@@ -1,0 +1,41 @@
+{
+  "name": "cartoon-reorbit",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "start": "nuxt start",
+    "lint": "eslint .",
+    "seed": "node prisma/seed.js",
+    "socket": "node server/socket-server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@prisma/client": "^6.7.0",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "nuxt": "^3.17.2",
+    "pg": "^8.15.6",
+    "prisma": "^6.7.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "vue3-dnd": "^2.1.0",
+    "vuedraggable": "^4.1.0"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+}

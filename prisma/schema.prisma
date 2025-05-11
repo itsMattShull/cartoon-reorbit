@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CZone {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  layoutData  Json
+  background  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Ctoon {
+  id          String    @id @default(uuid())
+  name        String
+  series      String?
+  type        String
+  rarity      String
+  assetPath   String
+  releaseDate DateTime?
+  perUserLimit Int?
+  codeOnly    Boolean   @default(false)
+  inCmart     Boolean   @default(false)
+  price       Int       @default(0)
+  quantity    Int? // NULL means unlimited
+  createdAt   DateTime  @default(now())
+  set         String?
+
+  owners UserCtoon[]
+  claimCodeRewards ClaimCodeReward[]
+}
+
+model UserCtoon {
+  id          String  @id @default(uuid())
+  userId      String
+  ctoonId     String
+  isTradeable Boolean @default(true)
+  inCzone     Boolean @default(false)
+  mintNumber  Int?
+
+  user  User  @relation(fields: [userId], references: [id])
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
+
+  tradeCtoons TradeCtoon[]
+}
+
+model UserPoints {
+  userId    String   @id
+  points    Int      @default(0)
+  updatedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id             String    @id @default(uuid())
+  username       String?   @unique
+  discordId      String    @unique
+  discordTag     String?
+  discordAvatar  String?
+  email          String?
+  avatar         String?
+  accessToken    String? // ⬅️ required
+  refreshToken   String? // ⬅️ required
+  tokenExpiresAt DateTime? // ⬅️ optional
+  roles          String[]  @default([]) // ⬅️ list of role IDs
+  inGuild        Boolean   @default(false) // tracks Discord guild membership
+  createdAt      DateTime  @default(now())
+  lastLogin      DateTime?
+
+  cZones  CZone[]
+  claims Claim[]
+  visits Visit[]
+  points UserPoints?
+  ctoons UserCtoon[]
+
+  friends    Friend[] @relation("UserFriends") // users I added as friends
+  friendedBy Friend[] @relation("UserFriendOf") // users who added me as a friend
+
+  traderARooms TradeRoom[] @relation("TraderA")
+  traderBRooms TradeRoom[] @relation("TraderB")
+  trades       Trade[]
+  tradeSpectators TradeSpectator[]
+
+  ips      UserIP[]
+}
+
+model UserIP {
+  id     String @id @default(uuid())
+  userId String
+  ip     String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, ip])
+}
+
+model Friend {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  user   User @relation("UserFriends", fields: [userId], references: [id])
+  friend User @relation("UserFriendOf", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+}
+
+model ClaimCode {
+  id         String       @id @default(uuid())
+  code       String       @unique
+  maxClaims  Int          // how many users can redeem this code
+  createdAt  DateTime     @default(now())
+  expiresAt  DateTime?
+  claims     Claim[]
+  rewards    ClaimCodeReward[]
+}
+
+model Claim {
+  id        String   @id @default(uuid())
+  userId    String
+  codeId    String
+  claimedAt DateTime @default(now())
+
+  user User       @relation(fields: [userId], references: [id])
+  code ClaimCode  @relation(fields: [codeId], references: [id])
+
+  @@unique([userId, codeId])
+}
+
+model ClaimCodeReward {
+  id        String   @id @default(uuid())
+  codeId    String
+  ctoonId   String
+  quantity  Int      @default(1)
+
+  code  ClaimCode @relation(fields: [codeId], references: [id])
+  ctoon Ctoon     @relation(fields: [ctoonId], references: [id])
+}
+
+model Visit {
+  id          String   @id @default(uuid())
+  userId      String
+  zoneOwnerId String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model TradeRoom {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  createdAt   DateTime @default(now())
+  active      Boolean  @default(true)
+
+  traderAId   String?
+  traderBId   String?
+  traderA     User?    @relation("TraderA", fields: [traderAId], references: [id])
+  traderB     User?    @relation("TraderB", fields: [traderBId], references: [id])
+
+  trades      Trade[]
+  spectators  TradeSpectator[]
+}
+
+model Trade {
+  id          String   @id @default(uuid())
+  userId      String
+  roomId      String
+  confirmed   Boolean  @default(false)
+
+  user        User     @relation(fields: [userId], references: [id])
+  room        TradeRoom @relation(fields: [roomId], references: [id])
+  ctoons      TradeCtoon[]
+}
+
+model TradeCtoon {
+  id          String   @id @default(uuid())
+  tradeId     String
+  userCtoonId String
+
+  trade       Trade     @relation(fields: [tradeId], references: [id])
+  userCtoon   UserCtoon @relation(fields: [userCtoonId], references: [id])
+}
+
+model TradeSpectator {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+
+  room      TradeRoom @relation(fields: [roomId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+}
