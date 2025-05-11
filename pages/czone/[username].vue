@@ -251,7 +251,7 @@ const selectedCtoon = ref(null)
 const showSidebar = ref(false)
 let socket
 if (process.client) {
-  socket = io('http://localhost:3001') // replace with your actual socket server
+  socket = io(import.meta.env.PROD ? '/socket' : `http://localhost:${config.public.socketPort}`) // replace with your actual socket server
   window.socket = socket
 }
 const { user, fetchSelf } = useAuth()
