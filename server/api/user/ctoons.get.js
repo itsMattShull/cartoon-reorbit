@@ -1,7 +1,9 @@
 // server/api/user/ctoons.get.js
 import { defineEventHandler, getQuery, createError } from 'h3'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   // 1) Ensure the user is authenticated
   const userId = event.context.userId
   if (!userId) {
@@ -20,7 +22,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // 3) Query tradeable UserCtoons for that user, omitting excluded IDs
-  const prisma = event.context.prisma
   const rows = await prisma.userCtoon.findMany({
     where: {
       userId,

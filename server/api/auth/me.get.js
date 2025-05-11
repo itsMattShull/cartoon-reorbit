@@ -1,12 +1,13 @@
 import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const userId = event.context.userId
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
-  const prisma = event.context.prisma
   const config = useRuntimeConfig(event)
 
   const user = await prisma.user.findUnique({

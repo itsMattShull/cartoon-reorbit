@@ -1,4 +1,7 @@
+import { PrismaClient } from '@prisma/client'
+
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
     const userId = event.context.userId
     if (!userId) {
       throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
@@ -8,8 +11,6 @@ export default defineEventHandler(async (event) => {
     if (!username || typeof username !== 'string') {
       throw createError({ statusCode: 400, statusMessage: 'Missing or invalid username' })
     }
-  
-    const prisma = event.context.prisma
   
     const targetUser = await prisma.user.findUnique({
       where: { username }

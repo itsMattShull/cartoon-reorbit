@@ -1,15 +1,16 @@
 import 'dotenv/config'
 import { defineEventHandler, createError } from 'h3'
 import { useRuntimeConfig } from '#imports'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   // 1) Must be authenticated
   const userId = event.context.userId
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
-  const prisma = event.context.prisma
   const config = useRuntimeConfig()
 
   // 2) Load the user and ensure they have a Discord link

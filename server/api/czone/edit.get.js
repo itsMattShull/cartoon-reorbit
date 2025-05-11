@@ -1,12 +1,13 @@
 import { promises as fs } from 'fs'
 import path from 'path'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const user = event.context.user
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
-  const prisma = event.context.prisma
 
   // Get owned cToons
   const owned = await prisma.userCtoon.findMany({

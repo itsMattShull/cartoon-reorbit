@@ -1,4 +1,7 @@
+import { PrismaClient } from '@prisma/client'
+
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
     const userId = event.context.userId
     if (!userId) throw createError({ statusCode: 401 })
   
@@ -63,8 +66,6 @@ export default defineEventHandler(async (event) => {
     if (!username || !isValidUsername(username)) {
       throw createError({ statusCode: 400, statusMessage: 'Username must be built from the provided options.' })
     }
-  
-    const prisma = event.context.prisma
   
     // Ensure uniqueness
     const exists = await prisma.user.findFirst({ where: { username } })

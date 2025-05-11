@@ -1,4 +1,6 @@
+import { PrismaClient } from '@prisma/client'
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const userId = event.context.userId
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
@@ -10,8 +12,6 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(ctoonIds) || ctoonIds.length === 0) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid ctoonIds' })
   }
-
-  const prisma = event.context.prisma
 
   // Fetch cToon definitions and existing ownerships
   const [ctoDetails, existingCtoons] = await Promise.all([

@@ -5,6 +5,8 @@ import { Server } from 'socket.io'
 import { PrismaClient } from '@prisma/client';
 const db = new PrismaClient();
 
+const PORT = process.env.SOCKET_PORT || 3001
+
 const httpServer = createServer()
 const io = new Server(httpServer, {
   cors: {
@@ -592,6 +594,6 @@ io.on('connection', socket => {
   });
 })
 
-httpServer.listen(3001, () => {
+httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
 })

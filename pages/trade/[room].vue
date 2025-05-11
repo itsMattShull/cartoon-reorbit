@@ -278,7 +278,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 import Nav from '@/components/Nav.vue'
 
-const socket = io(import.meta.env.PROD ? '/socket' : 'http://localhost:3001')
+const config = useRuntimeConfig()
+const socket = io(import.meta.env.PROD ? '/socket' : `http://localhost:${config.public.socketPort}`)
 const router = useRouter()
 const route = useRoute()
 const roomName = route.params.room

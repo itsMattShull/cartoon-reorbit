@@ -1,11 +1,12 @@
+import { PrismaClient } from '@prisma/client'
+
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
   const { ctoonId } = await readBody(event)
   if (!ctoonId) throw createError({ statusCode: 400, statusMessage: 'Missing ctoonId' })
-
-  const prisma = event.context.prisma
 
   const ctoon = await prisma.ctoon.findUnique({
     where: { id: ctoonId }

@@ -1,4 +1,7 @@
 import jwt from 'jsonwebtoken'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 function getRequestIP(event) {
   return (
@@ -64,7 +67,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4. Save or update user in DB
-  const prisma = event.context.prisma
   const user = await prisma.user.upsert({
     where: { discordId: discordUser.id },
     update: {

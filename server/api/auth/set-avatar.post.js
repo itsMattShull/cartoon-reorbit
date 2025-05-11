@@ -1,7 +1,9 @@
 import { promises as fs } from 'fs'
 import path from 'path'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401 })
 
@@ -13,7 +15,6 @@ export default defineEventHandler(async (event) => {
   try { await fs.access(avatarPath) }
   catch { throw createError({ statusCode: 400, statusMessage: 'Invalid avatar' }) }
 
-  const prisma = event.context.prisma
   await prisma.user.update({ where: { id: userId }, data: { avatar } })
 
   return { success: true }

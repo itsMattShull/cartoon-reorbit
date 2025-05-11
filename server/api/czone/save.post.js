@@ -1,4 +1,7 @@
+import { PrismaClient } from '@prisma/client'
+
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const user = event.context.user
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
@@ -10,8 +13,6 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(layout) || typeof background !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Invalid request body' })
   }
-
-  const prisma = event.context.prisma
 
   // Get all UserCtoon IDs owned by the user
   const ownedCtoons = await prisma.userCtoon.findMany({

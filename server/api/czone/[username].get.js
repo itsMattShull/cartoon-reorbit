@@ -1,6 +1,8 @@
+import { PrismaClient } from '@prisma/client'
+
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const { username } = event.context.params
-  const prisma = event.context.prisma
 
   const user = await prisma.user.findUnique({
     where: { username },

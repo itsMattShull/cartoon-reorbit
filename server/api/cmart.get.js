@@ -1,5 +1,6 @@
+import { PrismaClient } from '@prisma/client'
 export default defineEventHandler(async (event) => {
-  const prisma = event.context.prisma
+  const prisma = new PrismaClient()
 
   const ctoons = await prisma.ctoon.findMany({
     where: {

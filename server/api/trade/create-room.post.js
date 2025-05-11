@@ -1,14 +1,14 @@
 // server/api/trade/create-room.post.js
 
 import { v4 as uuidv4 } from 'uuid'
+import { PrismaClient } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
+  const prisma = new PrismaClient()
   const { userId } = event.context
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
-
-  const prisma = event.context.prisma
 
   // Generate a unique, fun room name (reuse your username generator logic if available)
   const adjectives = [
