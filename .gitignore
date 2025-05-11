@@ -3,3 +3,4 @@ node_modules
 .nuxt
 .DS_Store
 .output
+ecosystem.config.js
