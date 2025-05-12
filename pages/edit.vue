@@ -249,13 +249,16 @@ const onMouseDown = (event, index) => {
 // Add touch support to dragging
 const onTouchStart = (event, index) => {
   currentlyDraggingIndex.value = index
+  event.preventDefault()
+  // Disable page scrolling while dragging on touch devices
+  document.body.style.overflow = 'hidden'
   const touch = event.touches[0]
   const rect = event.target.closest('.absolute').getBoundingClientRect()
   dragOffset.value = {
     x: touch.clientX - rect.left,
     y: touch.clientY - rect.top
   }
-  window.addEventListener('touchmove', onTouchMove)
+  window.addEventListener('touchmove', onTouchMove, { passive: false })
   window.addEventListener('touchend', onTouchEnd)
 }
 
@@ -268,6 +271,7 @@ const onMouseMove = (event) => {
 }
 
 const onTouchMove = (event) => {
+  event.preventDefault()
   if (currentlyDraggingIndex.value === null) return
   const touch = event.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
@@ -295,6 +299,8 @@ const onTouchEnd = async () => {
   if (currentlyDraggingIndex.value !== null) {
     await saveLayout(false)
   }
+  // Re‑enable page scrolling after dragging ends
+  document.body.style.overflow = ''
   currentlyDraggingIndex.value = null
   window.removeEventListener('touchmove', onTouchMove)
   window.removeEventListener('touchend', onTouchEnd)
@@ -357,5 +363,8 @@ const selectCtoon = async (ctoon) => {
   opacity: 0.5;
   outline: 2px dashed #3b82f6;
   z-index: 50;
+}
+#czone-canvas {
+  touch-action: none;
 }
 </style>
