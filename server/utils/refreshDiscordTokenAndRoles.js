@@ -34,7 +34,6 @@ export async function refreshDiscordTokenAndRoles(prisma, user, config) {
     let inGuildFlag = true
     let memberData
     try {
-      console.log(`https://discord.com/api/guilds/${config.discord.guildId}/members/${user.discordId}`)
       memberData = await $fetch(
         `https://discord.com/api/guilds/${config.discord.guildId}/members/${user.discordId}`,
         {

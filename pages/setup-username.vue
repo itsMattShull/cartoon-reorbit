@@ -233,7 +233,6 @@ async function chooseStarterSet () {
       body: { ctoonIds }
     })
     if (response?.success) {
-      console.log('Starter set saved, reloading page...')
       window.location.reload()
     }
   } catch (e) {

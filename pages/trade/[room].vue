@@ -501,7 +501,6 @@ function openAddPanel() {
       return res.json()
     })
     .then(data => {
-      console.log('ctoons:', data)
       availableCtoons.value = data
     })
     .catch(err => {

@@ -29,8 +29,6 @@ export default defineEventHandler(async (event) => {
       { headers: { Authorization: `${botToken}` } }
     )
 
-    console.log(res)
-    console.log(" ")
     inGuild = res.ok
 
     // Persist membership status

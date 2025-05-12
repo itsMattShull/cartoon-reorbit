@@ -21,9 +21,7 @@ const tradeRooms = {}
 const tradeSockets = {}
 
 io.on('connection', socket => {
-  console.log('connected')
   socket.on('join-zone', ({ zone }) => {
-    console.log('joined: ', zone)
     socket.zone = zone
     socket.join(zone)
 
@@ -36,9 +34,6 @@ io.on('connection', socket => {
   })
 
   socket.on('chat-message', ({ zone, user, message }) => {
-    console.log(zone)
-    console.log(user)
-    console.log(message)
     io.to(zone).emit('chat-message', { user, message })
   })
 

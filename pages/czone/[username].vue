@@ -12,7 +12,7 @@
     </div>
 
     <!-- CZone Canvas -->
-    <div class="flex min-w-[800px] justify-center overflow-hidden">
+    <!-- <div class="flex min-w-[800px] justify-center overflow-hidden">
       <div
         class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
         :style="`background: url(/backgrounds/${backgroundImage}) center center / cover no-repeat;`"
@@ -20,6 +20,32 @@
         <div class="absolute top-0 left-0 w-full h-full">
           <div v-for="(item, index) in cZoneItems" :key="index" class="absolute" :style="item.style">
             <img :src="item.assetPath" :alt="item.name" class="object-contain cursor-pointer" @click="openSidebar(item)" />
+          </div>
+        </div>
+      </div>
+    </div> -->
+
+    <div class="flex justify-center overflow-hidden">
+      <!-- scale wrapper: only on small screens -->
+      <div :style="scaleStyle">
+        <div
+          class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden"
+          :style="`background: url(/backgrounds/${backgroundImage}) center / cover no-repeat`"
+        >
+          <div class="absolute inset-0">
+            <div
+              v-for="(item, index) in cZoneItems"
+              :key="index"
+              class="absolute"
+              :style="item.style"
+            >
+              <img
+                :src="item.assetPath"
+                :alt="item.name"
+                class="object-contain cursor-pointer"
+                @click="openSidebar(item)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -194,9 +220,10 @@
 definePageMeta({
   middleware: 'auth'
 })
+
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { onMounted, ref, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue'
+import { onMounted, ref, onBeforeUnmount, watch, nextTick, watchEffect, computed } from 'vue'
 import { io } from 'socket.io-client'
 
 const predefinedMessages = [
@@ -250,13 +277,20 @@ const backgroundImage = ref('')
 const selectedCtoon = ref(null)
 const showSidebar = ref(false)
 const config = useRuntimeConfig()
-console.log(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`)
 const socket = io(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`);
 const { user, fetchSelf } = useAuth()
 
 watchEffect(() => {
   username.value = route.params.username
 })
+
+// --- mobile canvas scaling ---
+const scale = ref(1)
+
+const recalcScale = () => {
+  // 800 is the logical canvas width
+  scale.value = Math.min(1, window.innerWidth / 800)
+}
 
 onMounted(async () => {
   await fetchSelf()
@@ -287,8 +321,10 @@ onMounted(async () => {
     backgroundImage.value = 'IMG_3433.GIF'
   }
 
+  recalcScale()
+  window.addEventListener('resize', recalcScale)
+
   if (socket) {
-    console.log('connected to socket')
     socket.emit('join-zone', { zone: username.value })
 
     socket.on('visitor-count', count => {
@@ -320,12 +356,6 @@ const sendMessage = () => {
     user: user.value.username,
     message: newMessage.value
   }
-
-  console.log('sending: ', {
-    zone: username.value,
-    user: user.value.username,
-    message: newMessage.value
-  })
 
   socket.emit('chat-message', msg)
 
@@ -370,7 +400,15 @@ onBeforeUnmount(() => {
   if (socket && username.value) {
     socket.emit('leave-zone', { zone: username.value })
   }
+  window.removeEventListener('resize', recalcScale)
 })
+
+const scaleStyle = computed(() => ({
+  transform: `scale(${scale.value})`,
+  transformOrigin: 'top left',
+  width: `${800 * scale.value}px`,
+  height: `${600 * scale.value}px`
+}))
 
 // Also watch for username changes (i.e., navigating to another cZone) via route param
 watch(() => route.params.username, async (newUsername, oldUsername) => {

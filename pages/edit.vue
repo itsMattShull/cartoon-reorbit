@@ -7,7 +7,7 @@
     <button class="bg-green-600 text-white px-4 py-2 rounded" @click="openPanel('backgrounds')">Change Background</button>
   </div>
 
-  <div class="px-4 py-6 max-w-6xl mx-auto flex gap-6 md:mt-20">
+  <div class="px-0 md:px-4 py-6 mx-auto flex gap-6 md:mt-20 max-w-[800px]">
     <!-- Left Panel -->
     <div class="hidden lg:block w-2/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
       <div class="flex gap-2 mb-4">
@@ -51,43 +51,48 @@
     </div>
 
     <!-- Right Canvas Panel -->
-    <div class="min-w-[800px] bg-white rounded-xl shadow-md">
-      <div
-        id="czone-canvas"
-        class="relative h-[600px] min-w-[800px] max-w-[800px] shrink-0 border border-gray-300 rounded overflow-hidden mx-auto mb-4"
-        :style="`background: url('/backgrounds/${selectedBackground}') center center / cover no-repeat;`"
-        @dragover.prevent
-        @drop="onDrop"
-      >
+    <div class="bg-white rounded-xl shadow-md">
+      <div :style="scaleStyle">
         <div
-          v-for="(item, index) in layout"
-          :key="item.id"
-          class="absolute cursor-pointer"
-          :class="{ 'dragging': currentlyDraggingIndex === index }"
-          :style="item.style"
-          @contextmenu.prevent="removeItem(index)"
-          @mousedown="onMouseDown($event, index)"
-          @touchstart="onTouchStart($event, index)"
+          id="czone-canvas"
+          class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto mb-4"
+          :style="`background: url('/backgrounds/${selectedBackground}') center / cover no-repeat`"
+          @dragover.prevent
+          @drop="onDrop"
         >
-          <img
-            :src="item.assetPath"
-            :alt="item.name"
-            class="object-contain border border-gray-300"
-          />
+          <div
+            v-for="(item, index) in layout"
+            :key="item.id"
+            class="absolute cursor-pointer"
+            :class="{ dragging: currentlyDraggingIndex === index }"
+            :style="item.style"
+            @contextmenu.prevent="removeItem(index)"
+            @mousedown="onMouseDown($event, index)"
+            @touchstart="onTouchStart($event, index)"
+          >
+            <img
+              :src="item.assetPath"
+              :alt="item.name"
+              class="object-contain border border-gray-300"
+            />
+          </div>
         </div>
       </div>
 
-      <div class="flex flex-col lg:flex-row justify-between gap-2 pr-4 pl-4 mb-6">
+      <!-- Buttons under the canvas -->
+      <div class="flex flex-col lg:flex-row justify-between gap-2 px-4 mb-6 mt-6">
         <div class="w-full lg:w-auto">
-          <div class="flex gap-2">
-            <button class="bg-red-500 text-white px-4 py-2 rounded" @click="clearAll">Remove All cToons</button>
-          </div>
+          <button class="bg-red-500 text-white px-4 py-2 rounded" @click="clearAll">
+            Remove All cToons
+          </button>
         </div>
-        <div class="w-full lg:w-auto">
-          <div class="flex gap-2">
-            <button class="bg-gray-500 text-white px-4 py-2 rounded" @click="navigateTo('/czone/' + user.username)">Close</button>
-            <button class="bg-green-600 text-white px-4 py-2 rounded" @click="saveLayout(true)">Save</button>
-          </div>
+        <div class="w-full lg:w-auto flex gap-2">
+          <button class="bg-gray-500 text-white px-4 py-2 rounded" @click="navigateTo('/czone/' + user.username)">
+            Close
+          </button>
+          <button class="bg-green-600 text-white px-4 py-2 rounded" @click="saveLayout(true)">
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -144,11 +149,38 @@
 definePageMeta({
   middleware: 'auth'
 })
+
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
-import { navigateTo } from '#app'
+import { navigateTo, useHead } from '#app'
+
+// --- mobile canvas scaling ---
+const scale = ref(1)
+
+const recalcScale = () => {
+  // 800 is the logical canvas width
+  scale.value = Math.min(1, window.innerWidth / 800)
+}
+
+recalcScale()
+
+useHead({
+  /* Tell phones to report their *real* width (≈390 px on an iPhone)   */
+  meta: [
+    { name: 'viewport',
+      content: 'width=device-width, initial-scale=1',
+      key: 'viewport' }     // ← same key so it REPLACES any previous tag
+  ]
+})
+
+const scaleStyle = computed(() => ({
+  transform: `scale(${scale.value})`,
+  transformOrigin: 'top left',
+  width: `${800 * scale.value}px`,
+  height: `${600 * scale.value}px`
+}))
 
 const tab = ref('ctoones')
 const seriesFilter = ref('')
@@ -164,6 +196,19 @@ const backgrounds = ref([])
 
 const uniqueSeries = computed(() => [...new Set(ctoons.value.map(c => c.series).filter(Boolean))])
 const uniqueRarities = computed(() => [...new Set(ctoons.value.map(c => c.rarity).filter(Boolean))])
+
+onMounted(async () => {
+  const res = await $fetch('/api/czone/edit')
+  ctoons.value = res.ctoons
+  backgrounds.value = res.backgrounds
+  layout.value = res.layout || []
+  selectedBackground.value = res.background || 'backgrounds/IMG_3433.GIF'
+  window.addEventListener('resize', recalcScale)
+})
+
+onBeforeUnmount(() => window.removeEventListener('resize', recalcScale))
+
+const unscale = (v) => v / scale.value
 
 const filteredCtoons = computed(() => {
   return ctoons.value.filter(c => {
@@ -184,8 +229,8 @@ const onDrop = async (event) => {
   if (!draggingItem.value) return;
 
   const rect = event.currentTarget.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const x = unscale(event.clientX - rect.left)
+  const y = unscale(event.clientY - rect.top)
 
   layout.value.push({
     id: draggingItem.value.id,
@@ -265,8 +310,8 @@ const onTouchStart = (event, index) => {
 const onMouseMove = (event) => {
   if (currentlyDraggingIndex.value === null) return
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
-  const x = event.clientX - canvasRect.left - dragOffset.value.x
-  const y = event.clientY - canvasRect.top - dragOffset.value.y
+  const x = unscale(event.clientX - canvasRect.left - dragOffset.value.x)
+  const y = unscale(event.clientY - canvasRect.top  - dragOffset.value.y)
   layout.value[currentlyDraggingIndex.value].style = `top: ${y}px; left: ${x}px;`
 }
 
@@ -275,8 +320,8 @@ const onTouchMove = (event) => {
   if (currentlyDraggingIndex.value === null) return
   const touch = event.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
-  const x = touch.clientX - canvasRect.left - dragOffset.value.x
-  const y = touch.clientY - canvasRect.top - dragOffset.value.y
+  const x = unscale(touch.clientX - canvasRect.left - dragOffset.value.x)
+  const y = unscale(touch.clientY - canvasRect.top  - dragOffset.value.y)
   layout.value[currentlyDraggingIndex.value].style = `top: ${y}px; left: ${x}px;`
 }
 
@@ -285,8 +330,8 @@ const onMouseUp = async (event) => {
   if (currentlyDraggingIndex.value === null) return
 
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
-  const x = event.clientX - canvasRect.left - dragOffset.value.x
-  const y = event.clientY - canvasRect.top - dragOffset.value.y
+  const x = unscale(event.clientX - canvasRect.left - dragOffset.value.x)
+  const y = unscale(event.clientY - canvasRect.top  - dragOffset.value.y)
   layout.value[currentlyDraggingIndex.value].style = `top: ${y}px; left: ${x}px;`
 
   await saveLayout(false)
@@ -305,14 +350,6 @@ const onTouchEnd = async () => {
   window.removeEventListener('touchmove', onTouchMove)
   window.removeEventListener('touchend', onTouchEnd)
 }
-
-onMounted(async () => {
-  const res = await $fetch('/api/czone/edit')
-  ctoons.value = res.ctoons
-  backgrounds.value = res.backgrounds
-  layout.value = res.layout || []
-  selectedBackground.value = res.background || 'IMG_3433.GIF'
-})
 
 const tabClass = 'bg-gray-200 text-gray-800 px-3 py-1 rounded hover:bg-gray-300'
 const activeTab = 'bg-blue-600 text-white px-3 py-1 rounded shadow'
