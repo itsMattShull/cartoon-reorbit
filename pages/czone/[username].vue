@@ -249,9 +249,10 @@ const chatContainer = ref(null)
 const backgroundImage = ref('')
 const selectedCtoon = ref(null)
 const showSidebar = ref(false)
+const config = useRuntimeConfig()
 let socket
 if (process.client) {
-  socket = io(import.meta.env.PROD ? '/socket.io' : `http://localhost:${config.public.socketPort}`) // replace with your actual socket server
+  const socket = io(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`);
   window.socket = socket
 }
 const { user, fetchSelf } = useAuth()
