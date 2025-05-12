@@ -21,6 +21,7 @@ const tradeRooms = {}
 const tradeSockets = {}
 
 io.on('connection', socket => {
+  console.log('connected')
   socket.on('join-zone', ({ zone }) => {
     console.log('joined: ', zone)
     socket.zone = zone

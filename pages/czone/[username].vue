@@ -250,11 +250,8 @@ const backgroundImage = ref('')
 const selectedCtoon = ref(null)
 const showSidebar = ref(false)
 const config = useRuntimeConfig()
-let socket
-if (process.client) {
-  const socket = io(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`);
-  window.socket = socket
-}
+console.log(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`)
+const socket = io(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`);
 const { user, fetchSelf } = useAuth()
 
 watchEffect(() => {
@@ -291,6 +288,7 @@ onMounted(async () => {
   }
 
   if (socket) {
+    console.log('connected to socket')
     socket.emit('join-zone', { zone: username.value })
 
     socket.on('visitor-count', count => {
@@ -322,6 +320,12 @@ const sendMessage = () => {
     user: user.value.username,
     message: newMessage.value
   }
+
+  console.log('sending: ', {
+    zone: username.value,
+    user: user.value.username,
+    message: newMessage.value
+  })
 
   socket.emit('chat-message', msg)
 
