@@ -12,6 +12,15 @@ function getRequestIP(event) {
   )
 }
 
+// Utility: fetch the role ID for a given role name
+async function getRoleIdByName(guildId, roleName, botToken) {
+  const roles = await $fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+    headers: { Authorization: botToken }
+  })
+  const role = roles.find(r => r.name === roleName)
+  return role ? role.id : null
+}
+
 export default defineEventHandler(async (event) => {
   const { code, error, error_description } = getQuery(event)
   if (error) {
@@ -62,6 +71,22 @@ export default defineEventHandler(async (event) => {
         access_token
       })
     })
+
+    const memberRoleId = await getRoleIdByName(guildId, 'Member', botToken)
+    if (memberRoleId) {
+      await $fetch(
+        `https://discord.com/api/guilds/${guildId}/members/${discordUser.id}/roles/${memberRoleId}`,
+        {
+          method: 'PUT',
+          headers: { 
+            Authorization: botToken,
+            'Content-Type': 'application/json' 
+          }
+        }
+      )
+    } else {
+      console.warn('“Member” role not found in guild; skipping role assignment.')
+    }
   } catch (err) {
     console.warn('User not auto-joined to Discord. Proceeding anyway.')
   }
@@ -114,7 +139,8 @@ export default defineEventHandler(async (event) => {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 30
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    path: '/'                 // make it a site‑wide, persistent cookie
   })
 
   return sendRedirect(event, '/dashboard')

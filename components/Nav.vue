@@ -25,7 +25,7 @@
           {{ item.label }}
         </NuxtLink>
       </nav>
-      <button @click="logout" class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700">Logout</button>
+      <button @click="handleLogout" class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700">Logout</button>
     </aside>
   </transition>
 </template>
@@ -34,6 +34,12 @@
 import { ref } from 'vue'
 const isOpen = ref(false)
 function close () { isOpen.value = false }
+
+async function handleLogout () {
+  await logout()
+  // Close the sidebar after logging out so the overlay disappears
+  close()
+}
 
 const { logout, user } = useAuth()
 

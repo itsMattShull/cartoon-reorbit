@@ -37,12 +37,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
   }
 
-  if (ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
+  // Enforce perUserLimit only if more than 48 hours after release date
+  if (ctoon.releaseDate) {
+    const hoursSinceRelease = (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
+    const enforceLimit = hoursSinceRelease < 48
+    if (enforceLimit && ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: `You can only purchase this cToon up to ${ctoon.perUserLimit} time(s) within the first 48 hours of release.`
+      })
+    }
+  } else if (ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
+    // Fallback: if no releaseDate, always enforce limit
     throw createError({
       statusCode: 403,
-      statusMessage: `You can only purchase this cToon up to ${ctoon.perUserLimit} time(s)`
+      statusMessage: `You can only purchase this cToon up to ${ctoon.perUserLimit} time(s).`
     })
   }
+
+  // Calculate mintNumber and isFirstEdition before transaction
+  const mintNumber = totalMinted + 1
+  const isFirstEdition =
+    ctoon.initialQuantity === null || mintNumber <= ctoon.initialQuantity
 
   await prisma.$transaction([
     prisma.userPoints.update({
@@ -54,7 +70,8 @@ export default defineEventHandler(async (event) => {
       data: {
         userId,
         ctoonId,
-        mintNumber: totalMinted + 1
+        mintNumber,
+        isFirstEdition
       }
     })
   ])

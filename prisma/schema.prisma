@@ -29,6 +29,7 @@ model Ctoon {
   codeOnly    Boolean   @default(false)
   inCmart     Boolean   @default(false)
   price       Int       @default(0)
+  initialQuantity    Int? // NULL means unlimited
   quantity    Int? // NULL means unlimited
   createdAt   DateTime  @default(now())
   set         String?
@@ -43,6 +44,7 @@ model UserCtoon {
   ctoonId     String
   isTradeable Boolean @default(true)
   inCzone     Boolean @default(false)
+  isFirstEdition     Boolean @default(false)
   mintNumber  Int?
 
   user  User  @relation(fields: [userId], references: [id])
@@ -71,6 +73,7 @@ model User {
   refreshToken   String? // ⬅️ required
   tokenExpiresAt DateTime? // ⬅️ optional
   roles          String[]  @default([]) // ⬅️ list of role IDs
+  isAdmin        Boolean   @default(false)
   inGuild        Boolean   @default(false) // tracks Discord guild membership
   createdAt      DateTime  @default(now())
   lastLogin      DateTime?

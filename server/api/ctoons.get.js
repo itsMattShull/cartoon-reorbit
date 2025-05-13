@@ -1,0 +1,46 @@
+import { defineEventHandler } from 'h3'
+import { PrismaClient } from '@prisma/client'
+const db = new PrismaClient()
+
+// In-memory cache
+let cache = null
+let lastFetched = 0
+const CACHE_DURATION = 1000 * 60 * 60 * 24 // 1 day in ms
+
+async function fetchCToonsFromDB() {
+  const now = new Date()
+  const fourWeeksAgo = new Date(now)
+  const fourWeeksLater = new Date(now)
+  fourWeeksAgo.setDate(now.getDate() - 28)
+  fourWeeksLater.setDate(now.getDate() + 28)
+
+  // Replace this with your real DB logic
+  const ctoons = await db.ctoon.findMany({
+    where: {
+      inCmart: true,
+      releaseDate: {
+        gte: fourWeeksAgo,
+        lte: fourWeeksLater
+      }
+    },
+    select: {
+      id: true,
+      name: true,
+      assetPath: true,
+      releaseDate: true
+    }
+  })
+
+  return ctoons
+}
+
+export default defineEventHandler(async () => {
+  const now = Date.now()
+
+  if (!cache || now - lastFetched > CACHE_DURATION) {
+    cache = await fetchCToonsFromDB()
+    lastFetched = now
+  }
+
+  return cache
+})

@@ -1,14 +1,31 @@
 import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
 import { PrismaClient } from '@prisma/client'
+import jwt from 'jsonwebtoken'
+import { getCookie } from 'h3'
 
 export default defineEventHandler(async (event) => {
   const prisma = new PrismaClient()
-  const userId = event.context.userId
+  const config = useRuntimeConfig(event)
+
+  // Try middleware‑injected userId first; otherwise fall back to the persistent JWT cookie.
+  let userId = event.context.userId
+
+  if (!userId) {
+    const token = getCookie(event, 'session')
+    if (token) {
+      try {
+        const payload = jwt.verify(token, config.jwtSecret)
+        userId = payload.sub
+        event.context.userId = userId // make it available to downstream handlers
+      } catch {
+        // Invalid or expired cookie – treat as unauthenticated
+      }
+    }
+  }
+
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
-
-  const config = useRuntimeConfig(event)
 
   const user = await prisma.user.findUnique({
     where: { id: userId },

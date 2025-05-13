@@ -5,10 +5,22 @@ export const useAuth = () => {
       window.location.href = '/api/auth/discord'
     }
   
-    async function logout() {
-      await $fetch('/api/auth/logout', { method: 'POST' })
-      user.value = null
-      navigateTo('/')
+    async function logout () {
+      try {
+        await $fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        })
+      } catch (err) {
+        // Ignore network / server errors: we'll still clear local state.
+      } finally {
+        user.value = null
+        // Pro‑actively clear the cookie client‑side as well.
+        const session = useCookie('session')
+        session.value = null
+        // Replace the current history entry so "Back" doesn’t jump to a protected page.
+        window.location.href = '/api/auth/discord'
+      }
     }
   
     const fetchSelf = async () => {
@@ -22,4 +34,3 @@ export const useAuth = () => {
   
     return { user, login, logout, fetchSelf }
   }
-  

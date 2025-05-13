@@ -23,14 +23,34 @@
   </template>
   
   <script setup>
-  const { user, login, fetchSelf } = useAuth()
-  
-  onMounted(async () => {
+  const { login } = useAuth()
+
+  defineNuxtRouteMiddleware('auth', async () => {
+    const { user, fetchSelf } = useAuth()
     await fetchSelf()
     if (user.value && !user.value.needsSetup) {
-      navigateTo('/dashboard')
-    } else if (user.value?.needsSetup) {
-      navigateTo('/setup-username')
+      return navigateTo('/dashboard')
+    }
+    if (user.value?.needsSetup) {
+      return navigateTo('/setup-username')
+    }
+  })
+
+  definePageMeta({
+    middleware: async () => {
+      const { user, fetchSelf } = useAuth()
+      try {
+        await fetchSelf()
+      } catch {
+        // fetchSelf will throw on 401; ignore so unauthenticated users stay on index page
+      }
+
+      if (user.value) {
+        if (user.value.needsSetup) {
+          return navigateTo('/setup-username')
+        }
+        return navigateTo('/dashboard')
+      }
     }
   })
   </script>
@@ -38,4 +58,3 @@
   <style scoped>
   /* Optional: add styles or leave empty */
   </style>
-  
