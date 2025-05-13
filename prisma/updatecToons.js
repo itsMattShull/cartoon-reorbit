@@ -49,7 +49,7 @@ async function main() {
     { inCmart: true, name: 'Schoolgirl Sakura', quantity: 100, initialQuantity: 100, rarity: "Uncommon", perUserLimit: 10, characters:  ['Sakura'] },
     { inCmart: true, name: 'Fred Flintstone (Mowing)', quantity: 100, initialQuantity: 100, rarity: "Uncommon", perUserLimit: 10, characters: ['Fred Flintstone'] },
     { inCmart: true, name: 'Ed Edd n Eddy', quantity: 75, initialQuantity: 75, rarity: "Rare", perUserLimit: 5, characters:  ['Ed', 'Edd', 'Eddy'] },
-    { inCmart: true, name: 'Huckleberry (Waving)', quantity: 75, initialQuantity: 75, rarity: "Rare", perUserLimit: 5, characters:  [''] },
+    { inCmart: true, name: 'Huckleberry (Waving)', quantity: 75, initialQuantity: 75, rarity: "Rare", perUserLimit: 5, characters:  ['Huckleberry Hound'] },
     { inCmart: true, name: 'Kungfu Hong Kong Phooey', quantity: 75, initialQuantity: 75, rarity: "Rare", perUserLimit: 5, characters:  ['Hong Kong Phooey'] },
     { inCmart: true, name: 'Cybersuit Dexter', quantity: 50, initialQuantity: 50, rarity: "Very Rare", perUserLimit: 3, characters:  ['Dexter'] },
     { inCmart: true, name: 'Charizard', quantity: 50, initialQuantity: 50, rarity: "Very Rare", perUserLimit: 3, characters:  ['Charizard'] },
