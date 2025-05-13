@@ -134,10 +134,10 @@ export default defineEventHandler(async (event) => {
 
   // 5. Create session JWT
   const jwtToken = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: '30d' })
-  console.log('env: ', process.env.NODE_ENV)
+
   setCookie(event, 'session', jwtToken, {
     httpOnly: true,
-    sameSite: 'none',
+    sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: '/'                 // make it a site‑wide, persistent cookie
