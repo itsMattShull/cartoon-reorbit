@@ -33,6 +33,7 @@ model Ctoon {
   quantity    Int? // NULL means unlimited
   createdAt   DateTime  @default(now())
   set         String?
+  characters  String[]
 
   owners UserCtoon[]
   claimCodeRewards ClaimCodeReward[]
