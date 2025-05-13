@@ -64,7 +64,7 @@ async function main() {
     })
   }
 
-  for (const { inCmart, name, quantity, initialQuantity, rarity, perUserLimit, price, characters } of ctoons) {
+  for (const { inCmart, name, quantity, initialQuantity, rarity, perUserLimit, price, characters } of priceCtoons) {
     await prisma.ctoon.updateMany({
       where: { name },
       data: { inCmart: inCmart, quantity: quantity, initialQuantity: initialQuantity, rarity: rarity, perUserLimit: perUserLimit, price: price, characters: characters }
