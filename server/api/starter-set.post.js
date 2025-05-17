@@ -46,7 +46,8 @@ export default defineEventHandler(async (event) => {
     toInsert.push({
       userId,
       ctoonId: ctoon.id,
-      mintNumber: totalMinted + 1
+      mintNumber: totalMinted + 1,
+      userPurchased: false
     })
   }
 

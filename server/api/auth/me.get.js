@@ -68,6 +68,7 @@ export default defineEventHandler(async (event) => {
     points: user.points?.points || 0,
     needsSetup: !(user.username && user.avatar && user.ctoons && user.ctoons.length > 0),
     inGuild,
+    isAdmin: user.isAdmin,
     ctoons: user.ctoons
   }
 })

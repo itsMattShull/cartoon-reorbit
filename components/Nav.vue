@@ -21,40 +21,60 @@
   <transition name="slide">
     <aside v-if="isOpen" class="fixed top-0 left-0 h-full w-64 bg-gray-900 text-white z-50 flex flex-col pt-16 shadow-lg">
       <nav class="flex-1 overflow-y-auto">
-        <NuxtLink v-for="item in links" :key="item.to" :to="item.to" class="block px-6 py-3 hover:bg-gray-800" @click.native="close">
+        <NuxtLink
+          v-for="item in links"
+          :key="item.to"
+          :to="item.to"
+          class="block px-6 py-3 hover:bg-gray-800"
+          @click.native="close"
+        >
           {{ item.label }}
         </NuxtLink>
       </nav>
-      <button @click="handleLogout" class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700">Logout</button>
+      <button @click="handleLogout" class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700">
+        Logout
+      </button>
     </aside>
   </transition>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-const isOpen = ref(false)
-function close () { isOpen.value = false }
+import { ref, computed } from 'vue'
+import { useAuth } from '~/composables/useAuth'
 
-async function handleLogout () {
-  await logout()
-  // Close the sidebar after logging out so the overlay disappears
-  close()
+const isOpen = ref(false)
+function close() {
+  isOpen.value = false
 }
 
 const { logout, user } = useAuth()
 
-const links = [
+async function handleLogout() {
+  await logout()
+  close()
+}
+
+const baseLinks = [
   { label: 'Showcase', to: '/dashboard' },
-  { label: 'My cZone', to: `/czone/${user.value.username}` },
-  // { label: 'Friends', to: '/friends' },
+  { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'cMart', to: '/cmart' },
-  { label: 'Live Trading', to: '/live-trading' },
-  // { label: 'Redeem Code', to: '/code' }
+  { label: 'Live Trading', to: '/live-trading' }
 ]
+
+const links = computed(() => {
+  const all = [...baseLinks]
+  if (user.value?.isAdmin) {
+    all.push(
+      { label: 'Admin', to: '/admin' },
+      { label: 'Add cToon', to: '/admin/addCtoon' }
+    )
+  }
+  return all
+})
 </script>
 
 <style scoped>
-/* slide‑in sidebar */
+/* slide-in sidebar */
 .slide-enter-from { transform: translateX(-100%); }
 .slide-enter-active { transition: transform 0.25s ease; }
 .slide-leave-to { transform: translateX(-100%); }

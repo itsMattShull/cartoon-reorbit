@@ -116,13 +116,22 @@
               </h2>
               <!-- Horizontal scroll of cToon images -->
               <div class="relative overflow-x-auto">
-                <div class="flex items-end space-x-8 pl-8 py-2">
+                <div class="flex items-start space-x-8 pl-8 py-2">
                   <template v-for="c in upcoming.length > 0 ? upcoming : recent" :key="c.ctoonId">
-                    <img
-                      :src="`${c.assetPath}`"
-                      :alt="c.name"
-                      class="rounded-lg flex-none"
-                    />
+                    <div class="flex-none w-48 bg-white rounded-lg shadow p-4">
+                      <!-- Image -->
+                      <img
+                        :src="c.assetPath"
+                        :alt="c.name"
+                        class="w-full h-auto rounded-md"
+                      />
+
+                      <!-- Release Date/Time -->
+                      <div class="mt-2 text-sm text-gray-600">
+                        <span class="font-medium">Release:</span>
+                        {{ new Date(c.releaseDate).toLocaleString() }}
+                      </div>
+                    </div>
                   </template>
                 </div>
               </div>

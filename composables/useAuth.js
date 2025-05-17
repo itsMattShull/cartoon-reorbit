@@ -32,5 +32,7 @@ export const useAuth = () => {
       }
     }
   
-    return { user, login, logout, fetchSelf }
+    const isAdmin = computed(() => Boolean(user.value?.isAdmin))
+
+    return { user, isAdmin, login, logout, fetchSelf }
   }
