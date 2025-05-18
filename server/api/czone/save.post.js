@@ -1,38 +1,68 @@
+// server/api/czone.post.js
+
 import { PrismaClient } from '@prisma/client'
+import { defineEventHandler, readBody, createError } from 'h3'
+
+const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
+  // 1. Auth check
   const user = event.context.user
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  const body = await readBody(event)
-  const { layout, background } = body
-
+  // 2. Parse & validate body
+  const { layout, background } = await readBody(event)
   if (!Array.isArray(layout) || typeof background !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Invalid request body' })
   }
 
-  // Get all UserCtoon IDs owned by the user
-  const ownedCtoons = await prisma.userCtoon.findMany({
+  // 3. Fetch all UserCtoon records for this user, including their Ctoon
+  const userCtoons = await prisma.userCtoon.findMany({
     where: { userId: user.id },
-    select: { id: true }
+    select: {
+      id: true,
+      ctoon: {
+        select: {
+          id: true,
+          name: true,
+          assetPath: true
+        }
+      }
+    }
   })
-  const ownedIds = new Set(ownedCtoons.map(c => c.id))
 
-  // Filter layout to only include cToons the user still owns
-  const filteredLayout = layout.filter(item => ownedIds.has(item.id))
+  // Build a map: userCtoonId -> { name, assetPath }
+  const lookup = new Map(
+    userCtoons.map(uc => [uc.id, {
+      name: uc.ctoon.name,
+      assetPath: uc.ctoon.assetPath
+    }])
+  )
 
+  // 4. Filter & enrich layout items
+  const enrichedLayout = layout
+    .filter(item => lookup.has(item.id))
+    .map(item => {
+      const { name, assetPath } = lookup.get(item.id)
+      return {
+        ...item,
+        name,
+        assetPath
+      }
+    })
+
+  // 5. Upsert the CZone
   await prisma.cZone.upsert({
     where: { userId: user.id },
     update: {
-      layoutData: filteredLayout,
+      layoutData: enrichedLayout,
       background
     },
     create: {
       userId: user.id,
-      layoutData: filteredLayout,
+      layoutData: enrichedLayout,
       background
     }
   })

@@ -123,7 +123,7 @@
                       <img
                         :src="c.assetPath"
                         :alt="c.name"
-                        class="w-full h-auto rounded-md"
+                        class="rounded-md"
                       />
 
                       <!-- Release Date/Time -->
