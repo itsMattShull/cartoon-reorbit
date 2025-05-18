@@ -1,15 +1,15 @@
 // server/middleware/dailyPoints.js
 
 import { PrismaClient } from '@prisma/client'
-import { defineEventHandler } from 'h3'
 
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
   // Only run for logged-in users
-  const user = event.context.user
-  if (!user) return
-
+  const user = event.context.userId
+  if (!user) {
+    return
+  }
   // 1. Compute “window start” at 8 PM CST
   const now = new Date()
   const cstNow = new Date(
@@ -24,20 +24,21 @@ export default defineEventHandler(async (event) => {
 
   // Convert boundary back to UTC for DB comparison
   const boundaryUtc = new Date(
-    boundary.toLocaleString('en-US', { timeZone: 'UTC' })
+    boundary.toLocaleString('en-US', { timeZone: 'America/Chicago' })
   )
+
 
   // 2. Ensure there’s a UserPoints row
   const pts = await prisma.userPoints.upsert({
-    where: { userId: user.id },
-    create: { userId: user.id, points: 0, lastDailyAward: null },
+    where: { userId: user },
+    create: { userId: user, points: 0, lastDailyAward: null },
     update: {}
   })
 
   // 3. If they haven’t yet received today’s award, give 500 and update timestamp
   if (!pts.lastDailyAward || new Date(pts.lastDailyAward) < boundaryUtc) {
     await prisma.userPoints.update({
-      where: { userId: user.id },
+      where: { userId: user },
       data: {
         points: { increment: 500 },
         lastDailyAward: new Date()

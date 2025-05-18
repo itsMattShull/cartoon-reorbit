@@ -49,6 +49,7 @@ export default defineNuxtConfig({
 
   serverMiddleware: [
     '~/server/middleware/auth.js',
-    '~/server/middleware/guild-check.js'
+    '~/server/middleware/guild-check.js',
+    '~/server/middleware/daily-points.js'
   ]
 })
