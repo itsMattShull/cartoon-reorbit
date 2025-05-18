@@ -1,15 +1,26 @@
+// server/api/leaderboard/points.get.js
+
 import { PrismaClient } from '@prisma/client'
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler } from 'h3'
 
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
-  // fetch the top 10 by points
+  // fetch the top 10 non-admin users by points
   const top10 = await prisma.userPoints.findMany({
+    where: {
+      user: {
+        isAdmin: false
+      }
+    },
     orderBy: { points: 'desc' },
     take: 10,
     include: {
-      user: { select: { username: true } }
+      user: {
+        select: {
+          username: true
+        }
+      }
     }
   })
 

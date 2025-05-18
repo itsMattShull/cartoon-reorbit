@@ -59,6 +59,7 @@ model UserCtoon {
 model UserPoints {
   userId    String   @id
   points    Int      @default(0)
+  lastDailyAward DateTime?
   updatedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
