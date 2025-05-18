@@ -18,51 +18,52 @@ model CZone {
 }
 
 model Ctoon {
-  id          String    @id @default(uuid())
-  name        String
-  series      String?
-  type        String
-  rarity      String
-  assetPath   String
-  releaseDate DateTime?
-  perUserLimit Int?
-  codeOnly    Boolean   @default(false)
-  inCmart     Boolean   @default(false)
-  price       Int       @default(0)
-  initialQuantity    Int? // NULL means unlimited
-  quantity    Int? // NULL means unlimited
-  createdAt   DateTime  @default(now())
-  set         String?
-  characters  String[]
+  id                String          @id @default(uuid())
+  name              String
+  series            String?
+  type              String
+  rarity            String
+  assetPath         String
+  releaseDate       DateTime?
+  perUserLimit      Int?
+  codeOnly          Boolean         @default(false)
+  inCmart           Boolean         @default(false)
+  price             Int             @default(0)
+  initialQuantity   Int?             // NULL means unlimited
+  quantity          Int?             // NULL means unlimited
+  createdAt         DateTime        @default(now())
+  set               String?
+  characters        String[]
 
-  owners UserCtoon[]
-  claimCodeRewards ClaimCodeReward[]
+  owners            UserCtoon[]
+  // removed old ClaimCodeReward[] relation
+  rewardCtoons      RewardCtoon[]   // relation back from RewardCtoon
 }
 
 model UserCtoon {
-  id          String  @id @default(uuid())
-  userId      String
-  ctoonId     String
-  isTradeable Boolean @default(true)
-  inCzone     Boolean @default(false)
-  isFirstEdition     Boolean @default(false)
-  mintNumber  Int?
-  userPurchased Boolean @default(true)
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(uuid())
+  userId         String
+  ctoonId        String
+  isTradeable    Boolean   @default(true)
+  inCzone        Boolean   @default(false)
+  isFirstEdition Boolean   @default(false)
+  mintNumber     Int?
+  userPurchased  Boolean   @default(true)
+  createdAt      DateTime  @default(now())
 
-  user  User  @relation(fields: [userId], references: [id])
-  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
 
-  tradeCtoons TradeCtoon[]
+  tradeCtoons   TradeCtoon[]
 }
 
 model UserPoints {
-  userId    String   @id
-  points    Int      @default(0)
+  userId         String    @id
+  points         Int       @default(0)
   lastDailyAward DateTime?
-  updatedAt DateTime @default(now())
+  updatedAt      DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 }
 
 model User {
@@ -73,30 +74,27 @@ model User {
   discordAvatar  String?
   email          String?
   avatar         String?
-  accessToken    String? // ⬅️ required
-  refreshToken   String? // ⬅️ required
-  tokenExpiresAt DateTime? // ⬅️ optional
-  roles          String[]  @default([]) // ⬅️ list of role IDs
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  roles          String[]  @default([])
   isAdmin        Boolean   @default(false)
-  inGuild        Boolean   @default(false) // tracks Discord guild membership
+  inGuild        Boolean   @default(false)
   createdAt      DateTime  @default(now())
   lastLogin      DateTime?
 
-  cZones  CZone[]
-  claims Claim[]
-  visits Visit[]
-  points UserPoints?
-  ctoons UserCtoon[]
-
-  friends    Friend[] @relation("UserFriends") // users I added as friends
-  friendedBy Friend[] @relation("UserFriendOf") // users who added me as a friend
-
-  traderARooms TradeRoom[] @relation("TraderA")
-  traderBRooms TradeRoom[] @relation("TraderB")
-  trades       Trade[]
-  tradeSpectators TradeSpectator[]
-
-  ips      UserIP[]
+  cZones           CZone[]
+  claims           Claim[]
+  visits           Visit[]
+  points           UserPoints?
+  ctoons           UserCtoon[]
+  friends          Friend[]         @relation("UserFriends")
+  friendedBy       Friend[]         @relation("UserFriendOf")
+  traderARooms     TradeRoom[]      @relation("TraderA")
+  traderBRooms     TradeRoom[]      @relation("TraderB")
+  trades           Trade[]
+  tradeSpectators  TradeSpectator[]
+  ips              UserIP[]
 }
 
 model UserIP {
@@ -121,35 +119,46 @@ model Friend {
 }
 
 model ClaimCode {
-  id         String       @id @default(uuid())
-  code       String       @unique
-  maxClaims  Int          // how many users can redeem this code
-  createdAt  DateTime     @default(now())
+  id         String             @id @default(uuid())
+  code       String             @unique
+  maxClaims  Int
+  createdAt  DateTime           @default(now())
   expiresAt  DateTime?
   claims     Claim[]
   rewards    ClaimCodeReward[]
 }
 
 model Claim {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   codeId    String
-  claimedAt DateTime @default(now())
+  claimedAt DateTime  @default(now())
 
-  user User       @relation(fields: [userId], references: [id])
-  code ClaimCode  @relation(fields: [codeId], references: [id])
+  user  User      @relation(fields: [userId], references: [id])
+  code  ClaimCode @relation(fields: [codeId], references: [id])
 
   @@unique([userId, codeId])
 }
 
+/// One “reward batch” per code; may include points and multiple cToon grants
 model ClaimCodeReward {
-  id        String   @id @default(uuid())
-  codeId    String
-  ctoonId   String
-  quantity  Int      @default(1)
+  id       String            @id @default(uuid())
+  codeId   String
+  points   Int?              // optional points to award
 
-  code  ClaimCode @relation(fields: [codeId], references: [id])
-  ctoon Ctoon     @relation(fields: [ctoonId], references: [id])
+  code     ClaimCode         @relation(fields: [codeId], references: [id])
+  ctoons   RewardCtoon[]     // zero or more cToon grants
+}
+
+/// Join table so each reward can include many cToons
+model RewardCtoon {
+  id        String             @id @default(uuid())
+  rewardId  String
+  ctoonId   String
+  quantity  Int                @default(1)
+
+  reward    ClaimCodeReward    @relation(fields: [rewardId], references: [id])
+  ctoon     Ctoon              @relation(fields: [ctoonId], references: [id])
 }
 
 model Visit {
@@ -182,9 +191,9 @@ model Trade {
   roomId      String
   confirmed   Boolean  @default(false)
 
-  user        User     @relation(fields: [userId], references: [id])
-  room        TradeRoom @relation(fields: [roomId], references: [id])
-  ctoons      TradeCtoon[]
+  user   User      @relation(fields: [userId], references: [id])
+  room   TradeRoom @relation(fields: [roomId], references: [id])
+  ctoons TradeCtoon[]
 }
 
 model TradeCtoon {
@@ -192,8 +201,8 @@ model TradeCtoon {
   tradeId     String
   userCtoonId String
 
-  trade       Trade     @relation(fields: [tradeId], references: [id])
-  userCtoon   UserCtoon @relation(fields: [userCtoonId], references: [id])
+  trade     Trade     @relation(fields: [tradeId], references: [id])
+  userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
 }
 
 model TradeSpectator {
@@ -201,6 +210,6 @@ model TradeSpectator {
   roomId    String
   userId    String
 
-  room      TradeRoom @relation(fields: [roomId], references: [id])
-  user      User      @relation(fields: [userId], references: [id])
+  room      TradeRoom    @relation(fields: [roomId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
 }

@@ -58,7 +58,8 @@ const baseLinks = [
   { label: 'Showcase', to: '/dashboard' },
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'cMart', to: '/cmart' },
-  { label: 'Live Trading', to: '/live-trading' }
+  { label: 'Live Trading', to: '/live-trading' },
+  { label: 'Redeem Code', to: '/redeem' }
 ]
 
 const links = computed(() => {
@@ -66,7 +67,8 @@ const links = computed(() => {
   if (user.value?.isAdmin) {
     all.push(
       { label: 'Admin', to: '/admin' },
-      { label: 'Add cToon', to: '/admin/addCtoon' }
+      { label: 'Add cToon', to: '/admin/addCtoon' },
+      { label: 'Codes', to: '/admin/codes' }
     )
   }
   return all
