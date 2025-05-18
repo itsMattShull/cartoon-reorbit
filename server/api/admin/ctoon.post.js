@@ -134,7 +134,6 @@ export default defineEventHandler(async (event) => {
     data: {
       name: name.trim(),
       series: safeSeries,
-      type: imagePart.mimeType,
       rarity,
       assetPath,
       releaseDate,

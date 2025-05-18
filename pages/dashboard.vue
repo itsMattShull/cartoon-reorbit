@@ -138,6 +138,30 @@
             </div>
           </div>
         </div>
+        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
+          <div class="w-full lg:w-1/2">
+            <div class="flex flex-col items-center gap-6 w-full bg-white rounded-xl shadow-md p-6">
+              <h2 class="text-lg font-semibold mb-2">Points Leaderboard</h2>
+              <ul>
+                <li
+                  v-for="(entry, i) in leaderboard"
+                  :key="entry.username"
+                  class="flex items-center border-b last:border-b-0 py-1"
+                >
+                  <!-- username takes all available space, left-aligned -->
+                  <span class="flex-1 mr-2">
+                    {{ i + 1 }}. {{ entry.username }}
+                  </span>
+                  <!-- points right-aligned -->
+                  <span class="font-medium text-right">
+                    {{ entry.points.toLocaleString() }}
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
       </template>
     </div>
   </template>
@@ -165,6 +189,8 @@
       }
     }
     // --- end Discord widget data ---
+
+    const leaderboard = ref([])
 
     // --- cToons logic ---
     const allCToons = ref([])
@@ -208,6 +234,19 @@
 
       // fetch cToons
       await fetchCToons()
+
+      try {
+        const res = await fetch('/api/points-leaderboard', {
+          credentials: 'include'
+        })
+        if (res.ok) {
+          leaderboard.value = await res.json()
+        } else {
+          console.error('Failed to load leaderboard:', await res.text())
+        }
+      } catch (err) {
+        console.error('Leaderboard fetch error:', err)
+      }
 
       // remove loading animation
       loading.value = false
