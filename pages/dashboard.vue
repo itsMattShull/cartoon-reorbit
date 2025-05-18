@@ -112,24 +112,37 @@
           <div class="bg-white rounded-xl shadow-md p-6 w-full">
             <div>
               <h2 class="text-xl font-bold mb-4 text-indigo-600">
-                {{ upcoming.length > 0 ? 'Upcoming Drops' : 'Recently Released' }}
+                <nuxt-link to="/cmart">{{ upcoming.length > 0 ? 'Upcoming Drops' : 'Recently Released' }}</nuxt-link>
               </h2>
               <!-- Horizontal scroll of cToon images -->
               <div class="relative overflow-x-auto">
-                <div class="flex items-start space-x-8 pl-8 py-2">
-                  <template v-for="c in upcoming.length > 0 ? upcoming : recent" :key="c.ctoonId">
-                    <div class="flex-none w-48 bg-white rounded-lg shadow p-4">
+                <div class="flex items-stretch space-x-8 pl-8 py-2">
+                  <template
+                    v-for="c in upcoming.length > 0 ? upcoming : recent"
+                    :key="c.ctoonId"
+                  >
+                    <!-- each card is now a flex-column, full height, with content justified to the bottom -->
+                    <div class="flex-none bg-white rounded-lg shadow p-4 flex flex-col justify-end">
                       <!-- Image -->
-                      <img
-                        :src="c.assetPath"
-                        :alt="c.name"
-                        class="rounded-md"
-                      />
+                      <div class="flex justify-center">
+                        <img
+                          :src="c.assetPath"
+                          :alt="c.name"
+                          class="rounded-md"
+                        />
+                      </div>
 
                       <!-- Release Date/Time -->
                       <div class="mt-2 text-sm text-gray-600">
                         <span class="font-medium">Release:</span>
-                        {{ new Date(c.releaseDate).toLocaleString() }}
+                        {{ new Date(c.releaseDate).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZoneName: 'short'
+                        }) }}
                       </div>
                     </div>
                   </template>
