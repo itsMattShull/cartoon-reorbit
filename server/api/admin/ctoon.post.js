@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
 
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
-  const uploadDir = join(baseDir, 'uploads', 'cToons', safeSeries)
+  const uploadDir = join(baseDir, 'public', 'cToons', safeSeries)
   console.log('uploaddir: ', uploadDir)
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename
