@@ -164,7 +164,7 @@
         <!-- Set -->
         <div>
           <label class="block mb-1 font-medium">Set</label>
-          <input v-model="setField" required placeholder="Select or type new series" class="w-full border rounded p-2">
+          <input v-model="setField" required placeholder="Select or type new set" class="w-full border rounded p-2">
           <p v-if="errors.setField" class="text-red-600 text-sm mt-1">{{ errors.setField }}</p>
         </div>
 

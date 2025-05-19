@@ -112,9 +112,11 @@ export default defineEventHandler(async (event) => {
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
   const uploadDir = join(baseDir, 'public', 'cToons', safeSeries)
+  console.log('uploaddir: ', uploadDir)
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename
   const outPath = join(uploadDir, filename)
+  console.log('outPath: ', outPath)
   await writeFile(outPath, imagePart.data)
 
   const assetPath = `/cToons/${safeSeries}/${filename}`
