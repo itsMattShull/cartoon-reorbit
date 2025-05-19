@@ -15,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // Determine base directory for uploads:
 // Use project root in production; in development, use CWD
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..')
+  ? join(__dirname, '..', '..')
   : process.cwd()
 console.log('base directory: ', baseDir)
 const prisma = new PrismaClient()
@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
 
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
-  const uploadDir = join(baseDir, 'public', 'cToons', safeSeries)
+  const uploadDir = join(baseDir, 'uploads', 'cToons', safeSeries)
   console.log('uploaddir: ', uploadDir)
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename

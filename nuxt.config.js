@@ -46,7 +46,6 @@ export default defineNuxtConfig({
       socketPort: process.env.SOCKET_PORT || 3001
     }
   },
-
   serverMiddleware: [
     '~/server/middleware/auth.js',
     '~/server/middleware/guild-check.js',
