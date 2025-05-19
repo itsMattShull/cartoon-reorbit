@@ -30,7 +30,8 @@ export default defineEventHandler(async (event) => {
     default:    startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // ── 3. SQL: include every week in the range, even if no users (percentage = 0) ──
+  // ── 3. SQL: % of users with ≥1 purchase within 1 day of signup ─────────
+  //    Uses a CTE to find each user's first purchase, then aggregates by signup week.
   const result = await prisma.$queryRaw`
     WITH weeks AS (
       SELECT generate_series(
@@ -39,20 +40,24 @@ export default defineEventHandler(async (event) => {
         '1 week'
       ) AS week
     ),
+    purchases AS (
+      SELECT
+        uc."userId",
+        MIN(uc."createdAt") AS first_purchase
+      FROM "UserCtoon" uc
+      WHERE uc."userPurchased" = TRUE
+      GROUP BY uc."userId"
+    ),
     stats AS (
       SELECT
         date_trunc('week', u."createdAt") AS week,
         COUNT(*)::int AS total,
-        COUNT(
-          DISTINCT CASE
-            WHEN uc."userPurchased" = TRUE
-             AND uc."createdAt" <= u."createdAt" + INTERVAL '1 day'
-            THEN u.id
-          END
+        COUNT(*) FILTER (
+          WHERE p.first_purchase <= u."createdAt" + INTERVAL '1 day'
         )::int AS purchased
       FROM "User" u
-      LEFT JOIN "UserCtoon" uc
-        ON uc."userId" = u.id
+      LEFT JOIN purchases p
+        ON p."userId" = u.id
       WHERE u."createdAt" >= ${startDate}
       GROUP BY week
     )
@@ -69,6 +74,6 @@ export default defineEventHandler(async (event) => {
       ON s.week = w.week
     ORDER BY w.week
   `
-  
+
   return result
 })
