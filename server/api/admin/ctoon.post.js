@@ -97,7 +97,7 @@ export default defineEventHandler(async (event) => {
   // 3e) Quantities
   const totQty = totalQuantity != null && totalQuantity !== '' ? parseInt(totalQuantity, 10) : null
   const initQty = initialQuantity != null && initialQuantity !== '' ? parseInt(initialQuantity, 10) : null
-  if (initQty != null && totQty != null && initQty >= totQty) {
+  if (initQty != null && totQty != null && initQty > totQty) {
     throw createError({ statusCode: 400, statusMessage: 'Initial Quantity must be less than Total Quantity.' })
   }
 

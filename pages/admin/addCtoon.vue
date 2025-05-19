@@ -84,9 +84,9 @@
         <!-- Hidden Asset Path -->
         <input type="hidden" v-model="assetPath" />
 
-        <!-- Release Date & Time -->
+        <!-- Release Date & Time (CDT) -->
         <div>
-          <label class="block mb-1 font-medium">Release Date &amp; Time</label>
+          <label class="block mb-1 font-medium">Release Date &amp; Time (CDT)</label>
           <input
             type="datetime-local"
             v-model="releaseDate"
@@ -143,14 +143,19 @@
           <p v-if="errors.initialQuantity" class="text-red-600 text-sm mt-1">{{ errors.initialQuantity }}</p>
         </div>
 
-        <!-- Booleans -->
+        <!-- Hidden Code Only & In C-mart -->
         <div class="flex items-center space-x-6">
+          <!-- hidden Code Only flag -->
+          <input type="checkbox" v-model="codeOnly" hidden />
+
+          <!-- In C-mart -->
           <label class="inline-flex items-center">
-            <input v-model="codeOnly" type="checkbox" class="mr-2" />
-            <span>Code Only</span>
-          </label>
-          <label class="inline-flex items-center">
-            <input v-model="inCmart" type="checkbox" class="mr-2" />
+            <input
+              v-model="inCmart"
+              type="checkbox"
+              class="mr-2"
+              :disabled="['Prize Only','Code Only','Auction Only'].includes(rarity)"
+            />
             <span>In C-mart</span>
           </label>
         </div>
@@ -194,7 +199,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
@@ -205,24 +210,29 @@ definePageMeta({
 
 const router = useRouter()
 
+// --- Timezone helper ---
+function getChicagoNow(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+}
+
 // --- State ---
 const name = ref('')
 const series = ref('')
-const seriesOptions = ref([])
-const imageFile = ref(null)
+const seriesOptions = ref<string[]>([])
+const imageFile = ref<File|null>(null)
 const type = ref('')
 const assetPath = ref('')
 const releaseDate = ref('')
-const perUserLimit = ref(null)
+const perUserLimit = ref<number|null>(null)
 const codeOnly = ref(false)
 const inCmart = ref(false)
 const price = ref(0)
-const totalQuantity = ref(null)
-const initialQuantity = ref(null)
+const totalQuantity = ref<number|null>(null)
+const initialQuantity = ref<number|null>(null)
 const setField = ref('')
 const characters = ref('')
 const rarity = ref('')
-const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
+const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
 
 // --- Validation errors ---
 const errors = reactive({
@@ -237,16 +247,14 @@ const errors = reactive({
   characters: ''
 })
 
-// --- Min date/time for release ---
+// --- Min date/time for release in CDT ---
 const minDateTime = computed(() => {
-  const now = new Date()
-  const pad = n => n.toString().padStart(2,'0')
-  const Y = now.getFullYear(), M = pad(now.getMonth()+1), D = pad(now.getDate())
-  const h = pad(now.getHours()), m = pad(now.getMinutes())
-  return `${Y}-${M}-${D}T${h}:${m}`
+  const now = getChicagoNow()
+  const pad = (n: number) => n.toString().padStart(2,'0')
+  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
 })
 
-// --- Fetch existing series for autocomplete ---
+// --- Fetch existing series ---
 onMounted(async () => {
   try {
     const res = await fetch('/api/admin/series', { credentials: 'include' })
@@ -256,17 +264,31 @@ onMounted(async () => {
   }
 })
 
-// --- Helpers ---
+// Auto-set price & manage flags based on rarity
+watch(rarity, val => {
+  switch (val) {
+    case 'Common': price.value = 100; break
+    case 'Uncommon': price.value = 200; break
+    case 'Rare': price.value = 400; break
+    case 'Very Rare': price.value = 750; break
+    case 'Crazy Rare': price.value = 1250; break
+    default: price.value = 0
+  }
+  codeOnly.value = (val === 'Code Only')
+  if (['Prize Only','Code Only','Auction Only'].includes(val)) {
+    inCmart.value = false
+  }
+})
 
-function formatName() {
-  name.value = name.value
-    .split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
+// Update assetPath when series or file changes
+watch([series, imageFile], ([s,f]) => {
+  if (s && f) assetPath.value = `/public/cToons/${s}/${f.name}`
+})
 
-function handleFile(e) {
-  const f = e.target.files?.[0]
+// --- Handle file upload & set MIME type ---
+function handleFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0] ?? null
   imageFile.value = null
   errors.image = ''
   if (!f) {
@@ -281,110 +303,53 @@ function handleFile(e) {
   type.value = f.type
 }
 
-// Auto-set price based on rarity
-watch(rarity, val => {
-  switch (val) {
-    case 'Common': price.value = 100; break
-    case 'Uncommon': price.value = 200; break
-    case 'Rare': price.value = 400; break
-    case 'Very Rare': price.value = 750; break
-    case 'Crazy Rare': price.value = 1250; break
-    default: price.value = 0
-  }
-})
-
-// Update assetPath whenever series or file changes
-watch([series, imageFile], ([s,f]) => {
-  if (s && f) assetPath.value = `/public/cToons/${s}/${f.name}`
-})
-
 // --- Validation ---
 function validate() {
-  // Clear errors
   for (const key in errors) errors[key] = ''
-
-  // Image
-  if (!imageFile.value) {
-    errors.image = 'Image is required.'
-  }
-
-  // Name
-  if (!name.value.trim()) {
-    errors.name = 'Name is required.'
-  }
-
-  // Series
-  if (!series.value.trim()) {
-    errors.series = 'Series is required.'
-  }
-
-  // Rarity
-  if (!rarity.value) {
-    errors.rarity = 'Rarity is required.'
-  }
-
-  // Release date
+  if (!imageFile.value) errors.image = 'Image is required.'
+  if (!name.value.trim()) errors.name = 'Name is required.'
+  if (!series.value.trim()) errors.series = 'Series is required.'
+  if (!rarity.value) errors.rarity = 'Rarity is required.'
   if (!releaseDate.value) {
     errors.releaseDate = 'Release date/time is required.'
   } else if (new Date(releaseDate.value) <= new Date()) {
     errors.releaseDate = 'Release date/time must be in the future.'
   }
-
-  // Initial vs total quantity
   const init = initialQuantity.value
-  const tot  = totalQuantity.value
-  if (init != null && tot != null && init >= tot) {
+  const tot = totalQuantity.value
+  if (init != null && tot != null && init > tot) {
     errors.initialQuantity = 'Initial must be less than total quantity.'
   }
-
-  // CodeOnly vs inCmart
   if (codeOnly.value && inCmart.value) {
     errors.codeOnly = 'If Code Only is true, In C-mart must be false.'
   }
-
-  // Set
-  if (!setField.value) {
-    errors.setField = 'Set is required.'
-  }
-
-  // Characters
-  const charsArr = characters.value
-    .split(',')
-    .map(c => c.trim())
-    .filter(c => c)
-  if (charsArr.length === 0) {
-    errors.characters = 'At least one character is required.'
-  }
-
-  // Return overall validity
+  if (!setField.value) errors.setField = 'Set is required.'
+  const charsArr = characters.value.split(',').map(c=>c.trim()).filter(c=>c)
+  if (charsArr.length === 0) errors.characters = 'At least one character is required.'
   return Object.values(errors).every(msg => !msg)
 }
 
 // --- Submission ---
 async function submitForm() {
   if (!validate()) return
+  const charsArr = characters.value.split(',').map(c=>c.trim()).filter(c=>c)
+  const localDate = new Date(releaseDate.value)
+  const utcRelease = localDate.toISOString()
 
-  const charsArr = characters.value
-      .split(',')
-      .map(c => c.trim())
-      .filter(c => c)
-
-  const selected = new Date(releaseDate.value)
   const formData = new FormData()
-  formData.append('image', imageFile.value, imageFile.value.name)
+  formData.append('image', imageFile.value!)
   formData.append('name', name.value)
   formData.append('series', series.value)
   formData.append('type', type.value)
   formData.append('rarity', rarity.value)
-  formData.append('image', imageFile.value)
   formData.append('assetPath', assetPath.value)
-  formData.append('releaseDate', selected.toISOString())
-  if (perUserLimit.value != null) formData.append('perUserLimit', perUserLimit.value)
-  formData.append('codeOnly', codeOnly.value)
-  formData.append('inCmart', inCmart.value)
-  formData.append('price', price.value)
-  if (totalQuantity.value != null) formData.append('totalQuantity', totalQuantity.value)
-  if (initialQuantity.value != null) formData.append('initialQuantity', initialQuantity.value)
+  formData.append('releaseDate', utcRelease)
+  if (perUserLimit.value != null) formData.append('perUserLimit', `${perUserLimit.value}`)
+  formData.append('codeOnly', `${codeOnly.value}`)
+  formData.append('inCmart', `${inCmart.value}`)
+  formData.append('price', `${price.value}`)
+  if (totalQuantity.value != null) formData.append('totalQuantity', `${totalQuantity.value}`)
+  if (initialQuantity.value != null) formData.append('initialQuantity', `${initialQuantity.value}`)
   formData.append('set', setField.value)
   formData.append('characters', JSON.stringify(charsArr))
 
@@ -394,18 +359,16 @@ async function submitForm() {
       credentials: 'include',
       body: formData
     })
-    if (!res.ok) {
-      const text = await res.statusMessage
-      throw new Error(text || 'Failed to create cToon')
-    }
-    router.push('/admin')
+    if (!res.ok) throw new Error(await res.text() || 'Failed to create cToon')
+    router.push('/admin/ctoons')
   } catch (e) {
     console.error(e)
-    alert('Error: ' + e.message)
+    alert('Error: ' + (e as Error).message)
   }
 }
 </script>
 
 <style scoped>
+th, td { vertical-align: middle; }
 .max-w-2xl { max-width: 768px; }
 </style>
