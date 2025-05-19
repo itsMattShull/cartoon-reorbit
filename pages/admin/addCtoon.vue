@@ -164,12 +164,7 @@
         <!-- Set -->
         <div>
           <label class="block mb-1 font-medium">Set</label>
-          <select v-model="setField" required class="w-full border rounded p-2">
-            <option disabled value="">Select set</option>
-            <option>Original</option>
-            <option>Reorbit Exclusive</option>
-            <option>Community</option>
-          </select>
+          <input v-model="setField" required placeholder="Select or type new series" class="w-full border rounded p-2">
           <p v-if="errors.setField" class="text-red-600 text-sm mt-1">{{ errors.setField }}</p>
         </div>
 
