@@ -15,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // Determine base directory for uploads:
 // Use project root in production; in development, use CWD
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..')
+  ? join(__dirname, '.')
   : process.cwd()
 console.log('base directory: ', baseDir)
 const prisma = new PrismaClient()
