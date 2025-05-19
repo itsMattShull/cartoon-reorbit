@@ -1,5 +1,3 @@
-// server/api/admin/ctoon.post.js
-
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
@@ -8,8 +6,18 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
+// __dirname workaround for ESM
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// Determine base directory for uploads:
+// Use project root in production; in development, use CWD
+const baseDir = process.env.NODE_ENV === 'production'
+  ? join(__dirname, '..', '..', '..')
+  : process.cwd()
+console.log('base directory: ', baseDir)
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
@@ -40,7 +48,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 3. Validate inputs ──────────────────────────────────────────────────
-  // 3a) Image file present & type
   if (!imagePart) {
     throw createError({ statusCode: 400, statusMessage: 'An image file is required.' })
   }
@@ -48,7 +55,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Only PNG or GIF images are allowed.' })
   }
 
-  // 3b) Required text fields
   const {
     name,
     series,
@@ -65,20 +71,11 @@ export default defineEventHandler(async (event) => {
     type
   } = fields
 
-  if (!name?.trim()) {
-    throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
-  }
-  if (!series?.trim()) {
-    throw createError({ statusCode: 400, statusMessage: 'Series is required.' })
-  }
-  if (!rarity) {
-    throw createError({ statusCode: 400, statusMessage: 'Rarity is required.' })
-  }
-  if (!setField) {
-    throw createError({ statusCode: 400, statusMessage: 'Set is required.' })
-  }
+  if (!name?.trim()) throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
+  if (!series?.trim()) throw createError({ statusCode: 400, statusMessage: 'Series is required.' })
+  if (!rarity) throw createError({ statusCode: 400, statusMessage: 'Rarity is required.' })
+  if (!setField) throw createError({ statusCode: 400, statusMessage: 'Set is required.' })
 
-  // 3c) Release date must be valid, future
   const releaseDate = new Date(releaseRaw)
   if (isNaN(releaseDate.getTime())) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid release date/time.' })
@@ -87,21 +84,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Release date/time must be in the future.' })
   }
 
-  // 3d) Boolean rules
   const codeOnlyBool = String(codeOnly) === 'true'
   const inCmartBool = String(inCmart) === 'true'
   if (codeOnlyBool && inCmartBool) {
     throw createError({ statusCode: 400, statusMessage: 'Cannot be Code Only and In C-mart at the same time.' })
   }
 
-  // 3e) Quantities
   const totQty = totalQuantity != null && totalQuantity !== '' ? parseInt(totalQuantity, 10) : null
   const initQty = initialQuantity != null && initialQuantity !== '' ? parseInt(initialQuantity, 10) : null
   if (initQty != null && totQty != null && initQty > totQty) {
     throw createError({ statusCode: 400, statusMessage: 'Initial Quantity must be less than Total Quantity.' })
   }
 
-  // 3f) Characters array
   let charactersArr
   try {
     charactersArr = JSON.parse(charsRaw)
@@ -112,21 +106,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Characters must be a non-empty array.' })
   }
 
-  // 3g) Price
   const priceInt = price != null && price !== '' ? parseInt(price, 10) : 0
-
-  // 3h) perUserLimit
   const limitInt = perUserLimit != null && perUserLimit !== '' ? parseInt(perUserLimit, 10) : null
 
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
-  const uploadDir = join(process.cwd(), 'public', 'cToons', safeSeries)
+  const uploadDir = join(baseDir, 'public', 'cToons', safeSeries)
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename
   const outPath = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
 
-  // Compute assetPath
   const assetPath = `/cToons/${safeSeries}/${filename}`
 
   // ── 5. Create in database ───────────────────────────────────────────────
