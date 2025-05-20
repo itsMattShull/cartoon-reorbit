@@ -14,7 +14,7 @@ async function fetchCToonsFromDB() {
   fourWeeksAgo.setDate(now.getDate() - 28)
   fourWeeksLater.setDate(now.getDate() + 28)
 
-  // Replace this with your real DB logic
+  // Fetch and sort by releaseDate descending
   const ctoons = await db.ctoon.findMany({
     where: {
       inCmart: true,
@@ -28,6 +28,9 @@ async function fetchCToonsFromDB() {
       name: true,
       assetPath: true,
       releaseDate: true
+    },
+    orderBy: {
+      releaseDate: 'desc'
     }
   })
 
