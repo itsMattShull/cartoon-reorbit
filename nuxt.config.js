@@ -3,13 +3,11 @@ export default defineNuxtConfig({
     port: process.env.NUXT_PORT || 3000,
     host: '0.0.0.0'
   },
+
   // ───────────────────────────────────────────────
   // 1)  Modules
   // ───────────────────────────────────────────────
-  modules: [
-    '@nuxtjs/tailwindcss',
-    '@prisma/nuxt'
-  ],
+  modules: ['@nuxtjs/tailwindcss', '@prisma/nuxt', '@sentry/nuxt/module'],
 
   // ───────────────────────────────────────────────
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
@@ -46,9 +44,21 @@ export default defineNuxtConfig({
       socketPort: process.env.SOCKET_PORT || 3001
     }
   },
+
   serverMiddleware: [
     '~/server/middleware/auth.js',
     '~/server/middleware/guild-check.js',
     '~/server/middleware/daily-points.js'
-  ]
+  ],
+
+  sentry: {
+    sourceMapsUploadOptions: {
+      org: 'matt-shull-m0',
+      project: 'javascript-nuxt'
+    }
+  },
+
+  sourcemap: {
+    client: 'hidden'
+  }
 })

@@ -82,6 +82,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import Nav from '@/components/Nav.vue'
+import * as Sentry from "@sentry/nuxt"
 
 const { user, fetchSelf } = useAuth()
 const ctoons = ref([])
@@ -156,8 +157,15 @@ const buyCtoon = async (ctoon) => {
     toastMessage.value = 'Purchase successful!'
     setTimeout(() => toastMessage.value = '', 5000)
   } catch (err) {
+    Sentry.withScope(scope => {
+      // add any custom metadata you like:
+      scope.setTag('page', 'dashboard');
+      scope.setTag('user', user?.username);
+      scope.setExtra('moreInfo', 'Failed while loading purchsing cToon');
+      Sentry.captureException(err);
+    });
     toastType.value = 'error'
-    toastMessage.value = err?.data?.message || 'An error occurred while purchasing.'
+    toastMessage.value = 'An error occurred while purchasing.'
     setTimeout(() => toastMessage.value = '', 5000)
   }
 }

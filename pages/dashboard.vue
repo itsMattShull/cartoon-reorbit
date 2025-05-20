@@ -181,6 +181,7 @@
   
   <script setup>
     import { useRouter } from 'vue-router'
+    import * as Sentry from "@sentry/nuxt"
     definePageMeta({
       middleware: 'auth'
     })
@@ -198,6 +199,13 @@
       try {
         guild.value = await $fetch('https://discord.com/api/guilds/1369067208029896794/widget.json')
       } catch (err) {
+        Sentry.withScope(scope => {
+          // add any custom metadata you like:
+          scope.setTag('page', 'dashboard');
+          scope.setTag('user', user?.username);
+          scope.setExtra('moreInfo', 'Failed while loading discord widget');
+          Sentry.captureException(err);
+        });
         console.error('Failed to load Discord widget JSON', err)
       }
     }
@@ -230,6 +238,13 @@
       try {
         allCToons.value = await $fetch('/api/ctoons')
       } catch (err) {
+        Sentry.withScope(scope => {
+          // add any custom metadata you like:
+          scope.setTag('page', 'dashboard');
+          scope.setTag('user', user?.username);
+          scope.setExtra('moreInfo', 'Failed while loading /api/ctoons');
+          Sentry.captureException(err);
+        });
         console.error('Failed to fetch cToons', err)
       }
     }
@@ -258,6 +273,13 @@
           console.error('Failed to load leaderboard:', await res.text())
         }
       } catch (err) {
+        Sentry.withScope(scope => {
+          // add any custom metadata you like:
+          scope.setTag('page', 'dashboard');
+          scope.setTag('user', user?.username);
+          scope.setExtra('moreInfo', 'Failed while loading /api/points-leaderboard');
+          Sentry.captureException(err);
+        });
         console.error('Leaderboard fetch error:', err)
       }
 
