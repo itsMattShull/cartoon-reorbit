@@ -301,11 +301,9 @@ onMounted(async () => {
     ownerId.value = res.ownerId
     cZoneItems.value = (res.cZone.layoutData || []).map(item => ({
       ...item,
-      series: item.series || 'Unknown',
-      rarity: item.rarity || 'Unknown',
-      quantity: item.quantity,
-      mintNumber: item.mintNumber ?? null,
+      style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`
     }))
+
     backgroundImage.value = res.cZone.background || ''
 
     if (user.value && res.ownerId !== user.value.id) {

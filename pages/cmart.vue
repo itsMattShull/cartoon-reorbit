@@ -144,29 +144,29 @@ const buyCtoon = async (ctoon) => {
       method: 'POST',
       body: { ctoonId: ctoon.id }
     })
+
+    // Refresh the user from the server (which now has the correct, deducted balance)
     await fetchSelf()
-    // Explicitly update user points after fetching self
-    if (user.value && typeof user.value.points === 'number') {
-      user.value.points -= ctoon.price
-    }
+
+    // Update the minted count locally
     const target = ctoons.value.find(x => x.id === ctoon.id)
     if (target) {
       target.minted++
     }
+
     toastType.value = 'success'
     toastMessage.value = 'Purchase successful!'
     setTimeout(() => toastMessage.value = '', 5000)
   } catch (err) {
     Sentry.withScope(scope => {
-      // add any custom metadata you like:
-      scope.setTag('page', 'dashboard');
-      scope.setTag('user', user?.username);
-      scope.setExtra('moreInfo', 'Failed while loading purchsing cToon');
-      Sentry.captureException(err);
-    });
+      scope.setTag('page', 'cmart')
+      scope.setExtra('ctoonId', ctoon.id)
+      Sentry.captureException(err)
+    })
     toastType.value = 'error'
     toastMessage.value = 'An error occurred while purchasing.'
     setTimeout(() => toastMessage.value = '', 5000)
   }
 }
+
 </script>
