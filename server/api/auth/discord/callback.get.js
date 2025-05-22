@@ -3,6 +3,16 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+// Utility: parse a Discord “snowflake” ID into its creation Date
+function parseDiscordSnowflake(snowflake) {
+  // Discord epoch: 2015-01-01T00:00:00.000Z as a BigInt
+  const DISCORD_EPOCH = 1420070400000n
+  // shift away the lower 22 bits of the snowflake, then add the epoch
+  const timestamp = (BigInt(snowflake) >> 22n) + DISCORD_EPOCH
+  return new Date(Number(timestamp))
+}
+
+
 function getRequestIP(event) {
   return (
     event.node.req.headers['x-forwarded-for']?.split(',')[0] ||
@@ -59,6 +69,8 @@ export default defineEventHandler(async (event) => {
   // 2. Fetch user info
   const discordUser = await $fetch('https://discord.com/api/users/@me', { headers: authHeader })
 
+  const discordCreatedAt = parseDiscordSnowflake(discordUser.id)
+
   // 3. Auto-join user to the guild (using bot token)
   try {
     await $fetch(`https://discord.com/api/guilds/${guildId}/members/${discordUser.id}`, {
@@ -100,6 +112,7 @@ export default defineEventHandler(async (event) => {
       email: discordUser.email,
       accessToken: access_token,
       refreshToken: refresh_token,
+      discordCreatedAt,
       tokenExpiresAt: new Date(Date.now() + expires_in * 1000),
       lastLogin: new Date()
     },
@@ -110,6 +123,7 @@ export default defineEventHandler(async (event) => {
       discordAvatar: discordUser.avatar,
       accessToken: access_token,
       refreshToken: refresh_token,
+      discordCreatedAt,
       tokenExpiresAt: new Date(Date.now() + expires_in * 1000)
     }
   })

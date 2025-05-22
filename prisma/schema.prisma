@@ -82,6 +82,7 @@ model User {
   inGuild        Boolean   @default(false)
   createdAt      DateTime  @default(now())
   lastLogin      DateTime?
+  discordCreatedAt DateTime?
 
   cZones           CZone[]
   claims           Claim[]
