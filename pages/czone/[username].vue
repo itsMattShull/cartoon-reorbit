@@ -25,7 +25,7 @@
       </div>
     </div> -->
 
-    <div class="flex justify-center overflow-hidden">
+    <div class="flex justify-center">
       <!-- scale wrapper: only on small screens -->
       <div :style="scaleStyle">
         <div
@@ -42,7 +42,7 @@
               <img
                 :src="item.assetPath"
                 :alt="item.name"
-                class="object-contain cursor-pointer"
+                class="object-contain cursor-pointer max-w-[initial]"
                 @click="openSidebar(item)"
               />
             </div>
