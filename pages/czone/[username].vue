@@ -153,7 +153,7 @@
           <div class="absolute top-0 left-0 w-full h-full">
             <!-- Placeholder for cToon layout, this should be updated to map cToons to positions -->
             <div v-for="(item, index) in cZoneItems" :key="index" class="absolute" :style="item.style">
-              <img :src="item.assetPath" :alt="item.name" class="object-contain cursor-pointer" @click="openSidebar(item)" />
+              <img :src="item.assetPath" :alt="item.name" class="object-contain cursor-pointer max-w-[initial]" @click="openSidebar(item)" />
             </div>
           </div>
         </div>
