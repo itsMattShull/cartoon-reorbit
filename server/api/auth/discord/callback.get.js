@@ -6,9 +6,9 @@ const prisma = new PrismaClient()
 // Utility: parse a Discord “snowflake” ID into its creation Date
 function parseDiscordSnowflake(snowflake) {
   // Discord epoch: 2015-01-01T00:00:00.000Z as a BigInt
-  const DISCORD_EPOCH = 1420070400000n
+  const DISCORD_EPOCH = BigInt(1420070400000)
   // shift away the lower 22 bits of the snowflake, then add the epoch
-  const timestamp = (BigInt(snowflake) >> 22n) + DISCORD_EPOCH
+  const timestamp = (BigInt(snowflake) >> BigInt(22)) + DISCORD_EPOCH
   return new Date(Number(timestamp))
 }
 
