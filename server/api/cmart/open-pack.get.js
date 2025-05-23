@@ -1,25 +1,4 @@
 // server/api/cmart/open-pack.get.js
-//
-// Opens a sealed pack that the user just bought and returns the
-// randomly-selected cToons that were inside.
-//
-//   • query ?id=<userPackId>
-//   • user must own this UserPack and it must still be unopened
-//   • obey PackRarityConfig counts and PackCtoonOption weights
-//   • respect cToon.quantity (print-run) when selecting
-//   • creates UserCtoon rows ± mints, marks UserPack.opened = true
-//   • returns [{ id,name,assetPath,rarity }] for the UI reveal
-//
-// Assumes the following tables exist (names from earlier schema):
-//   User        (id)
-//   UserPack    (id,userId,packId,opened:Boolean)
-//   Pack        (id,name)
-//   PackRarityConfig   (packId,rarity,count)
-//   PackCtoonOption    (packId,ctoonId,weight)
-//   Ctoon              (id,name,rarity,assetPath,quantity)  // quantity null = unlimited
-//   UserCtoon          (...)
-
-// server/api/cmart/open-pack.get.js
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
@@ -61,7 +40,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing id param' })
   }
 
-  // Load the sealed UserPack + its Pack config
   const userPack = await db().userPack.findUnique({
     where: { id: userPackId },
     include: {
@@ -81,16 +59,17 @@ export default defineEventHandler(async (event) => {
   }
 
   const packId = userPack.pack.id
-  // Build in-memory pools, skipping sold-out cToons
   const poolByRarity = {}
   for (const opt of userPack.pack.ctoonOptions) {
     const c = opt.ctoon
-    if (c.quantity !== null && c.quantity <= 0) continue
+    if (c.quantity !== null) {
+      const minted = await db().userCtoon.count({ where: { ctoonId: c.id } })
+      if (minted >= c.quantity) continue
+    }
     if (!poolByRarity[c.rarity]) poolByRarity[c.rarity] = []
     poolByRarity[c.rarity].push({ ctoon: c, weight: opt.weight })
   }
 
-  // Select cToons
   const chosen = []
   for (const rc of userPack.pack.rarityConfigs) {
     const pool = poolByRarity[rc.rarity] || []
@@ -98,22 +77,13 @@ export default defineEventHandler(async (event) => {
     for (let i = 0; i < rc.count; i++) {
       const pick = pickWeighted(pool)
       chosen.push(pick.ctoon)
-      if (pick.ctoon.quantity !== null) {
-        pick.ctoon.quantity--
-        if (pick.ctoon.quantity === 0) {
-          const idx = pool.indexOf(pick)
-          if (idx !== -1) pool.splice(idx, 1)
-        }
-      }
     }
   }
   if (chosen.length === 0) {
     throw createError({ statusCode: 500, statusMessage: 'Pack yielded no cToons' })
   }
 
-  // Persist everything in one transaction
   const minted = await db().$transaction(async (tx) => {
-    // Mark the pack opened
     await tx.userPack.update({
       where: { id: userPackId },
       data: { opened: true, openedAt: new Date() }
@@ -121,25 +91,14 @@ export default defineEventHandler(async (event) => {
 
     const results = []
     for (const c of chosen) {
-      // Decrement print-run if limited
-      if (c.quantity !== null) {
-        const updated = await tx.ctoon.update({
-          where: { id: c.id },
-          data: { quantity: { decrement: 1 } },
-          select: { quantity: true }
-        })
-        if (updated.quantity === 0) {
-          // Remove sold-out option
-          await tx.packCtoonOption.deleteMany({
-            where: { packId, ctoonId: c.id }
-          })
-        }
-      }
-
-      // Mint the cToon to the user
       const alreadyMinted = await tx.userCtoon.count({
         where: { ctoonId: c.id }
       })
+
+      if (c.quantity !== null && alreadyMinted >= c.quantity) {
+        continue  // skip minting if limit is reached
+      }
+
       const uc = await tx.userCtoon.create({
         data: {
           userId: me.id,
@@ -151,7 +110,6 @@ export default defineEventHandler(async (event) => {
       results.push({ ...c, id: uc.id })
     }
 
-    // Remove any empty rarity configs
     for (const rc of userPack.pack.rarityConfigs) {
       const remaining = await tx.packCtoonOption.count({
         where: { packId, ctoon: { rarity: rc.rarity } }
@@ -166,7 +124,6 @@ export default defineEventHandler(async (event) => {
     return results
   })
 
-  // Return the freshly minted cToons to the client
   return minted.map(c => ({
     id:       c.id,
     name:     c.name,

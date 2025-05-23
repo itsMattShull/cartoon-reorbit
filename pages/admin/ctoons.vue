@@ -21,6 +21,7 @@
             <th class="px-4 py-2 text-right">Highest Mint</th>
             <th class="px-4 py-2 text-right">Quantity</th>
             <th class="px-4 py-2 text-center">In C-mart</th>
+            <th class="px-4 py-2 text-right">Edit</th>
           </tr>
         </thead>
         <tbody>
@@ -57,6 +58,12 @@
             <td class="px-4 py-2 text-center">
               {{ c.inCmart ? 'Yes' : 'No' }}
             </td>
+            <td class="px-4 py-2 text-right">
+              <NuxtLink
+                :to="`/admin/editCtoon/${c.id}`"
+                class="text-blue-600 hover:text-blue-800"
+              >Edit</NuxtLink>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -72,19 +79,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import Nav from '~/components/Nav.vue'
-
 definePageMeta({
   middleware: ['auth', 'admin']
 })
+import { ref, onMounted } from 'vue'
+import Nav from '~/components/Nav.vue'
 
 const take = 20
 const skip = ref(0)
 const ctoons = ref([])
 const loading = ref(false)
 const finished = ref(false)
-const sentinel = ref(null)    // no runtime type annotation
+const sentinel = ref(null)
 
 async function loadNext() {
   if (loading.value || finished.value) return
@@ -95,7 +101,6 @@ async function loadNext() {
     { credentials: 'include' }
   )
   if (!res.ok) {
-    // handle error…
     loading.value = false
     return
   }
