@@ -38,6 +38,7 @@ model Ctoon {
   owners            UserCtoon[]
   // removed old ClaimCodeReward[] relation
   rewardCtoons      RewardCtoon[]   // relation back from RewardCtoon
+  packOptions       PackCtoonOption[]
 }
 
 model UserCtoon {
@@ -96,6 +97,7 @@ model User {
   trades           Trade[]
   tradeSpectators  TradeSpectator[]
   ips              UserIP[]
+  packs           UserPack[]
 }
 
 model UserIP {
@@ -149,6 +151,7 @@ model ClaimCodeReward {
 
   code     ClaimCode         @relation(fields: [codeId], references: [id])
   ctoons   RewardCtoon[]     // zero or more cToon grants
+  packs    RewardPack[]
 }
 
 /// Join table so each reward can include many cToons
@@ -160,6 +163,18 @@ model RewardCtoon {
 
   reward    ClaimCodeReward    @relation(fields: [rewardId], references: [id])
   ctoon     Ctoon              @relation(fields: [ctoonId], references: [id])
+}
+
+model RewardPack {
+  id        String   @id @default(uuid())
+  rewardId  String
+  packId    String
+  quantity  Int      @default(1)
+
+  reward    ClaimCodeReward @relation(fields: [rewardId], references: [id])
+  pack      Pack            @relation(fields: [packId], references: [id])
+
+  @@unique([rewardId, packId])
 }
 
 model Visit {
@@ -213,4 +228,58 @@ model TradeSpectator {
 
   room      TradeRoom    @relation(fields: [roomId], references: [id])
   user      User          @relation(fields: [userId], references: [id])
+}
+
+model Pack {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  price         Int      @default(0)
+  imagePath     String?
+  inCmart       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /* How many pulls of each rarity come in one pack */
+  rarityConfigs PackRarityConfig[]
+  /* All candidate cToons (with weights) that can be rolled */
+  ctoonOptions  PackCtoonOption[]
+  /* Instances users have purchased */
+  userPacks     UserPack[]
+  rewardPacks   RewardPack[]
+}
+
+model PackRarityConfig {
+  id        String @id @default(uuid())
+  packId    String
+  rarity    String
+  count     Int
+
+  pack      Pack   @relation(fields: [packId], references: [id])
+
+  @@unique([packId, rarity])
+}
+
+model PackCtoonOption {
+  id        String @id @default(uuid())
+  packId    String
+  ctoonId   String
+  weight    Int    @default(1)
+
+  pack      Pack   @relation(fields: [packId], references: [id])
+  ctoon     Ctoon  @relation(fields: [ctoonId], references: [id])
+
+  @@unique([packId, ctoonId])
+}
+
+model UserPack {
+  id        String   @id @default(uuid())
+  userId    String
+  packId    String
+  opened    Boolean  @default(false)
+  openedAt  DateTime?
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+  pack      Pack @relation(fields: [packId], references: [id])
 }

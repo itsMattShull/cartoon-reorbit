@@ -68,7 +68,8 @@ const links = computed(() => {
     all.push(
       { label: 'Admin', to: '/admin' },
       { label: 'Manage cToons', to: '/admin/ctoons' },
-      { label: 'Manage Codes', to: '/admin/codes' }
+      { label: 'Manage Codes', to: '/admin/codes' },
+      { label: 'Manage Packs', to: '/admin/packs' }
     )
   }
   return all
