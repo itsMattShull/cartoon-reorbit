@@ -119,7 +119,7 @@ export default defineEventHandler(async (event) => {
   console.log('outPath: ', outPath)
   await writeFile(outPath, imagePart.data)
 
-  const assetPath = `/cToons/${safeSeries}/${filename}`
+  const assetPath = `/images/cToons/${safeSeries}/${filename}`
 
   // ── 5. Create in database ───────────────────────────────────────────────
   const newCtoon = await prisma.ctoon.create({

@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
   const filename = `${Date.now()}_${imagePart.filename.replace(/[^A-Za-z0-9._-]/g, '')}`
   const outPath  = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
-  const imagePath = `/packs/${filename}`
+  const imagePath = `/images/packs/${filename}`
 
   const result = await db().$transaction(async (tx) => {
     const pack = await tx.pack.create({
