@@ -154,9 +154,9 @@ const { user, fetchSelf } = useAuth()
 
 const avatars = ref([])
 const starterSets = [
-  ['/cToons/Dexters Lab/DEX_deedee_1_2_1.gif', '/cToons/Ed Edd n Eddy/space_outlaw_ed.gif', '/cToons/Justice League/fearless_flash_fm1.gif', '/cToons/Powerpuff Girls/funky_blue_bubbles_fm1[1].gif', '/cToons/Scooby Doo/lazy_scooby_fm1.gif'],
-  ['/cToons/Dexters Lab/valentines_mandark_fm1.gif', '/cToons/Ed Edd n Eddy/space_outlaw_edd.gif', '/cToons/Justice League/the_batman_fm1.gif', '/cToons/Powerpuff Girls/funky_green_buttercup_fm1[1].gif', '/cToons/Scooby Doo/velma_fm1.gif'],
-  ['/cToons/Dexters Lab/watcher_dexter_fm1.gif', '/cToons/Ed Edd n Eddy/space_outlaw_eddy.gif', '/cToons/Justice League/undaunted_hawkgirl_fm1.gif', '/cToons/Powerpuff Girls/funky_pink_blossom_fm1[1].gif', '/cToons/Scooby Doo/shaggy_FM1.gif']
+  ['/images/cToons/Dexters Lab/DEX_deedee_1_2_1.gif', '/images/cToons/Ed Edd n Eddy/space_outlaw_ed.gif', '/images/cToons/Justice League/fearless_flash_fm1.gif', '/images/cToons/Powerpuff Girls/funky_blue_bubbles_fm1[1].gif', '/images/cToons/Scooby Doo/lazy_scooby_fm1.gif'],
+  ['/images/cToons/Dexters Lab/valentines_mandark_fm1.gif', '/images/cToons/Ed Edd n Eddy/space_outlaw_edd.gif', '/images/cToons/Justice League/the_batman_fm1.gif', '/images/cToons/Powerpuff Girls/funky_green_buttercup_fm1[1].gif', '/images/cToons/Scooby Doo/velma_fm1.gif'],
+  ['/images/cToons/Dexters Lab/watcher_dexter_fm1.gif', '/images/cToons/Ed Edd n Eddy/space_outlaw_eddy.gif', '/images/cToons/Justice League/undaunted_hawkgirl_fm1.gif', '/images/cToons/Powerpuff Girls/funky_pink_blossom_fm1[1].gif', '/images/cToons/Scooby Doo/shaggy_FM1.gif']
 ]
 const selectedSet = ref(null)
 const ctoonDataSets = ref([])
