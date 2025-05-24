@@ -183,7 +183,8 @@
     import { useRouter } from 'vue-router'
     import * as Sentry from "@sentry/nuxt"
     definePageMeta({
-      middleware: 'auth'
+      middleware: 'auth',
+      layout: 'default'
     })
 
     const loading = ref(true)

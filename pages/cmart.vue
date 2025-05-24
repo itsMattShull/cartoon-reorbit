@@ -215,7 +215,10 @@
 
 <script setup>
 // ────────── Nuxt Page Meta ─────────────────────────
-definePageMeta({ middleware: 'auth' })
+definePageMeta({ 
+  middleware: 'auth',
+  layout: 'default'
+})
 
 // ────────── Imports ─────────────────────────────────
 import { ref, computed, onMounted } from 'vue'

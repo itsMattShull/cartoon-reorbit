@@ -267,7 +267,8 @@
 
 <script setup>
 definePageMeta({
-  middleware: ['auth', 'admin']
+  middleware: ['auth', 'admin'],
+      layout: 'default'
 })
 
 /* ---------- Nuxt / Vue composables ---------- */

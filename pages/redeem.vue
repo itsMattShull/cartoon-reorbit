@@ -70,7 +70,8 @@
 import { ref } from 'vue'
 
 definePageMeta({
-  middleware: ['auth']
+  middleware: ['auth'],
+  layout: 'default'
 })
 
 const code = ref('')

@@ -67,7 +67,8 @@ import { useFetch } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
-  middleware: ['auth','admin']
+  middleware: ['auth','admin'],
+  layout: 'default'
 })
 
 // Fetch the list of codes from your admin API

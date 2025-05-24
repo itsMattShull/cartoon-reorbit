@@ -100,7 +100,8 @@
 
 <script setup>
 definePageMeta({
-  middleware: ['auth', 'admin']
+  middleware: ['auth', 'admin'],
+      layout: 'default'
 })
 
 import { ref, onMounted, watch } from 'vue'

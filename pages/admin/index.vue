@@ -68,7 +68,8 @@ Chart.register(
 
 // Restrict page to authenticated admins
 definePageMeta({
-  middleware: ['auth', 'admin']
+  middleware: ['auth', 'admin'],
+  layout: 'default'
 })
 
 // --- State & refs ---

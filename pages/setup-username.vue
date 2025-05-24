@@ -87,6 +87,10 @@
 </template>
   
 <script setup>
+definePageMeta({
+  middleware: ['auth'],
+  layout: 'default'
+})
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { navigateTo } from '#app'

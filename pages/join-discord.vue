@@ -18,7 +18,10 @@
   import { useRouter } from 'vue-router'
   import { useRuntimeConfig } from '#imports'
 
-  definePageMeta({ middleware: 'auth' })
+  definePageMeta({ 
+    middleware: 'auth',
+    layout: 'default'
+  })
 
   const config    = useRuntimeConfig()
   const inviteUrl = config.public.discordInvite  // now injected at runtime

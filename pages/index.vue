@@ -37,6 +37,7 @@
   })
 
   definePageMeta({
+    layout: 'default',
     middleware: async () => {
       const { user, fetchSelf } = useAuth()
       try {

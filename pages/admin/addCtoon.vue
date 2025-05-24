@@ -118,7 +118,10 @@
 
 
 <script setup>
-definePageMeta({ middleware: ['auth', 'admin'] })
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'

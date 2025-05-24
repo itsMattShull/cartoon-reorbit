@@ -155,7 +155,10 @@ import { navigateTo, useHead } from '#app'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({ 
+  middleware: 'auth',
+  layout: 'default'
+})
 
 // Scale logic
 const scale = ref(1)

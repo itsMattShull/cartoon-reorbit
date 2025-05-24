@@ -271,7 +271,8 @@
 
 <script setup>
 definePageMeta({
-  middleware: 'auth'
+  middleware: 'auth',
+  layout: 'default'
 })
 import { ref, reactive, onMounted, nextTick, computed, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
