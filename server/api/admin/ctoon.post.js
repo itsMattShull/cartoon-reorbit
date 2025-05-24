@@ -17,7 +17,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
-console.log('base directory: ', baseDir)
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
@@ -112,11 +111,9 @@ export default defineEventHandler(async (event) => {
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
   const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
-  console.log('uploaddir: ', uploadDir)
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename
   const outPath = join(uploadDir, filename)
-  console.log('outPath: ', outPath)
   await writeFile(outPath, imagePart.data)
 
   const assetPath = `/images/cToons/${safeSeries}/${filename}`

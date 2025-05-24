@@ -75,8 +75,6 @@ async function main() {
   await prisma.userCtoon.updateMany({
     data: { isFirstEdition: true }
   })
-
-  console.log('Ctoon initialQuantity and UserCtoon isFirstEdition updated successfully.')
 }
 
 main()

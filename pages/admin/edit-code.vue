@@ -173,7 +173,6 @@ onMounted(async () => {
     const target = route.query.code
     if (!target) throw new Error('No code specified')
     const entry = all.find(c => c.code === target)
-    console.log(entry)
     if (!entry) throw new Error('Code not found')
 
     // 3) populate form
