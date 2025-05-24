@@ -23,7 +23,7 @@ function db () {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..')
+  ? join(__dirname, '..')
   : process.cwd()
 
 function validatePayload (meta) {
@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
   const meta = fields.meta ? JSON.parse(fields.meta) : null
   validatePayload(meta)
 
-  const uploadDir = join(baseDir, 'public', 'packs')
+  const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'packs')
   await mkdir(uploadDir, { recursive: true })
   const filename = `${Date.now()}_${imagePart.filename.replace(/[^A-Za-z0-9._-]/g, '')}`
   const outPath  = join(uploadDir, filename)
