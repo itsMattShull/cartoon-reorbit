@@ -254,6 +254,7 @@ model PackRarityConfig {
   packId    String
   rarity    String
   count     Int
+  probabilityPercent Int  @default(100)
 
   pack      Pack   @relation(fields: [packId], references: [id])
 

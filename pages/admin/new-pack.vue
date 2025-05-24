@@ -183,7 +183,7 @@
               <!-- cards per pack -->
               <div class="flex items-center gap-1">
                 <input
-                  v-model.number="countsByRarity[rarity]"
+                  v-model.number="countsByRarity[rarity].count"
                   type="number"
                   :min="1"
                   :max="ids.length"
@@ -191,6 +191,19 @@
                   :title="'How many ' + rarity + ' cards per pack (1–' + ids.length + ')'"
                 />
                 <span class="text-xs text-gray-500">cards</span>
+              </div>
+
+              <!-- probability percent -->
+              <div class="flex items-center gap-1 ml-3">
+                <input
+                  v-model.number="countsByRarity[rarity].probabilityPercent"
+                  type="number"
+                  min="1"
+                  max="100"
+                  class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                  :title="'Probability of receiving ' + rarity + ' (1%–100%)'"
+                />
+                <span class="text-xs text-gray-500">%</span>
               </div>
             </div>
 
@@ -301,16 +314,21 @@ function onFile (e) {
 /* 3. Rarity counts --------------------------------------------------- */
 const rarities = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
 const countsByRarity = reactive({
-  Common: 1,
-  Uncommon: 0,
-  Rare: 0,
-  'Very Rare': 0,
-  'Crazy Rare': 0
+  Common: { count: 1, probabilityPercent: 100 },
+  Uncommon: { count: 0, probabilityPercent: 0 },
+  Rare: { count: 0, probabilityPercent: 0 },
+  'Very Rare': { count: 0, probabilityPercent: 0 },
+  'Crazy Rare': { count: 0, probabilityPercent: 0 }
 })
+
 const rarityConfigs = computed(() =>
   Object.entries(countsByRarity)
-    .filter(([, count]) => count > 0)
-    .map(([rarity, count]) => ({ rarity, count }))
+    .filter(([, config]) => config.count > 0)
+    .map(([rarity, config]) => ({ 
+      rarity, 
+      count: config.count,
+      probabilityPercent: config.probabilityPercent
+    }))
 )
 
 /* 4. cToon data & selection ----------------------------------------- */
@@ -409,15 +427,18 @@ const countsValid = computed(() =>
   Object.entries(grouped.value).every(
     ([r, ids]) =>
       !ids.length ||
-      (countsByRarity[r] >= 1 && countsByRarity[r] <= ids.length)
-  )
+      (countsByRarity[r].count >= 1 && countsByRarity[r].count <= ids.length &&
+       countsByRarity[r].probabilityPercent >= 1 && countsByRarity[r].probabilityPercent <= 100)
+  ) && rarityConfigs.value.some(r => r.probabilityPercent === 100)
 )
+
 const allValid = computed(() =>
   countsValid.value &&
   rarities.every(r => !grouped.value[r]?.length || sumWeights(r) === 100)
 )
 const submitTooltip = computed(() => {
   if (!imageFile.value) return 'Thumbnail image required'
+  if (!countsValid.value) return 'Ensure at least one rarity has 100% probability and others between 1% and 100%'
   if (!allValid.value) return 'Fix card counts or weights'
   return ''
 })
@@ -436,7 +457,7 @@ onMounted(async () => {
 /* 8. Submit ---------------------------------------------------------- */
 const router = useRouter()
 async function submit () {
-  if (!allValid.value || !imageFile.value) return
+  if (!allValid.value || !countsValid.value || !imageFile.value) return
 
   const form = new FormData()
   form.append('meta', JSON.stringify({
@@ -444,12 +465,13 @@ async function submit () {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
-    rarityConfigs: rarityConfigs.value,
+    rarityConfigs: rarityConfigs.value, // already includes probabilityPercent
     ctoonOptions: selectedIds.value.map(id => ({
       ctoonId: id,
       weight: weights.value[id]
     }))
   }))
+
   form.append('image', imageFile.value)
 
   try {

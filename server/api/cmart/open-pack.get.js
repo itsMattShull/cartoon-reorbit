@@ -1,4 +1,3 @@
-// server/api/cmart/open-pack.get.js
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
@@ -31,6 +30,10 @@ function pickWeighted(options) {
     if (r <= acc) return o
   }
   return options[options.length - 1]
+}
+
+function shouldIncludeRarity(probabilityPercent) {
+  return Math.random() * 100 < probabilityPercent
 }
 
 export default defineEventHandler(async (event) => {
@@ -73,7 +76,7 @@ export default defineEventHandler(async (event) => {
   const chosen = []
   for (const rc of userPack.pack.rarityConfigs) {
     const pool = poolByRarity[rc.rarity] || []
-    if (pool.length === 0) continue
+    if (pool.length === 0 || !shouldIncludeRarity(rc.probabilityPercent)) continue
     for (let i = 0; i < rc.count; i++) {
       const pick = pickWeighted(pool)
       chosen.push(pick.ctoon)
@@ -96,7 +99,7 @@ export default defineEventHandler(async (event) => {
       })
 
       if (c.quantity !== null && alreadyMinted >= c.quantity) {
-        continue  // skip minting if limit is reached
+        continue
       }
 
       const uc = await tx.userCtoon.create({
@@ -111,13 +114,22 @@ export default defineEventHandler(async (event) => {
     }
 
     for (const rc of userPack.pack.rarityConfigs) {
-      const remaining = await tx.packCtoonOption.count({
-        where: { packId, ctoon: { rarity: rc.rarity } }
+      const options = await tx.packCtoonOption.findMany({
+        where: { packId, ctoon: { rarity: rc.rarity } },
+        include: { ctoon: true }
       })
-      if (remaining === 0) {
-        await tx.packRarityConfig.deleteMany({
-          where: { packId, rarity: rc.rarity }
+
+      const rarityDepleted = await Promise.all(options.map(async opt => {
+        const mintedCount = await tx.userCtoon.count({ where: { ctoonId: opt.ctoon.id } })
+        return opt.ctoon.quantity !== null && mintedCount >= opt.ctoon.quantity
+      }))
+
+      if (rarityDepleted.every(depleted => depleted)) {
+        await tx.pack.update({
+          where: { id: packId },
+          data: { inCmart: false }
         })
+        break
       }
     }
 
@@ -125,9 +137,9 @@ export default defineEventHandler(async (event) => {
   })
 
   return minted.map(c => ({
-    id:       c.id,
-    name:     c.name,
-    assetPath:c.assetPath,
-    rarity:   c.rarity
+    id: c.id,
+    name: c.name,
+    assetPath: c.assetPath,
+    rarity: c.rarity
   }))
 })

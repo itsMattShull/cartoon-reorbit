@@ -173,7 +173,7 @@
                 <!-- cards per pack -->
                 <div class="flex items-center gap-1">
                   <input
-                    v-model.number="countsByRarity[rarity]"
+                    v-model.number="countsByRarity[rarity].count"
                     type="number"
                     :min="1"
                     :max="ids.length"
@@ -181,6 +181,19 @@
                   />
                   <span class="text-xs text-gray-500">cards</span>
                 </div>
+
+                <!-- NEW: probability percent -->
+                <div class="flex items-center gap-1 ml-4">
+                  <input
+                    v-model.number="countsByRarity[rarity].probabilityPercent"
+                    type="number"
+                    min="1"
+                    max="100"
+                    class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                  />
+                  <span class="text-xs text-gray-500">%</span>
+                </div>
+
               </div>
 
               <!-- totals -->
@@ -212,7 +225,7 @@
                     v-model.number="weights[id]"
                     type="number"
                     min="1"
-                    max="99"
+                    max="100"
                     class="w-20 rounded-md border border-gray-400 px-2 py-1 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                     @input="onManualWeight(rarity, id)"
                   />
@@ -307,12 +320,17 @@ function onFile (e) {
 
 /* ---------- 4. Rarity & cToon state ---------- */
 const rarities = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
-const countsByRarity = reactive(Object.fromEntries(rarities.map(r => [r, 0])))
+const countsByRarity = reactive(Object.fromEntries(rarities.map(r => [r, { count: 0, probabilityPercent: 100 }])))
 const rarityConfigs = computed(() =>
   Object.entries(countsByRarity)
-    .filter(([, c]) => c > 0)
-    .map(([rarity, count]) => ({ rarity, count }))
+    .filter(([, config]) => config.count > 0)
+    .map(([rarity, config]) => ({
+      rarity,
+      count: config.count,
+      probabilityPercent: config.probabilityPercent
+    }))
 )
+
 
 const ctoons      = ref([])
 const lookup      = ref({})
@@ -410,7 +428,13 @@ onMounted(async () => {
     inCmart.value     = p.inCmart
     imagePreview.value = p.imagePath
 
-    p.rarityConfigs.forEach(rc => { countsByRarity[rc.rarity] = rc.count })
+    p.rarityConfigs.forEach(rc => {
+      countsByRarity[rc.rarity] = {
+        count: rc.count,
+        probabilityPercent: rc.probabilityPercent ?? 100
+      }
+    })
+
     p.ctoonOptions.forEach(o => {
       selectedIds.value.push(o.ctoonId)
       weights.value[o.ctoonId] = o.weight
@@ -425,8 +449,9 @@ onMounted(async () => {
 const countsValid = computed(() =>
   Object.entries(grouped.value).every(([r, ids]) =>
     !ids.length ||
-    (countsByRarity[r] >= 1 && countsByRarity[r] <= ids.length)
-  )
+    (countsByRarity[r].count >= 1 && countsByRarity[r].count <= ids.length &&
+     countsByRarity[r].probabilityPercent >= 1 && countsByRarity[r].probabilityPercent <= 100)
+  ) && rarityConfigs.value.some(r => r.probabilityPercent === 100)
 )
 const allValid = computed(() =>
   countsValid.value &&

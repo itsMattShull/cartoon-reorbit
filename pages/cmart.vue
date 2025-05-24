@@ -428,6 +428,9 @@ async function buyPack(pack) {
 // ────────── Close Overlay ──────────────────────
 function closeOverlay() {
   overlayVisible.value = false
+  if (activeTab.value === 'Packs') {
+    fetchPacks()
+  }
 }
 </script>
 

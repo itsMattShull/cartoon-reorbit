@@ -72,7 +72,6 @@
             :src="item.assetPath"
             :alt="item.name"
             class="object-contain border border-gray-300"
-            style="width:100%; height:100%;"
             draggable="false"
           />
         </div>

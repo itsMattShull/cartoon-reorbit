@@ -15,20 +15,17 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/* ── Prisma singleton ─────────────────────────────────────────────── */
 let prisma
 function db () {
   if (!prisma) prisma = new PrismaClient()
   return prisma
 }
 
-/* ── Determine upload base dir (project root) ─────────────────────── */
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..')  // two levels up from /server/api/…
+  ? join(__dirname, '..', '..')
   : process.cwd()
 
-/* ── Helper: validate meta payload ─────────────────────────────────── */
 function validatePayload (meta) {
   if (!meta?.name || typeof meta.name !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "name"' })
@@ -40,14 +37,12 @@ function validatePayload (meta) {
     throw createError({ statusCode: 400, statusMessage: 'ctoonOptions array required' })
   }
   const dupRarity = meta.rarityConfigs.map(r => r.rarity).find((r, i, a) => a.indexOf(r) !== i)
-  if (dupRarity) throw createError({ statusCode: 400, statusMessage: `Duplicate rarity "${dupRarity}"` })
+  if (dupRarity) throw createError({ statusCode: 400, statusMessage: `Duplicate rarity \"${dupRarity}\"` })
   const dupCtoon = meta.ctoonOptions.map(o => o.ctoonId).find((r, i, a) => a.indexOf(r) !== i)
-  if (dupCtoon) throw createError({ statusCode: 400, statusMessage: `Duplicate cToon "${dupCtoon}"` })
+  if (dupCtoon) throw createError({ statusCode: 400, statusMessage: `Duplicate cToon \"${dupCtoon}\"` })
 }
 
-/* ── Route handler ────────────────────────────────────────────────── */
 export default defineEventHandler(async (event) => {
-  /* 1️⃣  Admin auth */
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -59,7 +54,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  /* 2️⃣  Parse multipart/form‑data */
   const parts = await readMultipartFormData(event)
   const fields = {}
   let imagePart = null
@@ -82,7 +76,6 @@ export default defineEventHandler(async (event) => {
   const meta = fields.meta ? JSON.parse(fields.meta) : null
   validatePayload(meta)
 
-  /* 3️⃣  Save image under /public/packs */
   const uploadDir = join(baseDir, 'public', 'packs')
   await mkdir(uploadDir, { recursive: true })
   const filename = `${Date.now()}_${imagePart.filename.replace(/[^A-Za-z0-9._-]/g, '')}`
@@ -90,7 +83,6 @@ export default defineEventHandler(async (event) => {
   await writeFile(outPath, imagePart.data)
   const imagePath = `/packs/${filename}`
 
-  /* 4️⃣  Persist in DB */
   const result = await db().$transaction(async (tx) => {
     const pack = await tx.pack.create({
       data: {
@@ -103,11 +95,26 @@ export default defineEventHandler(async (event) => {
     })
 
     if (meta.rarityConfigs?.length) {
+      const probabilities = meta.rarityConfigs.map(r => r.probabilityPercent)
+      if (!probabilities.some(p => p === 100)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'At least one rarity must have a 100% probability.'
+        })
+      }
+      if (probabilities.some(p => p < 1 || p > 100)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'Probabilities must be between 1% and 100%.'
+        })
+      }
+
       await tx.packRarityConfig.createMany({
         data: meta.rarityConfigs.map(r => ({
           packId: pack.id,
           rarity: r.rarity,
-          count: r.count
+          count: r.count,
+          probabilityPercent: r.probabilityPercent
         }))
       })
     }
@@ -125,6 +132,5 @@ export default defineEventHandler(async (event) => {
     return pack
   })
 
-  /* 5️⃣  Respond */
   return { id: result.id }
 })
