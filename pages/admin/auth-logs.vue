@@ -121,9 +121,9 @@ function setupObserver() {
   }
 }
 
-onMounted(() => {
-  fetchLogs()
-  setupObserver()
+onMounted(async () => {
+  await fetchLogs()    // wait for offset to be updated
+  setupObserver()      // now the observer only ever fires on *subsequent* scrolls
 })
 
 onBeforeUnmount(() => {
