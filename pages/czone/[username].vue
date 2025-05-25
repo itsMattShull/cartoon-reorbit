@@ -202,6 +202,7 @@
         <img :src="selectedCtoon.assetPath" class="max-w-full mb-4 mx-auto" :alt="selectedCtoon.name" />
         <h3 class="text-xl font-bold mb-2">{{ selectedCtoon.name }}</h3>
         <p><strong>Series:</strong> {{ selectedCtoon.series }}</p>
+        <p v-if="selectedCtoon.set"><strong>Set:</strong> {{ selectedCtoon.set }}</p>
         <p><strong>Rarity:</strong> <span class="capitalize">{{ selectedCtoon.rarity }}</span></p>
         <p>
           <strong>Mint #: </strong>
@@ -210,6 +211,14 @@
             {{ selectedCtoon.mintNumber }} of {{ selectedCtoon.quantity }}
           </span>
           <span v-else>Unknown</span>
+        </p>
+        <p>
+          <strong>Edition:</strong>
+          {{ selectedCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+        </p>
+        <p v-if="selectedCtoon.releaseDate">
+          <strong>Release Date:</strong>
+          {{ formatDate(selectedCtoon.releaseDate) }}
         </p>
       </div>
     </div>
@@ -340,6 +349,16 @@ onMounted(async () => {
 
   loading.value = false
 })
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-US', {
+    year:   'numeric',
+    month:  'long',
+    day:    'numeric'
+  })
+}
 
 const openSidebar = (item) => {
   const selected = { ...item }

@@ -20,6 +20,9 @@ export default defineEventHandler(async (event) => {
     name: uc.ctoon.name,
     series: uc.ctoon.series,
     rarity: uc.ctoon.rarity,
+    set: uc.ctoon.set,
+    isFirstEdition: uc.ctoon.isFirstEdition,
+    releaseDate: uc.ctoon.releaseDate,
     assetPath: uc.ctoon.assetPath
   }))
 

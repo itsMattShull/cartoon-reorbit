@@ -56,7 +56,8 @@
         <div class="flex items-center mb-2">
           <select
             v-model="selectedMessage"
-            class="flex-1 border rounded px-2 py-1 bg-white"
+            class="flex-1 border rounded px-2 py-1"
+            style="background-color: initial"
           >
             <option value="" disabled>Select a message</option>
             <option v-for="msg in predefinedMessages" :key="msg" :value="msg">{{ msg }}</option>
@@ -123,7 +124,9 @@
                 :key="ctoon.id"
                 :src="ctoon.assetPath"
                 :title="`Mint #${ctoon.mintNumber}`"
+                @click="openDetail(ctoon)"
                 @contextmenu="onContextMenuTraderA(ctoon, $event)"
+                class="cursor-pointer"
               />
             </div>
           </div>
@@ -148,42 +151,44 @@
                 :key="ctoon.id"
                 :src="ctoon.assetPath"
                 :title="`Mint #${ctoon.mintNumber}`"
+                @click="openDetail(ctoon)"
                 @contextmenu="onContextMenuTraderB(ctoon, $event)"
+                class="cursor-pointer"
               />
             </div>
           </div>
         </div>
       </div>
 
-<div v-if="isTrader" class="mt-6 hidden md:flex justify-end gap-4">
-  <button
-    @click="removeAllCtoons"
-    :disabled="isConfirmed || userItems.length === 0"
-    class="bg-yellow-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    Remove All cToons
-  </button>
-  <button
-    @click="toggleConfirmTrade"
-    :disabled="userItems.length === 0"
-    :class="[
-      isConfirmed ? 'bg-red-500' : 'bg-green-600',
-      userItems.length === 0
-        ? 'opacity-50 cursor-not-allowed'
-        : (isConfirmed ? 'hover:bg-red-700' : 'hover:bg-green-700')
-    ]"
-    class="text-white px-4 py-2 rounded"
-  >
-    {{ isConfirmed ? 'Cancel Trade' : 'Confirm Trade' }}
-  </button>
-  <button
-    @click="openAddPanel"
-    :disabled="isConfirmed"
-    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    Add cToons
-  </button>
-</div>
+      <div v-if="isTrader" class="mt-6 hidden md:flex justify-end gap-4">
+        <button
+          @click="removeAllCtoons"
+          :disabled="isConfirmed || userItems.length === 0"
+          class="bg-yellow-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Remove All cToons
+        </button>
+        <button
+          @click="toggleConfirmTrade"
+          :disabled="userItems.length === 0"
+          :class="[
+            isConfirmed ? 'bg-red-500' : 'bg-green-600',
+            userItems.length === 0
+              ? 'opacity-50 cursor-not-allowed'
+              : (isConfirmed ? 'hover:bg-red-700' : 'hover:bg-green-700')
+          ]"
+          class="text-white px-4 py-2 rounded"
+        >
+          {{ isConfirmed ? 'Cancel Trade' : 'Confirm Trade' }}
+        </button>
+        <button
+          @click="openAddPanel"
+          :disabled="isConfirmed"
+          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Add cToons
+        </button>
+      </div>
 
       <!-- Confirm Status -->
       <div class="mt-4">
@@ -231,7 +236,7 @@
         <div class="flex items-center mb-2">
           <select
             v-model="selectedMessage"
-            class="flex-1 border rounded px-2 py-1 bg-white"
+            class="flex-1 border rounded px-2 py-1"
           >
             <option value="" disabled>Select a message</option>
             <option v-for="msg in predefinedMessages" :key="msg" :value="msg">{{ msg }}</option>
@@ -266,25 +271,51 @@
           </div>
         </div>
     </transition>
+
+    <!-- Detail Panel -->
+    <transition name="slide-panel">
+      <div v-if="showDetailPanel" class="absolute top-0 right-0 w-full md:w-1/3 h-full bg-white border-l p-4 overflow-y-auto z-50">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg">{{ selectedCtoon.name }}</h3>
+          <button @click="closeDetailPanel" class="text-gray-500">✕</button>
+        </div>
+        <img :src="selectedCtoon.assetPath" alt="" class="w-full h-auto mb-4"/>
+        <ul class="space-y-2">
+          <li><strong>Series:</strong> {{ selectedCtoon.series }}</li>
+          <li><strong>Set:</strong> {{ selectedCtoon.set }}</li>
+          <li><strong>Rarity:</strong> {{ selectedCtoon.rarity }}</li>
+          <li><strong>Mint Number:</strong> #{{ selectedCtoon.mintNumber }}</li>
+          <li><strong>Edition:</strong> {{ selectedCtoon.firstEdition ? 'First Edition' : 'Unlimited Edition' }}</li>
+          <li><strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}</li>
+        </ul>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-definePageMeta({
-  middleware: 'auth',
-  layout: 'default'
-})
-import { ref, reactive, onMounted, nextTick, computed, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
+
 const config = useRuntimeConfig()
-const socket = io(import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`)
+const socket = io(
+  import.meta.env.PROD
+    ? undefined
+    : `http://localhost:${config.public.socketPort}`
+)
 const router = useRouter()
 const route = useRoute()
 const roomName = route.params.room
 const { user } = useAuth()
+
+// State refs
 const traderA = ref(null)
 const traderB = ref(null)
 const spectators = ref(0)
@@ -346,21 +377,23 @@ const predefinedMessages = [
 const traderAItems = ref([])
 const traderBItems = ref([])
 const isTrader = ref(false)
-const isSpectator = computed(() => {
-  // A spectator is anyone not a trader when Trader A exists but Trader B is open
-  return !isTrader.value && !!traderA.value && !traderB.value
-})
+const isSpectator = computed(() => !isTrader.value && !!traderA.value && !traderB.value)
 const confirmedBy = reactive({ traderA: false, traderB: false })
 const finalizedBy = reactive({ traderA: false, traderB: false })
 const isConfirmed = ref(false)
 const showPanel = ref(false)
 const availableCtoons = ref([])
 
+// New detail panel state
+const showDetailPanel = ref(false)
+const selectedCtoon = ref({})
+
+// Computed userItems
 const userItems = computed(() => {
-  const name = user.value.username;
-  if (traderA.value?.username === name) return traderAItems.value;
-  if (traderB.value?.username === name) return traderBItems.value;
-  return [];
+  const name = user.value.username
+  if (traderA.value?.username === name) return traderAItems.value
+  if (traderB.value?.username === name) return traderBItems.value
+  return []
 })
 
 onMounted(() => {
@@ -370,67 +403,45 @@ onMounted(() => {
     traderA.value = ta
     traderB.value = tb
     spectators.value = spec
-    // Update trade item lists
     traderAItems.value = offers?.[ta?.username] || []
     traderBItems.value = offers?.[tb?.username] || []
-    // Update confirmation statuses
     confirmedBy.traderA = confirmed?.[ta?.username] || false
     confirmedBy.traderB = confirmed?.[tb?.username] || false
     isTrader.value = (ta?.username === user.value.username) || (tb?.username === user.value.username)
 
-    // Sync local isConfirmed to match server state, so both traders reset after cancel
-    const me = user.value.username
-    if (traderA.value?.username === me) {
-      isConfirmed.value = confirmedBy.traderA
-    } else if (traderB.value?.username === me) {
-      isConfirmed.value = confirmedBy.traderB
-    } else {
-      isConfirmed.value = false
-    }
+    isConfirmed.value = traderA.value?.username === user.value.username
+      ? confirmedBy.traderA
+      : traderB.value?.username === user.value.username
+        ? confirmedBy.traderB
+        : false
 
-    // Reset finalize flags whenever both traders are not simultaneously confirmed
     if (!(confirmedBy.traderA && confirmedBy.traderB)) {
       finalizedBy.traderA = false
       finalizedBy.traderB = false
     }
 
-    // Only allow Trader A or Trader B to see the finalize prompt once both have confirmed
-    const isActualTrader =
-      traderA.value?.username === me || traderB.value?.username === me
-    if (traderA.value && traderB.value && isActualTrader &&
-        confirmedBy.traderA && confirmedBy.traderB) {
-      const role = traderA.value.username === me ? 'traderA' : 'traderB'
+    if (
+      traderA.value && traderB.value &&
+      (traderA.value.username === user.value.username || traderB.value.username === user.value.username) &&
+      confirmedBy.traderA && confirmedBy.traderB
+    ) {
+      const role = traderA.value.username === user.value.username ? 'traderA' : 'traderB'
       if (!finalizedBy[role]) {
         finalizedBy[role] = true
-        const proceed = window.confirm(
-          'Both traders have confirmed. Finalize trade?'
-        )
+        const proceed = window.confirm('Both traders have confirmed. Finalize trade?')
         if (proceed) {
-          // Signal server this trader finalized; server will only execute once both have
-          socket.emit('finalize-trade', { room: roomName, user: me })
+          socket.emit('finalize-trade', { room: roomName, user: user.value.username })
         } else {
-          // A trader declined finalization: reset both sides completely
           traderAItems.value = []
           traderBItems.value = []
-          if (traderA.value) {
-            socket.emit('remove-all-trade-offer', {
-              room: roomName,
-              user: traderA.value.username
-            })
-          }
-          if (traderB.value) {
-            socket.emit('remove-all-trade-offer', {
-              room: roomName,
-              user: traderB.value.username
-            })
-          }
-          // Reset all confirmation and finalization flags
+          if (traderA.value) socket.emit('remove-all-trade-offer', { room: roomName, user: traderA.value.username })
+          if (traderB.value) socket.emit('remove-all-trade-offer', { room: roomName, user: traderB.value.username })
           isConfirmed.value = false
           confirmedBy.traderA = false
           confirmedBy.traderB = false
           finalizedBy.traderA = false
           finalizedBy.traderB = false
-          socket.emit('cancel-trade', { room: roomName, user: me })
+          socket.emit('cancel-trade', { room: roomName, user: user.value.username })
         }
       }
     }
@@ -439,163 +450,93 @@ onMounted(() => {
   socket.on('trade-chat', (msg) => {
     chatMessages.value.push(msg)
     nextTick(() => {
-      if (chatBox.value) {
-        chatBox.value.scrollTop = chatBox.value.scrollHeight
-      }
+      if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
     })
   })
 
-  socket.on('trade-room-inactive', () => {
-    router.push('/live-trading')
-  })
-
+  socket.on('trade-room-inactive', () => router.push('/live-trading'))
   socket.on('trade-complete', ({ message }) => {
-    alert(message);
-    // Clear the local panels so both tables are empty
-    traderAItems.value = [];
-    traderBItems.value = [];
-    // Reset confirmations and allow adding again
-    isConfirmed.value = false;
-    confirmedBy.traderA = false;
-    confirmedBy.traderB = false;
-  });
-
-  socket.on('trade-error', ({ message }) => {
-    alert(message);
-  });
-})
-
-function onContextMenuTraderA(ctoon, event) {
-  // Only allow Trader A to remove their own items
-  if (!isConfirmed.value && traderA.value?.username === user.value.username) {
-    event.preventDefault();
-    removeFromTrade(ctoon);
-  }
-}
-
-function onContextMenuTraderB(ctoon, event) {
-  // Only allow Trader B to remove their own items
-  if (!isConfirmed.value && traderB.value?.username === user.value.username) {
-    event.preventDefault();
-    removeFromTrade(ctoon);
-  }
-}
-
-function sendChat(message) {
-  if (!message) return
-  socket.emit('trade-chat', {
-    room: roomName,
-    user: user.value.username,
-    message
+    alert(message)
+    traderAItems.value = []
+    traderBItems.value = []
+    isConfirmed.value = false
+    confirmedBy.traderA = false
+    confirmedBy.traderB = false
   })
-  selectedMessage.value = ''
-}
+  socket.on('trade-error', ({ message }) => alert(message))
+})
 
 function openAddPanel() {
   showPanel.value = true
   const excludeIds = JSON.stringify(
-    [...traderAItems.value, ...traderBItems.value].map(c => c.id)
+    [...traderAItems.value, ...traderBItems.value].map((c) => c.id)
   )
   fetch(`/api/user/ctoons?exclude=${excludeIds}`)
-    .then(res => {
+    .then((res) => {
       if (!res.ok) throw new Error('Failed to fetch cToons')
       return res.json()
     })
-    .then(data => {
+    .then((data) => {
       availableCtoons.value = data
     })
-    .catch(err => {
-      console.error('Error loading cToons:', err)
-    })
+    .catch((err) => console.error('Error loading cToons:', err))
 }
 
 function addToTrade(ctoon) {
   if (isConfirmed.value) return
   const currentUser = user.value.username
-  // Determine which side to add to
   if (traderA.value?.username === currentUser) {
     traderAItems.value.push(ctoon)
-    socket.emit('add-trade-offer', {
-      room: roomName,
-      user: currentUser,
-      ctoons: traderAItems.value
-    })
+    socket.emit('add-trade-offer', { room: roomName, user: currentUser, ctoons: traderAItems.value })
   } else if (traderB.value?.username === currentUser) {
     traderBItems.value.push(ctoon)
-    socket.emit('add-trade-offer', {
-      room: roomName,
-      user: currentUser,
-      ctoons: traderBItems.value
-    })
-  } else {
-    return
+    socket.emit('add-trade-offer', { room: roomName, user: currentUser, ctoons: traderBItems.value })
   }
-  // Remove from availableCtoons panel
-  availableCtoons.value = availableCtoons.value.filter(c => c.id !== ctoon.id)
+  availableCtoons.value = availableCtoons.value.filter((c) => c.id !== ctoon.id)
+}
+
+// at bottom of <script setup>, just before onBeforeUnmount
+function onContextMenuTraderA(ctoon, event) {
+  if (!isConfirmed.value && traderA.value?.username === user.value.username) {
+    event.preventDefault()
+    removeFromTrade(ctoon)
+  }
+}
+
+function onContextMenuTraderB(ctoon, event) {
+  if (!isConfirmed.value && traderB.value?.username === user.value.username) {
+    event.preventDefault()
+    removeFromTrade(ctoon)
+  }
 }
 
 function removeFromTrade(ctoon) {
-  if (isConfirmed.value) return;
-  const currentUser = user.value.username;
+  if (isConfirmed.value) return
+  const currentUser = user.value.username
   if (traderA.value?.username === currentUser) {
-    traderAItems.value = traderAItems.value.filter(c => c.id !== ctoon.id);
-    socket.emit('add-trade-offer', {
-      room: roomName,
-      user: currentUser,
-      ctoons: traderAItems.value
-    });
-    // Refresh available cToons in side panel
-    const excludeIds = JSON.stringify(
-      [...traderAItems.value, ...traderBItems.value].map(c => c.id)
-    );
-    fetch(`/api/user/ctoons?exclude=${excludeIds}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch cToons');
-        return res.json();
-      })
-      .then(data => {
-        availableCtoons.value = data;
-      })
-      .catch(err => console.error('Error refreshing cToons:', err));
+    traderAItems.value = traderAItems.value.filter((c) => c.id !== ctoon.id)
+    socket.emit('add-trade-offer', { room: roomName, user: currentUser, ctoons: traderAItems.value })
   } else if (traderB.value?.username === currentUser) {
-    traderBItems.value = traderBItems.value.filter(c => c.id !== ctoon.id);
-    socket.emit('add-trade-offer', {
-      room: roomName,
-      user: currentUser,
-      ctoons: traderBItems.value
-    });
-    // Refresh available cToons in side panel
-    const excludeIds = JSON.stringify(
-      [...traderAItems.value, ...traderBItems.value].map(c => c.id)
-    );
-    fetch(`/api/user/ctoons?exclude=${excludeIds}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch cToons');
-        return res.json();
-      })
-      .then(data => {
-        availableCtoons.value = data;
-      })
-      .catch(err => console.error('Error refreshing cToons:', err));
+    traderBItems.value = traderBItems.value.filter((c) => c.id !== ctoon.id)
+    socket.emit('add-trade-offer', { room: roomName, user: currentUser, ctoons: traderBItems.value })
   }
 }
 
 function removeAllCtoons() {
   traderAItems.value = []
   socket.emit('remove-all-trade-offer', { room: roomName, user: user.value.username })
-  // Refresh available cToons in side panel
   const excludeIds = JSON.stringify(
-    [...traderAItems.value, ...traderBItems.value].map(c => c.id)
+    [...traderAItems.value, ...traderBItems.value].map((c) => c.id)
   )
   fetch(`/api/user/ctoons?exclude=${excludeIds}`)
-    .then(res => {
+    .then((res) => {
       if (!res.ok) throw new Error('Failed to fetch cToons')
       return res.json()
     })
-    .then(data => {
+    .then((data) => {
       availableCtoons.value = data
     })
-    .catch(err => console.error('Error refreshing cToons:', err))
+    .catch((err) => console.error('Error refreshing cToons:', err))
 }
 
 function toggleConfirmTrade() {
@@ -611,14 +552,23 @@ function requestTraderB() {
   socket.emit('become-traderB', { room: roomName, user: user.value.username })
 }
 
-socket.on('become-traderB-failed', ({ message }) => {
-  alert(message)
-})
+function openDetail(ctoon) {
+  selectedCtoon.value = ctoon
+  showDetailPanel.value = true
+}
 
-onBeforeUnmount(() => {
-  socket.emit('leave-traderoom')
-})
+function closeDetailPanel() {
+  showDetailPanel.value = false
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+onBeforeUnmount(() => socket.emit('leave-traderoom'))
 </script>
+
 
 <style scoped>
 /* Optional styling */

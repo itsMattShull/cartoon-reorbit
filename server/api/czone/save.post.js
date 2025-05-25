@@ -23,35 +23,50 @@ export default defineEventHandler(async (event) => {
     where: { userId: user.id },
     select: {
       id: true,
+      // if your mint number lives on userCtoon:
+      mintNumber: true,
+      isFirstEdition: true,
       ctoon: {
         select: {
           id: true,
           name: true,
-          assetPath: true
+          assetPath: true,
+          series: true,
+          set: true,
+          rarity: true,
+          releaseDate: true,
+          quantity: true,        // total supply (or null for unlimited)
         }
       }
     }
   })
 
+
   // Build a map: userCtoonId -> { name, assetPath }
   const lookup = new Map(
-    userCtoons.map(uc => [uc.id, {
-      name: uc.ctoon.name,
-      assetPath: uc.ctoon.assetPath
+    userCtoons.map(uc => [ uc.id, {
+      // pull mintNumber off the userCtoon if present:
+      mintNumber: uc.mintNumber,
+      name:         uc.ctoon.name,
+      assetPath:    uc.ctoon.assetPath,
+      series:       uc.ctoon.series,
+      set:          uc.ctoon.set,
+      rarity:       uc.ctoon.rarity,
+      releaseDate:  uc.ctoon.releaseDate,
+      quantity:     uc.ctoon.quantity,      // null → unlimited
+      isFirstEdition: uc.ctoon.isFirstEdition
     }])
   )
 
+
   // 4. Filter & enrich layout items
   const enrichedLayout = layout
-    .filter(item => lookup.has(item.id))
-    .map(item => {
-      const { name, assetPath } = lookup.get(item.id)
-      return {
-        ...item,
-        name,
-        assetPath
-      }
-    })
+  .filter(item => lookup.has(item.id))
+  .map(item => ({
+    ...item,
+    ...lookup.get(item.id)
+  }))
+
 
   // 5. Upsert the CZone
   await prisma.cZone.upsert({
