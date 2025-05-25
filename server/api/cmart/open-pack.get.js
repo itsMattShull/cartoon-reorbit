@@ -21,6 +21,7 @@ async function getMe(event) {
   }
 }
 
+// unchanged
 function pickWeighted(options) {
   const total = options.reduce((sum, o) => sum + o.weight, 0)
   const r = Math.random() * total
@@ -77,18 +78,19 @@ export default defineEventHandler(async (event) => {
   for (const rc of userPack.pack.rarityConfigs) {
     const pool = poolByRarity[rc.rarity] || []
     if (pool.length === 0 || !shouldIncludeRarity(rc.probabilityPercent)) continue
-    const picked = new Set()
-    let attempts = 0
 
-    for (let i = 0; i < rc.count && pool.length > 0 && attempts < pool.length * 2; attempts++) {
-      const remainingPool = pool.filter(opt => !picked.has(opt.ctoon.id))
-      if (remainingPool.length === 0) break
-
-      const pick = pickWeighted(remainingPool)
-      picked.add(pick.ctoon.id)
+    // -- NEW: do weighted draws WITHOUT replacement --
+    const localPool = [...pool]
+    for (let i = 0; i < rc.count && localPool.length > 0; i++) {
+      const pick = pickWeighted(localPool)
       chosen.push(pick.ctoon)
+      // remove picked item from localPool
+      const idx = localPool.findIndex(o => o.ctoon.id === pick.ctoon.id)
+      localPool.splice(idx, 1)
     }
+    // -- END NEW LOGIC --
   }
+
   if (chosen.length === 0) {
     throw createError({ statusCode: 500, statusMessage: 'Pack yielded no cToons' })
   }
