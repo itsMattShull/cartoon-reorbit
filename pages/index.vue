@@ -18,6 +18,9 @@
 
           Sign in with Discord
         </button>
+        <p class="mt-6">
+          By logging in you agree with our <a style="text-decoration: underline;" href="/privacy">privacy policy</a>.
+        </p>
       </div>
     </div>
   </template>
