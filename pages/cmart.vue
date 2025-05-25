@@ -92,8 +92,8 @@
           <img :src="pack.imagePath" class="max-w-full h-auto" />
         </div>
         <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
-          <li v-for="r in pack.rarityConfigs" :key="r.rarity">
-            {{ r.rarity }} ×{{ r.count }}
+          <li v-for="r in pack.rarityConfigs" :key="r.rarity" style="margin-top: 12px !important;">
+            <strong>{{ r.rarity }}:</strong> {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
           </li>
         </ul>
         <button

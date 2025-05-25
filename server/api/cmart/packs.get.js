@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
         price: true,
         imagePath: true,
         rarityConfigs: {
-          select: { rarity: true, count: true }
+          select: { rarity: true, count: true, probabilityPercent: true }
         }
       }
     })

@@ -61,6 +61,10 @@
 
 
 <script setup>
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const logs = ref([])
