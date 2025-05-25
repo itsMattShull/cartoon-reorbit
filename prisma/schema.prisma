@@ -86,6 +86,7 @@ model User {
   discordCreatedAt DateTime?
 
   cZones           CZone[]
+  logins           LoginLog[]
   claims           Claim[]
   visits           Visit[]
   points           UserPoints?
@@ -283,4 +284,14 @@ model UserPack {
 
   user      User @relation(fields: [userId], references: [id])
   pack      Pack @relation(fields: [packId], references: [id])
+}
+
+model LoginLog {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  ip            String
+  createdAt     DateTime @default(now())
+
+  @@index([ip])
 }

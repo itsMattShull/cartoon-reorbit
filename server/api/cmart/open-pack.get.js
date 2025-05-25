@@ -77,8 +77,15 @@ export default defineEventHandler(async (event) => {
   for (const rc of userPack.pack.rarityConfigs) {
     const pool = poolByRarity[rc.rarity] || []
     if (pool.length === 0 || !shouldIncludeRarity(rc.probabilityPercent)) continue
-    for (let i = 0; i < rc.count; i++) {
-      const pick = pickWeighted(pool)
+    const picked = new Set()
+    let attempts = 0
+
+    for (let i = 0; i < rc.count && pool.length > 0 && attempts < pool.length * 2; attempts++) {
+      const remainingPool = pool.filter(opt => !picked.has(opt.ctoon.id))
+      if (remainingPool.length === 0) break
+
+      const pick = pickWeighted(remainingPool)
+      picked.add(pick.ctoon.id)
       chosen.push(pick.ctoon)
     }
   }

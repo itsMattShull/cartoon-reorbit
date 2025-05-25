@@ -69,7 +69,8 @@ const links = computed(() => {
       { label: 'Admin', to: '/admin' },
       { label: 'Manage cToons', to: '/admin/ctoons' },
       { label: 'Manage Codes', to: '/admin/codes' },
-      { label: 'Manage Packs', to: '/admin/packs' }
+      { label: 'Manage Packs', to: '/admin/packs' },
+      { label: 'Auth Logs', to: '/admin/auth-logs' }
     )
   }
   return all
