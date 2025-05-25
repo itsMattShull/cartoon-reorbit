@@ -111,12 +111,17 @@ export default defineEventHandler(async (event) => {
         continue
       }
 
+      // same mintNumber + first-edition logic as in buy.post.js
+      const mintNumber = alreadyMinted + 1
+      const isFirstEdition =
+        c.initialQuantity === null || mintNumber <= c.initialQuantity
+
       const uc = await tx.userCtoon.create({
         data: {
-          userId: me.id,
-          ctoonId: c.id,
-          isFirstEdition: alreadyMinted === 0,
-          mintNumber: alreadyMinted + 1
+          userId:      me.id,
+          ctoonId:     c.id,
+          mintNumber,
+          isFirstEdition
         }
       })
       results.push({ ...c, id: uc.id })
