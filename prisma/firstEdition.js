@@ -4,11 +4,12 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  // 1. Load every UserCtoon with its mintNumber and the parent Ctoon's initialQuantity
+  // 1. Load every UserCtoon with its current isFirstEdition, mintNumber, and parent initialQuantity
   const all = await prisma.userCtoon.findMany({
     select: {
       id: true,
       mintNumber: true,
+      isFirstEdition: true,
       ctoon: {
         select: {
           initialQuantity: true
@@ -17,23 +18,25 @@ async function main() {
     }
   })
 
-  // 2. Loop and update only those that should be first-edition
+  // 2. Loop and update mismatches
   let updatedCount = 0
-  for (const { id, mintNumber, ctoon: { initialQuantity } } of all) {
-    const shouldBeFirst =
-      initialQuantity === null ||
-      (mintNumber != null && mintNumber <= initialQuantity)
+  for (const { id, mintNumber, isFirstEdition, ctoon: { initialQuantity } } of all) {
+    const desiredIsFirst =
+      initialQuantity !== null &&
+      mintNumber != null &&
+      mintNumber <= initialQuantity
 
-    if (shouldBeFirst) {
+    // If the stored flag doesn’t match what we want, flip it
+    if (isFirstEdition !== desiredIsFirst) {
       await prisma.userCtoon.update({
         where: { id },
-        data: { isFirstEdition: true }
+        data: { isFirstEdition: desiredIsFirst }
       })
       updatedCount++
     }
   }
 
-  console.log(`✅ Updated ${updatedCount} of ${all.length} UserCtoon rows to first edition.`)
+  console.log(`✅ Updated ${updatedCount} of ${all.length} UserCtoon rows.`)
 }
 
 main()

@@ -69,7 +69,8 @@ export default defineEventHandler(async (event) => {
         mintNumber: match?.mintNumber ?? null,
         quantity: match?.ctoon?.quantity ?? null,
         series: match?.ctoon?.series ?? null,
-        rarity: match?.ctoon?.rarity ?? null
+        rarity: match?.ctoon?.rarity ?? null,
+        isFirstEdition: match?.isFirstEdition ?? null
       }
     })
   }

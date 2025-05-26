@@ -31,10 +31,15 @@ export default defineEventHandler(async (event) => {
     select: {
       id: true,
       mintNumber: true,
+      isFirstEdition: true,
       ctoon: {
         select: {
           assetPath: true,
-          name: true
+          name: true,
+          set: true,
+          series: true,
+          rarity: true,
+          releaseDate: true
         }
       }
     }
@@ -45,6 +50,11 @@ export default defineEventHandler(async (event) => {
     id: uc.id,
     assetPath: uc.ctoon.assetPath,
     name: uc.ctoon.name,
-    mintNumber: uc.mintNumber
+    mintNumber: uc.mintNumber,
+    rarity: uc.ctoon.rarity,
+    isFirstEdition: uc.isFirstEdition,
+    set: uc.ctoon.set,
+    series: uc.ctoon.series,
+    releaseDate: uc.ctoon.releaseDate
   }))
 })

@@ -23,7 +23,6 @@ export default defineEventHandler(async (event) => {
     where: { userId: user.id },
     select: {
       id: true,
-      // if your mint number lives on userCtoon:
       mintNumber: true,
       isFirstEdition: true,
       ctoon: {
@@ -54,9 +53,10 @@ export default defineEventHandler(async (event) => {
       rarity:       uc.ctoon.rarity,
       releaseDate:  uc.ctoon.releaseDate,
       quantity:     uc.ctoon.quantity,      // null → unlimited
-      isFirstEdition: uc.ctoon.isFirstEdition
+      isFirstEdition: uc.isFirstEdition
     }])
   )
+  console.log(lookup)
 
 
   // 4. Filter & enrich layout items

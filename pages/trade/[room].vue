@@ -279,13 +279,13 @@
           <h3 class="font-bold text-lg">{{ selectedCtoon.name }}</h3>
           <button @click="closeDetailPanel" class="text-gray-500">✕</button>
         </div>
-        <img :src="selectedCtoon.assetPath" alt="" class="w-full h-auto mb-4"/>
+        <img :src="selectedCtoon.assetPath" alt="" class="w-auto h-auto mb-4"/>
         <ul class="space-y-2">
           <li><strong>Series:</strong> {{ selectedCtoon.series }}</li>
           <li><strong>Set:</strong> {{ selectedCtoon.set }}</li>
           <li><strong>Rarity:</strong> {{ selectedCtoon.rarity }}</li>
           <li><strong>Mint Number:</strong> #{{ selectedCtoon.mintNumber }}</li>
-          <li><strong>Edition:</strong> {{ selectedCtoon.firstEdition ? 'First Edition' : 'Unlimited Edition' }}</li>
+          <li><strong>Edition:</strong> {{ selectedCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}</li>
           <li><strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}</li>
         </ul>
       </div>

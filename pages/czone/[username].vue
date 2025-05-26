@@ -314,6 +314,8 @@ onMounted(async () => {
       style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`
     }))
 
+    console.log(cZoneItems.value)
+
     backgroundImage.value = res.cZone.background || ''
 
     if (user.value && res.ownerId !== user.value.id) {
