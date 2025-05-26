@@ -5,7 +5,7 @@ const db = new PrismaClient()
 // In-memory cache
 let cache = null
 let lastFetched = 0
-const CACHE_DURATION = 1000 * 60 * 60 * 24 // 1 day in ms
+const CACHE_DURATION = 1000 * 60 * 60 * 2 // 1 day in ms
 
 async function fetchCToonsFromDB() {
   const now = new Date()
