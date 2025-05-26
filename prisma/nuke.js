@@ -21,6 +21,7 @@ async function resetDatabase() {
 
     await prisma.visit.deleteMany()
     await prisma.friend.deleteMany()
+    await prisma.loginLog.deleteMany()             // Clear login logs
     await prisma.userCtoon.deleteMany()
     await prisma.cZone.deleteMany()
 
@@ -29,8 +30,13 @@ async function resetDatabase() {
     await prisma.userPack.deleteMany()
     await prisma.pack.deleteMany()
 
-    await prisma.ctoon.deleteMany()
+    // await prisma.ctoon.deleteMany()
     await prisma.userIP.deleteMany()
+    await prisma.emailLoginCode.deleteMany()        // Clear email login codes
+
+    // --- New: Delete user points and users ---
+    await prisma.userPoints.deleteMany()
+    await prisma.user.deleteMany()
 
     console.log('Database reset complete. User and Points data remain intact.')
   } catch (err) {

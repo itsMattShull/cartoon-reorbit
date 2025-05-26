@@ -1,9 +1,5 @@
 export async function refreshDiscordTokenAndRoles(prisma, user, config) {
     const now = Date.now()
-
-    if (!user.discordId) {
-      return
-    }
   
     // Skip if token still valid
     if (user.tokenExpiresAt && user.tokenExpiresAt.getTime() > now - 60_000) return

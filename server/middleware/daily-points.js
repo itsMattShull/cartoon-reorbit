@@ -7,6 +7,7 @@ const prisma = new PrismaClient()
 export default defineEventHandler(async (event) => {
   // Only run for logged-in users
   const user = event.context.userId
+  console.log('user: ', user)
   if (!user) {
     return
   }

@@ -69,7 +69,7 @@ model UserPoints {
 model User {
   id               String           @id @default(uuid())
   username         String?          @unique
-  discordId        String?           @unique
+  discordId        String           @unique
   discordTag       String?
   discordAvatar    String?
   email            String?          @unique
@@ -290,15 +290,4 @@ model LoginLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([ip])
-}
-
-/// Passwordless email login codes
-model EmailLoginCode {
-  id        String   @id @default(uuid())
-  email     String
-  codeHash  String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([email])
 }

@@ -162,7 +162,7 @@ const selectedSet = ref(null)
 const ctoonDataSets = ref([])
 
 onMounted(async () => {
-  await fetchSelf()
+  // await fetchSelf()
   if (!user.value) return navigateTo('/')
   if (!user.value.needsSetup) return navigateTo('/dashboard')
   if (user.value.username) { 
