@@ -18,27 +18,26 @@ model CZone {
 }
 
 model Ctoon {
-  id                String          @id @default(uuid())
-  name              String
-  series            String?
-  type              String
-  rarity            String
-  assetPath         String
-  releaseDate       DateTime?
-  perUserLimit      Int?
-  codeOnly          Boolean         @default(false)
-  inCmart           Boolean         @default(false)
-  price             Int             @default(0)
-  initialQuantity   Int?             // NULL means unlimited
-  quantity          Int?             // NULL means unlimited
-  createdAt         DateTime        @default(now())
-  set               String?
-  characters        String[]
+  id              String          @id @default(uuid())
+  name            String
+  series          String?
+  type            String
+  rarity          String
+  assetPath       String
+  releaseDate     DateTime?
+  perUserLimit    Int?
+  codeOnly        Boolean         @default(false)
+  inCmart         Boolean         @default(false)
+  price           Int             @default(0)
+  initialQuantity Int?             // NULL means unlimited
+  quantity        Int?             // NULL means unlimited
+  createdAt       DateTime        @default(now())
+  set             String?
+  characters      String[]
 
-  owners            UserCtoon[]
-  // removed old ClaimCodeReward[] relation
-  rewardCtoons      RewardCtoon[]   // relation back from RewardCtoon
-  packOptions       PackCtoonOption[]
+  owners          UserCtoon[]
+  rewardCtoons    RewardCtoon[]
+  packOptions     PackCtoonOption[]
 }
 
 model UserCtoon {
@@ -68,21 +67,21 @@ model UserPoints {
 }
 
 model User {
-  id             String    @id @default(uuid())
-  username       String?   @unique
-  discordId      String    @unique
-  discordTag     String?
-  discordAvatar  String?
-  email          String?
-  avatar         String?
-  accessToken    String?
-  refreshToken   String?
-  tokenExpiresAt DateTime?
-  roles          String[]  @default([])
-  isAdmin        Boolean   @default(false)
-  inGuild        Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  lastLogin      DateTime?
+  id               String           @id @default(uuid())
+  username         String?          @unique
+  discordId        String?           @unique
+  discordTag       String?
+  discordAvatar    String?
+  email            String?          @unique
+  avatar           String?
+  accessToken      String?
+  refreshToken     String?
+  tokenExpiresAt   DateTime?
+  roles            String[]         @default([])
+  isAdmin          Boolean          @default(false)
+  inGuild          Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  lastLogin        DateTime?
   discordCreatedAt DateTime?
 
   cZones           CZone[]
@@ -98,13 +97,14 @@ model User {
   trades           Trade[]
   tradeSpectators  TradeSpectator[]
   ips              UserIP[]
-  packs           UserPack[]
+  packs            UserPack[]
 }
 
 model UserIP {
   id     String @id @default(uuid())
   userId String
   ip     String
+
   user   User   @relation(fields: [userId], references: [id])
 
   @@unique([userId, ip])
@@ -144,18 +144,16 @@ model Claim {
   @@unique([userId, codeId])
 }
 
-/// One “reward batch” per code; may include points and multiple cToon grants
 model ClaimCodeReward {
   id       String            @id @default(uuid())
   codeId   String
-  points   Int?              // optional points to award
+  points   Int?
 
   code     ClaimCode         @relation(fields: [codeId], references: [id])
-  ctoons   RewardCtoon[]     // zero or more cToon grants
+  ctoons   RewardCtoon[]
   packs    RewardPack[]
 }
 
-/// Join table so each reward can include many cToons
 model RewardCtoon {
   id        String             @id @default(uuid())
   rewardId  String
@@ -223,12 +221,12 @@ model TradeCtoon {
 }
 
 model TradeSpectator {
-  id        String   @id @default(uuid())
-  roomId    String
-  userId    String
+  id     String   @id @default(uuid())
+  roomId String
+  userId String
 
-  room      TradeRoom    @relation(fields: [roomId], references: [id])
-  user      User          @relation(fields: [userId], references: [id])
+  room   TradeRoom   @relation(fields: [roomId], references: [id])
+  user   User        @relation(fields: [userId], references: [id])
 }
 
 model Pack {
@@ -241,21 +239,18 @@ model Pack {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  /* How many pulls of each rarity come in one pack */
   rarityConfigs PackRarityConfig[]
-  /* All candidate cToons (with weights) that can be rolled */
   ctoonOptions  PackCtoonOption[]
-  /* Instances users have purchased */
   userPacks     UserPack[]
   rewardPacks   RewardPack[]
 }
 
 model PackRarityConfig {
-  id        String @id @default(uuid())
-  packId    String
-  rarity    String
-  count     Int
-  probabilityPercent Int  @default(100)
+  id                  String @id @default(uuid())
+  packId              String
+  rarity              String
+  count               Int
+  probabilityPercent  Int    @default(100)
 
   pack      Pack   @relation(fields: [packId], references: [id])
 
@@ -268,8 +263,8 @@ model PackCtoonOption {
   ctoonId   String
   weight    Int    @default(1)
 
-  pack      Pack   @relation(fields: [packId], references: [id])
-  ctoon     Ctoon  @relation(fields: [ctoonId], references: [id])
+  pack   Pack   @relation(fields: [packId], references: [id])
+  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
 
   @@unique([packId, ctoonId])
 }
@@ -282,16 +277,28 @@ model UserPack {
   openedAt  DateTime?
   createdAt DateTime @default(now())
 
-  user      User @relation(fields: [userId], references: [id])
-  pack      Pack @relation(fields: [packId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  pack Pack @relation(fields: [packId], references: [id])
 }
 
 model LoginLog {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id])
-  ip            String
-  createdAt     DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  ip        String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 
   @@index([ip])
+}
+
+/// Passwordless email login codes
+model EmailLoginCode {
+  id        String   @id @default(uuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
 }

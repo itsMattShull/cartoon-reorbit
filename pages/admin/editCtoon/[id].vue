@@ -50,7 +50,7 @@
         <!-- Release Date & Time (CDT) -->
         <div>
           <label class="block mb-1 font-medium">Release Date &amp; Time (CDT)</label>
-          <input type="datetime-local" v-model="releaseDate" required class="w-full border rounded p-2" disabled />
+          <input type="datetime-local" v-model="releaseDate" required class="w-full border rounded p-2" />
         </div>
 
         <!-- Per-User Limit -->
