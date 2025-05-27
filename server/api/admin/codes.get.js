@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
 
   // 2. Fetch all codes with maxClaims, expiration, and full reward definitions
   const codes = await prisma.claimCode.findMany({
+    where: { showInFrontend: true },
     orderBy: { createdAt: 'desc' },
     select: {
       code: true,

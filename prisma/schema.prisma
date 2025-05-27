@@ -125,6 +125,7 @@ model Friend {
 model ClaimCode {
   id         String             @id @default(uuid())
   code       String             @unique
+  showInFrontend    Boolean            @default(true)
   maxClaims  Int
   createdAt  DateTime           @default(now())
   expiresAt  DateTime?
