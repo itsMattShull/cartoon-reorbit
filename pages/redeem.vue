@@ -61,7 +61,9 @@
             </li>
           </ul>
         </div>
-        <div id="comment-anchor"></div>
+        <ClientOnly>
+          <div v-html="rawHTML"></div>
+        </ClientOnly>
       </div>
     </div>
   </div>
@@ -74,6 +76,8 @@ definePageMeta({
   middleware: ['auth'],
   layout: 'default'
 })
+
+const rawHTML = '<!-- My special production comment for this page -->'
 
 const code = ref('')
 const error = ref('')
@@ -127,14 +131,6 @@ async function submit() {
     error.value = e.message || 'An unexpected error occurred.'
   }
 }
-
-onMounted(() => {
-  const comment = document.createComment(' My special production comment ')
-  const anchor = document.getElementById('comment-anchor')
-  if (anchor && anchor.parentNode) {
-    anchor.parentNode.insertBefore(comment, anchor)
-  }
-})
 </script>
 
 <style scoped>
