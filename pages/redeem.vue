@@ -61,13 +61,14 @@
             </li>
           </ul>
         </div>
+        <div id="comment-anchor"></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 definePageMeta({
   middleware: ['auth'],
@@ -126,6 +127,14 @@ async function submit() {
     error.value = e.message || 'An unexpected error occurred.'
   }
 }
+
+onMounted(() => {
+  const comment = document.createComment(' My special production comment ')
+  const anchor = document.getElementById('comment-anchor')
+  if (anchor && anchor.parentNode) {
+    anchor.parentNode.insertBefore(comment, anchor)
+  }
+})
 </script>
 
 <style scoped>
