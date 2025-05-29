@@ -23,6 +23,47 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import * as CANNON from 'cannon-es'
 
+const COLORS = {
+  board:          0xF0E6FF,  // light lavender
+  bumper:         0x8c8cff,  // periwinkle-blue
+  halfCircle:     0x8c8cff,  // pale lilac
+  cap:            0xffd000,
+  goldHalfCircle: 0xFFD700
+}
+
+let winSound, loseSound, bigBumperSound, plungerSound, wallSound;
+function initSounds() {
+  winSound = new Audio('/winball/win.mp3')
+  winSound.volume = 0.8     // tweak volume 0.0–1.0
+  winSound.preload = 'auto'
+
+  loseSound = new Audio('/winball/lose.mp3')
+  loseSound.volume = 0.8     // tweak volume 0.0–1.0
+  loseSound.preload = 'auto'
+
+  bigBumperSound = new Audio('/winball/bigbumper.mp3')
+  bigBumperSound.volume = 0.4     // tweak volume 0.0–1.0
+  bigBumperSound.preload = 'auto'
+
+  plungerSound = new Audio('/winball/plunger.mp3')
+  plungerSound.volume = 0.8     // tweak volume 0.0–1.0
+  plungerSound.preload = 'auto'
+
+  wallSound = new Audio('/winball/wall.mp3')
+  wallSound.volume = 0.5     // tweak volume 0.0–1.0
+  wallSound.preload = 'auto'
+}
+
+// ➤ shared material settings
+const makeMat = (hex, opts = {}) =>
+  new THREE.MeshPhongMaterial({
+    color: hex,
+    specular: 0xffffff,
+    shininess: opts.shininess ?? 50,
+    transparent: true,
+    opacity: opts.opacity  ?? 0.9
+  })
+
 let stateHistory = []
 let gameEnded = false
 
@@ -58,6 +99,8 @@ const resetBall = () => {
   capClosed = false
   stateHistory = []
   gameEnded = false
+
+  initSounds()
 
   // Reset ball
   ballBody.position.set(initialBallPos.x, initialBallPos.y, initialBallPos.z)
@@ -95,6 +138,8 @@ onMounted(() => {
   const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
   const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
   const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
+
+  initSounds()
 
   /* ---------- THREE SCENE ---------- */
   scene = new THREE.Scene()
@@ -153,7 +198,7 @@ onMounted(() => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = new THREE.MeshPhongMaterial({ color: '#ffffff' }) // single white color
+  const boardMat = makeMat(COLORS.board, { opacity: 0.5 }) // single white color
   const board    = new THREE.Mesh(boardGeo, boardMat)
   // board.rotation.x = -Math.PI / 2           // lay flat
   board.position.set(0, 0, 0)
@@ -278,6 +323,7 @@ onMounted(() => {
   const wallHeight = 3
   // const wallThickness = 0.5   // Already defined above with ball/plunger
   const wallMatColor = '#4b4b4b'
+  const walls = []
 
   // Helper to get the Y position of the board surface at a given Z (accounts for tilt)
   // utility: create a vertical wall (visual + physics)
@@ -289,6 +335,8 @@ onMounted(() => {
     body.position.set(px, yPos, pz)
     body.quaternion.setFromEuler(-boardTilt, rotY, 0)
     world.addBody(body)
+
+    walls.push(body)
 
     // Visual
     const mesh = new THREE.Mesh(
@@ -347,6 +395,7 @@ const bumperHeight = 3
 const bumperZ = 0
 // X positions for the three bumpers
 const bumperXs = [-12, -1, 8]
+const bumpers = []
 
 bumperXs.forEach((bx) => {
   // Offset left/right bumpers forward by 3 units
@@ -366,10 +415,12 @@ bumperXs.forEach((bx) => {
   const by = boardYAt(actualZ) + bumperHeight / 2
   bumperBody.position.set(bx, by, actualZ)
   world.addBody(bumperBody)
+  
+  bumpers.push(bumperBody)
 
   // Visual: a matching Three.js cylinder
   const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = new THREE.MeshPhongMaterial({ color: '#ff00ff' })
+  const bumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
   const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
   bumperMesh.position.set(bx, by, actualZ)
   // No extra rotation needed—upright by default
@@ -394,7 +445,26 @@ bumperXs.forEach((bx) => {
     extrudedGeo.rotateX(-Math.PI / 2)
     const mesh = new THREE.Mesh(
       extrudedGeo,
-      new THREE.MeshPhongMaterial({ color: '#00ff00' })
+      // new THREE.MeshPhongMaterial({ color: COLORS.halfCircle, transparent: true, opacity: 0.85 })
+      (() => {
+        if (name === 'halfCircle2') {
+          return new THREE.MeshPhongMaterial({
+            color: COLORS.goldHalfCircle,    // gold
+            specular: 0xFFFFFF, // full‐white highlights
+            shininess: 100,     // max out the gloss
+            transparent: true,
+            opacity: 1
+          })
+        } else {
+          return new THREE.MeshPhongMaterial({
+            color: COLORS.halfCircle,    // your default pale
+            specular: 0xffffff,
+            shininess: 50,
+            transparent: true,
+            opacity: 0.85
+          })
+        }
+      })()
     )
     mesh.position.set(x, boardYAt(z), z - 0.25)
     mesh.rotation.y = Math.PI
@@ -440,6 +510,28 @@ bumperXs.forEach((bx) => {
 
   // 3) Listen for contact against the ball
   world.addEventListener('beginContact', ({ bodyA, bodyB }) => {
+    if (
+      (bodyA === ballBody && walls.includes(bodyB)) ||
+      (bodyB === ballBody && walls.includes(bodyA))
+    ) {
+      // Clone so multiple hits overlap
+      const s = wallSound.cloneNode()
+      s.currentTime = 0
+      s.play().catch(() => {
+        /* ignore any playback interruption errors */
+      })
+    }
+
+    // bumper hit?
+    if (
+      (bodyA === ballBody && bumpers.includes(bodyB)) ||
+      (bodyB === ballBody && bumpers.includes(bodyA))
+    ) {
+      const s = bigBumperSound.cloneNode()   // clone with same src
+      s.currentTime = 0
+      s.play().catch(()=>{})
+    }
+
     halfCircles.forEach(({ name, trigger }) => {
       if (
         (bodyA === ballBody && bodyB === trigger) ||
@@ -476,15 +568,21 @@ bumperXs.forEach((bx) => {
             })
             // handle the verdict
             if (result.result === 'hit') {
+              // play the sound
+              winSound.currentTime = 0     // rewind in case it’s still fading out
+              winSound.play().catch(() => {
+                // user gesture might be needed on some browsers; fallback silently
+              })
+
               alert(`You won ${result.pointsAwarded} points!`)
-              console.log(`Nice! Server says you hit ${result.pocket} on tick ${result.tick}.`)
             }
             else if (result.result === 'gutter') {
+              // play the sound
+              loseSound.currentTime = 0     // rewind in case it’s still fading out
+              loseSound.play().catch(() => {
+                // user gesture might be needed on some browsers; fallback silently
+              })
               alert("You hit the gutter.")
-              console.log(`Oops—server says you went in the gutter on tick ${result.tick}.`)
-            }
-            else {
-              console.log(`Still in play? Server returned “${result.result}.”`)
             }
           } catch (err) {
             console.error('Error verifying ball:', err)
@@ -641,10 +739,20 @@ bumperXs.forEach((bx) => {
           })
           // handle the verdict
           if (result.result === 'hit') {
-            console.log(`Nice! Server says you hit ${result.pocket} on tick ${result.tick}.`)
+            // play the sound
+            winSound.currentTime = 0     // rewind in case it’s still fading out
+            winSound.play().catch(() => {
+              // user gesture might be needed on some browsers; fallback silently
+            })
+            alert(`You won ${result.pointsAwarded} points!`)
           }
           else if (result.result === 'gutter') {
-            console.log(`Oops—server says you went in the gutter on tick ${result.tick}.`)
+            // play the sound
+            loseSound.currentTime = 0     // rewind in case it’s still fading out
+            loseSound.play().catch(() => {
+              // user gesture might be needed on some browsers; fallback silently
+            })
+            alert("You hit the gutter.")
           }
           else {
             console.log(`Still in play? Server returned “${result.result}.”`)
@@ -687,7 +795,7 @@ bumperXs.forEach((bx) => {
       // Visual
       capMesh = new THREE.Mesh(
         new THREE.BoxGeometry(capWidth, wallHeight, capThickness),
-        new THREE.MeshPhongMaterial({ color: '#ffff00' })
+        new THREE.MeshPhongMaterial({ color: COLORS.cap, shininess: 100 })
       )
       capMesh.position.set(capCenterX-0.4, capY-0.2, capZ-0.2)
       capMesh.rotation.set(-boardTilt, Math.PI / 4, 0)
@@ -731,6 +839,13 @@ bumperXs.forEach((bx) => {
   canvas.value.addEventListener('pointerup', () => {
     if (plungerPulling) {
       plungerPulling = false
+
+      // play the sound
+      plungerSound.currentTime = 0     // rewind in case it’s still fading out
+      plungerSound.play().catch(() => {
+        // user gesture might be needed on some browsers; fallback silently
+      })
+
       // Normalize pull (0–1)
       const norm = pullStrength / maxPull
       // Quadratic mapping: small pulls → very small, big pulls → full
