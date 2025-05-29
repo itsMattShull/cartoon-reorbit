@@ -49,7 +49,7 @@
   </div>
 
   <!-- Right Canvas Panel -->
-  <div class="bg-white rounded-xl shadow-md">
+  <div class="bg-white max-w-full">
     <div :style="scaleStyle">
       <div
         id="czone-canvas"
@@ -71,7 +71,7 @@
           <img
             :src="item.assetPath"
             :alt="item.name"
-            class="object-contain border border-gray-300"
+            class="max-w-none object-contain border border-gray-300"
             draggable="false"
           />
         </div>
@@ -79,7 +79,7 @@
     </div>
 
     <!-- Buttons under the canvas -->
-    <div class="flex flex-col lg:flex-row justify-between gap-2 px-4 mb-6 mt-6">
+    <div class="flex flex-col lg:flex-row justify-between gap-2 px-4 mb-6 mt-6 max-w-full">
       <button class="bg-red-500 text-white px-4 py-2 rounded" @click="clearAll">
         Remove All cToons
       </button>
@@ -127,7 +127,7 @@
             class="cursor-pointer flex items-center justify-center min-h-[6rem] w-[48%] border rounded p-1"
             @click="selectCtoon(ctoon)"
           >
-            <img :src="ctoon.assetPath" :alt="ctoon.name" class="object-contain" />
+            <img :src="ctoon.assetPath" :alt="ctoon.name" class="max-w-none object-contain" />
           </div>
         </div>
       </div>
