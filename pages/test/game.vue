@@ -12,6 +12,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import * as CANNON from 'cannon-es'
 
+let stateHistory = []
+let gameEnded = false
 
 const canvas = ref(null)
 let scene, world
@@ -43,6 +45,8 @@ const resetBall = () => {
     capMesh = null
   }
   capClosed = false
+  stateHistory = []
+  gameEnded = false
 
   // Reset ball
   ballBody.position.set(initialBallPos.x, initialBallPos.y, initialBallPos.z)
@@ -50,9 +54,9 @@ const resetBall = () => {
   ballBody.angularVelocity.setZero()
   ballMesh.position.set(initialBallPos.x, initialBallPos.y, initialBallPos.z)
   ballLaunched = false
-  // Restore ball physics
-  ballBody.type = CANNON.Body.DYNAMIC
-  ballBody.collisionResponse = true
+  // Freeze ball on plunger until user pulls
+  ballBody.type = CANNON.Body.KINEMATIC
+  ballBody.collisionResponse = false
 
   // Reset plunger
   plungerBody.position.set(laneCenterX, plungerY, plungerOriginalZ)
@@ -83,14 +87,11 @@ onMounted(() => {
 
   /* ---------- THREE SCENE ---------- */
   scene = new THREE.Scene()
-  scene.background = new THREE.Color('#202020')
+  scene.background = new THREE.Color('#ffffff')
   // Root group to rotate entire machine: lay flat and orient downhill
   rootGroup = new THREE.Group()
   rootGroup.rotation.set(Math.PI / 2, boardRotationY, 0)
   scene.add(rootGroup)
-  // Axes helper for visual debugging (length covers board area)
-  const axesHelper = new THREE.AxesHelper(60)
-  rootGroup.add(axesHelper)
 
   /* ---------- CAMERA + CONTROLS ---------- */
   const camera = new THREE.PerspectiveCamera(
@@ -99,18 +100,18 @@ onMounted(() => {
     0.1,
     1000
   )
-  camera.position.set(0, 0, 75)  // slightly more top-down view
+  camera.position.set(0, 0, 85)  // slightly more top-down view
   camera.lookAt(0, 0, 0)
 
   const renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true })
   renderer.setPixelRatio(window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
 
-  const controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.05
-  controls.target.set(0, 0, 0)
-  controls.update()
+  // const controls = new OrbitControls(camera, renderer.domElement)
+  // controls.enableDamping = true
+  // controls.dampingFactor = 0.05
+  // controls.target.set(0, 0, 0)
+  // controls.update()
   const clock = new THREE.Clock()
 
   /* ---------- LIGHTING ---------- */
@@ -120,7 +121,7 @@ onMounted(() => {
   scene.add(dir)
 
   /* ---------- BOARD ---------- */
-  const boardWidth  = 24
+  const boardWidth  = 36
   const boardLength = 50
 
   // --- Board with semicircular north edge ---
@@ -209,6 +210,9 @@ onMounted(() => {
     new THREE.MeshPhongMaterial({ color: '#ff0000' })
   )
   rootGroup.add(ballMesh)
+
+  ballBody.type = CANNON.Body.KINEMATIC
+  ballBody.collisionResponse = false
 
   // --- Plunger ---
   const plungerLength = 4
@@ -331,7 +335,7 @@ const bumperHeight = 3
 // Z position for bumpers (just above center)
 const bumperZ = 0
 // X positions for the three bumpers
-const bumperXs = [-8, -1, 5]
+const bumperXs = [-12, -1, 8]
 
 bumperXs.forEach((bx) => {
   // Offset left/right bumpers forward by 3 units
@@ -361,6 +365,125 @@ bumperXs.forEach((bx) => {
   rootGroup.add(bumperMesh)
 })
 
+  // ---------- HALF-CIRCLE TRIGGERS ----------
+  const halfCircleConfigs = [
+    { name: 'halfCircle1', x: -10, z: southZ - 12, radius: 2 },
+    { name: 'halfCircle2', x:  0, z: southZ - 6, radius: 2 },
+    { name: 'halfCircle3', x:  10, z: southZ - 12, radius: 2 },
+  ];
+  const halfCircles = [];
+
+  halfCircleConfigs.forEach(({ name, x, z, radius }) => {
+    // 1) Visual: extruded half-circle lying flat
+    const shape = new THREE.Shape()
+    shape.moveTo(-radius, 0)
+    shape.absarc(0, 0, radius, 0, Math.PI, false)
+    const extrudeSettings = { depth: 0.5, bevelEnabled: false }
+    const extrudedGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings)
+    extrudedGeo.rotateX(-Math.PI / 2)
+    const mesh = new THREE.Mesh(
+      extrudedGeo,
+      new THREE.MeshPhongMaterial({ color: '#00ff00' })
+    )
+    mesh.position.set(x, boardYAt(z), z - 0.25)
+    mesh.rotation.y = Math.PI
+    mesh.name = name
+    rootGroup.add(mesh)
+
+    // 2) Physics: exactly match that mesh’s surface
+    const meshGeo = mesh.geometry;
+
+    // pull out the flat vertex array
+    const verts = meshGeo.attributes.position.array;
+
+    // build an index array if none exists
+    let idx;
+    if (meshGeo.index) {
+      idx = meshGeo.index.array;
+    } else {
+      // non-indexed: every group of 3 vertices is a triangle
+      const vertCount = verts.length / 3;       // total vertices
+      idx = [];
+      for (let i = 0; i < vertCount; i += 3) {
+        idx.push(i, i + 1, i + 2);
+      }
+    }
+
+    // now make your trimesh shape
+    const trimeshShape = new CANNON.Trimesh(verts, idx);
+    const triggerBody = new CANNON.Body({ mass: 0 });
+    triggerBody.addShape(trimeshShape);
+
+    // match position & rotation exactly
+    triggerBody.position.copy(mesh.position);
+    triggerBody.quaternion.copy(mesh.quaternion);
+
+    // sensor mode
+    triggerBody.collisionResponse = false;
+    world.addBody(triggerBody);
+
+    // keep track
+    halfCircles.push({ name, mesh, trigger: triggerBody });
+  })
+
+
+  // 3) Listen for contact against the ball
+  world.addEventListener('beginContact', ({ bodyA, bodyB }) => {
+    halfCircles.forEach(({ name, trigger }) => {
+      if (
+        (bodyA === ballBody && bodyB === trigger) ||
+        (bodyB === ballBody && bodyA === trigger)
+      ) {
+        stateHistory.push({
+          position: {
+            x: ballBody.position.x,
+            y: ballBody.position.y,
+            z: ballBody.position.z
+          },
+          velocity: {
+            x: ballBody.velocity.x,
+            y: ballBody.velocity.y,
+            z: ballBody.velocity.z
+          }
+        });
+
+        // stop the ball cold
+        ballBody.velocity.setZero();
+        ballBody.angularVelocity.setZero();
+        ballBody.type = CANNON.Body.STATIC;
+        ballBody.collisionResponse = false;
+        gameEnded = true
+
+        // ── now call our new endpoint
+        ;(async () => {
+          try {
+            console.log('posting to winball, states.length=', stateHistory.length)
+            // Nuxt’s $fetch works client-side too
+            const result = await $fetch('/api/game/winball', {
+              method: 'POST',
+              body: stateHistory
+            })
+            // handle the verdict
+            if (result.result === 'hit') {
+              alert(`You won ${result.pointsAwarded} points!`)
+              console.log(`Nice! Server says you hit ${result.pocket} on tick ${result.tick}.`)
+            }
+            else if (result.result === 'gutter') {
+              alert("You hit the gutter.")
+              console.log(`Oops—server says you went in the gutter on tick ${result.tick}.`)
+            }
+            else {
+              console.log(`Still in play? Server returned “${result.result}.”`)
+            }
+          } catch (err) {
+            console.error('Error verifying ball:', err)
+            console.log('Verification failed; please retry.')
+          }
+        })()
+      }
+    });
+  });
+
 
   /* ---------- TEXT LABELS ---------- */
   function createLabelSprite (text) {
@@ -382,27 +505,11 @@ bumperXs.forEach((bx) => {
     return sprite
   }
 
-  const north = createLabelSprite('North')
-  north.position.set(0, 0.1, -boardLength / 2 + 2)
-  rootGroup.add(north)
-
-  const south = createLabelSprite('South')
-  south.position.set(0, 0.1, boardLength / 2 - 2)
-  rootGroup.add(south)
-
-  const east = createLabelSprite('East')
-  east.position.set(boardWidth / 2 - 2, 0.1, 0)
-  rootGroup.add(east)
-
-  const west = createLabelSprite('West')
-  west.position.set(-boardWidth / 2 + 2, 0.1, 0)
-  rootGroup.add(west)
-
 
   /* ---------- MAIN LOOP ---------- */
   function animate () {
     requestAnimationFrame(animate)
-    controls.update()
+    // controls.update()
 
     const dt = clock.getDelta() || 1/60
 
@@ -444,9 +551,35 @@ bumperXs.forEach((bx) => {
       ballBody.angularVelocity.setZero()
     }
 
+    // ALSO: if we haven’t pulled or launched yet, keep ball glued
+    if (!plungerPulling && !ballLaunched) {
+      const frontZ = plungerBody.position.z - plungerLength / 2
+      const targetZ = frontZ - ballRadius
+      const targetY = boardYAt(frontZ) + ballRadius
+      ballBody.position.set(laneCenterX, targetY, targetZ)
+      ballBody.velocity.setZero()
+      ballBody.angularVelocity.setZero()
+    }
+
     // Step the physics world
     world.step(1/60, dt, 20)
     ballBody.linearFactor.set(1, 0, 1)
+
+    // ── record every tick
+    if(!gameEnded) {
+      stateHistory.push({
+        position: {
+          x: ballBody.position.x,
+          y: ballBody.position.y,
+          z: ballBody.position.z
+        },
+        velocity: {
+          x: ballBody.velocity.x,
+          y: ballBody.velocity.y,
+          z: ballBody.velocity.z
+        }
+      })
+    }
     
     // Clamp ball to board surface on Y axis so it only moves in X/Z
     const zPos = ballBody.position.z
@@ -456,7 +589,22 @@ bumperXs.forEach((bx) => {
 
     // --- Stop ball at south wall and lock it in place ---
     const southLimit = southZ - ballRadius
-    if (ballLaunched && ballBody.position.z >= southLimit - 1 ) {
+    if (ballLaunched && ballBody.position.z >= southLimit - 1 && !gameEnded) {
+      stateHistory.push({
+        position: {
+          x: ballBody.position.x,
+          y: ballBody.position.y,
+          z: ballBody.position.z
+        },
+        velocity: {
+          x: ballBody.velocity.x,
+          y: ballBody.velocity.y,
+          z: ballBody.velocity.z
+        }
+      });
+
+      gameEnded = true
+
       // Snap to the wall face
       const whereitstopped = ballBody.position.z
       ballBody.position.z = whereitstopped
@@ -465,9 +613,36 @@ bumperXs.forEach((bx) => {
       ballBody.angularVelocity.setZero()
       // Disable further physics interactions
       ballBody.collisionResponse = false
-      ballBody.type = CANNON.Body.STATIC
+      ballBody.type = CANNON.Body.STATIC;
       // Mark as no longer launched
       // ballLaunched = false
+
+      // ── now call our new endpoint
+      ;(async () => {
+        try {
+          console.log('sending stuff')
+          // Nuxt’s $fetch works client-side too
+          console.log('posting to winball, states.length=', stateHistory.length)
+
+          const result = await $fetch('/api/game/winball', {
+            method: 'POST',
+            body: stateHistory
+          })
+          // handle the verdict
+          if (result.result === 'hit') {
+            console.log(`Nice! Server says you hit ${result.pocket} on tick ${result.tick}.`)
+          }
+          else if (result.result === 'gutter') {
+            console.log(`Oops—server says you went in the gutter on tick ${result.tick}.`)
+          }
+          else {
+            console.log(`Still in play? Server returned “${result.result}.”`)
+          }
+        } catch (err) {
+          console.error('Error verifying ball:', err)
+          console.log('Verification failed; please retry.')
+        }
+      })()
     }
 
 
@@ -551,10 +726,15 @@ bumperXs.forEach((bx) => {
       const forwardImpulse = plungerForce * (norm * norm)
       // Apply impulse toward the north (negative Z)
       if (!ballLaunched) {
+        // restore real physics…
+        ballBody.type = CANNON.Body.DYNAMIC
+        ballBody.collisionResponse = true
+        // …then launch
         ballBody.applyImpulse(new CANNON.Vec3(0, 0, -forwardImpulse), ballBody.position)
       }
       pullStrength = 0
       launched = true
+      ballLaunched = true
       // plungerBody.collisionResponse = false
       // world.removeBody(plungerBody)   // disable further plunger collisions
     }

@@ -28,7 +28,7 @@ function db () {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..')
+  ? join(__dirname, '..', '..', '..')
   : process.cwd()
 const packUploadDir = join(baseDir, 'public', 'packs')
 

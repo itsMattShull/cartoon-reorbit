@@ -86,6 +86,7 @@ model User {
 
   cZones           CZone[]
   logins           LoginLog[]
+  gamePointLogs    GamePointLog[]
   claims           Claim[]
   visits           Visit[]
   points           UserPoints?
@@ -291,4 +292,13 @@ model LoginLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([ip])
+}
+
+model GamePointLog {
+  id         String   @id @default(uuid())
+  userId     String
+  points     Int
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
 }
