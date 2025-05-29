@@ -1,6 +1,7 @@
 <template>
+  <Nav />
   <div class="game-container">
-    <button class="reset-btn" @click="resetBall">Reset Ball</button>
+    <button class="reset-btn mt-16" @click="resetBall">Reset Ball</button>
     <canvas ref="canvas" class="game-canvas"></canvas>
   </div>
 </template>
