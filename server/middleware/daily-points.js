@@ -1,48 +1,46 @@
 // server/middleware/dailyPoints.js
+// Uses **Luxon** instead of date‑fns‑tz for robust timezone handling
 
 import { PrismaClient } from '@prisma/client'
+import { DateTime } from 'luxon'
 
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
-  // Only run for logged-in users
   const user = event.context.userId
-  if (!user) {
-    return
-  }
-  // 1. Compute “window start” at 8 PM CST
-  const now = new Date()
-  const cstNow = new Date(
-    now.toLocaleString('en-US', { timeZone: 'America/Chicago' })
-  )
+  if (!user) return
 
-  let boundary = new Date(cstNow)
-  boundary.setHours(20, 0, 0, 0)      // today at 20:00 CST
-  if (cstNow < boundary) {
-    boundary.setDate(boundary.getDate() - 1)  // before 8 PM → go to yesterday 8 PM
+  // 1. Current Chicago time (handles DST automatically)
+  const chicagoNow = DateTime.now().setZone('America/Chicago')
+
+  // 2. Boundary = most recent 8 PM Chicago time
+  let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+  if (chicagoNow < boundaryLocal) {
+    boundaryLocal = boundaryLocal.minus({ days: 1 })
   }
 
-  // Convert boundary back to UTC for DB comparison
-  const boundaryUtc = new Date(
-    boundary.toLocaleString('en-US', { timeZone: 'America/Chicago' })
-  )
+  // 3. Convert boundary to native JS Date in UTC for DB comparisons
+  const boundaryUtc = boundaryLocal.toUTC().toJSDate()
 
-
-  // 2. Ensure there’s a UserPoints row
-  const pts = await prisma.userPoints.upsert({
+  // 4. Ensure a UserPoints row exists
+  await prisma.userPoints.upsert({
     where: { userId: user },
     create: { userId: user, points: 0, lastDailyAward: null },
-    update: {}
+    update: {},
   })
 
-  // 3. If they haven’t yet received today’s award, give 500 and update timestamp
-  if (!pts.lastDailyAward || new Date(pts.lastDailyAward) < boundaryUtc) {
-    await prisma.userPoints.update({
-      where: { userId: user },
-      data: {
-        points: { increment: 500 },
-        lastDailyAward: new Date()
-      }
-    })
-  }
+  // 5. Atomically award 500 points if not yet claimed this window
+  await prisma.userPoints.updateMany({
+    where: {
+      userId: user,
+      OR: [
+        { lastDailyAward: null },
+        { lastDailyAward: { lt: boundaryUtc } },
+      ],
+    },
+    data: {
+      points: { increment: 500 },
+      lastDailyAward: chicagoNow.toUTC().toJSDate(),
+    },
+  })
 })

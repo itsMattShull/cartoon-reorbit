@@ -29,7 +29,7 @@
           :key="element.id"
           class="cursor-move flex items-start justify-center min-h-[6rem] w-[48%]"
           draggable="true"
-          @dragstart="onDragStart(element)"
+          @dragstart="onDragStart(element, $event)"
         >
           <img :src="element.assetPath" :alt="element.name" class="object-contain" />
         </div>
@@ -160,21 +160,23 @@ definePageMeta({
   layout: 'default'
 })
 
+useHead({
+  meta: [
+   { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+  ]
+})
+
 // Scale logic
 const scale = ref(1)
 const recalcScale = () => {
   scale.value = Math.min(1, window.innerWidth / 800)
 }
-useHead({
-  meta: [
-    { name: 'viewport', content: 'width=device-width, initial-scale=1', key: 'viewport' }
-  ]
-})
+
 const scaleStyle = computed(() => ({
   transform: `scale(${scale.value})`,
   transformOrigin: 'top left',
-  width: `${800 * scale.value}px`,
-  height: `${600 * scale.value}px`
+  // width: `${800 * scale.value}px`,
+  // height: `${600 * scale.value}px`
 }))
 
 // Canvas constraints
@@ -218,35 +220,68 @@ onMounted(async () => {
   backgrounds.value = res.backgrounds
   layout.value = res.layout || []
   selectedBackground.value = res.background || 'backgrounds/IMG_3433.GIF'
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('dragend', cleanupDragImage)
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', recalcScale)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('dragend', cleanupDragImage)
+  }
 })
 
-// Drag & drop new
+// Drag & drop  (updated)
 const draggingItem = ref(null)
-function onDragStart(ctoon) {
+let dragImageEl = null // temp element for custom drag image
+
+function onDragStart(ctoon, ev) {
   draggingItem.value = ctoon
+  // Create a drag image so the pointer’s hot‑spot is the top‑left corner
+  dragImageEl = ev.target.cloneNode(true)
+  dragImageEl.style.position = 'absolute'
+  dragImageEl.style.top = '-9999px'
+  dragImageEl.style.left = '-9999px'
+  dragImageEl.style.width = `${ev.target.clientWidth}px`
+  dragImageEl.style.height = `${ev.target.clientHeight}px`
+  document.body.appendChild(dragImageEl)
+  // Hot‑spot at (0,0): top‑left corner
+  ev.dataTransfer.setDragImage(dragImageEl, 0, 0)
 }
+
+const cleanupDragImage = () => {
+  if (dragImageEl) {
+    document.body.removeChild(dragImageEl)
+    dragImageEl = null
+  }
+}
+
 async function onDrop(e) {
   if (!draggingItem.value) return
   const rect = e.currentTarget.getBoundingClientRect()
   let rawX = (e.clientX - rect.left) / scale.value
   let rawY = (e.clientY - rect.top) / scale.value
+
   const img = new Image()
   img.src = draggingItem.value.assetPath
   await img.decode()
+
+  // Because the hot‑spot is the top‑left, no offset subtraction needed
   const { x, y } = clampPosition(rawX, rawY, img.naturalWidth, img.naturalHeight)
+
   layout.value.push({
     id: draggingItem.value.id,
     name: draggingItem.value.name,
     assetPath: draggingItem.value.assetPath,
-    x, y,
+    x,
+    y,
     width: img.naturalWidth,
-    height: img.naturalHeight
+    height: img.naturalHeight,
   })
-  ctoons.value = ctoons.value.filter(c => c.id !== draggingItem.value.id)
+
+  ctoons.value = ctoons.value.filter((c) => c.id !== draggingItem.value.id)
   draggingItem.value = null
   await saveLayout(false)
 }
