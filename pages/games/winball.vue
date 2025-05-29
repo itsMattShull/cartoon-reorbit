@@ -7,7 +7,17 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: false })
+import { useHead } from '#imports'
+ definePageMeta({ layout: false })
+ // 1) lock viewport so mobile can’t zoom
+ useHead({
+   meta: [
+     {
+       name: 'viewport',
+       content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no'
+     }
+   ]
+ })
 import { ref, onMounted } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
@@ -750,11 +760,21 @@ bumperXs.forEach((bx) => {
   height: 100vh;
   background: #101010;
   overflow: hidden;
+
+  /* 2a) disable text selection/highlight */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+
+  /* 2b) disable scroll/pinch gestures on the container */
+  touch-action: none;
 }
 .game-canvas {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
 }
 .reset-btn {
   position: absolute;
@@ -768,6 +788,7 @@ bumperXs.forEach((bx) => {
   border-radius: 4px;
   cursor: pointer;
   font-family: sans-serif;
+  touch-action: manipulation;
 }
 .reset-btn:hover {
   background: #eee;
