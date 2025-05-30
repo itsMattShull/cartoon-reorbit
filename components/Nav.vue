@@ -59,7 +59,8 @@ const baseLinks = [
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Live Trading', to: '/live-trading' },
-  { label: 'Redeem Code', to: '/redeem' }
+  { label: 'Redeem Code', to: '/redeem' },
+  { label: 'Winball', to: '/games/winball' }
 ]
 
 const links = computed(() => {
