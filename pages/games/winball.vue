@@ -48,10 +48,38 @@ function initSounds() {
   plungerSound = new Audio('/winball/plunger.mp3')
   plungerSound.volume = 0.8     // tweak volume 0.0–1.0
   plungerSound.preload = 'auto'
+}
 
-  wallSound = new Audio('/winball/wall.mp3')
-  wallSound.volume = 0.5     // tweak volume 0.0–1.0
-  wallSound.preload = 'auto'
+let audioCtx
+let wallBuffer = null
+
+
+// on collision
+function playWallSound() {
+  if (!wallBuffer) return
+  const src = audioCtx.createBufferSource()
+  src.buffer = wallBuffer
+  src.connect(audioCtx.destination)
+  src.start(0)
+}
+
+// 1) helper to init or resume the context and load the buffer
+function prepareWallSound() {
+  // create or resume context
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  } else if (audioCtx.state === 'suspended') {
+    audioCtx.resume()
+  }
+
+  // fetch + decode
+  return fetch('/winball/wall.mp3')
+    .then(res => res.arrayBuffer())
+    .then(ab => audioCtx.decodeAudioData(ab))
+    .then(buf => {
+      wallBuffer = buf
+    })
+    .catch(console.error)
 }
 
 // ➤ shared material settings
@@ -101,6 +129,7 @@ const resetBall = () => {
   gameEnded = false
 
   initSounds()
+  prepareWallSound()
 
   // Reset ball
   ballBody.position.set(initialBallPos.x, initialBallPos.y, initialBallPos.z)
@@ -140,6 +169,8 @@ onMounted(() => {
   const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
 
   initSounds()
+
+  prepareWallSound()
 
   /* ---------- THREE SCENE ---------- */
   scene = new THREE.Scene()
@@ -514,12 +545,7 @@ bumperXs.forEach((bx) => {
       (bodyA === ballBody && walls.includes(bodyB)) ||
       (bodyB === ballBody && walls.includes(bodyA))
     ) {
-      // Clone so multiple hits overlap
-      const s = wallSound.cloneNode()
-      s.currentTime = 0
-      s.play().catch(() => {
-        /* ignore any playback interruption errors */
-      })
+      playWallSound()
     }
 
     // bumper hit?
