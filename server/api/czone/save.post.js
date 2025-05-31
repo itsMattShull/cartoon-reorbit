@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
       uc.id,
       {
         // duplicate-detection key
-        baseCtoonId: uc.ctoon.id,
+        baseCtoonId: uc.id,
 
         // data to merge into layout items
         mintNumber: uc.mintNumber,
