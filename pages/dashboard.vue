@@ -41,6 +41,18 @@
                 </p>
               </div>
             </div>
+            <div class="gap-6 w-full bg-white rounded-xl shadow-md p-6 mt-6">
+              <!-- New “Daily Points Reset” line: -->
+              <p class="text-gray-700 text-xl">
+                Daily Points Reset: {{ resetCountdown }}
+              </p>
+              <p
+                class="text-gray-700 cursor-pointer hover:text-indigo-600 mt-3 underline"
+                @click="showModal = true"
+              >
+                How do I earn more points?
+              </p>
+            </div>
           </div>
           <div class="rounded-xl shadow-md w-full lg:w-1/2">
             <div class="flex flex-col lg:flex-row gap-6 max-w-4xl mx-auto">
@@ -174,13 +186,50 @@
             </div>
           </div>
         </section>
-
+        <!-- Modal: “How To Gain Points” -->
+        <teleport to="body">
+          <div
+            v-if="showModal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+              <h3 class="text-xl font-semibold mb-4">How To Gain Points</h3>
+              <div class="space-y-2 text-gray-700 my-6">
+                All ways to gain points in a 24 hour cycle reset at 8pm CST.
+              </div>
+              <div class="space-y-6 text-gray-700">
+                <p>
+                  • 20 points every 24 hours for every cZone you visit (up to 200 points per day).
+                </p>
+                <p>
+                  • Claim your daily login bonus once every 24 hour cycle.
+                </p>
+                <p>
+                  • Playing games, such as Winball, will give you up to 100 points every 24 hours.
+                </p>
+                <p>
+                  • Special codes that can be found in the Discord.
+                </p>
+              </div>
+              <div class="mt-6 text-right">
+                <button
+                  @click="showModal = false"
+                  class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </teleport>
       </template>
     </div>
   </template>
   
   <script setup>
+    import { ref, onMounted, onUnmounted } from 'vue'
     import { useRouter } from 'vue-router'
+    import { DateTime, Duration } from 'luxon'
     import * as Sentry from "@sentry/nuxt"
     definePageMeta({
       middleware: 'auth',
@@ -251,12 +300,56 @@
     }
     // --- end cToons logic ---
 
+    // -------- Countdown to next 8 PM CST --------
+    const resetCountdown = ref('--:--:--')
+    let countdownInterval = null
+
+    function computeNextReset() {
+      // “Now” in Chicago
+      const chicagoNow = DateTime.now().setZone('America/Chicago')
+
+      // 8 PM today in Chicago
+      let next8pm = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+
+      // If we’re already past or exactly at 8 PM, bump to tomorrow
+      if (chicagoNow >= next8pm) {
+        next8pm = next8pm.plus({ days: 1 })
+      }
+
+      // Convert that 8 PM CST into the user’s local time
+      const nextLocal = next8pm.toLocal()
+
+      return nextLocal
+    }
+
+    function updateCountdown() {
+      const nowLocal = DateTime.local()
+      const resetLocal = computeNextReset()
+      const diff = resetLocal.diff(nowLocal, ['hours', 'minutes', 'seconds']).toObject()
+
+      // If for any reason diff is negative or missing, show 00:00:00
+      if (diff.hours < 0 || diff.minutes < 0 || diff.seconds < 0) {
+        resetCountdown.value = '00:00:00'
+        return
+      }
+
+      // Format as HH:mm:ss, zero-pad
+      const hh = String(Math.floor(diff.hours)).padStart(2, '0')
+      const mm = String(Math.floor(diff.minutes)).padStart(2, '0')
+      const ss = String(Math.floor(diff.seconds)).padStart(2, '0')
+      resetCountdown.value = `${hh}:${mm}:${ss}`
+    }
+
     onMounted(async () => {
       await fetchSelf()
       if (user.value?.needsSetup) {
         router.push('/setup-username')
         return
       }
+
+      // 2) Kick off countdown timer
+      updateCountdown()
+      countdownInterval = setInterval(updateCountdown, 1000)
 
       // fetch Discord data in parallel with the rest
       getDiscordWidget()
@@ -287,6 +380,15 @@
       // remove loading animation
       loading.value = false
     })
+
+    onUnmounted(() => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval)
+        countdownInterval = null
+      }
+    })
+
+    const showModal = ref(false)
   </script>
   
   <style scoped>

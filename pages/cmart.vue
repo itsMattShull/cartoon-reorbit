@@ -1,8 +1,8 @@
 <template>
   <Nav />
 
-  <!-- ──────────────── MAIN PAGE ──────────────── -->
-  <div class="pt-16 px-4 py-6 max-w-5xl mx-auto">
+  <!-- ──────────── MAIN PAGE ──────────── -->
+  <div class="pt-16 px-4 py-6 max-w-7xl mx-auto">
     <h1 class="text-3xl font-bold mb-6">cMart — gotta collect ’em&nbsp;all</h1>
 
     <!-- TABS + POINTS -->
@@ -25,107 +25,196 @@
       </div>
     </div>
 
-    <!-- SORT BAR (cToons tab) -->
-    <div v-if="activeTab === 'cToons'" class="flex items-center mb-4">
-      <label for="sort" class="mr-2 text-sm font-medium">Sort / Filter:</label>
-      <select id="sort" v-model="sortBy" class="border rounded px-2 py-1 text-sm">
-        <option value="releaseDateDesc">Release Time – Desc</option>
-        <option value="releaseDateAsc">Release Time – Asc</option>
-        <option value="rarity">Rarity</option>
-        <option value="series">Series</option>
-        <option value="priceAsc">Price – Asc</option>
-        <option value="priceDesc">Price – Desc</option>
-        <option value="owned">Owned</option>
-        <option value="unowned">Un-owned</option>
-      </select>
-    </div>
-
-    <!-- CTOON GRID -->
-    <div
-      v-if="activeTab === 'cToons'"
-      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    <!-- ──────── LAYOUT: SIDEBAR + CONTENT ──────── -->
+     <!-- Toggle button, only on mobile (hidden on lg+) -->
+    <button
+      class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
+      @click="showFilters = !showFilters"
     >
-      <div
-        v-for="ctoon in pagedCtoons"
-        :key="ctoon.id"
-        class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
-      >
-        <h2 class="text-xl font-semibold mb-2">{{ ctoon.name }}</h2>
-        <div class="flex-grow flex items-center justify-center w-full mb-4">
-          <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+      {{ showFilters ? 'Hide Filters' : 'Show Filters & Sort' }}
+    </button>
+    <div v-if="activeTab === 'cToons'" class="flex flex-col lg:flex-row gap-6">
+      <!-- FILTER / SORT PANEL (left) -->
+      <aside :class="[showFilters ? 'block' : 'hidden', 'lg:block', 'w-full lg:w-1/4', 'bg-white rounded-lg shadow p-6']">
+        <!-- 1) SEARCH INPUT -->
+        <div class="mb-10">
+          <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search cToons</label>
+          <input
+            id="search"
+            type="text"
+            v-model="searchQuery"
+            placeholder="Type a name…"
+            class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          />
         </div>
-        <div class="mt-auto text-sm text-center">
-          <p>
-            <span class="capitalize">{{ ctoon.series }}</span> •
-            <span class="capitalize">{{ ctoon.rarity }}</span>
-          </p>
-          <p>
-            Minted: {{ ctoon.minted }} /
-            {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
-          </p>
-        </div>
-        <button
-          @click="buyCtoon(ctoon)"
-          :disabled="ctoon.quantity && ctoon.minted >= ctoon.quantity"
-          class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-        <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
-          Sold Out
-        </span>
-        <span v-else>
-          Buy for {{ ctoon.price }} Pts
-        </span>
-        </button>
-      </div>
-    </div>
 
-    <!-- PACK GRID -->
-    <div
-      v-else
-      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-    >
-      <div
-        v-for="pack in packs"
-        :key="pack.id"
-        class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
-        @click="openPackModal(pack)"
-      >
-        <h2 class="text-xl font-semibold mb-2 text-center break-words">
-          {{ pack.name }}
-        </h2>
-        <div class="flex-grow flex items-center justify-center w-full mb-4">
-          <img :src="pack.imagePath" class="max-w-full h-auto" />
+        <!-- 2) FILTER BY SET -->
+        <div class="mb-10">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Set</p>
+          <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
+            <label
+              v-for="s in uniqueSets"
+              :key="s"
+              class="flex items-center text-sm"
+            >
+              <input
+                type="checkbox"
+                :value="s"
+                v-model="selectedSets"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ s }}</span>
+            </label>
+          </div>
         </div>
-        <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
-          <li v-for="r in pack.rarityConfigs" :key="r.rarity" style="margin-top: 12px !important;">
-            <strong>{{ r.rarity }}:</strong> {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
-          </li>
-        </ul>
-        <button
-          @click.stop="buyPack(pack)"
-          class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded"
-        >
-          Buy Pack for {{ pack.price }} Pts
-        </button>
-      </div>
-    </div>
 
-    <!-- PAGINATION -->
-    <div v-if="activeTab === 'cToons'" class="mt-8 flex justify-center gap-4">
-      <button
-        @click="currentPage--"
-        :disabled="currentPage === 1"
-        class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-      >
-        Previous
-      </button>
-      <button
-        @click="currentPage++"
-        :disabled="currentPage * itemsPerPage >= sortedCtoons.length"
-        class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-      >
-        Next
-      </button>
+        <!-- 3) FILTER BY SERIES -->
+        <div class="mb-10">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Series</p>
+          <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
+            <label
+              v-for="ser in uniqueSeries"
+              :key="ser"
+              class="flex items-center text-sm"
+            >
+              <input
+                type="checkbox"
+                :value="ser"
+                v-model="selectedSeries"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ ser }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 4) FILTER BY RARITY -->
+        <div class="mb-10">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Rarity</p>
+          <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
+            <label
+              v-for="r in uniqueRarities"
+              :key="r"
+              class="flex items-center text-sm"
+            >
+              <input
+                type="checkbox"
+                :value="r"
+                v-model="selectedRarities"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ r }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 5) FILTER BY OWNED / UNOWNED -->
+        <div class="mb-10">
+          <p class="text-sm font-medium text-gray-700 mb-2">Owned / Unowned</p>
+          <div class="space-y-1">
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="all"
+                v-model="ownedFilter"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">All</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="owned"
+                v-model="ownedFilter"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Owned</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="unowned"
+                v-model="ownedFilter"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Un‐owned</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 6) SORT SELECT -->
+        <div class="mt-10">
+          <label for="sort" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+          <select
+            id="sort"
+            v-model="sortBy"
+            class="mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="releaseDateDesc">Release Date – Descending</option>
+            <option value="releaseDateAsc">Release Date – Ascending</option>
+            <option value="priceDesc">Price – Descending</option>
+            <option value="priceAsc">Price – Ascending</option>
+            <option value="series">Series (A→Z)</option>
+          </select>
+        </div>
+      </aside>
+
+      <!-- GRID CONTENT (right) -->
+      <div class="w-full lg:w-3/4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            v-for="ctoon in pagedCtoons"
+            :key="ctoon.id"
+            class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
+          >
+            <h2 class="text-xl font-semibold mb-2">{{ ctoon.name }}</h2>
+            <div class="flex-grow flex items-center justify-center w-full mb-4">
+              <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+            </div>
+            <div class="mt-auto text-sm text-center">
+              <p>
+                <span class="capitalize">{{ ctoon.series }}</span> • 
+                <span class="capitalize">{{ ctoon.rarity }}</span> • 
+                <span class="capitalize">{{ ctoon.set }}</span>
+              </p>
+              <p>
+                Minted: {{ ctoon.minted }} / 
+                {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+              </p>
+            </div>
+            <button
+              @click="buyCtoon(ctoon)"
+              :disabled="ctoon.quantity && ctoon.minted >= ctoon.quantity"
+              class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+            >
+              <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
+                Sold Out
+              </span>
+              <span v-else>
+                Buy for {{ ctoon.price }} Pts
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- PAGINATION -->
+        <div class="mt-8 flex justify-center gap-4">
+          <button
+            @click="currentPage--"
+            :disabled="currentPage === 1"
+            class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            @click="currentPage++"
+            :disabled="(currentPage * itemsPerPage) >= filteredAndSortedCtoons.length"
+            class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- PACK OVERLAY & MODAL -->
@@ -219,85 +308,164 @@
 </template>
 
 <script setup>
-// ────────── Nuxt Page Meta ─────────────────────────
-definePageMeta({ 
+// ────────── Nuxt Meta ──────────────────────────
+definePageMeta({
   middleware: 'auth',
   layout: 'default'
 })
 
-// ────────── Imports ─────────────────────────────────
+// ────────── Imports ─────────────────────────────
 import { ref, computed, onMounted } from 'vue'
-import { useAuth }        from '@/composables/useAuth'
-import Toast               from '@/components/Toast.vue'
-import Nav                 from '@/components/Nav.vue'
-import * as Sentry         from '@sentry/nuxt'
+import { useAuth } from '@/composables/useAuth'
+import Toast from '@/components/Toast.vue'
+import Nav from '@/components/Nav.vue'
+import * as Sentry from '@sentry/nuxt'
 
-// ────────── Auth & Points ─────────────────────────
+const showFilters = ref(false)
+
+// ────────── Auth & User ────────────────────────
 const { user, fetchSelf } = useAuth()
 
-// ────────── Tabs ──────────────────────────────────
+// ────────── Tabs ───────────────────────────────
 const activeTab = ref('cToons')
 
-// ────────── Toast Helper ─────────────────────────
+// ────────── Toast Helper ───────────────────────
 const toastMessage = ref('')
 const toastType    = ref('error')
-function showToast(msg, type) {
-  toastType.value    = type || 'error'
+function showToast(msg, type = 'error') {
+  toastType.value    = type
   toastMessage.value = msg
-  setTimeout(function() {
+  setTimeout(() => {
     toastMessage.value = ''
   }, 5000)
 }
 
-// ────────── Shop Data ────────────────────────────
+// ────────── Shop Data ──────────────────────────
 const ctoons = ref([])
 const packs  = ref([])
 
-// ────────── Sorting & Paging (cToons) ────────────
-const sortBy       = ref('releaseDateDesc')
-const currentPage  = ref(1)
-const itemsPerPage = 50
+// ────────── FILTER / SORT STATE ───────────────
+const searchQuery      = ref('')
+const selectedSets     = ref([])
+const selectedSeries   = ref([])
+const selectedRarities = ref([])
+const ownedFilter      = ref('all')   // 'all' | 'owned' | 'unowned'
+const sortBy           = ref('releaseDateDesc')
+const currentPage      = ref(1)
+const itemsPerPage     = 50
 
-const sortedCtoons = computed(function() {
-  var list = ctoons.value.slice()
+// ────────── DERIVE UNIQUE FILTER OPTIONS ──────
+const uniqueSets = computed(() => {
+  const sets = new Set()
+  ctoons.value.forEach(c => {
+    if (c.set) sets.add(c.set)
+  })
+  return Array.from(sets).sort((a, b) => a.localeCompare(b))
+})
+const uniqueSeries = computed(() => {
+  const sers = new Set()
+  ctoons.value.forEach(c => sers.add(c.series))
+  return Array.from(sers).sort((a,b) => a.localeCompare(b))
+})
+const uniqueRarities = computed(() => {
+  const rars = new Set()
+  ctoons.value.forEach(c => rars.add(c.rarity))
+
+  // desired order:
+  const order = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+  return order.filter(r => rars.has(r))
+})
+
+// ────────── FILTERED LIST ──────────────────────
+const filteredCtoons = computed(() => {
+  return ctoons.value.filter(c => {
+    // 1) Search by name (case-insensitive)
+    const nameMatch = c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+
+    // 2) Filter by Set (if any selected)
+    const setMatch = selectedSets.value.length === 0
+      ? true
+      : selectedSets.value.includes(c.set)
+
+    // 3) Filter by Series
+    const seriesMatch = selectedSeries.value.length === 0
+      ? true
+      : selectedSeries.value.includes(c.series)
+
+    // 4) Filter by Rarity
+    const rarityMatch = selectedRarities.value.length === 0
+      ? true
+      : selectedRarities.value.includes(c.rarity)
+
+    // 5) Filter by Owned/Unowned
+    let ownedMatch = true
+    if (ownedFilter.value === 'owned') {
+      ownedMatch = c.owned
+    } else if (ownedFilter.value === 'unowned') {
+      ownedMatch = !c.owned
+    }
+
+    return nameMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
+  })
+})
+
+// ────────── SORTED (AND FILTERED) ─────────────
+const filteredAndSortedCtoons = computed(() => {
+  const list = filteredCtoons.value.slice()
+
   switch (sortBy.value) {
-    case 'rarity':
-      return list.sort(function(a,b){ return a.rarity.localeCompare(b.rarity) })
-    case 'series':
-      return list.sort(function(a,b){ return a.series.localeCompare(b.series) })
-    case 'priceAsc':
-      return list.sort(function(a,b){ return a.price - b.price })
-    case 'priceDesc':
-      return list.sort(function(a,b){ return b.price - a.price })
     case 'releaseDateAsc':
-      return list.sort(function(a,b){ return new Date(a.releaseDate) - new Date(b.releaseDate) })
-    case 'owned':
-      return list.filter(function(c){ return c.owned }).sort(function(a,b){ return a.name.localeCompare(b.name) })
-    case 'unowned':
-      return list.filter(function(c){ return !c.owned }).sort(function(a,b){ return a.name.localeCompare(b.name) })
+      return list.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate))
+
+    case 'releaseDateDesc':
+      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+
+    case 'priceAsc':
+      return list.sort((a, b) => a.price - b.price)
+
+    case 'priceDesc':
+      return list.sort((a, b) => b.price - a.price)
+
+    case 'rarity':
+      return list.sort((a, b) => a.rarity.localeCompare(b.rarity))
+
+    case 'series':
+      return list.sort((a, b) => a.series.localeCompare(b.series))
+
     default:
-      return list.sort(function(a,b){ return new Date(b.releaseDate) - new Date(a.releaseDate) })
+      // fallback
+      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
   }
 })
-const pagedCtoons = computed(function() {
-  var start = (currentPage.value - 1) * itemsPerPage
-  return sortedCtoons.value.slice(start, start + itemsPerPage)
+
+// ────────── PAGINATION ─────────────────────────
+const pagedCtoons = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  return filteredAndSortedCtoons.value.slice(start, start + itemsPerPage)
 })
 
-// ────────── Overlay & Animation State ───────────
+// Whenever filters or sorting change, reset to page 1
+watch(
+  [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, sortBy],
+  () => {
+    currentPage.value = 1
+  }
+)
+
+// ────────── Overlay / Glow State (unchanged) ────
 const overlayVisible  = ref(false)
 const showGlow        = ref(false)
-const openingStep     = ref('preview')   // 'preview' | 'pack' | 'reveal'
-const glowStage       = ref('hidden')    // 'hidden' | 'expand' | 'fade'
+const openingStep     = ref('preview')
+const glowStage       = ref('hidden')
 const revealComplete  = ref(false)
 
-const packDetails  = ref(null)   // metadata for selected pack
-const packContents = ref([])     // cToons after opening
+const packDetails  = ref(null)
+const packContents = ref([])
 
-const groupedByRarity = computed(function() {
+const groupedByRarity = computed(() => {
   if (!packDetails.value || !packDetails.value.ctoonOptions) return {}
-  return packDetails.value.ctoonOptions.reduce(function(acc, o) {
-    (acc[o.rarity] = acc[o.rarity] || []).push(o)
+  return packDetails.value.ctoonOptions.reduce((acc, o) => {
+    ;(acc[o.rarity] = acc[o.rarity] || []).push(o)
     return acc
   }, {})
 })
@@ -310,43 +478,43 @@ function resetSequence() {
   packContents.value   = []
 }
 
-// ────────── Fetch Shop Data on Mount ─────────────
-onMounted(async function() {
+// ────────── ON MOUNT: FETCH DATA ──────────────
+onMounted(async () => {
   await fetchSelf()
 
-  // load cToons
-  var ownedIds = new Set((user.value.ctoons || []).map(function(ct){ return ct.ctoonId }))
-  var ctoonRes = await $fetch('/api/cmart')
-  ctoons.value = ctoonRes.map(function(c) {
-    return {
-      id:        c.id,
-      name:      c.name,
-      series:    c.series,
-      rarity:    c.rarity,
-      assetPath: c.assetPath,
-      price:     c.price,
+  // LOAD cToons
+  const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+  try {
+    const ctoonRes = await $fetch('/api/cmart')
+    ctoons.value = ctoonRes.map(c => ({
+      id:          c.id,
+      name:        c.name,
+      set:         c.set,         // assumes backend includes `set`
+      series:      c.series,
+      rarity:      c.rarity,
+      assetPath:   c.assetPath,
+      price:       c.price,
       releaseDate: c.releaseDate,
-      quantity:  c.quantity,
-      owners:    c.owners,
-      minted:    (c.owners || []).length,
-      owned:     ownedIds.has(c.id)
-    }
-  })
+      quantity:    c.quantity,
+      owners:      c.owners,
+      minted:      (c.owners || []).length,
+      owned:       ownedIds.has(c.id)
+    }))
+  } catch (err) {
+    console.error('Failed to fetch cToons:', err)
+    showToast('Failed to load cToons')
+  }
 
-  // load packs
-  await fetchPacks()
-})
-
-async function fetchPacks() {
+  // LOAD PACKS
   try {
     packs.value = await $fetch('/api/cmart/packs')
   } catch (err) {
     console.error(err)
     showToast('Failed to load packs')
   }
-}
+})
 
-// ────────── Buy Single cToon ─────────────────────
+// ────────── BUY SINGLE cToon ────────────────────
 async function buyCtoon(ctoon) {
   if (user.value.points < ctoon.price) {
     return showToast("You don't have enough points")
@@ -359,6 +527,7 @@ async function buyCtoon(ctoon) {
     await fetchSelf()
     user.value.points -= ctoon.price
     ctoon.minted++
+    ctoon.owned = true
     showToast('Purchase successful', 'success')
   } catch (err) {
     Sentry.captureException(err)

@@ -324,6 +324,9 @@ const chatMessages = ref([])
 const selectedMessage = ref('')
 const chatBox = ref(null)
 const predefinedMessages = [
+  'I dont like that ctoon',
+  'Please add more ctoons',
+  'Please try a different ctoon',
   'Hello!',
   'Hi there!',
   'Greetings!',
