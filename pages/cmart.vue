@@ -497,6 +497,7 @@ onMounted(async () => {
       releaseDate: c.releaseDate,
       quantity:    c.quantity,
       owners:      c.owners,
+      characters:  c.characters,
       minted:      (c.owners || []).length,
       owned:       ownedIds.has(c.id)
     }))

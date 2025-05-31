@@ -57,6 +57,7 @@ async function handleLogout() {
 const baseLinks = [
   { label: 'Showcase', to: '/dashboard' },
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
+  { label: 'Collection', to: '/collection' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Live Trading', to: '/live-trading' },
   { label: 'Redeem Code', to: '/redeem' },
