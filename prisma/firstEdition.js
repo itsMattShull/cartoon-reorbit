@@ -35,8 +35,6 @@ async function main() {
       updatedCount++
     }
   }
-
-  console.log(`✅ Updated ${updatedCount} of ${all.length} UserCtoon rows.`)
 }
 
 main()

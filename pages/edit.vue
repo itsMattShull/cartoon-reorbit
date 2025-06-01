@@ -456,13 +456,18 @@ async function removeItem(idx) {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   await saveZones(false)
-  ctoons.value.push({
-    id: removed.id,
-    name: removed.name,
-    assetPath: removed.assetPath,
-    series: removed.series,
-    rarity: removed.rarity,
-  })
+
+  // Only add back to the sidebar if it's not already present
+  const existsInSidebar = ctoons.value.some(c => c.id === removed.id)
+  if (!existsInSidebar) {
+    ctoons.value.push({
+      id: removed.id,
+      name: removed.name,
+      assetPath: removed.assetPath,
+      series: removed.series,
+      rarity: removed.rarity,
+    })
+  }
 }
 
 function clearZone() {

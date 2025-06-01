@@ -54,7 +54,6 @@ export default defineEventHandler(async (event) => {
     )
   ) {
 
-    console.log('first zones: ', zone.layoutData.zones)
     return {
       ctoons,
       backgrounds,
@@ -78,8 +77,6 @@ export default defineEventHandler(async (event) => {
     { background: '',     toons: [] },
     { background: '',     toons: [] }
   ]
-
-  console.log('single layout zones: ', emptyZones)
 
   return {
     ctoons,

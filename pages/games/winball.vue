@@ -586,7 +586,6 @@ bumperXs.forEach((bx) => {
         // ── now call our new endpoint
         ;(async () => {
           try {
-            console.log('posting to winball, states.length=', stateHistory.length)
             // Nuxt’s $fetch works client-side too
             const result = await $fetch('/api/game/winball', {
               method: 'POST',
@@ -619,7 +618,6 @@ bumperXs.forEach((bx) => {
             }
           } catch (err) {
             console.error('Error verifying ball:', err)
-            console.log('Verification failed; please retry.')
           }
         })()
       }
@@ -762,9 +760,7 @@ bumperXs.forEach((bx) => {
       // ── now call our new endpoint
       ;(async () => {
         try {
-          console.log('sending stuff')
           // Nuxt’s $fetch works client-side too
-          console.log('posting to winball, states.length=', stateHistory.length)
 
           const result = await $fetch('/api/game/winball', {
             method: 'POST',
@@ -795,11 +791,9 @@ bumperXs.forEach((bx) => {
             alert("You hit the gutter.")
           }
           else {
-            console.log(`Still in play? Server returned “${result.result}.”`)
           }
         } catch (err) {
           console.error('Error verifying ball:', err)
-          console.log('Verification failed; please retry.')
         }
       })()
     }

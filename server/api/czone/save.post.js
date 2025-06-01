@@ -15,9 +15,6 @@ export default defineEventHandler(async (event) => {
   // 2. Parse & validate body
   // Expecting body: { zones: [ { background: string, toons: [ { id, x, y } ] }, { … }, { … } ] }
   const { zones } = await readBody(event)
-  console.log(' ')
-  console.log('const zones: ', zones)
-  console.log(' ')
   if (
     !Array.isArray(zones) ||
     zones.length !== 3 ||
@@ -135,7 +132,6 @@ export default defineEventHandler(async (event) => {
   // 5. Upsert the CZone
   // We’ll store the entire `zones` array under `layoutData`. We also update the old `background` column
   // to reflect zone 0’s background (so nothing breaks if other parts of the code still read it).
-  console.log({ zones: enrichedZones })
   const upsertData = {
     layoutData: { zones: enrichedZones },
     background: enrichedZones[0]?.background || '',

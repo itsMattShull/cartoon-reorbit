@@ -88,9 +88,6 @@ export default defineEventHandler(async (event) => {
 
       if (dirty) {
         // Persist the cleaned layoutData back to the database
-        console.log(' ')
-        console.log('updating')
-        console.log(' ')
         await prisma.cZone.update({
           where: { id: z.id },
           data: {
