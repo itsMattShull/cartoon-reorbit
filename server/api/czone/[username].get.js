@@ -1,9 +1,14 @@
+// server/api/czone/[username].get.js
+
 import { PrismaClient } from '@prisma/client'
+import { defineEventHandler, createError } from 'h3'
+
+const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   const { username } = event.context.params
 
+  // 1) Fetch user by username, including their cZones
   const user = await prisma.user.findUnique({
     where: { username },
     include: {
@@ -11,88 +16,140 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  let zone = user.cZones?.[0]
-
-  // Remove cToons from layoutData if the user no longer owns them
-  for (const z of user.cZones || []) {
-    if (z.layoutData?.length) {
-      const ids = z.layoutData.map(item => item.id).filter(Boolean)
-      // Fetch only the userCtoons still owned by this user
-      const owned = await prisma.userCtoon.findMany({
-        where: { id: { in: ids }, userId: user.id },
-        select: { id: true }
-      })
-      const ownedSet = new Set(owned.map(o => o.id))
-      const filtered = z.layoutData.filter(item => ownedSet.has(item.id))
-      if (filtered.length !== z.layoutData.length) {
-        // Persist the cleaned layoutData
-        await prisma.cZone.update({
-          where: { id: z.id },
-          data: { layoutData: filtered }
-        })
-        // Update in-memory zone entry
-        z.layoutData = filtered
-      }
-    }
-  }
-
+  // 2) If no such user, return 404
   if (!user) {
     throw createError({
       statusCode: 404,
       statusMessage: 'User not found'
     })
   }
-  
-  if (zone && zone.layoutData?.length) {
-    // Ensure we use the id of the userCtoon for filtering and mapping
-    const userCtoonIds = zone.layoutData.map(item => item.id).filter(Boolean)
 
-    const userCtoons = await prisma.userCtoon.findMany({
-      where: {
-        id: { in: userCtoonIds }
-      },
-      include: {
-        ctoon: true
+  // 3) Build a set of all userCtoon IDs the user still owns
+  const allCZoneToonIds = new Set()
+  for (const zone of user.cZones) {
+    if (
+      zone.layoutData &&
+      typeof zone.layoutData === 'object' &&
+      Array.isArray(zone.layoutData.zones)
+    ) {
+      for (const subZone of zone.layoutData.zones) {
+        for (const item of subZone.toons || []) {
+          if (item.id) {
+            allCZoneToonIds.add(item.id)
+          }
+        }
       }
-    })
-
-    const ctoonMap = {}
-    for (const entry of userCtoons) {
-      ctoonMap[entry.id] = entry
     }
-
-    // Use the full userCtoon object including nested ctoon details
-    zone.layoutData = zone.layoutData.map(item => {
-      const match = ctoonMap[item.id]
-      return {
-        ...item,
-        mintNumber: match?.mintNumber ?? null,
-        quantity: match?.ctoon?.quantity ?? null,
-        series: match?.ctoon?.series ?? null,
-        rarity: match?.ctoon?.rarity ?? null,
-        isFirstEdition: match?.isFirstEdition ?? null
-      }
-    })
   }
 
-  if (!zone) {
-    zone = {
+  // Fetch only those userCtoons still owned
+  const ownedUserCtoons = await prisma.userCtoon.findMany({
+    where: {
+      id: { in: Array.from(allCZoneToonIds) },
+      userId: user.id
+    },
+    include: { ctoon: true }
+  })
+  const ownedSet = new Set(ownedUserCtoons.map((uc) => uc.id))
+
+  // Helper: Enrich a single userCtoon ID with metadata
+  const ctoonMeta = {}
+  for (const uc of ownedUserCtoons) {
+    ctoonMeta[uc.id] = {
+      mintNumber: uc.mintNumber,
+      quantity: uc.ctoon.quantity,
+      series: uc.ctoon.series,
+      rarity: uc.ctoon.rarity,
+      isFirstEdition: uc.isFirstEdition
+    }
+  }
+
+  // 4) For each cZone, remove any orphaned toons and
+  //    update the DB if we filtered out anything
+  for (const z of user.cZones) {
+    if (
+      z.layoutData &&
+      typeof z.layoutData === 'object' &&
+      Array.isArray(z.layoutData.zones)
+    ) {
+      let dirty = false
+      const cleanedZones = z.layoutData.zones.map((subZone) => {
+        const kept = (subZone.toons || []).filter((item) =>
+          ownedSet.has(item.id)
+        )
+        if (kept.length !== (subZone.toons || []).length) {
+          dirty = true
+        }
+        return {
+          background: subZone.background || '',
+          toons: kept
+        }
+      })
+
+      if (dirty) {
+        // Persist the cleaned layoutData back to the database
+        console.log(' ')
+        console.log('updating')
+        console.log(' ')
+        await prisma.cZone.update({
+          where: { id: z.id },
+          data: {
+            layoutData: { zones: cleanedZones }
+          }
+        })
+        // Also update the in-memory copy
+        z.layoutData = { zones: cleanedZones }
+      }
+    }
+  }
+
+  // 5) Choose the first cZone (if any) to return; otherwise prepare an empty default
+  let chosenZone
+  if (user.cZones.length > 0) {
+    chosenZone = user.cZones[0]
+  } else {
+    // No existing cZone → return a blank 3-zone structure
+    chosenZone = {
       id: null,
-      layoutData: [],
-      background: '/IMG_3433.GIF',
+      layoutData: {
+        zones: [
+          { background: '', toons: [] },
+          { background: '', toons: [] },
+          { background: '', toons: [] }
+        ]
+      },
       isPublic: true
     }
   }
 
+  // 6) Enrich each sub-zone’s toons with metadata
+  const enrichedZones = (chosenZone.layoutData.zones || []).map((subZone) => {
+    const enrichedToons = (subZone.toons || []).map((item) => {
+      const meta = ctoonMeta[item.id] || {}
+      return {
+        ...item,
+        mintNumber: meta.mintNumber ?? null,
+        quantity: meta.quantity ?? null,
+        series: meta.series ?? null,
+        rarity: meta.rarity ?? null,
+        isFirstEdition: meta.isFirstEdition ?? null
+      }
+    })
+    return {
+      background: subZone.background || '',
+      toons: enrichedToons
+    }
+  })
+
+  // 7) Return the payload containing owner info and the 3-zone array
   return {
     ownerId: user.id,
     avatar: user.avatar,
     ownerName: user.username,
     cZone: {
-      id: zone.id,
-      layoutData: zone.layoutData || [],
-      background: zone.background || '/IMG_3433.GIF',
-      isPublic: zone.isPublic
+      id: chosenZone.id,
+      zones: enrichedZones,
+      isPublic: chosenZone.isPublic ?? true
     }
   }
 })
