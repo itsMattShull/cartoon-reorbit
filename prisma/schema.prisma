@@ -38,6 +38,7 @@ model Ctoon {
   owners          UserCtoon[]
   rewardCtoons    RewardCtoon[]
   packOptions     PackCtoonOption[]
+  gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
 }
 
 model UserCtoon {
@@ -301,4 +302,17 @@ model GamePointLog {
   createdAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id])
+}
+
+model GameConfig {
+  id                   String   @id @default(uuid())
+  gameName             String   @unique
+  leftCupPoints        Int      @default(0)
+  rightCupPoints       Int      @default(0)
+  goldCupPoints        Int      @default(0)
+  grandPrizeCtoonId    String? 
+  grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now()) @updatedAt
 }

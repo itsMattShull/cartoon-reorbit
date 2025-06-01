@@ -600,7 +600,14 @@ bumperXs.forEach((bx) => {
                 // user gesture might be needed on some browsers; fallback silently
               })
 
-              alert(`You won ${result.pointsAwarded} points!`)
+              if (result.grandPrizeCtoon) {
+                alert(
+                  `Congratulations! You won ${result.pointsAwarded} points ` +
+                  `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
+                )
+              } else {
+                alert(`You won ${result.pointsAwarded} points!`)
+              }
             }
             else if (result.result === 'gutter') {
               // play the sound
@@ -770,7 +777,14 @@ bumperXs.forEach((bx) => {
             winSound.play().catch(() => {
               // user gesture might be needed on some browsers; fallback silently
             })
-            alert(`You won ${result.pointsAwarded} points!`)
+            if (result.grandPrizeCtoon) {
+              alert(
+                `Congratulations! You won ${result.pointsAwarded} points ` +
+                `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
+              )
+            } else {
+              alert(`You won ${result.pointsAwarded} points!`)
+            }
           }
           else if (result.result === 'gutter') {
             // play the sound

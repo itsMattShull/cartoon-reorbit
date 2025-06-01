@@ -13,9 +13,9 @@
           :key="tab"
           @click="activeTab = tab"
           class="px-4 py-2 -mb-px text-sm font-medium border-b-2"
-          :class="activeTab === tab
+          :class=" activeTab === tab
             ? 'border-indigo-600 text-indigo-600'
-            : 'border-transparent text-gray-500 hover:text-gray-700'"
+            : 'border-transparent text-gray-500 hover:text-gray-700' "
         >
           {{ tab }}
         </button>
@@ -26,17 +26,21 @@
     </div>
 
     <!-- ──────── LAYOUT: SIDEBAR + CONTENT ──────── -->
-     <!-- Toggle button, only on mobile (hidden on lg+) -->
     <button
       class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
       @click="showFilters = !showFilters"
+      v-if="activeTab === 'cToons'"
     >
       {{ showFilters ? 'Hide Filters' : 'Show Filters & Sort' }}
     </button>
+
+    <!-- ─── cToons Tab ──────────────────────────── -->
     <div v-if="activeTab === 'cToons'" class="flex flex-col lg:flex-row gap-6">
       <!-- FILTER / SORT PANEL (left) -->
-      <aside :class="[showFilters ? 'block' : 'hidden', 'lg:block', 'w-full lg:w-1/4', 'bg-white rounded-lg shadow p-6']">
-        <!-- 1) SEARCH INPUT -->
+      <aside
+        :class="[showFilters ? 'block' : 'hidden', 'lg:block', 'w-full lg:w-1/4', 'bg-white rounded-lg shadow p-6']"
+      >
+        <!-- Search -->
         <div class="mb-10">
           <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search cToons</label>
           <input
@@ -48,7 +52,7 @@
           />
         </div>
 
-        <!-- 2) FILTER BY SET -->
+        <!-- Filter by Set -->
         <div class="mb-10">
           <p class="text-sm font-medium text-gray-700 mb-2">Filter by Set</p>
           <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
@@ -68,7 +72,7 @@
           </div>
         </div>
 
-        <!-- 3) FILTER BY SERIES -->
+        <!-- Filter by Series -->
         <div class="mb-10">
           <p class="text-sm font-medium text-gray-700 mb-2">Filter by Series</p>
           <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
@@ -88,7 +92,7 @@
           </div>
         </div>
 
-        <!-- 4) FILTER BY RARITY -->
+        <!-- Filter by Rarity -->
         <div class="mb-10">
           <p class="text-sm font-medium text-gray-700 mb-2">Filter by Rarity</p>
           <div class="space-y-1 max-h-32 overflow-y-auto pr-2">
@@ -108,7 +112,7 @@
           </div>
         </div>
 
-        <!-- 5) FILTER BY OWNED / UNOWNED -->
+        <!-- Filter by Owned / Unowned -->
         <div class="mb-10">
           <p class="text-sm font-medium text-gray-700 mb-2">Owned / Unowned</p>
           <div class="space-y-1">
@@ -142,7 +146,7 @@
           </div>
         </div>
 
-        <!-- 6) SORT SELECT -->
+        <!-- Sort Select -->
         <div class="mt-10">
           <label for="sort" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
           <select
@@ -159,7 +163,7 @@
         </div>
       </aside>
 
-      <!-- GRID CONTENT (right) -->
+      <!-- CTOON GRID (right) -->
       <div class="w-full lg:w-3/4">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
@@ -217,6 +221,39 @@
       </div>
     </div>
 
+    <!-- ─── PACKS TAB ─────────────────────────────── -->
+    <div v-if="activeTab === 'Packs'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div
+        v-for="pack in packs"
+        :key="pack.id"
+        class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
+        @click="openPackModal(pack)"
+      >
+        <h2 class="text-xl font-semibold mb-2 text-center break-words">
+          {{ pack.name }}
+        </h2>
+        <div class="flex-grow flex items-center justify-center w-full mb-4">
+          <img :src="pack.imagePath" class="max-w-full h-auto" />
+        </div>
+        <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
+          <li
+            v-for="r in pack.rarityConfigs"
+            :key="r.rarity"
+            class="mt-2"
+          >
+            <strong>{{ r.rarity }}:</strong>
+            {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
+          </li>
+        </ul>
+        <button
+          @click.stop="buyPack(pack)"
+          class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded"
+        >
+          Buy Pack for {{ pack.price }} Pts
+        </button>
+      </div>
+    </div>
+
     <!-- PACK OVERLAY & MODAL -->
     <div
       v-if="overlayVisible"
@@ -225,7 +262,6 @@
       <div
         class="relative bg-white rounded-lg shadow-xl max-w-3xl w-full p-8 flex flex-col items-center"
       >
-        <!-- close button during preview or after reveal -->
         <button
           v-if="openingStep === 'preview' || revealComplete"
           class="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
@@ -307,6 +343,7 @@
   </div>
 </template>
 
+
 <script setup>
 // ────────── Nuxt Meta ──────────────────────────
 definePageMeta({
@@ -315,7 +352,7 @@ definePageMeta({
 })
 
 // ────────── Imports ─────────────────────────────
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import Nav from '@/components/Nav.vue'
@@ -364,13 +401,16 @@ const uniqueSets = computed(() => {
 })
 const uniqueSeries = computed(() => {
   const sers = new Set()
-  ctoons.value.forEach(c => sers.add(c.series))
-  return Array.from(sers).sort((a,b) => a.localeCompare(b))
+  ctoons.value.forEach(c => {
+    if (c.series) sers.add(c.series)
+  })
+  return Array.from(sers).sort((a, b) => a.localeCompare(b))
 })
 const uniqueRarities = computed(() => {
   const rars = new Set()
-  ctoons.value.forEach(c => rars.add(c.rarity))
-
+  ctoons.value.forEach(c => {
+    if (c.rarity) rars.add(c.rarity)
+  })
   // desired order:
   const order = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
   return order.filter(r => rars.has(r))
@@ -382,7 +422,7 @@ const filteredCtoons = computed(() => {
     // 1) Search by name (case-insensitive)
     const nameMatch = c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
 
-    // 2) Filter by Set (if any selected)
+    // 2) Filter by Set
     const setMatch = selectedSets.value.length === 0
       ? true
       : selectedSets.value.includes(c.set)
@@ -426,14 +466,10 @@ const filteredAndSortedCtoons = computed(() => {
     case 'priceDesc':
       return list.sort((a, b) => b.price - a.price)
 
-    case 'rarity':
-      return list.sort((a, b) => a.rarity.localeCompare(b.rarity))
-
     case 'series':
       return list.sort((a, b) => a.series.localeCompare(b.series))
 
     default:
-      // fallback
       return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
   }
 })
@@ -444,7 +480,7 @@ const pagedCtoons = computed(() => {
   return filteredAndSortedCtoons.value.slice(start, start + itemsPerPage)
 })
 
-// Whenever filters or sorting change, reset to page 1
+// Reset to page 1 whenever filters/sort change
 watch(
   [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, sortBy],
   () => {
@@ -452,7 +488,7 @@ watch(
   }
 )
 
-// ────────── Overlay / Glow State (unchanged) ────
+// ────────── Overlay / Glow State ───────────────
 const overlayVisible  = ref(false)
 const showGlow        = ref(false)
 const openingStep     = ref('preview')
@@ -483,13 +519,13 @@ onMounted(async () => {
   await fetchSelf()
 
   // LOAD cToons
-  const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
   try {
+    const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
     const ctoonRes = await $fetch('/api/cmart')
     ctoons.value = ctoonRes.map(c => ({
       id:          c.id,
       name:        c.name,
-      set:         c.set,         // assumes backend includes `set`
+      set:         c.set,
       series:      c.series,
       rarity:      c.rarity,
       assetPath:   c.assetPath,
@@ -554,14 +590,14 @@ async function buyPack(pack) {
     return showToast("You don't have enough points")
   }
   try {
-    var res = await $fetch('/api/cmart/packs/buy', {
+    const res = await $fetch('/api/cmart/packs/buy', {
       method: 'POST',
       body: { packId: pack.id }
     })
     await fetchSelf()
     user.value.points -= pack.price
 
-    // ensure overlay visible & show sealed pack
+    // Show overlay with pack image
     if (!overlayVisible.value) {
       packDetails.value    = pack
       resetSequence()
@@ -571,13 +607,13 @@ async function buyPack(pack) {
     glowStage.value   = 'hidden'
     showGlow.value    = true
 
-    // 1) after 2s: expand glow
-    setTimeout(function() {
+    // 1) Expand glow after 2s
+    setTimeout(() => {
       glowStage.value = 'expand'
     }, 2000)
 
-    // 2) after 4s: fetch contents, reveal, fade glow
-    setTimeout(async function() {
+    // 2) Reveal contents after 4s
+    setTimeout(async () => {
       try {
         packContents.value = await $fetch('/api/cmart/open-pack', {
           query: { id: res.userPackId }
@@ -591,8 +627,8 @@ async function buyPack(pack) {
       glowStage.value      = 'fade'
     }, 3000)
 
-    // 3) after 5s: hide glow
-    setTimeout(function() {
+    // 3) Hide glow after 5s
+    setTimeout(() => {
       showGlow.value  = false
       glowStage.value = 'hidden'
     }, 5000)
@@ -606,11 +642,11 @@ async function buyPack(pack) {
 // ────────── Close Overlay ──────────────────────
 function closeOverlay() {
   overlayVisible.value = false
-  if (activeTab.value === 'Packs') {
-    fetchPacks()
-  }
+  // If you need to re-fetch packs after closing, simply:
+  // packs.value = await $fetch('/api/cmart/packs')
 }
 </script>
+
 
 <style scoped>
 /* ─── WHITE GLOW KEYFRAME ANIMATION ───────────── */

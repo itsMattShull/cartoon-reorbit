@@ -18,16 +18,26 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid body' })
   }
 
-  // 2) geometry setup (same as before)
+  // 2) load Winball configuration
+  const config = await prisma.gameConfig.findUnique({
+    where: { gameName: 'Winball' },
+    include: { grandPrizeCtoon: true }
+  })
+  if (!config) {
+    throw createError({ statusCode: 500, statusMessage: 'GameConfig for Winball not found' })
+  }
+
+  // 3) geometry setup (same as before)
   const boardLength   = 50
   const wallThickness = 0.5
   const ballRadius    = 1
   const southZ        = boardLength/2 + wallThickness/2
 
+  // map pockets to config values
   const pockets = [
-    { name: 'halfCircle1', x: -10, z: southZ - 12, r: 2, pts: 25 },
-    { name: 'halfCircle2', x:   0, z: southZ -  6, r: 2, pts: 50 },
-    { name: 'halfCircle3', x:  10, z: southZ - 12, r: 2, pts: 25 },
+    { name: 'halfCircle1', x: -10, z: southZ - 12, r: 2, pts: config.leftCupPoints },
+    { name: 'halfCircle2', x:   0, z: southZ -  6, r: 2, pts: config.goldCupPoints },
+    { name: 'halfCircle3', x:  10, z: southZ - 12, r: 2, pts: config.rightCupPoints },
   ]
 
   function segmentHitsCircle(p0,p1,cx,cz,rawR) {
@@ -53,7 +63,7 @@ export default defineEventHandler(async (event) => {
     return xi>=xMin && xi<=xMax
   }
 
-  // 3) detect the first terminal event
+  // 4) detect the first terminal event
   let award = null
   for (let i = 1; i < states.length; i++) {
     const p0 = states[i-1].position, p1 = states[i].position
@@ -79,13 +89,13 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!award) {
-    return { result:'gutter', pointsAwarded:0, remaining:0 }
+    return { result:'gutter', pointsAwarded:0, pointsRemainingToday:0 }
   }
 
-  // 4) compute 8 PM CST boundary in UTC, _without_ any external lib
+  // 5) compute 8 PM CST boundary in UTC, _without_ any external lib
   const now = new Date()
 
-  // 4a) get Chicago calendar date & hour
+  // 5a) get Chicago calendar date & hour
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Chicago',
     year:   'numeric',
@@ -103,19 +113,18 @@ export default defineEventHandler(async (event) => {
     if (p.type === 'hour')  cHour  = Number(p.value)
   }
 
-  // 4b) find offset = UTC hour minus Chicago hour
+  // 5b) find offset = UTC hour minus Chicago hour
   const utcHour     = now.getUTCHours()
   let   offsetHour  = utcHour - cHour
-  // wrap in [-12,12]
   if (offsetHour > 12)  offsetHour -= 24
   if (offsetHour < -12) offsetHour += 24
 
-  // 4c) build today’s 8 PM Chicago in UTC
+  // 5c) build today’s 8 PM Chicago in UTC
   let boundaryUtcMs = Date.UTC(
     cYear,
     cMonth - 1,
     cDay,
-    20 + offsetHour,  // add offset to convert local → UTC
+    20 + offsetHour,
     0, 0, 0
   )
 
@@ -125,7 +134,7 @@ export default defineEventHandler(async (event) => {
   }
   const boundary = new Date(boundaryUtcMs)
 
-  // 5) sum already‐awarded pts since that boundary
+  // 6) sum already‐awarded pts since that boundary
   const agg = await prisma.gamePointLog.aggregate({
     where: { userId, createdAt: { gte: boundary } },
     _sum:  { points: true }
@@ -134,7 +143,7 @@ export default defineEventHandler(async (event) => {
   const remaining = Math.max(0, 100 - used)
   const toGive    = Math.min(award.points, remaining)
 
-  // 6) persist if anything to give
+  // 7) persist points if any won
   if (toGive > 0) {
     await prisma.gamePointLog.create({
       data: { userId, points: toGive }
@@ -146,11 +155,46 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // 8) if gold cup (halfCircle2), mint grand prize cToon if not already owned
+  let grandPrizeCtoonName = null
+  if (award.pocket === 'halfCircle2' && config.grandPrizeCtoonId) {
+    // check ownership
+    const existing = await prisma.userCtoon.findFirst({
+      where: { userId, ctoonId: config.grandPrizeCtoonId }
+    })
+    if (!existing) {
+      // get the Ctoon record
+      const gp = await prisma.ctoon.findUnique({
+        where: { id: config.grandPrizeCtoonId }
+      })
+      if (gp) {
+        // count total minted so far
+        const totalMinted = await prisma.userCtoon.count({
+          where: { ctoonId: gp.id }
+        })
+        const mintNumber = totalMinted + 1
+        const isFirstEdition =
+          gp.initialQuantity === null || mintNumber <= gp.initialQuantity
+
+        await prisma.userCtoon.create({
+          data: {
+            userId,
+            ctoonId: gp.id,
+            mintNumber,
+            isFirstEdition
+          }
+        })
+        grandPrizeCtoonName = gp.name
+      }
+    }
+  }
+
   return {
     result: award.type,
     pocket: award.pocket,
     tick:   award.tick,
-    pointsAwarded:       toGive,
-    pointsRemainingToday: remaining - toGive
+    pointsAwarded:        toGive,
+    pointsRemainingToday: remaining - toGive,
+    grandPrizeCtoon:      grandPrizeCtoonName
   }
 })
