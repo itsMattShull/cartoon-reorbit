@@ -76,12 +76,20 @@ export default defineEventHandler(async (event) => {
   const meta = fields.meta ? JSON.parse(fields.meta) : null
   validatePayload(meta)
 
-  const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'packs')
+  // const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'packs')
+  const uploadDir = process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'packs')
+    : join(baseDir, 'public', 'packs')
+
   await mkdir(uploadDir, { recursive: true })
   const filename = `${Date.now()}_${imagePart.filename.replace(/[^A-Za-z0-9._-]/g, '')}`
   const outPath  = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
-  const imagePath = `/images/packs/${filename}`
+  // const imagePath = `/images/packs/${filename}`
+  const imagePath = process.env.NODE_ENV === 'production'
+    ? `/images/packs/${filename}`
+    : `/packs/${filename}`
+
 
   const result = await db().$transaction(async (tx) => {
     const pack = await tx.pack.create({

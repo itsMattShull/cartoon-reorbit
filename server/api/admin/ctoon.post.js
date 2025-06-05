@@ -110,13 +110,22 @@ export default defineEventHandler(async (event) => {
 
   // ── 4. Save image to disk ────────────────────────────────────────────────
   const safeSeries = series.trim()
-  const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
+  // const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
+  const uploadDir = process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
+    : join(baseDir, 'public', 'cToons', safeSeries)
+
+
+
   await mkdir(uploadDir, { recursive: true })
   const filename = imagePart.filename
   const outPath = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
 
-  const assetPath = `/images/cToons/${safeSeries}/${filename}`
+  // const assetPath = `/images/cToons/${safeSeries}/${filename}`
+  const assetPath = process.env.NODE_ENV === 'production'
+    ? `/images/cToons/${safeSeries}/${filename}`
+    : `/cToons/${safeSeries}/${filename}`
 
   // ── 5. Create in database ───────────────────────────────────────────────
   const newCtoon = await prisma.ctoon.create({
