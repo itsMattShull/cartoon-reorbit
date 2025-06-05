@@ -460,6 +460,7 @@ async function main() {
   const createdCtoons = await Promise.all(
     ctoons.map(data => prisma.ctoon.create({ data }))
   )
+  console.log('Created cToons:', createdCtoons.length)
 }
 
 main()

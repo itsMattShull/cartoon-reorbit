@@ -30,7 +30,7 @@ async function resetDatabase() {
     await prisma.userPack.deleteMany()
     await prisma.pack.deleteMany()
 
-    // await prisma.ctoon.deleteMany()
+    await prisma.ctoon.deleteMany()
     await prisma.userIP.deleteMany()
 
     // --- New: Delete user points and users ---
