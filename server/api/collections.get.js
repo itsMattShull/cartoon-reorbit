@@ -3,10 +3,11 @@
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
-  readBody,
   getRequestHeader,
-  createError
+  createError,
+  getQuery
 } from 'h3'
+
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
@@ -18,38 +19,46 @@ export default defineEventHandler(async (event) => {
   } catch {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
-  const userId = me?.id
+  const userId = me && me.id
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
+  // 2. Read page query (default to 1)
+  const { page: pageRaw } = getQuery(event) || {}
+  const page = parseInt(pageRaw) || 1
+  const take = 25
+  const skip = (page - 1) * take
+
   try {
-    // 1) fetch the full Ctoon catalog
-    const allCtoons = await prisma.ctoon.findMany()
-
-    // 2) fetch only the user’s UserCtoon rows (to know which ctoonIds they own)
-    const ownedRows = await prisma.userCtoon.findMany({
+    // 3. Fetch one page of UserCtoons for this user, including nested Ctoon
+    const userCtoons = await prisma.userCtoon.findMany({
       where: { userId },
-      select: { ctoonId: true }
+      include: { ctoon: true },
+      skip,
+      take,
+      orderBy: { createdAt: 'asc' }
     })
-    const ownedSet = new Set(ownedRows.map(row => row.ctoonId))
 
-    // 3) build the response so each ctoon has its `owners` array include a boolean “isOwned”
-    return allCtoons.map(c => ({
-      id:          c.id,
-      name:        c.name,
-      set:         c.set,
-      series:      c.series,
-      rarity:      c.rarity,
-      assetPath:   c.assetPath,
-      price:       c.price,
-      releaseDate: c.releaseDate,
-      quantity:    c.quantity,
-      // we no longer have a full `owners` list — just mark true/false on each Ctoon
-      isOwned:     ownedSet.has(c.id)
+    // 4. Map each UserCtoon → only the fields the client expects
+    return userCtoons.map((uc) => ({
+      id:              uc.id,
+      name:            uc.ctoon.name,
+      set:             uc.ctoon.set,
+      series:          uc.ctoon.series,
+      type:            uc.ctoon.type,
+      rarity:          uc.ctoon.rarity,
+      assetPath:       uc.ctoon.assetPath,
+      releaseDate:     uc.ctoon.releaseDate,
+      price:           uc.ctoon.price,
+      initialQuantity: uc.ctoon.initialQuantity,
+      quantity:        uc.ctoon.quantity,
+      characters:      uc.ctoon.characters,
+      mintNumber:      uc.mintNumber,
+      isFirstEdition:  uc.isFirstEdition
     }))
   } catch (err) {
-    console.error('Error fetching collections:', err)
+    console.error('Error fetching user collections (paginated):', err)
     return []
   }
 })
