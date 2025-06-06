@@ -188,11 +188,14 @@
             </div>
             <button
               @click="buyCtoon(ctoon)"
-              :disabled="ctoon.quantity && ctoon.minted >= ctoon.quantity"
+              :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
               class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
                 Sold Out
+              </span>
+              <span v-else-if="buyingCtoons.has(ctoon.id)">
+                Purchasing…
               </span>
               <span v-else>
                 Buy for {{ ctoon.price }} Pts
@@ -247,9 +250,15 @@
         </ul>
         <button
           @click.stop="buyPack(pack)"
-          class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded"
+          :disabled="buyingPacks.has(pack.id)"
+          class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
         >
+        <span v-if="buyingPacks.has(pack.id)">
+          Purchasing…
+        </span>
+        <span v-else>
           Buy Pack for {{ pack.price }} Pts
+        </span>
         </button>
       </div>
     </div>
@@ -359,6 +368,8 @@ import Nav from '@/components/Nav.vue'
 import * as Sentry from '@sentry/nuxt'
 
 const showFilters = ref(false)
+const buyingCtoons = ref(new Set())
+const buyingPacks  = ref(new Set())
 
 // ────────── Auth & User ────────────────────────
 const { user, fetchSelf } = useAuth()
@@ -556,6 +567,7 @@ async function buyCtoon(ctoon) {
   if (user.value.points < ctoon.price) {
     return showToast("You don't have enough points")
   }
+  buyingCtoons.value.add(ctoon.id)
   try {
     await $fetch('/api/cmart/buy', {
       method: 'POST',
@@ -569,6 +581,8 @@ async function buyCtoon(ctoon) {
   } catch (err) {
     Sentry.captureException(err)
     showToast('Failed to buy cToon')
+  } finally {
+    buyingCtoons.value.delete(ctoon.id)
   }
 }
 
@@ -589,6 +603,7 @@ async function buyPack(pack) {
   if (user.value.points < pack.price) {
     return showToast("You don't have enough points")
   }
+  buyingPacks.value.add(pack.id)
   try {
     const res = await $fetch('/api/cmart/packs/buy', {
       method: 'POST',
@@ -636,6 +651,8 @@ async function buyPack(pack) {
   } catch (err) {
     Sentry.captureException(err)
     showToast('Failed to buy pack')
+  } finally {
+    buyingPacks.value.delete(pack.id)
   }
 }
 
