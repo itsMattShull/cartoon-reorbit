@@ -17,6 +17,7 @@
       </select>
     </div>
 
+    
     <div class="px-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
       <!-- Cumulative Users -->
       <div>
@@ -33,6 +34,14 @@
         </h2>
         <div class="chart-container">
           <canvas ref="pctCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Unique Logins -->
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Unique Daily Logons</h2>
+        <div class="chart-container">
+          <canvas ref="uniqueCanvas"></canvas>
         </div>
       </div>
     </div>
@@ -83,8 +92,10 @@ const selectedTimeframe = ref('3m')
 
 const cumCanvas = ref(null)
 const pctCanvas = ref(null)
+const uniqueCanvas = ref(null)
 let cumChart = null
 let pctChart = null
+let uniqueChart = null
 
 // Chart.js options
 const cumOptions = {
@@ -120,6 +131,22 @@ const pctOptions = {
   },
   plugins: { legend: { display: false } }
 }
+const uniqueOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: {
+      type: 'time',
+      time: { unit: 'day', tooltipFormat: 'PP' },
+      title: { display: true, text: 'Day' }
+    },
+    y: {
+      title: { display: true, text: 'Unique Daily Logons' }
+    }
+  },
+  plugins: { legend: { display: false } }
+}
+
 
 // --- Fetch and render data ---
 async function fetchData() {
@@ -152,10 +179,26 @@ async function fetchData() {
     fill: false
   }]
   pctChart.update()
+
+  // 3) Unique Logins
+  const uniqueRes = await fetch(
+    `/api/admin/unique-logins?timeframe=${selectedTimeframe.value}`,
+    { credentials: 'include' }
+  )
+  const uniqueData = await uniqueRes.json()
+  console.log(uniqueData)
+  uniqueChart.data.labels = uniqueData.map(d => new Date(d.day))
+  uniqueChart.data.datasets = [{
+    label: 'Unique Daily Logons',
+    data: uniqueData.map(d => d.count),
+    borderWidth: 2,
+    fill: false
+  }]
+  uniqueChart.update()
 }
 
 onMounted(async () => {
-  // initialize both charts
+  // initialize all charts
   cumChart = new Chart(cumCanvas.value.getContext('2d'), {
     type: 'line',
     data: { labels: [], datasets: [] },
@@ -165,6 +208,11 @@ onMounted(async () => {
     type: 'line',
     data: { labels: [], datasets: [] },
     options: pctOptions
+  })
+  uniqueChart = new Chart(uniqueCanvas.value.getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [] },
+    options: uniqueOptions
   })
 
   // wait for DOM render, then load data
