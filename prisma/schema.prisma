@@ -39,6 +39,7 @@ model Ctoon {
   rewardCtoons    RewardCtoon[]
   packOptions     PackCtoonOption[]
   gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
+  wishlistItems   WishlistItem[]
 }
 
 model UserCtoon {
@@ -100,6 +101,7 @@ model User {
   tradeSpectators  TradeSpectator[]
   ips              UserIP[]
   packs            UserPack[]
+  wishlistItems   WishlistItem[]
 }
 
 model UserIP {
@@ -315,4 +317,16 @@ model GameConfig {
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @default(now()) @updatedAt
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  ctoonId   String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
+
+  @@unique([userId, ctoonId])
 }

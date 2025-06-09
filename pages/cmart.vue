@@ -186,21 +186,30 @@
                 {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
               </p>
             </div>
-            <button
-              @click="buyCtoon(ctoon)"
-              :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
-              class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
-            >
-              <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
-                Sold Out
-              </span>
-              <span v-else-if="buyingCtoons.has(ctoon.id)">
-                Purchasing…
-              </span>
-              <span v-else>
-                Buy for {{ ctoon.price }} Pts
-              </span>
-            </button>
+            <div class="mt-6 flex w-full space-x-2">
+              <!-- left: wishlist -->
+              <AddToWishlist
+                :ctoon-id="ctoon.id"
+                class="flex-1 text-xs"
+              />
+
+              <!-- right: buy -->
+              <button
+                @click="buyCtoon(ctoon)"
+                :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
+              >
+                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
+                  Sold Out
+                </span>
+                <span v-else-if="buyingCtoons.has(ctoon.id)">
+                  Purchasing…
+                </span>
+                <span v-else>
+                  Buy for {{ ctoon.price }} Pts
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -364,6 +373,7 @@ definePageMeta({
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
+import AddToWishlist from '@/components/AddToWishlist.vue'
 import Nav from '@/components/Nav.vue'
 import * as Sentry from '@sentry/nuxt'
 

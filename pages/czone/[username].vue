@@ -92,6 +92,12 @@
           Next cZone
         </button>
         <button
+          class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+          @click="openWishlist"
+        >
+          View Wishlist
+        </button>
+        <button
           v-if="user?.id === ownerId"
           @click="navigateTo(editPath)"
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
@@ -236,6 +242,12 @@
             Next cZone
           </button>
           <button
+            class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+            @click="openWishlist"
+          >
+            View Wishlist
+          </button>
+          <button
             v-if="user?.id === ownerId"
             @click="navigateTo(editPath)"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
@@ -322,6 +334,41 @@
         <p v-if="selectedCtoon.releaseDate">
           <strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}
         </p>
+        <div class="mt-4">
+          <AddToWishlist :ctoon-id="selectedCtoon.ctoonId" />
+        </div>
+      </div>
+    </div>
+  </transition>
+  <!-- Wishlist modal -->
+  <transition name="fade">
+    <div
+      v-if="wishlistModalVisible"
+      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+    >
+      <div class="bg-white rounded-lg shadow-lg w-96 p-6 relative">
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeWishlist"
+        >✕</button>
+        <h2 class="text-xl font-semibold mb-4">🎁 {{ ownerName }}’s Wishlist</h2>
+
+        <div v-if="isLoadingWishlist" class="text-center py-10">
+          Loading…
+        </div>
+        <div v-else-if="wishlistCtoons.length === 0" class="text-center py-10">
+          No cToons on their wishlist.
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+          <div
+            v-for="c in wishlistCtoons"
+            :key="c.id"
+            class="flex flex-col items-center"
+          >
+            <img :src="c.assetPath" class="w-20 h-20 object-contain mb-2" />
+            <p class="text-sm text-center">{{ c.name }}</p>
+          </div>
+        </div>
       </div>
     </div>
   </transition>
@@ -333,6 +380,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
+import AddToWishlist from '@/components/AddToWishlist.vue'
 
 // ——— Date formatter ———
 function formatDate(dateStr) {
@@ -384,6 +432,25 @@ const zones = ref([
   { background: '', toons: [] },
   { background: '', toons: [] }
 ])
+
+const wishlistModalVisible  = ref(false)
+const wishlistCtoons        = ref([])
+const isLoadingWishlist     = ref(false)
+
+async function loadUserWishlist() {
+  isLoadingWishlist.value = true
+  wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
+  isLoadingWishlist.value = false
+}
+
+function openWishlist() {
+  loadUserWishlist()
+  wishlistModalVisible.value = true
+}
+function closeWishlist() {
+  wishlistModalVisible.value = false
+}
+
 
 // Which zone index is currently displayed (0, 1, or 2)
 const currentZoneIndex = ref(0)

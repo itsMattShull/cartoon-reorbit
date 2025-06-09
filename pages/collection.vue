@@ -17,6 +17,15 @@
           My Collection
         </button>
         <button
+          @click="switchTab('MyWishlist')"
+          :class="activeTab === 'MyWishlist'
+            ? 'border-b-2 border-indigo-600 text-indigo-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="px-4 py-2 -mb-px text-sm font-medium"
+        >
+          My Wishlist
+        </button>
+        <button
           @click="switchTab('AllSets')"
           :class="activeTab === 'AllSets'
             ? 'border-b-2 border-indigo-600 text-indigo-600'
@@ -75,7 +84,7 @@
           <p class="text-sm font-medium text-gray-700 mb-2">Filter by Set</p>
           <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
             <label
-              v-for="s in activeTab === 'MyCollection' ? uniqueUserSets : uniqueAllSets"
+              v-for="s in activeTab === 'MyCollection' ? uniqueUserSets : activeTab === 'MyWishlist' ? uniqueWishlistSets : uniqueAllSets"
               :key="s"
               class="flex items-center text-sm"
             >
@@ -181,6 +190,15 @@
             <option value="set">Set (A→Z)</option>
           </select>
         </div>
+        <!-- ─── Unique/All toggle button ─── -->
+        <div class="mt-4">
+          <button
+            @click="toggleUnique"
+            class="w-full px-4 py-2 bg-indigo-600 text-white rounded text-sm font-medium"
+          >
+            {{ uniqueButtonText }}
+          </button>
+        </div>
       </aside>
 
       <!-- ─────────────────── TAB CONTENTS ─────────────────── -->
@@ -205,7 +223,7 @@
             <!-- ─── actual UserCtoon cards ─── -->
             <template v-else>
               <div
-                v-for="uc in filteredAndSortedUserCtoons"
+                v-for="uc in displayedUserCtoons"
                 :key="uc.id"
                 v-show="matchesUserFilters(uc)"
                 class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
@@ -245,7 +263,47 @@
             </template>
           </div>
         </div>
+        <!-- ─────────────────── My Wishlist ─────────────────── -->
+        <div v-if="activeTab === 'MyWishlist'">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- loading skeleton -->
+            <template v-if="isLoadingWishlist">
+              <div
+                v-for="n in 6"
+                :key="n"
+                class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full animate-pulse"
+              >
+                <div class="bg-gray-200 rounded w-3/4 h-6 mb-4"></div>
+                <div class="bg-gray-200 rounded w-full h-32 mb-4"></div>
+                <div class="bg-gray-200 rounded w-1/2 h-4 mb-2"></div>
+                <div class="bg-gray-200 rounded w-1/2 h-4"></div>
+              </div>
+            </template>
 
+            <!-- actual wishlist cards -->
+            <template v-else>
+              <div
+                v-for="wc in filteredAndSortedWishlistCtoons"
+                :key="wc.id"
+                v-show="matchesWishlistFilters(wc)"
+                class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
+              >
+                <h2 class="text-xl font-semibold mb-2">{{ wc.name }}</h2>
+                <div class="flex-grow flex items-center justify-center w-full mb-2">
+                  <img :src="wc.assetPath" class="max-w-full h-auto"/>
+                </div>
+                <div class="text-sm text-center mb-2">
+                  <p>
+                    <span class="capitalize">{{ wc.series }}</span> •
+                    <span class="capitalize">{{ wc.rarity }}</span> •
+                    <span class="capitalize">{{ wc.set }}</span>
+                  </p>
+                </div>
+                <AddToWishlist :ctoon-id="wc.id" class="mt-auto"/>
+              </div>
+            </template>
+          </div>
+        </div>
         <!-- ─────────────────── All Sets ─────────────────── -->
         <div v-if="activeTab === 'AllSets'">
           <div
@@ -296,6 +354,7 @@
                       <span class="capitalize">{{ c.rarity }}</span>
                     </p>
                   </div>
+                  <AddToWishlist :ctoon-id="c.id" />
                   <!-- Owned badge -->
                   <span
                     v-if="c.isOwned"
@@ -379,6 +438,7 @@
                       <span class="capitalize">{{ c.rarity }}</span>
                     </p>
                   </div>
+                  <AddToWishlist :ctoon-id="c.id" />
                   <!-- Owned badge -->
                   <span
                     v-if="c.isOwned"
@@ -420,6 +480,7 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useAuth }      from '@/composables/useAuth'
 import Toast            from '@/components/Toast.vue'
+import AddToWishlist    from '@/components/AddToWishlist.vue'
 import Nav              from '@/components/Nav.vue'
 
 /***** AUTH & USER *****/
@@ -429,6 +490,11 @@ const { user, fetchSelf } = useAuth()
 const activeTab = ref('MyCollection')
 function switchTab(tab) {
   activeTab.value = tab
+
+  if (tab === 'MyWishlist') {
+    loadWishlist()
+  }
+
   // Immediately load page 1 for AllSets/AllSeries when first clicked
   if ((tab === 'AllSets' || tab === 'AllSeries') && pageAll.value === 0) {
     loadMoreAll()
@@ -472,6 +538,43 @@ const pageUser             = ref(0)
 const isLoadingUserCtoons  = ref(false)
 const isLoadingMoreUser    = ref(false)
 const noMoreUser           = ref(false)
+
+
+// ─── Wishlist state & loader ───
+const wishlistCtoons      = ref([])
+const isLoadingWishlist   = ref(false)
+
+async function loadWishlist() {
+  isLoadingWishlist.value = true
+  // fetch full Ctoon objects for the user’s wishlist
+  wishlistCtoons.value = await $fetch('/api/wishlist')
+  isLoadingWishlist.value = false
+}
+
+
+// whether to collapse duplicates by assetPath
+const showUnique = ref(false)
+
+// the list actually rendered in the MyCollection grid
+const displayedUserCtoons = computed(() => {
+  const list = filteredAndSortedUserCtoons.value
+  if (!showUnique.value) return list
+
+  const seen = new Set()
+  return list.filter((uc) => {
+    if (seen.has(uc.assetPath)) return false
+    seen.add(uc.assetPath)
+    return true
+  })
+})
+
+const uniqueButtonText = computed(() =>
+  showUnique.value ? 'Show All cToons' : 'Show Unique cToons'
+)
+
+function toggleUnique() {
+  showUnique.value = !showUnique.value
+}
 
 /***** PAGINATION PARAMETERS *****/
 const TAKE = 200 // always fetch 25 at a time
@@ -650,6 +753,54 @@ const filteredAndSortedUserCtoons = computed(() => {
 function matchesUserFilters(uc) {
   return true
 }
+
+// derive unique options
+const uniqueWishlistSets = computed(() => {
+  const s = new Set()
+  wishlistCtoons.value.forEach((wc) => wc.set && s.add(wc.set))
+  return [...s].sort()
+})
+const uniqueWishlistSeries = computed(() => {
+  const s = new Set()
+  wishlistCtoons.value.forEach((wc) => wc.series && s.add(wc.series))
+  return [...s].sort()
+})
+const uniqueWishlistRarities = computed(() => {
+  const r = new Set()
+  wishlistCtoons.value.forEach((wc) => wc.rarity && r.add(wc.rarity))
+  return [...r].sort()
+})
+
+// filtered list
+const filteredWishlistCtoons = computed(() => {
+  return wishlistCtoons.value.filter((wc) => {
+    const nameMatch   = wc.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+    const setMatch    = !selectedSets.value.length || selectedSets.value.includes(wc.set)
+    const seriesMatch = !selectedSeries.value.length || selectedSeries.value.includes(wc.series)
+    const rarityMatch = !selectedRarities.value.length || selectedRarities.value.includes(wc.rarity)
+    return nameMatch && setMatch && seriesMatch && rarityMatch
+  })
+})
+
+// reuse your sort switch
+const filteredAndSortedWishlistCtoons = computed(() => {
+  const list = filteredWishlistCtoons.value.slice()
+  switch (sortBy.value) {
+    case 'releaseDateAsc':
+      return list.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate))
+    case 'priceDesc':
+      return list.sort((a, b) => b.price - a.price)
+    // …etc, same cases you already have…
+    default:
+      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+  }
+})
+
+// simple matcher for v-show
+function matchesWishlistFilters(wc) {
+  return true
+}
+
 
 /***** SCROLL HANDLER FOR INFINITE‐SCROLL *****/
 function onScroll() {
