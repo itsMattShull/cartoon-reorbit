@@ -12,7 +12,7 @@ const connection = {
 const worker = new Worker('mintQueue', async job => {
   const prisma = new PrismaClient()
   try {
-    const { userId, ctoonId } = job.data
+    const { userId, ctoonId, isStarter = false } = job.data
 
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
@@ -29,7 +29,7 @@ const worker = new Worker('mintQueue', async job => {
 
     // Wallet balance check
     const wallet = await prisma.userPoints.findUnique({ where: { userId } })
-    if (!wallet || wallet.points < ctoon.price) {
+    if (!isStarter && (!wallet || wallet.points < ctoon.price)) {
       throw new Error('Insufficient points')
     }
 
