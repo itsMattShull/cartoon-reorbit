@@ -105,7 +105,9 @@ export default defineEventHandler(async (event) => {
     const filename  = `${Date.now()}_${imagePart.filename}`
     const outPath   = join(packUploadDir, filename)
     await writeFile(outPath, imagePart.data)
-    imagePath = `/packs/${filename}`
+    imagePath = process.env.NODE_ENV === 'production'
+    ? `/images/packs/${filename}`
+    : `/packs/${filename}`
   }
 
   const result = await db().$transaction(async (tx) => {
