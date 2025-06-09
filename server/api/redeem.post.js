@@ -1,5 +1,4 @@
 // server/api/redeem.post.js
-
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
@@ -7,6 +6,7 @@ import {
   getRequestHeader,
   createError
 } from 'h3'
+import { mintQueue } from './utils/queues'  // import the BullMQ queue
 
 const prisma = new PrismaClient()
 
@@ -43,18 +43,14 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4. Enforce maxClaims
-  const totalClaims = await prisma.claim.count({
-    where: { codeId: claimCode.id }
-  })
+  const totalClaims = await prisma.claim.count({ where: { codeId: claimCode.id } })
   if (totalClaims >= claimCode.maxClaims) {
     throw createError({ statusCode: 400, statusMessage: 'Code fully redeemed' })
   }
 
   // 5. Prevent double-redeem by this user
   const already = await prisma.claim.findUnique({
-    where: {
-      userId_codeId: { userId, codeId: claimCode.id }
-    }
+    where: { userId_codeId: { userId, codeId: claimCode.id } }
   })
   if (already) {
     throw createError({ statusCode: 400, statusMessage: 'Code already redeemed' })
@@ -65,11 +61,7 @@ export default defineEventHandler(async (event) => {
     where: { codeId: claimCode.id },
     include: {
       ctoons: {
-        include: {
-          ctoon: {
-            select: { id: true, name: true, initialQuantity: true }
-          }
-        }
+        include: { ctoon: { select: { id: true, name: true, initialQuantity: true } } }
       }
     }
   })
@@ -79,8 +71,6 @@ export default defineEventHandler(async (event) => {
     (sum, r) => sum + (r.points ?? 0),
     0
   )
-
-  // flatten into [{ ctoonId, name, quantity, initialQuantity }]
   const ctoonAwards = rewardDefs.flatMap(r =>
     r.ctoons.map(rc => ({
       ctoonId: rc.ctoon.id,
@@ -90,14 +80,18 @@ export default defineEventHandler(async (event) => {
     }))
   )
 
-  // 8. Perform atomic transaction, minting UserCtoons with mintNumber & isFirstEdition
-  const mintedRecords = await prisma.$transaction(async (tx) => {
-    // a) record the claim
-    await tx.claim.create({
-      data: { userId, codeId: claimCode.id }
-    })
+  // 8. Preload existing counts for each ctoon
+  const counts = {}
+  for (const award of ctoonAwards) {
+    const { ctoonId } = award
+    if (counts[ctoonId] == null) {
+      counts[ctoonId] = await prisma.userCtoon.count({ where: { ctoonId } })
+    }
+  }
 
-    // b) award points
+  // 9. Record claim and award points in one transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.claim.create({ data: { userId, codeId: claimCode.id } })
     if (pointsToAward > 0) {
       await tx.userPoints.upsert({
         where: { userId },
@@ -105,52 +99,26 @@ export default defineEventHandler(async (event) => {
         update: { points: { increment: pointsToAward } }
       })
     }
-
-    // c) award cToons one by one
-    const minted = []
-    // preload existing counts for each ctoon
-    const counts = {}
-    for (const award of ctoonAwards) {
-      const { ctoonId } = award
-      if (counts[ctoonId] == null) {
-        counts[ctoonId] = await tx.userCtoon.count({
-          where: { ctoonId }
-        })
-      }
-    }
-
-    for (const award of ctoonAwards) {
-      const { ctoonId, name, quantity, initialQuantity } = award
-      for (let i = 0; i < quantity; i++) {
-        const mintNumber = counts[ctoonId] + 1
-        counts[ctoonId]++
-
-        const isFirstEdition = initialQuantity > 0
-          ? mintNumber <= initialQuantity
-          : false
-
-        const created = await tx.userCtoon.create({
-          data: {
-            userId,
-            ctoonId,
-            mintNumber,
-            isFirstEdition
-          }
-        })
-
-        minted.push({
-          ctoonId,
-          name,
-          mintNumber,
-          isFirstEdition
-        })
-      }
-    }
-
-    return minted
   })
 
-  // 9. Return summary
+  // 10. Enqueue mint jobs and prepare return data
+  const mintedRecords = []
+  for (const award of ctoonAwards) {
+    for (let i = 0; i < award.quantity; i++) {
+      const { ctoonId, name, initialQuantity } = award
+      const mintNumber = counts[ctoonId] + 1
+      counts[ctoonId]++
+      const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
+
+      // enqueue the mint job
+      await mintQueue.add('mintCtoon', { userId, ctoonId })
+
+      // collect local record
+      mintedRecords.push({ ctoonId, name, mintNumber, isFirstEdition })
+    }
+  }
+
+  // 11. Return summary
   return {
     points: pointsToAward,
     ctoons: mintedRecords
