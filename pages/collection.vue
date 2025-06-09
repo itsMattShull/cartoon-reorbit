@@ -474,7 +474,7 @@ const isLoadingMoreUser    = ref(false)
 const noMoreUser           = ref(false)
 
 /***** PAGINATION PARAMETERS *****/
-const TAKE = 25 // always fetch 25 at a time
+const TAKE = 200 // always fetch 25 at a time
 
 /***** DERIVE FILTER OPTIONS FROM userCtoons (for MyCollection) *****/
 const uniqueUserSets = computed(() => {
