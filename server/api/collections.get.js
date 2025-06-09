@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   // 2. Read page query (default to 1)
   const { page: pageRaw } = getQuery(event) || {}
   const page = parseInt(pageRaw) || 1
-  const take = 25
+  const take = 200
   const skip = (page - 1) * take
 
   try {
