@@ -12,7 +12,7 @@ const connection = {
 const worker = new Worker('mintQueue', async job => {
   const prisma = new PrismaClient()
   try {
-    const { userId, ctoonId, isStarter = false } = job.data
+    const { userId, ctoonId, isSpecial = false } = job.data
 
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
@@ -29,12 +29,12 @@ const worker = new Worker('mintQueue', async job => {
 
     // Wallet balance check
     const wallet = await prisma.userPoints.findUnique({ where: { userId } })
-    if (!isStarter && (!wallet || wallet.points < ctoon.price)) {
+    if (!isSpecial && (!wallet || wallet.points < ctoon.price)) {
       throw new Error('Insufficient points')
     }
 
     // Per-user limit enforcement (first 48h window)
-    if (ctoon.releaseDate) {
+    if (!isSpecial && ctoon.releaseDate) {
       const hoursSinceRelease = (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
       const enforceLimit = hoursSinceRelease < 48
       if (
@@ -57,15 +57,23 @@ const worker = new Worker('mintQueue', async job => {
       ctoon.initialQuantity === null || mintNumber <= ctoon.initialQuantity
 
     // Perform the minting transaction
-    await prisma.$transaction([
-      prisma.userPoints.update({
-        where: { userId },
-        data: { points: { decrement: ctoon.price } }
-      }),
-      prisma.userCtoon.create({
-        data: { userId, ctoonId, mintNumber, isFirstEdition }
-      })
-    ])
+    if (!isSpecial) {
+      await prisma.$transaction([
+        prisma.userPoints.update({
+          where: { userId },
+          data: { points: { decrement: ctoon.price } }
+        }),
+        prisma.userCtoon.create({
+          data: { userId, ctoonId, mintNumber, isFirstEdition }
+        })
+      ])
+    } else {
+      await prisma.$transaction([
+        prisma.userCtoon.create({
+          data: { userId, ctoonId, mintNumber, isFirstEdition }
+        })
+      ])
+    }
 
   } finally {
     await prisma.$disconnect()

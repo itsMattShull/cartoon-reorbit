@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
     // 5) Enqueue each mint job
     await Promise.all(
       toMint.map(ctoonId =>
-        mintQueue.add('mintCtoon', { userId, ctoonId, isStarter: true })
+        mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
       )
     )
 
