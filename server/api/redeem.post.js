@@ -6,7 +6,7 @@ import {
   getRequestHeader,
   createError
 } from 'h3'
-import { mintQueue } from './utils/queues'  // import the BullMQ queue
+import { mintQueue } from '../utils/queues'  // import the BullMQ queue
 
 const prisma = new PrismaClient()
 
