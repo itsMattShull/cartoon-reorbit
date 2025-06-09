@@ -16,7 +16,7 @@ const worker = new Worker('mintQueue', async job => {
 
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
-    if (!ctoon || !ctoon.inCmart) throw new Error('Invalid or not-for-sale cToon')
+    if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
 
     // Count how many have been minted and existing user purchases
     const totalMinted = await prisma.userCtoon.count({ where: { ctoonId } })
