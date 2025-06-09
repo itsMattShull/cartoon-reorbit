@@ -30,7 +30,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
-const packUploadDir = join(baseDir, 'public', 'packs')
+const packUploadDir = process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'packs')
+    : join(baseDir, 'public', 'packs')
 
 async function assertAdmin (event) {
   const cookie = getRequestHeader(event, 'cookie') || ''
