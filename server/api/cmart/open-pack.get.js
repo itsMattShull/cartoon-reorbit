@@ -1,7 +1,7 @@
 // server/api/open-pack.get.js
 import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
-import { mintQueue } from '../utils/queues'
+import { mintQueue } from '../../utils/queues'
 
 let prisma
 function db() {
