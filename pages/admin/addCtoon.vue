@@ -39,22 +39,14 @@
           <p v-if="errors.series" class="text-red-600 text-sm mt-1">{{ errors.series }}</p>
         </div>
 
-        <!-- Rarity -->
-        <div>
-          <label class="block mb-1 font-medium">Rarity</label>
-          <select v-model="rarity" required class="w-full border rounded p-2">
-            <option disabled value="">Select rarity</option>
-            <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
-          <p class="text-sm text-gray-500">Determines drop odds and pricing tier.</p>
-          <p v-if="errors.rarity" class="text-red-600 text-sm mt-1">{{ errors.rarity }}</p>
-        </div>
-
         <!-- Set -->
         <div>
           <label class="block mb-1 font-medium">Set</label>
-          <input v-model="set" required class="w-full border rounded p-2" />
-          <p class="text-sm text-gray-500">Which collectible set this cToon belongs to.</p>
+          <input v-model="set" list="sets-list" required class="w-full border rounded p-2" />
+          <datalist id="sets-list">
+            <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+          </datalist>
+          <p class="text-sm text-gray-500">Which collectible set this cToon belongs to. Choose from existing or enter a new one.</p>
         </div>
 
         <!-- Characters -->
@@ -116,7 +108,6 @@
   </div>
 </template>
 
-
 <script setup>
 definePageMeta({
   middleware: ['auth', 'admin'],
@@ -142,13 +133,18 @@ const inCmart = ref(false)
 const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
+const setsOptions = ref([])
 
 const errors = reactive({ image: '', name: '', series: '', rarity: '' })
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
 onMounted(async () => {
-  const res = await fetch('/api/admin/series', { credentials: 'include' })
-  seriesOptions.value = await res.json()
+  const [seriesRes, setsRes] = await Promise.all([
+    fetch('/api/admin/series', { credentials: 'include' }),
+    fetch('/api/admin/sets', { credentials: 'include' })
+  ])
+  seriesOptions.value = await seriesRes.json()
+  setsOptions.value = await setsRes.json()
 })
 
 watch(rarity, val => {
@@ -156,6 +152,34 @@ watch(rarity, val => {
   price.value = pricing[val] || 0
   codeOnly.value = val === 'Code Only'
   if (val === 'Code Only') inCmart.value = false
+
+  switch (val) {
+    case 'Common':
+      initialQuantity.value = 100
+      totalQuantity.value = 100
+      perUserLimit.value = null
+      break
+    case 'Uncommon':
+      initialQuantity.value = 75
+      totalQuantity.value = 75
+      perUserLimit.value = null
+      break
+    case 'Rare':
+      initialQuantity.value = 50
+      totalQuantity.value = 50
+      perUserLimit.value = 3
+      break
+    case 'Very Rare':
+      initialQuantity.value = 35
+      totalQuantity.value = 35
+      perUserLimit.value = 2
+      break
+    case 'Crazy Rare':
+      initialQuantity.value = 25
+      totalQuantity.value = 25
+      perUserLimit.value = 1
+      break
+  }
 })
 
 function handleFile(e) {
