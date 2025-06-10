@@ -129,6 +129,36 @@ const characters = ref('')
 const seriesOptions = ref([])
 const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
 
+// ── HELPERS ─────────────────────────────────────────────────────────────────
+// Turn a UTC ISO string into the "YYYY-MM-DDTHH:mm" string that
+// <input type="datetime-local"> expects—rendered in America/Chicago.
+function toDateTimeLocal(utcString) {
+  const dt = new Date(utcString)
+  // Swedish locale gives "YYYY-MM-DD HH:mm" in 24hr. Split & swap:
+  const formatted = new Intl.DateTimeFormat('sv', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  }).format(dt)
+  const [date, time] = formatted.split(' ')
+  return `${date}T${time}`
+}
+
+// Take the naive "YYYY-MM-DDTHH:mm" (which we mean as America/Chicago)
+// and turn it into a true UTC-ISO string:
+function localToUtcIso(localDateTime) {
+  const dt = new Date(localDateTime) // parsed in the browser’s local zone
+  // Re-interpret that same clock-time in Chicago:
+  const dtInZone = new Date(
+    dt.toLocaleString('en-US', { timeZone: 'America/Chicago' })
+  )
+  const offset = dtInZone.getTime() - dt.getTime()
+  const utcMillis = dt.getTime() - offset
+  return new Date(utcMillis).toISOString()
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 onMounted(async () => {
   const res = await fetch(`/api/admin/ctoon/${id}`, { credentials: 'include' })
   const { ctoon } = await res.json()
@@ -141,7 +171,7 @@ onMounted(async () => {
   series.value = ctoon.series
   rarity.value = ctoon.rarity
   price.value = ctoon.price
-  releaseDate.value = new Date(ctoon.releaseDate).toISOString().slice(0,16)  // for datetime-local
+  releaseDate.value     = toDateTimeLocal(ctoon.releaseDate)
   perUserLimit.value = ctoon.perUserLimit
   quantity.value = ctoon.quantity
   initialQuantity.value = ctoon.initialQuantity
@@ -160,6 +190,8 @@ watch(rarity, val => {
 })
 
 async function submitForm() {
+  const utcRelease = localToUtcIso(releaseDate.value)
+
   await fetch(`/api/admin/ctoon/${id}`, {
     method: 'PUT',
     credentials: 'include',
@@ -169,7 +201,7 @@ async function submitForm() {
       series: series.value,
       rarity: rarity.value,
       price: price.value,
-      releaseDate: releaseDate.value,
+      releaseDate: utcRelease,
       perUserLimit: perUserLimit.value,
       quantity: quantity.value,
       initialQuantity: initialQuantity.value,

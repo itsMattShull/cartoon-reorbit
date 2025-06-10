@@ -16,7 +16,7 @@
           <tr class="bg-gray-100">
             <th class="px-4 py-2 text-left">Asset</th>
             <th class="px-4 py-2 text-left">Name</th>
-            <th class="px-4 py-2 text-left">Release Date</th>
+            <th class="px-4 py-2 text-left">Release Date (CDT)</th>
             <th class="px-4 py-2 text-left">Rarity</th>
             <th class="px-4 py-2 text-right">Highest Mint</th>
             <th class="px-4 py-2 text-right">Quantity</th>
@@ -46,6 +46,7 @@
                   day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit',
+                  timeZone: 'America/Chicago',
                   timeZoneName: 'short'
                 })
               }}

@@ -36,6 +36,16 @@ export default defineEventHandler(async (event) => {
       characters
     } = body
 
+
+    // ── parse & validate just like in ctoon.post.js ──
+     const newReleaseDate = new Date(releaseDate)
+     if (isNaN(newReleaseDate.getTime())) {
+       throw createError({ statusCode: 400, statusMessage: 'Invalid release date/time.' })
+     }
+     if (newReleaseDate <= new Date()) {
+       throw createError({ statusCode: 400, statusMessage: 'Release date/time must be in the future.' })
+     }
+
     await prisma.ctoon.update({
       where: { id },
       data: {
@@ -43,7 +53,7 @@ export default defineEventHandler(async (event) => {
         series,
         rarity,
         price,
-        releaseDate: new Date(releaseDate),
+        releaseDate: newReleaseDate,
         perUserLimit,
         quantity,
         initialQuantity,
