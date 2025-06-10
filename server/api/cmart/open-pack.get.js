@@ -120,7 +120,7 @@ export default defineEventHandler(async (event) => {
 
   // Enqueue a mintCtoon job for each selected cToon
   for (const c of chosen) {
-    await mintQueue.add('mintCtoon', { userId, ctoonId: c.id })
+    await mintQueue.add('mintCtoon', { userId, ctoonId: c.id, isSpecial: true })
   }
 
   // Return the selected cToons in the same shape as before
