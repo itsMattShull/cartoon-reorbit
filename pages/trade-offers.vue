@@ -23,54 +23,97 @@
     <!-- Loading -->
     <div v-if="loading" class="text-center py-10">Loading…</div>
 
-    <!-- Table -->
+    <!-- Responsive Table / Cards -->
     <div v-else>
-      <table class="w-full table-auto border-collapse">
-        <thead>
-          <tr class="bg-gray-100">
-            <th class="px-4 py-2 text-left">Initiator</th>
-            <th class="px-4 py-2 text-left">Recipient</th>
-            <th class="px-4 py-2 text-right">Points</th>
-            <th class="px-4 py-2 text-right"># Offered</th>
-            <th class="px-4 py-2 text-right"># Requested</th>
-            <th class="px-4 py-2 text-left">Status</th>
-            <th class="px-4 py-2 text-left">Created</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="offer in displayedOffers"
-            :key="offer.id"
-            class="border-t"
+      <!-- Desktop table -->
+      <div class="hidden sm:block">
+        <table class="w-full table-auto border-collapse">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="px-4 py-2 text-left">Initiator</th>
+              <th class="px-4 py-2 text-left">Recipient</th>
+              <th class="px-4 py-2 text-right">Points</th>
+              <th class="px-4 py-2 text-right"># Offered</th>
+              <th class="px-4 py-2 text-right"># Requested</th>
+              <th class="px-4 py-2 text-left">Status</th>
+              <th class="px-4 py-2 text-left">Created</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="offer in displayedOffers"
+              :key="offer.id"
+              class="border-t"
+            >
+              <td class="px-4 py-2">{{ offer.initiator.username }}</td>
+              <td class="px-4 py-2">{{ offer.recipient.username }}</td>
+              <td class="px-4 py-2 text-right">{{ offer.pointsOffered }}</td>
+              <td class="px-4 py-2 text-right">{{ countByRole(offer, 'OFFERED') }}</td>
+              <td class="px-4 py-2 text-right">{{ countByRole(offer, 'REQUESTED') }}</td>
+              <td class="px-4 py-2">
+                <span :class="statusClasses(offer.status)">
+                  {{ offer.status.toLowerCase() }}
+                </span>
+              </td>
+              <td class="px-4 py-2 text-left">{{ formatDateTime(offer.createdAt) }}</td>
+              <td class="px-4 py-2 text-right">
+                <button
+                  class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+                  @click="viewOffer(offer)"
+                >
+                  View Trade
+                </button>
+              </td>
+            </tr>
+            <tr v-if="displayedOffers.length === 0">
+              <td colspan="8" class="px-4 py-6 text-center text-gray-500">
+                No {{ activeTab === 'incoming' ? 'incoming' : 'outgoing' }} trades.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards -->
+      <div class="space-y-4 sm:hidden">
+        <div
+          v-for="offer in displayedOffers"
+          :key="offer.id"
+          class="border rounded-lg p-4 bg-white shadow"
+        >
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <p class="font-semibold">From: {{ offer.initiator.username }}</p>
+              <p class="text-sm">To: {{ offer.recipient.username }}</p>
+            </div>
+            <span :class="statusClasses(offer.status)">
+              {{ offer.status.toLowerCase() }}
+            </span>
+          </div>
+          <p class="text-sm mb-1"><strong>Points:</strong> {{ offer.pointsOffered }}</p>
+          <p class="text-sm mb-1">
+            <strong>Offered:</strong> {{ countByRole(offer, 'OFFERED') }}
+          </p>
+          <p class="text-sm mb-1">
+            <strong>Requested:</strong> {{ countByRole(offer, 'REQUESTED') }}
+          </p>
+          <p class="text-xs text-gray-500 mb-3">{{ formatDateTime(offer.createdAt) }}</p>
+          <button
+            class="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded"
+            @click="viewOffer(offer)"
           >
-            <td class="px-4 py-2">{{ offer.initiator.username }}</td>
-            <td class="px-4 py-2">{{ offer.recipient.username }}</td>
-            <td class="px-4 py-2 text-right">{{ offer.pointsOffered }}</td>
-            <td class="px-4 py-2 text-right">{{ countByRole(offer, 'OFFERED') }}</td>
-            <td class="px-4 py-2 text-right">{{ countByRole(offer, 'REQUESTED') }}</td>
-            <td class="px-4 py-2">
-              <span :class="statusClasses(offer.status)">
-                {{ offer.status }}
-              </span>
-            </td>
-            <td class="px-4 py-2 text-left">{{ formatDateTime(offer.createdAt) }}</td>
-            <td class="px-4 py-2 text-right">
-              <button
-                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
-                @click="viewOffer(offer)"
-              >
-                View Trade
-              </button>
-            </td>
-          </tr>
-          <tr v-if="displayedOffers.length === 0">
-            <td colspan="8" class="px-4 py-6 text-center text-gray-500">
-              No {{ activeTab === 'incoming' ? 'incoming' : 'outgoing' }} trades.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            View Trade
+          </button>
+        </div>
+
+        <div
+          v-if="displayedOffers.length === 0"
+          class="text-center text-gray-500 py-6"
+        >
+          No {{ activeTab === 'incoming' ? 'incoming' : 'outgoing' }} trades.
+        </div>
+      </div>
     </div>
 
     <!-- Offer Modal -->
@@ -79,97 +122,105 @@
         v-if="showModal"
         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       >
-        <div class="bg-white rounded-lg shadow-lg w-11/12 max-w-3xl p-6 relative">
-          <button
-            class="absolute top-4 right-4 text-gray-500 hover:text-black"
-            @click="closeModal"
-          >✕</button>
+        <div
+          class="bg-white rounded-lg shadow-lg w-11/12 max-w-3xl max-h-[90vh] overflow-y-auto relative"
+        >
+          <!-- Sticky Header -->
+          <div class="sticky top-0 bg-white z-20 p-6 border-b">
+            <button
+              class="absolute top-4 right-4 text-gray-500 hover:text-black"
+              @click="closeModal"
+            >✕</button>
 
-          <h2 class="text-xl font-semibold mb-4">
-            Trade between
-            <span class="font-bold">{{ currentOffer.initiator.username }}</span>
-            → 
-            <span class="font-bold">{{ currentOffer.recipient.username }}</span>
-          </h2>
+            <h2 class="text-xl font-semibold mb-2">
+              Trade between
+              <span class="font-bold">{{ currentOffer.initiator.username }}</span>
+              →
+              <span class="font-bold">{{ currentOffer.recipient.username }}</span>
+            </h2>
 
-          <!-- Points, Status & Created -->
-          <p class="mb-1"><strong>Points Offered:</strong> {{ currentOffer.pointsOffered }}</p>
-          <p class="mb-1"><strong>Status:</strong> {{ currentOffer.status.toLowerCase() }}</p>
-          <p class="mb-4"><strong>Created:</strong> {{ formatDateTime(currentOffer.createdAt) }}</p>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- Offered -->
-            <div>
-              <h3 class="font-semibold mb-2">Offered CToons</h3>
-              <div class="grid grid-cols-2 gap-4">
-                <div
-                  v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
-                  :key="tc.id"
-                  class="border rounded p-2 flex flex-col items-center"
-                >
-                  <img
-                    :src="tc.userCtoon.ctoon.assetPath"
-                    class="w-20 h-20 object-contain mb-1"
-                  />
-                  <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
-                  <p class="text-xs text-gray-600">
-                    {{ tc.userCtoon.ctoon.rarity }}
-                  </p>
-                  <p class="text-xs text-gray-600">
-                    Mint #{{ tc.userCtoon.mintNumber }} of
-                    {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
-                  </p>
-                  <p class="text-xs text-gray-600">
-                    {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <!-- Requested -->
-            <div>
-              <h3 class="font-semibold mb-2">Requested CToons</h3>
-              <div class="grid grid-cols-2 gap-4">
-                <div
-                  v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
-                  :key="tc.id"
-                  class="border rounded p-2 flex flex-col items-center"
-                >
-                  <img
-                    :src="tc.userCtoon.ctoon.assetPath"
-                    class="w-20 h-20 object-contain mb-1"
-                  />
-                  <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
-                  <p class="text-xs text-gray-600">
-                    {{ tc.userCtoon.ctoon.rarity }}
-                  </p>
-                  <p class="text-xs text-gray-600">
-                    Mint #{{ tc.userCtoon.mintNumber }} of
-                    {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
-                  </p>
-                  <p class="text-xs text-gray-600">
-                    {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <p class="mb-1"><strong>Points Offered:</strong> {{ currentOffer.pointsOffered }}</p>
+            <p class="mb-1">
+              <strong>Status:</strong>
+              <span :class="statusClasses(currentOffer.status)">
+                {{ currentOffer.status.toLowerCase() }}
+              </span>
+            </p>
+            <p class="mb-0"><strong>Created:</strong> {{ formatDateTime(currentOffer.createdAt) }}</p>
           </div>
 
-          <!-- Action buttons (only when pending) -->
-          <div class="flex justify-end space-x-3">
-            <button
-              v-if="isRecipient && currentOffer.status === 'PENDING'"
-              class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-              @click="acceptOffer"
-            >
-              Accept Offer
-            </button>
-            <button
-              v-if="(isRecipient || isInitiator) && currentOffer.status === 'PENDING'"
-              class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-              @click="rejectOffer"
-            >
-              Reject Offer
-            </button>
+          <!-- Scrollable Body -->
+          <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <!-- Offered CToons -->
+              <div>
+                <h3 class="font-semibold mb-2">Offered CToons</h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <div
+                    v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
+                    :key="tc.id"
+                    class="border rounded p-2 flex flex-col items-center"
+                  >
+                    <img
+                      :src="tc.userCtoon.ctoon.assetPath"
+                      class="w-20 h-20 object-contain mb-1"
+                    />
+                    <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
+                    <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
+                    <p class="text-xs text-gray-600">
+                      Mint #{{ tc.userCtoon.mintNumber }} of
+                      {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
+                    </p>
+                    <p class="text-xs text-gray-600">
+                      {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <!-- Requested CToons -->
+              <div>
+                <h3 class="font-semibold mb-2">Requested CToons</h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <div
+                    v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
+                    :key="tc.id"
+                    class="border rounded p-2 flex flex-col items-center"
+                  >
+                    <img
+                      :src="tc.userCtoon.ctoon.assetPath"
+                      class="w-20 h-20 object-contain mb-1"
+                    />
+                    <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
+                    <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
+                    <p class="text-xs text-gray-600">
+                      Mint #{{ tc.userCtoon.mintNumber }} of
+                      {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
+                    </p>
+                    <p class="text-xs text-gray-600">
+                      {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons (only when pending) -->
+            <div class="flex justify-end space-x-3">
+              <button
+                v-if="isRecipient && currentOffer.status === 'PENDING'"
+                class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+                @click="acceptOffer"
+              >
+                Accept Offer
+              </button>
+              <button
+                v-if="(isRecipient || isInitiator) && currentOffer.status === 'PENDING'"
+                class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+                @click="rejectOffer"
+              >
+                Reject Offer
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -184,6 +235,11 @@ import { ref, onMounted, computed } from 'vue'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 import { useAuth } from '@/composables/useAuth'
+
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
 
 // format with the user's own locale & timezone
 function formatDateTime(iso) {
@@ -223,7 +279,7 @@ function tabClass(tab) {
   ]
 }
 
-// at the top of your <script setup>
+// status pill classes
 function statusClasses(status) {
   const base = 'inline-block px-2 py-1 rounded-full text-xs font-semibold capitalize'
   switch (status) {
@@ -278,12 +334,10 @@ function closeModal() {
 async function acceptOffer() {
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/accept`, { method: 'POST' })
-    // success path
     closeModal()
     await loadOffers()
     showToast('Offer accepted!', 'success')
   } catch (err) {
-    // extract server message
     const msg =
       err.data?.statusMessage ||
       err.statusMessage ||
@@ -297,12 +351,10 @@ async function acceptOffer() {
 async function rejectOffer() {
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/reject`, { method: 'POST' })
-    // success path
     closeModal()
     await loadOffers()
     showToast('Offer rejected.', 'success')
   } catch (err) {
-    // extract server message
     const msg =
       err.data?.statusMessage ||
       err.statusMessage ||
@@ -312,7 +364,6 @@ async function rejectOffer() {
     showToast(msg, 'error')
   }
 }
-
 
 onMounted(async () => {
   await fetchSelf()

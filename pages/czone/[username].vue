@@ -497,17 +497,19 @@
           class="absolute bottom-4 left-6 right-6 flex items-center justify-between bg-white pt-4 border-t"
         >
           <div>
-            Points to Offer <input
+            Points to Offer
+            <input
               type="number"
               v-model.number="pointsToOffer"
               :max="user?.points || 0"
               min="0"
+              @input="pointsToOffer = Math.max(0, pointsToOffer)"
               placeholder="Points"
               class="border px-2 py-1 rounded w-24"
             />
           </div>
           <button
-            :disabled="!selectedInitiatorCtoons.length && !pointsToOffer"
+            :disabled="pointsToOffer < 0 || (selectedInitiatorCtoons.length === 0 && pointsToOffer === 0)"
             @click="sendOffer"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
           >
@@ -533,6 +535,11 @@ import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import Toast from '@/components/Toast.vue'
+
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
 
 // ——— Date formatter ———
 function formatDate(dateStr) {
