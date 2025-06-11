@@ -437,6 +437,9 @@
               <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
               <p class="text-sm text-center">{{ c.name }}</p>
               <p class="text-xs text-gray-600">
+                {{ c.rarity }}
+              </p>
+              <p class="text-xs text-gray-600">
                 Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
               </p>
               <p class="text-xs text-gray-600">
@@ -475,6 +478,9 @@
             >
               <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
               <p class="text-sm text-center">{{ c.name }}</p>
+              <p class="text-xs text-gray-600">
+                {{ c.rarity }}
+              </p>
               <p class="text-xs text-gray-600">
                 Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
               </p>
