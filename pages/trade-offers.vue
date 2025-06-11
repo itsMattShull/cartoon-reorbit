@@ -46,8 +46,22 @@
               :key="offer.id"
               class="border-t"
             >
-              <td class="px-4 py-2">{{ offer.initiator.username }}</td>
-              <td class="px-4 py-2">{{ offer.recipient.username }}</td>
+              <td class="px-4 py-2">
+                <NuxtLink
+                  :to="`/czone/${offer.initiator.username}`"
+                  class="text-indigo-600 hover:underline"
+                >
+                  {{ offer.initiator.username }}
+                </NuxtLink>
+              </td>
+              <td class="px-4 py-2">
+                <NuxtLink
+                  :to="`/czone/${offer.recipient.username}`"
+                  class="text-indigo-600 hover:underline"
+                >
+                  {{ offer.recipient.username }}
+                </NuxtLink>
+              </td>
               <td class="px-4 py-2 text-right">{{ offer.pointsOffered }}</td>
               <td class="px-4 py-2 text-right">{{ countByRole(offer, 'OFFERED') }}</td>
               <td class="px-4 py-2 text-right">{{ countByRole(offer, 'REQUESTED') }}</td>
@@ -84,8 +98,24 @@
         >
           <div class="flex justify-between items-start mb-2">
             <div>
-              <p class="font-semibold">From: {{ offer.initiator.username }}</p>
-              <p class="text-sm">To: {{ offer.recipient.username }}</p>
+              <p class="font-semibold">
+                From:
+                <NuxtLink
+                  :to="`/czone/${offer.initiator.username}`"
+                  class="text-indigo-600 hover:underline"
+                >
+                  {{ offer.initiator.username }}
+                </NuxtLink>
+              </p>
+              <p class="text-sm">
+                To:
+                <NuxtLink
+                  :to="`/czone/${offer.recipient.username}`"
+                  class="text-indigo-600 hover:underline"
+                >
+                  {{ offer.recipient.username }}
+                </NuxtLink>
+              </p>
             </div>
             <span :class="statusClasses(offer.status)">
               {{ offer.status.toLowerCase() }}
@@ -134,9 +164,19 @@
 
             <h2 class="text-xl font-semibold mb-2">
               Trade between
-              <span class="font-bold">{{ currentOffer.initiator.username }}</span>
+              <NuxtLink
+                :to="`/czone/${currentOffer.initiator.username}`"
+                class="text-indigo-600 hover:underline"
+              >
+                {{ currentOffer.initiator.username }}
+              </NuxtLink>
               →
-              <span class="font-bold">{{ currentOffer.recipient.username }}</span>
+              <NuxtLink
+                :to="`/czone/${currentOffer.recipient.username}`"
+                class="text-indigo-600 hover:underline"
+              >
+                {{ currentOffer.recipient.username }}
+              </NuxtLink>
             </h2>
 
             <p class="mb-1"><strong>Points Offered:</strong> {{ currentOffer.pointsOffered }}</p>
@@ -159,11 +199,19 @@
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
                     :key="tc.id"
-                    class="border rounded p-2 flex flex-col items-center"
+                    class="relative border rounded p-2 flex flex-col items-center"
                   >
+                    <span
+                      class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                      :class="selfOwnedIds.has(tc.userCtoon.ctoonId)
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-200 text-gray-600'"
+                    >
+                      {{ selfOwnedIds.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
+                    </span>
                     <img
                       :src="tc.userCtoon.ctoon.assetPath"
-                      class="w-20 h-20 object-contain mb-1"
+                      class="w-20 h-20 object-contain mb-1 mt-6"
                     />
                     <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
                     <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
@@ -184,11 +232,19 @@
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
                     :key="tc.id"
-                    class="border rounded p-2 flex flex-col items-center"
+                    class="relative border rounded p-2 flex flex-col items-center"
                   >
+                    <span
+                      class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                      :class="selfOwnedIds.has(tc.userCtoon.ctoonId)
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-200 text-gray-600'"
+                    >
+                      {{ selfOwnedIds.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
+                    </span>
                     <img
                       :src="tc.userCtoon.ctoon.assetPath"
-                      class="w-20 h-20 object-contain mb-1"
+                      class="w-20 h-20 object-contain mb-1 mt-6"
                     />
                     <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
                     <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
@@ -204,7 +260,7 @@
               </div>
             </div>
 
-            <!-- Action Buttons (only when pending) -->
+            <!-- Action Buttons (PENDING only) -->
             <div class="flex justify-end space-x-3">
               <button
                 v-if="isRecipient && currentOffer.status === 'PENDING'"
@@ -241,7 +297,6 @@ definePageMeta({
   layout: 'default'
 })
 
-// format with the user's own locale & timezone
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString(undefined, {
     dateStyle: 'medium',
@@ -249,27 +304,33 @@ function formatDateTime(iso) {
   })
 }
 
-// tabs & data
 const activeTab = ref('incoming')
 const incoming = ref([])
 const outgoing = ref([])
 const loading = ref(true)
 
-// modal & current offer
 const showModal = ref(false)
 const currentOffer = ref(null)
 
-// toast state
+const selfCtoons    = ref([])
+const isLoadingSelf = ref(false)
+async function loadSelfCollection() {
+  isLoadingSelf.value = true
+  selfCtoons.value    = await $fetch(`/api/collection/${user.value.username}`)
+  isLoadingSelf.value = false
+}
+const selfOwnedIds = computed(() =>
+  new Set(selfCtoons.value.map(sc => sc.ctoonId))
+)
+
 const toast = ref({ show: false, message: '', type: 'success' })
 function showToast(msg, type = 'success') {
   toast.value = { show: true, message: msg, type }
   setTimeout(() => (toast.value.show = false), 4000)
 }
 
-// auth
 const { user, fetchSelf } = useAuth()
 
-// helper to tell which tab is active
 function tabClass(tab) {
   return [
     'px-4 py-2 rounded',
@@ -278,33 +339,22 @@ function tabClass(tab) {
       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
   ]
 }
-
-// status pill classes
 function statusClasses(status) {
   const base = 'inline-block px-2 py-1 rounded-full text-xs font-semibold capitalize'
   switch (status) {
-    case 'PENDING':
-      return `${base} bg-yellow-100 text-yellow-800`
-    case 'ACCEPTED':
-      return `${base} bg-green-100 text-green-800`
-    case 'REJECTED':
-      return `${base} bg-red-100 text-red-800`
-    default:
-      return `${base} bg-gray-100 text-gray-800`
+    case 'PENDING':  return `${base} bg-yellow-100 text-yellow-800`
+    case 'ACCEPTED': return `${base} bg-green-100 text-green-800`
+    case 'REJECTED': return `${base} bg-red-100 text-red-800`
+    default:         return `${base} bg-gray-100 text-gray-800`
   }
 }
-
-// count cToons by ROLE
 function countByRole(offer, role) {
   return offer.ctoons.filter(c => c.role === role).length
 }
 
-// lists which offers to show in the table
 const displayedOffers = computed(() =>
   activeTab.value === 'incoming' ? incoming.value : outgoing.value
 )
-
-// are we the recipient or initiator of the current offer?
 const isRecipient = computed(() =>
   currentOffer.value?.recipient.id === user.value?.id
 )
@@ -312,7 +362,6 @@ const isInitiator = computed(() =>
   currentOffer.value?.initiator.id === user.value?.id
 )
 
-// fetch both lists
 async function loadOffers() {
   loading.value = true
   incoming.value = await $fetch('/api/trade/offers/incoming')
@@ -320,9 +369,9 @@ async function loadOffers() {
   loading.value = false
 }
 
-// open/close modal
 function viewOffer(offer) {
   currentOffer.value = offer
+  loadSelfCollection()
   showModal.value = true
 }
 function closeModal() {
@@ -330,38 +379,22 @@ function closeModal() {
   currentOffer.value = null
 }
 
-// accept / reject
 async function acceptOffer() {
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/accept`, { method: 'POST' })
-    closeModal()
-    await loadOffers()
-    showToast('Offer accepted!', 'success')
+    closeModal(); await loadOffers(); showToast('Offer accepted!', 'success')
   } catch (err) {
-    const msg =
-      err.data?.statusMessage ||
-      err.statusMessage ||
-      'Failed to accept offer'
-    closeModal()
-    await loadOffers()
-    showToast(msg, 'error')
+    const msg = err.data?.statusMessage || err.statusMessage || 'Failed to accept'
+    closeModal(); await loadOffers(); showToast(msg, 'error')
   }
 }
-
 async function rejectOffer() {
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/reject`, { method: 'POST' })
-    closeModal()
-    await loadOffers()
-    showToast('Offer rejected.', 'success')
+    closeModal(); await loadOffers(); showToast('Offer rejected.', 'success')
   } catch (err) {
-    const msg =
-      err.data?.statusMessage ||
-      err.statusMessage ||
-      'Failed to reject offer'
-    closeModal()
-    await loadOffers()
-    showToast(msg, 'error')
+    const msg = err.data?.statusMessage || err.statusMessage || 'Failed to reject'
+    closeModal(); await loadOffers(); showToast(msg, 'error')
   }
 }
 

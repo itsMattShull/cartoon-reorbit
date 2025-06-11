@@ -427,18 +427,22 @@
               v-for="c in collectionCtoons"
               :key="c.id"
               @click="selectTargetCtoon(c)"
-              :class="[
-                'flex flex-col items-center p-2 cursor-pointer border rounded',
-                selectedTargetCtoons.includes(c)
-                  ? 'border-indigo-500 bg-indigo-100'
-                  : ''
-              ]"
+              class="relative flex flex-col items-center p-2 cursor-pointer border rounded hover:shadow"
+              :class="selectedTargetCtoons.includes(c) ? 'border-indigo-500 bg-indigo-50' : ''"
             >
-              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
+              <!-- Owned / Unowned badge -->
+              <span
+                class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                :class="selfOwnedIds.has(c.ctoonId)
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-200 text-gray-600'"
+              >
+                {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
+              </span>
+
+              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
               <p class="text-sm text-center">{{ c.name }}</p>
-              <p class="text-xs text-gray-600">
-                {{ c.rarity }}
-              </p>
+              <p class="text-xs text-gray-600">{{ c.rarity }}</p>
               <p class="text-xs text-gray-600">
                 Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
               </p>
@@ -592,6 +596,7 @@ const isLoadingCollection        = ref(false)
 const selectedTargetCtoons       = ref([])
 const selfCtoons                 = ref([])
 const isLoadingSelfCollection    = ref(false)
+const isLoadingSelf              = ref(false)
 const selectedInitiatorCtoons    = ref([])
 const pointsToOffer              = ref(0)
 
@@ -621,6 +626,7 @@ function openCollection() {
   tradeStep.value              = 1
   selectedTargetCtoons.value   = []
   loadCollection(username.value)
+  loadSelfCollection()
   collectionModalVisible.value = true
 }
 function closeCollection() {
@@ -643,14 +649,19 @@ function startTrade() {
   loadSelfCollection()
 }
 
-// —— Load your own tradeable cToons —— 
+// fetch the viewing user’s own collection
 async function loadSelfCollection() {
+  isLoadingSelf.value = true
   isLoadingSelfCollection.value = true
-  selfCtoons.value             = await $fetch(
-    `/api/collection/${user.value.username}`
-  )
+  selfCtoons.value    = await $fetch(`/api/collection/${user.value.username}`)
+  isLoadingSelf.value = false
   isLoadingSelfCollection.value = false
 }
+
+// a Set of ctoonIds the viewer owns
+const selfOwnedIds = computed(() =>
+  new Set(selfCtoons.value.map(sc => sc.ctoonId))
+)
 
 // —— Select/deselect your cToon ——
 function selectInitiatorCtoon(ct) {

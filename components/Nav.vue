@@ -1,9 +1,26 @@
 <template>
   <!-- hamburger button / top bar -->
   <header class="fixed top-0 left-0 w-full h-14 bg-gray-800 flex items-center px-4 z-40">
-    <button @click="isOpen = true" class="text-white focus:outline-none" aria-label="Open navigation">
+    <button
+      @click="isOpen = true"
+      class="relative text-white focus:outline-none"
+      aria-label="Open navigation"
+    >
+      <!-- sparkle animation only if NOT on Trade Offers page AND there are pending offers -->
+      <span
+        v-if="pendingCount > 0 && !isOnTradeOffersPage"
+        class="absolute inset-0 rounded-full bg-yellow-400 opacity-75 animate-ping"
+        style="top: -4px; left: -5px"
+      ></span>
       <!-- hamburger icon -->
-      <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        class="w-7 h-7 relative"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="3" y1="12" x2="21" y2="12" />
         <line x1="3" y1="18" x2="21" y2="18" />
@@ -14,24 +31,40 @@
 
   <!-- overlay -->
   <transition name="fade">
-    <div v-if="isOpen" @click="close" class="fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+    <div
+      v-if="isOpen"
+      @click="close"
+      class="fixed inset-0 bg-black bg-opacity-50 z-40"
+    ></div>
   </transition>
 
   <!-- sidebar -->
   <transition name="slide">
-    <aside v-if="isOpen" class="fixed top-0 left-0 h-full w-64 bg-gray-900 text-white z-50 flex flex-col pt-16 shadow-lg">
+    <aside
+      v-if="isOpen"
+      class="fixed top-0 left-0 h-full w-64 bg-gray-900 text-white z-50 flex flex-col pt-16 shadow-lg"
+    >
       <nav class="flex-1 overflow-y-auto">
         <NuxtLink
           v-for="item in links"
           :key="item.to"
           :to="item.to"
-          class="block px-6 py-3 hover:bg-gray-800"
+          class="block px-6 py-3 hover:bg-gray-800 flex justify-between items-center"
           @click.native="close"
         >
-          {{ item.label }}
+          <span>{{ item.label }}</span>
+          <span
+            v-if="item.to === '/trade-offers' && pendingCount > 0"
+            class="inline-block bg-red-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full"
+          >
+            {{ pendingCount }}
+          </span>
         </NuxtLink>
       </nav>
-      <button @click="handleLogout" class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700">
+      <button
+        @click="handleLogout"
+        class="w-full text-left px-6 py-3 bg-red-600 hover:bg-red-700"
+      >
         Logout
       </button>
     </aside>
@@ -39,8 +72,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '~/composables/useAuth'
+import { useRoute } from 'vue-router'
 
 const isOpen = ref(false)
 function close() {
@@ -48,11 +82,26 @@ function close() {
 }
 
 const { logout, user } = useAuth()
-
 async function handleLogout() {
   await logout()
   close()
 }
+
+// detect if we're on /trade-offers
+const route = useRoute()
+const isOnTradeOffersPage = computed(() => route.path === '/trade-offers')
+
+// load pending incoming offers count
+const pendingCount = ref(0)
+onMounted(async () => {
+  if (!user.value) return
+  try {
+    const offers = await $fetch('/api/trade/offers/incoming')
+    pendingCount.value = offers.filter(o => o.status === 'PENDING').length
+  } catch (err) {
+    console.error('Failed to fetch incoming offers:', err)
+  }
+})
 
 const baseLinks = [
   { label: 'Showcase', to: '/dashboard' },
@@ -82,6 +131,21 @@ const links = computed(() => {
 </script>
 
 <style scoped>
+/* sparkle ping effect */
+.animate-ping {
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
 /* slide-in sidebar */
 .slide-enter-from { transform: translateX(-100%); }
 .slide-enter-active { transition: transform 0.25s ease; }
