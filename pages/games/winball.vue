@@ -692,14 +692,14 @@ bumperXs.forEach((bx) => {
     }
 
     // ALSO: if we haven’t pulled or launched yet, keep ball glued
-    if (!plungerPulling && !ballLaunched) {
-      const frontZ = plungerBody.position.z - plungerLength / 2
-      const targetZ = frontZ - ballRadius
-      const targetY = boardYAt(frontZ) + ballRadius
-      ballBody.position.set(laneCenterX, targetY, targetZ)
-      ballBody.velocity.setZero()
-      ballBody.angularVelocity.setZero()
-    }
+    //if (!plungerPulling && !ballLaunched) {
+      //const frontZ = plungerBody.position.z - plungerLength / 2
+      //const targetZ = frontZ - ballRadius
+      //const targetY = boardYAt(frontZ) + ballRadius
+      //ballBody.position.set(laneCenterX, targetY, targetZ)
+      //ballBody.velocity.setZero()
+      //ballBody.angularVelocity.setZero()
+    //}
 
     // Step the physics world
     world.step(1/60, dt, 20)
@@ -729,7 +729,7 @@ bumperXs.forEach((bx) => {
 
     // --- Stop ball at south wall and lock it in place ---
     const southLimit = southZ - ballRadius
-    if (ballLaunched && ballBody.position.z >= southLimit - 1 && !gameEnded) {
+    if (ballBody.position.x<16.75 && ballBody.position.z >= southLimit - 1 && !gameEnded) {
       stateHistory.push({
         position: {
           x: ballBody.position.x,
