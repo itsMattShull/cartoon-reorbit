@@ -97,6 +97,9 @@
         >
           View Wishlist
         </button>
+        <button v-if="user?.id !== ownerId" @click="openCollection" class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2">
+          View Collection
+        </button>
         <button
           v-if="user?.id === ownerId"
           @click="navigateTo(editPath)"
@@ -221,43 +224,58 @@
         </div>
       </div>
 
-      <div class="flex justify-between items-center text-sm mb-6 pl-4 pr-4">
-        <div class="flex gap-2">
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-            @click="goToPreviousUser"
-          >
-            Previous cZone
-          </button>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-            @click="goToRandomUser"
-          >
-            Random cZone
-          </button>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-            @click="goToNextUser"
-          >
-            Next cZone
-          </button>
-          <button
-            class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
-            @click="openWishlist"
-          >
-            View Wishlist
-          </button>
-          <button
-            v-if="user?.id === ownerId"
-            @click="navigateTo(editPath)"
-            class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
-          >
-            ✏️ Edit cZone
-          </button>
+      <div class="flex justify-between items-start text-sm mb-6 px-4">
+        <!-- Left side: two vertical groups -->
+        <div class="flex flex-col gap-6">
+          <!-- Group 1: zone nav buttons -->
+          <div class="flex gap-2">
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+              @click="goToPreviousUser"
+            >
+              Previous cZone
+            </button>
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+              @click="goToRandomUser"
+            >
+              Random cZone
+            </button>
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+              @click="goToNextUser"
+            >
+              Next cZone
+            </button>
+          </div>
+
+          <!-- Group 2: wishlist / collection / edit -->
+          <div class="flex gap-2">
+            <button
+              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+              @click="openWishlist"
+            >
+              View Wishlist
+            </button>
+            <button
+              v-if="user?.id !== ownerId"
+              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+              @click="openCollection"
+            >
+              View Collection
+            </button>
+            <button
+              v-if="user?.id === ownerId"
+              @click="navigateTo(editPath)"
+              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
+            >
+              ✏️ Edit cZone
+            </button>
+          </div>
         </div>
-        <div
-          class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm"
-        >
+
+        <!-- Right side: points badge -->
+        <div class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm">
           My Points: {{ user?.points ?? 0 }}
         </div>
       </div>
@@ -372,6 +390,133 @@
       </div>
     </div>
   </transition>
+  <!-- Collection & Trade Modal -->
+  <transition name="fade">
+    <div
+      v-if="collectionModalVisible"
+      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+    >
+      <div
+        class="relative bg-white rounded-lg shadow-lg w-11/12 max-w-2xl p-6 flex flex-col"
+        style="max-height:80vh;"
+      >
+        <!-- Close -->
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeCollection"
+        >
+          ✕
+        </button>
+
+        <!-- Header -->
+        <h2 class="text-xl font-semibold mb-4">
+          {{ tradeStep === 1
+              ? `${ownerName}’s Collection`
+              : 'Your Collection'
+          }}
+        </h2>
+
+        <!-- STEP 1: Select target’s cToons -->
+        <div v-if="tradeStep === 1" class="flex-1 overflow-y-auto">
+          <div v-if="isLoadingCollection" class="text-center py-10">Loading…</div>
+          <div v-else-if="collectionCtoons.length === 0" class="text-center py-10">
+            No cToons in their collection.
+          </div>
+          <div v-else class="grid grid-cols-4 gap-4">
+            <div
+              v-for="c in collectionCtoons"
+              :key="c.id"
+              @click="selectTargetCtoon(c)"
+              :class="[
+                'flex flex-col items-center p-2 cursor-pointer border rounded',
+                selectedTargetCtoons.includes(c)
+                  ? 'border-indigo-500 bg-indigo-100'
+                  : ''
+              ]"
+            >
+              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
+              <p class="text-sm text-center">{{ c.name }}</p>
+              <p class="text-xs text-gray-600">
+                Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+              </p>
+              <p class="text-xs text-gray-600">
+                {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div v-if="tradeStep === 1" class="mt-4 text-right">
+          <button
+            :disabled="!selectedTargetCtoons.length"
+            @click="startTrade"
+            class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
+          >
+            Create Trade
+          </button>
+        </div>
+
+        <!-- STEP 2: Select your cToons + points -->
+        <div v-else class="flex-1 overflow-y-auto">
+          <div v-if="isLoadingSelfCollection" class="text-center py-10">Loading…</div>
+          <div v-else-if="selfCtoons.length === 0" class="text-center py-10">
+            You have no cToons to trade.
+          </div>
+          <div v-else class="grid grid-cols-4 gap-4 mb-20">
+            <div
+              v-for="c in selfCtoons"
+              :key="c.id"
+              @click="selectInitiatorCtoon(c)"
+              :class="[
+                'flex flex-col items-center p-2 cursor-pointer border rounded',
+                selectedInitiatorCtoons.includes(c)
+                  ? 'border-green-500 bg-green-100'
+                  : ''
+              ]"
+            >
+              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
+              <p class="text-sm text-center">{{ c.name }}</p>
+              <p class="text-xs text-gray-600">
+                Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+              </p>
+              <p class="text-xs text-gray-600">
+                {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom bar: points + send -->
+        <div
+          v-if="tradeStep === 2"
+          class="absolute bottom-4 left-6 right-6 flex items-center justify-between bg-white pt-4 border-t"
+        >
+          <div>
+            Points to Offer <input
+              type="number"
+              v-model.number="pointsToOffer"
+              :max="user?.points || 0"
+              min="0"
+              placeholder="Points"
+              class="border px-2 py-1 rounded w-24"
+            />
+          </div>
+          <button
+            :disabled="!selectedInitiatorCtoons.length && !pointsToOffer"
+            @click="sendOffer"
+            class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
+          >
+            Send Offer
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+  <!-- Toast -->
+  <Toast
+    v-if="showToast"
+    :message="toastMessage"
+    :type="toastType"
+  />
 </template>
 
 
@@ -381,6 +526,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import Toast from '@/components/Toast.vue'
 
 // ——— Date formatter ———
 function formatDate(dateStr) {
@@ -424,6 +570,103 @@ const chatContainer = ref(null)
 // ——— Sidebar state ———
 const showSidebar = ref(false)
 const selectedCtoon = ref(null)
+
+// —— Trade modal state ——
+const collectionModalVisible     = ref(false)
+const tradeStep                  = ref(1)      // 1 = select target’s, 2 = select yours
+const collectionCtoons           = ref([])
+const isLoadingCollection        = ref(false)
+const selectedTargetCtoons       = ref([])
+const selfCtoons                 = ref([])
+const isLoadingSelfCollection    = ref(false)
+const selectedInitiatorCtoons    = ref([])
+const pointsToOffer              = ref(0)
+
+const showToast        = ref(false)
+const toastMessage     = ref('')
+const toastType        = ref('success') // 'success' or 'error'
+
+function displayToast(message, type = 'success') {
+  toastMessage.value = message
+  toastType.value    = type
+  showToast.value    = true
+  // auto-hide after 4s
+  setTimeout(() => {
+    showToast.value = false
+  }, 4000)
+}
+
+// —— Load someone’s collection ——
+async function loadCollection(userToLoad) {
+  isLoadingCollection.value = true
+  collectionCtoons.value     = await $fetch(`/api/collection/${userToLoad}`)
+  isLoadingCollection.value = false
+}
+
+// —— Open / reset ——
+function openCollection() {
+  tradeStep.value              = 1
+  selectedTargetCtoons.value   = []
+  loadCollection(username.value)
+  collectionModalVisible.value = true
+}
+function closeCollection() {
+  collectionModalVisible.value = false
+  tradeStep.value              = 1
+}
+
+// —— Select/deselect target’s cToon ——
+function selectTargetCtoon(ct) {
+  const idx = selectedTargetCtoons.value.findIndex(t => t.id === ct.id)
+  if (idx >= 0) selectedTargetCtoons.value.splice(idx, 1)
+  else selectedTargetCtoons.value.push(ct)
+}
+
+// —— Move to step 2 —— 
+function startTrade() {
+  tradeStep.value             = 2
+  selectedInitiatorCtoons.value = []
+  pointsToOffer.value         = 0
+  loadSelfCollection()
+}
+
+// —— Load your own tradeable cToons —— 
+async function loadSelfCollection() {
+  isLoadingSelfCollection.value = true
+  selfCtoons.value             = await $fetch(
+    `/api/collection/${user.value.username}`
+  )
+  isLoadingSelfCollection.value = false
+}
+
+// —— Select/deselect your cToon ——
+function selectInitiatorCtoon(ct) {
+  const idx = selectedInitiatorCtoons.value.findIndex(t => t.id === ct.id)
+  if (idx >= 0) selectedInitiatorCtoons.value.splice(idx, 1)
+  else selectedInitiatorCtoons.value.push(ct)
+}
+
+// —— Send the trade offer —— 
+async function sendOffer() {
+  const payload = {
+    recipientUsername: username.value,
+    ctoonIdsRequested: selectedTargetCtoons.value.map(c => c.id),
+    ctoonIdsOffered:   selectedInitiatorCtoons.value.map(c => c.id),
+    pointsOffered:     pointsToOffer.value
+  }
+
+  try {
+    await $fetch('/api/trade/offers', {
+      method: 'POST',
+      body: payload
+    })
+    closeCollection()
+    displayToast('Trade offer sent!', 'success')
+  } catch (err) {
+    console.error('Trade offer failed', err)
+    displayToast('Failed to send trade offer. Please try again.', 'error')
+  }
+}
 
 // ——— Zones state ———
 // Start out with three empty zones by default:

@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
-import { addDays, subMonths, subYears, format, isAfter } from 'date-fns'
+import { addDays, subMonths, subYears, format } from 'date-fns'
 
 const prisma = new PrismaClient()
 

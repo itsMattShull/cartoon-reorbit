@@ -60,6 +60,7 @@ const baseLinks = [
   { label: 'Collection', to: '/collection' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Live Trading', to: '/live-trading' },
+  { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' }
 ]
