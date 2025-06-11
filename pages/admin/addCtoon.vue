@@ -20,6 +20,19 @@
           <p class="text-sm text-gray-500">Automatically determined from uploaded file.</p>
         </div>
 
+        <!-- Rarity -->
+        <div>
+          <label class="block mb-1 font-medium">Rarity</label>
+          <select v-model="rarity" required class="w-full border rounded p-2 bg-white">
+            <option disabled value="">Select rarity</option>
+            <option v-for="opt in rarityOptions" :key="opt" :value="opt">
+              {{ opt }}
+            </option>
+          </select>
+          <p class="text-sm text-gray-500">Choose the rarity tier for this cToon.</p>
+          <p v-if="errors.rarity" class="text-red-600 text-sm mt-1">{{ errors.rarity }}</p>
+        </div>
+
         <!-- Name -->
         <div>
           <label class="block mb-1 font-medium">Name</label>
@@ -135,8 +148,10 @@ const imageFile = ref(null)
 const seriesOptions = ref([])
 const setsOptions = ref([])
 
-const errors = reactive({ image: '', name: '', series: '', rarity: '' })
+// Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
+
+const errors = reactive({ image: '', name: '', series: '', rarity: '' })
 
 onMounted(async () => {
   const [seriesRes, setsRes] = await Promise.all([
@@ -158,26 +173,31 @@ watch(rarity, val => {
       initialQuantity.value = 100
       totalQuantity.value = 100
       perUserLimit.value = null
+      inCmart.value = true
       break
     case 'Uncommon':
       initialQuantity.value = 75
       totalQuantity.value = 75
       perUserLimit.value = null
+      inCmart.value = true
       break
     case 'Rare':
       initialQuantity.value = 50
       totalQuantity.value = 50
       perUserLimit.value = 3
+      inCmart.value = true
       break
     case 'Very Rare':
       initialQuantity.value = 35
       totalQuantity.value = 35
       perUserLimit.value = 2
+      inCmart.value = true
       break
     case 'Crazy Rare':
       initialQuantity.value = 25
       totalQuantity.value = 25
-      perUserLimit.value = 1
+      perUserLimit.value = 2
+      inCmart.value = true
       break
   }
 })
@@ -198,11 +218,13 @@ function handleFile(e) {
 }
 
 async function submitForm() {
+  // Validate
   if (!name.value.trim()) errors.name = 'Name is required.'
   if (!series.value.trim()) errors.series = 'Series is required.'
   if (!rarity.value) errors.rarity = 'Rarity is required.'
   if (Object.values(errors).some(e => e)) return
 
+  // Build form data
   const formData = new FormData()
   formData.append('image', imageFile.value)
   formData.append('name', name.value)
@@ -211,8 +233,7 @@ async function submitForm() {
   formData.append('rarity', rarity.value)
   formData.append('set', set.value)
   formData.append('characters', JSON.stringify(characters.value.split(',').map(c => c.trim())))
-  const utcRelease = new Date(releaseDate.value).toISOString()
-  formData.append('releaseDate', utcRelease)
+  formData.append('releaseDate', new Date(releaseDate.value).toISOString())
   formData.append('totalQuantity', totalQuantity.value ?? '')
   formData.append('initialQuantity', initialQuantity.value ?? '')
   formData.append('perUserLimit', perUserLimit.value ?? '')
@@ -230,8 +251,3 @@ async function submitForm() {
   else alert('Failed to create cToon')
 }
 </script>
-
-<style scoped>
-th, td { vertical-align: middle; }
-.max-w-2xl { max-width: 768px; }
-</style>
