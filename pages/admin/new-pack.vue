@@ -323,13 +323,16 @@ const countsByRarity = reactive({
 })
 
 const rarityConfigs = computed(() =>
-  Object.entries(countsByRarity)
-    .filter(([, config]) => config.count > 0)
-    .map(([rarity, config]) => ({ 
-      rarity, 
-      count: config.count,
-      probabilityPercent: config.probabilityPercent
-    }))
+Object.entries(countsByRarity)
+    .filter(([rarity, config]) => 
+      // you must have selected at least one cToon of that rarity
+      config.count > 0 && (grouped.value[rarity] || []).length > 0
+    )
+    .map(([rarity, config]) => ({
+    rarity, 
+    count: config.count,
+    probabilityPercent: config.probabilityPercent
+  }))
 )
 
 /* 4. cToon data & selection ----------------------------------------- */

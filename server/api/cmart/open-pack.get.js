@@ -98,7 +98,13 @@ export default defineEventHandler(async (event) => {
     const packId = userPack.pack.id
     for (const rc of userPack.pack.rarityConfigs) {
       const options = await tx.packCtoonOption.findMany({
-        where: { packId, ctoon: { rarity: rc.rarity } }
+        where: {
+          packId,
+          // this filters by the Ctoon’s rarity
+          ctoon: { rarity: rc.rarity }
+        },
+        // make sure opt.ctoon is populated
+        include: { ctoon: true }
       })
 
       const rarityDepleted = await Promise.all(

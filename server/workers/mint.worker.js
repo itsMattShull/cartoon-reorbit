@@ -46,7 +46,7 @@ const worker = new Worker('mintQueue', async job => {
           `Purchase limit of ${ctoon.perUserLimit} within first 48h reached`
         )
       }
-    } else if (ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
+    } else if (!isSpecial && ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
       // Fallback if no releaseDate
       throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }
