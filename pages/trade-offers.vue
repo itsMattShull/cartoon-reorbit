@@ -101,7 +101,7 @@
             <!-- Offered -->
             <div>
               <h3 class="font-semibold mb-2">Offered CToons</h3>
-              <div class="grid grid-cols-3 gap-4">
+              <div class="grid grid-cols-2 gap-4">
                 <div
                   v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
                   :key="tc.id"
@@ -112,6 +112,9 @@
                     class="w-20 h-20 object-contain mb-1"
                   />
                   <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
+                  <p class="text-xs text-gray-600">
+                    {{ tc.userCtoon.ctoon.rarity }}
+                  </p>
                   <p class="text-xs text-gray-600">
                     Mint #{{ tc.userCtoon.mintNumber }} of
                     {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
@@ -125,7 +128,7 @@
             <!-- Requested -->
             <div>
               <h3 class="font-semibold mb-2">Requested CToons</h3>
-              <div class="grid grid-cols-3 gap-4">
+              <div class="grid grid-cols-2 gap-4">
                 <div
                   v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
                   :key="tc.id"
@@ -136,6 +139,9 @@
                     class="w-20 h-20 object-contain mb-1"
                   />
                   <p class="text-sm text-center">{{ tc.userCtoon.ctoon.name }}</p>
+                  <p class="text-xs text-gray-600">
+                    {{ tc.userCtoon.ctoon.rarity }}
+                  </p>
                   <p class="text-xs text-gray-600">
                     Mint #{{ tc.userCtoon.mintNumber }} of
                     {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
