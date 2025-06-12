@@ -58,6 +58,7 @@ model UserCtoon {
 
   tradeCtoons   TradeCtoon[]
   tradeOfferCtoons TradeOfferCtoon[]
+  auctions          Auction[]
 }
 
 model UserPoints {
@@ -105,6 +106,9 @@ model User {
   wishlistItems   WishlistItem[]
   tradeOffersInitiated TradeOffer[] @relation("OfferInitiator")
   tradeOffersReceived  TradeOffer[] @relation("OfferRecipient")
+  auctionsAsHighestBid  Auction[]   @relation("HighestBidder")
+  auctionsAsWinner      Auction[]   @relation("AuctionWinner")
+  bids                  Bid[]
 }
 
 model UserIP {
@@ -368,4 +372,44 @@ model TradeOfferCtoon {
 enum TradeOfferCtoonRole {
   OFFERED
   REQUESTED
+}
+
+enum AuctionStatus {
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+model Auction {
+  id               String         @id @default(uuid())
+  userCtoonId      String
+  initialBet       Int
+  duration         Int            // days
+  endAt            DateTime
+  status           AuctionStatus  @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+
+  // NEW fields for live tracking and final winner
+  highestBid       Int            @default(0)
+  highestBidderId  String?        
+  winnerId         String?        
+  winnerAt         DateTime?
+
+  userCtoon        UserCtoon      @relation(fields: [userCtoonId],    references: [id])
+  highestBidder    User?          @relation("HighestBidder",   fields: [highestBidderId], references: [id])
+  winner           User?          @relation("AuctionWinner",    fields: [winnerId],        references: [id])
+
+  bids             Bid[]          // one-to-many on Bid
+  @@index([userCtoonId, status])
+}
+
+model Bid {
+  id        String    @id @default(uuid())
+  auctionId String
+  userId    String
+  amount    Int
+  createdAt DateTime  @default(now())
+
+  auction   Auction   @relation(fields: [auctionId], references: [id])
+  user      User      @relation(fields: [userId],    references: [id])
 }

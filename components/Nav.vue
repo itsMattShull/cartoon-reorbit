@@ -108,6 +108,7 @@ const baseLinks = [
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'Collection', to: '/collection' },
   { label: 'cMart', to: '/cmart' },
+  { label: 'Auctions', to: '/auctions' },
   { label: 'Live Trading', to: '/live-trading' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },

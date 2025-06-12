@@ -592,7 +592,67 @@ io.on('connection', socket => {
       }
     }
   });
+
+  socket.on('new-bid', ({ auctionId, user, amount }) => {
+    // broadcast to everyone in auction_<id>
+    console.log('new bid: ', amount)
+    io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
+  })
+
+  socket.on('join-auction', ({ auctionId }) => {
+    console.log('auction: ', auctionId)
+    socket.join(`auction_${auctionId}`)
+  })
+
+  // leave that auction room
+  socket.on('leave-auction', ({ auctionId }) => {
+    socket.leave(`auction_${auctionId}`)
+  })
 })
+
+// 2. Periodically scan for ended auctions and finalize them.
+//    Runs every 30s (adjust as desired).
+setInterval(async () => {
+  const now = new Date()
+  const toClose = await db.auction.findMany({
+    where: { status: 'ACTIVE', endAt: { lte: now } }
+  })
+
+  for (const auc of toClose) {
+    await db.$transaction(async (tx) => {
+      // close it
+      await tx.auction.update({
+        where: { id: auc.id },
+        data: {
+          status: 'CLOSED',
+          winnerId: auc.highestBidderId,
+          winnerAt: now
+        }
+      })
+      // debit winner points
+      if (auc.highestBidderId && auc.highestBid > 0) {
+        await tx.userPoints.update({
+          where: { userId: auc.highestBidderId },
+          data: { points: { decrement: auc.highestBid } }
+        })
+      }
+      // transfer the cToon
+      if (auc.highestBidderId) {
+        await tx.userCtoon.update({
+          where: { id: auc.userCtoonId },
+          data: { userId: auc.highestBidderId }
+        })
+      }
+    })
+
+    // notify clients
+    io.to(`auction_${auc.id}`).emit('auction-ended', {
+      winnerId: auc.highestBidderId,
+      winningBid: auc.highestBid
+    })
+  }
+}, 30 * 1000)
+
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
