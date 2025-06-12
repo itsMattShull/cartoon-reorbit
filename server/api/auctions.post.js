@@ -1,5 +1,3 @@
-// server/api/auctions.post.js
-
 import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
@@ -11,7 +9,7 @@ import {
 const prisma = new PrismaClient()
 
 export default defineEventHandler(async (event) => {
-  // 1. Authenticate user
+  // 1. Authenticate
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -24,9 +22,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  // 2. Parse & validate body
-  const { userCtoonId, initialBet, durationDays } = await readBody(event)
-  if (!userCtoonId || !initialBet || !durationDays) {
+  // 2. Parse & validate
+  const { userCtoonId, initialBet, durationDays, durationMinutes } = await readBody(event)
+  if (
+    !userCtoonId ||
+    !initialBet ||
+    (durationDays === undefined || durationMinutes === undefined)
+  ) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
@@ -39,33 +41,31 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
   }
 
-  // 4. Existing auction check
+  // 4. Active auction check
   const existing = await prisma.auction.findFirst({
-    where: {
-      userCtoonId,
-      status: 'ACTIVE'          // only forbid if there's still an active one
-    }
+    where: { userCtoonId, status: 'ACTIVE' }
   })
   if (existing) {
-    throw createError({ statusCode: 400, statusMessage: 'This cToon already has an active auction' })
+    throw createError({ statusCode: 400, statusMessage: 'There’s already an active auction for this cToon' })
   }
 
-  // 5. Create auction with UTC endAt
-  const now    = Date.now()
-  const later  = now + durationDays * 24 * 60 * 60 * 1000
-  // toISOString() always gives UTC
-  const endAtUtc = new Date(later).toISOString()
+  // 5. Compute endAt
+  const nowMs    = Date.now()
+  const daysMs   = durationDays * 24 * 60 * 60 * 1000
+  const minsMs   = durationMinutes * 60 * 1000
+  const endAtUtc = new Date(nowMs + daysMs + minsMs).toISOString()
 
+  // 6. Create auction
   const auction = await prisma.auction.create({
     data: {
       userCtoonId,
       initialBet,
-      duration:    durationDays,
-      endAt:       endAtUtc
+      duration: durationDays,
+      endAt: endAtUtc
     }
   })
 
-  // 6. Disable tradeability
+  // 7. Disable tradeability
   await prisma.userCtoon.update({
     where: { id: userCtoonId },
     data: { isTradeable: false }
