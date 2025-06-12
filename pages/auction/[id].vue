@@ -1,87 +1,107 @@
 <template>
   <Nav />
+
   <div class="pt-16 px-4 py-6 max-w-3xl mx-auto">
-    <!-- Auction Header -->
-    <h1 class="text-3xl font-bold mb-4">Auction: {{ auction.ctoon.name }}</h1>
+    <!-- Skeleton when loading -->
+    <template v-if="loading">
+      <div class="animate-pulse space-y-4">
+        <!-- Title -->
+        <div class="h-8 bg-gray-200 rounded w-1/3"></div>
+        <!-- Countdown -->
+        <div class="h-4 bg-gray-200 rounded w-1/4"></div>
+        <!-- Image -->
+        <div class="h-64 bg-gray-200 rounded"></div>
+        <!-- Details list -->
+        <div class="space-y-2">
+          <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+          <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+          <div class="h-4 bg-gray-200 rounded w-1/4"></div>
+          <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+        </div>
+        <!-- Bid input -->
+        <div class="h-10 bg-gray-200 rounded w-full"></div>
+        <div class="h-10 bg-gray-200 rounded w-1/2"></div>
+        <!-- Bid history -->
+        <div class="h-6 bg-gray-200 rounded w-1/4 mt-4"></div>
+        <div class="space-y-1">
+          <div class="h-4 bg-gray-200 rounded w-full"></div>
+          <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+          <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      </div>
+    </template>
 
-    <!-- Countdown / Ended Message -->
-    <p v-if="!ended" class="text-sm text-red-600 mb-6">
-      {{ ended ? 'Auction has ended' : `Ending in ${formatRemaining(auction.endAt)}` }}
-    </p>
-    
-    <div v-if="ended" class="mb-6">
-      <span
-        class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
-      >
-        🎉 Winner: {{ displayWinner || '—' }} 🎉
-      </span>
-    </div>
+    <!-- Real content -->
+    <template v-else>
+      <!-- Auction Header -->
+      <h1 class="text-3xl font-bold mb-4">Auction: {{ auction.ctoon.name }}</h1>
 
-    <!-- Ctoon Image Centered -->
-    <div class="flex justify-center mb-6">
-      <img
-        :src="auction.ctoon.assetPath"
-        alt="{{ auction.ctoon.name }}"
-        class="block max-w-full mx-auto rounded"
-      />
-    </div>
-
-    <!-- Details -->
-    <div class="mb-6 space-y-2">
-      <p><strong>Series:</strong> {{ auction.ctoon.series }}</p>
-      <p><strong>Rarity:</strong> {{ auction.ctoon.rarity }}</p>
-      <p><strong>Mint #:</strong> {{ auction.ctoon.mintNumber ?? 'N/A' }}</p>
-      <p><strong>Current Highest Bid:</strong> {{ currentBid }} pts</p>
-    </div>
-
-    <!-- Countdown / Ended Message -->
-    <p v-if="!ended" class="text-sm text-red-600 mb-6">
-      {{ ended ? 'Auction has ended' : `Ending in ${formatRemaining(auction.endAt)}` }}
-    </p>
-
-    <div v-if="ended" class="mb-6">
-      <span
-        class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
-      >
-        🎉 Winner: {{ displayWinner || '—' }} 🎉
-      </span>
-    </div>
-
-    <!-- Bid Form -->
-    <div v-if="!ended" class="mb-6">
-      <label for="bid" class="block text-sm font-medium mb-1">Your Bid (pts)</label>
-      <input
-        id="bid"
-        type="number"
-        v-model.number="bidAmount"
-        :min="currentBid + 1"
-        class="w-full border border-gray-300 rounded px-3 py-2 mb-2"
-      />
-      <button
-        @click="placeBid"
-        :disabled="!canBid"
-        class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
-      >
-        Place Bid
-      </button>
-      <p v-if="!hasEnoughPoints" class="text-sm text-red-500 mt-2">
-        You only have {{ userPoints }} pts.
+      <!-- Countdown / Ended Message -->
+      <p v-if="!ended" class="text-sm text-red-600 mb-6">
+        {{ `Ending in ${formatRemaining(auction.endAt)}` }}
       </p>
-    </div>
+      
+      <div v-if="ended" class="mb-6">
+        <span
+          class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
+        >
+          🎉 Winner: {{ displayWinner || '—' }} 🎉
+        </span>
+      </div>
 
-    <!-- Bid History -->
-    <div class="border-t pt-4">
-      <h2 class="text-xl font-semibold mb-2">Bid History</h2>
-      <ul class="space-y-1 text-sm">
-        <li v-for="(b, i) in bids" :key="i">
-          {{ b.user }}: {{ b.amount }} pts
-        </li>
-        <li v-if="!bids.length" class="text-gray-500">No bids yet.</li>
-      </ul>
-    </div>
+      <!-- Ctoon Image Centered -->
+      <div class="flex justify-center mb-6">
+        <img
+          :src="auction.ctoon.assetPath"
+          :alt="auction.ctoon.name"
+          class="block max-w-full mx-auto rounded"
+        />
+      </div>
 
-    <!-- Toast -->
-    <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
+      <!-- Details -->
+      <div class="mb-6 space-y-2">
+        <p><strong>Series:</strong> {{ auction.ctoon.series }}</p>
+        <p><strong>Rarity:</strong> {{ auction.ctoon.rarity }}</p>
+        <p><strong>Mint #:</strong> {{ auction.ctoon.mintNumber ?? 'N/A' }}</p>
+        <p><strong>Current Highest Bid:</strong> {{ currentBid }} pts</p>
+      </div>
+
+      <!-- Bid Form -->
+      <div v-if="!ended" class="mb-6">
+        <label for="bid" class="block text-sm font-medium mb-1">Your Bid (pts)</label>
+        <input
+          id="bid"
+          type="number"
+          v-model.number="bidAmount"
+          :min="currentBid + 1"
+          class="w-full border border-gray-300 rounded px-3 py-2 mb-2"
+        />
+        <button
+          @click="placeBid"
+          :disabled="!canBid"
+          class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+        >
+          Place Bid
+        </button>
+        <p v-if="!hasEnoughPoints" class="text-sm text-red-500 mt-2">
+          You only have {{ userPoints }} pts.
+        </p>
+      </div>
+
+      <!-- Bid History -->
+      <div class="border-t pt-4">
+        <h2 class="text-xl font-semibold mb-2">Bid History</h2>
+        <ul class="space-y-1 text-sm">
+          <li v-for="(b, i) in bids" :key="i">
+            {{ b.user }}: {{ b.amount }} pts
+          </li>
+          <li v-if="!bids.length" class="text-gray-500">No bids yet.</li>
+        </ul>
+      </div>
+
+      <!-- Toast -->
+      <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
+    </template>
   </div>
 </template>
 
@@ -99,6 +119,7 @@ const route     = useRoute()
 const auctionId = route.params.id
 const { user, fetchSelf } = useAuth()
 
+const loading       = ref(true)
 const auction       = ref({ ctoon: {}, winnerUsername: null, endAt: null })
 const bids          = ref([])
 const currentBid    = ref(0)
@@ -110,7 +131,7 @@ const toastType     = ref('error')
 const now = ref(new Date())
 let timer
 
-// --- Socket.IO client (lazy connect) ---
+// --- Socket.IO client (lazy) ---
 const config = useRuntimeConfig()
 const socket = io(
   import.meta.env.PROD
@@ -120,10 +141,10 @@ const socket = io(
 )
 
 // --- Computed ---
-// Auction ended?
-const ended = computed(() => auction.value.endAt && new Date(auction.value.endAt) <= now.value)
+const ended = computed(() =>
+  auction.value.endAt && new Date(auction.value.endAt) <= now.value
+)
 
-// Highest bidder from bid history
 const topBidderFromHistory = computed(() => {
   if (!bids.value.length) return null
   return bids.value
@@ -131,19 +152,19 @@ const topBidderFromHistory = computed(() => {
     .user
 })
 
-// If API returned a winnerUsername use that, otherwise fall back
 const displayWinner = computed(() =>
   auction.value.winnerUsername || topBidderFromHistory.value
 )
 
-// Can the current user place this bid?
 const canBid = computed(() =>
   !ended.value &&
   bidAmount.value >= currentBid.value + 1 &&
   bidAmount.value <= userPoints.value
 )
 
-const hasEnoughPoints = computed(() => bidAmount.value <= userPoints.value)
+const hasEnoughPoints = computed(() =>
+  bidAmount.value <= userPoints.value
+)
 
 // --- Helpers ---
 function showToast(msg, type = 'error') {
@@ -191,20 +212,19 @@ async function placeBid() {
 
 // --- Lifecycle ---
 onMounted(async () => {
-  // 1) load initial data
+  // load data
   await loadAuction()
+  loading.value = false
 
-  // 2) countdown tick
+  // countdown
   timer = setInterval(() => { now.value = new Date() }, 1000)
 
-  // 3) socket event handlers
+  // socket handlers
   socket.on('connect', () => {
-    console.log('Socket connected:', socket.id)
     socket.emit('join-auction', { auctionId })
   })
 
   socket.on('new-bid', payload => {
-    console.log('Received new-bid:', payload)
     if (payload.auctionId.toString() === auctionId) {
       bids.value.unshift({ user: payload.user, amount: payload.amount })
       currentBid.value = payload.amount
@@ -212,17 +232,11 @@ onMounted(async () => {
     }
   })
 
-  socket.on('auction-ended', ({ winnerId, winningBid, winnerUsername }) => {
-    console.log('Auction ended:', { winnerId, winningBid, winnerUsername })
+  socket.on('auction-ended', ({ winnerUsername, winningBid }) => {
     currentBid.value = winningBid ?? currentBid.value
     auction.value.winnerUsername = winnerUsername || auction.value.winnerUsername
   })
 
-  socket.on('connect_error', err => {
-    console.error('Socket connect error:', err)
-  })
-
-  // 4) finally connect
   socket.connect()
 })
 
