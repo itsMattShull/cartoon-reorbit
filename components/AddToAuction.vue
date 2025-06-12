@@ -116,6 +116,10 @@ function closeModal() {
 }
 
 async function sendToAuction() {
+  if (initialBet.value < 1) {
+    showToast('Initial bet must be at least 1 pt.', 'error')
+    return
+  }
   sending.value = true
   try {
     await $fetch('/api/auctions', {
