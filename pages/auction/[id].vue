@@ -66,6 +66,14 @@
         <p><strong>Current Highest Bid:</strong> {{ currentBid }} pts</p>
       </div>
 
+      <div v-if="ended" class="mb-6">
+        <span
+          class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
+        >
+          🎉 Winner: {{ displayWinner || '—' }} 🎉
+        </span>
+      </div>
+
       <!-- Bid Form -->
       <div v-if="!ended" class="mb-6">
         <label for="bid" class="block text-sm font-medium mb-1">Your Bid (pts)</label>
