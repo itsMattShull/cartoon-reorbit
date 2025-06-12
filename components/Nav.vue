@@ -53,11 +53,21 @@
           @click.native="close"
         >
           <span>{{ item.label }}</span>
+
+          <!-- badge for trade-offers -->
           <span
             v-if="item.to === '/trade-offers' && pendingCount > 0"
             class="inline-block bg-red-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full"
           >
             {{ pendingCount }}
+          </span>
+
+          <!-- badge for auctions -->
+          <span
+            v-if="item.to === '/auctions' && activeCount > 0"
+            class="inline-block bg-blue-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full"
+          >
+            {{ activeCount }}
           </span>
         </NuxtLink>
       </nav>
@@ -91,21 +101,33 @@ async function handleLogout() {
 const route = useRoute()
 const isOnTradeOffersPage = computed(() => route.path === '/trade-offers')
 
-// load pending incoming offers count
+// pending incoming offers count
 const pendingCount = ref(0)
+// active auctions count
+const activeCount = ref(0)
+
 onMounted(async () => {
-  if (!user.value) return
-  try {
-    const offers = await $fetch('/api/trade/offers/incoming')
-    pendingCount.value = offers.filter(o => o.status === 'PENDING').length
-  } catch (err) {
-    console.error('Failed to fetch incoming offers:', err)
+  if (user.value) {
+    try {
+      // fetch incoming trade offers
+      const offers = await $fetch('/api/trade/offers/incoming')
+      pendingCount.value = offers.filter(o => o.status === 'PENDING').length
+
+      // fetch active auctions
+      const auctions = await $fetch('/api/auctions')
+      activeCount.value = Array.isArray(auctions) ? auctions.length : 0
+    } catch (err) {
+      console.error('Failed to fetch counts:', err)
+    }
   }
 })
 
 const baseLinks = [
   { label: 'Showcase', to: '/dashboard' },
-  { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
+  {
+    label: 'My cZone',
+    to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard'
+  },
   { label: 'Collection', to: '/collection' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Auctions', to: '/auctions' },
