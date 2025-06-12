@@ -1,10 +1,9 @@
 // server/api/trade/create-room.post.js
 
 import { v4 as uuidv4 } from 'uuid'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   const { userId } = event.context
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })

@@ -1,7 +1,5 @@
 // scripts/shiftAuctions.js
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 async function main() {
   // how many milliseconds is 21h40m?

@@ -1,9 +1,8 @@
 // server/api/buy.post.js
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 import { mintQueue } from '../../utils/queues'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   try {
     // — Authentication
     const userId = event.context.userId

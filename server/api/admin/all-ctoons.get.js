@@ -1,9 +1,9 @@
 // server/api/admin/all-ctoons.get.js
 
-import { PrismaClient } from '@prisma/client'
+
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1. Admin check

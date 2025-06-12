@@ -2,8 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { PrismaClient } from '@prisma/client';
-const db = new PrismaClient();
+import { prisma as db } from './prisma.js'
 
 const PORT = process.env.SOCKET_PORT || 3001
 

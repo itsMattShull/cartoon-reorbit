@@ -1,10 +1,10 @@
 // server/api/auction/[id]/bid.post.js
-import { PrismaClient } from '@prisma/client'
+
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate user

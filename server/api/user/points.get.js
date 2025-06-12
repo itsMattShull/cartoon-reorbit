@@ -1,9 +1,8 @@
 // server/api/user/points.get.js
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate user via existing /api/auth/me

@@ -1,8 +1,6 @@
 // server/api/collection/[username].get.js
-import { PrismaClient } from '@prisma/client'
 import { createError, defineEventHandler } from 'h3'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const usernameParam = event.context.params.username

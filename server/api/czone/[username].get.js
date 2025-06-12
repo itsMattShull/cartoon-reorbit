@@ -1,9 +1,8 @@
 // server/api/czone/[username].get.js
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, createError } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const { username } = event.context.params

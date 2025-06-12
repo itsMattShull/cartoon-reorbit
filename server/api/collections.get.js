@@ -1,6 +1,6 @@
 // server/api/collections.get.js
 
-import { PrismaClient } from '@prisma/client'
+
 import {
   defineEventHandler,
   getRequestHeader,
@@ -8,7 +8,7 @@ import {
   getQuery
 } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate user

@@ -1,9 +1,9 @@
 // server/api/leaderboard/points.get.js
 
-import { PrismaClient } from '@prisma/client'
+
 import { defineEventHandler } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // fetch the top 10 non-admin users by points

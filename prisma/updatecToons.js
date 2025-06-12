@@ -12,8 +12,7 @@ Very Rare: 3 per-user limit for first 48 hours and 100% of active user base (min
 Crazy Rare: 1 per-user limit for first 48 hours and 50% of active user base (minimum of 25)
 */
 
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 async function main() {
   const priceCtoons = [

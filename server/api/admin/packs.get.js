@@ -1,15 +1,9 @@
 // /api/admin/packs.get.js
 // List packs OR, when ?id=<uuid> is given, return that single pack.
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, getQuery, createError } from 'h3'
 
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
-
+import { prisma } from '@/server/prisma'
 async function assertAdmin (event) {
   const user = event.context.user
   if (!user?.isAdmin) {
@@ -26,7 +20,7 @@ export default defineEventHandler(async (event) => {
   try {
     if (id) {
       // ── SINGLE PACK ─────────────────────────────────────
-      const pack = await db().pack.findUnique({
+      const pack = await prisma.pack.findUnique({
         where: { id },
         include: {
           rarityConfigs: true, // includes probabilityPercent
@@ -42,7 +36,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // ── LIST ALL PACKS ────────────────────────────────────
-    return await db().pack.findMany({
+    return await prisma.pack.findMany({
       include: {
         rarityConfigs: true // include probabilities in list too
       },

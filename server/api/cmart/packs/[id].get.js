@@ -20,14 +20,9 @@
 //   ]
 // }
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
+import { prisma as db } from '@/server/prisma'
 
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
 
 export default defineEventHandler(async (event) => {
   /* ── (Optional) require login ─────────────────────────── */
@@ -44,7 +39,7 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id param' })
 
   /* ── query pack (+children) ───────────────────────────── */
-  const pack = await db().pack.findFirst({
+  const pack = await db.pack.findFirst({
     where: { id, inCmart: true },
     select: {
       id: true,

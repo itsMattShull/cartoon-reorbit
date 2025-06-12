@@ -1,7 +1,5 @@
 // scripts/updateFirstEditions.js
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 async function main() {
   // 1. Load every UserCtoon with its current isFirstEdition, mintNumber, and parent initialQuantity

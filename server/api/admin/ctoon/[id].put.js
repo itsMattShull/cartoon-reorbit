@@ -1,9 +1,9 @@
 // /api/admin/ctoon/[id].put.js
 
-import { PrismaClient } from '@prisma/client'
+
 import { defineEventHandler, getRequestHeader, createError, readBody } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const id = event.context.params.id

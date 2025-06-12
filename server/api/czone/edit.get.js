@@ -2,10 +2,9 @@
 
 import { promises as fs } from 'fs'
 import path from 'path'
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, createError } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user

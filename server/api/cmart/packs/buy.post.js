@@ -10,7 +10,6 @@
 // • user must have ≥ pack.price points
 // • deduct points, create a UserPack row (sealed)
 
-import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
   readBody,
@@ -18,11 +17,8 @@ import {
   createError
 } from 'h3'
 
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
+
 
 export default defineEventHandler(async (event) => {
   /* 1.  authenticate user ------------------------------------------------ */
@@ -42,8 +38,8 @@ export default defineEventHandler(async (event) => {
 
   /* 3.  lookup pack & user points --------------------------------------- */
   const [pack, userPts] = await Promise.all([
-    db().pack.findUnique({ where: { id: packId }, select: { id: true, price: true, inCmart: true } }),
-    db().userPoints.findUnique({ where: { userId: me.id }, select: { points: true } })
+    db.pack.findUnique({ where: { id: packId }, select: { id: true, price: true, inCmart: true } }),
+    db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } })
   ])
   if (!pack || !pack.inCmart) {
     throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
@@ -53,7 +49,7 @@ export default defineEventHandler(async (event) => {
   }
 
   /* 4.  transaction: deduct points + create sealed pack ----------------- */
-  const result = await db().$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     // 4-a  deduct points
     await tx.userPoints.update({
       where: { userId: me.id },

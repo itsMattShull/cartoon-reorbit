@@ -1,6 +1,6 @@
 // server/workers/mint.worker.js
 import { Worker } from 'bullmq'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 const connection = {
   host: process.env.REDIS_HOST,
@@ -10,7 +10,6 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker('mintQueue', async job => {
-  const prisma = new PrismaClient()
   try {
     const { userId, ctoonId, isSpecial = false } = job.data
 

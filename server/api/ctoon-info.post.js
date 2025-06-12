@@ -1,8 +1,8 @@
 import { defineEventHandler, readBody } from 'h3'
-import { PrismaClient } from '@prisma/client'
+
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   const body = await readBody(event)
 
   if (!body || !Array.isArray(body.assetPaths)) {

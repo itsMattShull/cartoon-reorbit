@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+
 import {
   defineEventHandler,
   readMultipartFormData,
@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // ── 1. Admin check ──────────────────────────────────────────────────────

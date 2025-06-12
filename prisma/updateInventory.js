@@ -1,7 +1,5 @@
 // scripts/update-ctoon-supply.js
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/server/prisma'
 
 async function main() {
   // 1. Define your rarity thresholds
