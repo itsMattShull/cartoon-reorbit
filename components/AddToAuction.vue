@@ -35,14 +35,6 @@
         </p>
         <div>
           <p class="block mb-1 font-medium">Duration</p>
-          <label class="inline-flex items-center mr-4">
-            <input
-              type="checkbox"
-              v-model="quick3m"
-              class="form-checkbox"
-            />
-            <span class="ml-2">Quick: 3 minutes</span>
-          </label>
           <div v-if="!quick3m">
             <label class="block mb-1">Days: <span class="font-semibold">{{ timeframe }} day(s)</span></label>
             <input

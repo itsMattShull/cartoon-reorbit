@@ -1,3 +1,4 @@
+// server/api/auctions.post.js
 
 import {
   defineEventHandler,
@@ -5,8 +6,9 @@ import {
   readBody,
   createError
 } from 'h3'
-
 import { prisma } from '@/server/prisma'
+import { useRuntimeConfig } from '#imports'
+import fetch from 'node-fetch'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate
@@ -23,12 +25,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse & validate
-  const { userCtoonId, initialBet, durationDays, durationMinutes } = await readBody(event)
-  if (
-    !userCtoonId ||
-    !initialBet ||
-    (durationDays === undefined || durationMinutes === undefined)
-  ) {
+  const { userCtoonId, initialBet, durationDays = 0, durationMinutes = 0 } = await readBody(event)
+  if (!userCtoonId || !initialBet || (durationDays === undefined || durationMinutes === undefined)) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
@@ -61,7 +59,8 @@ export default defineEventHandler(async (event) => {
       userCtoonId,
       initialBet,
       duration: durationDays,
-      endAt: endAtUtc
+      endAt: endAtUtc,
+      ...(userId ? { creatorId: userId } : {})
     }
   })
 
@@ -71,5 +70,59 @@ export default defineEventHandler(async (event) => {
     data: { isTradeable: false }
   })
 
+  // 8. Send Discord notification (best effort)
+  ;(async () => {
+    try {
+      const config     = useRuntimeConfig()
+      const botToken   = process.env.BOT_TOKEN
+      const guildId    = '1369067208029896794'
+      const channelId  = '1370959477968339004'
+
+      // get base URL (production vs. dev)
+      const baseUrl = config.public.baseUrl ||
+        (process.env.NODE_ENV === 'production'
+          ? 'https://www.cartoonreorbit.com'
+          : `http://localhost:${config.public.socketPort || 3000}`)
+
+      // fetch ctoon details
+      const userCtoon = await prisma.userCtoon.findUnique({
+        where: { id: userCtoonId },
+        include: { ctoon: true }
+      })
+      if (!userCtoon) throw new Error('Failed to load cToon for Discord message')
+
+      const { name, rarity } = userCtoon.ctoon
+      const mintNumber = userCtoon.mintNumber
+      const durationText = durationMinutes > 0
+        ? `${durationMinutes} minute(s)`
+        : `${durationDays} day(s)`
+
+      const auctionLink = `${baseUrl}/auction/${auction.id}`
+
+      const content = `<@${me.discordId}> has created a new auction!\n` +
+        `**cToon:** ${name}\n` +
+        `**Rarity:** ${rarity}\n` +
+        `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
+        `**Starting Bid:** ${initialBet} pts\n` +
+        `**Duration:** ${durationText}\n` +
+        `🔗 <${auctionLink}>`
+
+      await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `${botToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content })
+        }
+      )
+    } catch (discordErr) {
+      console.error('Failed to send Discord notification:', discordErr)
+    }
+  })()
+
+  // 9. Return to client
   return { success: true, auction }
 })

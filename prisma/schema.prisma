@@ -109,6 +109,7 @@ model User {
   auctionsAsHighestBid  Auction[]   @relation("HighestBidder")
   auctionsAsWinner      Auction[]   @relation("AuctionWinner")
   bids                  Bid[]
+  auctionsCreated  Auction[]   @relation("AuctionsCreated")
 }
 
 model UserIP {
@@ -388,14 +389,15 @@ model Auction {
   endAt            DateTime
   status           AuctionStatus  @default(ACTIVE)
   createdAt        DateTime       @default(now())
-
-  // NEW fields for live tracking and final winner
+  creatorId        String?
   highestBid       Int            @default(0)
   highestBidderId  String?        
   winnerId         String?        
   winnerAt         DateTime?
+  endingSoonNotified Boolean @default(false)
 
   userCtoon        UserCtoon      @relation(fields: [userCtoonId],    references: [id])
+  creator          User?           @relation("AuctionsCreated", fields: [creatorId],    references: [id])
   highestBidder    User?          @relation("HighestBidder",   fields: [highestBidderId], references: [id])
   winner           User?          @relation("AuctionWinner",    fields: [winnerId],        references: [id])
 

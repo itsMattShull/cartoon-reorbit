@@ -652,6 +652,63 @@ setInterval(async () => {
   }
 }, 30 * 1000)
 
+setInterval(async () => {
+  const now   = new Date()
+  const five  = new Date(now.getTime() + 5 * 60 * 1000)
+
+  // pick up auctions ending in the next 5m, not yet pinged
+  const soonAuctions = await db.auction.findMany({
+    where: {
+      status: 'ACTIVE',
+      endAt: { lte: five, gt: now },
+      endingSoonNotified: false
+    },
+    include: { userCtoon: { include: { ctoon: true } }, creator: true }
+  })
+
+  for (const auc of soonAuctions) {
+    // build Discord message
+    try {
+      const botToken  = process.env.BOT_TOKEN
+      const channelId = '1370959477968339004'
+      const baseUrl   = (process.env.NODE_ENV === 'production'
+        ? 'https://www.cartoonreorbit.com'
+        : `http://localhost:3001`)
+      const link      = `${baseUrl}/auction/${auc.id}`
+
+      const { name, rarity } = auc.userCtoon.ctoon
+      const mintNumber = auc.userCtoon.mintNumber
+      const content = 
+        `⏰ **Auction ending within 5 minutes!** ⏰\n` +
+        `**cToon:** ${name}\n` +
+        `**Rarity:** ${rarity}\n` +
+        `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
+        `🔗 ${link}`
+
+      await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `${botToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content })
+        }
+      )
+
+      // mark notified
+      await db.auction.update({
+        where: { id: auc.id },
+        data: { endingSoonNotified: true }
+      })
+
+    } catch (err) {
+      console.error(`Failed 5m-warning for auction ${auc.id}:`, err)
+    }
+  }
+}, 60 * 1000)
+
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')

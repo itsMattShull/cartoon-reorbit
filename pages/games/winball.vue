@@ -7,8 +7,11 @@
 </template>
 
 <script setup>
-import { useHead } from '#imports'
- definePageMeta({ layout: false })
+  import { useHead } from '#imports'
+  definePageMeta({
+    middleware: 'auth',
+    layout: 'default'
+  })
  // 1) lock viewport so mobile can’t zoom
  useHead({
    meta: [
