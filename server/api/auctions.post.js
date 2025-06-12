@@ -75,7 +75,6 @@ export default defineEventHandler(async (event) => {
     try {
       const config     = useRuntimeConfig()
       const botToken   = process.env.BOT_TOKEN
-      const guildId    = '1369067208029896794'
       const channelId  = '1370959477968339004'
 
       // get base URL (production vs. dev)

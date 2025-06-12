@@ -1,9 +1,9 @@
 // server/api/trade/offers.post.js
-import { 
-  defineEventHandler, 
-  readBody, 
-  getRequestHeader, 
-  createError 
+import {
+  defineEventHandler,
+  readBody,
+  getRequestHeader,
+  createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
 
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  // 2) Parse & validate body (was getBody → now readBody)
+  // 2) Parse & validate body
   const {
     recipientUsername,
     ctoonIdsRequested = [],
@@ -39,21 +39,22 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 3) Lookup recipient
+  // 3) Lookup recipient & ensure they have a Discord ID
   const recipient = await prisma.user.findUnique({
     where: { username: recipientUsername }
   })
   if (!recipient) {
     throw createError({ statusCode: 404, statusMessage: 'Recipient not found' })
   }
+  const recipientDiscordId = recipient.discordId
+  if (!recipientDiscordId) {
+    console.warn(`Cannot DM ${recipientUsername}: no discordId on record`)
+  }
 
   // 4) Verify ownership of offered cToons
   if (ctoonIdsOffered.length) {
     const ownedByInitiator = await prisma.userCtoon.findMany({
-      where: {
-        id:   { in: ctoonIdsOffered },
-        userId: initiatorId
-      },
+      where: { id: { in: ctoonIdsOffered }, userId: initiatorId },
       select: { id: true }
     })
     if (ownedByInitiator.length !== ctoonIdsOffered.length) {
@@ -67,10 +68,7 @@ export default defineEventHandler(async (event) => {
   // 5) Verify ownership of requested cToons
   if (ctoonIdsRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: {
-        id:   { in: ctoonIdsRequested },
-        userId: recipient.id
-      },
+      where: { id: { in: ctoonIdsRequested }, userId: recipient.id },
       select: { id: true }
     })
     if (ownedByRecipient.length !== ctoonIdsRequested.length) {
@@ -89,14 +87,8 @@ export default defineEventHandler(async (event) => {
       pointsOffered,
       ctoons: {
         create: [
-          ...ctoonIdsOffered.map(id => ({
-            userCtoonId: id,
-            role: 'OFFERED'
-          })),
-          ...ctoonIdsRequested.map(id => ({
-            userCtoonId: id,
-            role: 'REQUESTED'
-          }))
+          ...ctoonIdsOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
+          ...ctoonIdsRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
         ]
       }
     },
@@ -104,6 +96,55 @@ export default defineEventHandler(async (event) => {
       ctoons: { include: { userCtoon: true } }
     }
   })
+
+  try {
+    // 7) Send as a DIRECT MESSAGE to the user via their DM channel
+    if (recipientDiscordId && process.env.BOT_TOKEN) {
+      const BOT_TOKEN = process.env.BOT_TOKEN
+      const isProd = process.env.NODE_ENV === 'production'
+      const baseUrl = isProd
+        ? 'https://www.cartoonreorbit.com/trade-offers'
+        : 'http://localhost:3000/trade-offers'
+
+      // 7a) Open (or fetch) a DM channel with that user
+      const dmChannel = await $fetch(
+        'https://discord.com/api/v10/users/@me/channels',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `${BOT_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: { recipient_id: recipientDiscordId }
+        }
+      )
+
+      // 7b) Post the message into that DM channel
+      const messageContent = [
+        `👋 **${me.username}** has sent you a trade offer!`,
+        `• Points offered: **${pointsOffered}**`,
+        `• cToons offered: **${ctoonIdsOffered.length}**`,
+        `• cToons requested: **${ctoonIdsRequested.length}**`,
+        ``,
+        `🔗 View it here: ${baseUrl}`
+      ].join('\n')
+
+      await $fetch(
+        `https://discord.com/api/v10/channels/${dmChannel.id}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `${BOT_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: { content: messageContent }
+        }
+      )
+    }
+  } catch (err) {
+    // console.error('Failed to send offer DM:', err)
+    // optionally report to an error-tracker here
+  }
 
   return { success: true, offer }
 })

@@ -1,5 +1,9 @@
 // server/api/trade/offers/[id]/accept.post.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import {
+  defineEventHandler,
+  getRequestHeader,
+  createError
+} from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -31,6 +35,12 @@ export default defineEventHandler(async (event) => {
   if (offer.status !== 'PENDING') {
     throw createError({ statusCode: 400, statusMessage: 'Offer is not pending' })
   }
+
+  // 2a) Fetch initiator’s Discord info
+  const initiator = await prisma.user.findUnique({
+    where: { id: offer.initiatorId },
+    select: { discordId: true, username: true }
+  })
 
   // 3) Verify initiator still owns all OFFERED cToons
   const offeredIds = offer.ctoons
@@ -90,7 +100,6 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 6) All good → transfer cToons & accept
   // 6) All good → transfer cToons, deduct points, & accept
   await prisma.$transaction([
     // a) deduct points from initiator and give points to recipient
@@ -123,6 +132,51 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
+  try {
+    // 7) Notify the initiator via Discord DM
+    if (initiator?.discordId && process.env.BOT_TOKEN) {
+      const BOT_TOKEN = process.env.BOT_TOKEN
+      const isProd = process.env.NODE_ENV === 'production'
+      const baseUrl = isProd
+        ? 'https://www.cartoonreorbit.com/trade-offers'
+        : 'http://localhost:3000/trade-offers'
+
+      // 7a) Open or fetch DM channel
+      const dmChannel = await $fetch(
+        'https://discord.com/api/v10/users/@me/channels',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `${BOT_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: { recipient_id: initiator.discordId }
+        }
+      )
+
+      // 7b) Send acceptance message
+      const messageContent = [
+        `🎉 **${me.username}** has accepted your trade offer!`,
+        ``,
+        `🔗 View details: ${baseUrl}`
+      ].join('\n')
+
+      await $fetch(
+        `https://discord.com/api/v10/channels/${dmChannel.id}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `${BOT_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: { content: messageContent }
+        }
+      )
+    }
+  } catch (err) {
+    // console.error('Failed to send acceptance DM:', err)
+    // optionally report to an error-tracker here
+  }
 
   return { success: true }
 })
