@@ -100,8 +100,22 @@
             <div
               v-for="auction in filteredAuctions"
               :key="auction.id"
-              class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full"
+              class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full relative"
             >
+              <!-- Owned / Un-owned badge -->
+              <span
+                v-if="auction.isOwned"
+                class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+              >
+                Owned
+              </span>
+              <span
+                v-else
+                class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+              >
+                Un-owned
+              </span>
+
               <!-- Centered image -->
               <div class="flex-grow flex items-center justify-center">
                 <img
@@ -110,7 +124,7 @@
                 />
               </div>
 
-              <!-- Text at bottom -->
+              <!-- Details & link -->
               <div class="mt-4">
                 <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
                 <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>

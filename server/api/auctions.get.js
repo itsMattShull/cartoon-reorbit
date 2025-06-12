@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
     rarity:      a.userCtoon.ctoon.rarity,
     mintNumber:  a.userCtoon.mintNumber,
     assetPath:   a.userCtoon.ctoon.assetPath,
-    endAt:       a.endAt.toISOString()
+    endAt:       a.endAt.toISOString(),
+    isOwned:    a.userCtoon.userId === me.id
   }))
 })
