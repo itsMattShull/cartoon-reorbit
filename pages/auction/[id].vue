@@ -13,7 +13,7 @@
       <span
         class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
       >
-        🎉 Winner: {{ auction.winnerUsername }} 🎉
+        🎉 Winner: {{ displayWinner || '—' }} 🎉
       </span>
     </div>
 
@@ -43,7 +43,7 @@
       <span
         class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
       >
-        🎉 Winner: {{ auction.winnerUsername }} 🎉
+        🎉 Winner: {{ displayWinner || '—' }} 🎉
       </span>
     </div>
 
@@ -90,72 +90,89 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
 import { useRoute } from 'vue-router'
+import { useRuntimeConfig } from '#imports'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
+// --- Setup & state ---
 const route     = useRoute()
 const auctionId = route.params.id
 const { user, fetchSelf } = useAuth()
 
-// state...
-const auction    = ref({ ctoon: {} })
-const bids       = ref([])
-const currentBid = ref(0)
-const bidAmount  = ref(0)
-const userPoints = ref(0)
-const toastMessage = ref('')
-const toastType    = ref('error')
+const auction       = ref({ ctoon: {}, winnerUsername: null, endAt: null })
+const bids          = ref([])
+const currentBid    = ref(0)
+const bidAmount     = ref(0)
+const userPoints    = ref(0)
+const toastMessage  = ref('')
+const toastType     = ref('error')
 
-// countdown...
 const now = ref(new Date())
 let timer
 
-// only create your socket here:
+// --- Socket.IO client (lazy connect) ---
+const config = useRuntimeConfig()
 const socket = io(
   import.meta.env.PROD
     ? undefined
-    : `http://localhost:${useRuntimeConfig().public.socketPort}`,
+    : `http://localhost:${config.public.socketPort}`,
   { autoConnect: false }
 )
 
+// --- Computed ---
+// Auction ended?
+const ended = computed(() => auction.value.endAt && new Date(auction.value.endAt) <= now.value)
 
-// Computed
-const ended = computed(() => new Date(auction.value.endAt) <= now.value)
+// Highest bidder from bid history
+const topBidderFromHistory = computed(() => {
+  if (!bids.value.length) return null
+  return bids.value
+    .reduce((max, b) => b.amount > max.amount ? b : max, bids.value[0])
+    .user
+})
+
+// If API returned a winnerUsername use that, otherwise fall back
+const displayWinner = computed(() =>
+  auction.value.winnerUsername || topBidderFromHistory.value
+)
+
+// Can the current user place this bid?
 const canBid = computed(() =>
   !ended.value &&
   bidAmount.value >= currentBid.value + 1 &&
   bidAmount.value <= userPoints.value
 )
+
 const hasEnoughPoints = computed(() => bidAmount.value <= userPoints.value)
 
-// Helpers
+// --- Helpers ---
 function showToast(msg, type = 'error') {
   toastMessage.value = msg
   toastType.value = type
-  setTimeout(() => (toastMessage.value = ''), 5000)
+  setTimeout(() => { toastMessage.value = '' }, 5000)
 }
 
 function formatRemaining(endAt) {
   const diff = new Date(endAt) - now.value
   if (diff <= 0) return '0s'
-  const hrs = Math.floor(diff / 3600000)
+  const hrs  = Math.floor(diff / 3600000)
   const mins = Math.floor((diff % 3600000) / 60000)
   const secs = Math.floor((diff % 60000) / 1000)
-  if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`
+  if (hrs > 0)  return `${hrs}h ${mins}m ${secs}s`
   if (mins > 0) return `${mins}m ${secs}s`
   return `${secs}s`
 }
 
+// --- Data loading & actions ---
 async function loadAuction() {
-  // Fetch auction details and user points
   await fetchSelf()
   const data = await $fetch(`/api/auction/${auctionId}`)
   const pts  = await $fetch('/api/user/points')
 
-  auction.value = data
-  bids.value = data.bids
+  auction.value    = data
+  bids.value       = data.bids
   currentBid.value = data.currentBid
-  bidAmount.value = currentBid.value + 1
+  bidAmount.value  = data.currentBid + 1
   userPoints.value = pts.points
 }
 
@@ -172,29 +189,22 @@ async function placeBid() {
   }
 }
 
-// Lifecycle
+// --- Lifecycle ---
 onMounted(async () => {
-  // 1) fetch your initial data
-  await fetchSelf()
-  const data = await $fetch(`/api/auction/${auctionId}`)
-  const pts  = await $fetch('/api/user/points')
-  auction.value    = data
-  bids.value       = data.bids
-  currentBid.value = data.currentBid
-  bidAmount.value  = data.currentBid + 1
-  userPoints.value = pts.points
+  // 1) load initial data
+  await loadAuction()
 
-  // 2) start your countdown
-  timer = setInterval(() => (now.value = new Date()), 1000)
+  // 2) countdown tick
+  timer = setInterval(() => { now.value = new Date() }, 1000)
 
-  // 3) register your listeners *before* connecting
+  // 3) socket event handlers
   socket.on('connect', () => {
-    console.log('socket connected ⚡️', socket.id)
+    console.log('Socket connected:', socket.id)
     socket.emit('join-auction', { auctionId })
   })
 
-  socket.on('new-bid', (payload) => {
-    console.log('got new-bid payload:', payload)
+  socket.on('new-bid', payload => {
+    console.log('Received new-bid:', payload)
     if (payload.auctionId.toString() === auctionId) {
       bids.value.unshift({ user: payload.user, amount: payload.amount })
       currentBid.value = payload.amount
@@ -202,16 +212,17 @@ onMounted(async () => {
     }
   })
 
-  socket.on('auction-ended', ({ winnerId, winningBid }) => {
-    console.log('auction-ended →', { winnerId, winningBid })
-    currentBid.value = winningBid || currentBid.value
+  socket.on('auction-ended', ({ winnerId, winningBid, winnerUsername }) => {
+    console.log('Auction ended:', { winnerId, winningBid, winnerUsername })
+    currentBid.value = winningBid ?? currentBid.value
+    auction.value.winnerUsername = winnerUsername || auction.value.winnerUsername
   })
 
-  socket.on('connect_error', (err) => {
-    console.error('socket failed to connect:', err)
+  socket.on('connect_error', err => {
+    console.error('Socket connect error:', err)
   })
 
-  // 4) now actually open the socket
+  // 4) finally connect
   socket.connect()
 })
 
