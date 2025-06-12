@@ -30,6 +30,9 @@
             class="w-full p-2 border rounded"
           />
         </div>
+        <p v-if="initialBet < 1" class="text-sm text-red-500 mt-1">
+          Initial bet must be at least 1 pt.
+        </p>
         <div>
           <p class="block mb-1 font-medium">Duration</p>
           <label class="inline-flex items-center mr-4">
@@ -58,7 +61,11 @@
       </div>
       <div class="mt-6 flex justify-end space-x-2">
         <button @click="closeModal" class="btn-secondary">Cancel</button>
-        <button @click="sendToAuction" :disabled="sending" class="btn-primary">
+        <button
+          @click="sendToAuction"
+          :disabled="sending || initialBet < 1"
+          class="btn-primary"
+        >
           {{ sending ? 'Sending...' : 'Send to Auction' }}
         </button>
       </div>
