@@ -123,7 +123,7 @@ const socket = io(
 const ended = computed(() => new Date(auction.value.endAt) <= now.value)
 const canBid = computed(() =>
   !ended.value &&
-  bidAmount.value > currentBid.value &&
+  bidAmount.value >= currentBid.value + 1 &&
   bidAmount.value <= userPoints.value
 )
 const hasEnoughPoints = computed(() => bidAmount.value <= userPoints.value)
