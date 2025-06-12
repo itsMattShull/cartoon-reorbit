@@ -1,6 +1,6 @@
 // server/workers/mint.worker.js
 import { Worker } from 'bullmq'
-import { prisma } from '@/server/prisma'
+import { prisma } from '../prisma.js'
 
 const connection = {
   host: process.env.REDIS_HOST,
