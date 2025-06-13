@@ -52,7 +52,15 @@ export default defineEventHandler(async (event) => {
           leftCupPoints:     0,
           rightCupPoints:    0,
           goldCupPoints:     0,
-          grandPrizeCtoonId: null
+          grandPrizeCtoonId: null,
+          dailyPointLimit:   100
+        },
+        select: {
+          dailyPointLimit: true,
+          leftCupPoints: true,
+          rightCupPoints: true,
+          goldCupPoints: true,
+          grandPrizeCtoon: true
         },
         include: {
           grandPrizeCtoon: {

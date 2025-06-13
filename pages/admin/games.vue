@@ -34,6 +34,15 @@
         </div>
       </div>
 
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Daily Point Cap</label>
+        <input
+          type="number"
+          v-model.number="dailyPointLimit"
+          class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+        />
+      </div>
+
       <!-- Grand Prize cToon Autocomplete -->
       <div class="mb-6 relative">
         <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
@@ -116,6 +125,7 @@
   const leftCupPoints   = ref(0)
   const rightCupPoints  = ref(0)
   const goldCupPoints   = ref(0)
+  const dailyPointLimit = ref(100)
 
   const allCtoons       = ref([])
   const grandPrizeCtoon = ref(null)
@@ -136,6 +146,7 @@
         leftCupPoints.value  = config.leftCupPoints
         rightCupPoints.value = config.rightCupPoints
         goldCupPoints.value  = config.goldCupPoints
+        dailyPointLimit.value   = config.dailyPointLimit
         if (config.grandPrizeCtoon) {
           selectedCtoonId.value = config.grandPrizeCtoon.id
           grandPrizeCtoon.value = {
@@ -210,6 +221,7 @@
           leftCupPoints:     leftCupPoints.value,
           rightCupPoints:    rightCupPoints.value,
           goldCupPoints:     goldCupPoints.value,
+          dailyPointLimit:   dailyPointLimit.value,
           grandPrizeCtoonId: selectedCtoonId.value || null
         }
       })

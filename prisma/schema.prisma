@@ -320,6 +320,7 @@ model GameConfig {
   leftCupPoints        Int      @default(0)
   rightCupPoints       Int      @default(0)
   goldCupPoints        Int      @default(0)
+  dailyPointLimit      Int      @default(100)
   grandPrizeCtoonId    String? 
   grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
 
