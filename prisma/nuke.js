@@ -1,7 +1,5 @@
 // server/scripts/nuke.js
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 async function resetDatabase() {
   try {

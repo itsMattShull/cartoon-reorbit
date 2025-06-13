@@ -1,13 +1,8 @@
 // server/api/open-pack.get.js
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { mintQueue } from '../../utils/queues'
 
-let prisma
-function db() {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
 
 async function getMe(event) {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -41,7 +36,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing id param' })
   }
 
-  const userPack = await db().userPack.findUnique({
+  const userPack = await db.userPack.findUnique({
     where: { id: userPackId },
     include: {
       pack: {
@@ -64,7 +59,7 @@ export default defineEventHandler(async (event) => {
   for (const opt of userPack.pack.ctoonOptions) {
     const c = opt.ctoon
     if (c.quantity !== null) {
-      const minted = await db().userCtoon.count({ where: { ctoonId: c.id } })
+      const minted = await db.userCtoon.count({ where: { ctoonId: c.id } })
       if (minted >= c.quantity) continue
     }
     if (!poolByRarity[c.rarity]) poolByRarity[c.rarity] = []
@@ -89,7 +84,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Mark pack opened and handle depletion
-  await db().$transaction(async (tx) => {
+  await db.$transaction(async (tx) => {
     await tx.userPack.update({
       where: { id: userPackId },
       data: { opened: true, openedAt: new Date() }
@@ -98,7 +93,13 @@ export default defineEventHandler(async (event) => {
     const packId = userPack.pack.id
     for (const rc of userPack.pack.rarityConfigs) {
       const options = await tx.packCtoonOption.findMany({
-        where: { packId, ctoon: { rarity: rc.rarity } }
+        where: {
+          packId,
+          // this filters by the Ctoon’s rarity
+          ctoon: { rarity: rc.rarity }
+        },
+        // make sure opt.ctoon is populated
+        include: { ctoon: true }
       })
 
       const rarityDepleted = await Promise.all(

@@ -1,10 +1,9 @@
 // server/api/visit.post.js
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, readBody } from 'h3'
 import { DateTime } from 'luxon'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

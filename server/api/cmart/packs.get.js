@@ -15,14 +15,9 @@
 //
 // No admin check required; optionally fail if user isn’t logged-in.
 
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
+import { prisma as db } from '@/server/prisma'
 
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
 
 export default defineEventHandler(async (event) => {
   /* ── OPTIONAL auth: if your shop requires login to view ───────── */
@@ -36,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   /* ── Fetch packs that are visible in cMart ─────────────────────── */
   try {
-    const packs = await db().pack.findMany({
+    const packs = await db.pack.findMany({
       where: { inCmart: true },
       orderBy: { createdAt: 'desc' },
       select: {

@@ -1,6 +1,6 @@
 // server/api/admin/codes.post.js
 
-import { PrismaClient } from '@prisma/client'
+
 import {
   defineEventHandler,
   readBody,
@@ -8,7 +8,7 @@ import {
   createError
 } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // ── 1. Admin check via your auth endpoint ────────────────────────────────

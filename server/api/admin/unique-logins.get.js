@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client'
-import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
-import { addDays, subMonths, subYears, format, isAfter } from 'date-fns'
 
-const prisma = new PrismaClient()
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
+import { addDays, subMonths, subYears, format } from 'date-fns'
+
+import { prisma } from '@/server/prisma'
 
 function getStartDate(timeframe) {
   const now = new Date()

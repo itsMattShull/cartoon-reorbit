@@ -1,10 +1,10 @@
 // server/api/grant-ctoens.post.js
-import { PrismaClient } from '@prisma/client'
+
 import { defineEventHandler, readBody, createError } from 'h3'
 import { mintQueue } from '../utils/queues'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   try {
     // 1) Authenticate
     const userId = event.context.userId

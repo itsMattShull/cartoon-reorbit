@@ -1,9 +1,8 @@
 // server/api/user/ctoons.get.js
 import { defineEventHandler, getQuery, createError } from 'h3'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   // 1) Ensure the user is authenticated
   const userId = event.context.userId
   if (!userId) {

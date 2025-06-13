@@ -1,5 +1,5 @@
 // server/api/redeem.post.js
-import { PrismaClient } from '@prisma/client'
+
 import {
   defineEventHandler,
   readBody,
@@ -8,7 +8,7 @@ import {
 } from 'h3'
 import { mintQueue } from '../utils/queues'  // import the BullMQ queue
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate user

@@ -57,6 +57,8 @@ model UserCtoon {
   ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
 
   tradeCtoons   TradeCtoon[]
+  tradeOfferCtoons TradeOfferCtoon[]
+  auctions          Auction[]
 }
 
 model UserPoints {
@@ -102,6 +104,12 @@ model User {
   ips              UserIP[]
   packs            UserPack[]
   wishlistItems   WishlistItem[]
+  tradeOffersInitiated TradeOffer[] @relation("OfferInitiator")
+  tradeOffersReceived  TradeOffer[] @relation("OfferRecipient")
+  auctionsAsHighestBid  Auction[]   @relation("HighestBidder")
+  auctionsAsWinner      Auction[]   @relation("AuctionWinner")
+  bids                  Bid[]
+  auctionsCreated  Auction[]   @relation("AuctionsCreated")
 }
 
 model UserIP {
@@ -329,4 +337,81 @@ model WishlistItem {
   ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
 
   @@unique([userId, ctoonId])
+}
+
+/// A pending trade between two users
+model TradeOffer {
+  id             String               @id @default(uuid())
+  initiatorId    String               // who is making the offer
+  recipientId    String               // who will receive the offer
+  pointsOffered  Int                  @default(0)
+  status         String               @default("PENDING")   // e.g. PENDING, ACCEPTED, REJECTED
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  initiator      User                 @relation("OfferInitiator", fields: [initiatorId], references: [id])
+  recipient      User                 @relation("OfferRecipient", fields: [recipientId], references: [id])
+
+  ctoons          TradeOfferCtoon[]
+}
+
+/// Join table tying a specific UserCtoon to a TradeOffer,
+/// tagged as either OFFERED or REQUESTED
+model TradeOfferCtoon {
+  id             String                   @id @default(uuid())
+  tradeOfferId   String
+  userCtoonId    String
+  role           TradeOfferCtoonRole
+
+  tradeOffer     TradeOffer               @relation(fields: [tradeOfferId], references: [id])
+  userCtoon      UserCtoon                @relation(fields: [userCtoonId],  references: [id])
+
+  @@unique([tradeOfferId, userCtoonId, role])
+}
+
+/// Are we offering this cToon, or requesting it?
+enum TradeOfferCtoonRole {
+  OFFERED
+  REQUESTED
+}
+
+enum AuctionStatus {
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+model Auction {
+  id               String         @id @default(uuid())
+  userCtoonId      String
+  initialBet       Int
+  duration         Int            // days
+  endAt            DateTime
+  status           AuctionStatus  @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+  creatorId        String?
+  highestBid       Int            @default(0)
+  highestBidderId  String?        
+  winnerId         String?        
+  winnerAt         DateTime?
+  endingSoonNotified Boolean @default(false)
+
+  userCtoon        UserCtoon      @relation(fields: [userCtoonId],    references: [id])
+  creator          User?           @relation("AuctionsCreated", fields: [creatorId],    references: [id])
+  highestBidder    User?          @relation("HighestBidder",   fields: [highestBidderId], references: [id])
+  winner           User?          @relation("AuctionWinner",    fields: [winnerId],        references: [id])
+
+  bids             Bid[]          // one-to-many on Bid
+  @@index([userCtoonId, status])
+}
+
+model Bid {
+  id        String    @id @default(uuid())
+  auctionId String
+  userId    String
+  amount    Int
+  createdAt DateTime  @default(now())
+
+  auction   Auction   @relation(fields: [auctionId], references: [id])
+  user      User      @relation(fields: [userId],    references: [id])
 }

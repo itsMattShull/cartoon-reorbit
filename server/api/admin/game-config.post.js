@@ -1,5 +1,4 @@
 // server/api/admin/game-config.post.js
-import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
   readBody,
@@ -7,11 +6,7 @@ import {
   createError
 } from 'h3'
 
-let prisma
-function db() {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
 
 function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
@@ -60,7 +55,7 @@ export default defineEventHandler(async (event) => {
 
   // 3) Upsert within a transaction
   try {
-    const result = await db().$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       return await tx.gameConfig.upsert({
         where: { gameName },
         create: {

@@ -1,10 +1,9 @@
 // server/middleware/dailyPoints.js
 // Uses **Luxon** instead of date‑fns‑tz for robust timezone handling
 
-import { PrismaClient } from '@prisma/client'
 import { DateTime } from 'luxon'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.userId

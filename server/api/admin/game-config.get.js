@@ -1,5 +1,4 @@
 // server/api/admin/game-config.get.js
-import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
   getQuery,
@@ -7,11 +6,7 @@ import {
   createError
 } from 'h3'
 
-let prisma
-function db() {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1) Ensure user is authenticated & isAdmin
@@ -35,7 +30,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     // 3) Try to fetch existing config
-    let config = await db().gameConfig.findUnique({
+    let config = await db.gameConfig.findUnique({
       where: { gameName },
       include: {
         grandPrizeCtoon: {
@@ -51,7 +46,7 @@ export default defineEventHandler(async (event) => {
 
     // 4) If not found, create a new default row
     if (!config) {
-      config = await db().gameConfig.create({
+      config = await db.gameConfig.create({
         data: {
           gameName,
           leftCupPoints:     0,

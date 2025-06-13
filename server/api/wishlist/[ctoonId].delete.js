@@ -1,8 +1,7 @@
 // server/api/wishlist/[ctoonId].delete.js
-import { PrismaClient } from '@prisma/client'
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1) auth (as you already have it)…

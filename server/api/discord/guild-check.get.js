@@ -1,10 +1,9 @@
 import 'dotenv/config'
 import { defineEventHandler, createError } from 'h3'
 import { useRuntimeConfig } from '#imports'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   // 1) Must be authenticated
   const userId = event.context.userId
   if (!userId) {

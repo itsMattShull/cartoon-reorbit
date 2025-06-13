@@ -1,10 +1,9 @@
 import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
-import { PrismaClient } from '@prisma/client'
 import jwt from 'jsonwebtoken'
 import { getCookie } from 'h3'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
   const config = useRuntimeConfig(event)
 
   // Try middleware‑injected userId first; otherwise fall back to the persistent JWT cookie.

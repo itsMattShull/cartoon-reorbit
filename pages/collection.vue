@@ -245,6 +245,14 @@
                     First Edition
                   </p>
                 </div>
+                <div class="mt-auto flex space-x-2">
+                  <AddToAuction
+                    :userCtoon="uc"
+                    :isOwner="uc.userId === user.id"
+                    :hasActiveAuction="uc.auctions.length > 0"
+                    @auctionCreated="loadMoreUser"
+                  />
+                </div>
               </div>
 
               <!-- ── “loading more” skeletons at bottom (pages ≥ 2) ── -->
@@ -482,6 +490,12 @@ import { useAuth }      from '@/composables/useAuth'
 import Toast            from '@/components/Toast.vue'
 import AddToWishlist    from '@/components/AddToWishlist.vue'
 import Nav              from '@/components/Nav.vue'
+import AddToAuction     from '@/components/AddToAuction.vue'
+
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
 
 /***** AUTH & USER *****/
 const { user, fetchSelf } = useAuth()

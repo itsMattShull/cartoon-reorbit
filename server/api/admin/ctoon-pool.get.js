@@ -2,7 +2,7 @@
 // Returns cToons that still have supply left to mint (or are unlimited).
 // Filters so that `owners < quantity` OR `quantity` is NULL.
 
-import { PrismaClient } from '@prisma/client'
+
 import {
   defineEventHandler,
   getQuery,
@@ -11,11 +11,7 @@ import {
 } from 'h3'
 
 /* ── Singleton Prisma ──────────────────────────────────────── */
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma } from '@/server/prisma'
 
 /* ── Route handler ─────────────────────────────────────────── */
 export default defineEventHandler(async (event) => {
@@ -38,7 +34,7 @@ export default defineEventHandler(async (event) => {
     : undefined
 
   /* 3️⃣  Fetch with owner counts so we can compare */
-  const raw = await db().ctoon.findMany({
+  const raw = await prisma.ctoon.findMany({
     where: whereName,
     orderBy: { name: 'asc' },
     select: {

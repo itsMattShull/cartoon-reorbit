@@ -2,8 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { PrismaClient } from '@prisma/client';
-const db = new PrismaClient();
+import { prisma as db } from './prisma.js'
 
 const PORT = process.env.SOCKET_PORT || 3001
 
@@ -592,7 +591,124 @@ io.on('connection', socket => {
       }
     }
   });
+
+  socket.on('new-bid', ({ auctionId, user, amount }) => {
+    // broadcast to everyone in auction_<id>
+    console.log('new bid: ', amount)
+    io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
+  })
+
+  socket.on('join-auction', ({ auctionId }) => {
+    console.log('auction: ', auctionId)
+    socket.join(`auction_${auctionId}`)
+  })
+
+  // leave that auction room
+  socket.on('leave-auction', ({ auctionId }) => {
+    socket.leave(`auction_${auctionId}`)
+  })
 })
+
+// 2. Periodically scan for ended auctions and finalize them.
+//    Runs every 30s (adjust as desired).
+setInterval(async () => {
+  const now = new Date()
+  const toClose = await db.auction.findMany({
+    where: { status: 'ACTIVE', endAt: { lte: now } }
+  })
+
+  for (const auc of toClose) {
+    await db.$transaction(async (tx) => {
+      // close it
+      await tx.auction.update({
+        where: { id: auc.id },
+        data: {
+          status: 'CLOSED',
+          winnerId: auc.highestBidderId,
+          winnerAt: now
+        }
+      })
+      // debit winner points
+      if (auc.highestBidderId && auc.highestBid > 0) {
+        await tx.userPoints.update({
+          where: { userId: auc.highestBidderId },
+          data: { points: { decrement: auc.highestBid } }
+        })
+      }
+      // transfer the cToon
+      if (auc.highestBidderId) {
+        await tx.userCtoon.update({
+          where: { id: auc.userCtoonId },
+          data: { userId: auc.highestBidderId }
+        })
+      }
+    })
+
+    // notify clients
+    io.to(`auction_${auc.id}`).emit('auction-ended', {
+      winnerId: auc.highestBidderId,
+      winningBid: auc.highestBid
+    })
+  }
+}, 30 * 1000)
+
+setInterval(async () => {
+  const now   = new Date()
+  const five  = new Date(now.getTime() + 5 * 60 * 1000)
+
+  // pick up auctions ending in the next 5m, not yet pinged
+  const soonAuctions = await db.auction.findMany({
+    where: {
+      status: 'ACTIVE',
+      endAt: { lte: five, gt: now },
+      endingSoonNotified: false
+    },
+    include: { userCtoon: { include: { ctoon: true } }, creator: true }
+  })
+
+  for (const auc of soonAuctions) {
+    // build Discord message
+    try {
+      const botToken  = process.env.BOT_TOKEN
+      const channelId = '1370959477968339004'
+      const baseUrl   = (process.env.NODE_ENV === 'production'
+        ? 'https://www.cartoonreorbit.com'
+        : `http://localhost:3001`)
+      const link      = `${baseUrl}/auction/${auc.id}`
+
+      const { name, rarity } = auc.userCtoon.ctoon
+      const mintNumber = auc.userCtoon.mintNumber
+      const content = 
+        `⏰ **Auction ending within 5 minutes!** ⏰\n` +
+        `**cToon:** ${name}\n` +
+        `**Rarity:** ${rarity}\n` +
+        `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
+        `🔗 ${link}`
+
+      await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `${botToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content })
+        }
+      )
+
+      // mark notified
+      await db.auction.update({
+        where: { id: auc.id },
+        data: { endingSoonNotified: true }
+      })
+
+    } catch (err) {
+      console.error(`Failed 5m-warning for auction ${auc.id}:`, err)
+    }
+  }
+}, 60 * 1000)
+
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')

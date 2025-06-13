@@ -1,7 +1,5 @@
 // scripts/set-inGuild.js
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/server/prisma'
 
 async function main() {
   // 1) Find the most recently created user

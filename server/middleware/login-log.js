@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client'
 import { startOfDay, endOfDay } from 'date-fns'
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context?.userId

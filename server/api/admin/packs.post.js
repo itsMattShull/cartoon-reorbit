@@ -4,7 +4,6 @@
 //   • field "meta"   – JSON string of the pack metadata (name, price, etc.)
 //   • field "image"  – PNG or JPEG file
 
-import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
   readMultipartFormData,
@@ -15,11 +14,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-let prisma
-function db () {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -91,7 +86,7 @@ export default defineEventHandler(async (event) => {
     : `/packs/${filename}`
 
 
-  const result = await db().$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const pack = await tx.pack.create({
       data: {
         name: meta.name,

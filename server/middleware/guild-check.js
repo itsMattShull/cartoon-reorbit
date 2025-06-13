@@ -1,12 +1,11 @@
 import { refreshDiscordTokenAndRoles } from '../utils/refreshDiscordTokenAndRoles.js'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) return
 
   const config = useRuntimeConfig(event)
-  const prisma = new PrismaClient()
 
   const user = await prisma.user.findUnique({
     where: { id: userId }

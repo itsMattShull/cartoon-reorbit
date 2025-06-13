@@ -1,6 +1,5 @@
 import { defineEventHandler } from 'h3'
-import { PrismaClient } from '@prisma/client'
-const db = new PrismaClient()
+import { prisma as db } from '@/server/prisma'
 
 // In-memory cache
 let cache = null

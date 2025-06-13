@@ -1,9 +1,8 @@
 // server/api/trade/rooms.get.js
 import { defineEventHandler } from 'h3'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const prisma = new PrismaClient()
 
   try {
     const rooms = await prisma.tradeRoom.findMany({

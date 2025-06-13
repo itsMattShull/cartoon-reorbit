@@ -1,9 +1,8 @@
 // File: server/api/game/winball.post.js
 import { defineEventHandler, createError, readBody } from 'h3'
-import { PrismaClient } from '@prisma/client'
 import { mintQueue } from '../../utils/queues'  // import BullMQ queue
 
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId

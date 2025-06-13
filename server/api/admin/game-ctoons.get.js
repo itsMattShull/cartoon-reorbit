@@ -1,5 +1,4 @@
 // server/api/ctoos.get.js
-import { PrismaClient } from '@prisma/client'
 import {
   defineEventHandler,
   readBody,
@@ -7,11 +6,7 @@ import {
   createError
 } from 'h3'
 
-let prisma
-function db() {
-  if (!prisma) prisma = new PrismaClient()
-  return prisma
-}
+import { prisma as db } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   // 1) Ensure user is authenticated & isAdmin
@@ -27,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const ctoons = await db().ctoon.findMany({
+    const ctoons = await db.ctoon.findMany({
       select: {
         id:        true,
         name:      true,

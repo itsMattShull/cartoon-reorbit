@@ -1,7 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/server/prisma'
 
 // Utility: parse a Discord “snowflake” ID into its creation Date
 function parseDiscordSnowflake(snowflake) {
