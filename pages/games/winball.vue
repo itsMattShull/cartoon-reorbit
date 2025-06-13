@@ -7,11 +7,8 @@
 </template>
 
 <script setup>
-  import { useHead } from '#imports'
-  definePageMeta({
-    middleware: 'auth',
-    layout: 'default'
-  })
+import { useHead } from '#imports'
+ definePageMeta({ layout: false })
  // 1) lock viewport so mobile can’t zoom
  useHead({
    meta: [
@@ -166,7 +163,7 @@ onMounted(() => {
   const ballWallRestitution = 1.2   // high restitution for energetic wall bounces
   const boardFriction = 0         // moderate friction on playfield for rolling
   const boardRestitution = 0.0      // no bounce on the board surface
-  const plungerMaxPull = 0.6                    // max pull distance
+  const plungerMaxPull = 0.65                    // max pull distance
   const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
   const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
   const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
@@ -654,7 +651,7 @@ bumperXs.forEach((bx) => {
     requestAnimationFrame(animate)
     // controls.update()
 
-    const dt = clock.getDelta() || 1/60
+    const dt = 0.003
 
     if (plungerMesh && plungerBody) {
       // Determine desired plunger position
