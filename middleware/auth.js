@@ -15,8 +15,9 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo('/setup-username')
   }
 
-  //if user is missing roles or not in the guild, send them to join discord
-  if ((!user.value.roles || !user.value.inGuild) && to.path !== '/join-discord') {
+  // if user is missing roles or not in the guild, send them to join discord
+  // if ((!user.value.roles || !user.value.inGuild) && to.path !== '/join-discord') {
+  if ((!user.value.inGuild) && to.path !== '/join-discord') {
     return navigateTo('/join-discord')
   }
 })
