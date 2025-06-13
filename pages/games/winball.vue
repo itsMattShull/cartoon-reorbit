@@ -654,7 +654,7 @@ bumperXs.forEach((bx) => {
     requestAnimationFrame(animate)
     // controls.update()
 
-    const dt = 0.003
+    const dt = clock.getDelta()
 
     if (plungerMesh && plungerBody) {
       // Determine desired plunger position
