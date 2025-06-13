@@ -362,9 +362,9 @@
   <transition name="fade">
     <div
       v-if="wishlistModalVisible"
-      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
     >
-      <div class="bg-white rounded-lg shadow-lg w-96 p-6 relative">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
         <button
           class="absolute top-3 right-3 text-gray-500 hover:text-black"
           @click="closeWishlist"
@@ -394,11 +394,10 @@
   <transition name="fade">
     <div
       v-if="collectionModalVisible"
-      class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
     >
       <div
-        class="relative bg-white rounded-lg shadow-lg w-11/12 max-w-2xl p-6 flex flex-col"
-        style="max-height:80vh;"
+        class="relative bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 flex flex-col max-h-[80vh] overflow-y-auto"
       >
         <!-- Close -->
         <button
