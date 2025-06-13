@@ -421,7 +421,7 @@
           <div v-else-if="collectionCtoons.length === 0" class="text-center py-10">
             No cToons in their collection.
           </div>
-          <div v-else class="grid grid-cols-4 gap-4">
+          <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div
               v-for="c in collectionCtoons"
               :key="c.id"
@@ -467,7 +467,7 @@
           <div v-else-if="selfCtoons.length === 0" class="text-center py-10">
             You have no cToons to trade.
           </div>
-          <div v-else class="grid grid-cols-4 gap-4 mb-20">
+          <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-20">
             <div
               v-for="c in selfCtoons"
               :key="c.id"
