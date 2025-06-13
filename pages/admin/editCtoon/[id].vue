@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16 relative">
       <h1 class="text-2xl font-semibold mb-4">Edit cToon</h1>
       <form @submit.prevent="submitForm" class="space-y-4">
         <!-- Image Display (no re-upload) -->
@@ -94,6 +94,9 @@
           <button class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Update cToon</button>
         </div>
       </form>
+
+      <!-- Toast -->
+      <Toast v-if="showToast" :message="toastMessage" :type="toastType" />
     </div>
   </div>
 </template>
@@ -101,12 +104,13 @@
 <script setup>
 definePageMeta({
   middleware: ['auth', 'admin'],
-      layout: 'default'
+  layout: 'default'
 })
 
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
+import Toast from '~/components/Toast.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -129,59 +133,58 @@ const characters = ref('')
 const seriesOptions = ref([])
 const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
 
-// ── HELPERS ─────────────────────────────────────────────────────────────────
-// Turn a UTC ISO string into the "YYYY-MM-DDTHH:mm" string that
-// <input type="datetime-local"> expects—rendered in America/Chicago.
+// Toast state
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref('success')
+function displayToast(message, type = 'error') {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+  setTimeout(() => showToast.value = false, 5000)
+}
+
+// Date helpers (unchanged)
 function toDateTimeLocal(utcString) {
   const dt = new Date(utcString)
-  // Swedish locale gives "YYYY-MM-DD HH:mm" in 24hr. Split & swap:
   const formatted = new Intl.DateTimeFormat('sv', {
-    timeZone: 'America/Chicago',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-    hour12: false
+    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
   }).format(dt)
   const [date, time] = formatted.split(' ')
   return `${date}T${time}`
 }
-
-// Take the naive "YYYY-MM-DDTHH:mm" (which we mean as America/Chicago)
-// and turn it into a true UTC-ISO string:
 function localToUtcIso(localDateTime) {
-  const dt = new Date(localDateTime) // parsed in the browser’s local zone
-  // Re-interpret that same clock-time in Chicago:
-  const dtInZone = new Date(
-    dt.toLocaleString('en-US', { timeZone: 'America/Chicago' })
-  )
+  const dt = new Date(localDateTime)
+  const dtInZone = new Date(dt.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
   const offset = dtInZone.getTime() - dt.getTime()
   const utcMillis = dt.getTime() - offset
   return new Date(utcMillis).toISOString()
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
-  const res = await fetch(`/api/admin/ctoon/${id}`, { credentials: 'include' })
-  const { ctoon } = await res.json()
-  if (!ctoon) {
-    alert('Failed to load cToon.')
-    return
-  }
-  name.value = ctoon.name
-  type.value = ctoon.type
-  series.value = ctoon.series
-  rarity.value = ctoon.rarity
-  price.value = ctoon.price
-  releaseDate.value     = toDateTimeLocal(ctoon.releaseDate)
-  perUserLimit.value = ctoon.perUserLimit
-  quantity.value = ctoon.quantity
-  initialQuantity.value = ctoon.initialQuantity
-  inCmart.value = ctoon.inCmart
-  assetPath.value = ctoon.assetPath
-  setField.value = ctoon.set
-  characters.value = (ctoon.characters || []).join(', ')
+  try {
+    const res = await fetch(`/api/admin/ctoon/${id}`, { credentials: 'include' })
+    if (!res.ok) throw new Error('Failed to load')
+    const { ctoon } = await res.json()
+    name.value = ctoon.name
+    type.value = ctoon.type
+    series.value = ctoon.series
+    rarity.value = ctoon.rarity
+    price.value = ctoon.price
+    releaseDate.value = toDateTimeLocal(ctoon.releaseDate)
+    perUserLimit.value = ctoon.perUserLimit
+    quantity.value = ctoon.quantity
+    initialQuantity.value = ctoon.initialQuantity
+    inCmart.value = ctoon.inCmart
+    assetPath.value = ctoon.assetPath
+    setField.value = ctoon.set
+    characters.value = (ctoon.characters || []).join(', ')
 
-  const seriesRes = await fetch('/api/admin/series', { credentials: 'include' })
-  seriesOptions.value = await seriesRes.json()
+    const seriesRes = await fetch('/api/admin/series', { credentials: 'include' })
+    seriesOptions.value = await seriesRes.json()
+  } catch (err) {
+    displayToast('Error loading cToon', 'error')
+  }
 })
 
 watch(rarity, val => {
@@ -190,27 +193,30 @@ watch(rarity, val => {
 })
 
 async function submitForm() {
-  const utcRelease = localToUtcIso(releaseDate.value)
-
-  await fetch(`/api/admin/ctoon/${id}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: name.value,
-      series: series.value,
-      rarity: rarity.value,
-      price: price.value,
-      releaseDate: utcRelease,
-      perUserLimit: perUserLimit.value,
-      quantity: quantity.value,
-      initialQuantity: initialQuantity.value,
-      inCmart: inCmart.value,
-      set: setField.value,
-      characters: characters.value.split(',').map(c => c.trim())
+  try {
+    const utcRelease = localToUtcIso(releaseDate.value)
+    const res = await fetch(`/api/admin/ctoon/${id}`, {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.value,
+        series: series.value,
+        rarity: rarity.value,
+        price: price.value,
+        releaseDate: utcRelease,
+        perUserLimit: perUserLimit.value,
+        quantity: quantity.value,
+        initialQuantity: initialQuantity.value,
+        inCmart: inCmart.value,
+        set: setField.value,
+        characters: characters.value.split(',').map(c => c.trim())
+      })
     })
-  })
-  router.push('/admin/ctoons')
+    if (!res.ok) throw new Error('Update failed')
+    displayToast('cToon updated!', 'success')
+    router.push('/admin/ctoons')
+  } catch (err) {
+    displayToast('Error updating cToon', 'error')
+  }
 }
-
 </script>
