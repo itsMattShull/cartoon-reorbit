@@ -166,7 +166,7 @@ onMounted(() => {
   const ballWallRestitution = 1.2   // high restitution for energetic wall bounces
   const boardFriction = 0         // moderate friction on playfield for rolling
   const boardRestitution = 0.0      // no bounce on the board surface
-  const plungerMaxPull = 0.6                    // max pull distance
+  const plungerMaxPull = 0.65                    // max pull distance
   const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
   const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
   const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
@@ -654,7 +654,7 @@ bumperXs.forEach((bx) => {
     requestAnimationFrame(animate)
     // controls.update()
 
-    const dt = clock.getDelta() || 1/60
+    const dt = clock.getDelta()
 
     if (plungerMesh && plungerBody) {
       // Determine desired plunger position
@@ -695,14 +695,14 @@ bumperXs.forEach((bx) => {
     }
 
     // ALSO: if we haven’t pulled or launched yet, keep ball glued
-    if (!plungerPulling && !ballLaunched) {
-      const frontZ = plungerBody.position.z - plungerLength / 2
-      const targetZ = frontZ - ballRadius
-      const targetY = boardYAt(frontZ) + ballRadius
-      ballBody.position.set(laneCenterX, targetY, targetZ)
-      ballBody.velocity.setZero()
-      ballBody.angularVelocity.setZero()
-    }
+    //if (!plungerPulling && !ballLaunched) {
+      //const frontZ = plungerBody.position.z - plungerLength / 2
+      //const targetZ = frontZ - ballRadius
+      //const targetY = boardYAt(frontZ) + ballRadius
+      //ballBody.position.set(laneCenterX, targetY, targetZ)
+      //ballBody.velocity.setZero()
+      //ballBody.angularVelocity.setZero()
+    //}
 
     // Step the physics world
     world.step(1/60, dt, 20)
@@ -732,7 +732,7 @@ bumperXs.forEach((bx) => {
 
     // --- Stop ball at south wall and lock it in place ---
     const southLimit = southZ - ballRadius
-    if (ballLaunched && ballBody.position.z >= southLimit - 1 && !gameEnded) {
+    if (ballBody.position.x<16.75 && ballBody.position.z >= southLimit - 1 && !gameEnded) {
       stateHistory.push({
         position: {
           x: ballBody.position.x,
@@ -809,7 +809,7 @@ bumperXs.forEach((bx) => {
     }
 
     // Close cap once ball has cleared the curve and is moving away
-    if (!capClosed && ballBody.position.z + 4 < startZ - ballRadius && ballBody.velocity.z < 0) {
+    if (!capClosed && ballBody.velocity.x != 0) {
       capClosed = true
       ballLaunched = true
       // Cap wall creation
