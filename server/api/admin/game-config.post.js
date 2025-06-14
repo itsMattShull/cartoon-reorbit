@@ -12,7 +12,7 @@ function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName"' })
   }
-  ['leftCupPoints', 'rightCupPoints', 'goldCupPoints'].forEach(field => {
+  ['leftCupPoints', 'rightCupPoints', 'goldCupPoints', 'dailyPointLimit'].forEach(field => {
     if (payload[field] == null || typeof payload[field] !== 'number') {
       throw createError({
         statusCode: 400,
@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
     leftCupPoints,
     rightCupPoints,
     goldCupPoints,
+    dailyPointLimit,
     grandPrizeCtoonId
   } = body
 
@@ -63,12 +64,14 @@ export default defineEventHandler(async (event) => {
           leftCupPoints,
           rightCupPoints,
           goldCupPoints,
+          dailyPointLimit,
           grandPrizeCtoonId: grandPrizeCtoonId || null
         },
         update: {
           leftCupPoints,
           rightCupPoints,
           goldCupPoints,
+          dailyPointLimit,
           grandPrizeCtoonId: grandPrizeCtoonId || null,
           updatedAt: new Date()
         },

@@ -333,13 +333,31 @@
           <div
             v-for="item in packContents"
             :key="item.id"
-            class="flex flex-col items-center"
+            class="relative flex flex-col items-center p-4 border rounded-lg bg-white"
+            :class="{ 'card-glow': !item.inCmart }"
           >
+            <!-- New! badge -->
+            <span
+              v-if="!originalOwnedSet.has(item.id)"
+              class="absolute top-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full"
+            >
+              New!
+            </span>
+
+            <!-- Image -->
             <img
               :src="item.assetPath"
-              class="max-w-full h-auto object-contain rounded border border-gray-300"
+              class="w-24 h-24 object-contain mb-2 mt-8"
             />
-            <p class="mt-2 text-xs text-center">{{ item.name }}</p>
+
+            <!-- Name -->
+            <p class="font-semibold text-sm text-center">{{ item.name }}</p>
+
+            <!-- Rarity -->
+            <p class="text-xs text-gray-600 capitalize">{{ item.rarity }}</p>
+
+            <!-- Mint # -->
+            <p class="text-xs text-gray-500">Mint #{{ item.mintNumber }}</p>
           </div>
         </div>
 
@@ -383,6 +401,11 @@ const buyingPacks  = ref(new Set())
 
 // ────────── Auth & User ────────────────────────
 const { user, fetchSelf } = useAuth()
+
+// Track what they owned _before_ opening this pack
+const originalOwnedSet = computed(() =>
+  new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+)
 
 // ────────── Tabs ───────────────────────────────
 const activeTab = ref('cToons')
@@ -716,5 +739,15 @@ function closeOverlay() {
   to {
     opacity: 0;
   }
+}
+
+/* highlight cToons that went out of stock (inCmart=false) */
+@keyframes cardGlow {
+  0%   { box-shadow: 0 0 0px   rgba(255,215,0,0.5); }
+  50%  { box-shadow: 0 0 10px  rgba(255,215,0,1);   }
+  100% { box-shadow: 0 0 0px   rgba(255,215,0,0.5); }
+}
+.card-glow {
+  animation: cardGlow 2s infinite ease-in-out;
 }
 </style>

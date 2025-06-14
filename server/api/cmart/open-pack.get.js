@@ -124,11 +124,32 @@ export default defineEventHandler(async (event) => {
     await mintQueue.add('mintCtoon', { userId, ctoonId: c.id, isSpecial: true })
   }
 
-  // Return the selected cToons in the same shape as before
+  // Immediately create userCtoon records so we know mintNumber, and capture inCmart
+  const mintNumbers = {}
+  const inCmartFlags = {}
+  for (const c of chosen) {
+    // how many this user already has
+    const priorCount = await db.userCtoon.count({
+      where: { userId, ctoonId: c.id }
+    })
+    const mintNumber = priorCount + 1
+    // create the actual record
+    await db.userCtoon.create({
+      data: { userId, ctoonId: c.id, mintNumber }
+    })
+    mintNumbers[c.id] = mintNumber
+    // grab the up-to-date inCmart from the ctoon row
+    const full = await db.ctoon.findUnique({ where: { id: c.id } })
+    inCmartFlags[c.id] = full?.inCmart ?? true
+  }
+
+  // Return the selected cToons with mintNumber + inCmart
   return chosen.map(c => ({
-    id: c.id,
-    name: c.name,
-    assetPath: c.assetPath,
-    rarity: c.rarity
-  }))
+    id:         c.id,
+    name:       c.name,
+    assetPath:  c.assetPath,
+    rarity:     c.rarity,
+    mintNumber: mintNumbers[c.id],
+    inCmart:    inCmartFlags[c.id]
+ }))
 })
