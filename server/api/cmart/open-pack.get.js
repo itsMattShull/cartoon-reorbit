@@ -133,10 +133,6 @@ export default defineEventHandler(async (event) => {
       where: { userId, ctoonId: c.id }
     })
     const mintNumber = priorCount + 1
-    // create the actual record
-    // await db.userCtoon.create({
-    //   data: { userId, ctoonId: c.id, mintNumber }
-    // })
     mintNumbers[c.id] = mintNumber
     // grab the up-to-date inCmart from the ctoon row
     const full = await db.ctoon.findUnique({ where: { id: c.id } })
