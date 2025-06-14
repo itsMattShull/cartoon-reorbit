@@ -102,7 +102,7 @@ export default defineEventHandler(async (event) => {
       const imageUrl = assetPath
         ? assetPath.startsWith('http')
           ? assetPath
-          : `${baseUrl}/images${assetPath}`
+          : `${baseUrl}${assetPath}`
         : null
 
         console.log(imageUrl)
