@@ -132,6 +132,8 @@ export default defineEventHandler(async (event) => {
         }
       )
       console.log('Discord API status:', res.status, res.statusText)
+      const json = await res.json()
+      console.log('Discord API response JSON:', json)
     } catch (discordErr) {
       console.error('Failed to send Discord notification:', discordErr)
     }
