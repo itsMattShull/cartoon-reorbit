@@ -1,16 +1,25 @@
-// server/api/collection/[username].get.js
-import { createError, defineEventHandler } from 'h3'
+// File: server/api/collection/[username].get.js
+
+import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const usernameParam = event.context.params.username
+  const { username } = event.context.params
+  const { filter } = getQuery(event)
 
+  // Fetch user along with their cToons
   const userWithCtoons = await prisma.user.findUnique({
-    where: { username: usernameParam },
+    where: { username },
     include: {
       ctoons: {
-        where: { isTradeable: true },
-        include: { ctoon: true }
+        where: {
+          isTradeable: true,
+          // If filter=gtoon, only include ctoons marked as gToons
+          ...(filter === 'gtoon' ? { ctoon: { isGtoon: true } } : {})
+        },
+        include: {
+          ctoon: true
+        }
       }
     }
   })

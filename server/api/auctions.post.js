@@ -90,7 +90,7 @@ export default defineEventHandler(async (event) => {
       })
       if (!userCtoon) throw new Error('Failed to load cToon for Discord message')
 
-      const { name, rarity } = userCtoon.ctoon
+      const { name, rarity, assetPath } = userCtoon.ctoon
       const mintNumber = userCtoon.mintNumber
       const durationText = durationMinutes > 0
         ? `${durationMinutes} minute(s)`
@@ -98,13 +98,25 @@ export default defineEventHandler(async (event) => {
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
 
-      const content = `<@${me.discordId}> has created a new auction!\n` +
-        `**cToon:** ${name}\n` +
-        `**Rarity:** ${rarity}\n` +
-        `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
-        `**Starting Bid:** ${initialBet} pts\n` +
-        `**Duration:** ${durationText}\n` +
-        `🔗 <${auctionLink}>`
+      // build full image URL
+      const imageUrl = assetPath
+        ? assetPath.startsWith('http')
+          ? assetPath
+          : `${baseUrl}/images/${assetPath}`
+        : null
+
+      // construct payload with embed including image
+      const payload = {
+        content: `<@${me.discordId}> has created a new auction!`,
+        embeds: [
+          {
+            title: name,
+            url: auctionLink,
+            description: `**Rarity:** ${rarity}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
+            ...(imageUrl ? { image: { url: imageUrl } } : {})
+          }
+        ]
+      }
 
       await fetch(
         `https://discord.com/api/v10/channels/${channelId}/messages`,
@@ -114,7 +126,7 @@ export default defineEventHandler(async (event) => {
             'Authorization': `${botToken}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ content })
+          body: JSON.stringify(payload)
         }
       )
     } catch (discordErr) {

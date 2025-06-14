@@ -34,6 +34,7 @@ model Ctoon {
   createdAt       DateTime        @default(now())
   set             String?
   characters      String[]
+  isGtoon         Boolean         @default(false)
 
   owners          UserCtoon[]
   rewardCtoons    RewardCtoon[]
