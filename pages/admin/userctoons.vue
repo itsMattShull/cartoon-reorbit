@@ -96,14 +96,13 @@
               <th class="px-4 py-2 text-left">cToon Name</th>
               <th class="px-4 py-2 text-right">Mint #</th>
               <th class="px-4 py-2 text-left">Owner</th>
-              <th class="px-4 py-2 text-center">1st Edition</th>  <!-- added -->
+              <th class="px-4 py-2 text-center">1st Edition</th>
               <th class="px-4 py-2 text-left">Acquired (CDT)</th>
               <th class="px-4 py-2 text-left">Release Date (CDT)</th>
               <th class="px-4 py-2 text-left">Rarity</th>
               <th class="px-4 py-2 text-right">Highest Mint</th>
               <th class="px-4 py-2 text-right">Quantity</th>
               <th class="px-4 py-2 text-center">In C-mart</th>
-              <th class="px-4 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -133,14 +132,6 @@
                 {{ uc.ctoon.quantity == null ? 'Unlimited' : uc.ctoon.quantity }}
               </td>
               <td class="px-4 py-2 text-center">{{ uc.ctoon.inCmart ? 'Yes' : 'No' }}</td>
-              <td class="px-4 py-2 text-right">
-                <button
-                  @click="deleteUserCtoon(uc.id)"
-                  class="text-red-600 hover:text-red-800"
-                >
-                  Delete
-                </button>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -166,7 +157,7 @@
           </div>
           <ul class="text-sm space-y-1 mb-4">
             <li><strong>Mint #:</strong> {{ uc.mintNumber }}</li>
-            <li><strong>1st Edition:</strong> {{ uc.isFirstEdition ? 'Yes' : 'No' }}</li>  <!-- added -->
+            <li><strong>1st Edition:</strong> {{ uc.isFirstEdition ? 'Yes' : 'No' }}</li>
             <li><strong>Acquired:</strong> {{ formatDate(uc.createdAt) }}</li>
             <li><strong>Release:</strong> {{ formatDate(uc.ctoon.releaseDate) }}</li>
             <li><strong>Rarity:</strong> {{ uc.ctoon.rarity }}</li>
@@ -174,12 +165,6 @@
             <li><strong>Quantity:</strong> {{ uc.ctoon.quantity == null ? 'Unlimited' : uc.ctoon.quantity }}</li>
             <li><strong>In C-mart:</strong> {{ uc.ctoon.inCmart ? 'Yes' : 'No' }}</li>
           </ul>
-          <button
-            @click="deleteUserCtoon(uc.id)"
-            class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-          >
-            Delete
-          </button>
         </div>
       </div>
 
@@ -269,20 +254,6 @@ function applyFilters() {
   finished.value = false
   userCtoons.value = []
   loadNext()
-}
-
-// Delete a UserCtoon
-async function deleteUserCtoon(id) {
-  if (!confirm('Are you sure you want to delete this entry?')) return
-  const res = await fetch(`/api/admin/user-ctoons/${id}`, {
-    method: 'DELETE',
-    credentials: 'include'
-  })
-  if (res.ok) {
-    userCtoons.value = userCtoons.value.filter(u => u.id !== id)
-  } else {
-    alert('Failed to delete')
-  }
 }
 
 onMounted(() => {
