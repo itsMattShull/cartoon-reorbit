@@ -102,8 +102,10 @@ export default defineEventHandler(async (event) => {
       const imageUrl = assetPath
         ? assetPath.startsWith('http')
           ? assetPath
-          : `${baseUrl}/images/${assetPath}`
+          : `${baseUrl}/images${assetPath}`
         : null
+
+        console.log(imageUrl)
 
       // construct payload with embed including image
       const payload = {
