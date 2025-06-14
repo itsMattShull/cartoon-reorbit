@@ -11,63 +11,108 @@
         >Create cToon</NuxtLink>
       </div>
 
-      <table class="min-w-full table-auto border-collapse">
-        <thead>
-          <tr class="bg-gray-100">
-            <th class="px-4 py-2 text-left">Asset</th>
-            <th class="px-4 py-2 text-left">Name</th>
-            <th class="px-4 py-2 text-left">Release Date (CDT)</th>
-            <th class="px-4 py-2 text-left">Rarity</th>
-            <th class="px-4 py-2 text-right">Highest Mint</th>
-            <th class="px-4 py-2 text-right">Quantity</th>
-            <th class="px-4 py-2 text-center">In C-mart</th>
-            <th class="px-4 py-2 text-right">Edit</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="c in ctoons"
-            :key="c.id"
-            class="border-b hover:bg-gray-50"
-          >
-            <td class="px-4 py-2">
-              <img
-                :src="c.assetPath"
-                :alt="c.name"
-                class="h-16 w-auto mx-auto rounded"
-              />
-            </td>
-            <td class="px-4 py-2">{{ c.name }}</td>
-            <td class="px-4 py-2">
-              {{
-                new Date(c.releaseDate).toLocaleString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  timeZone: 'America/Chicago',
-                  timeZoneName: 'short'
-                })
-              }}
-            </td>
-            <td class="px-4 py-2">{{ c.rarity }}</td>
-            <td class="px-4 py-2 text-right">{{ c.highestMint }}</td>
-            <td class="px-4 py-2 text-right">
-              {{ c.quantity == null ? 'Unlimited' : c.quantity }}
-            </td>
-            <td class="px-4 py-2 text-center">
-              {{ c.inCmart ? 'Yes' : 'No' }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              <NuxtLink
-                :to="`/admin/editCtoon/${c.id}`"
-                class="text-blue-600 hover:text-blue-800"
-              >Edit</NuxtLink>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- TABLE VIEW (hidden on small screens) -->
+      <div class="overflow-x-auto hidden sm:block">
+        <table class="min-w-full table-auto border-collapse">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="px-4 py-2 text-left">Asset</th>
+              <th class="px-4 py-2 text-left">Name</th>
+              <th class="px-4 py-2 text-left">Release Date (CDT)</th>
+              <th class="px-4 py-2 text-left">Rarity</th>
+              <th class="px-4 py-2 text-right">Highest Mint</th>
+              <th class="px-4 py-2 text-right">Quantity</th>
+              <th class="px-4 py-2 text-center">In C-mart</th>
+              <th class="px-4 py-2 text-right">Edit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="c in ctoons"
+              :key="c.id"
+              class="border-b hover:bg-gray-50"
+            >
+              <td class="px-4 py-2">
+                <img
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  class="h-16 w-auto mx-auto rounded"
+                />
+              </td>
+              <td class="px-4 py-2">{{ c.name }}</td>
+              <td class="px-4 py-2">
+                {{
+                  new Date(c.releaseDate).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'America/Chicago',
+                    timeZoneName: 'short'
+                  })
+                }}
+              </td>
+              <td class="px-4 py-2">{{ c.rarity }}</td>
+              <td class="px-4 py-2 text-right">{{ c.highestMint }}</td>
+              <td class="px-4 py-2 text-right">
+                {{ c.quantity == null ? 'Unlimited' : c.quantity }}
+              </td>
+              <td class="px-4 py-2 text-center">
+                {{ c.inCmart ? 'Yes' : 'No' }}
+              </td>
+              <td class="px-4 py-2 text-right">
+                <NuxtLink
+                  :to="`/admin/editCtoon/${c.id}`"
+                  class="text-blue-600 hover:text-blue-800"
+                >Edit</NuxtLink>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CARD VIEW (visible on small devices only) -->
+      <div class="space-y-4 block sm:hidden">
+        <div
+          v-for="c in ctoons"
+          :key="c.id"
+          class="bg-gray-100 rounded-lg p-4 flex items-start space-x-4"
+        >
+          <img
+            :src="c.assetPath"
+            :alt="c.name"
+            class="max-w-[80px] w-auto flex-shrink-0 object-contain rounded"
+          />
+          <div class="flex-1 flex flex-col justify-between">
+            <div class="space-y-1">
+              <h2 class="text-lg font-semibold">{{ c.name }}</h2>
+              <p class="text-sm text-gray-600">
+                {{
+                  new Date(c.releaseDate).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'America/Chicago'
+                  })
+                }}
+              </p>
+              <p class="mt-1 text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
+              <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
+              <p class="text-sm"><strong>Quantity:</strong> {{ c.quantity == null ? 'Unlimited' : c.quantity }}</p>
+              <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
+            </div>
+            <NuxtLink
+              :to="`/admin/editCtoon/${c.id}`"
+              class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium self-end"
+            >
+              Edit
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
 
       <!-- sentinel for infinite scroll -->
       <div ref="sentinel" class="h-2"></div>
