@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "concurrently \"nuxt dev\" \"npm:worker\"",
+    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:guildchecker\"",
     "worker": "node server/workers/mint.worker.js",
+    "guildchecker": "node ./server/cron/sync-guild-members.js",
     "build": "nuxt build",
     "start": "nuxt start",
     "lint": "eslint .",
@@ -33,6 +34,7 @@
     "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.6.1",
+    "node-cron": "^4.1.0",
     "nodemailer": "^7.0.3",
     "nuxt": "^3.17.2",
     "pg": "^8.15.6",

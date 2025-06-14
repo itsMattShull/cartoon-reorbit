@@ -1,7 +1,8 @@
-import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
+// server/api/auth/me.get.js
+import { defineEventHandler, createError, getCookie } from 'h3'
 import jwt from 'jsonwebtoken'
-import { getCookie } from 'h3'
 import { prisma } from '@/server/prisma'
+import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -26,10 +27,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
+  // Fetch only the fields we need, including inGuild as a scalar
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
-      points: true,
+    select: {
+      id: true,
+      discordId: true,
+      discordTag: true,
+      discordAvatar: true,
+      avatar: true,
+      username: true,
+      email: true,
+      roles: true,
+      isAdmin: true,
+      inGuild: true,
+      points: { select: { points: true } },
       ctoons: true
     }
   })
@@ -40,19 +52,6 @@ export default defineEventHandler(async (event) => {
 
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
-
-  // Check if user is in the guild
-  const guildRes = await $fetch(
-    `https://discord.com/api/guilds/${config.discord.guildId}/members/${user.discordId}`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: config.botToken
-      }
-    }
-  ).catch(() => null)
-
-  const inGuild = !!guildRes
 
   // Return full session data
   return {
@@ -65,8 +64,8 @@ export default defineEventHandler(async (event) => {
     email: user.email,
     roles: user.roles,
     points: user.points?.points || 0,
-    needsSetup: !(user.username && user.avatar && user.ctoons && user.ctoons.length > 0),
-    inGuild,
+    needsSetup: !(user.username && user.avatar && user.ctoons.length > 0),
+    inGuild: user.inGuild,
     isAdmin: user.isAdmin,
     ctoons: user.ctoons
   }

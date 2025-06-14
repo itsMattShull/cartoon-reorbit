@@ -134,9 +134,9 @@ export default defineEventHandler(async (event) => {
     })
     const mintNumber = priorCount + 1
     // create the actual record
-    await db.userCtoon.create({
-      data: { userId, ctoonId: c.id, mintNumber }
-    })
+    // await db.userCtoon.create({
+    //   data: { userId, ctoonId: c.id, mintNumber }
+    // })
     mintNumbers[c.id] = mintNumber
     // grab the up-to-date inCmart from the ctoon row
     const full = await db.ctoon.findUnique({ where: { id: c.id } })

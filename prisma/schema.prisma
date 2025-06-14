@@ -83,7 +83,7 @@ model User {
   tokenExpiresAt   DateTime?
   roles            String[]         @default([])
   isAdmin          Boolean          @default(false)
-  inGuild          Boolean          @default(false)
+  inGuild          Boolean          @default(true)
   createdAt        DateTime         @default(now())
   lastLogin        DateTime?
   discordCreatedAt DateTime?

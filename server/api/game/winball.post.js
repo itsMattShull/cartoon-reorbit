@@ -132,7 +132,10 @@ export default defineEventHandler(async (event) => {
 
   // 8) if gold cup, enqueue grand prize mint
   let grandPrizeCtoonName = null
-  if (award.pocket === 'halfCircle2' && config.grandPrizeCtoonId) {
+  if (award.pocket === 'halfCircle2'
+      && config.grandPrizeCtoonId
+      && remaining > 0
+  ) {
     const existing = await prisma.userCtoon.findFirst({
       where: { userId, ctoonId: config.grandPrizeCtoonId }
     })
