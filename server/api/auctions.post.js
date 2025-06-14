@@ -120,7 +120,7 @@ export default defineEventHandler(async (event) => {
         ]
       }
 
-      await fetch(
+      const res = await fetch(
         `https://discord.com/api/v10/channels/${channelId}/messages`,
         {
           method: 'POST',
@@ -131,7 +131,7 @@ export default defineEventHandler(async (event) => {
           body: JSON.stringify(payload)
         }
       )
-      console.log('sent')
+      console.log('Discord API status:', res.status, res.statusText)
     } catch (discordErr) {
       console.error('Failed to send Discord notification:', discordErr)
     }
