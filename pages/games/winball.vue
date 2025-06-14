@@ -809,7 +809,7 @@ bumperXs.forEach((bx) => {
     }
 
     // Close cap once ball has cleared the curve and is moving away
-    if (!capClosed && ballBody.position.z + 4 < startZ - ballRadius && ballBody.velocity.z < 0) {
+    if (!capClosed && ballBody.velocity.x != 0) {
       capClosed = true
       ballLaunched = true
       // Cap wall creation
