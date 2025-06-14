@@ -394,12 +394,12 @@
   <transition name="fade">
     <div
       v-if="collectionModalVisible"
-      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 p-4"
     >
       <div
-        class="relative bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 flex flex-col max-h-[80vh] overflow-y-auto"
+        class="relative bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 flex flex-col max-h-[80vh]"
       >
-        <!-- Close -->
+        <!-- Close button -->
         <button
           class="absolute top-3 right-3 text-gray-500 hover:text-black"
           @click="closeCollection"
@@ -409,95 +409,101 @@
 
         <!-- Header -->
         <h2 class="text-xl font-semibold mb-4">
-          {{ tradeStep === 1
-              ? `${ownerName}’s Collection`
-              : 'Your Collection'
-          }}
+          {{ tradeStep === 1 ? `${ownerName}’s Collection` : 'Your Collection' }}
         </h2>
 
-        <!-- STEP 1: Select target’s cToons -->
-        <div v-if="tradeStep === 1" class="flex-1 overflow-y-auto">
-          <div v-if="isLoadingCollection" class="text-center py-10">Loading…</div>
-          <div v-else-if="collectionCtoons.length === 0" class="text-center py-10">
-            No cToons in their collection.
-          </div>
-          <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div
-              v-for="c in collectionCtoons"
-              :key="c.id"
-              @click="selectTargetCtoon(c)"
-              class="relative flex flex-col items-center p-2 cursor-pointer border rounded hover:shadow"
-              :class="selectedTargetCtoons.includes(c) ? 'border-indigo-500 bg-indigo-50' : ''"
-            >
-              <!-- Owned / Unowned badge -->
-              <span
-                class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
-                :class="selfOwnedIds.has(c.ctoonId)
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-200 text-gray-600'"
+        <!-- ─── Scrollable content ─── -->
+        <div class="flex-1 overflow-y-auto">
+          <!-- STEP 1: Select target’s cToons -->
+          <div v-if="tradeStep === 1">
+            <div v-if="isLoadingCollection" class="text-center py-10">Loading…</div>
+            <div v-else-if="collectionCtoons.length === 0" class="text-center py-10">
+              No cToons in their collection.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div
+                v-for="c in collectionCtoons"
+                :key="c.id"
+                @click="selectTargetCtoon(c)"
+                class="relative flex flex-col items-center p-2 cursor-pointer border rounded hover:shadow"
+                :class="selectedTargetCtoons.includes(c) ? 'border-indigo-500 bg-indigo-50' : ''"
               >
-                {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
-              </span>
+                <span
+                  class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                  :class="selfOwnedIds.has(c.ctoonId)
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-200 text-gray-600'"
+                >
+                  {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
+                </span>
 
-              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
-              <p class="text-sm text-center">{{ c.name }}</p>
-              <p class="text-xs text-gray-600">{{ c.rarity }}</p>
-              <p class="text-xs text-gray-600">
-                Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
-              </p>
-              <p class="text-xs text-gray-600">
-                {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-              </p>
+                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-2 mt-8" />
+                <p class="text-sm text-center">{{ c.name }}</p>
+                <p class="text-xs text-gray-600">{{ c.rarity }}</p>
+                <p class="text-xs text-gray-600">
+                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                </p>
+                <p class="text-xs text-gray-600">
+                  {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                </p>
+              </div>
+            </div>
+            <div class="mt-4 text-right">
+              <button
+                :disabled="!selectedTargetCtoons.length"
+                @click="startTrade"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                Create Trade
+              </button>
+            </div>
+          </div>
+
+          <!-- STEP 2: Select your cToons + points -->
+          <div v-else>
+            <div v-if="isLoadingSelfCollection" class="text-center py-10">Loading…</div>
+            <div v-else-if="selfCtoons.length === 0" class="text-center py-10">
+              You have no cToons to trade.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div
+                v-for="c in selfCtoons"
+                :key="c.id"
+                @click="selectInitiatorCtoon(c)"
+                :class="[
+                  'relative flex flex-col items-center p-2 cursor-pointer border rounded',
+                  selectedInitiatorCtoons.includes(c)
+                    ? 'border-green-500 bg-green-100'
+                    : ''
+                ]"
+              >
+                <span
+                  class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                  :class="targetOwnedIds.has(c.ctoonId)
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-gray-200 text-gray-600'"
+                >
+                  {{ targetOwnedIds.has(c.ctoonId) ? 'Owned by Owner' : 'Unowned by Owner' }}
+                </span>
+
+                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
+                <p class="text-sm text-center">{{ c.name }}</p>
+                <p class="text-xs text-gray-600">{{ c.rarity }}</p>
+                <p class="text-xs text-gray-600">
+                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                </p>
+                <p class="text-xs text-gray-600">
+                  {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-        <div v-if="tradeStep === 1" class="mt-4 text-right">
-          <button
-            :disabled="!selectedTargetCtoons.length"
-            @click="startTrade"
-            class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
-          >
-            Create Trade
-          </button>
-        </div>
 
-        <!-- STEP 2: Select your cToons + points -->
-        <div v-else class="flex-1 overflow-y-auto">
-          <div v-if="isLoadingSelfCollection" class="text-center py-10">Loading…</div>
-          <div v-else-if="selfCtoons.length === 0" class="text-center py-10">
-            You have no cToons to trade.
-          </div>
-          <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-20">
-            <div
-              v-for="c in selfCtoons"
-              :key="c.id"
-              @click="selectInitiatorCtoon(c)"
-              :class="[
-                'flex flex-col items-center p-2 cursor-pointer border rounded',
-                selectedInitiatorCtoons.includes(c)
-                  ? 'border-green-500 bg-green-100'
-                  : ''
-              ]"
-            >
-              <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1" />
-              <p class="text-sm text-center">{{ c.name }}</p>
-              <p class="text-xs text-gray-600">
-                {{ c.rarity }}
-              </p>
-              <p class="text-xs text-gray-600">
-                Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
-              </p>
-              <p class="text-xs text-gray-600">
-                {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom bar: points + send -->
+        <!-- ─── Fixed footer (only on Step 2) ─── -->
         <div
           v-if="tradeStep === 2"
-          class="absolute bottom-4 left-6 right-6 flex items-center justify-between bg-white pt-4 border-t"
+          class="mt-4 pt-4 border-t flex items-center justify-between bg-white"
         >
           <div>
             Points to Offer
@@ -522,6 +528,7 @@
       </div>
     </div>
   </transition>
+
   <!-- Toast -->
   <Toast
     v-if="showToast"
@@ -660,6 +667,10 @@ async function loadSelfCollection() {
 // a Set of ctoonIds the viewer owns
 const selfOwnedIds = computed(() =>
   new Set(selfCtoons.value.map(sc => sc.ctoonId))
+)
+
+const targetOwnedIds = computed(() =>
+  new Set(collectionCtoons.value.map(ct => ct.ctoonId))
 )
 
 // —— Select/deselect your cToon ——
