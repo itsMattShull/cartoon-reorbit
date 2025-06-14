@@ -202,13 +202,13 @@
                   • 20 points every 24 hours for every cZone you visit (up to 200 points per day).
                 </p>
                 <p>
-                  • Claim your daily login bonus once every 24 hour cycle.
+                  • Claim your daily login bonus (500 points) once every 24 hour cycle.
                 </p>
                 <p>
-                  • Playing games, such as Winball, will give you up to 100 points every 24 hours.
+                  • Playing games, such as Winball, will give you up to 250 points every 24 hours.
                 </p>
                 <p>
-                  • Special codes that can be found in the Discord.
+                  • Special codes that can be found in the announcements channel in Discord.
                 </p>
               </div>
               <div class="mt-6 text-right">
