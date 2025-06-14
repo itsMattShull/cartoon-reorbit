@@ -110,8 +110,6 @@ export default defineEventHandler(async (event) => {
         ? encodeURI(rawImageUrl)
         : null
 
-        console.log(imageUrl)
-
       // construct payload with embed including image
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
@@ -136,12 +134,8 @@ export default defineEventHandler(async (event) => {
           body: JSON.stringify(payload)
         }
       )
-      console.log(' ')
-      console.log(JSON.stringify(payload))
-      console.log(' ')
-      console.log('Discord API status:', res.status, res.statusText)
+
       const json = await res.json()
-      console.log('Discord API full response:', JSON.stringify(json, null, 2))
     } catch (discordErr) {
       console.error('Failed to send Discord notification:', discordErr)
     }
