@@ -98,11 +98,16 @@ export default defineEventHandler(async (event) => {
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
 
-      // build full image URL
-      const imageUrl = assetPath
+        // 1. Construct the raw URL
+        const rawImageUrl = assetPath
         ? assetPath.startsWith('http')
-          ? assetPath
-          : `${baseUrl}${assetPath}`
+            ? assetPath
+            : `${baseUrl}${assetPath}`
+        : null
+
+        // 2. Percent-encode it
+        const imageUrl = rawImageUrl
+        ? encodeURI(rawImageUrl)
         : null
 
         console.log(imageUrl)
