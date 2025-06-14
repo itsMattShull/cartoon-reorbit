@@ -131,6 +131,9 @@ export default defineEventHandler(async (event) => {
           body: JSON.stringify(payload)
         }
       )
+      console.log(' ')
+      console.log(JSON.stringify(payload))
+      console.log(' ')
       console.log('Discord API status:', res.status, res.statusText)
       const json = await res.json()
       console.log('Discord API full response:', JSON.stringify(json, null, 2))
