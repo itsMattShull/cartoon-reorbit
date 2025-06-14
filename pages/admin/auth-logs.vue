@@ -20,6 +20,13 @@
           <p><strong>Discord Username:</strong> {{ log.user.discordTag || '—' }}</p>
           <p><strong>Discord Account Created:</strong> {{ formatDate(log.user.discordCreatedAt) }}</p>
           <p><strong>IP Address:</strong> {{ log.ip }}</p>
+          <p
+            v-if="isSuspicious(log.ip)"
+            class="mt-2 text-sm"
+          >
+            <strong>Other Usernames:</strong>
+            {{ otherUsernames(log.ip, log.user.username).join(', ') }}
+          </p>
         </div>
       </div>
 
@@ -34,6 +41,7 @@
               <th class="p-2 border-b">Discord Username</th>
               <th class="p-2 border-b">Discord Account Created</th>
               <th class="p-2 border-b">IP Address</th>
+              <th class="p-2 border-b">Other Usernames</th>
             </tr>
           </thead>
           <tbody>
@@ -48,55 +56,59 @@
               <td class="p-2 border-b">{{ log.user.discordTag || '—' }}</td>
               <td class="p-2 border-b">{{ formatDate(log.user.discordCreatedAt) }}</td>
               <td class="p-2 border-b">{{ log.ip }}</td>
+              <td class="p-2 border-b">
+                <span v-if="isSuspicious(log.ip)">
+                  {{ otherUsernames(log.ip, log.user.username).join(', ') }}
+                </span>
+                <span v-else>—</span>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
-
-      <!-- Infinite scroll trigger -->
-      <div ref="loadTrigger" class="h-8"></div>
     </div>
   </div>
 </template>
 
-
 <script setup>
+import { ref, onMounted } from 'vue'
+import Nav from '~/components/Nav.vue'
+
 definePageMeta({
   middleware: ['auth', 'admin'],
   layout: 'default'
 })
-import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const logs = ref([])
 const ipMap = ref({})
-const offset = ref(0)
-const hasMore = ref(true)
-const loadTrigger = ref(null)
-let observer
 
-async function fetchLogs() {
-  if (!hasMore.value) return
-  const res = await fetch(`/api/admin/auth-logs?offset=${offset.value}`)
-  const data = await res.json()
+async function fetchAllLogs() {
+  let offset = 0
+  while (true) {
+    const res = await fetch(`/api/admin/auth-logs?offset=${offset}`)
+    const { logs: page } = await res.json()
+    if (!page.length) break
+    logs.value.push(...page)
+    offset += page.length
 
-  logs.value.push(...data.logs)
-  offset.value += data.logs.length
-  hasMore.value = data.logs.length > 0
-
-  // Track IP -> usernames
-  for (const log of data.logs) {
-    const ip = log.ip
-    const username = log.user.username || '__null__'
-    if (!ipMap.value[ip]) {
-      ipMap.value[ip] = new Set()
+    // Populate IP -> usernames map
+    for (const log of page) {
+      const ip = log.ip
+      const username = log.user.username || '__null__'
+      if (!ipMap.value[ip]) ipMap.value[ip] = new Set()
+      ipMap.value[ip].add(username)
     }
-    ipMap.value[ip].add(username)
   }
 }
 
 function isSuspicious(ip) {
-  const usernames = ipMap.value[ip]
-  return usernames && usernames.size > 1
+  const users = ipMap.value[ip]
+  return users && users.size > 1
+}
+
+function otherUsernames(ip, current) {
+  const users = ipMap.value[ip] || new Set()
+  return Array.from(users).filter(u => u !== (current || '__null__'))
 }
 
 function formatDate(str, withTime = false) {
@@ -107,26 +119,5 @@ function formatDate(str, withTime = false) {
   })
 }
 
-function setupObserver() {
-  if (observer) observer.disconnect()
-
-  observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && hasMore.value) {
-      fetchLogs()
-    }
-  })
-
-  if (loadTrigger.value) {
-    observer.observe(loadTrigger.value)
-  }
-}
-
-onMounted(async () => {
-  await fetchLogs()    // wait for offset to be updated
-  setupObserver()      // now the observer only ever fires on *subsequent* scrolls
-})
-
-onBeforeUnmount(() => {
-  if (observer) observer.disconnect()
-})
+onMounted(fetchAllLogs)
 </script>

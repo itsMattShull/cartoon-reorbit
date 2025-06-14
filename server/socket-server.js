@@ -653,62 +653,91 @@ setInterval(async () => {
 }, 30 * 1000)
 
 setInterval(async () => {
-  const now   = new Date()
-  const five  = new Date(now.getTime() + 5 * 60 * 1000)
+  const now  = new Date()
+  const five = new Date(now.getTime() + 5 * 60 * 1000)
 
-  // pick up auctions ending in the next 5m, not yet pinged
+  // fetch auctions ending in the next 5m, not yet notified
   const soonAuctions = await db.auction.findMany({
     where: {
       status: 'ACTIVE',
-      endAt: { lte: five, gt: now },
+      endAt:   { lte: five, gt: now },
       endingSoonNotified: false
     },
-    include: { userCtoon: { include: { ctoon: true } }, creator: true }
+    include: {
+      userCtoon: { include: { ctoon: true } },
+      creator: true
+    }
   })
 
   for (const auc of soonAuctions) {
-    // build Discord message
     try {
       const botToken  = process.env.BOT_TOKEN
       const channelId = '1370959477968339004'
-      const baseUrl   = (process.env.NODE_ENV === 'production'
+      const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
-        : `http://localhost:3001`)
-      const link      = `${baseUrl}/auction/${auc.id}`
+        : 'http://localhost:3001'
+      const auctionLink = `${baseUrl}/auction/${auc.id}`
 
-      const { name, rarity } = auc.userCtoon.ctoon
+      // cToon details
+      const { name, rarity, assetPath } = auc.userCtoon.ctoon
       const mintNumber = auc.userCtoon.mintNumber
-      const content = 
-        `⏰ **Auction ending within 5 minutes!** ⏰\n` +
-        `**cToon:** ${name}\n` +
-        `**Rarity:** ${rarity}\n` +
-        `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
-        `🔗 ${link}`
 
-      await fetch(
+      // build & encode image URL
+      const rawImageUrl = assetPath
+        ? assetPath.startsWith('http')
+          ? assetPath
+          : `${baseUrl}${assetPath}`
+        : null
+      const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
+
+      // payload with embed + image
+      const payload = {
+        content: `⏰ **Auction ending within 5 minutes!** ⏰`,
+        embeds: [
+          {
+            title: name,
+            url: auctionLink,
+            description:
+              `**Rarity:** ${rarity}\n` +
+              `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
+              `⏱️ Ending at: <t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>\n` +
+              `🔗 [View Auction](${auctionLink})`,
+            ...(imageUrl ? { image: { url: imageUrl } } : {})
+          }
+        ]
+      }
+
+      // send to Discord
+      const res = await fetch(
         `https://discord.com/api/v10/channels/${channelId}/messages`,
         {
           method: 'POST',
           headers: {
-            Authorization: `${botToken}`,
+            'Authorization': `${botToken}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ content })
+          body: JSON.stringify(payload)
         }
       )
 
-      // mark notified
+      const json = await res.json()
+      if (!res.ok) {
+        console.error(
+          `Discord warning failed (${res.status}):`,
+          JSON.stringify(json, null, 2)
+        )
+      }
+
+      // mark as notified
       await db.auction.update({
         where: { id: auc.id },
-        data: { endingSoonNotified: true }
+        data:  { endingSoonNotified: true }
       })
-
     } catch (err) {
       console.error(`Failed 5m-warning for auction ${auc.id}:`, err)
     }
   }
 }, 60 * 1000)
-
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
