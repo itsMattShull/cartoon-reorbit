@@ -96,6 +96,7 @@
               <th class="px-4 py-2 text-left">cToon Name</th>
               <th class="px-4 py-2 text-right">Mint #</th>
               <th class="px-4 py-2 text-left">Owner</th>
+              <th class="px-4 py-2 text-center">1st Edition</th>  <!-- added -->
               <th class="px-4 py-2 text-left">Acquired (CDT)</th>
               <th class="px-4 py-2 text-left">Release Date (CDT)</th>
               <th class="px-4 py-2 text-left">Rarity</th>
@@ -121,6 +122,9 @@
               <td class="px-4 py-2">{{ uc.ctoon.name }}</td>
               <td class="px-4 py-2 text-right">{{ uc.mintNumber }}</td>
               <td class="px-4 py-2">{{ uc.username }}</td>
+              <td class="px-4 py-2 text-center">
+                {{ uc.isFirstEdition ? 'Yes' : 'No' }}
+              </td>
               <td class="px-4 py-2">{{ formatDate(uc.createdAt) }}</td>
               <td class="px-4 py-2">{{ formatDate(uc.ctoon.releaseDate) }}</td>
               <td class="px-4 py-2">{{ uc.ctoon.rarity }}</td>
@@ -162,6 +166,7 @@
           </div>
           <ul class="text-sm space-y-1 mb-4">
             <li><strong>Mint #:</strong> {{ uc.mintNumber }}</li>
+            <li><strong>1st Edition:</strong> {{ uc.isFirstEdition ? 'Yes' : 'No' }}</li>  <!-- added -->
             <li><strong>Acquired:</strong> {{ formatDate(uc.createdAt) }}</li>
             <li><strong>Release:</strong> {{ formatDate(uc.ctoon.releaseDate) }}</li>
             <li><strong>Rarity:</strong> {{ uc.ctoon.rarity }}</li>
@@ -231,11 +236,11 @@ function buildQuery() {
     dir:  dir.value
   })
   const f = filters.value
-  if (f.rarity)      params.set('rarity', f.rarity)
-  if (f.owner)       params.set('owner', f.owner)
-  if (f.acquiredFrom)params.set('acquiredFrom', f.acquiredFrom)
-  if (f.acquiredTo)  params.set('acquiredTo', f.acquiredTo)
-  if (f.ctoonName)   params.set('ctoonName', f.ctoonName)
+  if (f.rarity)       params.set('rarity', f.rarity)
+  if (f.owner)        params.set('owner', f.owner)
+  if (f.acquiredFrom) params.set('acquiredFrom', f.acquiredFrom)
+  if (f.acquiredTo)   params.set('acquiredTo', f.acquiredTo)
+  if (f.ctoonName)    params.set('ctoonName', f.ctoonName)
   return params.toString()
 }
 
