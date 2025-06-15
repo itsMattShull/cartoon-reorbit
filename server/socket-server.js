@@ -664,8 +664,9 @@ setInterval(async () => {
       endingSoonNotified: false
     },
     include: {
-      userCtoon: { include: { ctoon: true } },
-      creator: true
+      userCtoon:      { include: { ctoon: true } },
+      creator:        true,
+      highestBidder:  true     // ← include highestBidder!
     }
   })
 
@@ -682,6 +683,11 @@ setInterval(async () => {
       const { name, rarity, assetPath } = auc.userCtoon.ctoon
       const mintNumber = auc.userCtoon.mintNumber
 
+      // highest bid & bidder tag
+      const highestBid = auc.highestBid ?? 0
+      const bidderDiscordId = auc.highestBidder?.discordId
+      const topBidderTag = bidderDiscordId ? `<@${bidderDiscordId}>` : 'No bids yet'
+
       // build & encode image URL
       const rawImageUrl = assetPath
         ? assetPath.startsWith('http')
@@ -690,18 +696,20 @@ setInterval(async () => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
-      // payload with embed + image
+      // payload with embed + image + bid info
       const payload = {
         content: `⏰ **Auction ending within 5 minutes!** ⏰`,
         embeds: [
           {
             title: name,
             url: auctionLink,
-            description:
-              `**Rarity:** ${rarity}\n` +
-              `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
-              `⏱️ Ending at: <t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>\n` +
-              `🔗 [View Auction](${auctionLink})`,
+            fields: [
+              { name: 'Rarity',       value: rarity,                               inline: true },
+              { name: 'Mint #',       value: `${mintNumber ?? 'N/A'}`,           inline: true },
+              { name: 'Highest Bid',  value: `${highestBid}`,                     inline: true },
+              { name: 'Top Bidder',   value: topBidderTag,                        inline: true },
+              { name: 'View Auction', value: `[Click here](${auctionLink})`,       inline: false }
+            ],
             ...(imageUrl ? { image: { url: imageUrl } } : {})
           }
         ]
@@ -714,7 +722,7 @@ setInterval(async () => {
           method: 'POST',
           headers: {
             'Authorization': `${botToken}`,
-            'Content-Type': 'application/json'
+            'Content-Type':  'application/json'
           },
           body: JSON.stringify(payload)
         }
@@ -738,6 +746,7 @@ setInterval(async () => {
     }
   }
 }, 60 * 1000)
+
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
