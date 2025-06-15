@@ -664,9 +664,9 @@ setInterval(async () => {
       endingSoonNotified: false
     },
     include: {
-      userCtoon:      { include: { ctoon: true } },
-      creator:        true,
-      highestBidder:  true     // ← include highestBidder!
+      userCtoon:     { include: { ctoon: true } },
+      creator:       true,
+      highestBidder: true     // ← include highestBidder
     }
   })
 
@@ -683,10 +683,12 @@ setInterval(async () => {
       const { name, rarity, assetPath } = auc.userCtoon.ctoon
       const mintNumber = auc.userCtoon.mintNumber
 
-      // highest bid & bidder tag
-      const highestBid = auc.highestBid ?? 0
-      const bidderDiscordId = auc.highestBidder?.discordId
-      const topBidderTag = bidderDiscordId ? `<@${bidderDiscordId}>` : 'No bids yet'
+      // determine bid display: use initialBet if no bids
+      const hasBidder       = Boolean(auc.highestBidder)
+      const displayedBid    = hasBidder ? auc.highestBid : auc.initialBet
+      const topBidderTag    = hasBidder
+        ? `<@${auc.highestBidder.discordId}>`
+        : 'No one has bid on it'
 
       // build & encode image URL
       const rawImageUrl = assetPath
@@ -704,11 +706,12 @@ setInterval(async () => {
             title: name,
             url: auctionLink,
             fields: [
-              { name: 'Rarity',       value: rarity,                               inline: true },
-              { name: 'Mint #',       value: `${mintNumber ?? 'N/A'}`,           inline: true },
-              { name: 'Highest Bid',  value: `${highestBid}`,                     inline: true },
-              { name: 'Top Bidder',   value: topBidderTag,                        inline: true },
-              { name: 'View Auction', value: `[Click here](${auctionLink})`,       inline: false }
+              { name: 'Rarity',       value: rarity,                           inline: true },
+              { name: 'Mint #',       value: `${mintNumber ?? 'N/A'}`,       inline: true },
+              { name: 'Highest Bid',  value: `${displayedBid}`,               inline: true },
+              { name: 'Top Bidder',   value: topBidderTag,                    inline: true },
+              { name: 'Ends In',      value: `<t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>`, inline: false },
+              { name: 'View Auction', value: `[Click here](${auctionLink})`,   inline: false }
             ],
             ...(imageUrl ? { image: { url: imageUrl } } : {})
           }
@@ -746,7 +749,6 @@ setInterval(async () => {
     }
   }
 }, 60 * 1000)
-
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
