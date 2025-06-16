@@ -64,8 +64,8 @@
             class="border-t"
             :class="{
               'bg-yellow-100':
-                computeTotalValue(trade.ctoonsRequested) <
-                (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) * 0.8
+                computeTotalValue(trade.ctoonsOffered) <
+                (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
             }"
           >
             <td class="px-4 py-2 break-words">
