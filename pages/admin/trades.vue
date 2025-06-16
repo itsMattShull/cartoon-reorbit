@@ -119,43 +119,49 @@
       v-if="showModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center py-4 overflow-auto"
     >
-      <div class="bg-white rounded shadow-lg w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
-        <button
-          @click="closeModal"
-          class="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
-        >×</button>
-
-        <h2 class="text-xl font-semibold mb-6">Trade Details</h2>
-
-        <!-- Initiator & Offers Section -->
-        <div class="mb-6 p-4 border rounded">
-          <h3 class="font-medium mb-2">Initiator &amp; Offers</h3>
-          <div><span class="font-medium">Initiator:</span> {{ selectedTrade.initiator.username }}</div>
-          <div class="mt-2"><span class="font-medium">Points Offered:</span> {{ selectedTrade.pointsOffered }}</div>
-          <div class="mt-1"><span class="font-medium">cToon Value:</span> {{ computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
-          <div class="mt-1"><span class="font-medium">Total Offered Value:</span> {{ selectedTrade.pointsOffered + computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
-          <div class="font-medium mt-4">cToons Offered:</div>
-          <div class="grid grid-cols-3 gap-4 mt-2">
-            <div v-for="item in selectedTrade.ctoonsOffered" :key="item.id" class="text-center">
-              <img :src="item.assetPath" alt class="max-w-[80px] h-auto object-contain rounded mx-auto" />
-              <div class="mt-1 font-medium">{{ item.name }}</div>
-              <div class="text-sm text-gray-600">{{ item.rarity }}</div>
-            </div>
-          </div>
+      <div class="bg-white rounded shadow-lg w-full max-w-2xl relative max-h-[80vh]">
+        <!-- Sticky Header -->
+        <div class="sticky top-0 z-20 bg-white flex justify-between items-center p-4 border-b">
+          <h2 class="text-xl font-semibold">Trade Details</h2>
+          <button
+            @click="closeModal"
+            class="text-gray-500 hover:text-gray-800"
+          >
+            ×
+          </button>
         </div>
-
-        <!-- Recipient & Requests Section -->
-        <div class="p-4 border rounded">
-          <div><span class="font-medium">Recipient:</span> {{ selectedTrade.recipient.username }}</div>
-          <div class="font-medium mt-4">cToons Requested:</div>
-          <div class="grid grid-cols-3 gap-4 mt-2">
-            <div v-for="item in selectedTrade.ctoonsRequested" :key="item.id" class="text-center">
-              <img :src="item.assetPath" alt class="max-w-[80px] h-auto object-contain rounded mx-auto" />
-              <div class="mt-1 font-medium">{{ item.name }}</div>
-              <div class="text-sm text-gray-600">{{ item.rarity }}</div>
+        <!-- Scrollable Content -->
+        <div class="p-6 overflow-y-auto" style="max-height: calc(80vh - 64px);">
+          <!-- Initiator & Offers Section -->
+          <div class="mb-6 p-4 border rounded">
+            <h3 class="font-medium mb-2">Initiator &amp; Offers</h3>
+            <div><span class="font-medium">Initiator:</span> {{ selectedTrade.initiator.username }}</div>
+            <div class="mt-2"><span class="font-medium">Points Offered:</span> {{ selectedTrade.pointsOffered }}</div>
+            <div class="mt-1"><span class="font-medium">cToon Value:</span> {{ computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
+            <div class="mt-1"><span class="font-medium">Total Offered Value:</span> {{ selectedTrade.pointsOffered + computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
+            <div class="font-medium mt-4">cToons Offered:</div>
+            <div class="grid grid-cols-3 gap-4 mt-2">
+              <div v-for="item in selectedTrade.ctoonsOffered" :key="item.id" class="text-center">
+                <img :src="item.assetPath" alt class="max-w-[80px] h-auto object-contain rounded mx-auto" />
+                <div class="mt-1 font-medium">{{ item.name }}</div>
+                <div class="text-sm text-gray-600">{{ item.rarity }}</div>
+              </div>
             </div>
           </div>
-          <div class="mt-4"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
+
+          <!-- Recipient & Requests Section -->
+          <div class="p-4 border rounded">
+            <div><span class="font-medium">Recipient:</span> {{ selectedTrade.recipient.username }}</div>
+            <div class="mt-4"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
+            <div class="font-medium mt-4">cToons Requested:</div>
+            <div class="grid grid-cols-3 gap-4 mt-2">
+              <div v-for="item in selectedTrade.ctoonsRequested" :key="item.id" class="text-center">
+                <img :src="item.assetPath" alt class="max-w-[80px] h-auto object-contain rounded mx-auto" />
+                <div class="mt-1 font-medium">{{ item.name }}</div>
+                <div class="text-sm text-gray-600">{{ item.rarity }}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
