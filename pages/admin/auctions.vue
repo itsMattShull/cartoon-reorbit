@@ -1,5 +1,7 @@
 <template>
-  <div class="p-4">
+  <Nav />
+
+  <div class="p-4 mt-16">
     <!-- Filter Dropdown -->
     <div class="mb-4 flex items-center">
       <label for="creatorFilter" class="mr-2 font-medium">Filter by creator:</label>
@@ -46,7 +48,7 @@
                 class="w-12 h-12 object-cover rounded"
               />
             </td>
-            <td class="px-4 py-2">{{ auc.creator.username }}</td>
+            <td class="px-4 py-2">{{ auc.creator?.username || '—' }}</td>
             <td class="px-4 py-2">{{ auc.status }}</td>
             <td class="px-4 py-2">{{ hoursLeft(auc.endAt) }}</td>
             <td class="px-4 py-2">
@@ -84,7 +86,7 @@
         <div class="space-y-1 text-sm text-gray-700">
           <div>
             <span class="font-medium">Creator:</span>
-            {{ auc.creator.username }}
+            {{ auc.creator?.username || '—' }}
           </div>
           <div>
             <span class="font-medium">Status:</span>
@@ -109,14 +111,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAsyncData } from '#app'
+import Nav from '@/components/Nav.vue'
 
 // Fetch all auctions with related data
-const { data: auctionsData } = await useAsyncData('auctions', () =>
+const { data: auctionsData, error } = await useAsyncData('auctions', () =>
   $fetch('/api/admin/auctions')
 )
 const auctions = ref(auctionsData.value || [])
+
+// Update auctions when data changes
+watch(auctionsData, (val) => {
+  auctions.value = val || []
+})
 
 // Derive unique creators for the dropdown
 const creators = computed(() => {
@@ -132,7 +140,7 @@ const selectedCreator = ref('')
 const filteredAuctions = computed(() =>
   auctions.value.filter(a =>
     selectedCreator.value
-      ? a.creator.username === selectedCreator.value
+      ? a.creator?.username === selectedCreator.value
       : true
   )
 )
