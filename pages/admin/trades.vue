@@ -104,8 +104,8 @@
         class="border rounded p-4 shadow break-words"
         :class="{
           'bg-yellow-100':
-            computeTotalValue(trade.ctoonsRequested) <
-            (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) * 0.8
+            computeTotalValue(trade.ctoonsOffered) <
+            (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
         }"
       >
         <div class="mb-2">
