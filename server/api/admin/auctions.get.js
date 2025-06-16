@@ -59,6 +59,7 @@ export default defineEventHandler(async (event) => {
   return auctions.map(a => ({
     id: a.id,
     status: a.status,
+    createdAt: a.createdAt,
     endAt: a.endAt,
     highestBid: a.highestBid,
     userCtoon: {
