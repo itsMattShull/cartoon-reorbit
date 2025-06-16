@@ -58,8 +58,17 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="trade in filteredTrades" :key="trade.id" class="border-t">
-            <td class="px-4 py-2">
+          <tr
+            v-for="trade in filteredTrades"
+            :key="trade.id"
+            class="border-t"
+            :class="{
+              'bg-yellow-100':
+                computeTotalValue(trade.ctoonsRequested) <
+                (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) * 0.8
+            }"
+          >
+            <td class="px-4 py-2 break-words">
               <span class="font-medium">{{ trade.initiator.username }}</span>
               <span class="mx-2">→</span>
               <span class="font-medium">{{ trade.recipient.username }}</span>
@@ -89,14 +98,23 @@
 
     <!-- Mobile Cards -->
     <div class="md:hidden grid grid-cols-1 gap-4">
-      <div v-for="trade in filteredTrades" :key="trade.id" class="border rounded p-4 shadow">
-        <div class="mb-2 flex justify-between items-center">
-          <div>
-            <span class="font-medium">{{ trade.initiator.username }}</span>
-            <span class="mx-2">→</span>
-            <span class="font-medium">{{ trade.recipient.username }}</span>
-          </div>
-          <span class="px-2 py-1 text-sm bg-gray-200 rounded">{{ trade.status }}</span>
+      <div
+        v-for="trade in filteredTrades"
+        :key="trade.id"
+        class="border rounded p-4 shadow break-words"
+        :class="{
+          'bg-yellow-100':
+            computeTotalValue(trade.ctoonsRequested) <
+            (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) * 0.8
+        }"
+      >
+        <div class="mb-2">
+          <span class="font-medium">{{ trade.initiator.username }}</span>
+          <span class="mx-2">→</span>
+          <span class="font-medium">{{ trade.recipient.username }}</span>
+        </div>
+        <div class="mb-2 text-sm text-gray-500">
+          <span class="font-medium">Status:</span> {{ trade.status }}
         </div>
         <div class="text-sm space-y-1">
           <div><span class="font-medium">Points:</span> {{ trade.pointsOffered }}</div>
@@ -117,7 +135,7 @@
     <!-- Trade Details Modal -->
     <div
       v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center py-4 overflow-auto"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-auto"
     >
       <div class="bg-white rounded shadow-lg w-full max-w-2xl relative max-h-[80vh]">
         <!-- Sticky Header -->
@@ -152,7 +170,6 @@
           <!-- Recipient & Requests Section -->
           <div class="p-4 border rounded">
             <div><span class="font-medium">Recipient:</span> {{ selectedTrade.recipient.username }}</div>
-            <div class="mt-4"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
             <div class="font-medium mt-4">cToons Requested:</div>
             <div class="grid grid-cols-3 gap-4 mt-2">
               <div v-for="item in selectedTrade.ctoonsRequested" :key="item.id" class="text-center">
@@ -161,6 +178,7 @@
                 <div class="text-sm text-gray-600">{{ item.rarity }}</div>
               </div>
             </div>
+            <div class="mt-4"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
           </div>
         </div>
       </div>
