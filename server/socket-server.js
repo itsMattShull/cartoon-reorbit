@@ -612,55 +612,57 @@ io.on('connection', socket => {
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 30s (adjust as desired).
 setInterval(async () => {
-  const now = new Date()
+  const now = new Date();
   const toClose = await db.auction.findMany({
     where: { status: 'ACTIVE', endAt: { lte: now } }
-  })
+  });
 
   for (const auc of toClose) {
-    await db.$transaction(async (tx) => {
-      // close it
+    const { id, highestBidderId, creatorId, highestBid, userCtoonId } = auc;
+
+    // only adjust points/ownership if there's a bidder who isn't the creator
+    const shouldFinalize = highestBidderId && highestBidderId !== creatorId;
+
+    await db.$transaction(async tx => {
+      // close the auction
       await tx.auction.update({
-        where: { id: auc.id },
+        where: { id },
         data: {
           status: 'CLOSED',
-          winnerId: auc.highestBidderId,
+          winnerId: highestBidderId,
           winnerAt: now
         }
-      })
-      // debit winner points
-      if (auc.highestBidderId && auc.highestBid > 0) {
+      });
+
+      if (shouldFinalize && highestBid > 0) {
+        // debit the winner
         await tx.userPoints.update({
-          where: { userId: auc.highestBidderId },
-          data: { points: { decrement: auc.highestBid } }
-        })
-      }
-      
-      // give initiator the points
-      if (auc.creatorId && auc.highestBid > 0) {
+          where: { userId: highestBidderId },
+          data: { points: { decrement: highestBid } }
+        });
+
+        // credit the creator
         await tx.userPoints.upsert({
-          where: { userId: auc.creatorId },
-          create: { userId: auc.creatorId, points: auc.highestBid },
-          update: { points: { increment: auc.highestBid } }
-        })
-      }
+          where: { userId: creatorId },
+          create: { userId: creatorId, points: highestBid },
+          update: { points: { increment: highestBid } }
+        });
 
-      // transfer the cToon
-      if (auc.highestBidderId) {
+        // transfer the cToon
         await tx.userCtoon.update({
-          where: { id: auc.userCtoonId },
-          data: { userId: auc.highestBidderId }
-        })
+          where: { id: userCtoonId },
+          data: { userId: highestBidderId }
+        });
       }
-    })
+    });
 
-    // notify clients
-    io.to(`auction_${auc.id}`).emit('auction-ended', {
-      winnerId: auc.highestBidderId,
-      winningBid: auc.highestBid
-    })
+    // notify clients regardless
+    io.to(`auction_${id}`).emit('auction-ended', {
+      winnerId: highestBidderId,
+      winningBid: highestBid
+    });
   }
-}, 30 * 1000)
+}, 30 * 1000);
 
 setInterval(async () => {
   const now  = new Date()
