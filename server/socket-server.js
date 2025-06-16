@@ -635,6 +635,16 @@ setInterval(async () => {
           data: { points: { decrement: auc.highestBid } }
         })
       }
+      
+      // give initiator the points
+      if (auc.creatorId && auc.highestBid > 0) {
+        await tx.userPoints.upsert({
+          where: { userId: auc.creatorId },
+          create: { userId: auc.creatorId, points: auc.highestBid },
+          update: { points: { increment: auc.highestBid } }
+        })
+      }
+
       // transfer the cToon
       if (auc.highestBidderId) {
         await tx.userCtoon.update({
