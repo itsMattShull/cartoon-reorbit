@@ -54,7 +54,8 @@ export default defineEventHandler(async (event) => {
       recipient: o.recipient,
       pointsOffered: o.pointsOffered,
       ctoonsOffered,
-      ctoonsRequested
+      ctoonsRequested,
+      status: o.status
     }
   })
 })

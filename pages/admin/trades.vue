@@ -1,12 +1,54 @@
 <template>
   <Nav />
   <div class="p-4 mt-16">
+    <!-- Filter Dropdowns -->
+    <div class="mb-4 flex flex-wrap items-center space-x-4">
+      <!-- User Filter -->
+      <div class="flex items-center">
+        <label for="userFilter" class="mr-2 font-medium">User:</label>
+        <select
+          id="userFilter"
+          v-model="selectedUser"
+          class="border rounded px-2 py-1"
+        >
+          <option value="">All</option>
+          <option
+            v-for="user in users"
+            :key="user"
+            :value="user"
+          >
+            {{ user }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="flex items-center">
+        <label for="statusFilter" class="mr-2 font-medium">Status:</label>
+        <select
+          id="statusFilter"
+          v-model="selectedStatus"
+          class="border rounded px-2 py-1"
+        >
+          <option value="">All</option>
+          <option
+            v-for="status in statusOptions"
+            :key="status"
+            :value="status"
+          >
+            {{ status }}
+          </option>
+        </select>
+      </div>
+    </div>
+
     <!-- Trades Table / Cards -->
     <div class="hidden md:block overflow-x-auto">
       <table class="min-w-full bg-white rounded shadow">
         <thead class="bg-gray-100">
           <tr>
             <th class="px-4 py-2">Users</th>
+            <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2">Points Offered</th>
             <th class="px-4 py-2"># Offered</th>
             <th class="px-4 py-2"># Requested</th>
@@ -16,12 +58,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="trade in trades" :key="trade.id" class="border-t">
+          <tr v-for="trade in filteredTrades" :key="trade.id" class="border-t">
             <td class="px-4 py-2">
               <span class="font-medium">{{ trade.initiator.username }}</span>
               <span class="mx-2">→</span>
               <span class="font-medium">{{ trade.recipient.username }}</span>
             </td>
+            <td class="px-4 py-2">{{ trade.status }}</td>
             <td class="px-4 py-2">{{ trade.pointsOffered }}</td>
             <td class="px-4 py-2">{{ trade.ctoonsOffered.length }}</td>
             <td class="px-4 py-2">{{ trade.ctoonsRequested.length }}</td>
@@ -46,11 +89,14 @@
 
     <!-- Mobile Cards -->
     <div class="md:hidden grid grid-cols-1 gap-4">
-      <div v-for="trade in trades" :key="trade.id" class="border rounded p-4 shadow">
-        <div class="mb-2">
-          <span class="font-medium">{{ trade.initiator.username }}</span>
-          <span class="mx-2">→</span>
-          <span class="font-medium">{{ trade.recipient.username }}</span>
+      <div v-for="trade in filteredTrades" :key="trade.id" class="border rounded p-4 shadow">
+        <div class="mb-2 flex justify-between items-center">
+          <div>
+            <span class="font-medium">{{ trade.initiator.username }}</span>
+            <span class="mx-2">→</span>
+            <span class="font-medium">{{ trade.recipient.username }}</span>
+          </div>
+          <span class="px-2 py-1 text-sm bg-gray-200 rounded">{{ trade.status }}</span>
         </div>
         <div class="text-sm space-y-1">
           <div><span class="font-medium">Points:</span> {{ trade.pointsOffered }}</div>
@@ -71,7 +117,7 @@
     <!-- Trade Details Modal -->
     <div
       v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center py-4 overflow-auto mt-14"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center py-4 overflow-auto"
     >
       <div class="bg-white rounded shadow-lg w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
         <button
@@ -117,7 +163,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAsyncData } from '#app'
 import Nav from '@/components/Nav.vue'
 
@@ -135,6 +181,34 @@ const { data: tradesData } = await useAsyncData('trades', () =>
   $fetch('/api/admin/trades')
 )
 const trades = ref(tradesData.value || [])
+
+// Filter state
+const selectedUser = ref('')
+const selectedStatus = ref('')
+
+// Compute unique users for filter
+const users = computed(() => {
+  const set = new Set()
+  trades.value.forEach(t => {
+    set.add(t.initiator.username)
+    set.add(t.recipient.username)
+  })
+  return Array.from(set)
+})
+
+// Trade status options
+const statusOptions = ['PENDING', 'ACCEPTED', 'REJECTED']
+
+// Filtered trades
+const filteredTrades = computed(() =>
+  trades.value.filter(t => {
+    if (selectedUser.value) {
+      if (t.initiator.username !== selectedUser.value && t.recipient.username !== selectedUser.value) return false
+    }
+    if (selectedStatus.value && t.status !== selectedStatus.value) return false
+    return true
+  })
+)
 
 // Modal state
 const showModal = ref(false)
