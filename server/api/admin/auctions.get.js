@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const auctions = await   prisma.auction.findMany({
-    orderBy: { endAt: 'asc' },
+    orderBy: { endAt: 'desc' },
     include: {
       // include the UserCtoon → Ctoon relation so we can get the image & name
       userCtoon: {
