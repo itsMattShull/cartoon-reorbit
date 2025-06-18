@@ -3,24 +3,32 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
+  const ctoonId = '7defae35-c41f-4cd7-ab2d-e54abe04fe65'
   try {
-    // 1. Find the cToon by name
-    const ctoon = await prisma.ctoon.findFirst({
-      where: { id: "7defae35-c41f-4cd7-ab2d-e54abe04fe65" },
-      select: { id: true, name: true }
-    })
-
+    // 1. Verify Ctoon exists
+    const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) {
-      console.log("No cToon found with name 'Father's Hug'. Nothing to delete.")
+      console.log(`No cToon found with ID ${ctoonId}. Nothing to delete.`)
       return
     }
 
-    // 2. Delete the cToon (will cascade or error if relations exist)
-    await prisma.ctoon.delete({
-      where: { id: ctoon.id }
-    })
+    // 2. Remove related records
+    await prisma.$transaction([
+      prisma.userCtoon.deleteMany({ where: { ctoonId } }),
+      prisma.rewardCtoon.deleteMany({ where: { ctoonId } }),
+      prisma.packCtoonOption.deleteMany({ where: { ctoonId } }),
+      prisma.wishlistItem.deleteMany({ where: { ctoonId } }),
+      prisma.gameConfig.updateMany({
+        where: { grandPrizeCtoonId: ctoonId },
+        data: { grandPrizeCtoonId: null }
+      }),
+      // add more deletions here if other relations exist
+    ])
 
-    console.log(`Successfully deleted cToon: "${ctoon.name}" (ID: ${ctoon.id})`)
+    // 3. Delete the Ctoon itself
+    await prisma.ctoon.delete({ where: { id: ctoonId } })
+
+    console.log(`Successfully deleted cToon and related records for ID ${ctoonId}`)
   } catch (error) {
     console.error('Error deleting cToon:', error)
   } finally {
