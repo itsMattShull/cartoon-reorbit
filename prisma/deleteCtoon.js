@@ -6,7 +6,7 @@ async function main() {
   try {
     // 1. Find the cToon by name
     const ctoon = await prisma.ctoon.findFirst({
-      where: { name: "Father's Hug" },
+      where: { id: "7defae35-c41f-4cd7-ab2d-e54abe04fe65" },
       select: { id: true, name: true }
     })
 
