@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
       const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
 
       // enqueue the mint job
-      await mintQueue.add('mintCtoon', { userId, ctoonId })
+      await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
 
       // collect local record
       mintedRecords.push({ ctoonId, name, mintNumber, isFirstEdition })
