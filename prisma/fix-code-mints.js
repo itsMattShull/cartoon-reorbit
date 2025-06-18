@@ -38,7 +38,7 @@ async function main() {
         })
         if (!owns) {
           // Enqueue mint job
-          await mintQueue.add('mintCtoon', { userId: user.id, ctoonId })
+          await mintQueue.add('mintCtoon', { userId: user.id, ctoonId, isSpecial: true })
           mintedRecords.push({ userId: user.id, username: user.username, ctoonId })
         }
       }
