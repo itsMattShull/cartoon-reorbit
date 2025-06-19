@@ -699,7 +699,7 @@ async function refreshPacks () {
 }
 
 // ────────── Close Overlay ──────────────────────
-function closeOverlay() {
+async function closeOverlay() {
   overlayVisible.value = false
   await refreshPacks() 
 }
