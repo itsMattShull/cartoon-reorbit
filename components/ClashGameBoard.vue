@@ -60,31 +60,42 @@
 ------------------------------------------------------------ */
 import { computed } from 'vue'
 
-defineProps({
-  lanes:               { type: Array,   required: true },
-  phase:               { type: String,  required: true },   // select | reveal | setup | gameEnd
-  priority:            { type: String,  required: true },   // player | ai (for reveal highlight)
-  previewPlacements:   { type: Array,   default: () => [] }, // [{cardId,laneIndex}]
-  selected:            { type: [Object, null], default: null }
+/* 1️⃣  Declare props and keep a `props` reference */
+const props = defineProps({
+  lanes:             { type: Array,  required: true },
+  phase:             { type: String, required: true },   // select | reveal | setup | gameEnd
+  priority:          { type: String, required: true },   // player | ai
+  previewPlacements: { type: Array,  default: () => [] },// [{cardId,laneIndex}]
+  selected:          { type: [Object, null], default: null }
 })
+
+/* 2️⃣  Emit */
 const emit = defineEmits(['place'])
 
 /* ---------- helpers ---------- */
-function handleLaneClick (idx) { emit('place', idx) }
+function handleLaneClick (idx) {
+  emit('place', idx)
+}
 
-const ghostInLane = (laneIdx) =>
-  previewPlacements.find(p => p.laneIndex === laneIdx && selected && p.cardId === selected.id)
+/* “ghost” = the card you’re preview-placing in this lane (if any) */
+function ghostInLane (laneIdx) {
+  const sel = props.selected
+  return props.previewPlacements.find(
+    (p) => p.laneIndex === laneIdx && sel && p.cardId === sel.id
+  )
+}
 
+/* pulse highlight during the reveal phase */
 function highlightLane (idx) {
-  // pulse border if lane contains first-revealing side’s newest card
-  const lane = lanes[idx]
-  const firstSide = priority === 'player' ? lane.player : lane.ai
+  if (props.phase !== 'reveal') return ''
+  const lane = props.lanes[idx]
+  const firstSide = props.priority === 'player' ? lane.player : lane.ai
   if (!firstSide.length) return ''
-
   const newest = firstSide[firstSide.length - 1]
   return newest.revealedThisTurn ? 'animate-pulse ring-2 ring-indigo-400' : ''
 }
 </script>
+
 
 <style scoped>
 /* minimal pulse animation if you don't use Tailwind animate util */

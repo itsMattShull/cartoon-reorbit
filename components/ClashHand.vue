@@ -23,6 +23,7 @@
         :key="c.id"
         :card="c"
         :selected="selected && selected.id === c.id"
+        @select="$emit('select', c)" 
         @click="handleSelect(c)"
       />
     </div>

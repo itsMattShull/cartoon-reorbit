@@ -80,8 +80,11 @@ function startSelectTimer (io, match) {
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', ({ deck }) => {
+    console.log('deck: ', deck)
     const aiDeck = [...deck].sort(() => 0.5 - Math.random()).slice(0, 12)
+    console.log('aiDeck: ', aiDeck)
     const gameId = randomUUID()
+    console.log('game id: ', gameId)
     const battle = createBattle({
       playerDeck: deck,
       aiDeck,

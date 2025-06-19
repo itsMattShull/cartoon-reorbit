@@ -1,14 +1,20 @@
 <template>
   <Nav />
 
-  <section class="pt-20 pb-10 max-w-4xl mx-auto text-center">
+  <section v-if="route.path === '/games/clash'" class="pt-20 pb-10 max-w-4xl mx-auto text-center">
     <h1 class="text-3xl font-bold mb-6">gToon Clash</h1>
 
     <!-- Deck preview or loading skeleton -->
     <div class="mb-8">
       <!-- Actual cards once loaded -->
       <div v-if="loaded && deck.length" class="flex flex-wrap justify-center gap-4">
-        <div
+        <ClashCToonCard
+          v-for="c in deck"
+          :key="c.id"
+          :card="c"
+          size="large"
+        />
+        <!-- <div
           v-for="c in deck"
           :key="c.id"
           class="w-24 h-32 border rounded flex flex-col items-center justify-center text-xs bg-white shadow"
@@ -16,13 +22,13 @@
           <img :src="c.assetPath" :alt="c.name" class="w-20 h-20 object-contain mb-1" />
           <span class="font-semibold truncate w-full px-1">{{ c.name }}</span>
           <span class="text-[10px] text-gray-500">P{{ c.power }} · C{{ c.cost }}</span>
-        </div>
+        </div> -->
       </div>
 
-      <!-- Loading skeleton (10 card placeholders) -->
+      <!-- Loading skeleton (12 card placeholders) -->
       <div v-else-if="!loaded" class="flex flex-wrap justify-center gap-4 animate-pulse">
         <div
-          v-for="n in 10"
+          v-for="n in 12"
           :key="n"
           class="w-24 h-32 bg-gray-200 rounded flex flex-col items-center justify-center"
         >
@@ -35,7 +41,7 @@
 
     <!-- Not enough G‑toons notice -->
     <p
-      v-if="loaded && deck.length < 10"
+      v-if="loaded && deck.length < 12"
       class="mt-6 text-red-600 font-semibold max-w-md mx-auto"
     >
       You need at least <strong>12 G‑toons</strong> to play Clash. Acquire more in the <NuxtLink to="/shop" class="text-indigo-600 underline">cMart</NuxtLink> and come back!
@@ -50,6 +56,8 @@
       {{ starting ? 'Starting…' : 'Start Match vs AI' }}
     </button>
   </section>
+  <!-- where the child route (/play) gets injected -->
+  <NuxtPage v-if="route.path !== '/games/clash'" />  
 </template>
 
 <script setup>
@@ -59,9 +67,11 @@
    • Connect via socket.io, store battle state, route to play page
 -------------------------------------------------------------- */
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
+import ClashCToonCard from '@/components/ClashCToonCard.vue'
 
+const route   = useRoute() 
 const router   = useRouter()
 const deck     = ref([])
 const starting = ref(false)
@@ -103,6 +113,8 @@ function startMatch () {
 // --- Handle socket events ------------------------------------
 socket.on('gameStart', (state) => {
   battleState.value = state
+  console.log('battle state: ', battleState.value)
+  console.log('sending to /play')
   router.push('/games/clash/play')
 })
 
