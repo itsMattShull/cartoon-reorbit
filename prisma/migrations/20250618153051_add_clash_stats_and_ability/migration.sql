@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Ctoon" ADD COLUMN     "abilityData" JSONB,
+ADD COLUMN     "abilityKey" TEXT,
+ADD COLUMN     "cost" INTEGER NOT NULL DEFAULT 1,
+ADD COLUMN     "power" INTEGER NOT NULL DEFAULT 1;

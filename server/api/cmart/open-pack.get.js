@@ -1,10 +1,11 @@
-// server/api/open-pack.get.js
+// /server/api/open-pack.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { mintQueue } from '../../utils/queues'
-
 import { prisma as db } from '@/server/prisma'
 
-async function getMe(event) {
+/* ───────── helpers ───────────────────────────────────────────────────────── */
+
+async function getMe (event) {
   const cookie = getRequestHeader(event, 'cookie') || ''
   try {
     return await $fetch('/api/auth/me', { headers: { cookie } })
@@ -13,24 +14,26 @@ async function getMe(event) {
   }
 }
 
-function pickWeighted(options) {
-  const total = options.reduce((sum, o) => sum + o.weight, 0)
+function pickWeighted (opts) {
+  const total = opts.reduce((t, o) => t + o.weight, 0)
   const r = Math.random() * total
   let acc = 0
-  for (const o of options) {
+  for (const o of opts) {
     acc += o.weight
     if (r <= acc) return o
   }
-  return options[options.length - 1]
+  return opts[opts.length - 1]
 }
 
-function shouldIncludeRarity(probabilityPercent) {
-  return Math.random() * 100 < probabilityPercent
-}
+const rngUnder100 = () => Math.random() * 100
+const shouldInclude = p => rngUnder100() < p
+
+/* ───────── handler ──────────────────────────────────────────────────────── */
 
 export default defineEventHandler(async (event) => {
   const me = await getMe(event)
   const userId = me.id
+
   const { id: userPackId } = getQuery(event)
   if (!userPackId) {
     throw createError({ statusCode: 400, statusMessage: 'Missing id param' })
@@ -54,7 +57,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Pack already opened' })
   }
 
-  // Build pools and select cToons
+  /* ── 1. Build pools & choose cToons ────────────────────────────────────── */
   const poolByRarity = {}
   for (const opt of userPack.pack.ctoonOptions) {
     const c = opt.ctoon
@@ -62,84 +65,103 @@ export default defineEventHandler(async (event) => {
       const minted = await db.userCtoon.count({ where: { ctoonId: c.id } })
       if (minted >= c.quantity) continue
     }
-    if (!poolByRarity[c.rarity]) poolByRarity[c.rarity] = []
-    poolByRarity[c.rarity].push({ ctoon: c, weight: opt.weight })
+    ;(poolByRarity[c.rarity] ||= []).push({ ctoon: c, weight: opt.weight })
   }
 
   const chosen = []
   for (const rc of userPack.pack.rarityConfigs) {
     const pool = poolByRarity[rc.rarity] || []
-    if (pool.length === 0 || !shouldIncludeRarity(rc.probabilityPercent)) continue
-    const localPool = [...pool]
-    for (let i = 0; i < rc.count && localPool.length > 0; i++) {
-      const pick = pickWeighted(localPool)
+    if (!pool.length || !shouldInclude(rc.probabilityPercent)) continue
+
+    const local = [...pool]
+    for (let i = 0; i < rc.count && local.length; i++) {
+      const pick = pickWeighted(local)
       chosen.push(pick.ctoon)
-      const idx = localPool.findIndex(o => o.ctoon.id === pick.ctoon.id)
-      localPool.splice(idx, 1)
+      local.splice(local.findIndex(o => o.ctoon.id === pick.ctoon.id), 1)
     }
   }
-
-  if (chosen.length === 0) {
+  if (!chosen.length) {
     throw createError({ statusCode: 500, statusMessage: 'Pack yielded no cToons' })
   }
 
-  // Mark pack opened and handle depletion
+  // how many of each cToon we’re about to mint in THIS opening
+  const chosenCounts = {}
+  for (const c of chosen) chosenCounts[c.id] = (chosenCounts[c.id] || 0) + 1
+
+  /* ── 2. Mark opened, prune depleted, rebalance weights ─────────────────── */
   await db.$transaction(async (tx) => {
+    // mark pack opened
     await tx.userPack.update({
       where: { id: userPackId },
-      data: { opened: true, openedAt: new Date() }
+      data:  { opened: true, openedAt: new Date() }
     })
 
     const packId = userPack.pack.id
+
     for (const rc of userPack.pack.rarityConfigs) {
       const options = await tx.packCtoonOption.findMany({
-        where: {
-          packId,
-          // this filters by the Ctoon’s rarity
-          ctoon: { rarity: rc.rarity }
-        },
-        // make sure opt.ctoon is populated
+        where: { packId, ctoon: { rarity: rc.rarity } },
         include: { ctoon: true }
       })
 
-      const rarityDepleted = await Promise.all(
-        options.map(async opt => {
-          const count = await tx.userCtoon.count({ where: { ctoonId: opt.ctoonId } })
-          return opt.ctoon.quantity !== null && count >= opt.ctoon.quantity
-        })
-      )
+      const depleted = []
+      const remaining = []
 
-      if (rarityDepleted.every(depleted => depleted)) {
+      // decide depletion (minted so far + about-to-mint)
+      for (const opt of options) {
+        const mintedSoFar = await tx.userCtoon.count({ where: { ctoonId: opt.ctoonId } })
+        const pending     = chosenCounts[opt.ctoonId] || 0
+        const totalAfter  = mintedSoFar + pending
+        const isDepleted  = opt.ctoon.quantity !== null && totalAfter >= opt.ctoon.quantity
+        ;(isDepleted ? depleted : remaining).push(opt)
+      }
+
+      if (depleted.length) {
+        await tx.packCtoonOption.deleteMany({
+          where: { id: { in: depleted.map(o => o.id) } }
+        })
+      }
+
+      if (remaining.length) {
+        const even  = Math.floor(100 / remaining.length)
+        let extra   = 100 - even * remaining.length
+        for (const opt of remaining) {
+          const newWeight = even + (extra-- > 0 ? 1 : 0)
+          if (newWeight !== opt.weight) {
+            await tx.packCtoonOption.update({
+              where: { id: opt.id },
+              data:  { weight: newWeight }
+            })
+          }
+        }
+      }
+
+      // If no options left in this rarity, un-list pack and break
+      if (!remaining.length) {
         await tx.pack.update({
           where: { id: packId },
-          data: { inCmart: false }
+          data:  { inCmart: false }
         })
         break
       }
     }
   })
 
-  // Enqueue a mintCtoon job for each selected cToon
+  /* ── 3. Enqueue mints & build response ─────────────────────────────────── */
   for (const c of chosen) {
     await mintQueue.add('mintCtoon', { userId, ctoonId: c.id, isSpecial: true })
   }
 
-  // Immediately create userCtoon records so we know mintNumber, and capture inCmart
-  const mintNumbers = {}
+  const mintNumbers  = {}
   const inCmartFlags = {}
+
   for (const c of chosen) {
-    // how many this user already has
-    const priorCount = await db.userCtoon.count({
-      where: { userId, ctoonId: c.id }
-    })
-    const mintNumber = priorCount + 1
-    mintNumbers[c.id] = mintNumber
-    // grab the up-to-date inCmart from the ctoon row
+    const prior = await db.userCtoon.count({ where: { userId, ctoonId: c.id } })
+    mintNumbers[c.id] = prior + 1
     const full = await db.ctoon.findUnique({ where: { id: c.id } })
-    inCmartFlags[c.id] = full?.inCmart ?? true
+    inCmartFlags[c.id] = full ? full.inCmart : true
   }
 
-  // Return the selected cToons with mintNumber + inCmart
   return chosen.map(c => ({
     id:         c.id,
     name:       c.name,
@@ -147,5 +169,5 @@ export default defineEventHandler(async (event) => {
     rarity:     c.rarity,
     mintNumber: mintNumbers[c.id],
     inCmart:    inCmartFlags[c.id]
- }))
+  }))
 })

@@ -1,25 +1,157 @@
-import dotenv from 'dotenv';
-dotenv.config();
-import { createServer } from 'http'
-import { Server } from 'socket.io'
-import { prisma as db } from './prisma.js'
+import dotenv from 'dotenv'
+dotenv.config()
 
+import { createServer }  from 'http'
+import { Server }        from 'socket.io'
+import { prisma as db }  from './prisma.js'
+
+import fs                 from 'node:fs'
+import path               from 'node:path'
+import { dirname }        from 'node:path'
+import { fileURLToPath }  from 'node:url'
+import { randomUUID }     from 'crypto'
+
+/* ── Clash engine & helpers ────────────────────────────────── */
+import { createBattle }   from './utils/battleEngine.js'
+
+/* ── Load Cartoon-Network lanes once at boot ──────────────── */
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const lanesPath = path.join(__dirname, '../data/lanes.json')
+const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
+
+/* ────────────────────────────────────────────────────────────
+ *  HTTP + Socket.IO bootstrap
+ * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
-
 const httpServer = createServer()
-const io = new Server(httpServer, {
-  cors: {
-    origin: '*',
-  }
-})
+const io = new Server(httpServer, { cors: { origin: '*' } })
 
-const zoneVisitors = {}
-const zoneSockets = {}
+/* ────────────────────────────────────────────────────────────
+ *  cZone visitors & chat (unchanged)
+ * ────────────────────────────────────────────────────────── */
+const zoneVisitors = {}        // zone → count
+const zoneSockets  = {}        // zone → Set(socketId)
 
-const tradeRooms = {}
+/* ────────────────────────────────────────────────────────────
+ *  Trade rooms (unchanged)
+ * ────────────────────────────────────────────────────────── */
+const tradeRooms   = {}
 const tradeSockets = {}
 
+/* ────────────────────────────────────────────────────────────
+ *  Clash PvE: Select ▸ Reveal ▸ Setup
+ * ────────────────────────────────────────────────────────── */
+function aiChooseSelections (battle) {
+  const { energy, aiHand } = battle.state
+  const playable = aiHand.filter(c => c.cost <= energy)
+  if (!playable.length) return []
+  const card = playable.sort((a, b) => b.cost - a.cost)[0]
+  const laneIndex = Math.floor(Math.random() * 3)
+  return [{ cardId: card.id, laneIndex }]
+}
+
+const pveMatches = new Map()          // gameId → { battle, timer … }
+
+function broadcastPhase (io, match) {
+  io.to(match.id).emit('phaseUpdate', match.battle.publicState())
+}
+
+function endMatch (io, match, result) {
+  io.to(match.id).emit('gameEnd', result)
+  clearInterval(match.timer)
+  pveMatches.delete(match.id)
+}
+
+function startSelectTimer (io, match) {
+  match.selectDeadline = Date.now() + 30_000
+  if (match.timer) clearInterval(match.timer)
+
+  match.timer = setInterval(() => {
+    match.battle.tick(Date.now())
+    broadcastPhase(io, match)
+
+    if (match.battle.state.phase === 'gameEnd') {
+      endMatch(io, match, match.battle.state.result)
+    }
+  }, 1_000)
+}
+
+
 io.on('connection', socket => {
+  /* ──────────   Clash PvE   ────────── */
+  socket.on('joinPvE', ({ deck }) => {
+    const aiDeck = [...deck].sort(() => 0.5 - Math.random()).slice(0, 12)
+    const gameId = randomUUID()
+    const battle = createBattle({
+      playerDeck: deck,
+      aiDeck,
+      battleId: gameId,
+      lanes: LANES
+    })
+
+    const match = {
+      id: gameId,
+      socketId: socket.id,
+      battle,
+      playerConfirmed: false,
+      aiConfirmed: false,
+      timer: null,
+      selectDeadline: null
+    }
+    pveMatches.set(gameId, match)
+
+    socket.data.gameId = gameId
+    socket.join(gameId)
+
+    startSelectTimer(io, match)
+    socket.emit('gameStart', battle.publicState())
+  })
+
+  socket.on('selectCards', ({ selections }) => {
+    const match = pveMatches.get(socket.data.gameId)
+    if (!match || match.battle.state.phase !== 'select') return
+
+    /* apply player selections */
+    match.battle.select('player', selections)
+    match.playerConfirmed = true
+
+    /* AI selections */
+    const aiSel = aiChooseSelections(match.battle)
+    match.battle.select('ai', aiSel)
+    match.aiConfirmed = true
+
+    broadcastPhase(io, match)
+
+    if (match.playerConfirmed && match.aiConfirmed) {
+      match.battle.confirm('player')
+      match.battle.confirm('ai')
+
+      /* Reveal phase */
+      match.battle.runReveal()
+      broadcastPhase(io, match)
+
+      /* Setup next turn (draw, lane reveal, energy++) */
+      match.battle.setupNextTurn()
+      match.playerConfirmed = false
+      match.aiConfirmed     = false
+
+      /* Restart 30-sec select timer */
+      startSelectTimer(io, match)
+      broadcastPhase(io, match)
+
+      if (match.battle.state.phase === 'gameEnd') {
+        endMatch(io, match, match.battle.state.result)
+      }
+    }
+  })
+
+  socket.on('disconnect', () => {
+    const gid = socket.data.gameId
+    if (!gid) return
+    const match = pveMatches.get(gid)
+    if (match) endMatch(io, match, { winner:'ai', reason:'player_disconnect' })
+  })
+
   socket.on('join-zone', ({ zone }) => {
     socket.zone = zone
     socket.join(zone)
@@ -664,6 +796,7 @@ setInterval(async () => {
   }
 }, 30 * 1000);
 
+// Auction notifications
 setInterval(async () => {
   const now  = new Date()
   const five = new Date(now.getTime() + 5 * 60 * 1000)

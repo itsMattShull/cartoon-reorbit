@@ -689,11 +689,19 @@ async function buyPack(pack) {
   }
 }
 
+async function refreshPacks () {
+  try {
+    packs.value = await $fetch('/api/cmart/packs')      // <— same endpoint you use onMounted
+  } catch (err) {
+    console.error('Failed to refresh packs', err)
+    showToast('Could not refresh packs')
+  }
+}
+
 // ────────── Close Overlay ──────────────────────
 function closeOverlay() {
   overlayVisible.value = false
-  // If you need to re-fetch packs after closing, simply:
-  // packs.value = await $fetch('/api/cmart/packs')
+  await refreshPacks() 
 }
 </script>
 

@@ -105,6 +105,80 @@
         </div>
         <p class="text-sm text-gray-500">Check "Code Only" for exclusive reward drops. Check "In Cmart" to list in shop.</p>
 
+        <!-- ── Is this a G-toon? ─────────────────────────────── -->
+        <div class="flex items-center space-x-4 mt-6">
+          <label class="flex items-center font-medium">
+            <input type="checkbox" v-model="isGtoon" class="mr-2" />
+            Is this a gToon?
+          </label>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">
+          Check if this cToon will be playable in Clash.
+        </p>
+
+        <!-- ── G-toon-specific fields (shown only if checked) ── -->
+        <div v-if="isGtoon" class="border p-4 rounded bg-indigo-50 space-y-4">
+          <!-- Cost -->
+          <div>
+            <label class="block mb-1 font-medium">Cost <span class="text-xs text-gray-500">(1 – 6)</span></label>
+            <input v-model.number="cost" type="number" min="0" max="6"
+                  required class="w-full border rounded p-2" />
+            <p class="text-sm text-gray-500">Energy needed to play this card in Clash.</p>
+            <p v-if="errors.cost" class="text-red-600 text-sm mt-1">{{ errors.cost }}</p>
+          </div>
+
+          <!-- Power -->
+          <div>
+            <label class="block mb-1 font-medium">Power <span class="text-xs text-gray-500">(≥ 0)</span></label>
+            <input v-model.number="power" type="number" min="0" max="12"
+                  required class="w-full border rounded p-2" />
+            <p class="text-sm text-gray-500">Base lane power the card contributes.</p>
+            <p v-if="errors.power" class="text-red-600 text-sm mt-1">{{ errors.power }}</p>
+          </div>
+
+          <!-- Ability Key -->
+          <div>
+            <label class="block mb-1 font-medium">Ability</label>
+            <select v-model="abilityKey" class="w-full border rounded p-2 bg-white" required>
+              <option disabled value="">Select an ability</option>
+              <option v-for="a in abilityKeyOptions" :key="a.key" :value="a.key">
+                {{ a.label }}
+              </option>
+            </select>
+            <p class="text-sm text-gray-500">
+              Determines the on-play effect. See the tips below for how each ability works.
+            </p>
+          </div>
+
+          <!-- Ability Data (parameter) -->
+          <div v-if="selectedAbility && selectedAbility.params?.length">
+            <label class="block mb-1 font-medium">
+              {{ selectedAbility.paramLabel }}
+            </label>
+            <select v-model="abilityParam" class="w-full border rounded p-2 bg-white" required>
+              <option :value="null" disabled>Select a value</option>
+              <option v-for="opt in selectedAbility.params" :key="opt" :value="opt">
+                {{ opt }}
+              </option>
+            </select>
+            <p class="text-sm text-gray-500">
+              {{ selectedAbility.paramHelp }}
+            </p>
+          </div>
+
+          <!-- Inline guidance -->
+          <div class="text-xs text-left text-gray-600">
+            <p class="font-semibold">Ability cheat-sheet:</p>
+            <ul class="list-disc list-inside">
+              <li><strong>Flame Bug</strong> – Deals the selected damage to a random enemy
+                  in the lane when played.</li>
+              <li><strong>Heal Ally</strong> – Heals all friendly cToons in the lane for
+                  the selected amount.</li>
+              <!-- add more as you add registry entries -->
+            </ul>
+          </div>
+        </div>
+
         <!-- Price -->
         <div>
           <label class="block mb-1 font-medium">Price</label>
@@ -127,6 +201,7 @@ definePageMeta({
   layout: 'default'
 })
 import { ref, reactive, onMounted, watch } from 'vue'
+import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 
@@ -147,11 +222,27 @@ const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
 const setsOptions = ref([])
+/* ── NEW: G-toon state ───────────────────────────────── */
+const isGtoon     = ref(false)
+const cost        = ref(1)
+const power       = ref(1)
+const abilityKey  = ref('')
+const abilityParam = ref(null)
+
+const abilityKeyOptions = abilityMeta
+
+ /* computed helper */
+ const selectedAbility = computed(() =>
+   abilityKeyOptions.find(a => a.key === abilityKey.value) || null
+ )
+
+/* reset param when ability changes */
+watch(abilityKey, () => { abilityParam.value = null })
 
 // Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
-const errors = reactive({ image: '', name: '', series: '', rarity: '' })
+const errors = reactive({ image: '', name: '', series: '', rarity: '', cost:  '', power: '' })
 
 onMounted(async () => {
   const [seriesRes, setsRes] = await Promise.all([
@@ -240,6 +331,16 @@ async function submitForm() {
   formData.append('codeOnly', codeOnly.value)
   formData.append('inCmart', inCmart.value)
   formData.append('price', price.value)
+  formData.append('isGtoon',      isGtoon.value)
+  if (isGtoon.value) {
+    formData.append('cost',       cost.value)
+    formData.append('power',      power.value)
+    formData.append('abilityKey', abilityKey.value)
+    const abilityData = selectedAbility.value && abilityParam.value != null
+      ? JSON.stringify({ [selectedAbility.value.paramLabel.toLowerCase().split(' ')[0]]: abilityParam.value })
+      : '{}'
+    formData.append('abilityData', abilityData)
+  }
 
   const res = await fetch('/api/admin/ctoon', {
     method: 'POST',

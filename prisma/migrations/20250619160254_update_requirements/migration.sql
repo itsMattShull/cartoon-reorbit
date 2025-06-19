@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Ctoon" ALTER COLUMN "cost" DROP NOT NULL,
+ALTER COLUMN "power" DROP NOT NULL;

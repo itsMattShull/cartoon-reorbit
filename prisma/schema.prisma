@@ -34,7 +34,13 @@ model Ctoon {
   createdAt       DateTime        @default(now())
   set             String?
   characters      String[]
+
+  // gToon fields
   isGtoon         Boolean         @default(false)
+  cost            Int?      @default(1)
+  power           Int?      @default(1)
+  abilityKey      String?
+  abilityData     Json?
 
   owners          UserCtoon[]
   rewardCtoons    RewardCtoon[]
