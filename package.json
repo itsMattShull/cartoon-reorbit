@@ -30,6 +30,7 @@
     "canvas-confetti": "^1.9.3",
     "chart.js": "^4.4.9",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "crypto": "^1.0.1",
     "date-fns-tz": "^3.2.0",
     "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",

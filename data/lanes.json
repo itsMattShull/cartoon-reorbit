@@ -1,0 +1,32 @@
+[
+  {
+    "id": "dexters_lab",
+    "name": "Dexter’s Lab",
+    "desc": "Abilities here trigger twice.",
+    "effect": "DOUBLE_ABILITIES"
+  },
+  {
+    "id": "candy_kingdom",
+    "name": "Candy Kingdom",
+    "desc": "All cToons here get +2 power.",
+    "effect": "PLUS_TWO_POWER"
+  },
+  {
+    "id": "fosters_home",
+    "name": "Foster’s Home",
+    "desc": "On reveal, add a 1-power Imaginary Friend to each side.",
+    "effect": "SPAWN_TOKEN"
+  },
+  {
+    "id": "omnitrix_core",
+    "name": "Omnitrix Core",
+    "desc": "Cards here roll a new random power (0-10) each turn.",
+    "effect": "RANDOMIZE_POWER"
+  },
+  {
+    "id": "townsville",
+    "name": "Townsville",
+    "desc": "All 1-cost cToons here gain +1 power.",
+    "effect": "CHEAP_BUFF"
+  }
+]

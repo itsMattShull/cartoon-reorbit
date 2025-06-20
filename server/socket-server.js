@@ -1,25 +1,166 @@
-import dotenv from 'dotenv';
-dotenv.config();
-import { createServer } from 'http'
-import { Server } from 'socket.io'
-import { prisma as db } from './prisma.js'
+import dotenv from 'dotenv'
+dotenv.config()
 
+import { createServer }  from 'http'
+import { Server }        from 'socket.io'
+import { prisma as db }  from './prisma.js'
+
+import fs                 from 'node:fs'
+import path               from 'node:path'
+import { dirname }        from 'node:path'
+import { fileURLToPath }  from 'node:url'
+import { randomUUID }     from 'crypto'
+
+/* ── Clash engine & helpers ────────────────────────────────── */
+import { createBattle }   from './utils/battleEngine.js'
+
+/* ── Load Cartoon-Network lanes once at boot ──────────────── */
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const lanesPath = path.join(__dirname, '../data/lanes.json')
+const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
+
+/* ────────────────────────────────────────────────────────────
+ *  HTTP + Socket.IO bootstrap
+ * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
-
 const httpServer = createServer()
-const io = new Server(httpServer, {
-  cors: {
-    origin: '*',
-  }
-})
+const io = new Server(httpServer, { cors: { origin: '*' } })
 
-const zoneVisitors = {}
-const zoneSockets = {}
+/* ────────────────────────────────────────────────────────────
+ *  cZone visitors & chat (unchanged)
+ * ────────────────────────────────────────────────────────── */
+const zoneVisitors = {}        // zone → count
+const zoneSockets  = {}        // zone → Set(socketId)
 
-const tradeRooms = {}
+/* ────────────────────────────────────────────────────────────
+ *  Trade rooms (unchanged)
+ * ────────────────────────────────────────────────────────── */
+const tradeRooms   = {}
 const tradeSockets = {}
 
+/* ── Clash PvE: Select → Reveal → Setup ───────────────────── */
+// Fisher–Yates shuffle helper
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function aiChooseSelections(battle) {
+  const { energy, aiHand } = battle.state
+  const playable = aiHand.filter(c => c.cost <= energy)
+  if (!playable.length) return []
+  // pick highest-cost card, random lane
+  const card = playable.sort((a, b) => b.cost - a.cost)[0]
+  const laneIndex = Math.floor(Math.random() * 3)
+  return [{ cardId: card.id, laneIndex }]
+}
+
+const pveMatches = new Map()
+
+function broadcastPhase(io, match) {
+  io.to(match.id).emit('phaseUpdate', match.battle.publicState())
+}
+
+function endMatch(io, match, result) {
+  io.to(match.id).emit('gameEnd', result)
+  clearInterval(match.timer)
+  pveMatches.delete(match.id)
+}
+
+function startSelectTimer(io, match) {
+  match.selectDeadline = Date.now() + 30_000
+  if (match.timer) clearInterval(match.timer)
+  match.timer = setInterval(() => {
+    match.battle.tick(Date.now())
+    broadcastPhase(io, match)
+    if (match.battle.state.phase === 'gameEnd') {
+      endMatch(io, match, match.battle.state.result)
+    }
+  }, 1000)
+}
+
+
 io.on('connection', socket => {
+  /* ──────────   Clash PvE   ────────── */
+  socket.on('joinPvE', ({ deck }) => {
+    const aiDeck = shuffle(deck).slice(0, 12)
+    const gameId = randomUUID()
+    const battle = createBattle({
+      playerDeck: deck,
+      aiDeck,
+      battleId: gameId,
+      lanes: LANES
+    })
+
+    const match = {
+      id:           gameId,
+      socketId:     socket.id,
+      battle,
+      playerConfirmed: false,
+      aiConfirmed:     false,
+      timer:           null,
+      selectDeadline:  null
+    }
+    pveMatches.set(gameId, match)
+
+    socket.data.gameId = gameId
+    socket.join(gameId)
+
+    startSelectTimer(io, match)
+    socket.emit('gameStart', battle.publicState())
+  })
+
+  /* ── Handle player selection ──────────────────────────── */
+  socket.on('selectCards', ({ selections }) => {
+    const match = pveMatches.get(socket.data.gameId)
+    if (!match) {
+      console.warn(
+        '[Server] no match found for socket.data.gameId=',
+        socket.data.gameId
+      )
+      return
+    }
+    if (match.battle.state.phase !== 'select') {
+      console.warn('[Server] selectCards but phase=', match.battle.state.phase)
+      return
+    }
+
+    // AI makes its selection
+    const aiSel = aiChooseSelections(match.battle)
+
+    // Apply & confirm both sides (engine will run reveal→setup)
+    match.battle.select('player', selections)
+    match.battle.select('ai', aiSel)
+    match.battle.confirm('player')
+    match.battle.confirm('ai')
+
+    // broadcast the new state (after reveal & setup)
+    broadcastPhase(io, match)
+
+    // restart the select timer for the next turn
+    startSelectTimer(io, match)
+    broadcastPhase(io, match)
+
+    // handle game end
+    if (match.battle.state.phase === 'gameEnd') {
+      endMatch(io, match, match.battle.state.result)
+    }
+  })
+
+  /* ── Disconnect handling ──────────────────────────────── */
+  socket.on('disconnect', () => {
+    const gid = socket.data.gameId
+    if (!gid) return
+    const match = pveMatches.get(gid)
+    if (match) {
+      endMatch(io, match, { winner: 'ai', reason: 'player_disconnect' })
+    }
+  })
+
   socket.on('join-zone', ({ zone }) => {
     socket.zone = zone
     socket.join(zone)
@@ -594,12 +735,10 @@ io.on('connection', socket => {
 
   socket.on('new-bid', ({ auctionId, user, amount }) => {
     // broadcast to everyone in auction_<id>
-    console.log('new bid: ', amount)
     io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
   })
 
   socket.on('join-auction', ({ auctionId }) => {
-    console.log('auction: ', auctionId)
     socket.join(`auction_${auctionId}`)
   })
 
@@ -612,46 +751,59 @@ io.on('connection', socket => {
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 30s (adjust as desired).
 setInterval(async () => {
-  const now = new Date()
+  const now = new Date();
   const toClose = await db.auction.findMany({
     where: { status: 'ACTIVE', endAt: { lte: now } }
-  })
+  });
 
   for (const auc of toClose) {
-    await db.$transaction(async (tx) => {
-      // close it
+    const { id, highestBidderId, creatorId, highestBid, userCtoonId } = auc;
+
+    // only adjust points/ownership if there's a bidder who isn't the creator
+    const shouldFinalize = highestBidderId && highestBidderId !== creatorId;
+
+    await db.$transaction(async tx => {
+      // close the auction
       await tx.auction.update({
-        where: { id: auc.id },
+        where: { id },
         data: {
           status: 'CLOSED',
-          winnerId: auc.highestBidderId,
+          winnerId: highestBidderId,
           winnerAt: now
         }
-      })
-      // debit winner points
-      if (auc.highestBidderId && auc.highestBid > 0) {
+      });
+
+      if (shouldFinalize && highestBid > 0) {
+        // debit the winner
         await tx.userPoints.update({
-          where: { userId: auc.highestBidderId },
-          data: { points: { decrement: auc.highestBid } }
-        })
-      }
-      // transfer the cToon
-      if (auc.highestBidderId) {
+          where: { userId: highestBidderId },
+          data: { points: { decrement: highestBid } }
+        });
+
+        // credit the creator
+        await tx.userPoints.upsert({
+          where: { userId: creatorId },
+          create: { userId: creatorId, points: highestBid },
+          update: { points: { increment: highestBid } }
+        });
+
+        // transfer the cToon
         await tx.userCtoon.update({
-          where: { id: auc.userCtoonId },
-          data: { userId: auc.highestBidderId }
-        })
+          where: { id: userCtoonId },
+          data: { userId: highestBidderId }
+        });
       }
-    })
+    });
 
-    // notify clients
-    io.to(`auction_${auc.id}`).emit('auction-ended', {
-      winnerId: auc.highestBidderId,
-      winningBid: auc.highestBid
-    })
+    // notify clients regardless
+    io.to(`auction_${id}`).emit('auction-ended', {
+      winnerId: highestBidderId,
+      winningBid: highestBid
+    });
   }
-}, 30 * 1000)
+}, 30 * 1000);
 
+// Auction notifications
 setInterval(async () => {
   const now  = new Date()
   const five = new Date(now.getTime() + 5 * 60 * 1000)
@@ -664,8 +816,9 @@ setInterval(async () => {
       endingSoonNotified: false
     },
     include: {
-      userCtoon: { include: { ctoon: true } },
-      creator: true
+      userCtoon:     { include: { ctoon: true } },
+      creator:       true,
+      highestBidder: true     // ← include highestBidder
     }
   })
 
@@ -682,6 +835,13 @@ setInterval(async () => {
       const { name, rarity, assetPath } = auc.userCtoon.ctoon
       const mintNumber = auc.userCtoon.mintNumber
 
+      // determine bid display: use initialBet if no bids
+      const hasBidder       = Boolean(auc.highestBidder)
+      const displayedBid    = hasBidder ? auc.highestBid : auc.initialBet
+      const topBidderTag    = hasBidder
+        ? `<@${auc.highestBidder.discordId}>`
+        : 'No one has bid on it'
+
       // build & encode image URL
       const rawImageUrl = assetPath
         ? assetPath.startsWith('http')
@@ -690,18 +850,21 @@ setInterval(async () => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
-      // payload with embed + image
+      // payload with embed + image + bid info
       const payload = {
         content: `⏰ **Auction ending within 5 minutes!** ⏰`,
         embeds: [
           {
             title: name,
             url: auctionLink,
-            description:
-              `**Rarity:** ${rarity}\n` +
-              `**Mint #:** ${mintNumber ?? 'N/A'}\n` +
-              `⏱️ Ending at: <t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>\n` +
-              `🔗 [View Auction](${auctionLink})`,
+            fields: [
+              { name: 'Rarity',       value: rarity,                           inline: true },
+              { name: 'Mint #',       value: `${mintNumber ?? 'N/A'}`,       inline: true },
+              { name: 'Highest Bid',  value: `${displayedBid}`,               inline: true },
+              { name: 'Top Bidder',   value: topBidderTag,                    inline: true },
+              { name: 'Ends In',      value: `<t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>`, inline: false },
+              { name: 'View Auction', value: `[Click here](${auctionLink})`,   inline: false }
+            ],
             ...(imageUrl ? { image: { url: imageUrl } } : {})
           }
         ]
@@ -714,7 +877,7 @@ setInterval(async () => {
           method: 'POST',
           headers: {
             'Authorization': `${botToken}`,
-            'Content-Type': 'application/json'
+            'Content-Type':  'application/json'
           },
           body: JSON.stringify(payload)
         }

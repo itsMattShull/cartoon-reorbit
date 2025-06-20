@@ -1,0 +1,48 @@
+[
+  {
+    "key": "flame_bug",
+    "label": "Flame Bug (Deal Damage)",
+    "paramLabel": "Damage Amount",
+    "paramHelp": "How much damage this card deals when revealed.",
+    "params": [1, 2, 3, 4, 5]
+  },
+  {
+    "key": "heal_ally",
+    "label": "Heal Ally (Heal Friends)",
+    "paramLabel": "Heal Amount",
+    "paramHelp": "How much each friendly cToon is healed.",
+    "params": [1, 2, 3, 4, 5]
+  },
+  {
+    "key": "always_sneaking_up",
+    "label": "Always Sneaking Up (Starts in Hand)"
+  },
+  {
+    "key": "heal_ally_big",
+    "label": "Heal Ally (3 Power)"
+  },
+  {
+    "key": "gotcha_now",
+    "label": "Gotcha Now (+4 if Opp. also played)"
+  },
+  {
+    "key": "time_and_space",
+    "label": "Time & Space (Replace Lane)"
+  },
+  {
+    "key": "take_that",
+    "label": "Take That (+2 to ability-less)"
+  },
+  {
+    "key": "watchful_eye",
+    "label": "Watchful Eye (+5 next turn if skip)"
+  },
+  {
+    "key": "power_up",
+    "label": "Power Up (Double Lane)"
+  },
+  {
+    "key": "helping_hand",
+    "label": "Helping Hand (+1 Others)"
+  }
+]
