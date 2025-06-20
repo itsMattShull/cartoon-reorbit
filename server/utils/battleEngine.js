@@ -37,12 +37,13 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     phase:        'select',
     selectEndsAt: Date.now() + SELECT_WINDOW,
 
-    lanes: shuffle([...lanes]).slice(0, 3).map(l => ({
-      ...l,
-      revealed: false,
-      player:   [],
-      ai:       []
-    })),
+    lanes: shuffle([...lanes]).slice(0, 3).map((l, i) => ({
+       ...l,
+       // reveal the first lane immediately
+       revealed: i === 0,
+       player:   [],
+       ai:       []
+     })),
 
     playerDeck: _playerDeck,
     aiDeck:     _aiDeck,

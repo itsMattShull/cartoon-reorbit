@@ -1,25 +1,39 @@
 <template>
   <div
-    :class="[
-      'border rounded bg-white flex flex-col items-center justify-center select-none transition',
-      sizeClasses.outer,
-      { 'cursor-pointer': true },
-      isSelected && 'ring-2 ring-indigo-400'
-    ]"
-    :draggable="isDraggable"
+    :class="outerClasses"
+    :draggable="afford !== false"
     @dragstart="dragStart"
     @click="handleClick"
   >
-    <img
-      :src="card.assetPath"
-      :alt="card.name"
-      :class="[sizeClasses.img, 'object-contain mb-0.5']"
-    />
-    <span :class="['font-semibold truncate w-full px-1 leading-none', sizeClasses.name]">
+    <div class="relative">
+      <!-- the toon art -->
+      <img
+        :src="card.assetPath"
+        :alt="card.name"
+        class="w-24 h-24 object-contain"
+      />
+
+      <!-- power in the big circle -->
+      <div class="absolute" :style="powerStyle">
+        <span class="text-white font-bold drop-shadow-lg text-2xl">
+          {{ card.power }}
+        </span>
+      </div>
+
+      <!-- cost in the small bubble -->
+      <div class="absolute" :style="costStyle">
+        <span class="text-white font-bold drop-shadow text-[8px]">
+          {{ card.cost }}
+        </span>
+      </div>
+    </div>
+
+    <!-- name only when large -->
+    <span
+      v-if="!isSmall"
+      class="font-semibold truncate w-full px-1 mt-1 leading-none text-[11px]"
+    >
       {{ card.name }}
-    </span>
-    <span :class="['text-gray-500 leading-none', sizeClasses.stats]">
-      P{{ card.power }} · C{{ card.cost }}
     </span>
   </div>
 </template>
@@ -28,37 +42,70 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  card:        { type: Object, required: true },
-  size:        { type: String, default: 'small' }, // 'small' | 'large'
-  selectedId:  { type: [String, Number], default: null } // ← NEW
+  card:     { type: Object,  required: true },
+  selected: { type: Boolean, default: false },
+  afford:   { type: Boolean, default: null },    // passed from ClashHand
+  size:     { type: String,  default: 'large' }  // 'large' | 'small'
 })
-
 const emit = defineEmits(['select'])
 
-/* ---------- visual helpers ---------- */
-const isDraggable = computed(() => props.size === 'large')
-const isSelected  = computed(() => props.card.id === props.selectedId)
+const isSmall = computed(() => props.size === 'small')
 
-const sizeClasses = computed(() => props.size === 'large'
-  ? { outer: 'w-24 h-36 text-xs', img: 'w-20 h-20',
-      name: 'text-[11px]', stats: 'text-[10px]' }
-  : { outer: 'w-16 h-24 text-[10px]', img: 'w-12 h-12',
-      name: 'text-[10px]', stats: 'text-[9px]' }
-)
+// build the container classes
+const outerClasses = computed(() => [
+  // base layout
+  'flex flex-col items-center justify-center bg-white select-none transition',
+  'w-24 h-36 text-xs rounded',
 
-/* ---------- events ---------- */
-function dragStart (evt) {
-  if (evt.dataTransfer && isDraggable.value) {
+  // only large cards get a border
+  !isSmall.value && 'border',
+
+  // small cards are simply scaled down
+  isSmall.value && 'transform scale-75',
+
+  // afford / not afford
+  props.afford === false ? 'cursor-not-allowed opacity-30' : 'cursor-pointer',
+
+  // selected ring
+  props.selected && props.afford !== false && 'ring-2 ring-indigo-400',
+])
+
+// overlay positions (hard-coded against your 96×96 template)
+const DIM = 96
+const powerStyle = {
+  top:       `${DIM * 0.64}px`,
+  left:      `${DIM * 0.645}px`,
+  transform: 'translate(-50%, -50%)'
+}
+const costStyle = {
+  top:       `${DIM * 0.473}px`,
+  left:      `${DIM * 0.775}px`,
+  transform: 'translate(-50%, 0)'
+}
+
+function dragStart(evt) {
+  if (evt.dataTransfer && props.afford !== false) {
     evt.dataTransfer.setData('ctoon-id', props.card.id)
   }
 }
 
-function handleClick () {
+function handleClick() {
+  if (props.afford === false) return
   emit('select', props.card)
 }
 </script>
 
 <style scoped>
-/* optional hover scale for large cards */
-.cursor-pointer:hover { transform: scale(1.03); }
+/* subtle hover scale for draggable/affordable cards */
+.cursor-pointer:hover {
+  transform: scale(1.03);
+}
+
+/* make the white text pop on the blue bubbles */
+.drop-shadow {
+  text-shadow: 0 0 2px rgba(0,0,0,0.8);
+}
+.drop-shadow-lg {
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
 </style>

@@ -21,10 +21,10 @@
 
     <!-- CToon stacks -->
     <div class="flex justify-between gap-1">
-      <div class="flex gap-1">
+      <div class="flex gap-0">
         <ClashCToonCard v-for="c in lane.player" :key="c.id" :card="c" small />
       </div>
-      <div class="flex gap-1">
+      <div class="flex gap-0">
         <ClashCToonCard v-for="c in lane.ai" :key="c.id" :card="c" small />
       </div>
     </div>

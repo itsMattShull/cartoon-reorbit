@@ -38,53 +38,57 @@ const zoneSockets  = {}        // zone → Set(socketId)
 const tradeRooms   = {}
 const tradeSockets = {}
 
-/* ────────────────────────────────────────────────────────────
- *  Clash PvE: Select ▸ Reveal ▸ Setup
- * ────────────────────────────────────────────────────────── */
-function aiChooseSelections (battle) {
+/* ── Clash PvE: Select → Reveal → Setup ───────────────────── */
+// Fisher–Yates shuffle helper
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function aiChooseSelections(battle) {
   const { energy, aiHand } = battle.state
   const playable = aiHand.filter(c => c.cost <= energy)
   if (!playable.length) return []
+  // pick highest-cost card, random lane
   const card = playable.sort((a, b) => b.cost - a.cost)[0]
   const laneIndex = Math.floor(Math.random() * 3)
   return [{ cardId: card.id, laneIndex }]
 }
 
-const pveMatches = new Map()          // gameId → { battle, timer … }
+const pveMatches = new Map()
 
-function broadcastPhase (io, match) {
+function broadcastPhase(io, match) {
   io.to(match.id).emit('phaseUpdate', match.battle.publicState())
 }
 
-function endMatch (io, match, result) {
+function endMatch(io, match, result) {
   io.to(match.id).emit('gameEnd', result)
   clearInterval(match.timer)
   pveMatches.delete(match.id)
 }
 
-function startSelectTimer (io, match) {
+function startSelectTimer(io, match) {
   match.selectDeadline = Date.now() + 30_000
   if (match.timer) clearInterval(match.timer)
-
   match.timer = setInterval(() => {
     match.battle.tick(Date.now())
     broadcastPhase(io, match)
-
     if (match.battle.state.phase === 'gameEnd') {
       endMatch(io, match, match.battle.state.result)
     }
-  }, 1_000)
+  }, 1000)
 }
 
 
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', ({ deck }) => {
-    console.log('deck: ', deck)
-    const aiDeck = [...deck].sort(() => 0.5 - Math.random()).slice(0, 12)
-    console.log('aiDeck: ', aiDeck)
+    const aiDeck = shuffle(deck).slice(0, 12)
     const gameId = randomUUID()
-    console.log('game id: ', gameId)
     const battle = createBattle({
       playerDeck: deck,
       aiDeck,
@@ -93,13 +97,13 @@ io.on('connection', socket => {
     })
 
     const match = {
-      id: gameId,
-      socketId: socket.id,
+      id:           gameId,
+      socketId:     socket.id,
       battle,
       playerConfirmed: false,
-      aiConfirmed: false,
-      timer: null,
-      selectDeadline: null
+      aiConfirmed:     false,
+      timer:           null,
+      selectDeadline:  null
     }
     pveMatches.set(gameId, match)
 
@@ -110,49 +114,51 @@ io.on('connection', socket => {
     socket.emit('gameStart', battle.publicState())
   })
 
+  /* ── Handle player selection ──────────────────────────── */
   socket.on('selectCards', ({ selections }) => {
     const match = pveMatches.get(socket.data.gameId)
-    if (!match || match.battle.state.phase !== 'select') return
+    if (!match) {
+      console.warn(
+        '[Server] no match found for socket.data.gameId=',
+        socket.data.gameId
+      )
+      return
+    }
+    if (match.battle.state.phase !== 'select') {
+      console.warn('[Server] selectCards but phase=', match.battle.state.phase)
+      return
+    }
 
-    /* apply player selections */
-    match.battle.select('player', selections)
-    match.playerConfirmed = true
-
-    /* AI selections */
+    // AI makes its selection
     const aiSel = aiChooseSelections(match.battle)
-    match.battle.select('ai', aiSel)
-    match.aiConfirmed = true
 
+    // Apply & confirm both sides (engine will run reveal→setup)
+    match.battle.select('player', selections)
+    match.battle.select('ai', aiSel)
+    match.battle.confirm('player')
+    match.battle.confirm('ai')
+
+    // broadcast the new state (after reveal & setup)
     broadcastPhase(io, match)
 
-    if (match.playerConfirmed && match.aiConfirmed) {
-      match.battle.confirm('player')
-      match.battle.confirm('ai')
+    // restart the select timer for the next turn
+    startSelectTimer(io, match)
+    broadcastPhase(io, match)
 
-      /* Reveal phase */
-      match.battle.runReveal()
-      broadcastPhase(io, match)
-
-      /* Setup next turn (draw, lane reveal, energy++) */
-      match.battle.setupNextTurn()
-      match.playerConfirmed = false
-      match.aiConfirmed     = false
-
-      /* Restart 30-sec select timer */
-      startSelectTimer(io, match)
-      broadcastPhase(io, match)
-
-      if (match.battle.state.phase === 'gameEnd') {
-        endMatch(io, match, match.battle.state.result)
-      }
+    // handle game end
+    if (match.battle.state.phase === 'gameEnd') {
+      endMatch(io, match, match.battle.state.result)
     }
   })
 
+  /* ── Disconnect handling ──────────────────────────────── */
   socket.on('disconnect', () => {
     const gid = socket.data.gameId
     if (!gid) return
     const match = pveMatches.get(gid)
-    if (match) endMatch(io, match, { winner:'ai', reason:'player_disconnect' })
+    if (match) {
+      endMatch(io, match, { winner: 'ai', reason: 'player_disconnect' })
+    }
   })
 
   socket.on('join-zone', ({ zone }) => {
@@ -729,12 +735,10 @@ io.on('connection', socket => {
 
   socket.on('new-bid', ({ auctionId, user, amount }) => {
     // broadcast to everyone in auction_<id>
-    console.log('new bid: ', amount)
     io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
   })
 
   socket.on('join-auction', ({ auctionId }) => {
-    console.log('auction: ', auctionId)
     socket.join(`auction_${auctionId}`)
   })
 

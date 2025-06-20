@@ -247,11 +247,14 @@ const selectedCount = computed(() => selectedIds.value.length)
 const grouped = computed(() => {
   const m = {}
   for (const id of selectedIds.value) {
-    const r = lookup.value[id]?.rarity || 'Unknown'
+    const c = lookup.value[id]
+    if (!c) continue                // ← skip any ID we don’t know about
+    const r = c.rarity
     ;(m[r] ||= []).push(id)
   }
   return m
 })
+
 
 /* ------------- weight helpers ------------------ */
 const sumWeights = rarity =>

@@ -1,3 +1,4 @@
+<!-- pages/games/clash/play.vue -->
 <template>
   <Nav />
 
@@ -23,7 +24,7 @@
         v-if="isSelecting"
         class="text-sm font-normal text-gray-600 ml-4"
       >
-        Select ({{ secondsLeft }} s)
+        Select ({{ secondsLeft }}s)
       </span>
       <span
         v-else-if="game.phase==='reveal'"
@@ -90,7 +91,7 @@
       @click="confirmSelections"
       class="self-center bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded disabled:opacity-50"
     >
-      {{ confirmed ? 'Waiting…' : 'Confirm' }}
+      {{ confirmed ? 'Waiting…' : `Confirm (${secondsLeft}s)` }}
     </button>
 
     <!-- Game-over modal -->
@@ -124,16 +125,15 @@
 </template>
 
 <script setup>
-/* ------------------------------------------------------------------
-   Play page for Clash – handles Setup ▸ Select ▸ Reveal ▸ …
------------------------------------------------------------------- */
+// Play page for gToon Clash
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
+import { useState, useRuntimeConfig } from '#imports'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
-import ClashHand      from '@/components/ClashHand.vue'
+import ClashHand from '@/components/ClashHand.vue'
 
-/* shared Nuxt state for socket + initial battle */
+// shared Nuxt state
 const battleState = useState('battle-state', () => null)
 const socketState = useState('clash-socket',  () => null)
 const game        = ref(battleState.value)
@@ -141,7 +141,7 @@ const game        = ref(battleState.value)
 const router  = useRouter()
 const runtime = useRuntimeConfig()
 
-/* socket singleton across pages */
+// socket singleton across pages
 let socket = socketState.value
 if (!socket) {
   socket = io(
@@ -152,121 +152,113 @@ if (!socket) {
   socketState.value = socket
 }
 
-/* local UI refs */
-const selected   = ref(null)   // selected hand card
-const placements = ref([])     // [{cardId,laneIndex}]
-const confirmed  = ref(false)  // after confirm button pressed
+// local UI refs
+const selected   = ref(null)
+const placements = ref([])     // [{ cardId, laneIndex }]
+const confirmed  = ref(false)
 const log        = ref([])
 const summary    = ref(null)
 
-/* countdown */
+// countdown
 const secondsLeft = ref(30)
-const progressPercent = computed(() =>
-  Math.max(0, Math.min(100, (secondsLeft.value / 30) * 100))
-)
-const isSelecting = computed(() =>
-  game.value && (game.value.phase === 'select' || game.value.phase === 'setup')
-)
-
-/* dynamic instructions */
-const instructionText = computed(() => {
-  if (!game.value) return ''
-  if (game.value.phase === 'setup') {
-    return 'Prepare your first move – select a card and place it on a lane.'
-  }
-  if (game.value.phase === 'select') {
-    if (confirmed.value) return 'Waiting for opponent…'
-    if (!selected.value) return 'Click a card, then click a lane to place it.'
-    return 'Choose a lane and confirm your selection.'
-  }
-  if (game.value.phase === 'reveal') {
-    return game.value.priority === 'player'
-      ? 'Your turn attacks first – watch the reveal!'
-      : 'Opponent attacks first – watch the reveal.'
-  }
-  return ''
-})
-
-/* timer helper */
-let tickId = null
-function startTimer (deadline) {
-  clearInterval(tickId)
+let timerId = null
+function startTimer(deadline) {
+  clearInterval(timerId)
   if (!deadline) return
-  tickId = setInterval(() => {
-    secondsLeft.value = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
-    if (secondsLeft.value === 0) clearInterval(tickId)
+  timerId = setInterval(() => {
+    secondsLeft.value = Math.max(0,
+      Math.ceil((deadline - Date.now())/1000)
+    )
+    if (secondsLeft.value === 0) clearInterval(timerId)
   }, 1000)
 }
 
-/* ---------------- socket handlers ---------------- */
-function wireSocket () {
-  socket.on('gameStart', state => {
-    game.value = state
-    battleState.value = state
-    resetLocal()
-    startTimer(state.selectDeadline)
-  })
+// derived flags
+const isSelecting = computed(
+  () => game.value
+    && (game.value.phase === 'select' || game.value.phase === 'setup')
+)
+const progressPercent = computed(() =>
+  Math.max(0, Math.min(100, (secondsLeft.value/30)*100))
+)
+const instructionText = computed(() => {
+  if (!game.value) return ''
+  if (game.value.phase === 'setup')
+    return 'Prepare your first move – select a card and place it on a lane.'
+  if (game.value.phase === 'select') {
+    if (confirmed.value)        return 'Waiting for opponent…'
+    if (!selected.value)        return 'Click a card, then a lane to place it.'
+    return 'Choose a lane and confirm your selection.'
+  }
+  if (game.value.phase === 'reveal')
+    return game.value.priority==='player'
+      ? 'You attack first – watch the reveal!'
+      : 'Opponent attacks first – watch the reveal.'
+  return ''
+})
 
+// socket handlers
+function wireSocket() {
   socket.on('phaseUpdate', state => {
-    game.value = state
     battleState.value = state
+    game.value        = state
 
-    if (state.phase === 'select' || state.phase === 'setup') {
-      startTimer(state.selectDeadline)
+    if (state.phase==='select' || state.phase==='setup') {
+      startTimer(state.selectEndsAt)
     } else {
-      clearInterval(tickId)
+      clearInterval(timerId)
       secondsLeft.value = 0
     }
 
-    /* new select/setup phase → reset UI */
-    if ((state.phase === 'select' || state.phase === 'setup') && confirmed.value) {
+    // reset selections on new window
+    if ((state.phase==='select'||state.phase==='setup') && confirmed.value) {
       resetLocal()
     }
   })
 
   socket.on('gameEnd', sum => {
     summary.value = sum
-    clearInterval(tickId)
+    clearInterval(timerId)
   })
 }
 
-/* ---------------- UI actions --------------------- */
-function handlePlace (laneIdx) {
+// UI actions
+function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
-
-  /* Toggle placement */
-  const idx = placements.value.findIndex(p => p.cardId === selected.value.id)
-  if (idx >= 0) placements.value.splice(idx, 1)
-  else placements.value.push({ cardId: selected.value.id, laneIndex: laneIdx })
+  const i = placements.value.findIndex(p => p.cardId===selected.value.id)
+  if (i>=0) placements.value.splice(i,1)
+  else      placements.value.push({ cardId:selected.value.id, laneIndex:laneIdx })
 }
 
-function confirmSelections () {
+function confirmSelections() {
   if (confirmed.value || !placements.value.length) return
-  socket.emit('selectCards', { selections: placements.value })
+  socket.emit('selectCards',{ selections:placements.value })
   confirmed.value = true
 }
 
-/* ---------------- helpers ------------------------ */
-function resetLocal () {
+// reset
+function resetLocal() {
   placements.value = []
   confirmed.value  = false
   selected.value   = null
 }
 
-/* -------------- lifecycle ------------------------ */
+// lifecycle
 onMounted(() => {
-  if (!game.value) return router.replace('/games/clash')
+  if (!battleState.value) {
+    return router.replace('/games/clash')
+  }
+  game.value = battleState.value
   wireSocket()
 })
 
 onBeforeUnmount(() => {
-  socket.off('gameStart')
   socket.off('phaseUpdate')
   socket.off('gameEnd')
-  clearInterval(tickId)
+  clearInterval(timerId)
 })
 
-/* keep local `game` in-sync if parent page overwrites battleState */
+// keep in sync if battleState changes
 watch(battleState, val => { if (val) game.value = val })
 </script>
 
