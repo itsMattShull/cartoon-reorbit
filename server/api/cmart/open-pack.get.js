@@ -128,13 +128,13 @@ export default defineEventHandler(async (event) => {
             })
           }
         }
-      }
 
-      /* 2-c  ➜  NEW: keep PackRarityConfig.count in sync */
-      await tx.packRarityConfig.update({
-        where: { id: rc.id },
-        data:  { count: remaining.length }
-      })
+        /* 2-c  ➜  NEW: keep PackRarityConfig.count in sync */
+        await tx.packRarityConfig.update({
+          where: { id: rc.id },
+          data:  { count: remaining.length }
+        })
+      }
 
       /* 2-d if none left, unlist pack and stop looping */
       if (!remaining.length) {
