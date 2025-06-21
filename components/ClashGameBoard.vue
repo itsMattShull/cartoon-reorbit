@@ -1,68 +1,82 @@
+<!-- components/ClashGameBoard.vue -->
 <template>
   <div class="flex flex-col items-center gap-6">
-    <!-- All 3 lanes, side by side -->
-    <div class="flex gap-4 w-full justify-center">
+    <div class="flex w-full justify-center gap-4">
       <div
         v-for="(lane, idx) in lanes"
         :key="idx"
         class="flex flex-col items-center bg-white rounded-lg shadow-lg p-4 w-1/3 transition"
         :class="[
           phase !== 'select'
-            ? 'opacity-70 pointer-events-none'
+            ? 'pointer-events-none opacity-70'
             : 'cursor-pointer hover:ring-2 hover:ring-indigo-300',
           isLaneSelected(idx) ? 'ring-4 ring-indigo-500' : '',
           phase === 'reveal' && highlightLane(idx)
         ]"
-        @click="phase === 'select' && place(idx)"
+        @click="phase==='select' && place(idx)"
       >
         <!-- AI’s cards (2×2 grid) -->
-        <div class="grid grid-cols-2 grid-rows-2 gap-2 mb-3">
-          <ClashCToonCard
-            v-for="c in lane.ai"
-            :key="c.id"
-            :card="c"
-            :selected="false"
-            :afford="null"
-            size="small"
-          />
+        <div
+          class="grid grid-cols-2 gap-0.5 mb-3 w-full auto-rows-[9rem]"
+        >
+          <template v-for="i in 4" :key="i">
+            <div class="flex items-center justify-center">
+              <ClashCToonCard
+                v-if="lane.ai[i-1]"
+                :card="lane.ai[i-1]"
+                size="small"
+              />
+              <div v-else class="w-24 h-36"></div>
+            </div>
+          </template>
         </div>
 
         <!-- Location + Totals -->
-        <div class="flex items-center justify-between w-full bg-gray-100 rounded p-2 mb-3">
-          <span class="font-bold text-sm">AI: {{ sumPower(lane.ai) }}</span>
+        <div class="flex items-center justify-between w-full bg-gray-100 rounded p-2 mb-3 text-sm">
+          <span class="font-bold">AI: {{ sumPower(lane.ai) }}</span>
           <div class="text-center">
-            <div class="font-semibold text-sm">
+            <div class="font-semibold">
               {{ lane.revealed ? lane.name : '???' }}
             </div>
-            <div v-if="lane.revealed" class="text-xs text-gray-600 mt-1">
+            <div v-if="lane.revealed" class="text-xs text-gray-600">
               {{ lane.desc }}
             </div>
           </div>
-          <span class="font-bold text-sm">You: {{ sumPower(lane.player) }}</span>
+          <span class="font-bold">You: {{ sumPower(lane.player) }}</span>
         </div>
 
-        <!-- Player’s cards (2×2 grid) -->
-        <div class="grid grid-cols-2 grid-rows-2 gap-2">
-          <!-- ghost preview if any -->
-          <template v-if="ghostInLane(idx)">
-            <img
-              :src="ghostInLane(idx).assetPath"
-              class="w-full h-20 object-contain border-2 border-dashed rounded opacity-50"
-            />
+        <!-- Player’s cards (2×2 grid + ghosts) -->
+        <div
+          class="grid grid-cols-2 gap-0.5 w-full auto-rows-[9rem]"
+        >
+          <template v-for="i in 4" :key="i">
+            <div class="flex items-center justify-center">
+              <!-- real card -->
+              <ClashCToonCard
+                v-if="lane.player[i-1]"
+                :card="lane.player[i-1]"
+                size="small"
+              />
+
+              <!-- ghost preview -->
+              <ClashCToonCard
+                v-else-if="phase==='select' && !confirmed && ghostAtSlot(idx, i-1)"
+                :card="ghostAtSlot(idx, i-1)"
+                size="small"
+                :afford="false"
+                class="opacity-50 border-2 border-dashed"
+              />
+
+              <!-- invisible placeholder (keeps the slot size fixed) -->
+              <div v-else class="w-24 h-36"></div>
+            </div>
           </template>
-          <ClashCToonCard
-            v-for="c in lane.player"
-            :key="c.id"
-            :card="c"
-            :selected="false"
-            :afford="null"
-            size="small"
-          />
         </div>
       </div>
     </div>
   </div>
 </template>
+
 
 <script setup>
 import { computed } from 'vue'
@@ -70,25 +84,44 @@ import ClashCToonCard from '@/components/ClashCToonCard.vue'
 
 const props = defineProps({
   lanes:             { type: Array,  required: true },
-  phase:             { type: String, required: true },   // select | reveal | setup | gameEnd
-  priority:          { type: String, required: true },   // player | ai
-  previewPlacements: { type: Array,  default: () => [] },// [{cardId,laneIndex}]
-  selected:          { type: [Object, null], default: null }
+  phase:             { type: String, required: true },
+  priority:          { type: String, required: true },
+  previewPlacements: { type: Array,  default: () => [] },
+  selected:          { type: [Object, null], default: null },
+  confirmed:         { type: Boolean, required: true }
 })
 const emit = defineEmits(['place'])
 
-/** Place handler **/
 function place(idx) {
   emit('place', idx)
 }
 
-/** Which lanes have ghost previews? **/
-function ghostInLane(laneIdx) {
-  const sel = props.selected
-  return props.previewPlacements.find(p => p.laneIndex === laneIdx && sel && p.cardId === sel.id)
+function ghostsForLane(laneIdx) {
+  return props.previewPlacements
+    .filter(p => p.laneIndex === laneIdx)
+    .map(p => p.card)
 }
 
-/** Highlight ring for selection **/
+function ghostAtSlot(laneIdx, slotIdx) {
+  const realCount  = props.lanes[laneIdx].player.length
+  const ghosts     = props.previewPlacements.filter(p => p.laneIndex === laneIdx)
+  const offset     = slotIdx - realCount
+  return offset >= 0 && offset < ghosts.length
+    ? ghosts[offset].card
+    : null
+}
+
+function highlightLane(idx) {
+  if (props.phase !== 'reveal') return ''
+  const lane = props.lanes[idx]
+  const side = props.priority === 'player' ? lane.player : lane.ai
+  if (!side.length) return ''
+  const newest = side[side.length - 1]
+  return newest.revealedThisTurn
+    ? 'animate-pulse ring-2 ring-indigo-400'
+    : ''
+}
+
 const selectedLanes = computed(() =>
   props.previewPlacements.map(p => p.laneIndex)
 )
@@ -96,19 +129,6 @@ function isLaneSelected(idx) {
   return selectedLanes.value.includes(idx)
 }
 
-/** Pulse animation on reveal **/
-function highlightLane(idx) {
-  if (props.phase !== 'reveal') return ''
-  const lane = props.lanes[idx]
-  const firstSide = props.priority === 'player' ? lane.player : lane.ai
-  if (!firstSide.length) return ''
-  const newest = firstSide[firstSide.length - 1]
-  return newest.revealedThisTurn
-    ? 'animate-pulse ring-2 ring-indigo-400'
-    : ''
-}
-
-/** Sum up a side’s power for display **/
 function sumPower(cards) {
   return cards.reduce((sum, c) => sum + (c.power || 0), 0)
 }

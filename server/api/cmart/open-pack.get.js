@@ -115,15 +115,16 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      /* 2-b even out weights for survivors */
-      if (remaining.length) {
+      // 2-b even out weights for survivors — only if we pruned some options
+      if (depleted.length > 0 && remaining.length > 0) {
         const even  = Math.floor(100 / remaining.length)
         let extra   = 100 - even * remaining.length
         for (const opt of remaining) {
           const newW = even + (extra-- > 0 ? 1 : 0)
           if (newW !== opt.weight) {
             await tx.packCtoonOption.update({
-              where: { id: opt.id }, data: { weight: newW }
+              where: { id: opt.id },
+              data:  { weight: newW }
             })
           }
         }

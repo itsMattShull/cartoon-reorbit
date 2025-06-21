@@ -59,19 +59,23 @@
   </section>
 
   <!-- Child route for /games/clash/play -->
-  <NuxtPage />
+  <NuxtPage v-if="route.path === '/games/clash/play'" />
 </template>
 
 <script setup>
 // ⚔️ gToon Clash Lobby
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 import { useRouter, useRoute } from 'vue-router'
 import { useClashSocket } from '@/composables/useClashSocket'
 import ClashCToonCard from '@/components/ClashCToonCard.vue'
+import Nav from '@/components/Nav.vue'
 
 const { socket, battleState } = useClashSocket()
 const router  = useRouter()
 const route   = useRoute()
+const { user, fetchSelf } = useAuth()
+await fetchSelf()
 
 const deck     = ref([])
 const loaded   = ref(false)
@@ -102,7 +106,7 @@ async function loadDeck() {
 function startMatch() {
   if (deck.value.length < 12) return
   starting.value = true
-  socket.emit('joinPvE', { deck: deck.value })
+  socket.emit('joinPvE', { deck: deck.value, userId: user.value.id })
 }
 
 onMounted(() => {

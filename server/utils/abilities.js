@@ -141,6 +141,74 @@ export const abilityRegistry = {
       const laneArr = game.state.lanes[laneIndex][side]
       laneArr.filter(c => c.id !== card.id).forEach(c => (c.power += 1))
     }
+  },
+
+  /* ----------------------------------------------------------------
+   *  Lane effects (keys match your lanes.json “effect” field)
+   * ----------------------------------------------------------------*/
+
+  DOUBLE_ABILITIES: {
+    // “Abilities here trigger twice.”
+    onReveal ({ game, side, laneIndex }) {
+      const lane   = game.state.lanes[laneIndex]
+      const cards  = lane[side]
+      cards.forEach(card => {
+        const def = abilityRegistry[card.abilityKey]
+        if (def?.onReveal) {
+          def.onReveal({ game, side, laneIndex, card })
+          def.onReveal({ game, side, laneIndex, card })
+        }
+      })
+      game.log.push(`${lane.name}: Abilities triggered twice`)
+    }
+  },
+
+  PLUS_TWO_POWER: {
+    // “All cToons here get +2 power.”
+    onReveal ({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]
+      ;[...lane.player, ...lane.ai].forEach(c => c.power += 2)
+      game.log.push(`${lane.name}: +2 power to all cToons`)
+    }
+  },
+
+  SPAWN_TOKEN: {
+    // “On reveal, add a 1-power Imaginary Friend to each side.”
+    onReveal ({ game, laneIndex }) {
+      const token = {
+        id:           'imaginary_friend',
+        name:         'Imaginary Friend',
+        power:        1,
+        cost:         0,
+        abilityKey:   null,
+        abilityData:  null
+      }
+      game.state.lanes[laneIndex].player.push({ ...token })
+      game.state.lanes[laneIndex].ai.push({ ...token })
+      game.log.push(`${game.state.lanes[laneIndex].name}: spawned Imaginary Friend`)
+    }
+  },
+
+  RANDOMIZE_POWER: {
+    // “Cards here roll a new random power (0–10) each turn.”
+    onTurnStart ({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]
+      ;[...lane.player, ...lane.ai].forEach(c => {
+        c.power = Math.floor(Math.random() * 11)
+      })
+      game.log.push(`${lane.name}: randomized power of all cToons`)
+    }
+  },
+
+  CHEAP_BUFF: {
+    // “All 1-cost cToons here gain +1 power.”
+    onReveal ({ game, laneIndex }) {
+      const lane   = game.state.lanes[laneIndex]
+      ;[...lane.player, ...lane.ai]
+        .filter(c => c.cost === 1)
+        .forEach(c => c.power += 1)
+      game.log.push(`${lane.name}: +1 power to all 1-cost cToons`)
+    }
   }
 
   // Note: Tom, The Great Gazoo, Jerry & Buttercup have no abilities in the sheet → no entry needed.

@@ -20,7 +20,7 @@
         :key="c.id"
         :card="c"
         :selected="selected && selected.id === c.id"
-        :afford="energy >= c.cost"
+        :afford="c.cost <= remainingEnergy"
         @select="handleSelect"
       />
     </div>
@@ -34,7 +34,8 @@ const props = defineProps({
   cards:    { type: Array,  default: () => [] },
   energy:   { type: Number, default: 1 },
   selected: { type: [Object, null], default: null },
-  disabled: { type: Boolean, default: false }
+  disabled: { type: Boolean, default: false },
+  remainingEnergy: { type: Number, default: 1 },
 })
 const emit = defineEmits(['select'])
 

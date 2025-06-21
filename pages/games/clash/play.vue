@@ -3,7 +3,7 @@
   <Nav />
 
   <!-- ───── Guard: no match loaded ───── -->
-  <div v-if="!game" class="pt-20 text-center mt-16">
+  <div v-if="!game" class="pt-20 text-center">
     <p class="text-gray-600">
       No active match.
       <NuxtLink to="/games/clash" class="text-indigo-600 underline">
@@ -15,7 +15,7 @@
   <!-- ───── Main Clash board ───── -->
   <section
     v-else
-    class="pt-20 pb-16 max-w-5xl mx-auto flex flex-col gap-6 mt-16"
+    class="pt-20 pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Turn / Phase header -->
     <h2 class="text-xl font-bold text-center mb-2">
@@ -55,7 +55,8 @@
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
-      :selected="selected && selected.id"
+      :selected="selected"
+      :confirmed="confirmed"
     />
 
     <!-- Battle log -->
@@ -80,6 +81,7 @@
       :cards="game.playerHand"
       :energy="game.energy"
       :selected="selected"
+      :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
       @select="c => (selected = c)"
     />
@@ -87,7 +89,7 @@
     <!-- Confirm button (select/setup only) -->
     <button
       v-if="isSelecting"
-      :disabled="confirmed || !placements.length"
+      :disabled="confirmed || !canConfirm"
       @click="confirmSelections"
       class="self-center bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded disabled:opacity-50"
     >
@@ -128,29 +130,18 @@
 // Play page for gToon Clash
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { io } from 'socket.io-client'
-import { useState, useRuntimeConfig } from '#imports'
+import { useClashSocket } from '@/composables/useClashSocket'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
+import Nav from '@/components/Nav.vue'
 
 // shared Nuxt state
-const battleState = useState('battle-state', () => null)
-const socketState = useState('clash-socket',  () => null)
-const game        = ref(battleState.value)
+const { socket, battleState } = useClashSocket()
+const game = computed(() => battleState.value)
 
 const router  = useRouter()
-const runtime = useRuntimeConfig()
 
-// socket singleton across pages
-let socket = socketState.value
-if (!socket) {
-  socket = io(
-    import.meta.env.PROD
-      ? undefined
-      : `http://localhost:${runtime.public.socketPort}`
-  )
-  socketState.value = socket
-}
+
 
 // local UI refs
 const selected   = ref(null)
@@ -172,6 +163,28 @@ function startTimer(deadline) {
     if (secondsLeft.value === 0) clearInterval(timerId)
   }, 1000)
 }
+
+const hasPlayable = computed(() => {
+  return game.value.playerHand.some(c => c.cost <= game.value.energy)
+})
+
+const canConfirm = computed(() => {
+  // either we have at least one placement,
+  // or there simply are no affordable cards in hand
+  return placements.value.length > 0 || !hasPlayable.value
+})
+
+// total cost of all pending selections
+const pendingCost = computed(() =>
+  placements.value.reduce((sum, p) =>
+    sum + (p.card.cost || 0)
+  , 0)
+)
+
+// how much energy you have left to spend on new ghosts
+const remainingEnergy = computed(() =>
+  game.value.energy - pendingCost.value
+)
 
 // derived flags
 const isSelecting = computed(
@@ -200,8 +213,8 @@ const instructionText = computed(() => {
 // socket handlers
 function wireSocket() {
   socket.on('phaseUpdate', state => {
+    // write into battleState only:
     battleState.value = state
-    game.value        = state
 
     if (state.phase==='select' || state.phase==='setup') {
       startTimer(state.selectEndsAt)
@@ -210,7 +223,6 @@ function wireSocket() {
       secondsLeft.value = 0
     }
 
-    // reset selections on new window
     if ((state.phase==='select'||state.phase==='setup') && confirmed.value) {
       resetLocal()
     }
@@ -225,15 +237,43 @@ function wireSocket() {
 // UI actions
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
-  const i = placements.value.findIndex(p => p.cardId===selected.value.id)
-  if (i>=0) placements.value.splice(i,1)
-  else      placements.value.push({ cardId:selected.value.id, laneIndex:laneIdx })
+
+  // are we un-placing?
+  const idx = placements.value.findIndex(p => p.card?.id === selected.value.id)
+  if (idx >= 0) {
+    placements.value.splice(idx, 1)
+    return
+  }
+
+  // otherwise, check that this new card is still affordable
+  const costSum = pendingCost.value
+  if (selected.value.cost + costSum > game.value.energy) {
+    // optionally show a toast: “Not enough energy!”
+    return
+  }
+
+  placements.value.push({
+    card:    selected.value,
+    laneIndex: laneIdx
+  })
 }
 
 function confirmSelections() {
-  if (confirmed.value || !placements.value.length) return
-  socket.emit('selectCards',{ selections:placements.value })
+  if (confirmed.value || !canConfirm.value) return
+
+  // only keep the entries that actually have a `.card`
+  const good = placements.value.filter(p => p && p.card && p.laneIndex != null)
+
+  const selections = good.map(p => ({
+    cardId:    p.card.id,
+    laneIndex: p.laneIndex
+  }))
+
+  socket.emit('selectCards', { selections })
   confirmed.value = true
+
+  // clear previews if you want them to vanish immediately:
+  placements.value = []
 }
 
 // reset
@@ -245,10 +285,6 @@ function resetLocal() {
 
 // lifecycle
 onMounted(() => {
-  if (!battleState.value) {
-    return router.replace('/games/clash')
-  }
-  game.value = battleState.value
   wireSocket()
 })
 
@@ -259,7 +295,7 @@ onBeforeUnmount(() => {
 })
 
 // keep in sync if battleState changes
-watch(battleState, val => { if (val) game.value = val })
+// watch(battleState, val => { if (val) game.value = val })
 </script>
 
 <style scoped>

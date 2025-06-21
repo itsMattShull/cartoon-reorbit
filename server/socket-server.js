@@ -65,8 +65,39 @@ function broadcastPhase(io, match) {
   io.to(match.id).emit('phaseUpdate', match.battle.publicState())
 }
 
-function endMatch(io, match, result) {
-  io.to(match.id).emit('gameEnd', result)
+async function endMatch(io, match, result) {
+  // make sure we have a real result object
+  const { winner, playerLanesWon, aiLanesWon } = result
+
+  // only award if we actually got back a “player” win
+  if (winner === 'player') {
+    try {
+      // assume you have socket.data.userId from when they joined; 
+      // if not, store it in match when they join.
+      const userId = match.playerUserId  
+      await db.userPoints.upsert({
+        where: { userId },
+        create: { userId, points: 100 },
+        update: { points: { increment: 100 } }
+      })
+    } catch (err) {
+      console.error('Failed to award points:', err)
+    }
+  }
+
+  console.log({
+    winner,
+    playerLanesWon,
+    aiLanesWon
+  })
+
+  // — now broadcast the end-of-game summary —
+  io.to(match.id).emit('gameEnd', {
+    winner,
+    playerLanesWon,
+    aiLanesWon
+  })
+
   clearInterval(match.timer)
   pveMatches.delete(match.id)
 }
@@ -86,7 +117,8 @@ function startSelectTimer(io, match) {
 
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
-  socket.on('joinPvE', ({ deck }) => {
+  socket.on('joinPvE', ({ deck, userId }) => {
+    console.log('deck: ', deck)
     const aiDeck = shuffle(deck).slice(0, 12)
     const gameId = randomUUID()
     const battle = createBattle({
@@ -103,8 +135,10 @@ io.on('connection', socket => {
       playerConfirmed: false,
       aiConfirmed:     false,
       timer:           null,
-      selectDeadline:  null
+      selectDeadline:  null,
+      playerUserId: userId
     }
+
     pveMatches.set(gameId, match)
 
     socket.data.gameId = gameId
