@@ -109,7 +109,7 @@ export default defineEventHandler(async (event) => {
       }
 
       /* 2-a delete depleted options */
-      if (depleted.length) {
+      if (depleted.length > 0) {
         await tx.packCtoonOption.deleteMany({
           where: { id: { in: depleted.map(o => o.id) } }
         })
