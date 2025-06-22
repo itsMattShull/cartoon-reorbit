@@ -327,12 +327,19 @@ model GameConfig {
   leftCupPoints        Int      @default(0)
   rightCupPoints       Int      @default(0)
   goldCupPoints        Int      @default(0)
-  dailyPointLimit      Int      @default(100)
   grandPrizeCtoonId    String? 
   grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
+  pointsPerWin         Int?      @default(0)
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @default(now()) @updatedAt
+}
+
+model GlobalGameConfig {
+  id               String   @id @default(uuid())
+  dailyPointLimit  Int      @default(100)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model WishlistItem {

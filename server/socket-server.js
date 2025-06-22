@@ -66,40 +66,80 @@ function broadcastPhase(io, match) {
 }
 
 async function endMatch(io, match, result) {
-  // make sure we have a real result object
-  const { winner, playerLanesWon, aiLanesWon } = result
+  const { winner, playerLanesWon, aiLanesWon } = result;
 
-  // only award if we actually got back a “player” win
+  let toGive = 0;
+
   if (winner === 'player') {
     try {
-      // assume you have socket.data.userId from when they joined; 
-      // if not, store it in match when they join.
-      const userId = match.playerUserId  
-      await db.userPoints.upsert({
-        where: { userId },
-        create: { userId, points: 100 },
-        update: { points: { increment: 100 } }
-      })
+      const userId = match.playerUserId;
+
+      // 1) Load Clash config (pointsPerWin)
+      const clashConfig = await db.gameConfig.findUnique({
+        where: { gameName: 'Clash' },
+        select: { pointsPerWin: true }
+      });
+
+      // 2) Load the singleton global cap
+      const globalConfig = await db.globalGameConfig.findUnique({
+        where: { id: 'singleton' },
+        select: { dailyPointLimit: true }
+      });
+
+      if (clashConfig && globalConfig) {
+        const { pointsPerWin }          = clashConfig;
+        const { dailyPointLimit: cap }  = globalConfig;
+
+        // 3) Compute today's midnight boundary (server-local)
+        const now      = new Date();
+        const midnight = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          0, 0, 0, 0
+        );
+
+        // 4) Sum points already awarded today
+        const agg = await db.gamePointLog.aggregate({
+          where: {
+            userId,
+            createdAt: { gte: midnight }
+          },
+          _sum: { points: true }
+        });
+        const usedToday = agg._sum.points || 0;
+
+        // 5) Figure out how many we can still give under the global cap
+        const remaining = Math.max(0, cap - usedToday);
+        toGive = Math.min(pointsPerWin, remaining);
+
+        // 6) Award if there's any room left
+        if (toGive > 0) {
+          await db.gamePointLog.create({
+            data: { userId, points: toGive }
+          });
+          await db.userPoints.upsert({
+            where: { userId },
+            create: { userId, points: toGive },
+            update: { points: { increment: toGive } }
+          });
+        }
+      }
     } catch (err) {
-      console.error('Failed to award points:', err)
+      console.error('Failed to award Clash points:', err);
     }
   }
-
-  console.log({
-    winner,
-    playerLanesWon,
-    aiLanesWon
-  })
 
   // — now broadcast the end-of-game summary —
   io.to(match.id).emit('gameEnd', {
     winner,
     playerLanesWon,
-    aiLanesWon
-  })
+    aiLanesWon,
+    pointsAwarded: toGive
+  });
 
-  clearInterval(match.timer)
-  pveMatches.delete(match.id)
+  clearInterval(match.timer);
+  pveMatches.delete(match.id);
 }
 
 function startSelectTimer(io, match) {
@@ -118,7 +158,6 @@ function startSelectTimer(io, match) {
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', ({ deck, userId }) => {
-    console.log('deck: ', deck)
     const aiDeck = shuffle(deck).slice(0, 12)
     const gameId = randomUUID()
     const battle = createBattle({

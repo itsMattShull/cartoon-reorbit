@@ -59,9 +59,6 @@ export default defineEventHandler(async (event) => {
     if (isNaN(powerInt) || powerInt < 0 || powerInt > 12) {
       throw createError({ statusCode: 400, statusMessage: 'Power must be 0–12.' })
     }
-    if (!abilityKey) {
-      throw createError({ statusCode: 400, statusMessage: 'Ability Key required.' })
-    }
 
     try {
       abilityDataObj = abilityData ? JSON.parse(abilityData) : {}

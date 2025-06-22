@@ -116,6 +116,9 @@
             Lanes Won: You {{ summary.playerLanesWon }} – AI
             {{ summary.aiLanesWon }}
           </p>
+          <p v-if="summary.winner === 'player'" class="mb-4 text-indigo-600 font-medium">
+            You earned {{ summary.pointsAwarded }} point<span v-if="summary.pointsAwarded > 1">s</span>!
+          </p>
           <NuxtLink
             to="/games/clash"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded"
@@ -230,6 +233,7 @@ function wireSocket() {
 
   socket.on('gameEnd', sum => {
     summary.value = sum
+    console.log(sum)
     clearInterval(timerId)
   })
 }

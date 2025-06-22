@@ -40,13 +40,14 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     phase:        'select',
     selectEndsAt: Date.now() + SELECT_WINDOW,
 
-    lanes: shuffle([...lanes]).slice(0, 3).map((l, i) => ({
-       ...l,
-       // reveal the first lane immediately
-       revealed: i === 0,
-       player:   [],
-       ai:       []
-     })),
+    lanes: shuffle(lanes).slice(0,3).map((l,i) => ({
+      id:         l.id,
+      name:       l.name,
+      desc:       l.desc,
+      abilityKey: l.effect,    // ← turn your “effect” into the key the registry expects
+      revealed:   i===0,
+      player:     [], ai:[]
+    })),
 
     playerDeck: _playerDeck,
     aiDeck:     _aiDeck,
@@ -115,6 +116,8 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     }
   }
 
+  battle.log = state.log
+
   /* ───────────── internal helpers ───────────── */
   function applySelections (side) {
     const selections = _pending[side] || []
@@ -122,7 +125,8 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     selections.forEach(sel => {
       const idxHand = hand.findIndex(c => c.id === sel.cardId)
       if (idxHand === -1) return
-      const [card] = hand.splice(idxHand, 1)
+      const [orig] = hand.splice(idxHand, 1)
+      const card = { ...orig }
       state.lanes[sel.laneIndex][side].push(card)
       state.energy -= card.cost
     })
@@ -136,6 +140,12 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       const def   = abilityRegistry[card.abilityKey]
       if (def?.onReveal) {
         def.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
+      }
+
+      // ▶︎ also run the lane's onReveal **per-card placement**
+      const laneDef = abilityRegistry[lane.abilityKey]
+      if (laneDef?.onReveal) {
+        laneDef.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
       }
     })
   }
@@ -153,10 +163,12 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     fireReveal(state.priority === 'player' ? 'ai' : 'player')
 
     // ► NEW: after all card‐level reveals, trigger each lane’s own onReveal
-    state.lanes.forEach((lane, laneIndex) => {
+    state.lanes.forEach((lane, i) => {
       const def = abilityRegistry[lane.abilityKey]
-      if (lane.revealed && def?.onReveal) {
-        def.onReveal({ game: battle, side: null, laneIndex, card: null })
+      // only run onReveal if we just flipped this turn
+      if (lane.revealed && !lane._hasRevealedOnce && def?.onReveal) {
+        def.onReveal({ game: battle, side: null, laneIndex: i, card: null })
+        lane._hasRevealedOnce = true
       }
     })
 

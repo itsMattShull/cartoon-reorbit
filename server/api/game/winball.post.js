@@ -116,7 +116,8 @@ export default defineEventHandler(async (event) => {
     where: { userId, createdAt: { gte: boundary } }, _sum:{ points:true }
   })
   const used = agg._sum.points || 0
-  const cap       = config.dailyPointLimit
+  const global = await prisma.globalGameConfig.findUnique({ where:{ id:'singleton' } })
+  const cap    = global.dailyPointLimit
   const remaining = Math.max(0, cap - used)
   const toGive = Math.min(award.points, remaining)
 

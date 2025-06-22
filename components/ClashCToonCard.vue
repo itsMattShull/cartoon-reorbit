@@ -16,7 +16,7 @@
       <!-- power in the big circle -->
       <div class="absolute" :style="powerStyle">
         <span class="text-white font-bold drop-shadow-lg text-2xl">
-          {{ card.power }}
+          {{ currentPower }}
         </span>
       </div>
 
@@ -48,6 +48,8 @@ const props = defineProps({
   size:     { type: String,  default: 'large' }  // 'large' | 'small'
 })
 const emit = defineEmits(['select'])
+
+const currentPower = computed(() => props.card.power)
 
 const isSmall = computed(() => props.size === 'small')
 

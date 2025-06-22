@@ -148,44 +148,110 @@ export const abilityRegistry = {
    * ----------------------------------------------------------------*/
 
   DOUBLE_ABILITIES: {
-    // “Abilities here trigger twice.”
-    onReveal ({ game, side, laneIndex }) {
-      const lane   = game.state.lanes[laneIndex]
-      const cards  = lane[side]
-      cards.forEach(card => {
-        const def = abilityRegistry[card.abilityKey]
-        if (def?.onReveal) {
-          def.onReveal({ game, side, laneIndex, card })
-          def.onReveal({ game, side, laneIndex, card })
-        }
-      })
+    onReveal({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]
+      // apply twice per card on both sides
+      for (const side of ['player','ai']) {
+        lane[side].forEach(card => {
+          const def = abilityRegistry[card.abilityKey]
+          if (def?.onReveal) {
+            def.onReveal({ game, side, laneIndex, card })
+            def.onReveal({ game, side, laneIndex, card })
+          }
+        })
+      }
       game.log.push(`${lane.name}: Abilities triggered twice`)
     }
   },
 
   PLUS_TWO_POWER: {
-    // “All cToons here get +2 power.”
-    onReveal ({ game, laneIndex }) {
-      const lane = game.state.lanes[laneIndex]
-      ;[...lane.player, ...lane.ai].forEach(c => c.power += 2)
-      game.log.push(`${lane.name}: +2 power to all cToons`)
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex];
+      if (!lane) return;
+
+      // STATIC FLIP: buff every existing card in *this* lane once
+      if (!side && !card) {
+        if (lane._plusTwoLaneHandled) return;
+        lane._plusTwoLaneHandled = true;
+
+        // only cards in this lane, no other lanes touched
+        ;[...lane.player, ...lane.ai].forEach(c => {
+          if (!c._plusTwoApplied) {
+            c.power += 2;
+            c._plusTwoApplied = true;
+          }
+        });
+
+        game.log.push(`${lane.name}: +2 power to all pre-existing cToons`);
+        return;
+      }
+
+      // PER-CARD PLACEMENT: only buff the one you just dropped
+      if (!side || !card) return;
+      if (!lane.revealed)    return;
+      if (card._plusTwoApplied) return;
+
+      card.power += 2;
+      card._plusTwoApplied = true;
+      game.log.push(
+        `${card.name} gains +2 Power (Plus Two) in ${lane.name} for ${side}`
+      );
     }
   },
 
   SPAWN_TOKEN: {
-    // “On reveal, add a 1-power Imaginary Friend to each side.”
-    onReveal ({ game, laneIndex }) {
-      const token = {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]
+      if (!lane) return
+
+      // Token factory
+      const makeToken = () => ({
         id:           'imaginary_friend',
         name:         'Imaginary Friend',
         power:        1,
         cost:         0,
         abilityKey:   null,
-        abilityData:  null
+        abilityData:  null,
+        assetPath:    '/images/cToons/imaginaryfriend.png'
+      })
+
+      // 1) Static lane-flip: side=null & card=null
+      if (!side && !card) {
+        // only do this once
+        if (lane._spawnedInitialTokens) return
+        lane._spawnedInitialTokens = true
+
+        for (const who of ['player','ai']) {
+          // count only real cards (exclude existing tokens)
+          const realCards = lane[who].filter(c => c.id !== 'imaginary_friend')
+          // count how many tokens already exist
+          const existingTokens = lane[who].filter(c => c.id === 'imaginary_friend').length
+          // how many more we can add without exceeding 4 total
+          const room = 4 - lane[who].length
+          // how many tokens to spawn = min(realCards, room) minus already present tokens
+          const toSpawn = Math.min(realCards.length - existingTokens, room)
+          for (let i = 0; i < toSpawn; i++) {
+            lane[who].push(makeToken())
+          }
+        }
+
+        game.log.push(
+          `${lane.name}: spawned initial Imaginary Friends for pre-existing cards`
+        )
+        return
       }
-      game.state.lanes[laneIndex].player.push({ ...token })
-      game.state.lanes[laneIndex].ai.push({ ...token })
-      game.log.push(`${game.state.lanes[laneIndex].name}: spawned Imaginary Friend`)
+
+      // 2) Per-card placement: only when a real card is played
+      if (!side || !card) return
+      if (!lane.revealed) return
+
+      // don’t exceed 4 cards on that side
+      if (lane[side].length >= 4) return
+
+      lane[side].push(makeToken())
+      game.log.push(
+        `${card.name} triggered ${lane.name}: spawned Imaginary Friend for ${side}`
+      )
     }
   },
 
@@ -193,6 +259,7 @@ export const abilityRegistry = {
     // “Cards here roll a new random power (0–10) each turn.”
     onTurnStart ({ game, laneIndex }) {
       const lane = game.state.lanes[laneIndex]
+      if (!lane?.revealed) return
       ;[...lane.player, ...lane.ai].forEach(c => {
         c.power = Math.floor(Math.random() * 11)
       })
@@ -201,15 +268,39 @@ export const abilityRegistry = {
   },
 
   CHEAP_BUFF: {
-    // “All 1-cost cToons here gain +1 power.”
-    onReveal ({ game, laneIndex }) {
-      const lane   = game.state.lanes[laneIndex]
-      ;[...lane.player, ...lane.ai]
-        .filter(c => c.cost === 1)
-        .forEach(c => c.power += 1)
-      game.log.push(`${lane.name}: +1 power to all 1-cost cToons`)
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex];
+      if (!lane) return;
+
+      // STATIC FLIP: buff existing 1-costs in this lane once
+      if (!side && !card) {
+        if (lane._cheapBuffLaneHandled) return;
+        lane._cheapBuffLaneHandled = true;
+
+        ;[...lane.player, ...lane.ai]
+          .filter(c => c.cost === 1 && !c._cheapBuffApplied)
+          .forEach(c => {
+            c.power += 1;
+            c._cheapBuffApplied = true;
+          });
+
+        game.log.push(`${lane.name}: +1 power to all pre-existing 1-cost cToons`);
+        return;
+      }
+
+      // PER-CARD PLACEMENT: only buff that new 1-cost card
+      if (!side || !card) return;
+      if (!lane.revealed)    return;
+      if (card.cost !== 1)   return;
+      if (card._cheapBuffApplied) return;
+
+      card.power += 1;
+      card._cheapBuffApplied = true;
+      game.log.push(
+        `${card.name} gains +1 Power (Cheap Buff) in ${lane.name} for ${side}`
+      );
     }
-  }
+  },
 
   // Note: Tom, The Great Gazoo, Jerry & Buttercup have no abilities in the sheet → no entry needed.
 }

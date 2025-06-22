@@ -116,7 +116,7 @@
           <div>
             <label class="block mb-1 font-medium">Ability</label>
             <select v-model="abilityKey" class="w-full border rounded p-2 bg-white">
-              <option disabled value="">Select ability</option>
+              <option value="">None</option>
               <option v-for="a in abilityKeyOptions" :key="a.key" :value="a.key">{{ a.label }}</option>
             </select>
           </div>
@@ -156,7 +156,7 @@
 <script setup>
 definePageMeta({ middleware:['auth','admin'], layout:'default' })
 
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Nav   from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
@@ -178,14 +178,14 @@ const characters = ref('')
 /* G-toon refs */
 const isGtoon = ref(false)
 const cost = ref(0); const power = ref(0)
-const abilityKey = ref(''); const abilityParam = ref(null)
+const abilityKey = ref('')
+const abilityParam = ref(null)
 
 const abilityKeyOptions = abilityMeta
 
- /* computed helper */
- const selectedAbility = computed(() =>
-   abilityKeyOptions.find(a => a.key === abilityKey.value) || null
- )
+const selectedAbility = computed(() =>
+  abilityKeyOptions.find(a => a.key === abilityKey.value) || null
+)
 
 /* validation errors */
 const err = reactive({ cost:'', power:'' })
@@ -197,17 +197,19 @@ const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Priz
 /* toast helpers */
 const showToast = ref(false)
 const toastMessage = ref(''); const toastType = ref('success')
-function displayToast(msg, type='error'){
-  toastMessage.value = msg; toastType.value = type
-  showToast.value = true; setTimeout(()=>showToast.value=false,4000)
-}
+function displayToast(msg, type='error'){ toastMessage.value = msg; toastType.value = type; showToast.value = true; setTimeout(()=>showToast.value = false, 4000) }
 
 /* date helpers */
 function toDateTimeLocal(utc){
   const dt = new Date(utc)
-  return new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16)
+  return new Date(dt.getTime() - dt.getTimezoneOffset()*60000).toISOString().slice(0,16)
 }
-const localToUtcIso = (l)=> new Date(l).toISOString()
+const localToUtcIso = l => new Date(l).toISOString()
+
+/* reset param when ability cleared */
+watch(abilityKey, val => {
+  if (!val) abilityParam.value = null
+})
 
 /* load data */
 onMounted(async ()=>{
@@ -233,8 +235,8 @@ onMounted(async ()=>{
     isGtoon.value   = ctoon.isGtoon
     cost.value      = ctoon.cost ?? 0
     power.value     = ctoon.power ?? 0
-    abilityKey.value= ctoon.abilityKey ?? ''
-    if(ctoon.abilityData){
+    abilityKey.value= ctoon.abilityKey || ''
+    if(ctoon.abilityData && ctoon.abilityKey) {
       const param = Object.values(ctoon.abilityData)[0]
       if(param != null) abilityParam.value = param
     }
@@ -244,8 +246,8 @@ onMounted(async ()=>{
   }catch{ displayToast('Error loading cToon') }
 })
 
-watch(rarity,v=>{
-  const map={Common:100,Uncommon:200,Rare:400,'Very Rare':750,'Crazy Rare':1250}
+watch(rarity, v => {
+  const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
   price.value = map[v]||0
 })
 
@@ -259,42 +261,38 @@ async function submitForm(){
   }
 
   const body = {
-    name:           name.value.trim(),
-    series:         series.value.trim(),
-    rarity:         rarity.value,
-    price:          price.value,
-    releaseDate:    localToUtcIso(releaseDate.value),
+    name:            name.value.trim(),
+    series:          series.value.trim(),
+    rarity:          rarity.value,
+    price:           price.value,
+    releaseDate:     localToUtcIso(releaseDate.value),
 
-    // ← unwrap the refs here:
-    perUserLimit:   perUserLimit.value,
-    quantity:       quantity.value,
+    perUserLimit:    perUserLimit.value,
+    quantity:        quantity.value,
     initialQuantity: initialQuantity.value,
-    inCmart:        inCmart.value,
+    inCmart:         inCmart.value,
 
-    set:            setField.value,
-    characters:     characters.value
-                      .split(',')
-                      .map(s => s.trim()),
+    set:             setField.value,
+    characters:      characters.value.split(',').map(s => s.trim()),
 
-    isGtoon:        isGtoon.value,
-    cost:           cost.value,
+    isGtoon:         isGtoon.value,
+    cost:            cost.value,
     power:          power.value,
-    abilityKey:     abilityKey.value,
-    abilityData:    abilityParam.value != null
-                       ? JSON.stringify({ value: abilityParam.value })
-                       : '{}'
+    abilityKey:      abilityKey.value || null,
+    abilityData:     abilityKey.value
+                      ? JSON.stringify({ value: abilityParam.value })
+                      : null
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {
-    method:  'PUT',
+    method:      'PUT',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body)
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify(body)
   })
 
   if (!res.ok) return displayToast('Update failed')
   displayToast('Updated','success')
   router.push('/admin/ctoons')
 }
-
 </script>

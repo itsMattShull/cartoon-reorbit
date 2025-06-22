@@ -2,13 +2,10 @@
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
 
-console.log('[sync-guild] loading cron script…')
-
 ;(async () => {
-  console.log('[sync-guild] scheduling job (every minute)…')
   const { default: cron } = await import('node-cron')
 
-  cron.schedule('* * * * *', async () => {
+  cron.schedule('0 0 * * *', async () => {
     try {
       const BOT_TOKEN   = process.env.BOT_TOKEN
       const GUILD_ID    = process.env.DISCORD_GUILD_ID
