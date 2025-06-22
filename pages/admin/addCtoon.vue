@@ -139,7 +139,7 @@
           <!-- Ability Key -->
           <div>
             <label class="block mb-1 font-medium">Ability</label>
-            <select v-model="abilityKey" class="w-full border rounded p-2 bg-white" required>
+            <select v-model="abilityKey" class="w-full border rounded p-2 bg-white">
               <option disabled value="">Select an ability</option>
               <option v-for="a in abilityKeyOptions" :key="a.key" :value="a.key">
                 {{ a.label }}
@@ -155,7 +155,7 @@
             <label class="block mb-1 font-medium">
               {{ selectedAbility.paramLabel }}
             </label>
-            <select v-model="abilityParam" class="w-full border rounded p-2 bg-white" required>
+            <select v-model="abilityParam" class="w-full border rounded p-2 bg-white">
               <option :value="null" disabled>Select a value</option>
               <option v-for="opt in selectedAbility.params" :key="opt" :value="opt">
                 {{ opt }}
