@@ -38,9 +38,9 @@ export default defineEventHandler(async (event) => {
 
   /* Parse numeric / boolean conversions */
   const priceInt      = price == null || price === '' ? 0 : Number(price)
-  const qtyInt        = quantity === '' ? null : Number(quantity)
-  const initQtyInt    = initialQuantity === '' ? null : Number(initialQuantity)
-  const perUserInt    = perUserLimit === '' ? null : Number(perUserLimit)
+  const qtyInt     = quantity   == null || quantity   === '' ? null : Number(quantity)
+  const initQtyInt = initialQuantity == null || initialQuantity === '' ? null : Number(initialQuantity)
+  const perUserInt = perUserLimit  == null || perUserLimit  === '' ? null : Number(perUserLimit)
   const inCmartBool   = Boolean(inCmart)
   const isGtoonBool   = Boolean(isGtoon)
 
