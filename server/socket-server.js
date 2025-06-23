@@ -143,7 +143,7 @@ async function endMatch(io, match, result) {
 }
 
 function startSelectTimer(io, match) {
-  match.selectDeadline = Date.now() + 30_000
+  match.selectDeadline = Date.now() + 60_000
   if (match.timer) clearInterval(match.timer)
   match.timer = setInterval(() => {
     match.battle.tick(Date.now())
