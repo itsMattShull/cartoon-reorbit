@@ -31,13 +31,14 @@
                 v-if="lane.player[i-1]"
                 :card="lane.player[i-1]"
                 size="small"
+                class="scale-75 md:scale-100"
               />
               <ClashCToonCard
                 v-else-if="phase==='select' && !confirmed && ghostAtSlot(idx, i-1)"
                 :card="ghostAtSlot(idx, i-1)"
                 size="small"
                 :afford="false"
-                class="opacity-50 border-2 border-dashed"
+                class="opacity-50 border-2 border-dashed scale-75 md:scale-100"
               />
               <div v-else class="w-24 h-36"></div>
             </div>
@@ -66,6 +67,7 @@
                 v-if="lane.ai[i-1]"
                 :card="lane.ai[i-1]"
                 size="small"
+                class="scale-75 md:scale-100"
               />
               <div v-else class="w-24 h-36"></div>
             </div>
