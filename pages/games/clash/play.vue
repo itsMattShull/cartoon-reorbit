@@ -15,7 +15,7 @@
   <!-- ───── Main Clash board ───── -->
   <section
     v-else
-    class="pt-20 pb-16 max-w-5xl mx-auto flex flex-col gap-6"
+    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Turn / Phase header -->
     <h2 class="text-xl font-bold text-center mb-2">
@@ -86,12 +86,32 @@
       @select="c => (selected = c)"
     />
 
-    <!-- Confirm button (select/setup only) -->
+    <!-- mobile-only floating checkmark -->
     <button
       v-if="isSelecting"
       :disabled="confirmed || !canConfirm"
       @click="confirmSelections"
-      class="self-center bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded disabled:opacity-50"
+      class="fixed bottom-4 right-4 z-50 md:hidden bg-indigo-500 hover:bg-indigo-600 text-white p-3 rounded-full disabled:opacity-50 shadow-lg"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+           viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 13l4 4L19 7" />
+      </svg>
+    </button>
+
+    <!-- desktop confirm -->
+    <button
+      v-if="isSelecting"
+      :disabled="confirmed || !canConfirm"
+      @click="confirmSelections"
+      class="
+        hidden md:inline-flex
+        self-center
+        bg-indigo-500 hover:bg-indigo-600 text-white 
+        px-6 py-2 rounded disabled:opacity-50
+        z-50
+      "
     >
       {{ confirmed ? 'Waiting…' : `Confirm (${secondsLeft}s)` }}
     </button>
