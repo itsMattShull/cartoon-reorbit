@@ -21,8 +21,6 @@ export default defineEventHandler(async (event) => {
   // 3. Fetch a page of cToons
   const ctoons = await prisma.ctoon.findMany({
     orderBy: { releaseDate: 'desc' },
-    skip:    skipNum,
-    take:    takeNum,
     select: {
       id:          true,
       name:        true,
