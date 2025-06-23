@@ -134,7 +134,8 @@ const baseLinks = [
   { label: 'Live Trading', to: '/live-trading' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
-  { label: 'Winball', to: '/games/winball' }
+  { label: 'Winball', to: '/games/winball' },
+  { label: 'gToons Clash', to: '/games/clash' }
 ]
 
 const links = computed(() => {
