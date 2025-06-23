@@ -29,7 +29,7 @@ async function fetchCToonsFromDB() {
       releaseDate: true
     },
     orderBy: {
-      releaseDate: 'desc'
+      createdAt: 'desc'
     }
   })
 

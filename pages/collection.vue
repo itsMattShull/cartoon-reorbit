@@ -516,7 +516,14 @@ function percentageOwnedBySeries(name){ const t=totalCountBySeries(name); return
 // TAB SWITCH
 function switchTab(tab) {
   activeTab.value = tab
-  if (tab==='AllSets'||tab==='AllSeries') loadMoreAll()
+  // Reset and load depending on tab
+  if (tab === 'AllSets' || tab === 'AllSeries') {
+    // clear previous cards
+    allCtoons.value = [];
+    pageAll.value = 0;
+    noMoreAll.value = false;
+    loadMoreAll();
+  }
   if (tab==='MyCollection') loadMoreUser()
   if (tab==='MyWishlist') loadWishlist()
 }
