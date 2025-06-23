@@ -8,7 +8,7 @@
 //    tick(now)        – call periodically; returns {timeout:true} when expired
 //
 //  Turn phases
-//    'select' : players compose selections (30‑s timer)
+//    'select' : players compose selections (60‑s timer)
 //    'reveal' : engine reveals selections in priority order
 //    'setup'  : draws cards, flips next location, toggles priority
 //    'gameEnd': final scoring ready
@@ -21,7 +21,7 @@ const ENERGY_PER_TURN = 1
 export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   /* ───────────── config ───────────── */
   const MAX_TURNS     = 6
-  const SELECT_WINDOW = 30_000  // 30 seconds
+  const SELECT_WINDOW = 60_000  // 60 seconds
 
   /* ───────────── helpers ──────────── */
   const shuffle = arr => [...arr].sort(() => Math.random() - 0.5)

@@ -174,7 +174,7 @@ const log        = ref([])
 const summary    = ref(null)
 
 // countdown
-const secondsLeft = ref(30)
+const secondsLeft = ref(60)
 let timerId = null
 function startTimer(deadline) {
   clearInterval(timerId)
@@ -215,7 +215,7 @@ const isSelecting = computed(
     && (game.value.phase === 'select' || game.value.phase === 'setup')
 )
 const progressPercent = computed(() =>
-  Math.max(0, Math.min(100, (secondsLeft.value/30)*100))
+  Math.max(0, Math.min(100, (secondsLeft.value/60)*100))
 )
 const instructionText = computed(() => {
   if (!game.value) return ''
