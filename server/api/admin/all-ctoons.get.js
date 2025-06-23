@@ -31,6 +31,8 @@ export default defineEventHandler(async (event) => {
     select: {
       id:         true,
       name:       true,
+      set: true,
+      series: true,
       assetPath:  true,
       releaseDate:true,
       quantity:   true,

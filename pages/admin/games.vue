@@ -149,6 +149,11 @@
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
+
 /** Global Settings **/
 const globalDailyPointLimit = ref(100)
 const loadingGlobal         = ref(false)

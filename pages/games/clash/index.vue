@@ -71,6 +71,8 @@ import { useClashSocket } from '@/composables/useClashSocket'
 import ClashCToonCard from '@/components/ClashCToonCard.vue'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({ middleware: 'auth', layout: 'default' })
+
 const { socket, battleState } = useClashSocket()
 const router  = useRouter()
 const route   = useRoute()

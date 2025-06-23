@@ -191,6 +191,11 @@ import { ref, computed } from 'vue'
 import { useAsyncData } from '#app'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
+
 // Rarity value mapping
 const rarityValues = {
   Common: 100,

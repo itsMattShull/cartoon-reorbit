@@ -158,13 +158,13 @@ import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({ middleware: 'auth', layout: 'default' })
+
 // shared Nuxt state
 const { socket, battleState } = useClashSocket()
 const game = computed(() => battleState.value)
 
 const router  = useRouter()
-
-
 
 // local UI refs
 const selected   = ref(null)
