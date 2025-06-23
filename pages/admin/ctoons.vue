@@ -132,7 +132,7 @@ definePageMeta({
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
 
-const take = 20
+const take = 50
 const skip = ref(0)
 const ctoons = ref([])
 const loading = ref(false)

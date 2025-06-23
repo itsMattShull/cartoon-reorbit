@@ -216,7 +216,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
 
     // turn increment & energy ramp
     state.turn += 1
-    state.energy = state.energy + state.turn+1
+    state.energy = Math.min(MAX_ENERGY, state.energy + state.turn)
 
     // flip priority
     state.priority = state.priority === 'player' ? 'ai' : 'player'

@@ -19,13 +19,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse pagination parameters
-  const { skip = '0', take = '20' } = getQuery(event)
+  const { skip = '0', take = '50' } = getQuery(event)
   const skipNum = parseInt(skip, 10)
   const takeNum = parseInt(take, 10)
 
   // 3. Fetch a page of cToons
   const ctoons = await prisma.ctoon.findMany({
-    orderBy: { releaseDate: 'desc' },
+    orderBy: { createdAt: 'desc' },
     skip: skipNum,
     take: takeNum,
     select: {
