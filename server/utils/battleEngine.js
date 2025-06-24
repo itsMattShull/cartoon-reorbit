@@ -36,6 +36,8 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     turn:         1,
     maxTurns:     MAX_TURNS,
     energy:       1,
+    playerEnergy: 1,
+    aiEnergy:     1,
     priority:     Math.random() < 0.5 ? 'player' : 'ai', // who reveals first
     phase:        'select',
     selectEndsAt: Date.now() + SELECT_WINDOW,
@@ -86,7 +88,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       for (const sel of selections) {
         const card = hand.find(h => h.id === sel.cardId)
         if (!card) return { error: 'CardNotInHand' }
-        if (card.cost > state.energy) return { error: 'NotEnoughEnergy' }
+        if (card.cost > state[ side + 'Energy' ]) return { error: 'NotEnoughEnergy' }
         if (sel.laneIndex < 0 || sel.laneIndex > 2) return { error: 'BadLane' }
       }
       _pending[side] = selections
@@ -128,8 +130,19 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       const [orig] = hand.splice(idxHand, 1)
       const card = { ...orig }
       state.lanes[sel.laneIndex][side].push(card)
-      state.energy -= card.cost
+      state[ side + 'Energy' ] -= card.cost
     })
+  }
+
+  // --- aiChooseSelections ---
+  function aiChooseSelections(battle) {
+    // pull from battle.state.aiEnergy, not a shared “energy” field
+    const { aiEnergy, aiHand } = battle.state
+    const playable = aiHand.filter(c => c.cost <= aiEnergy)
+    if (!playable.length) return []
+    const card = playable.sort((a, b) => b.cost - a.cost)[0]
+    const laneIndex = Math.floor(Math.random() * 3)
+    return [{ cardId: card.id, laneIndex }]
   }
 
   function fireReveal (side) {
@@ -221,8 +234,10 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     state.aiHand    .push(...draw(state.aiDeck,     1))
 
     // 4) ramp up energy
-    const energyGain = state.turn
-    state.energy = Math.min(MAX_ENERGY, (state.energy || 0) + energyGain)
+    // 4) ramp up each side’s energy by a fixed amount
+
+    state.playerEnergy = Math.min(state.playerEnergy + MAX_ENERGY, state.playerEnergy + state.turn)
+    state.aiEnergy     = Math.min(state.aiEnergy + MAX_ENERGY, state.aiEnergy     + state.turn)
 
     // 5) flip priority
     state.priority = state.priority === 'player' ? 'ai' : 'player'

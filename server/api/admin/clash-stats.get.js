@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     if (!statsMap[day]) statsMap[day] = { total: 0, finished: 0 }
     statsMap[day].total++
     // count as finished unless the outcome is "incomplete"
-    if (g.outcome !== 'incomplete') {
+    if (g.outcome !== 'incomplete' && g.outcome !== '' && g.outcome !== null) {
       statsMap[day].finished++
     }
   }

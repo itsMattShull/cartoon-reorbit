@@ -50,8 +50,8 @@ function shuffle(arr) {
 }
 
 function aiChooseSelections(battle) {
-  const { energy, aiHand } = battle.state
-  const playable = aiHand.filter(c => c.cost <= energy)
+  const { aiEnergy, aiHand } = battle.state
+  const playable = aiHand.filter(c => c.cost <= aiEnergy)
   if (!playable.length) return []
   // pick highest-cost card, random lane
   const card = playable.sort((a, b) => b.cost - a.cost)[0]
@@ -71,7 +71,7 @@ async function endMatch(io, match, result) {
 
   if (winner === 'player') {
     try {
-      const userId = match.player1UserId;
+      const userId = match.playerUserId;
 
       // 1) Load Clash config (pointsPerWin)
       const clashConfig = await db.gameConfig.findUnique({
@@ -139,7 +139,7 @@ async function endMatch(io, match, result) {
     where: { id: match.recordId },
     data: {
       endedAt:      new Date(),
-      winnerUserId: winner === 'player' ? userId : null,
+      winnerUserId: winner === 'player' ? match.playerUserId : null,
       outcome:      winner
     }
   });

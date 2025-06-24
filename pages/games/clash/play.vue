@@ -114,7 +114,7 @@
     <!-- Player hand & energy -->
     <ClashHand
       :cards="game.playerHand"
-      :energy="game.energy"
+      :energy="game.playerEnergy"
       :selected="selected"
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
@@ -224,9 +224,9 @@ function startTimer(deadline) {
   }, 1000)
 }
 
-const hasPlayable = computed(() => {
-  return game.value.playerHand.some(c => c.cost <= game.value.energy)
-})
+const hasPlayable = computed(() =>
+  game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
+)
 
 const canConfirm = computed(() => {
   // either we have at least one placement,
@@ -243,7 +243,7 @@ const pendingCost = computed(() =>
 
 // how much energy you have left to spend on new ghosts
 const remainingEnergy = computed(() =>
-  game.value.energy - pendingCost.value
+  game.value.playerEnergy - pendingCost.value
 )
 
 // derived flags
@@ -307,7 +307,7 @@ function handlePlace(laneIdx) {
 
   // otherwise, check that this new card is still affordable
   const costSum = pendingCost.value
-  if (selected.value.cost + costSum > game.value.energy) {
+  if (selected.value.cost + costSum > game.value.playerEnergy) {
     // optionally show a toast: “Not enough energy!”
     return
   }

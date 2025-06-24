@@ -744,7 +744,6 @@ const cZoneItems = computed(() => {
 // ——— Show arrows only if another zone (besides the current one) has ≥1 toon ———
 const hasOtherZones = computed(() => {
   // (Uncomment to debug in console)
-  // console.log('computed hasOtherZones → zones are', JSON.stringify(zones.value))
 
   return zones.value.some((zone, idx) => {
     return idx !== currentZoneIndex.value

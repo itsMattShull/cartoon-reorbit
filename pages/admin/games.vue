@@ -232,9 +232,10 @@ import {
   TimeScale,
   Title,
   Tooltip,
-  Legend
+  Legend,
 } from 'chart.js'
 import 'chartjs-adapter-date-fns'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 
 // page meta
 definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
@@ -339,7 +340,6 @@ async function loadClashGames() {
 
 // ── Chart initializer ───────────────────────
 async function initClashChart() {
-  // — 1) Wait until the <canvas ref="clashCanvas"> is rendered
   await nextTick()
   const canvasEl = clashCanvas.value
   if (!canvasEl) {
@@ -351,14 +351,11 @@ async function initClashChart() {
     console.error('⚠️ could not getContext("2d")')
     return
   }
-
-  // — 2) Tear down any existing chart
   if (clashChart) {
     clashChart.destroy()
     clashChart = null
   }
 
-  // — 3) Fetch stats directly (so you can see exactly what arrives)
   let stats = []
   try {
     stats = await $fetch('/api/admin/clash-stats')
@@ -367,7 +364,6 @@ async function initClashChart() {
     return
   }
 
-  // — 4) Build the chart
   clashChart = new Chart(ctx, {
     data: {
       labels: stats.map(s => new Date(s.day)),
@@ -377,11 +373,16 @@ async function initClashChart() {
           label: 'Games Played',
           data: stats.map(s => s.count),
           yAxisID: 'y',
-          backgroundColor: 'rgba(99,102,241,0.8)',
-          borderWidth: 0,
+          backgroundColor: '#6366F1',
           barPercentage: 0.6,
           categoryPercentage: 0.6,
-          order: 0
+          order: 1,
+          datalabels: {
+            color: '#fff',                 // white labels
+            anchor: 'center',               // attach at base of bar
+            align: 'center',               // centered horizontally
+            font: { weight: 'bold', size: 12 }
+          }
         },
         {
           type: 'line',
@@ -389,11 +390,10 @@ async function initClashChart() {
           data: stats.map(s => s.percentFinished),
           yAxisID: 'y1',
           borderColor: 'rgba(243,156,18,0.9)',
-          backgroundColor: 'rgba(243,156,18,1)',
           fill: false,
           tension: 0.3,
           pointBackgroundColor: 'rgba(243,156,18,1)',
-          order: 1
+          order: 0
         }
       ]
     },
@@ -415,19 +415,23 @@ async function initClashChart() {
           position: 'right',
           title: { display: true, text: '% Finished' },
           grid: { drawOnChartArea: false },
-          ticks: {
-            callback: v => v + '%',
-            min: 0,
-            max: 100
-          }
+          ticks: { callback: v => v + '%', min: 0, max: 100 }
         }
       },
       plugins: {
-        legend: { position: 'top' }
+        legend: { position: 'top' },
+        datalabels: {
+          anchor: 'end',
+          align: 'top',
+          formatter: (value, ctx) =>
+            ctx.dataset.type === 'bar' ? value : value + '%',
+          font: { weight: 'bold', size: 12 }
+        }
       }
     }
   })
 }
+
 
 // ── Settings load & save ────────────────────
 async function loadSettings() {
@@ -514,7 +518,7 @@ onMounted(async () => {
     BarController, BarElement,
     LineController, LineElement, PointElement,
     CategoryScale, LinearScale, TimeScale,
-    Title, Tooltip, Legend
+    Title, Tooltip, Legend, ChartDataLabels
   )
 
   // load your settings (cToon pools, point caps, etc.)

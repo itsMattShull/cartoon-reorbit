@@ -186,7 +186,6 @@ async function fetchData() {
     { credentials: 'include' }
   )
   const uniqueData = await uniqueRes.json()
-  console.log(uniqueData)
   uniqueChart.data.labels = uniqueData.map(d => new Date(d.day))
   uniqueChart.data.datasets = [{
     label: 'Unique Daily Logons',

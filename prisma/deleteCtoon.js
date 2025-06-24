@@ -8,7 +8,6 @@ async function main() {
     // 1. Verify Ctoon exists
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) {
-      console.log(`No cToon found with ID ${ctoonId}. Nothing to delete.`)
       return
     }
 
@@ -28,7 +27,6 @@ async function main() {
     // 3. Delete the Ctoon itself
     await prisma.ctoon.delete({ where: { id: ctoonId } })
 
-    console.log(`Successfully deleted cToon and related records for ID ${ctoonId}`)
   } catch (error) {
     console.error('Error deleting cToon:', error)
   } finally {
