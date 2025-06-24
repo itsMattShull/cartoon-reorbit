@@ -290,7 +290,6 @@ function wireSocket() {
 
   socket.on('gameEnd', sum => {
     summary.value = sum
-    console.log(sum)
     clearInterval(timerId)
   })
 }

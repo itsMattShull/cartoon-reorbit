@@ -198,31 +198,49 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   }
 
   function setupNextTurn () {
-    // (reveal‐new‐location, draw cards, etc.)
-
-    // ─── turn increment & energy ramp ───
+    // 1) increment the turn counter
     state.turn += 1
+
+    // 2) if we're now on turn 2 or 3, reveal that lane
+    if (state.turn >= 2 && state.turn <= 3) {
+      const laneIndex = state.turn - 1   // turn 2 → index 1, turn 3 → index 2
+      state.lanes[laneIndex].revealed = true
+
+      // trigger that lane's onTurnStart hook if you have one
+      const def = abilityRegistry[state.lanes[laneIndex].abilityKey]
+      def?.onTurnStart?.({
+        game: battle,
+        side: null,
+        laneIndex,
+        card: null
+      })
+    }
+
+    // 3) draw cards for each side
+    state.playerHand.push(...draw(state.playerDeck, 1))
+    state.aiHand    .push(...draw(state.aiDeck,     1))
+
+    // 4) ramp up energy
     const energyGain = state.turn
     state.energy = Math.min(MAX_ENERGY, (state.energy || 0) + energyGain)
 
-    // ─── flip priority, run onTurnStart hooks, reset selections ───
+    // 5) flip priority
     state.priority = state.priority === 'player' ? 'ai' : 'player'
-    state.lanes.forEach((lane, idx) => {
-      const def = abilityRegistry[lane.abilityKey]
-      def?.onTurnStart?.({ game: battle, side: null, laneIndex: idx, card: null })
-    })
+
+    // 6) reset pending / ready flags
     _pending = { player: null, ai: null }
     _ready   = { player: false, ai: false }
 
+    // 7) check for game end
     if (state.turn > MAX_TURNS) {
       finishGame()
       return
     }
 
+    // 8) start the next select phase
     state.phase        = 'select'
     state.selectEndsAt = Date.now() + SELECT_WINDOW
   }
-
 
   function finishGame() {
     // simple lane-tally scoring

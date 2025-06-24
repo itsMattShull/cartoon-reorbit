@@ -67,12 +67,11 @@ function broadcastPhase(io, match) {
 
 async function endMatch(io, match, result) {
   const { winner, playerLanesWon, aiLanesWon } = result;
-
   let toGive = 0;
 
   if (winner === 'player') {
     try {
-      const userId = match.playerUserId;
+      const userId = match.player1UserId;
 
       // 1) Load Clash config (pointsPerWin)
       const clashConfig = await db.gameConfig.findUnique({
@@ -87,37 +86,42 @@ async function endMatch(io, match, result) {
       });
 
       if (clashConfig && globalConfig) {
-        const { pointsPerWin }          = clashConfig;
-        const { dailyPointLimit: cap }  = globalConfig;
+        const { pointsPerWin }         = clashConfig;
+        const { dailyPointLimit: cap } = globalConfig;
 
-        // 3) Compute today's midnight boundary (server-local)
-        const now      = new Date();
-        const midnight = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          0, 0, 0, 0
-        );
+        // 3) Compute “now” in CST by subtracting 6 hours
+        const now       = new Date();
+        const nowCST    = new Date(now.getTime() - 6 * 60 * 60 * 1000);
 
-        // 4) Sum points already awarded today
+        // 4) Determine the last 8 PM CST cutoff
+        let cutoffCST = new Date(nowCST);
+        if (nowCST.getHours() >= 20) {
+          cutoffCST.setHours(20, 0, 0, 0);
+        } else {
+          cutoffCST.setDate(cutoffCST.getDate() - 1);
+          cutoffCST.setHours(20, 0, 0, 0);
+        }
+
+        // 5) Convert cutoff back to UTC
+        const cutoffUTC = new Date(cutoffCST.getTime() + 6 * 60 * 60 * 1000);
+
+        // 6) Sum points awarded since that cutoff
         const agg = await db.gamePointLog.aggregate({
           where: {
             userId,
-            createdAt: { gte: midnight }
+            createdAt: { gte: cutoffUTC }
           },
           _sum: { points: true }
         });
-        const usedToday = agg._sum.points || 0;
+        const usedSinceCutoff = agg._sum.points || 0;
 
-        // 5) Figure out how many we can still give under the global cap
-        const remaining = Math.max(0, cap - usedToday);
+        // 7) Compute how many we can still give
+        const remaining = Math.max(0, cap - usedSinceCutoff);
         toGive = Math.min(pointsPerWin, remaining);
 
-        // 6) Award if there's any room left
+        // 8) Award if possible
         if (toGive > 0) {
-          await db.gamePointLog.create({
-            data: { userId, points: toGive }
-          });
+          await db.gamePointLog.create({ data: { userId, points: toGive } });
           await db.userPoints.upsert({
             where: { userId },
             create: { userId, points: toGive },
@@ -130,7 +134,17 @@ async function endMatch(io, match, result) {
     }
   }
 
-  // — now broadcast the end-of-game summary —
+  // 9) Mark the game record ended
+  await db.clashGame.update({
+    where: { id: match.recordId },
+    data: {
+      endedAt:      new Date(),
+      winnerUserId: winner === 'player' ? match.player1UserId : null,
+      outcome:      winner
+    }
+  });
+
+  // 10) Broadcast the end‐of‐game summary
   io.to(match.id).emit('gameEnd', {
     winner,
     playerLanesWon,
@@ -141,6 +155,7 @@ async function endMatch(io, match, result) {
   clearInterval(match.timer);
   pveMatches.delete(match.id);
 }
+
 
 function startSelectTimer(io, match) {
   match.selectDeadline = Date.now() + 60_000
@@ -157,7 +172,7 @@ function startSelectTimer(io, match) {
 
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
-  socket.on('joinPvE', ({ deck, userId }) => {
+  socket.on('joinPvE', async ({ deck, userId }) => {
     const aiDeck = shuffle(deck).slice(0, 12)
     const gameId = randomUUID()
     const battle = createBattle({
@@ -167,11 +182,19 @@ io.on('connection', socket => {
       lanes: LANES
     })
 
+    const { id: recordId } = await db.clashGame.create({
+      data: {
+        player1UserId: userId,
+        player2UserId: null
+      }
+    })
+
     const match = {
       id:           gameId,
       socketId:     socket.id,
       battle,
       playerConfirmed: false,
+      recordId,
       aiConfirmed:     false,
       timer:           null,
       selectDeadline:  null,

@@ -8,11 +8,6 @@ import { prisma } from '@/server/prisma'
 export default defineEventHandler(async (event) => {
   // fetch the top 10 non-admin users by points
   const top10 = await prisma.userPoints.findMany({
-    where: {
-      user: {
-        isAdmin: false
-      }
-    },
     orderBy: { points: 'desc' },
     take: 10,
     include: {
