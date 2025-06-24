@@ -20,8 +20,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2️⃣ Fetch all clash games (we'll group by start date)
+  //    include the 'outcome' field
   const games = await prisma.clashGame.findMany({
-    select: { startedAt: true, endedAt: true }
+    select: {
+      startedAt: true,
+      outcome:   true
+    }
   })
 
   // 3️⃣ Build a map of YYYY-MM-DD → { total, finished }
@@ -30,7 +34,10 @@ export default defineEventHandler(async (event) => {
     const day = g.startedAt.toISOString().slice(0, 10)
     if (!statsMap[day]) statsMap[day] = { total: 0, finished: 0 }
     statsMap[day].total++
-    if (g.endedAt) statsMap[day].finished++
+    // count as finished unless the outcome is "incomplete"
+    if (g.outcome !== 'incomplete') {
+      statsMap[day].finished++
+    }
   }
 
   // 4️⃣ Turn that into a sorted array

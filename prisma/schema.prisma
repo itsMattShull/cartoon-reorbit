@@ -440,7 +440,7 @@ model ClashGame {
   player2UserId   String?   // null for AI
 
   winnerUserId  String?   // null if AI won or tie
-  outcome       String?   // 'player' | 'ai' | 'tie'
+  outcome       String?   // 'player' | 'ai' | 'tie' | 'incomplete'
   startedAt     DateTime @default(now())
   endedAt       DateTime?
 

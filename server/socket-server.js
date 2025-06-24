@@ -133,7 +133,7 @@ async function endMatch(io, match, result) {
       console.error('Failed to award Clash points:', err);
     }
   }
-  
+
   // 9) Mark the game record ended
   await db.clashGame.update({
     where: { id: match.recordId },
@@ -253,7 +253,12 @@ io.on('connection', socket => {
     if (!gid) return
     const match = pveMatches.get(gid)
     if (match) {
-      endMatch(io, match, { winner: 'ai', reason: 'player_disconnect' })
+      endMatch(io, match, {
+        winner: 'incomplete',           // mark as incomplete
+        playerLanesWon: 0,
+        aiLanesWon:     0,
+        reason:        'player_disconnect'
+      })
     }
   })
 
