@@ -389,6 +389,9 @@ async function initClashChart() {
           label: '% Finished',
           data: stats.map(s => s.percentFinished),
           yAxisID: 'y1',
+          min: 0,            // force the axis to start at 0
+          max: 100,          // force the axis to end at 100
+          beginAtZero: true, // ensures 0 is honored even if all data > 0
           borderColor: 'rgba(243,156,18,0.9)',
           fill: false,
           tension: 0.3,
