@@ -133,13 +133,13 @@ async function endMatch(io, match, result) {
       console.error('Failed to award Clash points:', err);
     }
   }
-
+  
   // 9) Mark the game record ended
   await db.clashGame.update({
     where: { id: match.recordId },
     data: {
       endedAt:      new Date(),
-      winnerUserId: winner === 'player' ? match.player1UserId : null,
+      winnerUserId: winner === 'player' ? userId : null,
       outcome:      winner
     }
   });
