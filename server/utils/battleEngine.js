@@ -214,6 +214,19 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     // 1) increment the turn counter
     state.turn += 1
 
+    state.lanes.forEach((lane, i) => {
+      if (lane.revealed && lane.abilityKey === 'RANDOMIZE_POWER') {
+        const def = abilityRegistry[lane.abilityKey]
+        def?.onTurnStart?.({
+          game:       battle,
+          side:       null,
+          laneIndex:  i,
+          card:       null
+        })
+        // (optional) you could set a flag here if you want to avoid double-firing
+      }
+    })
+
     // 2) if we're now on turn 2 or 3, reveal that lane
     if (state.turn >= 2 && state.turn <= 3) {
       const laneIndex = state.turn - 1   // turn 2 → index 1, turn 3 → index 2

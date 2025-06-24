@@ -393,7 +393,10 @@ async function initClashChart() {
           fill: false,
           tension: 0.3,
           pointBackgroundColor: 'rgba(243,156,18,1)',
-          order: 0
+          order: 0,
+          datalabels: {
+            color: '#D3D3D3',  
+          }
         }
       ]
     },
