@@ -198,36 +198,19 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   }
 
   function setupNextTurn () {
-    // reveal new location if turn 1‑3
-    if (state.turn <= 3) {
-      state.lanes[state.turn - 1].revealed = true
+    // (reveal‐new‐location, draw cards, etc.)
 
-      // ► NEW: trigger onTurnStart (or onStart) of that newly revealed location
-      const lane = state.lanes[state.turn-1]
-      const def  = abilityRegistry[lane.abilityKey]
-      if (def?.onTurnStart) {
-        def.onTurnStart({ game: battle, side: null, laneIndex: state.turn-1, card: null })
-      }
-    }
-
-    // draw cards
-    state.playerHand.push(...draw(state.playerDeck))
-    state.aiHand.push(...draw(state.aiDeck))
-
-    // turn increment & energy ramp
+    // ─── turn increment & energy ramp ───
     state.turn += 1
-    state.energy = Math.min(MAX_ENERGY, state.energy + state.turn)
+    const energyGain = state.turn
+    state.energy = Math.min(MAX_ENERGY, (state.energy || 0) + energyGain)
 
-    // flip priority
+    // ─── flip priority, run onTurnStart hooks, reset selections ───
     state.priority = state.priority === 'player' ? 'ai' : 'player'
-
-    // ► NEW: run each lane’s onTurnStart
-    state.lanes.forEach((lane, laneIndex) => {
+    state.lanes.forEach((lane, idx) => {
       const def = abilityRegistry[lane.abilityKey]
-      def?.onTurnStart?.({ game: battle, side: null, laneIndex, card: null })
+      def?.onTurnStart?.({ game: battle, side: null, laneIndex: idx, card: null })
     })
-
-    // clear pending
     _pending = { player: null, ai: null }
     _ready   = { player: false, ai: false }
 
@@ -236,20 +219,10 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       return
     }
 
-    // start next SELECT phase
     state.phase        = 'select'
     state.selectEndsAt = Date.now() + SELECT_WINDOW
-
-    // onTurnStart abilities
-    state.lanes.forEach((lane, i) => {
-      lane.player.forEach(card => {
-        abilityRegistry[card.abilityKey]?.onTurnStart?.({ game: battle, side: 'player', laneIndex: i, card })
-      })
-      lane.ai.forEach(card => {
-        abilityRegistry[card.abilityKey]?.onTurnStart?.({ game: battle, side: 'ai', laneIndex: i, card })
-      })
-    })
   }
+
 
   function finishGame() {
     // simple lane-tally scoring
