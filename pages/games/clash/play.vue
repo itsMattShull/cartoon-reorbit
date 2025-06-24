@@ -1,8 +1,40 @@
 <!-- pages/games/clash/play.vue -->
-<template>
+ <template>
   <Nav />
 
-  <!-- ───── Guard: no match loaded ───── -->
+  <!-- Mobile-only sticky timer + instructions -->
+  <div
+    v-if="game"
+    class="md:hidden sticky top-14 z-30 bg-white border-b border-gray-200"
+  >
+    <!-- Timer -->
+    <div class="py-2 text-center text-sm text-gray-700">
+      <template v-if="isSelecting">
+        Select ({{ secondsLeft }}s) - Turn {{ game.turn }} out of {{ game.maxTurns }}
+      </template>
+      <template v-else-if="game.phase==='reveal'">
+        Reveal — <span class="capitalize">{{ game.priority }}</span> goes first
+      </template>
+      <template v-else-if="game.phase==='setup'">
+        Setup
+      </template>
+    </div>
+
+    <!-- Next steps instructions -->
+    <p class="py-1 px-4 text-center text-xs text-gray-600">
+      {{ instructionText }}
+    </p>
+
+    <!-- Progress bar -->
+    <div v-if="isSelecting" class="md:hidden h-2 w-full bg-gray-200 rounded">
+      <div
+        class="h-full bg-indigo-500 rounded"
+        :style="{ width: progressPercent + '%' }"
+      />
+    </div>
+  </div>
+
+  <!-- No-game guard -->
   <div v-if="!game" class="pt-20 text-center">
     <p class="text-gray-600">
       No active match.
@@ -12,14 +44,14 @@
     </p>
   </div>
 
-  <!-- ───── Main Clash board ───── -->
+  <!-- Main board -->
   <section
     v-else
     class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
-    <!-- Turn / Phase header -->
-    <h2 class="text-xl font-bold text-center mb-2">
-      Turn {{ game.turn }} / {{ game.maxTurns }}
+    <!-- Desktop header (hidden on mobile) -->
+    <h2 class="hidden md:block text-xl font-bold text-center mb-2">
+      gToons Clash — Turn {{ game.turn }} / {{ game.maxTurns }}
       <span
         v-if="isSelecting"
         class="text-sm font-normal text-gray-600 ml-4"
@@ -40,15 +72,23 @@
       </span>
     </h2>
 
-    <!-- Progress bar during select/setup -->
-    <div v-if="isSelecting" class="h-2 w-full bg-gray-200 rounded">
+    <!-- Desktop instructions (below header) -->
+    <p
+      v-if="instructionText"
+      class="hidden md:block text-center text-sm text-gray-700"
+    >
+      {{ instructionText }}
+    </p>
+
+    <!-- Progress bar -->
+    <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
         class="h-full bg-indigo-500 rounded"
         :style="{ width: progressPercent + '%' }"
-      ></div>
+      />
     </div>
 
-    <!-- Board / lanes -->
+    <!-- Game board -->
     <ClashGameBoard
       :lanes="game.lanes"
       :phase="isSelecting ? 'select' : game.phase"
@@ -71,11 +111,6 @@
       >{{ entry }}</div>
     </div>
 
-    <!-- Phase-aware instructions -->
-    <p v-if="instructionText" class="text-center text-sm text-gray-700">
-      {{ instructionText }}
-    </p>
-
     <!-- Player hand & energy -->
     <ClashHand
       :cards="game.playerHand"
@@ -86,7 +121,7 @@
       @select="c => (selected = c)"
     />
 
-    <!-- mobile-only floating checkmark -->
+    <!-- Mobile confirm button -->
     <button
       v-if="isSelecting"
       :disabled="confirmed || !canConfirm"
@@ -100,7 +135,7 @@
       </svg>
     </button>
 
-    <!-- desktop confirm -->
+    <!-- Desktop confirm button -->
     <button
       v-if="isSelecting"
       :disabled="confirmed || !canConfirm"
@@ -137,7 +172,8 @@
             {{ summary.aiLanesWon }}
           </p>
           <p v-if="summary.winner === 'player'" class="mb-4 text-indigo-600 font-medium">
-            You earned {{ summary.pointsAwarded }} point<span v-if="summary.pointsAwarded > 1">s</span>!
+            You earned {{ summary.pointsAwarded }} point
+            <span v-if="summary.pointsAwarded > 1">s</span>!
           </p>
           <NuxtLink
             to="/games/clash"
@@ -146,8 +182,9 @@
         </div>
       </div>
     </transition>
-  </section>
-</template>
+    </section>
+  </template>
+
 
 <script setup>
 // Play page for gToon Clash

@@ -822,7 +822,7 @@ io.on('connection', socket => {
 })
 
 // 2. Periodically scan for ended auctions and finalize them.
-//    Runs every 30s (adjust as desired).
+//    Runs every 60s (adjust as desired).
 setInterval(async () => {
   const now = new Date();
   const toClose = await db.auction.findMany({
@@ -874,7 +874,7 @@ setInterval(async () => {
       winningBid: highestBid
     });
   }
-}, 30 * 1000);
+}, 60 * 1000);
 
 // Auction notifications
 setInterval(async () => {
