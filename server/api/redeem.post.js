@@ -98,6 +98,9 @@ export default defineEventHandler(async (event) => {
         create: { userId, points: pointsToAward },
         update: { points: { increment: pointsToAward } }
       })
+      await tx.pointsLog.create({
+        data: { userId, points: pointsToAward, method: "Redeem Code", direction: 'increase' }
+      });
     }
   })
 

@@ -7,6 +7,7 @@ import {
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
+  // ——————————————————————————————————————————————
   // 1️⃣ Admin auth via /api/auth/me
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -19,40 +20,43 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2️⃣ Fetch all clash games (we'll group by start date)
-  //    include the 'outcome' field
-  const games = await prisma.clashGame.findMany({
-    select: {
-      startedAt: true,
-      outcome:   true
+  // ——————————————————————————————————————————————
+  // 2️⃣ Raw SQL: group by day using Chicago time, count total & finished
+  const rows = await prisma.$queryRaw`
+    SELECT
+      to_char(
+        "startedAt" AT TIME ZONE 'UTC'
+                     AT TIME ZONE 'America/Chicago',
+        'YYYY-MM-DD'
+      ) AS day,
+      COUNT(*) AS total,
+      SUM(
+        CASE
+          WHEN outcome IS NOT NULL
+           AND outcome != 'incomplete'
+           AND outcome != ''
+          THEN 1
+          ELSE 0
+        END
+      ) AS finished
+    FROM "ClashGame"
+    GROUP BY day
+    ORDER BY day
+  `
+
+  // ——————————————————————————————————————————————
+  // 3️⃣ Map into the shape you want
+  const results = rows.map(r => {
+    const total    = Number(r.total)
+    const finished = Number(r.finished)
+    return {
+      day:             r.day,
+      count:           total,
+      percentFinished: total > 0
+        ? Math.round((finished / total) * 100)
+        : 0
     }
   })
-
-  // 3️⃣ Build a map of YYYY-MM-DD → { total, finished }
-  const statsMap = {}
-  for (const g of games) {
-    const day = g.startedAt.toISOString().slice(0, 10)
-    if (!statsMap[day]) statsMap[day] = { total: 0, finished: 0 }
-    statsMap[day].total++
-    // count as finished unless the outcome is "incomplete"
-    if (g.outcome !== 'incomplete' && g.outcome !== '' && g.outcome !== null) {
-      statsMap[day].finished++
-    }
-  }
-
-  // 4️⃣ Turn that into a sorted array
-  const results = Object.keys(statsMap)
-    .sort()
-    .map(dayKey => {
-      const { total, finished } = statsMap[dayKey]
-      return {
-        day:             dayKey,
-        count:           total,
-        percentFinished: total > 0
-          ? Math.round((finished / total) * 100)
-          : 0
-      }
-    })
 
   return results
 })

@@ -129,6 +129,9 @@ export default defineEventHandler(async (event) => {
       create: { userId, points: toGive },
       update: { points: { increment: toGive } }
     })
+    await prisma.pointsLog.create({
+      data: { userId, points: toGive, method: "Game - Winball", direction: 'increase' }
+    });
   }
 
   // 8) if gold cup, enqueue grand prize mint

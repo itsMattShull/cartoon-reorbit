@@ -58,5 +58,9 @@ export default defineEventHandler(async (event) => {
     create: { userId: viewerId, points: 20 },
   })
 
+  await prisma.pointsLog.create({
+    data: { userId: viewerId, points: 20, method: "cZone Visit", direction: 'increase' }
+  });
+
   return { success: true, message: 'Points awarded' }
 })

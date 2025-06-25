@@ -4,6 +4,7 @@ dotenv.config()
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
 import { prisma as db }  from './prisma.js'
+import { DateTime } from 'luxon'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -89,21 +90,11 @@ async function endMatch(io, match, result) {
         const { pointsPerWin }         = clashConfig;
         const { dailyPointLimit: cap } = globalConfig;
 
-        // 3) Compute “now” in CST by subtracting 6 hours
-        const now       = new Date();
-        const nowCST    = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-
-        // 4) Determine the last 8 PM CST cutoff
-        let cutoffCST = new Date(nowCST);
-        if (nowCST.getHours() >= 20) {
-          cutoffCST.setHours(20, 0, 0, 0);
-        } else {
-          cutoffCST.setDate(cutoffCST.getDate() - 1);
-          cutoffCST.setHours(20, 0, 0, 0);
-        }
-
-        // 5) Convert cutoff back to UTC
-        const cutoffUTC = new Date(cutoffCST.getTime() + 6 * 60 * 60 * 1000);
+        const nowCST    = DateTime.now().setZone('America/Chicago');
+        const cutoffCST = nowCST.hour >= 20
+          ? nowCST.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+          : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 });
+        const cutoffUTC = cutoffCST.toUTC().toJSDate();
 
         // 6) Sum points awarded since that cutoff
         const agg = await db.gamePointLog.aggregate({
@@ -126,6 +117,9 @@ async function endMatch(io, match, result) {
             where: { userId },
             create: { userId, points: toGive },
             update: { points: { increment: toGive } }
+          });
+          await db.pointsLog.create({
+            data: { userId, points: toGive, method: "Game - gToons Clash", direction: 'increase' }
           });
         }
       }
@@ -881,11 +875,19 @@ setInterval(async () => {
           data: { points: { decrement: highestBid } }
         });
 
+        await tx.pointsLog.create({
+          data: { userId: highestBidderId, points: highestBid, method: "Auction", direction: 'decrease' }
+        });
+
         // credit the creator
         await tx.userPoints.upsert({
           where: { userId: creatorId },
           create: { userId: creatorId, points: highestBid },
           update: { points: { increment: highestBid } }
+        });
+
+        await tx.pointsLog.create({
+          data: { userId: creatorId, points: highestBid, method: "Auction", direction: 'increase' }
         });
 
         // transfer the cToon

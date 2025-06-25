@@ -149,7 +149,8 @@ const links = computed(() => {
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
-      { label: 'Auth Logs', to: '/admin/auth-logs' }
+      { label: 'Auth Logs', to: '/admin/auth-logs' },
+      { label: 'Point Logs', to: '/admin/points-log' }
     )
   }
   return all

@@ -26,7 +26,7 @@
       </button>
     </div>
 
-    <!-- ── SETTINGS TAB ─────────────────────────────────── -->
+    <!-- SETTINGS TAB -->
     <div
       v-show="activeTab === 'Settings'"
       class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto space-y-12"
@@ -151,13 +151,13 @@
     >
       <h2 class="text-2xl font-semibold">gToons Clash Games</h2>
 
-      <!-- Chart: now always in DOM, just hidden/shown -->
+      <!-- Chart -->
       <div class="chart-container mb-6">
         <canvas ref="clashCanvas"></canvas>
       </div>
 
-      <!-- Recent Games Table -->
-      <div class="overflow-x-auto">
+      <!-- DESKTOP TABLE -->
+      <div class="hidden sm:block overflow-x-auto">
         <table class="min-w-full table-auto border-collapse">
           <thead>
             <tr class="bg-gray-100">
@@ -186,32 +186,90 @@
                 </span>
               </td>
               <td class="px-4 py-2">
-                <template v-if="g.player2">
+                <span v-if="g.player2">
                   {{ g.player2.username }}
                   <span class="text-gray-500 text-sm">
                     ({{ g.player2.discordTag }})
                   </span>
-                </template>
-                <template v-else>AI</template>
+                </span>
+                <span v-else>AI</span>
               </td>
               <td class="px-4 py-2">
-                <template v-if="g.winner">
+                <span v-if="g.winner">
                   {{ g.winner.username }}
                   <span class="text-gray-500 text-sm">
                     ({{ g.winner.discordTag }})
                   </span>
-                </template>
-                <template v-else-if="g.endedAt && !g.winnerUserId">AI/Tie</template>
-                <template v-else>–</template>
+                </span>
+                <span
+                  v-else-if="g.endedAt && !g.winnerUserId"
+                >
+                  AI/Tie
+                </span>
+                <span v-else>–</span>
               </td>
-              <td class="px-4 py-2">
-                <template v-if="g.outcome">
-                  {{ g.outcome }}
-                </template>
-              </td>
+              <td class="px-4 py-2">{{ g.outcome || '–' }}</td>
             </tr>
           </tbody>
         </table>
+        <div
+          v-if="!clashGames || !clashGames.length"
+          class="text-gray-500 py-4"
+        >
+          No games found.
+        </div>
+      </div>
+
+      <!-- MOBILE CARDS -->
+      <div class="block sm:hidden space-y-4">
+        <div
+          v-if="clashGames && clashGames.length"
+          v-for="g in clashGames"
+          :key="g.id"
+          class="bg-gray-100 rounded-lg p-4 flex flex-col space-y-2"
+        >
+          <p><strong>Start:</strong> {{ formatDate(g.startedAt) }}</p>
+          <p><strong>End:</strong> {{ g.endedAt ? formatDate(g.endedAt) : '–' }}</p>
+          <p>
+            <strong>Player 1:</strong>
+            {{ g.player1.username }}
+            <span class="text-gray-500 text-sm">
+              ({{ g.player1.discordTag }})
+            </span>
+          </p>
+          <p>
+            <strong>Player 2:</strong>
+            <span v-if="g.player2">
+              {{ g.player2.username }}
+              <span class="text-gray-500 text-sm">
+                ({{ g.player2.discordTag }})
+              </span>
+            </span>
+            <span v-else>AI</span>
+          </p>
+          <p>
+            <strong>Winner:</strong>
+            <span v-if="g.winner">
+              {{ g.winner.username }}
+              <span class="text-gray-500 text-sm">
+                ({{ g.winner.discordTag }})
+              </span>
+            </span>
+            <span
+              v-else-if="g.endedAt && !g.winnerUserId"
+            >
+              AI/Tie
+            </span>
+            <span v-else>–</span>
+          </p>
+          <p><strong>Outcome:</strong> {{ g.outcome || '–' }}</p>
+        </div>
+        <div
+          v-if="!clashGames || !clashGames.length"
+          class="text-gray-500"
+        >
+          No games found.
+        </div>
       </div>
     </div>
   </div>
@@ -359,6 +417,7 @@ async function initClashChart() {
   let stats = []
   try {
     stats = await $fetch('/api/admin/clash-stats')
+    console.log(stats)
   } catch (err) {
     console.error('Failed to load /api/admin/clash-stats', err)
     return

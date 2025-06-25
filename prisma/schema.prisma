@@ -98,6 +98,7 @@ model User {
   cZones           CZone[]
   logins           LoginLog[]
   gamePointLogs    GamePointLog[]
+  pointsLogs       PointsLog[]
   claims           Claim[]
   visits           Visit[]
   points           UserPoints?
@@ -319,6 +320,17 @@ model GamePointLog {
   id         String   @id @default(uuid())
   userId     String
   points     Int
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model PointsLog {
+  id         String   @id @default(uuid())
+  userId     String
+  direction  String? // 'increase' or 'decrease'
+  points     Int
+  method     String?
   createdAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id])

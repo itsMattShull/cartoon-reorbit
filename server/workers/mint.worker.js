@@ -62,6 +62,9 @@ const worker = new Worker('mintQueue', async job => {
           where: { userId },
           data: { points: { decrement: ctoon.price } }
         }),
+        prisma.pointsLog.create({
+          data: { userId, points: ctoon.price, method: "Bought cToon", direction: 'decrease' }
+        }),
         prisma.userCtoon.create({
           data: { userId, ctoonId, mintNumber, isFirstEdition }
         })
