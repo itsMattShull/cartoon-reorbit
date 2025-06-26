@@ -83,9 +83,9 @@ async function syncGuildMembers() {
           let body = { retry_after: 5 }
           try { body = await patch.json() } catch {}
           const waitMs = (body.retry_after || 5) * 1000
-          console.warn(
-            `[sync-guild] rate limited on ${m.user.id}, retrying in ${waitMs}ms (attempt ${attempts})`
-          )
+          // console.warn(
+          //   `[sync-guild] rate limited on ${m.user.id}, retrying in ${waitMs}ms (attempt ${attempts})`
+          // )
           await new Promise(r => setTimeout(r, waitMs))
 
         } else {
@@ -95,10 +95,10 @@ async function syncGuildMembers() {
           if (err.code === 50013) {
             // Missing Permissions: skip without logging
           } else {
-            console.warn(
-              `[sync-guild] failed to patch nick for ${m.user.id}:`,
-              JSON.stringify(err)
-            )
+            // console.warn(
+            //   `[sync-guild] failed to patch nick for ${m.user.id}:`,
+            //   JSON.stringify(err)
+            // )
           }
           done = true
         }
@@ -106,13 +106,13 @@ async function syncGuildMembers() {
     }
 
     // 5) final report
-    console.log(
-      `[sync-guild] processed ${memberList.length} members, ` +
-      `updated ${updated.length} nicknames: ${updated.join(', ')}`
-    )
+    // console.log(
+    //   `[sync-guild] processed ${memberList.length} members, ` +
+    //   `updated ${updated.length} nicknames: ${updated.join(', ')}`
+    // )
 
   } catch (err) {
-    console.error('[sync-guild] sync failed:', err)
+    // console.error('[sync-guild] sync failed:', err)
   }
 }
 
