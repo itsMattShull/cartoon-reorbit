@@ -143,6 +143,7 @@ const links = computed(() => {
   if (user.value?.isAdmin) {
     all.push(
       { label: 'Admin', to: '/admin' },
+      { label: 'Manage Users', to: '/admin/users' },
       { label: 'Manage cToons', to: '/admin/ctoons' },
       { label: 'Manage Codes', to: '/admin/codes' },
       { label: 'Manage Packs', to: '/admin/packs' },

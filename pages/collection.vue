@@ -164,6 +164,7 @@
             <option value="rarity">Rarity (A→Z)</option>
             <option value="series">Series (A→Z)</option>
             <option value="set">Set (A→Z)</option>
+            <option value="name">Name (A→Z, then Mint #)</option>
           </select>
         </div>
 
@@ -495,12 +496,31 @@ const filteredAndSortedUserCtoons = computed(() => {
     case 'rarity':           return list.sort((a,b)=>a.rarity.localeCompare(b.rarity))
     case 'series':           return list.sort((a,b)=>a.series.localeCompare(b.series))
     case 'set':              return list.sort((a,b)=>a.set.localeCompare(b.set))
+    case 'name':
+     return list.sort((a, b) => {
+       // first by name
+       const cmp = a.name.localeCompare(b.name)
+       if (cmp !== 0) return cmp
+       // tie-break on mint number
+       return (a.mintNumber || 0) - (b.mintNumber || 0)
+     })
     default:                 return list
   }
 })
 
 const filteredWishlistCtoons = computed(() => wishlistCtoons.value.filter(wc => wc.name.toLowerCase().includes(searchQuery.value.toLowerCase())))
-const filteredAndSortedWishlistCtoons = computed(() => filteredWishlistCtoons.value)
+const filteredAndSortedWishlistCtoons = computed(() => {
+  const list = filteredWishlistCtoons.value.slice()
+  if (sortBy.value === 'name') {
+    return list.sort((a, b) => {
+      const cmp = a.name.localeCompare(b.name)
+      return cmp !== 0 ? cmp : (a.mintNumber || 0) - (b.mintNumber || 0)
+    })
+  }
+  // or just return list if you don’t care about other sorts
+  return list
+})
+
 
 // HELPERS FOR COUNTS
 function filteredCtoonsInSet(name) { return filteredAllCtoons.value.filter(c=>c.set===name) }

@@ -161,6 +161,11 @@ import { ref, computed, watch } from 'vue'
 import { useAsyncData } from '#app'
 import Nav from '@/components/Nav.vue'
 
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
+
 // Fetch auctions
 const { data: auctionsData, error } = await useAsyncData('auctions', () =>
   $fetch('/api/admin/auctions')
