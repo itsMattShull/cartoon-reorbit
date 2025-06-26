@@ -118,7 +118,7 @@ const timeframeOptions = [
   { value: '6m', label: '6 Months' },
   { value: '1y', label: '1 Year' }
 ]
-const selectedTimeframe = ref('3m')
+const selectedTimeframe = ref('1m')
 
 // Active Discord meta
 const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
@@ -174,15 +174,20 @@ const uniqueOptions = {
       anchor: 'center',   // center on the point
       align:  'top',   // push below
       offset: 4,          // a few pixels of breathing room
-      display(ctx) {
-        const chart = ctx.chart
-        const x     = chart.scales.x.getPixelForValue(ctx.dataIndex)
-        // only show if at least 30px from the last shown
-        if (x - chart._lastShownLabelX >= 30) {
-          chart._lastShownLabelX = x
-          return true
-        }
-        return false
+      display: ctx => {
+        const chart = ctx.chart;
+        const xScale = chart.scales.x;
+        const labels = chart.data.labels;
+
+        // always show the very first point
+        if (ctx.dataIndex === 0) return true;
+
+        // get pixel X for this label vs. the previous one
+        const currX = xScale.getPixelForValue(labels[ctx.dataIndex]);
+        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1]);
+
+        // only show if they’re at least 30px apart
+        return Math.abs(currX - prevX) > 30;
       }
     }
   },

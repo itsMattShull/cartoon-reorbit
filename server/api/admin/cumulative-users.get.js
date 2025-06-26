@@ -28,10 +28,10 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Build the per-week series, plus an “offset” of all users before startDate
+  // 3) Build the per-week series, plus an “offset” of all users before startDate,
+  //    but only count in `stats` those who actually joined on/after startDate.
   const raw = await prisma.$queryRaw`
     WITH
-      -- generate one row per week in your timeframe
       weeks AS (
         SELECT generate_series(
           date_trunc('week', ${startDate}),
@@ -40,26 +40,24 @@ export default defineEventHandler(async (event) => {
         ) AS week
       ),
 
-      -- count how many users joined before the timeframe
       base AS (
-        SELECT
-          COUNT(*) AS before_count
+        SELECT COUNT(*)::int AS before_count
         FROM "User"
         WHERE "createdAt" < ${startDate}
       ),
 
-      -- count how many users joined each calendar‐week (all time)
       stats AS (
         SELECT
           date_trunc('week', "createdAt") AS week,
-          COUNT(*) AS cnt
+          COUNT(*)::int AS cnt
         FROM "User"
+        WHERE "createdAt" >= ${startDate}
         GROUP BY week
       )
 
     SELECT
       to_char(w.week, 'YYYY-MM-DD') AS week,
-      -- running sum of this week's stats plus the base offset
+      -- offset + running sum of only the new users in each week
       (b.before_count + COALESCE(
         SUM(s.cnt) OVER (ORDER BY w.week),
         0
@@ -71,7 +69,7 @@ export default defineEventHandler(async (event) => {
     ORDER BY w.week
   `
 
-  // 4) Serialize BigInt → Number in case of big counts
+  // 4) Serialize BigInt → Number
   return raw.map(r => ({
     week:       r.week,
     cumulative: typeof r.cumulative === 'bigint'
