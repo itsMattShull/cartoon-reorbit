@@ -48,9 +48,9 @@ async function syncGuildMembers() {
     const nameMap = new Map(users.map(u => [u.discordId, u.username]))
 
     // 4) for each member, if their guild‐nick !== your User.username, PATCH it
+    const updated = []
     for (const m of members) {
       const dbName = nameMap.get(m.user.id)
-      // m.nick is the per‐guild nickname (could be null)
       if (dbName && m.nick !== dbName) {
         const patch = await fetch(
           `${DISCORD_API}/guilds/${GUILD_ID}/members/${m.user.id}`,
@@ -63,7 +63,9 @@ async function syncGuildMembers() {
             body: JSON.stringify({ nick: dbName })
           }
         )
-        if (!patch.ok) {
+        if (patch.ok) {
+          updated.push(dbName)
+        } else {
           console.warn(
             `[sync-guild] failed to patch nick for ${m.user.id}:`,
             await patch.text()
@@ -72,7 +74,12 @@ async function syncGuildMembers() {
       }
     }
 
-    console.log(`[sync-guild] synced ${members.length} members, corrected nicknames where needed`)
+    // 5) report
+    console.log(
+      `[sync-guild] processed ${members.length} members, ` +
+      `updated ${updated.length} nick${updated.length === 1 ? '' : 's'}: ` +
+      updated.join(', ')
+    )
   }
   catch (err) {
     console.error('[sync-guild] sync failed:', err)
