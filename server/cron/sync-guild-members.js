@@ -2,6 +2,8 @@
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
+import dotenv from 'dotenv'
+dotenv.config()
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
@@ -15,7 +17,7 @@ async function syncGuildMembers() {
     while (true) {
       const res = await fetch(
         `${DISCORD_API}/guilds/${GUILD_ID}/members?limit=1000&after=${after}`,
-        { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+        { headers: { Authorization: `${BOT_TOKEN}` } }
       )
       if (!res.ok) {
         const body = await res.text()
@@ -57,7 +59,7 @@ async function syncGuildMembers() {
           {
             method: 'PATCH',
             headers: {
-              Authorization: `Bot ${BOT_TOKEN}`,
+              Authorization: `${BOT_TOKEN}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ nick: dbName })
