@@ -97,7 +97,12 @@ Chart.register(
   BarController, BarElement,
   CategoryScale, LinearScale, TimeScale,
   Title, Tooltip, Legend,
-  ChartDataLabels
+  ChartDataLabels, {
+    id: 'resetLabelPosition',
+    beforeDatasetsDraw(chart) {
+      chart._lastShownLabelX = -Infinity
+    }
+  }
 )
 
 // auth/admin guard
@@ -147,14 +152,6 @@ const commonLineOptions = {
   plugins: { legend: { display: false } }
 }
 
-const cumOptions = {
-  ...commonLineOptions,
-  scales: {
-    x: { type: 'time', offset: true, time: { unit: 'week', tooltipFormat: 'PP' }, title: { display: true, text: 'Week' } },
-    y: { title: { display: true, text: 'Cumulative Users' } }
-  }
-}
-
 const pctOptions = {
   ...commonLineOptions,
   scales: {
@@ -168,10 +165,83 @@ const pctOptions = {
 }
 
 const uniqueOptions = {
-  ...commonLineOptions,
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+
+    datalabels: {
+      anchor: 'center',   // center on the point
+      align:  'top',   // push below
+      offset: 4,          // a few pixels of breathing room
+      display(ctx) {
+        const chart = ctx.chart
+        const x     = chart.scales.x.getPixelForValue(ctx.dataIndex)
+        // only show if at least 30px from the last shown
+        if (x - chart._lastShownLabelX >= 30) {
+          chart._lastShownLabelX = x
+          return true
+        }
+        return false
+      }
+    }
+  },
   scales: {
-    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
-    y: { title: { display: true, text: 'Unique Daily Logons' } }
+    x: {
+      type: 'time',
+      offset: true,
+      time: {
+        unit: 'day',
+        tooltipFormat: 'PP'
+      },
+      title: { display: true, text: 'Day' }
+    },
+    y: {
+      title: { display: true, text: 'Unique Daily Logons' }
+    }
+  }
+}
+
+const cumOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+
+    // ← add this block
+    datalabels: {
+      anchor:  'center',     // center the label on the point
+      align:   'bottom',     // put it just under the point
+      offset:  4,            // a few pixels away
+      display: ctx => {
+        const chart = ctx.chart;
+        const xScale = chart.scales.x;
+        const labels = chart.data.labels;
+
+        // always show the very first point
+        if (ctx.dataIndex === 0) return true;
+
+        // get pixel X for this label vs. the previous one
+        const currX = xScale.getPixelForValue(labels[ctx.dataIndex]);
+        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1]);
+
+        // only show if they’re at least 30px apart
+        return Math.abs(currX - prevX) > 30;
+      }
+    }
+  },
+  scales: {
+    x: {
+      type: 'time',
+      time: {
+        unit:         'week',
+        tooltipFormat:'PP'
+      },
+      title: { display: true, text: 'Week' }
+    },
+    y: {
+      title: { display: true, text: 'Cumulative Users' }
+    }
   }
 }
 
@@ -200,9 +270,9 @@ const barOptions = {
       title: { display: true, text: 'Day' },
       ticks: {
         source:    'labels',
-        autoSkip: false,
-        maxRotation: 0,
-        minRotation: 0
+        autoSkip: true,
+        maxRotation: 45,
+        minRotation: 45
       }
     },
     y: { title: { display: true, text: 'Count' }, beginAtZero: true }
