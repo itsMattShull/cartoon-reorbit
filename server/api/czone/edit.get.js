@@ -15,7 +15,10 @@ export default defineEventHandler(async (event) => {
   // 1) Fetch all cToons the user owns
   const owned = await prisma.userCtoon.findMany({
     where: { userId: user.id },
-    include: { ctoon: true }
+    include: { ctoon: true },
+    orderBy: {
+      createdAt: 'desc',
+    },
   })
   const ctoons = owned.map((uc) => ({
     id: uc.id,
