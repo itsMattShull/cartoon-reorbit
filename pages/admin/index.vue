@@ -69,6 +69,14 @@
         <div class="chart-container"><canvas ref="packsCanvas"></canvas></div>
       </div>
 
+      <!-- 4) gToons Clash Games -->
+      <div>
+        <h2 class="text-xl font-semibold mb-2">gToons Clash Games</h2>
+        <div class="chart-container mb-6">
+          <canvas ref="clashCanvas"></canvas>
+        </div>
+      </div>
+
       <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
         <h2 class="text-xl font-semibold mb-2">Points Distribution</h2>
@@ -127,6 +135,7 @@ const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
 const cumCanvas     = ref(null)
 const pctCanvas     = ref(null)
 const uniqueCanvas  = ref(null)
+const clashCanvas   = ref(null)
 const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
@@ -134,13 +143,14 @@ const ptsDistCanvas = ref(null)
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    codesChart, ctoonChart, packChart, ptsHistChart
+    codesChart, ctoonChart, packChart, ptsHistChart, clashChart
 
 // --- color palette (solid, no opacity) ---
 const colors = {
   line:      '#4F46E5', // Indigo
   codesBar:  '#EF4444', // Red
   ctoonBar:  '#10B981', // Emerald
+  clashBar:  '#8B5CF6',
   packBar:   '#3B82F6', // Blue
   histBar:   '#F59E0B'  // Amber
 }
@@ -206,6 +216,45 @@ const uniqueOptions = {
     }
   }
 }
+
+// Clash games: bar+line combo
+const clashOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    // ← exactly the same X‐axis settings you used for codesChart
+    x: {
+      type: 'time',
+      offset: true,
+      time: {
+        unit: 'day',
+        tooltipFormat: 'PP',
+        displayFormats: { day: 'MMM d' }
+      },
+      title: { display: true, text: 'Day' },
+      ticks: {
+        source: 'labels',
+        autoSkip: true,
+        maxRotation: 45,
+        minRotation: 45
+      }
+    },
+    y: {
+      title: { display: true, text: 'Games Played' },
+      beginAtZero: true
+    },
+    y1: {
+      position: 'right',
+      title: { display: true, text: '% Finished' },
+      grid: { drawOnChartArea: false },
+      ticks: { callback: v => v + '%' },
+      min: 0,
+      max: 100
+    }
+  },
+  plugins: { legend: { position: 'top' } }
+}
+
 
 const cumOptions = {
   responsive: true,
@@ -352,6 +401,48 @@ async function fetchData() {
     total: ad.total
   }
 
+  // 5) clash stats
+  res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  const cs = await res.json()
+  clashChart.data.labels = cs.map(s => new Date(s.day))
+  clashChart.data.datasets = [
+    {
+      type: 'bar',
+      label: 'Games Played',
+      data: cs.map(s => s.count),
+      yAxisID: 'y',
+      backgroundColor: colors.clashBar,
+      borderColor: colors.clashBar,
+      borderWidth: 1,
+      order: 1,
+      datalabels: {
+        anchor: 'center',   // center vertically
+        align: 'center',    // center horizontally
+        color: '#ffffff',   // white text
+        font: { weight: 'bold' }
+      }
+    },
+    {
+      type: 'line',
+      label: '% Finished',
+      data: cs.map(s => s.percentFinished),
+      yAxisID: 'y1',
+      borderColor: '#FACC15',   // red line
+      backgroundColor: '#FACC15',
+      fill: false,
+      tension: 0.3,
+      order: 0,
+      pointBackgroundColor: '#FACC15',
+      datalabels: {
+        anchor: 'end',     // place above the point
+        align: 'top',
+        color: '#222222',  // dark color for max contrast on light or dark
+        font: { weight: 'bold' }
+      }
+    }
+  ]
+  clashChart.update()
+
   // 5) codes redeemed
   res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   let cr = await res.json()
@@ -414,6 +505,7 @@ onMounted(async () => {
   ctoonChart  = new Chart(ctoonCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
+  clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
 
   // fetch all
   await nextTick()

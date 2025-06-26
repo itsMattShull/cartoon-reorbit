@@ -4,33 +4,7 @@
   <div class="min-h-screen bg-gray-100 p-6 mt-12">
     <h1 class="text-3xl font-bold mb-6">Admin: Game Configuration</h1>
 
-    <!-- Tabs -->
-    <div class="flex space-x-4 mb-6">
-      <button
-        @click="activeTab = 'Settings'"
-        :class="activeTab === 'Settings'
-          ? 'border-b-2 border-indigo-600 text-indigo-600'
-          : 'text-gray-600 hover:text-gray-800'"
-        class="px-4 py-2 text-sm font-medium"
-      >
-        Settings
-      </button>
-      <button
-        @click="activeTab = 'ClashGames'"
-        :class="activeTab === 'ClashGames'
-          ? 'border-b-2 border-indigo-600 text-indigo-600'
-          : 'text-gray-600 hover:text-gray-800'"
-        class="px-4 py-2 text-sm font-medium"
-      >
-        gToons Clash
-      </button>
-    </div>
-
-    <!-- SETTINGS TAB -->
-    <div
-      v-show="activeTab === 'Settings'"
-      class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto space-y-12"
-    >
+    <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto space-y-12">
       <!-- Global Settings -->
       <section>
         <h2 class="text-2xl font-semibold mb-4">Global Settings</h2>
@@ -139,167 +113,19 @@
       </section>
 
       <!-- Toast -->
-      <div v-if="toastMessage" :class="toastClass">
+      <div
+        v-if="toastMessage"
+        :class="[toastClass, 'fixed bottom-4 left-1/2 transform -translate-x-1/2']"
+      >
         {{ toastMessage }}
-      </div>
-    </div>
-
-    <!-- gToons Clash TAB -->
-    <div
-      v-show="activeTab === 'ClashGames'"
-      class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto space-y-4"
-    >
-      <h2 class="text-2xl font-semibold">gToons Clash Games</h2>
-
-      <!-- Chart -->
-      <div class="chart-container mb-6">
-        <canvas ref="clashCanvas"></canvas>
-      </div>
-
-      <!-- DESKTOP TABLE -->
-      <div class="hidden sm:block overflow-x-auto">
-        <table class="min-w-full table-auto border-collapse">
-          <thead>
-            <tr class="bg-gray-100">
-              <th class="px-4 py-2 text-left">Start</th>
-              <th class="px-4 py-2 text-left">End</th>
-              <th class="px-4 py-2 text-left">Player 1</th>
-              <th class="px-4 py-2 text-left">Player 2</th>
-              <th class="px-4 py-2 text-left">Winner</th>
-              <th class="px-4 py-2 text-left">Outcome</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="g in clashGames"
-              :key="g.id"
-              class="border-b hover:bg-gray-50"
-            >
-              <td class="px-4 py-2">{{ formatDate(g.startedAt) }}</td>
-              <td class="px-4 py-2">
-                {{ g.endedAt ? formatDate(g.endedAt) : '–' }}
-              </td>
-              <td class="px-4 py-2">
-                {{ g.player1.username }}
-                <span class="text-gray-500 text-sm">
-                  ({{ g.player1.discordTag }})
-                </span>
-              </td>
-              <td class="px-4 py-2">
-                <span v-if="g.player2">
-                  {{ g.player2.username }}
-                  <span class="text-gray-500 text-sm">
-                    ({{ g.player2.discordTag }})
-                  </span>
-                </span>
-                <span v-else>AI</span>
-              </td>
-              <td class="px-4 py-2">
-                <span v-if="g.winner">
-                  {{ g.winner.username }}
-                  <span class="text-gray-500 text-sm">
-                    ({{ g.winner.discordTag }})
-                  </span>
-                </span>
-                <span
-                  v-else-if="g.endedAt && !g.winnerUserId"
-                >
-                  AI/Tie
-                </span>
-                <span v-else>–</span>
-              </td>
-              <td class="px-4 py-2">{{ g.outcome || '–' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div
-          v-if="!clashGames || !clashGames.length"
-          class="text-gray-500 py-4"
-        >
-          No games found.
-        </div>
-      </div>
-
-      <!-- MOBILE CARDS -->
-      <div class="block sm:hidden space-y-4">
-        <div
-          v-if="clashGames && clashGames.length"
-          v-for="g in clashGames"
-          :key="g.id"
-          class="bg-gray-100 rounded-lg p-4 flex flex-col space-y-2"
-        >
-          <p><strong>Start:</strong> {{ formatDate(g.startedAt) }}</p>
-          <p><strong>End:</strong> {{ g.endedAt ? formatDate(g.endedAt) : '–' }}</p>
-          <p>
-            <strong>Player 1:</strong>
-            {{ g.player1.username }}
-            <span class="text-gray-500 text-sm">
-              ({{ g.player1.discordTag }})
-            </span>
-          </p>
-          <p>
-            <strong>Player 2:</strong>
-            <span v-if="g.player2">
-              {{ g.player2.username }}
-              <span class="text-gray-500 text-sm">
-                ({{ g.player2.discordTag }})
-              </span>
-            </span>
-            <span v-else>AI</span>
-          </p>
-          <p>
-            <strong>Winner:</strong>
-            <span v-if="g.winner">
-              {{ g.winner.username }}
-              <span class="text-gray-500 text-sm">
-                ({{ g.winner.discordTag }})
-              </span>
-            </span>
-            <span
-              v-else-if="g.endedAt && !g.winnerUserId"
-            >
-              AI/Tie
-            </span>
-            <span v-else>–</span>
-          </p>
-          <p><strong>Outcome:</strong> {{ g.outcome || '–' }}</p>
-        </div>
-        <div
-          v-if="!clashGames || !clashGames.length"
-          class="text-gray-500"
-        >
-          No games found.
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
-import {
-  Chart,
-  BarController,
-  BarElement,
-  LineController,
-  LineElement,
-  PointElement,
-  CategoryScale,
-  LinearScale,
-  TimeScale,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-import 'chartjs-adapter-date-fns'
-import ChartDataLabels from 'chartjs-plugin-datalabels'
-
-// page meta
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
-
-// ── Tabs ───────────────────────────────────────
-const activeTab = ref('Settings')
 
 // ── Settings state ────────────────────────────
 const globalDailyPointLimit = ref(100)
@@ -308,13 +134,14 @@ const leftCupPoints         = ref(0)
 const rightCupPoints        = ref(0)
 const goldCupPoints         = ref(0)
 const clashPointsPerWin     = ref(1)
+const loadingWinball        = ref(false)
 const loadingClash          = ref(false)
+
 const grandPrizeCtoon       = ref(null)
 const selectedCtoonId       = ref('')
 const allCtoons             = ref([])
 const searchTerm            = ref('')
 const showDropdown          = ref(false)
-const loadingWinball        = ref(false)
 
 const toastMessage = ref('')
 const toastType    = ref('')
@@ -343,163 +170,11 @@ function selectCtoon(c) {
 function clearSelection() {
   selectedCtoonId.value = ''
   grandPrizeCtoon.value = null
-  searchTerm.value       = ''
-  showDropdown.value     = false
+  searchTerm.value      = ''
+  showDropdown.value    = false
 }
 
-// ── Chart & table state ──────────────────────
-const clashCanvas = ref(null)
-let clashChart   = null
-const clashStats = ref([])
-const clashGames = ref([])
-
-const clashOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    x: {
-      type: 'time',
-      time: { unit: 'day', tooltipFormat: 'PP' },
-      title: { display: true, text: 'Day' }
-    },
-    y: {
-      title: { display: true, text: 'Games Played' }
-    },
-    y1: {
-      title: { display: true, text: '% Finished' },
-      position: 'right',
-      grid: { drawOnChartArea: false },
-      ticks: { callback: v => v + '%' },
-      min: 0,
-      max: 100
-    }
-  },
-  plugins: { legend: { position: 'top' } }
-}
-
-// ── Helpers ──────────────────────────────────
-function formatDate(dt) {
-  return new Date(dt).toLocaleString('en-US', {
-    year:   'numeric',
-    month:  'short',
-    day:    'numeric',
-    hour:   '2-digit',
-    minute: '2-digit'
-  })
-}
-
-// ── Data loaders ────────────────────────────
-async function loadClashStats() {
-  clashStats.value = await $fetch('/api/admin/clash-stats')
-}
-async function loadClashGames() {
-  clashGames.value = await $fetch('/api/admin/clash-games')
-}
-
-// ── Chart initializer ───────────────────────
-async function initClashChart() {
-  await nextTick()
-  const canvasEl = clashCanvas.value
-  if (!canvasEl) {
-    console.error('⚠️ clashCanvas ref not found')
-    return
-  }
-  const ctx = canvasEl.getContext('2d')
-  if (!ctx) {
-    console.error('⚠️ could not getContext("2d")')
-    return
-  }
-  if (clashChart) {
-    clashChart.destroy()
-    clashChart = null
-  }
-
-  let stats = []
-  try {
-    stats = await $fetch('/api/admin/clash-stats')
-    console.log(stats)
-  } catch (err) {
-    console.error('Failed to load /api/admin/clash-stats', err)
-    return
-  }
-
-  clashChart = new Chart(ctx, {
-    data: {
-      labels: stats.map(s => new Date(s.day)),
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Games Played',
-          data: stats.map(s => s.count),
-          yAxisID: 'y',
-          backgroundColor: '#6366F1',
-          barPercentage: 0.6,
-          categoryPercentage: 0.6,
-          order: 1,
-          datalabels: {
-            color: '#fff',                 // white labels
-            anchor: 'center',               // attach at base of bar
-            align: 'center',               // centered horizontally
-            font: { weight: 'bold', size: 12 }
-          }
-        },
-        {
-          type: 'line',
-          label: '% Finished',
-          data: stats.map(s => s.percentFinished),
-          yAxisID: 'y1',
-          borderColor: 'rgba(243,156,18,0.9)',
-          fill: false,
-          tension: 0.3,
-          pointBackgroundColor: 'rgba(243,156,18,1)',
-          order: 0,
-          datalabels: {
-            color: '#D3D3D3',  
-          }
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          type: 'time',
-          time: { unit: 'day', tooltipFormat: 'PP' },
-          title: { display: true, text: 'Day' }
-        },
-        y: {
-          beginAtZero: true,
-          title: { display: true, text: 'Games Played' }
-        },
-        y1: {
-          position: 'right',
-          min: 0,            // force the axis to start at 0
-          max: 100,          // force the axis to end at 100
-          beginAtZero: true, // ensures 0 is honored even if all data > 0
-          title: { display: true, text: '% Finished' },
-          grid: { drawOnChartArea: false },
-          ticks: {
-            callback: v => v + '%'
-          }
-        }
-      },
-      plugins: {
-        legend: { position: 'top' },
-        datalabels: {
-          anchor: 'end',
-          align: 'top',
-          formatter: (value, ctx) =>
-            ctx.dataset.type === 'bar' ? value : value + '%',
-          font: { weight: 'bold', size: 12 }
-        }
-      }
-    }
-  })
-}
-
-
-// ── Settings load & save ────────────────────
+// ── Lifecycle & data loading ─────────────────
 async function loadSettings() {
   const g = await $fetch('/api/admin/global-config')
   globalDailyPointLimit.value = g.dailyPointLimit
@@ -509,13 +184,11 @@ async function loadSettings() {
   rightCupPoints.value = wb.rightCupPoints
   goldCupPoints.value  = wb.goldCupPoints
   if (wb.grandPrizeCtoon) {
-    grandPrizeCtoon.value  = wb.grandPrizeCtoon
-    selectedCtoonId.value  = wb.grandPrizeCtoon.id
-    searchTerm.value       = wb.grandPrizeCtoon.name
+    grandPrizeCtoon.value = wb.grandPrizeCtoon
+    selectedCtoonId.value = wb.grandPrizeCtoon.id
+    searchTerm.value      = wb.grandPrizeCtoon.name
   }
-  allCtoons.value = await $fetch(
-    '/api/admin/game-ctoons?select=id,name,rarity,assetPath'
-  )
+  allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
@@ -577,22 +250,7 @@ async function saveClashConfig() {
   }
 }
 
-// ── Lifecycle ────────────────────────────────
-onMounted(async () => {
-  // register Chart.js controllers & elements
-  Chart.register(
-    BarController, BarElement,
-    LineController, LineElement, PointElement,
-    CategoryScale, LinearScale, TimeScale,
-    Title, Tooltip, Legend, ChartDataLabels
-  )
-
-  // load your settings (cToon pools, point caps, etc.)
-  await loadSettings()
-  // and then initialize the chart
-  await initClashChart()
-  await loadClashGames()
-})
+onMounted(loadSettings)
 </script>
 
 <style scoped>
@@ -617,7 +275,7 @@ onMounted(async () => {
 }
 .btn-primary:disabled { opacity: .5; }
 
-/* Chart container styling */
+/* Chart container styling (still here if you add charts elsewhere) */
 .chart-container {
   height: 300px;
   position: relative;
