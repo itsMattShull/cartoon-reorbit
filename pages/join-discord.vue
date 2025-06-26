@@ -1,7 +1,7 @@
 <template>
     <div class="p-6 max-w-md mx-auto text-center">
       <h2 class="text-2xl font-bold mb-4">You're Almost In!</h2>
-      <p class="mb-4">Join our Discord server to unlock all features.</p>
+      <p class="mb-4">Join our Discord server, then come back and refresh the page, to unlock all features.</p>
       <a
         :href="inviteUrl"
         target="_blank"
