@@ -1,8 +1,6 @@
 // server/api/admin/percentage-first-purchase.get.js
 
-
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
-
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -63,12 +61,13 @@ export default defineEventHandler(async (event) => {
     )
     SELECT
       to_char(w.week, 'YYYY-MM-DD') AS week,
+      -- round to 0 decimal places and cast to integer
       ROUND(
         CASE
           WHEN COALESCE(s.total, 0) = 0 THEN 0
           ELSE (s.purchased::decimal * 100 / s.total)
         END
-      , 2) AS percentage
+      , 0)::int AS percentage
     FROM weeks w
     LEFT JOIN stats s
       ON s.week = w.week
