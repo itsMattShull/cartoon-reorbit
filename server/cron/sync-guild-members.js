@@ -1,7 +1,7 @@
 // server/cron/sync-guild-members.js
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
-import { default as cron } from 'node-cron'
+import cron from 'node-cron'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
@@ -9,41 +9,72 @@ const DISCORD_API = 'https://discord.com/api/v10'
 
 async function syncGuildMembers() {
   try {
+    // 1) page through the guild
     let after = '0'
-    const memberIds = []
-
-    // page through all guild members
+    const members = []
     while (true) {
       const res = await fetch(
         `${DISCORD_API}/guilds/${GUILD_ID}/members?limit=1000&after=${after}`,
-        { headers: { Authorization: `${BOT_TOKEN}` } }
+        { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
       )
       if (!res.ok) {
         const body = await res.text()
         throw new Error(`Discord API ${res.status}: ${body}`)
       }
-
       const batch = await res.json()
       if (!Array.isArray(batch) || batch.length === 0) break
 
-      batch.forEach(m => memberIds.push(m.user.id))
+      members.push(...batch)
       after = batch[batch.length - 1].user.id
-
       if (batch.length < 1000) break
     }
 
-    // flip on users who are now in guild but were marked out
-    const turnedOn = await prisma.user.updateMany({
+    // 2) flip on/off your inGuild flag
+    const memberIds = members.map(m => m.user.id)
+    await prisma.user.updateMany({
       where: { discordId: { in: memberIds }, inGuild: false },
       data:  { inGuild: true },
     })
-
-    // flip off users who left
-    const turnedOff = await prisma.user.updateMany({
+    await prisma.user.updateMany({
       where: { inGuild: true, discordId: { notIn: memberIds } },
       data:  { inGuild: false },
     })
-  } catch (err) {
+
+    // 3) pull all of your matching user records
+    const users = await prisma.user.findMany({
+      where: { discordId: { in: memberIds } },
+      select: { discordId: true, username: true }
+    })
+    const nameMap = new Map(users.map(u => [u.discordId, u.username]))
+
+    // 4) for each member, if their guild‐nick !== your User.username, PATCH it
+    for (const m of members) {
+      const dbName = nameMap.get(m.user.id)
+      // m.nick is the per‐guild nickname (could be null)
+      if (dbName && m.nick !== dbName) {
+        const patch = await fetch(
+          `${DISCORD_API}/guilds/${GUILD_ID}/members/${m.user.id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bot ${BOT_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ nick: dbName })
+          }
+        )
+        if (!patch.ok) {
+          console.warn(
+            `[sync-guild] failed to patch nick for ${m.user.id}:`,
+            await patch.text()
+          )
+        }
+      }
+    }
+
+    console.log(`[sync-guild] synced ${members.length} members, corrected nicknames where needed`)
+  }
+  catch (err) {
     console.error('[sync-guild] sync failed:', err)
   }
 }
