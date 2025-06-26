@@ -607,7 +607,6 @@ async function buyCtoon(ctoon) {
       body: { ctoonId: ctoon.id }
     })
     await fetchSelf()
-    user.value.points -= ctoon.price
     ctoon.minted++
     ctoon.owned = true
     showToast('Purchase successful', 'success')
