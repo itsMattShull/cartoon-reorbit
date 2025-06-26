@@ -33,5 +33,6 @@ export default defineEventHandler(async (event) => {
     points:      u.points?.points || 0,
     joined:       u.createdAt,
     lastLogin:    u.lastLogin,
+    inGuild:       u.inGuild
   }))
 })

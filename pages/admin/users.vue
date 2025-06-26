@@ -18,6 +18,7 @@
           <tr>
             <th class="px-4 py-2 text-left">Username</th>
             <th class="px-4 py-2 text-left">Discord Tag</th>
+            <th class="px-4 py-2 text-center">In Discord?</th> 
             <th class="px-4 py-2 text-right"># Unique cToons</th>
             <th class="px-4 py-2 text-right">Points</th>
             <th class="px-4 py-2 text-left">Joined</th>
@@ -28,6 +29,16 @@
           <tr v-for="u in filtered" :key="u.id" class="border-t">
             <td class="px-4 py-2">{{ u.username }}</td>
             <td class="px-4 py-2">{{ u.discordTag }}</td>
+            <td class="px-4 py-2 text-center">
+              <span
+                v-if="u.inGuild"
+                class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs"
+              >Yes</span>
+              <span
+                v-else
+                class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs"
+              >No</span>
+            </td>
             <td class="px-4 py-2 text-right">{{ u.uniqueCtoons }}</td>
             <td class="px-4 py-2 text-right">{{ u.points }}</td>
             <td class="px-4 py-2">{{ formatDate(u.joined) }}</td>
@@ -44,7 +55,17 @@
         :key="u.id"
         class="border rounded p-4 shadow"
       >
-        <div class="font-semibold text-lg">{{ u.username }}</div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-semibold text-lg">{{ u.username }}</div>
+          <span
+            v-if="u.inGuild"
+            class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs"
+          >Active</span>
+          <span
+            v-else
+            class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs"
+          >Off-guild</span>
+        </div>
         <div class="text-sm text-gray-600 mb-2">{{ u.discordTag }}</div>
         <div class="flex justify-between text-sm mb-2">
           <div># cToons: {{ u.uniqueCtoons }}</div>
