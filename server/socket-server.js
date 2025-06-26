@@ -893,7 +893,7 @@ setInterval(async () => {
         // transfer the cToon
         await tx.userCtoon.update({
           where: { id: userCtoonId },
-          data: { userId: highestBidderId }
+          data: { userId: highestBidderId, isTradeable: true }
         });
       }
     });
