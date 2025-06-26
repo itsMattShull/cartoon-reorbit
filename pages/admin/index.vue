@@ -51,19 +51,25 @@
         <div class="chart-container"><canvas ref="uniqueCanvas"></canvas></div>
       </div>
 
-      <!-- 4) cToons Purchased (bar) -->
+      <!-- 4) Codes Redeemed (bar) -->
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Codes Redeemed</h2>
+        <div class="chart-container"><canvas ref="codesCanvas"></canvas></div>
+      </div>
+
+      <!-- 5) cToons Purchased (bar) -->
       <div>
         <h2 class="text-xl font-semibold mb-2">cToons Purchased</h2>
         <div class="chart-container"><canvas ref="ctoonCanvas"></canvas></div>
       </div>
 
-      <!-- 5) Packs Purchased (bar) -->
+      <!-- 6) Packs Purchased (bar) -->
       <div>
         <h2 class="text-xl font-semibold mb-2">Packs Purchased</h2>
         <div class="chart-container"><canvas ref="packsCanvas"></canvas></div>
       </div>
 
-      <!-- 6) Points Distribution (histogram) spans full width -->
+      <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
         <h2 class="text-xl font-semibold mb-2">Points Distribution</h2>
         <div class="chart-container"><canvas ref="ptsDistCanvas"></canvas></div>
@@ -107,7 +113,7 @@ const timeframeOptions = [
   { value: '6m', label: '6 Months' },
   { value: '1y', label: '1 Year' }
 ]
-const selectedTimeframe = ref('1m')
+const selectedTimeframe = ref('3m')
 
 // Active Discord meta
 const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
@@ -116,17 +122,19 @@ const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
 const cumCanvas     = ref(null)
 const pctCanvas     = ref(null)
 const uniqueCanvas  = ref(null)
+const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    ctoonChart, packChart, ptsHistChart
+    codesChart, ctoonChart, packChart, ptsHistChart
 
 // --- color palette (solid, no opacity) ---
 const colors = {
   line:      '#4F46E5', // Indigo
+  codesBar:  '#EF4444', // Red
   ctoonBar:  '#10B981', // Emerald
   packBar:   '#3B82F6', // Blue
   histBar:   '#F59E0B'  // Amber
@@ -142,7 +150,7 @@ const commonLineOptions = {
 const cumOptions = {
   ...commonLineOptions,
   scales: {
-    x: { type: 'time', time: { unit: 'week', tooltipFormat: 'PP' }, title: { display: true, text: 'Week' } },
+    x: { type: 'time', offset: true, time: { unit: 'week', tooltipFormat: 'PP' }, title: { display: true, text: 'Week' } },
     y: { title: { display: true, text: 'Cumulative Users' } }
   }
 }
@@ -150,7 +158,7 @@ const cumOptions = {
 const pctOptions = {
   ...commonLineOptions,
   scales: {
-    x: { type: 'time', time: { unit: 'week', tooltipFormat: 'PP' }, title: { display: true, text: 'Week' } },
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
     y: {
       title: { display: true, text: '% First cToon Purchase' },
       ticks: { callback: v => v + '%' },
@@ -162,11 +170,12 @@ const pctOptions = {
 const uniqueOptions = {
   ...commonLineOptions,
   scales: {
-    x: { type: 'time', time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
     y: { title: { display: true, text: 'Unique Daily Logons' } }
   }
 }
 
+// both Codes, cToons & Packs use the same barOptions
 const barOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -182,13 +191,19 @@ const barOptions = {
   scales: {
     x: {
       type: 'time',
+      offset: true,
       time: {
-        unit: 'week',
-        // show e.g. "Jun 23"
+        unit: 'day',
         tooltipFormat: 'PP',
-        displayFormats: { week: 'MMM d' }
+        displayFormats: { day: 'MMM d' }
       },
-      title: { display: true, text: 'Week' }
+      title: { display: true, text: 'Day' },
+      ticks: {
+        source:    'labels',
+        autoSkip: false,
+        maxRotation: 0,
+        minRotation: 0
+      }
     },
     y: { title: { display: true, text: 'Count' }, beginAtZero: true }
   }
@@ -262,7 +277,19 @@ async function fetchData() {
     total: ad.total
   }
 
-  // 5) cToons purchased
+  // 5) codes redeemed
+  res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  let cr = await res.json()
+  codesChart.data.labels   = cr.map(d => new Date(d.period))
+  codesChart.data.datasets = [{
+    data: cr.map(d => d.count),
+    backgroundColor: colors.codesBar,
+    borderColor: colors.codesBar,
+    borderWidth: 1
+  }]
+  codesChart.update()
+
+  // 6) cToons purchased
   res = await fetch(`/api/admin/purchases?method=ctoon&timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   let pd = await res.json()
   if (pd.ctoonPurchases) pd = pd.ctoonPurchases
@@ -275,7 +302,7 @@ async function fetchData() {
   }]
   ctoonChart.update()
 
-  // 6) packs purchased
+  // 7) packs purchased
   res = await fetch(`/api/admin/purchases?method=pack&timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   let pp = await res.json()
   if (pp.packPurchases) pp = pp.packPurchases
@@ -288,7 +315,7 @@ async function fetchData() {
   }]
   packChart.update()
 
-  // 7) points distribution
+  // 8) points distribution
   res = await fetch('/api/admin/points-distribution', { credentials: 'include' })
   const hd = await res.json()
   ptsHistChart.data.labels   = hd.map(b => b.label)
@@ -303,40 +330,17 @@ async function fetchData() {
 
 onMounted(async () => {
   // init line charts
-  cumChart = new Chart(cumCanvas.value.getContext('2d'), {
-    type: 'line',
-    data: { labels: [], datasets: [] },
-    options: cumOptions
-  })
-  pctChart = new Chart(pctCanvas.value.getContext('2d'), {
-    type: 'line',
-    data: { labels: [], datasets: [] },
-    options: pctOptions
-  })
-  uniqueChart = new Chart(uniqueCanvas.value.getContext('2d'), {
-    type: 'line',
-    data: { labels: [], datasets: [] },
-    options: uniqueOptions
-  })
+  cumChart    = new Chart(cumCanvas.value.getContext('2d'),    { type: 'line', data: { labels: [], datasets: [] }, options: cumOptions })
+  pctChart    = new Chart(pctCanvas.value.getContext('2d'),    { type: 'line', data: { labels: [], datasets: [] }, options: pctOptions })
+  uniqueChart = new Chart(uniqueCanvas.value.getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: uniqueOptions })
 
   // init bar & histogram charts
-  ctoonChart = new Chart(ctoonCanvas.value.getContext('2d'), {
-    type: 'bar',
-    data: { labels: [], datasets: [] },
-    options: barOptions
-  })
-  packChart = new Chart(packsCanvas.value.getContext('2d'), {
-    type: 'bar',
-    data: { labels: [], datasets: [] },
-    options: barOptions
-  })
-  ptsHistChart = new Chart(ptsDistCanvas.value.getContext('2d'), {
-    type: 'bar',
-    data: { labels: [], datasets: [] },
-    options: histOptions
-  })
+  codesChart  = new Chart(codesCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
+  ctoonChart  = new Chart(ctoonCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
+  packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
+  ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
 
-  // fetch everything
+  // fetch all
   await nextTick()
   await fetchData()
 })

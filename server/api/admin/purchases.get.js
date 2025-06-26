@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
   // 3) Query cToon purchases
   const ctoonPurchases = await prisma.$queryRaw`
     SELECT
-      to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+      to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
       COUNT(*)::int AS count
     FROM "PointsLog"
     WHERE method LIKE '%Bought cToon%'
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
   // 4) Query pack purchases
   const packPurchases = await prisma.$queryRaw`
     SELECT
-      to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+      to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
       COUNT(*)::int AS count
     FROM "PointsLog"
     WHERE method LIKE '%Bought Pack%'
