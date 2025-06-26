@@ -400,6 +400,20 @@ const userItems = computed(() => {
   return []
 })
 
+// near the top of your <script setup>
+async function refreshAvailable() {
+  const excludeIds = JSON.stringify(
+    [...traderAItems.value, ...traderBItems.value].map(c => c.id)
+  )
+  try {
+    const res = await fetch(`/api/user/ctoons?exclude=${excludeIds}`)
+    if (!res.ok) throw new Error('Failed to fetch cToons')
+    availableCtoons.value = await res.json()
+  } catch (err) {
+    console.error('Error refreshing cToons:', err)
+  }
+}
+
 onMounted(() => {
   socket.emit('join-trade-room', { room: roomName, user: user.value.username })
 
@@ -524,6 +538,8 @@ function removeFromTrade(ctoon) {
     traderBItems.value = traderBItems.value.filter((c) => c.id !== ctoon.id)
     socket.emit('add-trade-offer', { room: roomName, user: currentUser, ctoons: traderBItems.value })
   }
+
+  refreshAvailable()
 }
 
 function removeAllCtoons() {
@@ -532,15 +548,7 @@ function removeAllCtoons() {
   const excludeIds = JSON.stringify(
     [...traderAItems.value, ...traderBItems.value].map((c) => c.id)
   )
-  fetch(`/api/user/ctoons?exclude=${excludeIds}`)
-    .then((res) => {
-      if (!res.ok) throw new Error('Failed to fetch cToons')
-      return res.json()
-    })
-    .then((data) => {
-      availableCtoons.value = data
-    })
-    .catch((err) => console.error('Error refreshing cToons:', err))
+  refreshAvailable()
 }
 
 function toggleConfirmTrade() {
