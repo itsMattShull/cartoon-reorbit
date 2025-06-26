@@ -47,6 +47,7 @@ model Ctoon {
   packOptions     PackCtoonOption[]
   gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
   wishlistItems   WishlistItem[]
+  prerequisites  ClaimCodePrerequisite[]
 }
 
 model UserCtoon {
@@ -154,6 +155,7 @@ model ClaimCode {
   expiresAt  DateTime?
   claims     Claim[]
   rewards    ClaimCodeReward[]
+  prerequisites  ClaimCodePrerequisite[]
 }
 
 model Claim {
@@ -459,4 +461,15 @@ model ClashGame {
   player1       User     @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
   player2       User?    @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
   winner        User?    @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+}
+
+model ClaimCodePrerequisite {
+  id       String    @id @default(uuid())
+  codeId   String
+  ctoonId  String
+
+  code     ClaimCode @relation(fields: [codeId],  references: [id], onDelete: Cascade)
+  ctoon    Ctoon     @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([codeId, ctoonId])
 }

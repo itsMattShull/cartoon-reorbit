@@ -24,7 +24,18 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 2. Parse & validate input ───────────────────────────────────────────
-  const { code, maxClaims, expiresAt, rewards } = await readBody(event)
+  const { code, maxClaims, expiresAt, rewards, prerequisites } = await readBody(event)
+
+  // validate prerequisites
+  if (prerequisites && !Array.isArray(prerequisites)) {
+    throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
+  }
+  const prereqCreates = (prerequisites || []).map((p, i) => {
+    if (!p.ctoonId || typeof p.ctoonId !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
+    }
+    return { ctoonId: p.ctoonId }
+  })
 
   if (!code || typeof code !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
@@ -84,7 +95,8 @@ export default defineEventHandler(async (event) => {
         expiresAt: expiresDate,
         rewards: {
           create: rewardCreates
-        }
+        },
+        prerequisites: { create: prereqCreates }
       }
     })
   } catch (e) {

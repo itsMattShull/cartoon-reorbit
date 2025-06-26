@@ -42,6 +42,31 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Code expired' })
   }
 
+  // 3b. Enforce prerequisites
+  const prereqs = await prisma.claimCodePrerequisite.findMany({
+    where: { codeId: claimCode.id },
+    include: { ctoon: { select: { id: true, name: true } } }
+  })
+  if (prereqs.length > 0) {
+    const owned = await prisma.userCtoon.findMany({
+      where: {
+        userId,
+        ctoonId: { in: prereqs.map(p => p.ctoonId) }
+      },
+      select: { ctoonId: true }
+    })
+    const ownedIds = new Set(owned.map(o => o.ctoonId))
+    const missing = prereqs
+      .filter(p => !ownedIds.has(p.ctoonId))
+      .map(p => p.ctoon.name)
+    if (missing.length) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `You must own the following cToons to redeem this code: ${missing.join(', ')}`
+      })
+    }
+  }
+
   // 4. Enforce maxClaims
   const totalClaims = await prisma.claim.count({ where: { codeId: claimCode.id } })
   if (totalClaims >= claimCode.maxClaims) {

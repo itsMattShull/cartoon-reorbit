@@ -26,6 +26,12 @@ export default defineEventHandler(async (event) => {
       code: true,
       maxClaims: true,
       expiresAt: true,
+      prerequisites: {
+        select: {
+          ctoonId: true,
+          ctoon: { select: { id: true, name: true } }
+        }
+      },
       rewards: {
         select: {
           points: true,
