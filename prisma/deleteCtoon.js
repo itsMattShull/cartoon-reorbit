@@ -1,6 +1,5 @@
 // deleteCtoon.js
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+import { prisma } from '@/server/prisma'
 
 async function deleteCtoonAndDependencies(ctoonId) {
   await prisma.$transaction(async tx => {
