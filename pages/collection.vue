@@ -429,6 +429,7 @@ const { user, fetchSelf } = useAuth()
 const activeTab = ref('MyCollection')
 const showFilters = ref(false)
 const searchQuery = ref('')
+const showUnique     = ref(false)
 const selectedSets = ref([])
 const selectedSeries = ref([])
 const selectedRarities = ref([])
@@ -453,18 +454,35 @@ const isLoadingWishlist = ref(false)
 
 const TAKE = 50
 
+
 // COMPUTED FILTER LISTS
 const uniqueAllSets = computed(() => filterMeta.value.sets)
 const uniqueAllSeries = computed(() => filterMeta.value.series)
+// expose the “all rarities” list for your filter panel
+const uniqueAllRarities = computed(() =>
+  filterMeta.value.rarities
+)
 
 // User & Wishlist filter lists
 const uniqueUserSets = computed(() => Array.from(new Set(userCtoons.value.map(u => u.set))).sort())
 const uniqueUserSeries = computed(() => Array.from(new Set(userCtoons.value.map(u => u.series))).sort())
-const uniqueUserRarities = computed(() => Array.from(new Set(userCtoons.value.map(u => u.rarity))).sort())
+const uniqueUserRarities = computed(() =>
+  uniqueAllRarities.value.filter(r =>
+    userCtoons.value.some(u => u.rarity === r)
+  )
+)
 const uniqueWishlistSets = computed(() => Array.from(new Set(wishlistCtoons.value.map(w => w.set))).sort())
 const uniqueWishlistSeries = computed(() => Array.from(new Set(wishlistCtoons.value.map(w => w.series))).sort())
-const uniqueWishlistRarities = computed(() => Array.from(new Set(wishlistCtoons.value.map(w => w.rarity))).sort())
+const uniqueWishlistRarities = computed(() =>
+  uniqueAllRarities.value.filter(r =>
+    wishlistCtoons.value.some(w => w.rarity === r)
+  )
+)
 
+
+function toggleUnique() {
+  showUnique.value = !showUnique.value
+}
 
 // FILTERED DATA
 const filteredAllCtoons = computed(() => {

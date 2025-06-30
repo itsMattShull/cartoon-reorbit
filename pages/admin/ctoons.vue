@@ -5,12 +5,21 @@
     <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-16">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
         <h1 class="text-2xl font-semibold">All cToons</h1>
-        <NuxtLink
-          to="/admin/addCtoon"
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Create cToon
-        </NuxtLink>
+        <div class="flex space-x-2">
+          <NuxtLink
+            to="/admin/addCtoon"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Create cToon
+          </NuxtLink>
+
+          <NuxtLink
+            to="/admin/bulk-upload-ctoons"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Bulk Upload cToons
+          </NuxtLink>
+        </div>
       </div>
 
       <!-- FILTER BAR -->

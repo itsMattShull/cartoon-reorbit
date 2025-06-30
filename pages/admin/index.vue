@@ -57,6 +57,12 @@
         <div class="chart-container"><canvas ref="codesCanvas"></canvas></div>
       </div>
 
+      <!-- 5) Trades Requested (bar) -->
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Trades Requested</h2>
+        <div class="chart-container"><canvas ref="tradesCanvas"></canvas></div>
+      </div>
+
       <!-- 5) cToons Purchased (bar) -->
       <div>
         <h2 class="text-xl font-semibold mb-2">cToons Purchased</h2>
@@ -136,6 +142,7 @@ const cumCanvas     = ref(null)
 const pctCanvas     = ref(null)
 const uniqueCanvas  = ref(null)
 const clashCanvas   = ref(null)
+const tradesCanvas  = ref(null)
 const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
@@ -143,13 +150,14 @@ const ptsDistCanvas = ref(null)
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    codesChart, ctoonChart, packChart, ptsHistChart, clashChart
+    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart
 
 // --- color palette (solid, no opacity) ---
 const colors = {
   line:      '#4F46E5', // Indigo
   codesBar:  '#EF4444', // Red
   ctoonBar:  '#10B981', // Emerald
+  tradesBar: '#D946EF',
   clashBar:  '#8B5CF6',
   packBar:   '#3B82F6', // Blue
   histBar:   '#F59E0B'  // Amber
@@ -366,6 +374,18 @@ async function fetchData() {
   }]
   cumChart.update()
 
+  // trades requested
+  res = await fetch(`/api/admin/trades-requested?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  const tr = await res.json()
+  tradesChart.data.labels   = tr.map(d => new Date(d.period))
+  tradesChart.data.datasets = [{
+    data: tr.map(d => d.count),
+    backgroundColor: colors.tradesBar,
+    borderColor:     colors.tradesBar,
+    borderWidth: 1
+  }]
+  tradesChart.update()
+
   // 2) % first purchase
   res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   data = await res.json()
@@ -503,6 +523,7 @@ onMounted(async () => {
   // init bar & histogram charts
   codesChart  = new Chart(codesCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ctoonChart  = new Chart(ctoonCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
+  tradesChart = new Chart(tradesCanvas.value.getContext('2d'), { type: 'bar', data: { labels: [], datasets: [] }, options: barOptions })
   packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })

@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Fetch all active auctions with nested Ctoon data
+  //    plus the single highest bid (if any)
   const auctions = await prisma.auction.findMany({
     where: { status: 'ACTIVE' },
     include: {
@@ -34,12 +35,18 @@ export default defineEventHandler(async (event) => {
             }
           }
         }
+      },
+      // grab only the highest bid amount
+      bids: {
+        select: { amount: true },
+        orderBy: { amount: 'desc' },
+        take: 1
       }
     },
     orderBy: { endAt: 'asc' }
   })
 
-  // 3. Get the set of ctoonIds this user owns (any UserCtoon)
+  // 3. Get the set of ctoonIds this user owns
   const ctoonIds = auctions.map(a => a.userCtoon.ctoonId)
   const owned = await prisma.userCtoon.findMany({
     where: {
@@ -59,6 +66,8 @@ export default defineEventHandler(async (event) => {
     mintNumber:  a.userCtoon.mintNumber,
     assetPath:   a.userCtoon.ctoon.assetPath,
     endAt:       a.endAt.toISOString(),
+    // highestBid: the one bid.amount we fetched, or null if none
+    highestBid:  a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
     // true if the user owns at least one of that cToon
     isOwned:     ownedSet.has(a.userCtoon.ctoonId)
   }))
