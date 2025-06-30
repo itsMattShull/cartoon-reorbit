@@ -1,5 +1,5 @@
 // deleteCtoon.js
-import { prisma } from '@/server/prisma'
+import { prisma } from '../server/prisma.js'
 
 async function deleteCtoonAndDependencies(ctoonId) {
   await prisma.$transaction(async tx => {
