@@ -87,5 +87,5 @@ worker.on('completed', job => {
   // console.log(`Mint job ${job.id} completed`)
 })
 worker.on('failed', (job, err) => {
-  console.error(`Mint job ${job?.id} failed: ${err.message}`)
+  // console.error(`Mint job ${job?.id} failed: ${err.message}`)
 })
