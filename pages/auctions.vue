@@ -129,6 +129,9 @@
                 <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
                 <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
                 <p class="text-sm text-gray-600 mb-1">Mint #{{ auction.mintNumber ?? 'N/A' }}</p>
+                <p class="text-sm text-gray-600 mb-1">
+                  Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                </p>
                 <p class="text-sm text-red-600 mb-4">
                   Ending in {{ formatRemaining(auction.endAt) }}
                 </p>

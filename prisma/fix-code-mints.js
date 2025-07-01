@@ -25,7 +25,6 @@ async function main() {
   // 2. Iterate over each claim
   for (const claim of claims) {
     const { user, code } = claim
-    console.log('checking claim')
     for (const reward of code.rewards) {
       for (const rc of reward.ctoons) {
         const ctoonId = rc.ctoonId
@@ -44,12 +43,6 @@ async function main() {
       }
     }
   }
-
-  // 3. Log results
-  console.log('Minted missing cToons for claims:')
-  mintedRecords.forEach(r => {
-    console.log(`- User ${r.username} (${r.userId}) → minted cToon ${r.ctoonId}`)
-  })
 }
 
 main()

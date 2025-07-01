@@ -1,16 +1,10 @@
 // server/api/collections/all.get.js
 
-import {
-  defineEventHandler,
-  getRequestHeader,
-  createError,
-  getQuery
-} from 'h3'
-
+import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1. Authenticate user
+  // 1. Authenticate the user
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -18,47 +12,37 @@ export default defineEventHandler(async (event) => {
   } catch {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
-  const userId = me && me.id
-  if (!userId) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
 
-  // 2. Read page query (default to 1)
-  const { page: pageRaw } = getQuery(event) || {}
-  const page = parseInt(pageRaw) || 1
-  const take = 200
-  const skip = (page - 1) * take
+  // 2. Parse pagination parameters
+  const { skip = '0', take = '50' } = getQuery(event)
+  const skipNum = parseInt(skip, 10)
+  const takeNum = parseInt(take, 10)
 
-  try {
-    // 3. Fetch one page of all Ctoons
-    const allCtoons = await prisma.ctoon.findMany({
-      skip,
-      take,
-      orderBy: { releaseDate: 'desc' }
-    })
+  // 3. Fetch a page of cToons
+  const ctoons = await prisma.ctoon.findMany({
+    orderBy: { releaseDate: 'desc' },
+    select: {
+      id:          true,
+      name:        true,
+      assetPath:   true,
+      releaseDate: true,
+      set:         true,
+      series:      true,
+      rarity:      true,
+      price:       true    // include if you support price‐based sorting
+    }
+  })
 
-    // 4. Fetch the user's owned ctoonIds
-    const ownedRows = await prisma.userCtoon.findMany({
-      where: { userId },
-      select: { ctoonId: true }
-    })
-    const ownedSet = new Set(ownedRows.map(row => row.ctoonId))
+  // 4. Determine which of these the user owns
+  const owned = await prisma.userCtoon.findMany({
+    where: { userId: me.id, ctoonId: { in: ctoons.map(c => c.id) } },
+    select: { ctoonId: true }
+  })
+  const ownedSet = new Set(owned.map(o => o.ctoonId))
 
-    // 5. Map each Ctoon → include isOwned
-    return allCtoons.map((c) => ({
-      id:          c.id,
-      name:        c.name,
-      set:         c.set,
-      series:      c.series,
-      rarity:      c.rarity,
-      assetPath:   c.assetPath,
-      price:       c.price,
-      releaseDate: c.releaseDate,
-      quantity:    c.quantity,
-      isOwned:     ownedSet.has(c.id)
-    }))
-  } catch (err) {
-    console.error('Error fetching all collections (paginated):', err)
-    return []
-  }
+  // 5. Merge and return
+  return ctoons.map(c => ({
+    ...c,
+    isOwned: ownedSet.has(c.id)
+  }))
 })

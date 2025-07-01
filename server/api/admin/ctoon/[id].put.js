@@ -38,9 +38,9 @@ export default defineEventHandler(async (event) => {
 
   /* Parse numeric / boolean conversions */
   const priceInt      = price == null || price === '' ? 0 : Number(price)
-  const qtyInt        = quantity === '' ? null : Number(quantity)
-  const initQtyInt    = initialQuantity === '' ? null : Number(initialQuantity)
-  const perUserInt    = perUserLimit === '' ? null : Number(perUserLimit)
+  const qtyInt     = quantity   == null || quantity   === '' ? null : Number(quantity)
+  const initQtyInt = initialQuantity == null || initialQuantity === '' ? null : Number(initialQuantity)
+  const perUserInt = perUserLimit  == null || perUserLimit  === '' ? null : Number(perUserLimit)
   const inCmartBool   = Boolean(inCmart)
   const isGtoonBool   = Boolean(isGtoon)
 
@@ -58,9 +58,6 @@ export default defineEventHandler(async (event) => {
     }
     if (isNaN(powerInt) || powerInt < 0 || powerInt > 12) {
       throw createError({ statusCode: 400, statusMessage: 'Power must be 0–12.' })
-    }
-    if (!abilityKey) {
-      throw createError({ statusCode: 400, statusMessage: 'Ability Key required.' })
     }
 
     try {

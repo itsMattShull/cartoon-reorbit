@@ -4,6 +4,7 @@ dotenv.config()
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
 import { prisma as db }  from './prisma.js'
+import { DateTime } from 'luxon'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -50,8 +51,8 @@ function shuffle(arr) {
 }
 
 function aiChooseSelections(battle) {
-  const { energy, aiHand } = battle.state
-  const playable = aiHand.filter(c => c.cost <= energy)
+  const { aiEnergy, aiHand } = battle.state
+  const playable = aiHand.filter(c => c.cost <= aiEnergy)
   if (!playable.length) return []
   // pick highest-cost card, random lane
   const card = playable.sort((a, b) => b.cost - a.cost)[0]
@@ -65,14 +66,93 @@ function broadcastPhase(io, match) {
   io.to(match.id).emit('phaseUpdate', match.battle.publicState())
 }
 
-function endMatch(io, match, result) {
-  io.to(match.id).emit('gameEnd', result)
-  clearInterval(match.timer)
-  pveMatches.delete(match.id)
+async function endMatch(io, match, result) {
+  const { winner, playerLanesWon, aiLanesWon } = result;
+  let toGive = 0;
+
+  if (winner === 'player') {
+    try {
+      const userId = match.playerUserId;
+
+      // 1) Load Clash config (pointsPerWin)
+      const clashConfig = await db.gameConfig.findUnique({
+        where: { gameName: 'Clash' },
+        select: { pointsPerWin: true }
+      });
+
+      // 2) Load the singleton global cap
+      const globalConfig = await db.globalGameConfig.findUnique({
+        where: { id: 'singleton' },
+        select: { dailyPointLimit: true }
+      });
+
+      if (clashConfig && globalConfig) {
+        const { pointsPerWin }         = clashConfig;
+        const { dailyPointLimit: cap } = globalConfig;
+
+        const nowCST    = DateTime.now().setZone('America/Chicago');
+        const cutoffCST = nowCST.hour >= 20
+          ? nowCST.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+          : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 });
+        const cutoffUTC = cutoffCST.toUTC().toJSDate();
+
+        // 6) Sum points awarded since that cutoff
+        const agg = await db.gamePointLog.aggregate({
+          where: {
+            userId,
+            createdAt: { gte: cutoffUTC }
+          },
+          _sum: { points: true }
+        });
+        const usedSinceCutoff = agg._sum.points || 0;
+
+        // 7) Compute how many we can still give
+        const remaining = Math.max(0, cap - usedSinceCutoff);
+        toGive = Math.min(pointsPerWin, remaining);
+
+        // 8) Award if possible
+        if (toGive > 0) {
+          await db.gamePointLog.create({ data: { userId, points: toGive } });
+          await db.userPoints.upsert({
+            where: { userId },
+            create: { userId, points: toGive },
+            update: { points: { increment: toGive } }
+          });
+          await db.pointsLog.create({
+            data: { userId, points: toGive, method: "Game - gToons Clash", direction: 'increase' }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to award Clash points:', err);
+    }
+  }
+
+  // 9) Mark the game record ended
+  await db.clashGame.update({
+    where: { id: match.recordId },
+    data: {
+      endedAt:      new Date(),
+      winnerUserId: winner === 'player' ? match.playerUserId : null,
+      outcome:      winner
+    }
+  });
+
+  // 10) Broadcast the end‐of‐game summary
+  io.to(match.id).emit('gameEnd', {
+    winner,
+    playerLanesWon,
+    aiLanesWon,
+    pointsAwarded: toGive
+  });
+
+  clearInterval(match.timer);
+  pveMatches.delete(match.id);
 }
 
+
 function startSelectTimer(io, match) {
-  match.selectDeadline = Date.now() + 30_000
+  match.selectDeadline = Date.now() + 60_000
   if (match.timer) clearInterval(match.timer)
   match.timer = setInterval(() => {
     match.battle.tick(Date.now())
@@ -86,7 +166,7 @@ function startSelectTimer(io, match) {
 
 io.on('connection', socket => {
   /* ──────────   Clash PvE   ────────── */
-  socket.on('joinPvE', ({ deck }) => {
+  socket.on('joinPvE', async ({ deck, userId }) => {
     const aiDeck = shuffle(deck).slice(0, 12)
     const gameId = randomUUID()
     const battle = createBattle({
@@ -96,15 +176,25 @@ io.on('connection', socket => {
       lanes: LANES
     })
 
+    const { id: recordId } = await db.clashGame.create({
+      data: {
+        player1UserId: userId,
+        player2UserId: null
+      }
+    })
+
     const match = {
       id:           gameId,
       socketId:     socket.id,
       battle,
       playerConfirmed: false,
+      recordId,
       aiConfirmed:     false,
       timer:           null,
-      selectDeadline:  null
+      selectDeadline:  null,
+      playerUserId: userId
     }
+
     pveMatches.set(gameId, match)
 
     socket.data.gameId = gameId
@@ -157,7 +247,12 @@ io.on('connection', socket => {
     if (!gid) return
     const match = pveMatches.get(gid)
     if (match) {
-      endMatch(io, match, { winner: 'ai', reason: 'player_disconnect' })
+      endMatch(io, match, {
+        winner: 'incomplete',           // mark as incomplete
+        playerLanesWon: 0,
+        aiLanesWon:     0,
+        reason:        'player_disconnect'
+      })
     }
   })
 
@@ -749,7 +844,7 @@ io.on('connection', socket => {
 })
 
 // 2. Periodically scan for ended auctions and finalize them.
-//    Runs every 30s (adjust as desired).
+//    Runs every 60s (adjust as desired).
 setInterval(async () => {
   const now = new Date();
   const toClose = await db.auction.findMany({
@@ -780,6 +875,10 @@ setInterval(async () => {
           data: { points: { decrement: highestBid } }
         });
 
+        await tx.pointsLog.create({
+          data: { userId: highestBidderId, points: highestBid, method: "Auction", direction: 'decrease' }
+        });
+
         // credit the creator
         await tx.userPoints.upsert({
           where: { userId: creatorId },
@@ -787,10 +886,14 @@ setInterval(async () => {
           update: { points: { increment: highestBid } }
         });
 
+        await tx.pointsLog.create({
+          data: { userId: creatorId, points: highestBid, method: "Auction", direction: 'increase' }
+        });
+
         // transfer the cToon
         await tx.userCtoon.update({
           where: { id: userCtoonId },
-          data: { userId: highestBidderId }
+          data: { userId: highestBidderId, isTradeable: true }
         });
       }
     });
@@ -801,7 +904,7 @@ setInterval(async () => {
       winningBid: highestBid
     });
   }
-}, 30 * 1000);
+}, 60 * 1000);
 
 // Auction notifications
 setInterval(async () => {

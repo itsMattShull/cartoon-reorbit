@@ -8,17 +8,20 @@
 //    tick(now)        – call periodically; returns {timeout:true} when expired
 //
 //  Turn phases
-//    'select' : players compose selections (30‑s timer)
+//    'select' : players compose selections (60‑s timer)
 //    'reveal' : engine reveals selections in priority order
 //    'setup'  : draws cards, flips next location, toggles priority
 //    'gameEnd': final scoring ready
 // -----------------------------------------------------------------------------
 import { abilityRegistry } from './abilities.js'
 
+const MAX_ENERGY    = 6
+const ENERGY_PER_TURN = 1
+
 export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   /* ───────────── config ───────────── */
   const MAX_TURNS     = 6
-  const SELECT_WINDOW = 30_000  // 30 seconds
+  const SELECT_WINDOW = 60_000  // 60 seconds
 
   /* ───────────── helpers ──────────── */
   const shuffle = arr => [...arr].sort(() => Math.random() - 0.5)
@@ -33,17 +36,20 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     turn:         1,
     maxTurns:     MAX_TURNS,
     energy:       1,
+    playerEnergy: 1,
+    aiEnergy:     1,
     priority:     Math.random() < 0.5 ? 'player' : 'ai', // who reveals first
     phase:        'select',
     selectEndsAt: Date.now() + SELECT_WINDOW,
 
-    lanes: shuffle([...lanes]).slice(0, 3).map((l, i) => ({
-       ...l,
-       // reveal the first lane immediately
-       revealed: i === 0,
-       player:   [],
-       ai:       []
-     })),
+    lanes: shuffle(lanes).slice(0,3).map((l,i) => ({
+      id:         l.id,
+      name:       l.name,
+      desc:       l.desc,
+      abilityKey: l.effect,    // ← turn your “effect” into the key the registry expects
+      revealed:   i===0,
+      player:     [], ai:[]
+    })),
 
     playerDeck: _playerDeck,
     aiDeck:     _aiDeck,
@@ -82,7 +88,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       for (const sel of selections) {
         const card = hand.find(h => h.id === sel.cardId)
         if (!card) return { error: 'CardNotInHand' }
-        if (card.cost > state.energy) return { error: 'NotEnoughEnergy' }
+        if (card.cost > state[ side + 'Energy' ]) return { error: 'NotEnoughEnergy' }
         if (sel.laneIndex < 0 || sel.laneIndex > 2) return { error: 'BadLane' }
       }
       _pending[side] = selections
@@ -104,22 +110,15 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     tick (now = Date.now()) {
       if (state.phase !== 'select') return
       if (now >= state.selectEndsAt) {
-        // timeout
-        if (_ready.player && !_ready.ai) {
-          state.phase  = 'gameEnd'
-          state.winner = 'player'
-        } else if (_ready.ai && !_ready.player) {
-          state.phase  = 'gameEnd'
-          state.winner = 'ai'
-        } else {
-          state.phase  = 'gameEnd'
-          state.winner = 'tie'
-        }
+        // treat as an early end
+        finishGame()
         return { timeout: true }
       }
       return { timeLeft: state.selectEndsAt - now }
     }
   }
+
+  battle.log = state.log
 
   /* ───────────── internal helpers ───────────── */
   function applySelections (side) {
@@ -128,10 +127,22 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     selections.forEach(sel => {
       const idxHand = hand.findIndex(c => c.id === sel.cardId)
       if (idxHand === -1) return
-      const [card] = hand.splice(idxHand, 1)
+      const [orig] = hand.splice(idxHand, 1)
+      const card = { ...orig }
       state.lanes[sel.laneIndex][side].push(card)
-      state.energy -= card.cost
+      state[ side + 'Energy' ] -= card.cost
     })
+  }
+
+  // --- aiChooseSelections ---
+  function aiChooseSelections(battle) {
+    // pull from battle.state.aiEnergy, not a shared “energy” field
+    const { aiEnergy, aiHand } = battle.state
+    const playable = aiHand.filter(c => c.cost <= aiEnergy)
+    if (!playable.length) return []
+    const card = playable.sort((a, b) => b.cost - a.cost)[0]
+    const laneIndex = Math.floor(Math.random() * 3)
+    return [{ cardId: card.id, laneIndex }]
   }
 
   function fireReveal (side) {
@@ -142,6 +153,12 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       const def   = abilityRegistry[card.abilityKey]
       if (def?.onReveal) {
         def.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
+      }
+
+      // ▶︎ also run the lane's onReveal **per-card placement**
+      const laneDef = abilityRegistry[lane.abilityKey]
+      if (laneDef?.onReveal) {
+        laneDef.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
       }
     })
   }
@@ -157,6 +174,16 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     // reveal order: priority first
     fireReveal(state.priority)
     fireReveal(state.priority === 'player' ? 'ai' : 'player')
+
+    // ► NEW: after all card‐level reveals, trigger each lane’s own onReveal
+    state.lanes.forEach((lane, i) => {
+      const def = abilityRegistry[lane.abilityKey]
+      // only run onReveal if we just flipped this turn
+      if (lane.revealed && !lane._hasRevealedOnce && def?.onReveal) {
+        def.onReveal({ game: battle, side: null, laneIndex: i, card: null })
+        lane._hasRevealedOnce = true
+      }
+    })
 
     // abilities: onTurnEnd triggers after both reveals
     triggerTurnEndAbilities()
@@ -176,60 +203,104 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
         def?.onTurnEnd?.({ game: battle, side: 'ai', laneIndex: i, card })
       })
     })
+
+    state.lanes.forEach((lane, laneIndex) => {
+      const def = abilityRegistry[lane.abilityKey]
+      def?.onTurnEnd?.({ game: battle, side: null, laneIndex, card: null })
+    })
   }
 
   function setupNextTurn () {
-    // reveal new location if turn 1‑3
-    if (state.turn <= 3) {
-      state.lanes[state.turn - 1].revealed = true
+    // 1) increment the turn counter
+    state.turn += 1
+
+    state.lanes.forEach((lane, i) => {
+      if (lane.revealed && lane.abilityKey === 'RANDOMIZE_POWER') {
+        const def = abilityRegistry[lane.abilityKey]
+        def?.onTurnStart?.({
+          game:       battle,
+          side:       null,
+          laneIndex:  i,
+          card:       null
+        })
+        // (optional) you could set a flag here if you want to avoid double-firing
+      }
+    })
+
+    // 2) if we're now on turn 2 or 3, reveal that lane
+    if (state.turn >= 2 && state.turn <= 3) {
+      const laneIndex = state.turn - 1   // turn 2 → index 1, turn 3 → index 2
+      state.lanes[laneIndex].revealed = true
+
+      // trigger that lane's onTurnStart hook if you have one
+      const def = abilityRegistry[state.lanes[laneIndex].abilityKey]
+      def?.onTurnStart?.({
+        game: battle,
+        side: null,
+        laneIndex,
+        card: null
+      })
     }
 
-    // draw cards
-    state.playerHand.push(...draw(state.playerDeck))
-    state.aiHand.push(...draw(state.aiDeck))
+    // 3) draw cards for each side
+    state.playerHand.push(...draw(state.playerDeck, 1))
+    state.aiHand    .push(...draw(state.aiDeck,     1))
 
-    // turn increment & energy ramp
-    state.turn += 1
-    state.energy = Math.min(state.turn, 6)
+    // 4) ramp up energy
+    // 4) ramp up each side’s energy by a fixed amount
 
-    // flip priority
+    state.playerEnergy = Math.min(state.playerEnergy + MAX_ENERGY, state.playerEnergy + state.turn)
+    state.aiEnergy     = Math.min(state.aiEnergy + MAX_ENERGY, state.aiEnergy     + state.turn)
+
+    // 5) flip priority
     state.priority = state.priority === 'player' ? 'ai' : 'player'
 
-    // clear pending
+    // 6) reset pending / ready flags
     _pending = { player: null, ai: null }
     _ready   = { player: false, ai: false }
 
+    // 7) check for game end
     if (state.turn > MAX_TURNS) {
       finishGame()
       return
     }
 
-    // start next SELECT phase
+    // 8) start the next select phase
     state.phase        = 'select'
     state.selectEndsAt = Date.now() + SELECT_WINDOW
-
-    // onTurnStart abilities
-    state.lanes.forEach((lane, i) => {
-      lane.player.forEach(card => {
-        abilityRegistry[card.abilityKey]?.onTurnStart?.({ game: battle, side: 'player', laneIndex: i, card })
-      })
-      lane.ai.forEach(card => {
-        abilityRegistry[card.abilityKey]?.onTurnStart?.({ game: battle, side: 'ai', laneIndex: i, card })
-      })
-    })
   }
 
-  function finishGame () {
-    // simple lane‑tally scoring
-    let p=0,a=0
-    state.lanes.forEach(l=>{
-      const pPow=l.player.reduce((s,c)=>s+c.power,0)
-      const aPow=l.ai.reduce((s,c)=>s+c.power,0)
-      if(pPow>aPow)p++;else if(aPow>pPow)a++
+  function finishGame() {
+    // simple lane-tally scoring
+    let p = 0, a = 0
+    state.lanes.forEach(l => {
+      const pPow = l.player.reduce((s, c) => s + c.power, 0)
+      const aPow = l.ai    .reduce((s, c) => s + c.power, 0)
+      if      (pPow > aPow) p++
+      else if (aPow > pPow) a++
     })
-    state.winner = p>a? 'player': a>p? 'ai':'tie'
-    state.phase  = 'gameEnd'
-  }
+  
+    // record final winner
+    state.winner = p > a
+      ? 'player'
+      : a > p
+        ? 'ai'
+        : 'tie'
+  
+    // jump to gameEnd
+    state.phase = 'gameEnd'
+  
+    // attach lane-wins counts so your server sees them
+    state.playerLanesWon = p
+    state.aiLanesWon     = a
+  
+    // prepare a tidy result object
+    state.result = {
+      winner:         state.winner,
+      playerLanesWon: p,
+      aiLanesWon:     a
+    }
+  }  
 
   /* ───────────── initial ability onStart hooks ─────────── */
   ;[...state.playerHand,...state.aiHand].forEach(card=>{

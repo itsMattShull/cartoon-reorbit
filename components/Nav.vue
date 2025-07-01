@@ -134,7 +134,8 @@ const baseLinks = [
   { label: 'Live Trading', to: '/live-trading' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
-  { label: 'Winball', to: '/games/winball' }
+  { label: 'Winball', to: '/games/winball' },
+  { label: 'gToons Clash', to: '/games/clash' }
 ]
 
 const links = computed(() => {
@@ -142,13 +143,15 @@ const links = computed(() => {
   if (user.value?.isAdmin) {
     all.push(
       { label: 'Admin', to: '/admin' },
+      { label: 'Manage Users', to: '/admin/users' },
       { label: 'Manage cToons', to: '/admin/ctoons' },
       { label: 'Manage Codes', to: '/admin/codes' },
       { label: 'Manage Packs', to: '/admin/packs' },
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
-      { label: 'Auth Logs', to: '/admin/auth-logs' }
+      { label: 'Auth Logs', to: '/admin/auth-logs' },
+      { label: 'Point Logs', to: '/admin/points-log' }
     )
   }
   return all

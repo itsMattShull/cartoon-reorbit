@@ -47,6 +47,7 @@ model Ctoon {
   packOptions     PackCtoonOption[]
   gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
   wishlistItems   WishlistItem[]
+  prerequisites  ClaimCodePrerequisite[]
 }
 
 model UserCtoon {
@@ -98,6 +99,7 @@ model User {
   cZones           CZone[]
   logins           LoginLog[]
   gamePointLogs    GamePointLog[]
+  pointsLogs       PointsLog[]
   claims           Claim[]
   visits           Visit[]
   points           UserPoints?
@@ -117,6 +119,9 @@ model User {
   auctionsAsWinner      Auction[]   @relation("AuctionWinner")
   bids                  Bid[]
   auctionsCreated  Auction[]   @relation("AuctionsCreated")
+  clashGamesAsPlayer1 ClashGame[] @relation("ClashGamePlayer1")
+  clashGamesAsPlayer2 ClashGame[] @relation("ClashGamePlayer2")
+  clashGamesAsWinner  ClashGame[] @relation("ClashGameWinner")
 }
 
 model UserIP {
@@ -150,6 +155,7 @@ model ClaimCode {
   expiresAt  DateTime?
   claims     Claim[]
   rewards    ClaimCodeReward[]
+  prerequisites  ClaimCodePrerequisite[]
 }
 
 model Claim {
@@ -321,18 +327,36 @@ model GamePointLog {
   user       User     @relation(fields: [userId], references: [id])
 }
 
+model PointsLog {
+  id         String   @id @default(uuid())
+  userId     String
+  direction  String? // 'increase' or 'decrease'
+  points     Int
+  method     String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}
+
 model GameConfig {
   id                   String   @id @default(uuid())
   gameName             String   @unique
   leftCupPoints        Int      @default(0)
   rightCupPoints       Int      @default(0)
   goldCupPoints        Int      @default(0)
-  dailyPointLimit      Int      @default(100)
   grandPrizeCtoonId    String? 
   grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
+  pointsPerWin         Int?      @default(0)
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @default(now()) @updatedAt
+}
+
+model GlobalGameConfig {
+  id               String   @id @default(uuid())
+  dailyPointLimit  Int      @default(100)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model WishlistItem {
@@ -422,4 +446,30 @@ model Bid {
 
   auction   Auction   @relation(fields: [auctionId], references: [id])
   user      User      @relation(fields: [userId],    references: [id])
+}
+
+model ClashGame {
+  id              String   @id @default(uuid())
+  player1UserId   String
+  player2UserId   String?   // null for AI
+
+  winnerUserId  String?   // null if AI won or tie
+  outcome       String?   // 'player' | 'ai' | 'tie' | 'incomplete'
+  startedAt     DateTime @default(now())
+  endedAt       DateTime?
+
+  player1       User     @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
+  player2       User?    @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
+  winner        User?    @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+}
+
+model ClaimCodePrerequisite {
+  id       String    @id @default(uuid())
+  codeId   String
+  ctoonId  String
+
+  code     ClaimCode @relation(fields: [codeId],  references: [id], onDelete: Cascade)
+  ctoon    Ctoon     @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([codeId, ctoonId])
 }

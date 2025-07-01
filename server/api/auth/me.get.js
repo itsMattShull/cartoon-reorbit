@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       roles: true,
       isAdmin: true,
       inGuild: true,
-      points: { select: { points: true } },
+      points: true,
       ctoons: true
     }
   })

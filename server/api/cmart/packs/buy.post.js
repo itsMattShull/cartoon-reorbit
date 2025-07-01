@@ -56,6 +56,10 @@ export default defineEventHandler(async (event) => {
       data: { points: { decrement: pack.price } }
     })
 
+    await tx.pointsLog.create({
+      data: { userId: me.id, points: pack.price, method: "Bought Pack", direction: 'decrease' }
+    });
+
     // 4-b  create UserPack (sealed)
     const userPack = await tx.userPack.create({
       data: {

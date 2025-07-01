@@ -169,9 +169,22 @@
           <div
             v-for="ctoon in pagedCtoons"
             :key="ctoon.id"
-            class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
+            class="relative bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
           >
-            <h2 class="text-xl font-semibold mb-2">{{ ctoon.name }}</h2>
+            <!-- badge -->
+            <span
+              v-if="ctoon.owned"
+              class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+            >
+              Owned
+            </span>
+            <span
+              v-else
+              class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+            >
+              Un-owned
+            </span>
+            <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
             <div class="flex-grow flex items-center justify-center w-full mb-4">
               <img :src="ctoon.assetPath" class="max-w-full h-auto" />
             </div>
@@ -607,7 +620,6 @@ async function buyCtoon(ctoon) {
       body: { ctoonId: ctoon.id }
     })
     await fetchSelf()
-    user.value.points -= ctoon.price
     ctoon.minted++
     ctoon.owned = true
     showToast('Purchase successful', 'success')

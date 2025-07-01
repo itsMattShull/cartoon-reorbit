@@ -111,7 +111,11 @@
             :style="{ top: item.y + 'px', left: item.x + 'px', width: item.width + 'px', height: item.height + 'px' }"
             @contextmenu.prevent="removeItem(index)"
             @mousedown="onMouseDown($event, index)"
+            @mouseup="onMouseUp"
             @touchstart="onTouchStart($event, index)"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+            @touchcancel="onTouchEnd"
           >
             <img
               :src="item.assetPath"
@@ -222,6 +226,8 @@ useHead({
 
 // ——— Loading indicator ———
 const loading = ref(true)
+const pressTimer = ref(null)
+const longPressDuration = 3000  // 3 seconds
 
 // ——— Scale logic ———
 const scale = ref(1)
@@ -324,6 +330,19 @@ function prevZone() {
   }
 }
 
+function startLongPress(idx) {
+  // clear any old timer
+  clearTimeout(pressTimer.value)
+  // start a new one
+  pressTimer.value = setTimeout(() => {
+    removeItem(idx)
+  }, longPressDuration)
+}
+
+function cancelLongPress() {
+  clearTimeout(pressTimer.value)
+}
+
 // ——— Drag & drop logic ———
 const draggingItem = ref(null)
 let dragImageEl = null
@@ -398,6 +417,7 @@ function onTouchStart(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
   document.body.style.overflow = 'hidden'
+  startLongPress(idx)
   const t = e.touches[0]
   const rect = e.target.closest('.absolute').getBoundingClientRect()
   dragOffset.value = {
@@ -421,6 +441,7 @@ async function onMouseMove(e) {
 
 async function onTouchMove(e) {
   e.preventDefault()
+  cancelLongPress()
   if (currentlyDraggingIndex.value === null) return
   const t = e.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
@@ -434,6 +455,7 @@ async function onTouchMove(e) {
 
 async function onMouseUp() {
   if (currentlyDraggingIndex.value === null) return
+  cancelLongPress()
   await saveZones(false)
   currentlyDraggingIndex.value = null
   window.removeEventListener('mousemove', onMouseMove)
@@ -444,6 +466,7 @@ async function onTouchEnd() {
   if (currentlyDraggingIndex.value !== null) {
     await saveZones(false)
   }
+  cancelLongPress()
   document.body.style.overflow = ''
   currentlyDraggingIndex.value = null
   window.removeEventListener('touchmove', onTouchMove)
@@ -460,7 +483,7 @@ async function removeItem(idx) {
   // Only add back to the sidebar if it's not already present
   const existsInSidebar = ctoons.value.some(c => c.id === removed.id)
   if (!existsInSidebar) {
-    ctoons.value.push({
+    ctoons.value.unshift({
       id: removed.id,
       name: removed.name,
       assetPath: removed.assetPath,
@@ -470,8 +493,20 @@ async function removeItem(idx) {
   }
 }
 
-function clearZone() {
+async function clearZone() {
   layout.value = []
+
+  await saveZones(false)
+
+  // 3) re-load your “available” cToons from the server
+  try {
+    // the same endpoint you use on mount
+    const res = await $fetch('/api/czone/edit')
+    // filter out any toons still placed in ANY zone
+    ctoons.value = res.ctoons.filter(c => !placedIds.value.has(c.id))
+  } catch (err) {
+    console.error('Could not refresh available cToons:', err)
+  }
 }
 
 async function saveZones(showToast = false) {

@@ -1,13 +1,11 @@
 // server/api/admin/codes.put.js
 
-
 import {
   defineEventHandler,
   readBody,
   getRequestHeader,
   createError
 } from 'h3'
-
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -24,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse & validate input
-  const { code, maxClaims, expiresAt, rewards } = await readBody(event)
+  const { code, maxClaims, expiresAt, rewards, prerequisites } = await readBody(event)
   if (!code || typeof code !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   }
@@ -43,8 +41,11 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(rewards) || rewards.length === 0) {
     throw createError({ statusCode: 400, statusMessage: 'At least one reward batch is required.' })
   }
+  if (prerequisites && !Array.isArray(prerequisites)) {
+    throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
+  }
 
-  // 3. Ensure the code exists (and fetch its internal id)
+  // 3. Ensure the code exists
   const existing = await prisma.claimCode.findUnique({
     where: { code },
     select: { id: true }
@@ -54,7 +55,7 @@ export default defineEventHandler(async (event) => {
   }
   const codeId = existing.id
 
-  // 4. Build nested create payload for ClaimCodeReward + RewardCtoon
+  // 4. Build nested payloads for rewards & prerequisites
   const rewardCreates = rewards.map((r, i) => {
     const { points, ctoons } = r
     if (points != null && (typeof points !== 'number' || points < 0)) {
@@ -78,25 +79,40 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 5. In one transaction:
-  //    a) delete all child RewardCtoon rows for this code’s rewards
-  //    b) delete all ClaimCodeReward rows for this code
-  //    c) update maxClaims/expiresAt & create new reward batches
-  const [, , updated] = await prisma.$transaction([
+  const prereqCreates = (prerequisites || []).map((p, i) => {
+    if (!p.ctoonId || typeof p.ctoonId !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
+    }
+    return { ctoonId: p.ctoonId }
+  })
+
+  // 5. In one transaction: delete old rewards & prereqs, then update code
+  const [
+    ,
+    ,
+    ,
+    updated
+  ] = await prisma.$transaction([
+    // remove existing reward ctoon links
     prisma.rewardCtoon.deleteMany({
       where: { reward: { codeId } }
     }),
+    // remove existing reward definitions
     prisma.claimCodeReward.deleteMany({
       where: { codeId }
     }),
+    // remove existing prerequisites
+    prisma.claimCodePrerequisite.deleteMany({
+      where: { codeId }
+    }),
+    // update the code with new batches
     prisma.claimCode.update({
       where: { code },
       data: {
         maxClaims,
         expiresAt: expiresDate,
-        rewards: {
-          create: rewardCreates
-        }
+        rewards:       { create: rewardCreates },
+        prerequisites: { create: prereqCreates }
       }
     })
   ])

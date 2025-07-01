@@ -42,6 +42,44 @@
           </p>
         </div>
 
+        <!-- Prerequisite cToons -->
+        <div>
+          <label class="block font-medium mb-1">Prerequisite cToons</label>
+          <datalist id="ctoont-list">
+            <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
+          </datalist>
+          <div
+            v-for="(pc, idx) in prereqCtoons"
+            :key="idx"
+            class="flex items-center space-x-2 mb-2"
+          >
+            <input
+              v-model="pc.ctoonName"
+              list="ctoont-list"
+              type="text"
+              class="flex-1 border rounded p-2"
+              placeholder="Type or select cToon name"
+            />
+            <button
+              type="button"
+              @click="removePrereqCtoon(idx)"
+              class="text-red-600 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+          <button
+            type="button"
+            @click="addPrereqCtoon"
+            class="text-blue-600 hover:underline text-sm"
+          >
+            + Add prerequisite cToon
+          </button>
+          <p class="text-sm text-gray-500">
+            Leave empty for no prerequisites.
+          </p>
+        </div>
+
         <!-- Points Reward -->
         <div>
           <label class="block font-medium mb-1">Points Reward</label>
@@ -137,6 +175,16 @@ const ctoonRewards = ref([
 ])
 const error = ref('')
 
+// at the top, alongside your other refs
+const prereqCtoons = ref([{ ctoonName: '' }])
+
+function addPrereqCtoon() {
+  prereqCtoons.value.push({ ctoonName: '' })
+}
+function removePrereqCtoon(index) {
+  prereqCtoons.value.splice(index, 1)
+}
+
 // list of all cToons from the DB
 const ctoonOptions = ref([])
 
@@ -202,10 +250,23 @@ async function submitForm() {
     })
   }
 
+  const validPrereqs = []
+  for (const p of prereqCtoons.value) {
+    const name = p.ctoonName.trim()
+    if (!name) continue
+    const match = ctoonOptions.value.find(ct => ct.name === name)
+    if (!match) {
+      error.value = `Unrecognized prerequisite cToon: “${name}”`
+      return
+    }
+    validPrereqs.push({ ctoonId: match.id })
+  }
+
   // build payload
   const payload = {
     code: code.value.trim(),
     maxClaims: maxClaims.value,
+    prerequisites: validPrereqs,
     expiresAt: expiresIso,
     rewards: [
       {

@@ -1,9 +1,41 @@
 <!-- pages/games/clash/play.vue -->
-<template>
+ <template>
   <Nav />
 
-  <!-- ───── Guard: no match loaded ───── -->
-  <div v-if="!game" class="pt-20 text-center mt-16">
+  <!-- Mobile-only sticky timer + instructions -->
+  <div
+    v-if="game"
+    class="md:hidden sticky top-14 z-30 bg-white border-b border-gray-200"
+  >
+    <!-- Timer -->
+    <div class="py-2 text-center text-sm text-gray-700">
+      <template v-if="isSelecting">
+        Select ({{ secondsLeft }}s) - Turn {{ game.turn }} out of {{ game.maxTurns }}
+      </template>
+      <template v-else-if="game.phase==='reveal'">
+        Reveal — <span class="capitalize">{{ game.priority }}</span> goes first
+      </template>
+      <template v-else-if="game.phase==='setup'">
+        Setup
+      </template>
+    </div>
+
+    <!-- Next steps instructions -->
+    <p class="py-1 px-4 text-center text-xs text-gray-600">
+      {{ instructionText }}
+    </p>
+
+    <!-- Progress bar -->
+    <div v-if="isSelecting" class="md:hidden h-2 w-full bg-gray-200 rounded">
+      <div
+        class="h-full bg-indigo-500 rounded"
+        :style="{ width: progressPercent + '%' }"
+      />
+    </div>
+  </div>
+
+  <!-- No-game guard -->
+  <div v-if="!game" class="pt-20 text-center">
     <p class="text-gray-600">
       No active match.
       <NuxtLink to="/games/clash" class="text-indigo-600 underline">
@@ -12,14 +44,14 @@
     </p>
   </div>
 
-  <!-- ───── Main Clash board ───── -->
+  <!-- Main board -->
   <section
     v-else
-    class="pt-20 pb-16 max-w-5xl mx-auto flex flex-col gap-6 mt-16"
+    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
-    <!-- Turn / Phase header -->
-    <h2 class="text-xl font-bold text-center mb-2">
-      Turn {{ game.turn }} / {{ game.maxTurns }}
+    <!-- Desktop header (hidden on mobile) -->
+    <h2 class="hidden md:block text-xl font-bold text-center mb-2">
+      gToons Clash — Turn {{ game.turn }} / {{ game.maxTurns }}
       <span
         v-if="isSelecting"
         class="text-sm font-normal text-gray-600 ml-4"
@@ -40,22 +72,31 @@
       </span>
     </h2>
 
-    <!-- Progress bar during select/setup -->
-    <div v-if="isSelecting" class="h-2 w-full bg-gray-200 rounded">
+    <!-- Desktop instructions (below header) -->
+    <p
+      v-if="instructionText"
+      class="hidden md:block text-center text-sm text-gray-700"
+    >
+      {{ instructionText }}
+    </p>
+
+    <!-- Progress bar -->
+    <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
         class="h-full bg-indigo-500 rounded"
         :style="{ width: progressPercent + '%' }"
-      ></div>
+      />
     </div>
 
-    <!-- Board / lanes -->
+    <!-- Game board -->
     <ClashGameBoard
       :lanes="game.lanes"
       :phase="isSelecting ? 'select' : game.phase"
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
-      :selected="selected && selected.id"
+      :selected="selected"
+      :confirmed="confirmed"
     />
 
     <!-- Battle log -->
@@ -70,26 +111,42 @@
       >{{ entry }}</div>
     </div>
 
-    <!-- Phase-aware instructions -->
-    <p v-if="instructionText" class="text-center text-sm text-gray-700">
-      {{ instructionText }}
-    </p>
-
     <!-- Player hand & energy -->
     <ClashHand
       :cards="game.playerHand"
-      :energy="game.energy"
+      :energy="game.playerEnergy"
       :selected="selected"
+      :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
       @select="c => (selected = c)"
     />
 
-    <!-- Confirm button (select/setup only) -->
+    <!-- Mobile confirm button -->
     <button
       v-if="isSelecting"
-      :disabled="confirmed || !placements.length"
+      :disabled="confirmed || !canConfirm"
       @click="confirmSelections"
-      class="self-center bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded disabled:opacity-50"
+      class="fixed bottom-4 right-4 z-50 md:hidden bg-indigo-500 hover:bg-indigo-600 text-white p-3 rounded-full disabled:opacity-50 shadow-lg"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+           viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 13l4 4L19 7" />
+      </svg>
+    </button>
+
+    <!-- Desktop confirm button -->
+    <button
+      v-if="isSelecting"
+      :disabled="confirmed || !canConfirm"
+      @click="confirmSelections"
+      class="
+        hidden md:inline-flex
+        self-center
+        bg-indigo-500 hover:bg-indigo-600 text-white 
+        px-6 py-2 rounded disabled:opacity-50
+        z-50
+      "
     >
       {{ confirmed ? 'Waiting…' : `Confirm (${secondsLeft}s)` }}
     </button>
@@ -114,6 +171,10 @@
             Lanes Won: You {{ summary.playerLanesWon }} – AI
             {{ summary.aiLanesWon }}
           </p>
+          <p v-if="summary.winner === 'player'" class="mb-4 text-indigo-600 font-medium">
+            You earned {{ summary.pointsAwarded }} point
+            <span v-if="summary.pointsAwarded > 1">s</span>!
+          </p>
           <NuxtLink
             to="/games/clash"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded"
@@ -121,36 +182,26 @@
         </div>
       </div>
     </transition>
-  </section>
-</template>
+    </section>
+  </template>
+
 
 <script setup>
 // Play page for gToon Clash
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { io } from 'socket.io-client'
-import { useState, useRuntimeConfig } from '#imports'
+import { useClashSocket } from '@/composables/useClashSocket'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
+import Nav from '@/components/Nav.vue'
+
+definePageMeta({ middleware: 'auth', layout: 'default' })
 
 // shared Nuxt state
-const battleState = useState('battle-state', () => null)
-const socketState = useState('clash-socket',  () => null)
-const game        = ref(battleState.value)
+const { socket, battleState } = useClashSocket()
+const game = computed(() => battleState.value)
 
 const router  = useRouter()
-const runtime = useRuntimeConfig()
-
-// socket singleton across pages
-let socket = socketState.value
-if (!socket) {
-  socket = io(
-    import.meta.env.PROD
-      ? undefined
-      : `http://localhost:${runtime.public.socketPort}`
-  )
-  socketState.value = socket
-}
 
 // local UI refs
 const selected   = ref(null)
@@ -160,7 +211,7 @@ const log        = ref([])
 const summary    = ref(null)
 
 // countdown
-const secondsLeft = ref(30)
+const secondsLeft = ref(60)
 let timerId = null
 function startTimer(deadline) {
   clearInterval(timerId)
@@ -173,13 +224,35 @@ function startTimer(deadline) {
   }, 1000)
 }
 
+const hasPlayable = computed(() =>
+  game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
+)
+
+const canConfirm = computed(() => {
+  // either we have at least one placement,
+  // or there simply are no affordable cards in hand
+  return placements.value.length > 0 || !hasPlayable.value
+})
+
+// total cost of all pending selections
+const pendingCost = computed(() =>
+  placements.value.reduce((sum, p) =>
+    sum + (p.card.cost || 0)
+  , 0)
+)
+
+// how much energy you have left to spend on new ghosts
+const remainingEnergy = computed(() =>
+  game.value.playerEnergy - pendingCost.value
+)
+
 // derived flags
 const isSelecting = computed(
   () => game.value
     && (game.value.phase === 'select' || game.value.phase === 'setup')
 )
 const progressPercent = computed(() =>
-  Math.max(0, Math.min(100, (secondsLeft.value/30)*100))
+  Math.max(0, Math.min(100, (secondsLeft.value/60)*100))
 )
 const instructionText = computed(() => {
   if (!game.value) return ''
@@ -200,8 +273,8 @@ const instructionText = computed(() => {
 // socket handlers
 function wireSocket() {
   socket.on('phaseUpdate', state => {
+    // write into battleState only:
     battleState.value = state
-    game.value        = state
 
     if (state.phase==='select' || state.phase==='setup') {
       startTimer(state.selectEndsAt)
@@ -210,7 +283,6 @@ function wireSocket() {
       secondsLeft.value = 0
     }
 
-    // reset selections on new window
     if ((state.phase==='select'||state.phase==='setup') && confirmed.value) {
       resetLocal()
     }
@@ -225,15 +297,43 @@ function wireSocket() {
 // UI actions
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
-  const i = placements.value.findIndex(p => p.cardId===selected.value.id)
-  if (i>=0) placements.value.splice(i,1)
-  else      placements.value.push({ cardId:selected.value.id, laneIndex:laneIdx })
+
+  // are we un-placing?
+  const idx = placements.value.findIndex(p => p.card?.id === selected.value.id)
+  if (idx >= 0) {
+    placements.value.splice(idx, 1)
+    return
+  }
+
+  // otherwise, check that this new card is still affordable
+  const costSum = pendingCost.value
+  if (selected.value.cost + costSum > game.value.playerEnergy) {
+    // optionally show a toast: “Not enough energy!”
+    return
+  }
+
+  placements.value.push({
+    card:    selected.value,
+    laneIndex: laneIdx
+  })
 }
 
 function confirmSelections() {
-  if (confirmed.value || !placements.value.length) return
-  socket.emit('selectCards',{ selections:placements.value })
+  if (confirmed.value || !canConfirm.value) return
+
+  // only keep the entries that actually have a `.card`
+  const good = placements.value.filter(p => p && p.card && p.laneIndex != null)
+
+  const selections = good.map(p => ({
+    cardId:    p.card.id,
+    laneIndex: p.laneIndex
+  }))
+
+  socket.emit('selectCards', { selections })
   confirmed.value = true
+
+  // clear previews if you want them to vanish immediately:
+  placements.value = []
 }
 
 // reset
@@ -245,10 +345,6 @@ function resetLocal() {
 
 // lifecycle
 onMounted(() => {
-  if (!battleState.value) {
-    return router.replace('/games/clash')
-  }
-  game.value = battleState.value
   wireSocket()
 })
 
@@ -259,7 +355,7 @@ onBeforeUnmount(() => {
 })
 
 // keep in sync if battleState changes
-watch(battleState, val => { if (val) game.value = val })
+// watch(battleState, val => { if (val) game.value = val })
 </script>
 
 <style scoped>

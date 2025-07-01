@@ -80,9 +80,7 @@ export default defineEventHandler(async (event) => {
     )
 
     socket.on('connect', () => {
-      console.log('[bid.post] socket connected:', socket.id)
       const payload = { auctionId: id, user: me.username, amount: newBid.amount }
-      console.log('[bid.post] emitting new-bid →', payload)
       socket.emit('new-bid', payload)
     })
 
@@ -95,12 +93,10 @@ export default defineEventHandler(async (event) => {
     })
 
     socket.on('disconnect', (reason) => {
-      console.log('[bid.post] socket disconnected:', reason)
     })
 
     // give it a moment to fire off the emit
     setTimeout(() => {
-      console.log('[bid.post] disconnecting socket')
       socket.disconnect()
     }, 500)
   } catch (e) {

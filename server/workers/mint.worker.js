@@ -62,6 +62,9 @@ const worker = new Worker('mintQueue', async job => {
           where: { userId },
           data: { points: { decrement: ctoon.price } }
         }),
+        prisma.pointsLog.create({
+          data: { userId, points: ctoon.price, method: "Bought cToon", direction: 'decrease' }
+        }),
         prisma.userCtoon.create({
           data: { userId, ctoonId, mintNumber, isFirstEdition }
         })
@@ -84,5 +87,5 @@ worker.on('completed', job => {
   // console.log(`Mint job ${job.id} completed`)
 })
 worker.on('failed', (job, err) => {
-  console.error(`Mint job ${job?.id} failed: ${err.message}`)
+  // console.error(`Mint job ${job?.id} failed: ${err.message}`)
 })

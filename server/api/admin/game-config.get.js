@@ -9,7 +9,7 @@ import {
 import { prisma as db } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1) Ensure user is authenticated & isAdmin
+  // 1) Auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -21,58 +21,59 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Read query parameter
-  const query = getQuery(event)
-  const gameName = query.gameName
+  // 2) Query param
+  const { gameName } = getQuery(event)
   if (!gameName || typeof gameName !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName" query parameter' })
   }
 
   try {
-    // 3) Try to fetch existing config
+    // 3) Try to load existing config
     let config = await db.gameConfig.findUnique({
       where: { gameName },
       include: {
+        // only Winball uses a grandPrizeCtoon
         grandPrizeCtoon: {
-          select: {
-            id:        true,
-            name:      true,
-            rarity:    true,
-            assetPath: true
-          }
+          select: { id: true, name: true, rarity: true, assetPath: true }
         }
       }
     })
 
-    // 4) If not found, create a new default row
+    // 4) If none, create defaults per‐game
     if (!config) {
-      config = await db.gameConfig.create({
-        data: {
-          gameName,
-          leftCupPoints:     0,
-          rightCupPoints:    0,
-          goldCupPoints:     0,
-          grandPrizeCtoonId: null,
-          dailyPointLimit:   100
-        },
-        select: {
-          dailyPointLimit: true,
-          leftCupPoints: true,
-          rightCupPoints: true,
-          goldCupPoints: true,
-          grandPrizeCtoon: true
-        },
-        include: {
-          grandPrizeCtoon: {
-            select: {
-              id:        true,
-              name:      true,
-              rarity:    true,
-              assetPath: true
+      if (gameName === 'Winball') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            leftCupPoints:     0,
+            rightCupPoints:    0,
+            goldCupPoints:     0,
+            dailyPointLimit:   100,
+            grandPrizeCtoonId: null
+          },
+          include: {
+            grandPrizeCtoon: {
+              select: { id: true, name: true, rarity: true, assetPath: true }
             }
           }
-        }
-      })
+        })
+      } else if (gameName === 'Clash') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            // default points per win:
+            pointsPerWin:     0,
+            dailyPointLimit: 100,
+            // Winball‐only fields remain null
+            leftCupPoints:    null,
+            rightCupPoints:   null,
+            goldCupPoints:    null,
+            grandPrizeCtoonId:null
+          }
+        })
+      } else {
+        throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${gameName}"` })
+      }
     }
 
     return config

@@ -116,7 +116,8 @@ export default defineEventHandler(async (event) => {
     where: { userId, createdAt: { gte: boundary } }, _sum:{ points:true }
   })
   const used = agg._sum.points || 0
-  const cap       = config.dailyPointLimit
+  const global = await prisma.globalGameConfig.findUnique({ where:{ id:'singleton' } })
+  const cap    = global.dailyPointLimit
   const remaining = Math.max(0, cap - used)
   const toGive = Math.min(award.points, remaining)
 
@@ -128,6 +129,9 @@ export default defineEventHandler(async (event) => {
       create: { userId, points: toGive },
       update: { points: { increment: toGive } }
     })
+    await prisma.pointsLog.create({
+      data: { userId, points: toGive, method: "Game - Winball", direction: 'increase' }
+    });
   }
 
   // 8) if gold cup, enqueue grand prize mint

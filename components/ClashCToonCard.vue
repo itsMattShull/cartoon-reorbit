@@ -5,18 +5,18 @@
     @dragstart="dragStart"
     @click="handleClick"
   >
-    <div class="relative">
+    <div class="relative w-24 h-24">
       <!-- the toon art -->
       <img
         :src="card.assetPath"
         :alt="card.name"
-        class="w-24 h-24 object-contain"
+        class="w-full h-full object-contain"
       />
 
       <!-- power in the big circle -->
       <div class="absolute" :style="powerStyle">
         <span class="text-white font-bold drop-shadow-lg text-2xl">
-          {{ card.power }}
+          {{ currentPower }}
         </span>
       </div>
 
@@ -49,19 +49,21 @@ const props = defineProps({
 })
 const emit = defineEmits(['select'])
 
+const currentPower = computed(() => props.card.power)
+
 const isSmall = computed(() => props.size === 'small')
 
 // build the container classes
 const outerClasses = computed(() => [
   // base layout
   'flex flex-col items-center justify-center bg-white select-none transition',
-  'w-24 h-36 text-xs rounded',
+  'w-24 text-xs rounded',
 
   // only large cards get a border
-  !isSmall.value && 'border',
+  !isSmall.value && 'border box-border',
 
   // small cards are simply scaled down
-  isSmall.value && 'transform scale-75',
+  // isSmall.value && 'transform scale-75',
 
   // afford / not afford
   props.afford === false ? 'cursor-not-allowed opacity-30' : 'cursor-pointer',
@@ -74,12 +76,12 @@ const outerClasses = computed(() => [
 const DIM = 96
 const powerStyle = {
   top:       `${DIM * 0.64}px`,
-  left:      `${DIM * 0.645}px`,
+  left:      `${DIM * 0.657}px`,
   transform: 'translate(-50%, -50%)'
 }
 const costStyle = {
   top:       `${DIM * 0.473}px`,
-  left:      `${DIM * 0.775}px`,
+  left:      `${DIM * 0.8}px`,
   transform: 'translate(-50%, 0)'
 }
 

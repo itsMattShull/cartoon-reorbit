@@ -1,12 +1,10 @@
 // server/api/admin/cumulative-users.get.js
 
-
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
-
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // ── 1. Admin check ────────────────────────────────────────────────
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -18,7 +16,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // ── 2. Parse & normalize timeframe (default 3m) ──────────────────
+  // 2) Parse & normalize timeframe (default 3m)
   const { timeframe = '3m' } = getQuery(event)
   const now = new Date()
   const startDate = new Date(now)
@@ -30,39 +28,52 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // ── 3. Build per-week series + cumulative sum ────────────────────
+  // 3) Build the per-week series, plus an “offset” of all users before startDate,
+  //    but only count in `stats` those who actually joined on/after startDate.
   const raw = await prisma.$queryRaw`
-    WITH weeks AS (
-      SELECT generate_series(
-        date_trunc('week', ${startDate}),
-        date_trunc('week', now()),
-        '1 week'
-      ) AS week
-    ), stats AS (
-      SELECT
-        date_trunc('week', "createdAt") AS week,
-        COUNT(*)::int AS count
-      FROM "User"
-      WHERE "createdAt" >= ${startDate}
-      GROUP BY week
-    )
+    WITH
+      weeks AS (
+        SELECT generate_series(
+          date_trunc('week', ${startDate}),
+          date_trunc('week', now()),
+          '1 week'
+        ) AS week
+      ),
+
+      base AS (
+        SELECT COUNT(*)::int AS before_count
+        FROM "User"
+        WHERE "createdAt" < ${startDate}
+      ),
+
+      stats AS (
+        SELECT
+          date_trunc('week', "createdAt") AS week,
+          COUNT(*)::int AS cnt
+        FROM "User"
+        WHERE "createdAt" >= ${startDate}
+        GROUP BY week
+      )
+
     SELECT
-      to_char(w.week, 'YYYY-MM-DD')        AS week,
-      SUM(COALESCE(s.count, 0)) 
-        OVER (ORDER BY w.week)             AS cumulative
+      to_char(w.week, 'YYYY-MM-DD') AS week,
+      -- offset + running sum of only the new users in each week
+      (b.before_count + COALESCE(
+        SUM(s.cnt) OVER (ORDER BY w.week),
+        0
+      ))::int AS cumulative
     FROM weeks w
     LEFT JOIN stats s
       ON s.week = w.week
+    CROSS JOIN base b
     ORDER BY w.week
   `
 
-  // ── 4. Serialize BigInt → Number for H3 ─────────────────────────
-  const result = raw.map(row => ({
-    week: row.week,
-    cumulative: typeof row.cumulative === 'bigint'
-      ? Number(row.cumulative)
-      : row.cumulative
+  // 4) Serialize BigInt → Number
+  return raw.map(r => ({
+    week:       r.week,
+    cumulative: typeof r.cumulative === 'bigint'
+                ? Number(r.cumulative)
+                : r.cumulative
   }))
-
-  return result
 })

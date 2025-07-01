@@ -109,9 +109,15 @@ export default defineEventHandler(async (event) => {
         points: { decrement: offer.pointsOffered }
       }
     }),
+    prisma.pointsLog.create({
+      data: { userId: offer.initiatorId, points: offer.pointsOffered, method: "Requested Trade", direction: 'decrease' }
+    }),
     prisma.userPoints.update({
       where: { userId: offer.recipientId },
       data: { points: { increment: offer.pointsOffered } }
+    }),
+    prisma.pointsLog.create({
+      data: { userId: offer.recipientId, points: offer.pointsOffered, method: "Accepted Trade", direction: 'increase' }
     }),
 
     // b) move each cToon

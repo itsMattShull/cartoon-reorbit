@@ -61,8 +61,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Cannot be Code-Only and in C-mart.' })
   }
 
-  const totQty  = totalQuantity ? parseInt(totalQuantity, 10) : null
-  const initQty = initialQuantity ? parseInt(initialQuantity, 10) : null
+  const totQty  = totalQuantity  == null || totalQuantity  === '' ? null : parseInt(totalQuantity,10)
+  const initQty = initialQuantity == null || initialQuantity === '' ? null : parseInt(initialQuantity,10)
   if (initQty != null && totQty != null && initQty > totQty) {
     throw createError({ statusCode: 400, statusMessage: 'Initial qty > total qty.' })
   }
@@ -94,14 +94,6 @@ export default defineEventHandler(async (event) => {
     }
     if (isNaN(powerInt) || powerInt < 0 || powerInt > 12) {
       throw createError({ statusCode: 400, statusMessage: 'Power must be between 0 and 12.' })
-    }
-    if (!abilityKey) {
-      throw createError({ statusCode: 400, statusMessage: 'Ability Key required for G-toon.' })
-    }
-    try {
-      abilityDataObj = abilityData ? JSON.parse(abilityData) : {}
-    } catch {
-      throw createError({ statusCode: 400, statusMessage: 'Ability Data must be valid JSON.' })
     }
   }
 
