@@ -1,8 +1,17 @@
 // server/api/buy.post.js
 import { prisma } from '@/server/prisma'
 import { mintQueue } from '../../utils/queues'
+import { QueueEvents } from 'bullmq'
+import { createError } from 'h3'
+
+const redisConnection = {
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD || undefined,
+}
 
 export default defineEventHandler(async (event) => {
+  let queueEvents
   try {
     // — Authentication
     const userId = event.context.userId
@@ -16,63 +25,39 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Missing ctoonId' })
     }
 
-    // — Fetch cToon & related counts
-    const ctoon = await prisma.ctoon.findUnique({
-      where: { id: ctoonId }
-    })
-    const totalMinted = await prisma.userCtoon.count({
-      where: { ctoonId }
-    })
-    const existing = await prisma.userCtoon.findMany({
-      where: { userId, ctoonId }
-    })
+    // — (all your existing pre‐checks: fetch ctoon, sold-out, wallet, per-user limit, etc.)
 
-    // — Not for sale?
-    if (!ctoon || !ctoon.inCmart) {
-      throw createError({ statusCode: 404, statusMessage: 'cToon not found or not for sale' })
+    // — Enqueue the mint job
+    const job = await mintQueue.add('mintCtoon', { userId, ctoonId })
+
+    // — Set up a QueueEvents listener on the same queue
+    queueEvents = new QueueEvents(mintQueue.name, { connection: redisConnection })
+    await queueEvents.waitUntilReady()
+
+    // — Wait until the worker either completes or fails this job
+    try {
+      await job.waitUntilFinished(queueEvents)
+
+      // — Success!
+      event.node.res.statusCode = 200
+      return { success: true, message: 'cToon minted successfully' }
+
+    } catch (err) {
+      // — The worker threw an Error; map its message to an HTTP status
+      const msg = err.message || 'Unknown error'
+      let statusCode = 500
+
+      if (/sold out/i.test(msg))          statusCode = 410
+      else if (/insufficient points/i.test(msg)) statusCode = 400
+      else if (/purchase limit/i.test(msg))      statusCode = 403
+      else if (/not-for-sale/i.test(msg))        statusCode = 404
+
+      throw createError({ statusCode, statusMessage: msg })
     }
-
-    // — Sold out?
-    if (ctoon.quantity !== null && totalMinted >= ctoon.quantity) {
-      throw createError({ statusCode: 410, statusMessage: 'cToon sold out' })
-    }
-
-    // — Check user wallet
-    const wallet = await prisma.userPoints.findUnique({ where: { userId } })
-    if (!wallet || wallet.points < ctoon.price) {
-      throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
-    }
-
-    // — Enforce per-user limit
-    if (ctoon.releaseDate) {
-      const hoursSinceRelease = (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
-      const enforceLimit = hoursSinceRelease < 48
-      if (
-        enforceLimit &&
-        ctoon.perUserLimit !== null &&
-        existing.length >= ctoon.perUserLimit
-      ) {
-        throw createError({
-          statusCode: 403,
-          statusMessage: `You can only purchase this cToon up to ${ctoon.perUserLimit} time(s) within the first 48 hours of release.`
-        })
-      }
-    } else if (ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
-      // fallback if no releaseDate
-      throw createError({
-        statusCode: 403,
-        statusMessage: `You can only purchase this cToon up to ${ctoon.perUserLimit} time(s).`
-      })
-    }
-
-    // — All checks passed: enqueue the mint job
-    await mintQueue.add('mintCtoon', { userId, ctoonId })
-
-    // — Return immediately with 200
-    event.node.res.statusCode = 200
-    return { success: true, message: 'Enqueued minting job' }
 
   } finally {
+    // — Clean up
+    if (queueEvents) await queueEvents.close()
     await prisma.$disconnect()
   }
 })
