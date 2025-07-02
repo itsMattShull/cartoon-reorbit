@@ -171,7 +171,7 @@ async function fetchAllLogs() {
 // filtered list for the All Logs tab
 const filteredLogs = computed(() =>
   logs.value.filter(l =>
-    (l.user.username || '')
+    (l.user?.username ?? '')
       .toLowerCase()
       .includes(searchTerm.value.toLowerCase())
   )
