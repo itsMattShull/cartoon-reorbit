@@ -87,48 +87,70 @@
 
 <script setup>
 definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
-import { ref, onMounted, computed } from 'vue'
-import { getQuery } from 'h3'
+
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '~/components/Nav.vue'
 
-const take      = 50
-const skip      = ref(0)
-const rawLogs   = ref([])
-const loading   = ref(false)
-const finished  = ref(false)
-const sentinel  = ref(null)
+// how many to show at a time
+const TAKE = 50
 
-// FILTER STATE
-const searchTerm = ref('')
+// raw data + UI state
+const rawLogs      = ref([])
+const visibleCount = ref(TAKE)
+const loading      = ref(false)
+const sentinel     = ref(null)
 
-const displayedLogs = computed(() => {
-  return rawLogs.value.filter(l =>
-    l.user.username.toLowerCase().includes(searchTerm.value.toLowerCase())
+// filter state
+const searchTerm   = ref('')
+
+// 1) filter by username, 2) slice to visibleCount
+const filteredLogs = computed(() =>
+  rawLogs.value.filter(log =>
+    log.user.username.toLowerCase().includes(searchTerm.value.toLowerCase())
   )
-})
+)
+const displayedLogs = computed(() =>
+  filteredLogs.value.slice(0, visibleCount.value)
+)
 
-async function loadNext() {
-  if (loading.value || finished.value) return
+// "No more logs" when we've shown them all
+const finished = computed(() =>
+  filteredLogs.value.length > 0 && visibleCount.value >= filteredLogs.value.length
+)
+
+// fetch *all* logs once
+async function loadAll() {
   loading.value = true
-  const res = await fetch(
-    `/api/admin/points-log?skip=${skip.value}&take=${take}`,
-    { credentials: 'include' }
-  )
-  if (!res.ok) { loading.value=false; return }
-  const page = await res.json()
-  if (page.length < take) finished.value = true
-  rawLogs.value.push(...page)
-  skip.value += take
+  const res = await fetch('/api/admin/points-log', { credentials: 'include' })
+  if (res.ok) {
+    rawLogs.value = await res.json()
+  }
   loading.value = false
 }
 
 onMounted(() => {
-  loadNext()
-  const obs = new IntersectionObserver(
-    entries => { if (entries[0].isIntersecting) loadNext() },
+  loadAll()
+
+  const observer = new IntersectionObserver(
+    entries => {
+      if (!entries[0].isIntersecting) return
+      // show 50 more, if any remain
+      if (visibleCount.value < filteredLogs.value.length) {
+        visibleCount.value += TAKE
+      }
+    },
     { rootMargin: '200px' }
   )
-  if (sentinel.value) obs.observe(sentinel.value)
+
+  if (sentinel.value) {
+    observer.observe(sentinel.value)
+  }
+
+  onBeforeUnmount(() => {
+    if (sentinel.value) {
+      observer.unobserve(sentinel.value)
+    }
+  })
 })
 </script>
 
