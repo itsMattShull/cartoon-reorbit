@@ -383,7 +383,18 @@ const netOptions = {
     }
   },
   plugins: {
-    legend: { display: false },
+    legend: {
+      display: true,
+      position: 'top',     // or 'bottom', 'left', 'right'
+      onClick: (e, legendItem, legend) => {
+        const ci = legend.chart;
+        const idx = legendItem.datasetIndex;
+        const meta = ci.getDatasetMeta(idx);
+        // toggle hidden flag
+        meta.hidden = !meta.hidden;
+        ci.update();
+      }
+    },
     annotation: {
       annotations: {
         greenLine: {
@@ -878,6 +889,10 @@ onMounted(async () => {
         backgroundColor: colors.line,
         borderWidth: 2,
         fill: false,
+        datalabels: {
+          anchor: 'end',
+          align:  'top'
+        }
       },
       {
         label: '7-day moving avg',
@@ -886,7 +901,11 @@ onMounted(async () => {
         backgroundColor: '#FACC15',
         borderWidth: 2,
         fill: false,
-        borderDash: [5,5]
+        borderDash: [5,5],
+        datalabels: {
+          anchor: 'start',
+          align:  'bottom'
+        }
       }
     ]},
     options: netOptions
