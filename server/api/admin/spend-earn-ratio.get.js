@@ -1,10 +1,9 @@
 // server/api/admin/spend-earn-ratio.get.js
-
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1) Admin auth
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -16,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) timeframe → days
+  // 2) Timeframe → days
   const { timeframe = '3m' } = getQuery(event)
   let days
   switch (timeframe) {
@@ -27,57 +26,102 @@ export default defineEventHandler(async (event) => {
     default:   days = 90
   }
 
-  // 3) Daily series + spend/earn ratio
+  // 3a) Daily series with gaps filled, plus 7-day MA
   const daily = await prisma.$queryRawUnsafe(`
     WITH
-      series AS (
+      day_series AS (
         SELECT generate_series(
           (now() - INTERVAL '${days} days')::date,
-           now()::date,
+          now()::date,
           '1 day'
         ) AS period
       ),
-      dec AS (
+      raw_agg AS (
         SELECT
           date_trunc('day', "createdAt")::date AS period,
-          SUM("points")::float AS spent
+          COALESCE(
+            SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
+            / NULLIF(
+                SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
+                0
+              ),
+            0
+          ) AS ratio
         FROM "PointsLog"
-        WHERE "direction" = 'decrease'
-          AND "createdAt" >= now() - INTERVAL '${days} days'
-        GROUP BY 1
-      ),
-      inc AS (
-        SELECT
-          date_trunc('day', "createdAt")::date AS period,
-          SUM("points")::float AS earned
-        FROM "PointsLog"
-        WHERE "direction" = 'increase'
-          AND "createdAt" >= now() - INTERVAL '${days} days'
+        WHERE "createdAt" >= now() - INTERVAL '${days} days'
         GROUP BY 1
       )
     SELECT
-      s.period,
-      d.spent / NULLIF(i.earned, 0) AS spend_earn_ratio
-    FROM series s
-    LEFT JOIN dec d ON d.period = s.period
-    LEFT JOIN inc i ON i.period = s.period
-    ORDER BY s.period;
+      ds.period,
+      COALESCE(ra.ratio, 0) AS spend_earn_ratio,
+      ROUND(
+        CAST(
+          AVG(COALESCE(ra.ratio, 0))
+            OVER (
+              ORDER BY ds.period
+              ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+            )
+          AS numeric
+        ),
+        3
+      ) AS moving_avg_7day
+    FROM day_series ds
+    LEFT JOIN raw_agg ra ON ra.period = ds.period
+    ORDER BY ds.period;
   `)
 
-  // 4) Map, guarding null → 0
+  // 3b) Weekly buckets
+  const weekly = await prisma.$queryRawUnsafe(`
+    SELECT
+      date_trunc('week', "createdAt")::date AS period,
+      COALESCE(
+        SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
+        / NULLIF(
+            SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
+            0
+          ),
+        0
+      ) AS spend_earn_ratio
+    FROM "PointsLog"
+    WHERE "createdAt" >= now() - INTERVAL '${days} days'
+    GROUP BY 1
+    ORDER BY 1;
+  `)
+
+  // 3c) Monthly buckets
+  const monthly = await prisma.$queryRawUnsafe(`
+    SELECT
+      date_trunc('month', "createdAt")::date AS period,
+      COALESCE(
+        SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
+        / NULLIF(
+            SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
+            0
+          ),
+        0
+      ) AS spend_earn_ratio
+    FROM "PointsLog"
+    WHERE "createdAt" >= now() - INTERVAL '${days} days'
+    GROUP BY 1
+    ORDER BY 1;
+  `)
+
+  // 4) Shape JSON
   return {
-    timeframe,
-    days,
-    daily: daily.map(r => {
-      // if ratio is null (no earned pts), treat as 0
-      const raw = r.spend_earn_ratio
-      const ratio = raw !== null
-        ? Number(raw.toFixed(2))
-        : 0
-      return {
-        period:           r.period,
-        spendEarnRatio:   ratio
-      }
-    })
+    timeframe,  // '1m','3m','6m','1y'
+    days,       // numeric window length
+    daily: daily.map(r => ({
+      period:          r.period,
+      spendEarnRatio:  Number(r.spend_earn_ratio.toFixed(3)),
+      movingAvg7Day:   Number(r.moving_avg_7day.toFixed(3))
+    })),
+    weekly: weekly.map(r => ({
+      period:         r.period,
+      spendEarnRatio: Number(r.spend_earn_ratio.toFixed(3))
+    })),
+    monthly: monthly.map(r => ({
+      period:         r.period,
+      spendEarnRatio: Number(r.spend_earn_ratio.toFixed(3))
+    }))
   }
 })

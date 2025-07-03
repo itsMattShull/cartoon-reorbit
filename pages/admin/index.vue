@@ -622,50 +622,55 @@ async function fetchData() {
   const last = np.daily[np.daily.length - 1]
   const avg7 = last ? last.movingAvg7Day : 0
 
-  if (Math.abs(avg7) <= 500) {
-    // Healthy: within ±500
+  const healthyThreshold = 500
+  const cautionThreshold = 1000
+
+  if (Math.abs(avg7) <= healthyThreshold) {
+    // 🎉 Healthy: within ±500 of zero
     netStatus.value = 'good'
     netSuggestions.value = []
-  } 
-  else if (Math.abs(avg7) <= 1000) {
-    // Caution: between ±500 and ±1000
+  }
+  else if (Math.abs(avg7) <= cautionThreshold) {
+    // ⚠️ Caution: between ±500 and ±1000
     netStatus.value = 'caution'
-    if (avg7 > 500) {
-      // Slightly too high: need to pull points out
+
+    if (avg7 > healthyThreshold) {
+      // Slightly too high: net points are above +500
       netSuggestions.value = [
-        `Your 7-day avg (${avg7}) is above the healthy zone (±500). To bring it down toward 0:`,
+        `Your 7-day avg is **${avg7}**, above the healthy target (should be near 0 ±${healthyThreshold}). To pull it back toward 0:`,
         '• Increase point sinks (raise auction fees or pack prices)',
         '• Launch limited-time, high-cost cosmetics to burn points',
         '• Add small periodic point-burn challenges or raffles'
       ]
     } else {
-      // Slightly too low: need to put points in
+      // Slightly too low: net points are below −500
       netSuggestions.value = [
-        `Your 7-day avg (${avg7}) is below the healthy zone (±500). To bring it up toward 0:`,
+        `Your 7-day avg is **${avg7}**, below the healthy target (should be near 0 ±${healthyThreshold}). To boost it up toward 0:`,
         '• Introduce earn-focused events (bonus quests, referral rewards)',
         '• Temporarily lower pack prices or auction fees to spur spending',
         '• Run double-points days or time-limited earn bonuses'
       ]
     }
-  } 
+  }
   else {
-    // Danger: beyond ±1000
+    // 🔥 Danger: beyond ±1000
     netStatus.value = 'danger'
-    if (avg7 > 1000) {
-      // Way too high: massive sink needed
+
+    if (avg7 > cautionThreshold) {
+      // Way too high
       netSuggestions.value = [
-        `Your 7-day avg (${avg7}) is far above 1,000. Immediately remove points by:`,
+        `Your 7-day avg is **${avg7}**, well above the danger threshold (>±${cautionThreshold}). It should be near 0 ±${healthyThreshold}. Immediately remove points by:`,
         '• Introducing premium limited-edition items with steep point costs',
-        '• Significantly raising auction fees or implementing new sink mechanics',
+        '• Significantly raising auction fees or new sink mechanics',
         '• Running high-visibility, large-scale point-burn events'
       ]
     } else {
-      // Way too low: massive earn needed
+      // Way too low
       netSuggestions.value = [
-        `Your 7-day avg (${avg7}) is far below –1,000. Immediately inject points by:`,
+        `Your 7-day avg is **${avg7}**, far below the danger threshold (<−${cautionThreshold}). It should be near 0 ±${healthyThreshold}. Immediately inject points by:`,
         '• Granting large event-based point bonuses (double or triple points)',
         '• Temporarily removing or reducing all point sinks',
-        '• Offering generous referral or activity rewards to flood points back in'
+        '• Offering generous referral or activity rewards'
       ]
     }
   }
@@ -751,53 +756,64 @@ async function fetchData() {
     `/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}`,
     { credentials: 'include' }
   )
+  // --- after fetching your spend/earn series above ---
   const sr = await res.json()
   ratioWindowDays.value = sr.days
 
-  ratioChart.data.labels = sr.daily.map(d => new Date(d.period))
-  ratioChart.data.datasets[0].data = sr.daily.map(d => d.spendEarnRatio)
+  // 1) re-populate the chart with two datasets
+  ratioChart.data.labels               = sr.daily.map(d => new Date(d.period))
+  ratioChart.data.datasets[0].data     = sr.daily.map(d => d.spendEarnRatio)
+  ratioChart.data.datasets[1].data     = sr.daily.map(d => d.movingAvg7Day)
   ratioChart.update()
 
-  // health = last day's spend/earn ratio
-  let lastRatio = sr.daily[sr.daily.length - 1]?.spendEarnRatio ?? 0
+  // 2) compute health off the 7-day moving avg of the last day
+  const lastEntry = sr.daily[sr.daily.length - 1] || { movingAvg7Day: 0 }
+  const avg7forRatio      = lastEntry.movingAvg7Day
 
-  if (lastRatio >= 0.9 && lastRatio <= 1.1) {
-    ratioStatus.value = 'good'
+  if (avg7forRatio >= 0.9 && avg7forRatio <= 1.1) {
+    // 🎉 Healthy
+    ratioStatus.value      = 'good'
     ratioSuggestions.value = []
-  } 
-  else if (lastRatio >= 0.75 && lastRatio <= 1.25) {
+  }
+  else if (avg7forRatio >= 0.75 && avg7forRatio <= 1.25) {
+    // ⚠️ Caution
     ratioStatus.value = 'caution'
-    if (lastRatio < 0.9) {
-      // ratio is a bit too low
+    if (avg7forRatio < 0.9) {
+      // MA slightly too low → need to inject more points (earn)
       ratioSuggestions.value = [
-        'Your ratio is slightly below healthy (0.9–1.1). Aim to increase earning or reduce sinks to push toward 1.0.',
-        'Run earn-focused events (e.g. quest bonuses) to boost daily income.',
-        'Temporarily lower pack prices or auction fees to encourage more spending that raises the ratio.'
+        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, just below the healthy band (0.9–1.1). To pull it up toward 1.0:`,
+        '• Run earn-focused events (bonus quests, referral rewards)',
+        '• Temporarily lower pack prices or auction fees to drive more spending',
+        '• Offer short-lived double-points days'
       ]
     } else {
-      // ratio is a bit too high
+      // MA slightly too high → need to sink more points (spend)
       ratioSuggestions.value = [
-        'Your ratio is slightly above healthy (0.9–1.1). Aim to increase sinks or slow earning toward 1.0.',
-        'Introduce small, time-boxed point sinks (new cosmetics, auction fees).',
-        'Run balanced earn-and-burn events to rebalance daily flow.'
+        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, just above the healthy band (0.9–1.1). To bring it down toward 1.0:`,
+        '• Introduce small time-boxed point sinks (new cosmetics or auction fees)',
+        '• Run burn-and-earn events that balance give/take',
+        '• Add low-cost point-burn challenges'
       ]
     }
-  } 
+  }
   else {
+    // 🔥 Danger
     ratioStatus.value = 'danger'
-    if (lastRatio < 0.75) {
-      // way too low
+    if (avg7forRatio < 0.75) {
+      // MA well under → massive earn needed
       ratioSuggestions.value = [
-        'Ratio is far under 1.0. Urgently boost earning: add bonus quests or referral rewards.',
-        'Temporarily reduce sink pressures (lower fees, pause auctions) so earning can catch up.',
-        'Run high-value earn promotions (limited-time double points) to jump-start activity.'
+        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, far below healthy. Urgently boost earning:`,
+        '• Add large event-based point bonuses (double/triple points)',
+        '• Temporarily pause major point sinks (auctions, high-cost packs)',
+        '• Launch generous referral or activity rewards'
       ]
     } else {
-      // way too high
+      // MA well over → massive sink needed
       ratioSuggestions.value = [
-        'Ratio is far above 1.0. Immediately increase sinks: raise pack prices or auction fees.',
-        'Launch limited-time high-cost cosmetics or bundles to burn points rapidly.',
-        'Temporarily pause large point grants in events/quests until balance returns.'
+        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, far above healthy. Immediately remove points by:`,
+        '• Introducing premium limited-edition items with steep point costs',
+        '• Significantly raising auction fees or new sink mechanics',
+        '• Running large-scale point-burn events'
       ]
     }
   }
@@ -867,17 +883,56 @@ onMounted(async () => {
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
 
+  // in your onMounted or wherever you init charts:
   ratioChart = new Chart(ratioCanvas.value.getContext('2d'), {
     type: 'line',
-    data: { labels: [], datasets: [{
-      label: 'Spend / Earn Ratio',
-      data: [],
-      borderColor: '#6366F1', // any color
-      borderWidth: 2,
-      fill: false
-    }]},
-    options: ratioOptions
-  })
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Daily spend/earn',
+          data: [],
+          borderColor: '#6366F1',
+          borderWidth: 2,
+          fill: false,
+          datalabels: {
+            anchor: 'end',   // above the point
+            align:  'top'
+          }
+        },
+        {
+          label: '7-day moving avg',
+          data: [],
+          borderColor: '#FACC15',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          fill: false,
+          datalabels: {
+            anchor: 'start', // below the point
+            align:  'bottom'
+          }
+        }
+      ]
+    },
+    options: {
+      ...ratioOptions,
+      plugins: {
+        ...ratioOptions.plugins,
+        legend: {
+          display: true,
+          position: 'top',
+          onClick: (e, legendItem, legend) => {
+            const chart = legend.chart;
+            const idx   = legendItem.datasetIndex;
+            const meta  = chart.getDatasetMeta(idx);
+            meta.hidden = !meta.hidden;
+            chart.update();
+          }
+        }
+      }
+    }
+  });
+
 
   netChart = new Chart(netCanvas.value.getContext('2d'), {
     type: 'line',
