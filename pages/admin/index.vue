@@ -612,24 +612,51 @@ async function fetchData() {
   const avg7 = last ? last.movingAvg7Day : 0
 
   if (Math.abs(avg7) <= 500) {
+    // Healthy: within ±500
     netStatus.value = 'good'
     netSuggestions.value = []
-  }
+  } 
   else if (Math.abs(avg7) <= 1000) {
+    // Caution: between ±500 and ±1000
     netStatus.value = 'caution'
-    netSuggestions.value = [
-      'Increase point sinks (e.g. raise pack prices or auction fees)',
-      'Run more limited-time sales or code-redemptions',
-      'Encourage first-time buyers with time-limited discounts'
-    ]
-  }
+    if (avg7 > 500) {
+      // Slightly too high: need to pull points out
+      netSuggestions.value = [
+        `Your 7-day avg (${avg7}) is above the healthy zone (±500). To bring it down toward 0:`,
+        '• Increase point sinks (raise auction fees or pack prices)',
+        '• Launch limited-time, high-cost cosmetics to burn points',
+        '• Add small periodic point-burn challenges or raffles'
+      ]
+    } else {
+      // Slightly too low: need to put points in
+      netSuggestions.value = [
+        `Your 7-day avg (${avg7}) is below the healthy zone (±500). To bring it up toward 0:`,
+        '• Introduce earn-focused events (bonus quests, referral rewards)',
+        '• Temporarily lower pack prices or auction fees to spur spending',
+        '• Run double-points days or time-limited earn bonuses'
+      ]
+    }
+  } 
   else {
+    // Danger: beyond ±1000
     netStatus.value = 'danger'
-    netSuggestions.value = [
-      'Immediately increase point sinks (raise fees, add premium cosmetics)',
-      'Temporarily disable large point grants in quests/events',
-      'Introduce high-value limited cToons that burn points on purchase'
-    ]
+    if (avg7 > 1000) {
+      // Way too high: massive sink needed
+      netSuggestions.value = [
+        `Your 7-day avg (${avg7}) is far above 1,000. Immediately remove points by:`,
+        '• Introducing premium limited-edition items with steep point costs',
+        '• Significantly raising auction fees or implementing new sink mechanics',
+        '• Running high-visibility, large-scale point-burn events'
+      ]
+    } else {
+      // Way too low: massive earn needed
+      netSuggestions.value = [
+        `Your 7-day avg (${avg7}) is far below –1,000. Immediately inject points by:`,
+        '• Granting large event-based point bonuses (double or triple points)',
+        '• Temporarily removing or reducing all point sinks',
+        '• Offering generous referral or activity rewards to flood points back in'
+      ]
+    }
   }
 
   // 2) % first purchase
