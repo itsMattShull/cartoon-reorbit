@@ -88,12 +88,67 @@
         <h2 class="text-xl font-semibold mb-2">Points Distribution</h2>
         <div class="chart-container"><canvas ref="ptsDistCanvas"></canvas></div>
       </div>
+
+      <!-- 0) Net Points Issued w/ health badge -->
+      <div class="lg:col-span-2">
+        <h2 class="text-xl font-semibold mb-2 flex items-center">
+          Net Points Issued
+          <span class="ml-2 text-sm text-gray-500">
+            (last {{ netWindowDays }} days)
+          </span>
+          <span 
+            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            :class="badgeClass"
+          >
+            {{ badgeText }}
+          </span>
+        </h2>
+
+        <!-- suggestions block -->
+        <div v-if="netStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
+          <p class="font-medium mb-1">How to improve:</p>
+          <ul class="list-disc list-inside space-y-1 text-sm">
+            <li v-for="(s,i) in netSuggestions" :key="i">{{ s }}</li>
+          </ul>
+        </div>
+
+        <div class="chart-container">
+          <canvas ref="netCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Spend / Earn Ratio -->
+      <div class="lg:col-span-2">
+        <h2 class="text-xl font-semibold mb-2 flex items-center">
+          Spend / Earn Ratio
+          <span class="ml-2 text-sm text-gray-500">
+            (last {{ ratioWindowDays }} days)
+          </span>
+          <span
+            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            :class="ratioBadgeClass"
+          >
+            {{ ratioBadgeText }}
+          </span>
+        </h2>
+
+        <div v-if="ratioStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
+          <p class="font-medium mb-1">How to improve:</p>
+          <ul class="list-disc list-inside space-y-1 text-sm">
+            <li v-for="(s,i) in ratioSuggestions" :key="i">{{ s }}</li>
+          </ul>
+        </div>
+
+        <div class="chart-container">
+          <canvas ref="ratioCanvas"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import {
   Chart,
   LineController, LineElement, PointElement,
@@ -103,6 +158,7 @@ import {
 } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import 'chartjs-adapter-date-fns'
+import annotationPlugin from 'chartjs-plugin-annotation'
 import Nav from '@/components/Nav.vue'
 
 // register controllers, scales & plugins
@@ -110,7 +166,7 @@ Chart.register(
   LineController, LineElement, PointElement,
   BarController, BarElement,
   CategoryScale, LinearScale, TimeScale,
-  Title, Tooltip, Legend,
+  Title, Tooltip, Legend, annotationPlugin,
   ChartDataLabels, {
     id: 'resetLabelPosition',
     beforeDatasetsDraw(chart) {
@@ -143,14 +199,52 @@ const pctCanvas     = ref(null)
 const uniqueCanvas  = ref(null)
 const clashCanvas   = ref(null)
 const tradesCanvas  = ref(null)
+const netCanvas    = ref(null)
 const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
+const netWindowDays = ref(0)
+
+const netStatus      = ref('good')   // 'good' | 'caution' | 'danger'
+const netSuggestions = ref([])
+
+const badgeClass = computed(() => {
+  switch (netStatus.value) {
+    case 'good':   return 'bg-green-100 text-green-800'
+    case 'caution':return 'bg-yellow-100 text-yellow-800'
+    case 'danger': return 'bg-red-100   text-red-800'
+  }
+})
+
+const badgeText = computed(() => {
+  switch (netStatus.value) {
+    case 'good':   return 'Healthy'
+    case 'caution':return 'Caution'
+    case 'danger': return 'Danger'
+  }
+})
+
+const ratioCanvas     = ref(null)
+const ratioWindowDays = ref(0)
+const ratioStatus     = ref('good')    // 'good' | 'caution' | 'danger'
+const ratioSuggestions= ref([])
+
+const ratioBadgeClass = computed(() => ({
+  good:    'bg-green-100 text-green-800',
+  caution: 'bg-yellow-100 text-yellow-800',
+  danger:  'bg-red-100 text-red-800'
+})[ratioStatus.value])
+
+const ratioBadgeText = computed(() => ({
+  good:    'Healthy',
+  caution: 'Caution',
+  danger:  'Danger'
+})[ratioStatus.value])
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart
+    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart, netChart, ratioChart
 
 // --- color palette (solid, no opacity) ---
 const colors = {
@@ -178,6 +272,54 @@ const pctOptions = {
       title: { display: true, text: '% First cToon Purchase' },
       ticks: { callback: v => v + '%' },
       min: 0, max: 100
+    }
+  }
+}
+
+const ratioOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: {
+      type: 'time',
+      time: { unit: 'day', tooltipFormat: 'PP' },
+      title: { display: true, text: 'Day' }
+    },
+    y: {
+      title: { display: true, text: 'Spend / Earn Ratio' },
+      min: 0
+    }
+  },
+  plugins: {
+    legend: { display: false },
+    annotation: {
+      annotations: {
+        green: {
+          type: 'line', yMin: 1, yMax: 1, scaleID: 'y',
+          borderColor: 'green', borderWidth: 2,
+          label: { enabled: true, content: '1.0' }
+        },
+        yellowLow: {
+          type: 'line', yMin: 0.9, yMax: 0.9, scaleID: 'y',
+          borderColor: 'orange', borderWidth: 1,
+          label: { enabled: true, content: '0.9' }
+        },
+        yellowHigh: {
+          type: 'line', yMin: 1.1, yMax: 1.1, scaleID: 'y',
+          borderColor: 'orange', borderWidth: 1,
+          label: { enabled: true, content: '1.1' }
+        },
+        redLow: {
+          type: 'line', yMin: 0.75, yMax: 0.75, scaleID: 'y',
+          borderColor: 'red', borderWidth: 1,
+          label: { enabled: true, content: '0.75' }
+        },
+        redHigh: {
+          type: 'line', yMin: 1.25, yMax: 1.25, scaleID: 'y',
+          borderColor: 'red', borderWidth: 1,
+          label: { enabled: true, content: '1.25' }
+        }
+      }
     }
   }
 }
@@ -221,6 +363,70 @@ const uniqueOptions = {
     },
     y: {
       title: { display: true, text: 'Unique Daily Logons' }
+    }
+  }
+}
+
+const netOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: {
+      type: 'time',
+      offset: true,
+      time: { unit: 'day', tooltipFormat: 'PP' },
+      title: { display: true, text: 'Day' }
+    },
+    y: {
+      title: { display: true, text: 'Net Points Issued' },
+      beginAtZero: false
+    }
+  },
+  plugins: {
+    legend: { display: false },
+    annotation: {
+      annotations: {
+        greenLine: {
+          type: 'line',
+          yMin: 0, yMax: 0,
+          scaleID: 'y',
+          borderColor: 'green',
+          borderWidth: 2,
+          label: { enabled: true, content: 'Zero' }
+        },
+        yellowLine: {
+          type: 'line',
+          yMin: 500, yMax: 500,
+          scaleID: 'y',
+          borderColor: 'orange',
+          borderWidth: 1,
+          label: { enabled: true, content: '+500' }
+        },
+        yellowLineNeg: {
+          type: 'line',
+          yMin: -500, yMax: -500,
+          scaleID: 'y',
+          borderColor: 'orange',
+          borderWidth: 1,
+          label: { enabled: true, content: '-500' }
+        },
+        redLine: {
+          type: 'line',
+          yMin: 1000, yMax: 1000,
+          scaleID: 'y',
+          borderColor: 'red',
+          borderWidth: 1,
+          label: { enabled: true, content: '+1000' }
+        },
+        redLineNeg: {
+          type: 'line',
+          yMin: -1000, yMax: -1000,
+          scaleID: 'y',
+          borderColor: 'red',
+          borderWidth: 1,
+          label: { enabled: true, content: '-1000' }
+        }
+      }
     }
   }
 }
@@ -386,6 +592,46 @@ async function fetchData() {
   }]
   tradesChart.update()
 
+  // Net Points Issued
+  res = await fetch(
+    `/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}`,
+    { credentials: 'include' }
+  )
+  const np = await res.json()
+  console.log('np: ', np)
+  netWindowDays.value = np.days
+
+  // populate the chart
+  netChart.data.labels           = np.daily.map(d => new Date(d.period))
+  netChart.data.datasets[0].data = np.daily.map(d => d.netPoints)
+  netChart.data.datasets[1].data = np.daily.map(d => d.movingAvg7Day)
+  netChart.update()
+
+  // **Compute health status off the 7-day moving average of the latest day**
+  const last = np.daily[np.daily.length - 1]
+  const avg7 = last ? last.movingAvg7Day : 0
+
+  if (Math.abs(avg7) <= 500) {
+    netStatus.value = 'good'
+    netSuggestions.value = []
+  }
+  else if (Math.abs(avg7) <= 1000) {
+    netStatus.value = 'caution'
+    netSuggestions.value = [
+      'Increase point sinks (e.g. raise pack prices or auction fees)',
+      'Run more limited-time sales or code-redemptions',
+      'Encourage first-time buyers with time-limited discounts'
+    ]
+  }
+  else {
+    netStatus.value = 'danger'
+    netSuggestions.value = [
+      'Immediately increase point sinks (raise fees, add premium cosmetics)',
+      'Temporarily disable large point grants in quests/events',
+      'Introduce high-value limited cToons that burn points on purchase'
+    ]
+  }
+
   // 2) % first purchase
   res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   data = await res.json()
@@ -463,6 +709,61 @@ async function fetchData() {
   ]
   clashChart.update()
 
+  res = await fetch(
+    `/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}`,
+    { credentials: 'include' }
+  )
+  const sr = await res.json()
+  ratioWindowDays.value = sr.days
+
+  ratioChart.data.labels = sr.daily.map(d => new Date(d.period))
+  ratioChart.data.datasets[0].data = sr.daily.map(d => d.spendEarnRatio)
+  ratioChart.update()
+
+  // health = last day's spend/earn ratio
+  let lastRatio = sr.daily[sr.daily.length - 1]?.spendEarnRatio ?? 0
+
+  if (lastRatio >= 0.9 && lastRatio <= 1.1) {
+    ratioStatus.value = 'good'
+    ratioSuggestions.value = []
+  } 
+  else if (lastRatio >= 0.75 && lastRatio <= 1.25) {
+    ratioStatus.value = 'caution'
+    if (lastRatio < 0.9) {
+      // ratio is a bit too low
+      ratioSuggestions.value = [
+        'Your ratio is slightly below healthy (0.9–1.1). Aim to increase earning or reduce sinks to push toward 1.0.',
+        'Run earn-focused events (e.g. quest bonuses) to boost daily income.',
+        'Temporarily lower pack prices or auction fees to encourage more spending that raises the ratio.'
+      ]
+    } else {
+      // ratio is a bit too high
+      ratioSuggestions.value = [
+        'Your ratio is slightly above healthy (0.9–1.1). Aim to increase sinks or slow earning toward 1.0.',
+        'Introduce small, time-boxed point sinks (new cosmetics, auction fees).',
+        'Run balanced earn-and-burn events to rebalance daily flow.'
+      ]
+    }
+  } 
+  else {
+    ratioStatus.value = 'danger'
+    if (lastRatio < 0.75) {
+      // way too low
+      ratioSuggestions.value = [
+        'Ratio is far under 1.0. Urgently boost earning: add bonus quests or referral rewards.',
+        'Temporarily reduce sink pressures (lower fees, pause auctions) so earning can catch up.',
+        'Run high-value earn promotions (limited-time double points) to jump-start activity.'
+      ]
+    } else {
+      // way too high
+      ratioSuggestions.value = [
+        'Ratio is far above 1.0. Immediately increase sinks: raise pack prices or auction fees.',
+        'Launch limited-time high-cost cosmetics or bundles to burn points rapidly.',
+        'Temporarily pause large point grants in events/quests until balance returns.'
+      ]
+    }
+  }
+
   // 5) codes redeemed
   res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   let cr = await res.json()
@@ -528,13 +829,63 @@ onMounted(async () => {
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
 
+  ratioChart = new Chart(ratioCanvas.value.getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [{
+      label: 'Spend / Earn Ratio',
+      data: [],
+      borderColor: '#6366F1', // any color
+      borderWidth: 2,
+      fill: false
+    }]},
+    options: ratioOptions
+  })
+
+  netChart = new Chart(netCanvas.value.getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [
+      {
+        label: 'Daily net points',
+        data: [],
+        borderColor: colors.line,
+        backgroundColor: colors.line,
+        borderWidth: 2,
+        fill: false,
+      },
+      {
+        label: '7-day moving avg',
+        data: [],
+        borderColor: '#FACC15',  // yellow
+        backgroundColor: '#FACC15',
+        borderWidth: 2,
+        fill: false,
+        borderDash: [5,5]
+      }
+    ]},
+    options: netOptions
+  })
+
   // fetch all
   await nextTick()
   await fetchData()
 })
 
 // re-fetch whenever timeframe changes
-watch(selectedTimeframe, fetchData)
+watch(
+  selectedTimeframe,
+  async () => {
+    // don’t run until the chart is built
+    if (!netChart) return
+
+    // clear out old data so Chart.js redraws axes properly
+    netChart.data.labels = []
+    netChart.data.datasets.forEach(ds => (ds.data = []))
+    netChart.update()
+
+    // now actually re-fetch & re-populate
+    await fetchData()
+  }
+)
 </script>
 
 <style scoped>
