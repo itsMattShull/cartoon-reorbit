@@ -36,7 +36,7 @@
               :key="log.id"
               class="border-b hover:bg-gray-50"
             >
-              <td class="px-4 py-2">{{ log.user.username }}</td>
+              <td class="px-4 py-2">{{ log.user?.username ?? '—' }}</td>
               <td class="px-4 py-2 capitalize">{{ log.direction }}</td>
               <td class="px-4 py-2 text-right">{{ log.points }}</td>
               <td class="px-4 py-2">{{ log.method || '—' }}</td>
@@ -61,7 +61,7 @@
         >
           <div class="flex justify-between">
             <div>
-              <p class="font-semibold">{{ log.user.username }}</p>
+              <p class="font-semibold">{{ log.user?.username ?? '—' }}</p>
               <p class="text-sm capitalize">{{ log.direction }}</p>
               <p class="text-sm">Points: {{ log.points }}</p>
               <p class="text-sm">Method: {{ log.method || '—' }}</p>
@@ -105,9 +105,13 @@ const searchTerm   = ref('')
 
 // 1) filter by username, 2) slice to visibleCount
 const filteredLogs = computed(() =>
-  rawLogs.value.filter(log =>
-    log.user.username.toLowerCase().includes(searchTerm.value.toLowerCase())
-  )
+  rawLogs.value.filter(log => {
+    // if user or username is missing, treat as empty string
+    const name = log.user?.username ?? ''
+    return name
+      .toLowerCase()
+      .includes(searchTerm.value.toLowerCase())
+  })
 )
 const displayedLogs = computed(() =>
   filteredLogs.value.slice(0, visibleCount.value)
