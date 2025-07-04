@@ -143,6 +143,41 @@
           <canvas ref="ratioCanvas"></canvas>
         </div>
       </div>
+
+      <!-- 8) Rarity Turnover Rate -->
+      <div class="lg:col-span-2">
+        <h2 class="text-xl font-semibold mb-2 flex items-center">
+          Rarity Turnover Rate
+          <span class="ml-2 text-sm text-gray-500">
+            (last {{ turnoverWindowDays }} days)
+          </span>
+          <span
+            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            :class="turnoverBadgeClass"
+          >
+            {{ turnoverBadgeText }}
+          </span>
+        </h2>
+
+        <!-- NEW: healthy‐ranges subtitle -->
+        <div class="text-sm text-gray-500 mb-4">
+          <span v-for="(range, rarity) in healthyRanges" :key="rarity" class="mr-6">
+            {{ rarity }}: {{ range }}
+          </span>
+        </div>
+
+        <!-- suggestions if not healthy -->
+        <div v-if="turnoverStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
+          <p class="font-medium mb-1">How to improve:</p>
+          <ul class="list-disc list-inside space-y-1 text-sm">
+            <li v-for="(s,i) in turnoverSuggestions" :key="i">{{ s }}</li>
+          </ul>
+        </div>
+
+        <div class="chart-container">
+          <canvas ref="turnoverCanvas"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -205,6 +240,31 @@ const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
 const netWindowDays = ref(0)
+// 1) New refs & state
+const turnoverCanvas      = ref(null)
+const turnoverWindowDays  = ref(0)
+const turnoverStatus      = ref('good')   // 'good' | 'caution' | 'danger'
+const turnoverSuggestions = ref([])
+
+const turnoverBadgeClass = computed(() => ({
+  good:    'bg-green-100 text-green-800',
+  caution: 'bg-yellow-100 text-yellow-800',
+  danger:  'bg-red-100 text-red-800'
+})[turnoverStatus.value])
+
+const turnoverBadgeText = computed(() => ({
+  good:    'Healthy',
+  caution: 'Caution',
+  danger:  'Danger'
+})[turnoverStatus.value])
+
+const healthyRanges = {
+  Common:    '≥10%',
+  Uncommon:  '≥8%',
+  Rare:      '≥5%',
+  'Very Rare':'≥3%',
+  'Crazy Rare':'≥2%'
+}
 
 const netStatus      = ref('good')   // 'good' | 'caution' | 'danger'
 const netSuggestions = ref([])
@@ -244,7 +304,7 @@ const ratioBadgeText = computed(() => ({
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart, netChart, ratioChart
+    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart, netChart, ratioChart, turnoverChart
 
 // --- color palette (solid, no opacity) ---
 const colors = {
@@ -255,6 +315,14 @@ const colors = {
   clashBar:  '#8B5CF6',
   packBar:   '#3B82F6', // Blue
   histBar:   '#F59E0B'  // Amber
+}
+
+colors.turnover = {
+  Common:    '#9CA3AF', // gray
+  Uncommon:  '#3B82F6', // blue
+  Rare:      '#8B5CF6', // purple
+  'Very Rare':'#F59E0B', // amber
+  'Crazy Rare':'#EF4444'  // red
 }
 
 // --- chart options ---
@@ -867,6 +935,54 @@ async function fetchData() {
     borderWidth: 1
   }]
   ptsHistChart.update()
+
+  res = await fetch(
+    `/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}`,
+    { credentials: 'include' }
+  )
+
+  const turnrate = await res.json()
+  turnoverWindowDays.value = turnrate.days
+
+  // populate chart
+  turnoverChart.data.labels = turnrate.data.map(d => d.rarity)
+  turnoverChart.data.datasets[0].data = turnrate.data.map(d => d.turnoverRate)
+  // assign colors per rarity
+  turnoverChart.data.datasets[0].backgroundColor =
+    turnrate.data.map(d => colors.turnover[d.rarity])
+  turnoverChart.data.datasets[0].borderColor =
+    turnrate.data.map(d => colors.turnover[d.rarity])
+  turnoverChart.update()
+
+  // compute overall health (avg turnover)
+  const avg = turnrate.data.reduce((sum,d) => sum + d.turnoverRate, 0) / turnrate.data.length
+  const healthyT = 0.05   // 5%
+  const cautionT = 0.02   // 2%
+
+  if (avg >= healthyT) {
+    turnoverStatus.value = 'good'
+    turnoverSuggestions.value = []
+  }
+  else if (avg >= cautionT) {
+    turnoverStatus.value = 'caution'
+    turnoverSuggestions.value = [
+      `Your average turnover is ${(avg*100).toFixed(1)}%, slightly below target (≥${healthyT*100}%). To boost trading:`,
+      '• Run gToons Clash quests rewarding bonus points for trading Rare & Very Rare cToons',
+      '• Add Winball challenges that drop Uncommon cToons on win to spur secondary trades',
+      '• Offer a small point-fee discount or coupon (via daily login bonus) for Crazy Rare trades',
+      '• Promote visiting czones with “trade boost” rewards to unlock lower auction fees'
+    ]
+  }
+  else {
+    turnoverStatus.value = 'danger'
+    turnoverSuggestions.value = [
+      `Turnover is very low at ${(avg*100).toFixed(1)}% (<${cautionT*100}%). Immediate actions:`,
+      '• Launch limited-edition auctions for Rare & Very Rare cToons with small bid fees',
+      '• Run a 24-hr triple-points event on any trade in gToons and Winball',
+      '• Temporarily waive all point sinks on trades to encourage Crazy Rare swaps',
+      '• Add a one-time “czone marathon” reward granting Rare cToons for visiting zones'
+    ]
+  }
 }
 
 onMounted(async () => {
@@ -932,6 +1048,42 @@ onMounted(async () => {
       }
     }
   });
+
+  turnoverChart = new Chart(turnoverCanvas.value.getContext('2d'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{
+      data: [],
+      backgroundColor: [],
+      borderColor:  [],
+      borderWidth: 1,
+      datalabels: { 
+        anchor: 'end', 
+        align: 'top',
+        formatter: v => (v * 100).toFixed(1) + '%'
+      }
+    }]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        datalabels: {}
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Rarity' }
+        },
+        y: {
+          title: { display: true, text: 'Turnover Rate' },
+          ticks: {
+            callback: v => (v * 100).toFixed(0) + '%'
+          },
+          beginAtZero: true
+        }
+      }
+    },
+    plugins: [ ChartDataLabels ]
+  })
 
 
   netChart = new Chart(netCanvas.value.getContext('2d'), {
