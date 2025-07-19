@@ -5,7 +5,6 @@ import {
   getRequestHeader,
   createError
 } from 'h3'
-
 import { prisma as db } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -24,22 +23,36 @@ export default defineEventHandler(async (event) => {
   // 2) Query param
   const { gameName } = getQuery(event)
   if (!gameName || typeof gameName !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName" query parameter' })
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Missing or invalid "gameName" query parameter'
+    })
   }
 
-  try {
-    // 3) Try to load existing config
-    let config = await db.gameConfig.findUnique({
-      where: { gameName },
+  // 3) Build dynamic include based on gameName
+  const includeOptions = {}
+  if (gameName === 'Winball') {
+    includeOptions.grandPrizeCtoon = {
+      select: { id: true, name: true, rarity: true, assetPath: true }
+    }
+  } else if (gameName === 'Winwheel') {
+    includeOptions.exclusiveCtoons = {
       include: {
-        // only Winball uses a grandPrizeCtoon
-        grandPrizeCtoon: {
+        ctoon: {
           select: { id: true, name: true, rarity: true, assetPath: true }
         }
       }
+    }
+  }
+
+  try {
+    // 4) Try to load existing config
+    let config = await db.gameConfig.findUnique({
+      where: { gameName },
+      include: includeOptions
     })
 
-    // 4) If none, create defaults per‐game
+    // 5) If none, create defaults per‐game
     if (!config) {
       if (gameName === 'Winball') {
         config = await db.gameConfig.create({
@@ -48,31 +61,35 @@ export default defineEventHandler(async (event) => {
             leftCupPoints:     0,
             rightCupPoints:    0,
             goldCupPoints:     0,
-            dailyPointLimit:   100,
+            // Winball shares daily limits via GlobalGameConfig,
+            // so we only set the game‐specific fields here
             grandPrizeCtoonId: null
           },
-          include: {
-            grandPrizeCtoon: {
-              select: { id: true, name: true, rarity: true, assetPath: true }
-            }
-          }
+          include: includeOptions
         })
       } else if (gameName === 'Clash') {
         config = await db.gameConfig.create({
           data: {
             gameName,
-            // default points per win:
-            pointsPerWin:     0,
-            dailyPointLimit: 100,
-            // Winball‐only fields remain null
-            leftCupPoints:    null,
-            rightCupPoints:   null,
-            goldCupPoints:    null,
-            grandPrizeCtoonId:null
+            pointsPerWin:     0
           }
+          // no includeOptions for Clash
+        })
+      } else if (gameName === 'Winwheel') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            spinCost:      100,
+            pointsWon:     250,
+            maxDailySpins: 2
+          },
+          include: includeOptions
         })
       } else {
-        throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${gameName}"` })
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Unknown gameName "${gameName}"`
+        })
       }
     }
 
@@ -80,6 +97,9 @@ export default defineEventHandler(async (event) => {
   } catch (err) {
     console.error('Failed to fetch or create GameConfig:', err)
     if (err.statusCode) throw err
-    throw createError({ statusCode: 500, statusMessage: 'Unable to load or initialize game configuration' })
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Unable to load or initialize game configuration'
+    })
   }
 })

@@ -14,8 +14,8 @@ function validatePayload(payload) {
   }
 
   if (payload.gameName === 'Winball') {
-    // Winball needs all four cup‐point fields + dailyPointLimit
-    ['leftCupPoints','rightCupPoints','goldCupPoints','dailyPointLimit']
+    // Winball needs leftCupPoints, rightCupPoints, goldCupPoints
+    ['leftCupPoints','rightCupPoints','goldCupPoints']
       .forEach(fld => {
         if (payload[fld] == null || typeof payload[fld] !== 'number') {
           throw createError({
@@ -30,23 +30,52 @@ function validatePayload(payload) {
         statusMessage: '"grandPrizeCtoonId" must be a string or null'
       })
     }
-  }
-  else if (payload.gameName === 'Clash') {
-    // Clash needs pointsPerWin + dailyPointLimit
+
+  } else if (payload.gameName === 'Clash') {
+    // Clash needs pointsPerWin
     if (payload.pointsPerWin == null || typeof payload.pointsPerWin !== 'number') {
       throw createError({
         statusCode: 400,
         statusMessage: 'Missing or invalid "pointsPerWin", must be a number'
       })
     }
-    if (payload.dailyPointLimit == null || typeof payload.dailyPointLimit !== 'number') {
+
+  } else if (payload.gameName === 'Winwheel') {
+    // Winwheel needs spinCost, pointsWon, maxDailySpins and exclusiveCtoons[]
+    if (payload.spinCost == null || typeof payload.spinCost !== 'number') {
       throw createError({
         statusCode: 400,
-        statusMessage: 'Missing or invalid "dailyPointLimit", must be a number'
+        statusMessage: 'Missing or invalid "spinCost", must be a number'
       })
     }
-  }
-  else {
+    if (payload.pointsWon == null || typeof payload.pointsWon !== 'number') {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Missing or invalid "pointsWon", must be a number'
+      })
+    }
+    if (payload.maxDailySpins == null || typeof payload.maxDailySpins !== 'number') {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Missing or invalid "maxDailySpins", must be a number'
+      })
+    }
+    if (!Array.isArray(payload.exclusiveCtoons)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Missing or invalid "exclusiveCtoons", must be an array of cToon IDs'
+      })
+    }
+    payload.exclusiveCtoons.forEach(id => {
+      if (typeof id !== 'string') {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'Each entry in "exclusiveCtoons" must be a string cToon ID'
+        })
+      }
+    })
+
+  } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
 }
@@ -74,17 +103,19 @@ export default defineEventHandler(async (event) => {
     leftCupPoints,
     rightCupPoints,
     goldCupPoints,
-    // shared field
-    dailyPointLimit,
     grandPrizeCtoonId,
     // Clash field
-    pointsPerWin
+    pointsPerWin,
+    // Winwheel fields
+    spinCost,
+    pointsWon,
+    maxDailySpins,
+    exclusiveCtoons = []
   } = body
 
-  // 3) Upsert
+  // 3) Upsert inside a transaction
   try {
-    const result = await db.$transaction(tx => {
-      // build create / update objects based on gameName
+    const result = await db.$transaction(async tx => {
       let createData = { gameName }
       let updateData = { updatedAt: new Date() }
 
@@ -103,33 +134,63 @@ export default defineEventHandler(async (event) => {
           goldCupPoints,
           grandPrizeCtoonId: grandPrizeCtoonId || null
         }
-      } else { // Clash
+      } else if (gameName === 'Clash') {
+        createData = { ...createData, pointsPerWin }
+        updateData = { ...updateData, pointsPerWin }
+      } else if (gameName === 'Winwheel') {
         createData = {
           ...createData,
-          pointsPerWin
+          spinCost,
+          pointsWon,
+          maxDailySpins
         }
         updateData = {
           ...updateData,
-          pointsPerWin
+          spinCost,
+          pointsWon,
+          maxDailySpins
         }
       }
 
-      return tx.gameConfig.upsert({
+      // dynamic include for return
+      const includeOptions = gameName === 'Winball'
+        ? { grandPrizeCtoon: { select: { id: true, name: true, rarity: true, assetPath: true } } }
+        : gameName === 'Winwheel'
+          ? { exclusiveCtoons: { include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } } } }
+          : undefined
+
+      // upsert the config
+      const cfg = await tx.gameConfig.upsert({
         where: { gameName },
         create: createData,
         update: updateData,
-        include: {
-          // only Winball has a grandPrizeCtoon relation
-          grandPrizeCtoon: {
-            select: { id: true, name: true, rarity: true, assetPath: true }
-          }
-        }
+        include: includeOptions
       })
+
+      // if Winwheel, sync the pool join‐table
+      if (gameName === 'Winwheel') {
+        // remove old options
+        await tx.winWheelOption.deleteMany({
+          where: { gameConfigId: cfg.id }
+        })
+        // add new ones
+        if (exclusiveCtoons.length) {
+          await tx.winWheelOption.createMany({
+            data: exclusiveCtoons.map(ctoonId => ({
+              gameConfigId: cfg.id,
+              ctoonId
+            }))
+          })
+        }
+      }
+
+      return cfg
     })
 
     return result
   } catch (err) {
     console.error('Error upserting GameConfig:', err)
+    if (err.statusCode) throw err
     throw createError({ statusCode: 500, statusMessage: 'Failed to save game configuration' })
   }
 })

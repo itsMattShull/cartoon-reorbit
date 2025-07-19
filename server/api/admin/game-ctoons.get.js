@@ -27,7 +27,8 @@ export default defineEventHandler(async (event) => {
         id:        true,
         name:      true,
         rarity:    true,
-        assetPath: true
+        assetPath: true,
+        quantity: true
       }
     })
     return ctoons

@@ -112,6 +112,82 @@
         </button>
       </section>
 
+            <!-- Win Wheel Settings -->
+      <section>
+        <h2 class="text-2xl font-semibold mb-4">Win Wheel Settings</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Spin Cost (pts)</label>
+            <input type="number" v-model.number="spinCostWW" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Points Won</label>
+            <input type="number" v-model.number="pointsWonWW" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Max Daily Spins</label>
+            <input type="number" v-model.number="maxDailySpinsWW" class="input" />
+          </div>
+        </div>
+
+        <!-- multi‐select pool of exclusive cToons -->
+        <div class="mb-6 relative">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Exclusive cToon Pool
+          </label>
+          <input
+            type="text"
+            v-model="searchTermWW"
+            @focus="showDropdownWW = true"
+            @input="onSearchInputWW"
+            placeholder="Type to search…"
+            class="input"
+          />
+          <ul
+            v-if="showDropdownWW && filteredMatchesWW.length"
+            class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
+          >
+            <li
+              v-for="c in filteredMatchesWW"
+              :key="c.id"
+              @mousedown.prevent="selectPoolCtoon(c)"
+              class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+            >
+              <img :src="c.assetPath" alt="" class="w-6 h-6 rounded mr-2 object-cover border" />
+              <div>
+                <p class="text-sm">{{ c.name }}</p>
+                <p class="text-xs text-gray-500">{{ c.rarity }}</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- chips for selected pool -->
+        <div class="flex flex-wrap gap-2 mb-6">
+          <span
+            v-for="c in poolCtoons"
+            :key="c.id"
+            class="flex items-center bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm"
+          >
+            {{ c.name }}
+            <button
+              class="ml-1 focus:outline-none"
+              @click="removePoolCtoon(c)"
+            >✕</button>
+          </span>
+        </div>
+
+        <button
+          @click="saveWinWheelConfig"
+          :disabled="loadingWinWheel"
+          class="btn-primary"
+        >
+          <span v-if="!loadingWinWheel">Save Win Wheel Settings</span>
+          <span v-else>Saving…</span>
+        </button>
+      </section>
+
+
       <!-- Toast -->
       <div
         v-if="toastMessage"
@@ -126,6 +202,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
+
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  layout: 'default'
+})
 
 // ── Settings state ────────────────────────────
 const globalDailyPointLimit = ref(100)
@@ -188,10 +269,88 @@ async function loadSettings() {
     selectedCtoonId.value = wb.grandPrizeCtoon.id
     searchTerm.value      = wb.grandPrizeCtoon.name
   }
-  allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath')
+  allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath,quantity')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
+}
+
+// Win Wheel reactive state
+const spinCostWW       = ref(100)
+const pointsWonWW      = ref(250)
+const maxDailySpinsWW  = ref(2)
+const poolCtoons       = ref([])
+const searchTermWW     = ref('')
+const showDropdownWW   = ref(false)
+const loadingWinWheel  = ref(false)
+
+// reuse `allCtoons` from above for autocomplete
+const filteredMatchesWW = computed(() => {
+  const t = searchTermWW.value.trim().toLowerCase()
+  if (!t) return []
+  return allCtoons.value
+    .filter(c =>
+      // only unlimited stock
+      (c.quantity === null || c.quantity === '') &&
+      // match search term
+      c.name.toLowerCase().includes(t) &&
+      // not already selected
+      !poolCtoons.value.some(p => p.id === c.id)
+    )
+    .slice(0, 8)
+})
+
+function onSearchInputWW() {
+  showDropdownWW.value = !!searchTermWW.value.trim()
+}
+
+function selectPoolCtoon(c) {
+  poolCtoons.value.push(c)
+  searchTermWW.value = ''
+  showDropdownWW.value = false
+}
+
+function removePoolCtoon(c) {
+  poolCtoons.value = poolCtoons.value.filter(x => x.id !== c.id)
+}
+
+// Load existing Win Wheel config on mount
+async function loadWinWheelConfig() {
+  // 1) fetch the core config
+  const ww = await $fetch('/api/admin/game-config?gameName=Winwheel')
+  spinCostWW.value      = ww.spinCost
+  pointsWonWW.value     = ww.pointsWon
+  maxDailySpinsWW.value = ww.maxDailySpins
+
+  // 2) fetch the pool (assumes your GET includes an array of { ctoon: { id,name,rarity,assetPath } })
+  poolCtoons.value = (ww.exclusiveCtoons || []).map(o => o.ctoon)
+}
+
+// Save Win Wheel settings
+async function saveWinWheelConfig() {
+  loadingWinWheel.value = true
+  toastMessage.value    = ''
+
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:        'Winwheel',
+        spinCost:        spinCostWW.value,
+        pointsWon:       pointsWonWW.value,
+        maxDailySpins:   maxDailySpinsWW.value,
+        exclusiveCtoons: poolCtoons.value.map(c => c.id)
+      }
+    })
+    toastMessage.value = 'Win Wheel settings saved!'
+    toastType.value    = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving Win Wheel settings'
+    toastType.value    = 'error'
+  } finally {
+    loadingWinWheel.value = false
+  }
 }
 
 async function saveGlobalConfig() {
@@ -250,7 +409,11 @@ async function saveClashConfig() {
   }
 }
 
-onMounted(loadSettings)
+// Call it during your existing onMounted loadSettings
+onMounted(async () => {
+  await loadSettings()
+  await loadWinWheelConfig()
+})
 </script>
 
 <style scoped>
