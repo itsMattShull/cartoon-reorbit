@@ -141,7 +141,6 @@ export default defineEventHandler(async (event) => {
       create: { userId, points: prizePoints },
       update: { points: { increment: prizePoints } }
     })
-    await prisma.gamePointLog.create({ data: { userId, points: prizePoints } })
     await prisma.pointsLog.create({
       data: { userId, direction: 'increase', points: prizePoints, method: 'wheel-spin' }
     })
