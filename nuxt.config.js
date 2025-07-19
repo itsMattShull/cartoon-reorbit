@@ -20,14 +20,6 @@ export default defineNuxtConfig({
         // If you prefer absolute paths:
         // '.prisma/client/index-browser': new URL('./node_modules/.prisma/client/index-browser.js', import.meta.url).pathname
       }
-    },
-    build: {
-      rollupOptions: {
-        external: [
-          // tell Rollup not to try and resolve this import
-          '/images/poster.png'
-        ]
-      }
     }
   },
 
