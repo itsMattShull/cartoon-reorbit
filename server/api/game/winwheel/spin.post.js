@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
     data: { points: { decrement: spinCost } },
   })
   await prisma.pointsLog.create({
-    data: { userId, direction: 'decrease', points: spinCost, method: 'wheel-spin' },
+    data: { userId, direction: 'decrease', points: spinCost, method: 'Game - Win Wheel' },
   })
 
   // — Spin the wheel —
