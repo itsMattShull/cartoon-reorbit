@@ -30,9 +30,9 @@ export default defineEventHandler(async (event) => {
   // — Enforce daily limit (8 AM CST → 8 AM CST) —
   const now = new Date()
   const chicagoNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-  const offsetMs = now.getTime() - chicagoNow.getTime()
+  const offsetMs   = now.getTime() - chicagoNow.getTime()
   const y = chicagoNow.getFullYear(), m = chicagoNow.getMonth(), d = chicagoNow.getDate()
-  let resetUtcMs = new Date(y, m, d, 8, 0, 0, 0).getTime() + offsetMs
+  let resetUtcMs = new Date(y, m, d, 8, 0, 0).getTime() + offsetMs
   if (now.getTime() < resetUtcMs) {
     resetUtcMs -= 24 * 60 * 60 * 1000
   }
@@ -84,12 +84,16 @@ export default defineEventHandler(async (event) => {
 
     case 2:
       result = 'ctoonLeast'
-      // — choose the "least minted" Common cToon in C-Mart —
-      // 1) find all Commons in C-Mart
+      // — choose the "least minted" Common cToon in C-Mart that has already released —
+      // 1) find all Commons in C-Mart whose releaseDate is before now
       const commons = await prisma.ctoon.findMany({
-        where: { inCmart: true, rarity: 'Common' }
+        where: {
+          inCmart: true,
+          rarity: 'Common',
+          releaseDate: { lt: new Date() }
+        }
       })
-      // 2) for each, get highest minted number
+      // 2) compute highest mint number for each
       const withMints = await Promise.all(commons.map(async c => {
         const agg = await prisma.userCtoon.aggregate({
           where: { ctoonId: c.id },
@@ -97,16 +101,16 @@ export default defineEventHandler(async (event) => {
         })
         return { ctoon: c, highestMint: agg._max.mintNumber || 0 }
       }))
-      // 3) filter those where highestMint < total quantity
+      // 3) pick those where highestMint < total quantity
       const finite = withMints.filter(({ ctoon, highestMint }) =>
         ctoon.quantity != null && highestMint < ctoon.quantity
       )
       if (finite.length > 0) {
         const minMint = Math.min(...finite.map(x => x.highestMint))
-        const least = finite.filter(x => x.highestMint === minMint)
+        const least  = finite.filter(x => x.highestMint === minMint)
         ctoonIdToMint = least[Math.floor(Math.random() * least.length)].ctoon.id
       } else {
-        // fallback: Commons with unlimited quantity
+        // fallback: Commons with unlimited quantity and already released
         const unlimited = commons.filter(c => c.quantity == null)
         if (unlimited.length === 0) {
           throw createError({
@@ -135,7 +139,7 @@ export default defineEventHandler(async (event) => {
     await prisma.userPoints.upsert({
       where: { userId },
       create: { userId, points: prizePoints },
-      update: { points: { increment: prizePoints } },
+      update: { points: { increment: prizePoints } }
     })
     await prisma.gamePointLog.create({ data: { userId, points: prizePoints } })
     await prisma.pointsLog.create({
@@ -168,10 +172,10 @@ export default defineEventHandler(async (event) => {
     data: {
       userId,
       result,
-      points:   result === 'points' ? prizePoints : null,
-      ctoonId:  ctoonIdToMint,
-      sliceIndex,
-    },
+      points:  result === 'points' ? prizePoints : null,
+      ctoonId: ctoonIdToMint,
+      sliceIndex
+    }
   })
 
   // — Fetch won cToon details if any —
