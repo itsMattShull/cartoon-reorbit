@@ -95,6 +95,11 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
 import { useAuth } from '@/composables/useAuth'
 
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
+
 const sliceCount  = 6
 const sliceAngle  = 360 / sliceCount
 const startOffset = -90  // slice 0 starts at top (-90°)
