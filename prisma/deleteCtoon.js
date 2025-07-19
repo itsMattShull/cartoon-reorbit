@@ -1,8 +1,5 @@
 // deleteCtoonsByName.js
 import { prisma } from '../server/prisma.js'
-import { createError } from 'h3'
-import { mintQueue } from '../../../server/utils/queues'  // if needed elsewhere
-import { QueueEvents } from 'bullmq'
 
 // Deletes a single cToon and all its dependent records
 async function deleteCtoonAndDependencies(ctoonId) {
