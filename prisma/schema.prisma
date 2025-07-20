@@ -97,6 +97,8 @@ model User {
   createdAt        DateTime         @default(now())
   lastLogin        DateTime?
   discordCreatedAt DateTime?
+  isBooster       Boolean   @default(false)
+  boosterSince    DateTime? 
 
   cZones           CZone[]
   logins           LoginLog[]
