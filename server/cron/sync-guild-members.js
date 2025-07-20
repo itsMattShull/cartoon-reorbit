@@ -120,11 +120,11 @@ async function syncGuildMembers() {
     }
 
     // 6) final report (optional logging)
-    console.log(
-      `[sync-guild] processed ${memberList.length} members, ` +
-      `nicknames updated: ${updated.length}, ` +
-      `boosters: ${boosterMembers.length}`
-    )
+    // console.log(
+    //   `[sync-guild] processed ${memberList.length} members, ` +
+    //   `nicknames updated: ${updated.length}, ` +
+    //   `boosters: ${boosterMembers.length}`
+    // )
 
   } catch (err) {
     // console.error('[sync-guild] sync failed:', err)
