@@ -26,9 +26,10 @@ export default defineEventHandler(async (event) => {
     default:   days = 30
   }
 
-  // — Compute turnover rate per rarity over the last N days
+  // — Compute turnover rate per rarity over the last N days, including accepted auctions
   const raw = await prisma.$queryRawUnsafe(`
 WITH filtered AS (
+  -- all cToons requested in trade‐offers created in the window
   SELECT
     toc."userCtoonId",
     c."rarity"
@@ -42,20 +43,35 @@ WITH filtered AS (
   WHERE
     toc.role = 'REQUESTED'
     AND toff."createdAt" >= now() - INTERVAL '${days} days'
-),
-total_per_rarity AS (
+
+  UNION ALL
+
+  -- all cToons sold via auctions that closed (with a winner) in the window
   SELECT
-    c2."rarity",
-    COUNT(uc2.id)::float AS total_supply
-  FROM "UserCtoon" uc2
+    a."userCtoonId",
+    c2."rarity"
+  FROM "Auction" a
+  JOIN "UserCtoon" uc2
+    ON a."userCtoonId" = uc2.id
   JOIN "Ctoon" c2
     ON uc2."ctoonId" = c2.id
-  WHERE uc2."createdAt" >= now() - INTERVAL '${days} days'
-  GROUP BY c2."rarity"
+  WHERE
+    a.status = 'CLOSED'
+    AND a."winnerAt" >= now() - INTERVAL '${days} days'
+),
+total_per_rarity AS (
+  -- total supply of newly‐created cToons in the same window
+  SELECT
+    c3."rarity",
+    COUNT(uc3.id)::float AS total_supply
+  FROM "UserCtoon" uc3
+  JOIN "Ctoon" c3
+    ON uc3."ctoonId" = c3.id
+  WHERE uc3."createdAt" >= now() - INTERVAL '${days} days'
+  GROUP BY c3."rarity"
 )
 SELECT
   f.rarity,
-  -- cast to numeric before rounding so ROUND(numeric, int) is valid
   ROUND(
     (
       COUNT(DISTINCT f."userCtoonId")

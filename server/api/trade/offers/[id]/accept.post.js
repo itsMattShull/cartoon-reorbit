@@ -100,27 +100,43 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 6) All good → transfer cToons, deduct points, & accept
-  await prisma.$transaction([
-    // a) deduct points from initiator and give points to recipient
-    prisma.userPoints.update({
-      where: { userId: offer.initiatorId },
-      data: {
-        points: { decrement: offer.pointsOffered }
-      }
-    }),
-    prisma.pointsLog.create({
-      data: { userId: offer.initiatorId, points: offer.pointsOffered, method: "Requested Trade", direction: 'decrease' }
-    }),
-    prisma.userPoints.update({
-      where: { userId: offer.recipientId },
-      data: { points: { increment: offer.pointsOffered } }
-    }),
-    prisma.pointsLog.create({
-      data: { userId: offer.recipientId, points: offer.pointsOffered, method: "Accepted Trade", direction: 'increase' }
-    }),
+  // 6) All good → transfer cToons, deduct points (if any), & accept
+  const txOps = []
 
-    // b) move each cToon
+  // only do points updates/logs if there's actually an amount offered
+  if (offer.pointsOffered > 0) {
+    txOps.push(
+      // deduct from initiator
+      prisma.userPoints.update({
+        where: { userId: offer.initiatorId },
+        data: { points: { decrement: offer.pointsOffered } }
+      }),
+      prisma.pointsLog.create({
+        data: {
+          userId: offer.initiatorId,
+          points: offer.pointsOffered,
+          method: 'Requested Trade',
+          direction: 'decrease'
+        }
+      }),
+      // credit to recipient
+      prisma.userPoints.update({
+        where: { userId: offer.recipientId },
+        data: { points: { increment: offer.pointsOffered } }
+      }),
+      prisma.pointsLog.create({
+        data: {
+          userId: offer.recipientId,
+          points: offer.pointsOffered,
+          method: 'Accepted Trade',
+          direction: 'increase'
+        }
+      })
+    )
+  }
+
+  // b) move each cToon to its new owner
+  txOps.push(
     ...offer.ctoons.map(tc => {
       const newOwner = tc.role === 'OFFERED'
         ? offer.recipientId
@@ -136,10 +152,12 @@ export default defineEventHandler(async (event) => {
       where: { id: offerId },
       data: { status: 'ACCEPTED' }
     })
-  ])
+  )
+
+  await prisma.$transaction(txOps)
 
   try {
-    // 7) Notify the initiator via Discord DM
+    // 7) Notify the initiator via Discord DM (unchanged)…
     if (initiator?.discordId && process.env.BOT_TOKEN) {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'
@@ -147,7 +165,6 @@ export default defineEventHandler(async (event) => {
         ? 'https://www.cartoonreorbit.com/trade-offers'
         : 'http://localhost:3000/trade-offers'
 
-      // 7a) Open or fetch DM channel
       const dmChannel = await $fetch(
         'https://discord.com/api/v10/users/@me/channels',
         {
@@ -160,7 +177,6 @@ export default defineEventHandler(async (event) => {
         }
       )
 
-      // 7b) Send acceptance message
       const messageContent = [
         `🎉 **${me.username}** has accepted your trade offer!`,
         ``,
@@ -180,8 +196,7 @@ export default defineEventHandler(async (event) => {
       )
     }
   } catch (err) {
-    // console.error('Failed to send acceptance DM:', err)
-    // optionally report to an error-tracker here
+    // ignore DM failures
   }
 
   return { success: true }

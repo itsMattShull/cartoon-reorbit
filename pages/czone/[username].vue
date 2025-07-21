@@ -425,7 +425,7 @@
             </div>
             <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div
-                v-for="c in collectionCtoons"
+                v-for="c in sortedCollectionCtoons"
                 :key="c.id"
                 @click="selectTargetCtoon(c)"
                 class="relative flex flex-col items-center p-2 cursor-pointer border rounded hover:shadow"
@@ -451,7 +451,9 @@
                 </p>
               </div>
             </div>
-            <div class="mt-4 text-right">
+            <div v-if="tradeStep === 1"
+              class="absolute bottom-0 left-0 right-0 border-t bg-white px-6 py-4 text-right"
+            >
               <button
                 :disabled="!selectedTargetCtoons.length"
                 @click="startTrade"
@@ -470,7 +472,7 @@
             </div>
             <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div
-                v-for="c in selfCtoons"
+                v-for="c in sortedSelfCtoons"
                 :key="c.id"
                 @click="selectInitiatorCtoon(c)"
                 :class="[
@@ -886,6 +888,26 @@ const canvasBackgroundStyle = computed(() => {
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat'
   }
+})
+
+// STEP 1: Sort the other user’s collection so Unowned come first
+const sortedCollectionCtoons = computed(() => {
+  return [...collectionCtoons.value].sort((a, b) => {
+    const aOwned = selfOwnedIds.value.has(a.ctoonId)
+    const bOwned = selfOwnedIds.value.has(b.ctoonId)
+    // unowned (false) should come before owned (true)
+    return (aOwned === bOwned) ? 0 : (aOwned ? 1 : -1)
+  })
+})
+
+// STEP 2: Sort your own collection so “Unowned by Owner” first
+const sortedSelfCtoons = computed(() => {
+  return [...selfCtoons.value].sort((a, b) => {
+    const aOwnedByOwner = targetOwnedIds.value.has(a.ctoonId)
+    const bOwnedByOwner = targetOwnedIds.value.has(b.ctoonId)
+    // “unowned by owner” (false) before “owned by owner” (true)
+    return (aOwnedByOwner === bOwnedByOwner) ? 0 : (aOwnedByOwner ? 1 : -1)
+  })
 })
 
 onMounted(async () => {
