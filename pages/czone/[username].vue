@@ -1,4 +1,5 @@
 <template>
+  <div v-if="ownerIsBooster" class="main"></div>
   <Nav />
 
   <!-- Mobile Layout Only -->
@@ -7,7 +8,7 @@
     class="lg:hidden pt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
   >
     <!-- Owner Section -->
-    <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4">
+    <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4" :class="{ booster: ownerIsBooster }">
       <div
         class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
       >
@@ -44,7 +45,7 @@
         </div>
 
     <!-- CZone Canvas -->
-    <div class="flex">
+    <div class="flex" :class="{ booster: ownerIsBooster }">
       <!-- scale wrapper: only on small screens -->
       <div :style="scaleStyle">
         <div
@@ -121,41 +122,41 @@
     v-if="!loading"
     class="hidden lg:flex pt-20 px-4 py-6 max-w-6xl mx-auto flex gap-6"
   >
-    <ClientOnly>
-      <!-- Left Column: Chat and Visitors -->
-      <div class="w-1/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
-        <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mb-4">
-          <div
-            class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
-          >
-            OWNER
-          </div>
-          <img
-            :src="`/avatars/${ownerAvatar}`"
-            alt="Owner Avatar"
-            class="w-14 h-14 rounded-full border border-blue-300"
-          />
-          <div class="text-xl font-semibold text-blue-700">{{ ownerName }}</div>
-        </div>
-        <h2 class="text-lg font-bold mb-2">Visitors: {{ visitorCount }}</h2>
+    <!-- Left Column: Chat and Visitors -->
+    <div class="w-1/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
+      <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mb-4" :class="{ booster: ownerIsBooster }">
         <div
-          :ref="(el) => { if (el && chatContainer) chatContainer.value = el }"
-          class="overflow-y-auto border rounded p-2 mb-4 text-sm h-96 flex flex-col-reverse"
+          class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
         >
-          <div
-            v-for="(msg, index) in [...chatMessages].reverse()"
-            :key="index"
-            class="mb-1 flex gap-2 text-sm items-start"
-          >
-            <NuxtLink
-              :to="`/czone/${msg.user}`"
-              class="font-bold text-indigo-700 min-w-[80px] hover:underline-none no-underline"
-            >
-              {{ msg.user }}
-            </NuxtLink>
-            <div class="flex-1 break-words">{{ msg.message }}</div>
-          </div>
+          OWNER
         </div>
+        <img
+          :src="`/avatars/${ownerAvatar}`"
+          alt="Owner Avatar"
+          class="w-14 h-14 rounded-full border border-blue-300"
+        />
+        <div class="text-xl font-semibold text-blue-700">{{ ownerName }}</div>
+      </div>
+      <h2 class="text-lg font-bold mb-2">Visitors: {{ visitorCount }}</h2>
+      <div
+        :ref="(el) => { if (el && chatContainer) chatContainer.value = el }"
+        class="overflow-y-auto border rounded p-2 mb-4 text-sm h-96 flex flex-col-reverse"
+      >
+        <div
+          v-for="(msg, index) in [...chatMessages].reverse()"
+          :key="index"
+          class="mb-1 flex gap-2 text-sm items-start"
+        >
+          <NuxtLink
+            :to="`/czone/${msg.user}`"
+            class="font-bold text-indigo-700 min-w-[80px] hover:underline-none no-underline"
+          >
+            {{ msg.user }}
+          </NuxtLink>
+          <div class="flex-1 break-words">{{ msg.message }}</div>
+        </div>
+      </div>
+      <ClientOnly>
         <form @submit.prevent="sendMessage" class="flex gap-2 items-center">
           <select
             v-model="newMessage"
@@ -174,109 +175,111 @@
             Send
           </button>
         </form>
-      </div>
-    </ClientOnly>
+      </ClientOnly>
+    </div>
 
     <!-- Right Column: CZone Display -->
     <div class="min-w-[800px] bg-white rounded-xl shadow-md">
+      <div :class="{ booster: ownerIsBooster }">
       <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
-      <div
-        v-if="hasOtherZones"
-        class="flex justify-center items-center gap-4 mt-2 mb-4"
-      >
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-          @click="goToPrevious"
-          :disabled="!hasPrevious"
-        >
-          ← Zone {{ currentZoneIndex + 1 }}
-        </button>
-        <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-          @click="goToNext"
-          :disabled="!hasNext"
-        >
-          Zone {{ currentZoneIndex + 1 }} →
-        </button>
-      </div>
-      <div class="flex justify-center overflow-hidden mb-4">
         <div
-          class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
-          :style="canvasBackgroundStyle"
+          v-if="hasOtherZones"
+          class="flex justify-center items-center gap-4 mt-2 mb-4"
         >
-          <!-- Fixed-size CZone canvas/display -->
-          <div class="absolute top-0 left-0">
-            <div
-              v-for="(item, index) in cZoneItems"
-              :key="index"
-              class="absolute"
-              :style="item.style"
-            >
-              <img
-                :src="item.assetPath"
-                :alt="item.name"
-                class="object-contain cursor-pointer max-w-[initial]"
-                @click="openSidebar(item)"
-              />
+          <button
+            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+            @click="goToPrevious"
+            :disabled="!hasPrevious"
+          >
+            ← Zone {{ currentZoneIndex + 1 }}
+          </button>
+          <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
+          <button
+            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+            @click="goToNext"
+            :disabled="!hasNext"
+          >
+            Zone {{ currentZoneIndex + 1 }} →
+          </button>
+        </div>
+        <div class="flex justify-center overflow-hidden mb-4">
+          <div
+            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
+            :style="canvasBackgroundStyle"
+          >
+            <!-- Fixed-size CZone canvas/display -->
+            <div class="absolute top-0 left-0">
+              <div
+                v-for="(item, index) in cZoneItems"
+                :key="index"
+                class="absolute"
+                :style="item.style"
+              >
+                <img
+                  :src="item.assetPath"
+                  :alt="item.name"
+                  class="object-contain cursor-pointer max-w-[initial]"
+                  @click="openSidebar(item)"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="flex justify-between items-start text-sm mb-6 px-4">
-        <!-- Left side: two vertical groups -->
-        <div class="flex flex-col gap-6">
-          <!-- Group 1: zone nav buttons -->
-          <div class="flex gap-2">
-            <button
-              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-              @click="goToPreviousUser"
-            >
-              Previous cZone
-            </button>
-            <button
-              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-              @click="goToRandomUser"
-            >
-              Random cZone
-            </button>
-            <button
-              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-              @click="goToNextUser"
-            >
-              Next cZone
-            </button>
+        <div class="flex justify-between items-start text-sm mb-6 px-4">
+          <!-- Left side: two vertical groups -->
+          <div class="flex flex-col gap-6">
+            <!-- Group 1: zone nav buttons -->
+            <div class="flex gap-2">
+              <button
+                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+                @click="goToPreviousUser"
+              >
+                Previous cZone
+              </button>
+              <button
+                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+                @click="goToRandomUser"
+              >
+                Random cZone
+              </button>
+              <button
+                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+                @click="goToNextUser"
+              >
+                Next cZone
+              </button>
+            </div>
+
+            <!-- Group 2: wishlist / collection / edit -->
+            <div class="flex gap-2">
+              <button
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+                @click="openWishlist"
+              >
+                View Wishlist
+              </button>
+              <button
+                v-if="user?.id !== ownerId"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+                @click="openCollection"
+              >
+                View Collection
+              </button>
+              <button
+                v-if="user?.id === ownerId"
+                @click="navigateTo(editPath)"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
+              >
+                ✏️ Edit cZone
+              </button>
+            </div>
           </div>
 
-          <!-- Group 2: wishlist / collection / edit -->
-          <div class="flex gap-2">
-            <button
-              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
-              @click="openWishlist"
-            >
-              View Wishlist
-            </button>
-            <button
-              v-if="user?.id !== ownerId"
-              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
-              @click="openCollection"
-            >
-              View Collection
-            </button>
-            <button
-              v-if="user?.id === ownerId"
-              @click="navigateTo(editPath)"
-              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
-            >
-              ✏️ Edit cZone
-            </button>
+          <!-- Right side: points badge -->
+          <div class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm">
+            My Points: {{ user?.points ?? 0 }}
           </div>
-        </div>
-
-        <!-- Right side: points badge -->
-        <div class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm">
-          My Points: {{ user?.points ?? 0 }}
         </div>
       </div>
     </div>
@@ -583,6 +586,7 @@ const loading = ref(true)
 
 // ——— Owner & chat state ———
 const ownerName = ref(username.value)
+const ownerIsBooster = ref(false)
 const ownerAvatar = ref('/avatars/default.png')
 const ownerId = ref(null)
 const visitorCount = ref(0)
@@ -609,6 +613,11 @@ const pointsToOffer              = ref(0)
 const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
+
+watch(ownerIsBooster, (isBooster) => {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('booster-bg', !!isBooster)
+}, { immediate: true })
 
 function displayToast(message, type = 'success') {
   toastMessage.value = message
@@ -889,6 +898,7 @@ onMounted(async () => {
   try {
     const res = await $fetch(`/api/czone/${username.value}`)
     ownerName.value = res.ownerName
+    ownerIsBooster.value = res.isBooster
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
 
@@ -950,6 +960,8 @@ onBeforeUnmount(() => {
     socket.emit('leave-zone', { zone: username.value })
   }
   window.removeEventListener('resize', recalcScale)
+
+  document.body.classList.remove('booster-bg')
 })
 
 // 3) Watch for route changes if the user navigates to a different person’s cZone
@@ -1033,4 +1045,90 @@ watch(
 .slide-panel-leave-to {
   transform: translateX(100%);
 }
+
+/* Dark‐mode overrides when ownerIsBooster toggles body.booster-bg */
+  .booster-bg {
+    background-color: #121212;
+    color: #e0e0e0;
+  }
+
+  /* Utility overrides */
+  .booster-bg .bg-white           { background-color: #1a1a1a !important; }
+  .booster-bg .rounded-xl         { background-color: #1a1a1a !important; }
+  .booster-bg .shadow-md          { box-shadow: none !important; }
+  .booster-bg .border-gray-300    { border-color: #444 !important; }
+  .booster-bg .border-blue-500    { border-color: #555 !important; }
+  .booster-bg .text-black         { color: #ccc !important; }
+  .booster-bg .text-gray-600      { color: #aaa !important; }
+  .booster-bg .bg-gray-200        { background-color: #2a2a2a !important; }
+  .booster-bg .bg-gray-300        { background-color: #333 !important; }
+  .booster-bg .bg-indigo-100      { background-color: #222 !important; }
+  .booster-bg .bg-indigo-500,
+  .booster-bg .bg-indigo-600      { background-color: #333 !important; }
+  /* Owner’s username (was text-blue-700) */
+  body.booster-bg .text-blue-700 {
+    color: #ffffff !important;
+  }
+
+  /* “My Points” badge (was text-indigo-800) */
+  body.booster-bg .text-indigo-800 {
+    color: #ffffff !important;
+  }
+
+  /* Form controls */
+  .booster-bg button,
+  .booster-bg input,
+  .booster-bg select {
+    background-color: #2a2a2a !important;
+    color: #eee !important;
+    border-color: #555 !important;
+  }
+
+  /* Animated golden glow on booster elements */
+  .booster {
+    position: relative;
+    z-index: 1;
+    border: 2px solid #ffd700 !important;
+    background-clip: padding-box;
+    animation: booster-glow 3s ease-in-out infinite !important;
+  }
+
+  @keyframes booster-glow {
+    0%, 100% {
+      box-shadow:
+        0 0 8px 2px rgba(255, 215, 0, 0.6),
+        0 0 0 4px rgba(255, 215, 0, 0.2);
+    }
+    50% {
+      box-shadow:
+        0 0 20px 6px rgba(255, 215, 0, 0.9),
+        0 0 0 8px rgba(255, 215, 0, 0.3);
+    }
+  }
+
+  .main {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    height: 1px;
+    width: 1px;
+    background-color: #fff;
+    border-radius: 50%;
+    box-shadow: -42vw -4vh 0px 0px #fff,25vw -41vh 0px 0px #fff,-20vw 49vh 0px 1px #fff,5vw 40vh 1px 1px #fff,29vw 19vh 1px 0px #fff,-44vw -13vh 0px 0px #fff,46vw 41vh 0px 1px #fff,-3vw -45vh 0px 1px #fff,47vw 35vh 1px 0px #fff,12vw -8vh 1px 0px #fff,-34vw 48vh 1px 1px #fff,32vw 26vh 1px 1px #fff,32vw -41vh 1px 1px #fff,0vw 37vh 1px 1px #fff,34vw -26vh 1px 0px #fff,-14vw -49vh 1px 0px #fff,-12vw 45vh 0px 1px #fff,-44vw -33vh 0px 1px #fff,-13vw 41vh 0px 0px #fff,-36vw -11vh 0px 1px #fff,-23vw -24vh 1px 0px #fff,-38vw -27vh 0px 1px #fff,16vw -19vh 0px 0px #fff,28vw 33vh 1px 0px #fff,-49vw -4vh 0px 0px #fff,16vw 32vh 0px 1px #fff,36vw -18vh 1px 0px #fff,-25vw -30vh 1px 0px #fff,-23vw 24vh 0px 1px #fff,-2vw -35vh 1px 1px #fff,-25vw 9vh 0px 0px #fff,-15vw -34vh 0px 0px #fff,-8vw -19vh 1px 0px #fff,-20vw -20vh 1px 1px #fff,42vw 50vh 0px 1px #fff,-32vw 10vh 1px 0px #fff,-23vw -17vh 0px 0px #fff,44vw 15vh 1px 0px #fff,-40vw 33vh 1px 1px #fff,-43vw 8vh 0px 0px #fff,-48vw -15vh 1px 1px #fff,-24vw 17vh 0px 0px #fff,-31vw 50vh 1px 0px #fff,36vw -38vh 0px 1px #fff,-7vw 48vh 0px 0px #fff,15vw -32vh 0px 0px #fff,29vw -41vh 0px 0px #fff,2vw 37vh 1px 0px #fff,7vw -40vh 1px 1px #fff,15vw 18vh 0px 0px #fff,25vw -13vh 1px 1px #fff,-46vw -12vh 1px 1px #fff,-18vw 22vh 0px 0px #fff,23vw -9vh 1px 0px #fff,50vw 12vh 0px 1px #fff,45vw 2vh 0px 0px #fff,14vw -48vh 1px 0px #fff,23vw 43vh 0px 1px #fff,-40vw 16vh 1px 1px #fff,20vw -31vh 0px 1px #fff,-17vw 44vh 1px 1px #fff,18vw -45vh 0px 0px #fff,33vw -6vh 0px 0px #fff,0vw 7vh 0px 1px #fff,-10vw -18vh 0px 1px #fff,-19vw 5vh 1px 0px #fff,1vw 42vh 0px 0px #fff,22vw 48vh 0px 1px #fff,39vw -8vh 1px 1px #fff,-6vw -42vh 1px 0px #fff,-47vw 34vh 0px 0px #fff,-46vw 19vh 0px 1px #fff,-12vw -32vh 0px 0px #fff,-45vw -38vh 0px 1px #fff,-28vw 18vh 1px 0px #fff,-38vw -46vh 1px 1px #fff,49vw -6vh 1px 1px #fff,-28vw 18vh 1px 1px #fff,10vw -24vh 0px 1px #fff,-5vw -11vh 1px 1px #fff,33vw -8vh 1px 0px #fff,-16vw 17vh 0px 0px #fff,18vw 27vh 0px 1px #fff,-8vw -10vh 1px 1px #fff;
+  
+  /* stars were too big with the layers above but left the code in case no one cares  -- as in, if noone's just that  one other loner who actually cares    */
+  
+  box-shadow: 24vw 9vh 1px 0px #fff,12vw -24vh 0px 1px #fff,-45vw -22vh 0px 0px #fff,-37vw -40vh 0px 1px #fff,29vw 19vh 0px 1px #fff,4vw -8vh 0px 1px #fff,-5vw 21vh 1px 1px #fff,-27vw 26vh 1px 1px #fff,-47vw -3vh 1px 1px #fff,-28vw -30vh 0px 1px #fff,-43vw -27vh 0px 1px #fff,4vw 22vh 1px 1px #fff,36vw 23vh 0px 0px #fff,-21vw 24vh 1px 1px #fff,-16vw 2vh 1px 0px #fff,-16vw -6vh 0px 0px #fff,5vw 26vh 0px 0px #fff,-34vw 41vh 0px 0px #fff,1vw 42vh 1px 1px #fff,11vw -13vh 1px 1px #fff,48vw -8vh 1px 0px #fff,22vw -15vh 0px 0px #fff,45vw 49vh 0px 0px #fff,43vw -27vh 1px 1px #fff,20vw -2vh 0px 0px #fff,8vw 22vh 0px 1px #fff,39vw 48vh 1px 1px #fff,-21vw -11vh 0px 1px #fff,-40vw 45vh 0px 1px #fff,11vw -30vh 1px 0px #fff,26vw 30vh 1px 0px #fff,45vw -29vh 0px 1px #fff,-2vw 18vh 0px 0px #fff,-29vw -45vh 1px 0px #fff,-7vw -27vh 1px 1px #fff,42vw 24vh 0px 0px #fff,45vw -48vh 1px 0px #fff,-36vw -18vh 0px 0px #fff,-44vw 13vh 0px 1px #fff,36vw 16vh 0px 1px #fff,40vw 24vh 0px 0px #fff,18vw 11vh 0px 0px #fff,-15vw -23vh 1px 0px #fff,-24vw 48vh 0px 1px #fff,27vw -45vh 1px 0px #fff,-2vw -24vh 0px 1px #fff,-15vw -28vh 0px 0px #fff,-43vw 13vh 1px 0px #fff,7vw 27vh 1px 0px #fff,47vw 5vh 0px 0px #fff,-45vw 15vh 1px 1px #fff,-5vw -28vh 0px 1px #fff,38vw 25vh 1px 1px #fff,-39vw -1vh 1px 0px #fff,5vw 0vh 1px 0px #fff,49vw 13vh 0px 0px #fff,48vw 10vh 0px 1px #fff,19vw -28vh 0px 0px #fff,4vw 7vh 0px 0px #fff,21vw 21vh 1px 1px #fff,-15vw -15vh 0px 1px #fff,-6vw -42vh 1px 0px #fff,-15vw 48vh 1px 1px #fff,-23vw 25vh 1px 1px #fff,-48vw 25vh 0px 1px #fff,-31vw -19vh 0px 1px #fff,4vw 37vh 1px 1px #fff,-43vw 28vh 0px 0px #fff,3vw -25vh 0px 1px #fff,-39vw 14vh 0px 1px #fff,-40vw 31vh 0px 1px #fff,35vw -36vh 1px 1px #fff,16vw 49vh 0px 0px #fff,6vw 39vh 0px 0px #fff,3vw -35vh 0px 1px #fff,-44vw -2vh 1px 0px #fff,-6vw 21vh 1px 0px #fff,48vw 9vh 1px 1px #fff,-43vw 30vh 1px 1px #fff,29vw -12vh 1px 1px #fff,-48vw 13vh 1px 0px #fff,-42vw 32vh 1px 1px #fff,34vw 15vh 1px 1px #fff,29vw -37vh 1px 1px #fff,28vw 2vh 0px 0px #fff;
+  animation: zoom 16s alternate infinite; 
+}
+
+@keyframes zoom {
+    0%{
+        transform: scale(1);
+    }
+    100%{
+        transform: scale(1.5);
+    }
+}
 </style>
+
