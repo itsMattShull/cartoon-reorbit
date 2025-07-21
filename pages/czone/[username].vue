@@ -19,7 +19,7 @@
         alt="Owner Avatar"
         class="w-14 h-14 rounded-full border border-blue-300"
       />
-      <div class="text-xl font-semibold text-blue-700">{{ ownerName }}</div>
+      <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
     </div>
 
     <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
@@ -135,7 +135,7 @@
           alt="Owner Avatar"
           class="w-14 h-14 rounded-full border border-blue-300"
         />
-        <div class="text-xl font-semibold text-blue-700">{{ ownerName }}</div>
+        <div class="text-xl font-semibold text-blue-700"  style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
       </div>
       <h2 class="text-lg font-bold mb-2">Visitors: {{ visitorCount }}</h2>
       <div

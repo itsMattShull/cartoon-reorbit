@@ -95,11 +95,7 @@
         <div>
           <label class="block font-medium mb-1">cToon Rewards</label>
           <datalist id="ctoont-list">
-            <option
-              v-for="ct in ctoonOptions"
-              :key="ct.id"
-              :value="ct.name"
-            />
+            <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
           </datalist>
           <div
             v-for="(rc, idx) in ctoonRewards"
@@ -183,6 +179,13 @@ function addPrereqCtoon() {
 }
 function removePrereqCtoon(index) {
   prereqCtoons.value.splice(index, 1)
+}
+
+function filteredCtoons(input) {
+  if (input.length < 2) return []
+  return ctoonOptions.value.filter(ct =>
+    ct.name.toLowerCase().includes(input.toLowerCase())
+  )
 }
 
 // list of all cToons from the DB

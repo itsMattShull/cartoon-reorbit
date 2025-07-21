@@ -27,8 +27,7 @@
                 alt="User Avatar"
                 class="w-24 h-24 rounded-full object-cover border-4 border-indigo-500"
               />
-              <div>
-                
+              <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   <NuxtLink :to="`/czone/${user?.username}`" class="text-2xl font-bold mb-1 text-indigo-600 hover:underline">
                     {{ user?.username }}
                   </NuxtLink>
