@@ -58,8 +58,12 @@
               required
               class="w-full border rounded p-2"
             />
-            <datalist id="sets-list">
-              <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+            <datalist v-if="bulkSet.length >= 2" id="sets-list">
+              <option
+                v-for="opt in filteredBulkSetsOptions"
+                :key="opt"
+                :value="opt"
+              />
             </datalist>
           </div>
           <div>
@@ -70,8 +74,12 @@
               required
               class="w-full border rounded p-2"
             />
-            <datalist id="series-list">
-              <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+            <datalist v-if="bulkSeries.length >= 2" id="series-list">
+              <option
+                v-for="opt in filteredBulkSeriesOptions"
+                :key="opt"
+                :value="opt"
+              />
             </datalist>
           </div>
           <div>
@@ -390,6 +398,21 @@ function updateDefaults(f) {
       break
   }
 }
+
+const filteredBulkSetsOptions = computed(() => {
+  if (bulkSet.value.length < 2) return []
+  return setsOptions.value.filter(opt =>
+    opt.toLowerCase().includes(bulkSet.value.toLowerCase())
+  )
+})
+
+// new: only show bulk-series suggestions once user typed ≥2 chars
+const filteredBulkSeriesOptions = computed(() => {
+  if (bulkSeries.value.length < 2) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(bulkSeries.value.toLowerCase())
+  )
+})
 
 onMounted(async () => {
   const [setsRes, seriesRes] = await Promise.all([
