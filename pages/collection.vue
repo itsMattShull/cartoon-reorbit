@@ -230,7 +230,13 @@
               >
                 <h2 class="text-xl font-semibold mb-2">{{ uc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <img loading="lazy" :src="uc.assetPath" class="max-w-full h-auto" />
+                  <!--<img loading="lazy" :src="uc.assetPath" class="max-w-full h-auto" />-->
+                  <LazyImage
+                    :src="uc.assetPath"
+                    alt=""
+                    image-class="max-w-full h-auto"
+                    placeholder-height="8rem"
+                  />
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
@@ -294,7 +300,13 @@
                 </span>
                 <h2 class="text-xl font-semibold mb-2 mt-6">{{ wc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <img loading="lazy" :src="wc.assetPath" class="max-w-full h-auto" />
+                  <!-- <img loading="lazy" :src="wc.assetPath" class="max-w-full h-auto" /> -->
+                  <LazyImage
+                    :src="wc.assetPath"
+                    alt=""
+                    image-class="max-w-full h-auto"
+                    placeholder-height="8rem"
+                  />
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
@@ -353,11 +365,17 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <img
+                    <!-- <img
                       loading="lazy"
                       :src="c.assetPath"
                       class="max-h-48 object-contain"
                       alt=""
+                    /> -->
+                    <LazyImage
+                      :src="c.assetPath"
+                      alt=""
+                      image-class="max-h-48 object-contain"
+                      placeholder-height="8rem"
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
@@ -425,11 +443,17 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <img
+                    <!-- <img
                       loading="lazy"
                       :src="c.assetPath"
                       class="max-h-48 object-contain"
                       alt=""
+                    /> -->
+                    <LazyImage
+                      :src="c.assetPath"
+                      alt=""
+                      image-class="max-h-48 object-contain"
+                      placeholder-height="8rem"
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
@@ -504,6 +528,7 @@ import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import AddToAuction from '@/components/AddToAuction.vue'
+import LazyImage from '@/components/LazyImage.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
