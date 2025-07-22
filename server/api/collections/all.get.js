@@ -33,17 +33,28 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // 3. Get ownership info for this user
+    // 3. Which of these the user owns?
     const owned = await prisma.userCtoon.findMany({
       where: { userId, ctoonId: { in: ctoons.map(c => c.id) } },
       select: { ctoonId: true }
     })
     const ownedSet = new Set(owned.map(o => o.ctoonId))
 
-    // 4. Merge and return all results with isOwned flag
+    // 4. Compute highest mintNumber per ctoon across all users
+    const maxMintRecords = await prisma.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: { ctoonId: { in: ctoons.map(c => c.id) } },
+      _max: { mintNumber: true }
+    })
+    const maxMintMap = new Map(
+      maxMintRecords.map(r => [r.ctoonId, r._max.mintNumber ?? 0])
+    )
+
+    // 5. Merge and return
     return ctoons.map(c => ({
       ...c,
-      isOwned: ownedSet.has(c.id)
+      isOwned:     ownedSet.has(c.id),
+      highestMint: maxMintMap.get(c.id) || 0
     }))
 
   } catch (err) {

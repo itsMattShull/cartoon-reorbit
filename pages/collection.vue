@@ -312,7 +312,7 @@
         <!-- All Sets -->
         <div v-if="activeTab === 'AllSets'">
           <div
-            v-for="setName in filterMeta.sets"
+            v-for="setName in setsWithItems"
             :key="setName"
             class="mb-8"
           >
@@ -362,9 +362,18 @@
                   </div>
                   <p class="text-sm mt-2 text-center">
                     {{ c.series }} • {{ c.rarity }}
+                    <span class="block">
+                      Highest Mint #: {{ c.highestMint }}
+                    </span>
                   </p>
-                  <div class="mt-2 text-center">
+                  <div class="mt-2 flex justify-between items-center">
                     <AddToWishlist :ctoon-id="c.id" />
+                    <button
+                      class="bg-white border border-gray-300 px-3 py-1 rounded text-sm hover:bg-gray-50"
+                      @click="openOwners(c)"
+                    >
+                      View Owners
+                    </button>
                   </div>
                 </div>
               </template>
@@ -375,7 +384,7 @@
         <!-- All Series -->
         <div v-if="activeTab === 'AllSeries'">
           <div
-            v-for="seriesName in filterMeta.series"
+            v-for="seriesName in seriesWithItems"
             :key="seriesName"
             class="mb-8"
           >
@@ -425,9 +434,18 @@
                   </div>
                   <p class="text-sm mt-2 text-center">
                     {{ c.set }} • {{ c.rarity }}
+                    <span class="block">
+                      Highest Mint #: {{ c.highestMint }}
+                    </span>
                   </p>
-                  <div class="mt-2 text-center">
+                  <div class="mt-2 flex justify-between items-center">
                     <AddToWishlist :ctoon-id="c.id" />
+                    <button
+                      class="bg-white border border-gray-300 px-3 py-1 rounded text-sm hover:bg-gray-50"
+                      @click="openOwners(c)"
+                    >
+                      View Owners
+                    </button>
                   </div>
                 </div>
               </template>
@@ -437,6 +455,47 @@
       </div>
     </div>
   </div>
+
+  <!-- Owners Side-Panel -->
+   <transition name="fade">
+    <div
+      v-if="ownersPanelVisible"
+      class="fixed inset-0 bg-black bg-opacity-50 z-40"
+      @click="closeOwners"
+    />
+  </transition>
+  
+  <transition name="slide-panel">
+    <div
+      v-if="ownersPanelVisible"
+      class="fixed top-0 right-0 h-full w-auto min-w-[450px] max-w-[85%] bg-white shadow-xl z-50 p-12 overflow-y-auto"
+    >
+      <button
+        class="absolute top-3 right-3 text-gray-500 hover:text-black"
+        @click="closeOwners"
+      >✕</button>
+      <h2 class="text-xl font-bold mb-4">
+        Owners of {{ currentOwnersCtoon?.name }}
+      </h2>
+      <div v-if="ownersLoading" class="text-center py-6">Loading…</div>
+      <ul v-else class="space-y-2">
+        <li
+          v-for="owner in sortedOwners"
+          :key="owner.userId + '-' + owner.mintNumber"
+          class="flex justify-between max-w-[250px] mx-auto"
+        >
+          <span class="text-sm text-gray-600">Mint #{{ owner.mintNumber }}</span>
+          <NuxtLink
+            :to="`/czone/${owner.username}`"
+            class="text-indigo-600 hover:underline"
+          >
+            <span>{{ owner.username }}</span>
+          </NuxtLink>
+        </li>
+      </ul>
+    </div>
+  </transition>
+
 </template>
 
 <script setup>
@@ -476,6 +535,37 @@ const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
 
 const TAKE = 50
+
+const ownersPanelVisible   = ref(false)
+const ownersList           = ref([])
+const ownersLoading        = ref(false)
+const currentOwnersCtoon   = ref(null)
+
+const sortedOwners = computed(() =>
+  ownersList.value.slice().sort((a, b) => a.mintNumber - b.mintNumber)
+)
+
+async function openOwners(ctoon) {
+  currentOwnersCtoon.value = ctoon
+  ownersLoading.value      = true
+  ownersPanelVisible.value = true
+  try {
+    const res = await $fetch(`/api/collections/owners?cToonId=${ctoon.id}`)
+    // expect res = [{ userId, username, mintNumber }, …]
+    ownersList.value = res
+  } catch (err) {
+    console.error('Failed to load owners', err)
+    ownersList.value = []
+  } finally {
+    ownersLoading.value = false
+  }
+}
+
+function closeOwners() {
+  ownersPanelVisible.value = false
+  ownersList.value         = []
+  currentOwnersCtoon.value = null
+}
 
 // ─── COMPUTED: All cToons ──────────────────────────────────────────────────────
 const filteredAllCtoons = computed(() => {
@@ -616,6 +706,20 @@ function percentageOwnedBySeries(seriesName) {
   const t = totalCountBySeries(seriesName)
   return t ? Math.round((ownedCountBySeries(seriesName) / t) * 100) : 0
 }
+
+// only show sets that have at least one cToon under them
+const setsWithItems = computed(() =>
+  filterMeta.value.sets.filter(setName =>
+    filteredAllCtoons.value.some(c => c.set === setName)
+  )
+)
+
+// only show series that have at least one cToon under them
+const seriesWithItems = computed(() =>
+  filterMeta.value.series.filter(seriesName =>
+    filteredAllCtoons.value.some(c => c.series === seriesName)
+  )
+)
 
 // ─── MOUNT & INFINITE SCROLL ─────────────────────────────────────────────────
 onMounted(async () => {
