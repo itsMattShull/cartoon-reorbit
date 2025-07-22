@@ -564,7 +564,7 @@ const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
 
-const TAKE = 50
+const TAKE = 300
 
 const ownersPanelVisible   = ref(false)
 const ownersList           = ref([])
