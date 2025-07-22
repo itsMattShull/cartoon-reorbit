@@ -562,6 +562,7 @@ const visibleUser      = ref(0)
 
 const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
+const hasLoadedWishlist = ref(false)
 
 const TAKE = 50
 
@@ -680,19 +681,23 @@ const filteredAndSortedWishlistCtoons = computed(() =>
 // ─── TAB SWITCH & DATA LOADERS ─────────────────────────────────────────────────
 function switchTab(tab) {
   activeTab.value = tab
-  if (tab === 'AllSets' || tab === 'AllSeries') {
-    if (!allCtoons.value.length) loadAll()
-    else visibleAll.value = TAKE
-  }
+  console.log('[switchTab] now →', tab)
+
   if (tab === 'MyCollection') {
+    // only MyCollection
     if (!userCtoons.value.length) loadUser()
     else visibleUser.value = TAKE
-  }
-  if (tab === 'MyWishlist') {
-    // only fetch the first time, and never if we're already loading
+
+  } else if (tab === 'MyWishlist') {
+    // only MyWishlist
     if (!wishlistCtoons.value.length && !isLoadingWishlist.value) {
       loadWishlist()
     }
+
+  } else if (tab === 'AllSets' || tab === 'AllSeries') {
+    // only AllSets/AllSeries
+    if (!allCtoons.value.length) loadAll()
+    else visibleAll.value = TAKE
   }
 }
 function loadMoreUser() {
@@ -713,11 +718,12 @@ async function loadUser() {
 }
 async function loadWishlist() {
   // don’t do anything if we’ve already got them or are in the middle of loading
-  if (isLoadingWishlist.value || wishlistCtoons.value.length) return
+  if (isLoadingWishlist.value || hasLoadedWishlist.value) return
 
   isLoadingWishlist.value = true
   try {
     wishlistCtoons.value = await $fetch('/api/wishlist')
+    hasLoadedWishlist.value = true
   } finally {
     isLoadingWishlist.value = false
   }
