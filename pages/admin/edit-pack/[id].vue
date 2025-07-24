@@ -225,6 +225,24 @@ function onFile (e) {
   imagePreview.value = URL.createObjectURL(file)
 }
 
+const defaultWeightConfigs = {
+  Common:      { true:  12,   false: 20   },
+  Uncommon:    { true:   7.5, false: 35   },
+  Rare:        { true:  18,   false: 45   },
+  'Very Rare': { true:  12.5, false: 75   },
+  'Crazy Rare':{ true:  10,   false: 90   }
+}
+
+/** assign default weights based on each cToon.inCmart flag */
+function assignDefaultWeights(rarity) {
+  const ids = grouped.value[rarity] || []
+  const map = defaultWeightConfigs[rarity] || {}
+  ids.forEach(id => {
+    const c = lookup.value[id]
+    weights.value[id] = map[ Boolean(c?.inCmart) ] ?? 0
+  })
+}
+
 /* ---------------- rarity / cToon state ------------ */
 const rarities = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
 const countsByRarity = reactive(
@@ -316,7 +334,7 @@ function toggleSelect (cto) {
     selectedIds.value.splice(idx,1)
     delete weights.value[id]
   }
-  rebalanceIfNeeded(rarity)
+  assignDefaultWeights(rarity)
   search.value       = ''
   suggestionsOpen.value = false
   highlighted.value  = -1
@@ -324,8 +342,8 @@ function toggleSelect (cto) {
 }
 
 function onManualWeight (rarity,id) {
-  weights.value[id] = Math.min(99,Math.max(1,Number(weights.value[id]||0)))
-  rebalanceIfNeeded(rarity,id)
+  // weights.value[id] = Math.min(99,Math.max(1,Number(weights.value[id]||0)))
+  // rebalanceIfNeeded(rarity,id)
 }
 
 if (process.client) {

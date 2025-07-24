@@ -53,7 +53,7 @@
             v-model.number="price"
             type="number"
             min="0"
-            placeholder="150"
+            placeholder="900"
             class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
             required
           />
@@ -282,65 +282,57 @@
 </template>
 
 <script setup>
-definePageMeta({
-  middleware: ['auth', 'admin'],
-  layout: 'default'
-})
+// Meta & imports
+definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from '#app'
 
-/* 1. Basic metadata -------------------------------------------------- */
+// 1️⃣ Basic pack fields
 const name        = ref('')
-const price       = ref(0)
+const price       = ref(900)
 const description = ref('')
 const inCmart     = ref(true)
 
-/* 2. Image upload ---------------------------------------------------- */
+// 2️⃣ Thumbnail upload
 const fileInput    = ref(null)
 const imageFile    = ref(null)
 const imagePreview = ref('')
-
-function onFile (e) {
+function onFile(e) {
   const file = e.target.files[0]
   if (!file) return
-  if (!['image/png', 'image/jpeg'].includes(file.type)) {
+  if (!['image/png','image/jpeg'].includes(file.type)) {
     alert('Only PNG or JPEG images are allowed.')
     fileInput.value.value = ''
     return
   }
-  imageFile.value = file
+  imageFile.value    = file
   imagePreview.value = URL.createObjectURL(file)
 }
 
-/* 3. Rarity counts --------------------------------------------------- */
-const rarities = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+// 3️⃣ Rarity counts
+const rarities = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
 const countsByRarity = reactive({
-  Common: { count: 1, probabilityPercent: 100 },
-  Uncommon: { count: 0, probabilityPercent: 0 },
-  Rare: { count: 0, probabilityPercent: 0 },
-  'Very Rare': { count: 0, probabilityPercent: 0 },
-  'Crazy Rare': { count: 0, probabilityPercent: 0 }
+  Common:      { count: 4, probabilityPercent: 100 },
+  Uncommon:    { count: 2, probabilityPercent:   100 },
+  Rare:        { count: 1, probabilityPercent:   100 },
+  'Very Rare': { count: 1, probabilityPercent:   25 },
+  'Crazy Rare':{ count: 1, probabilityPercent:   10 }
 })
-
 const rarityConfigs = computed(() =>
-Object.entries(countsByRarity)
-    .filter(([rarity, config]) => 
-      // you must have selected at least one cToon of that rarity
-      config.count > 0 && (grouped.value[rarity] || []).length > 0
-    )
-    .map(([rarity, config]) => ({
-    rarity, 
-    count: config.count,
-    probabilityPercent: config.probabilityPercent
-  }))
+  Object.entries(countsByRarity)
+    .filter(([rarity,cfg]) => cfg.count > 0 && (grouped.value[rarity]||[]).length > 0)
+    .map(([rarity,cfg]) => ({
+      rarity,
+      count: cfg.count,
+      probabilityPercent: cfg.probabilityPercent
+    }))
 )
 
-/* 4. cToon data & selection ----------------------------------------- */
-const ctoons = ref([])
-const lookup = ref({})
-const search = ref('')
-const searchInput = ref(null)
-
+// 4️⃣ cToon pool & selection
+const ctoons        = ref([])
+const lookup        = ref({})
+const search        = ref('')
+const searchInput   = ref(null)
 const selectedIds   = ref([])
 const weights       = ref({})
 const selectedCount = computed(() => selectedIds.value.length)
@@ -355,27 +347,33 @@ const grouped = computed(() => {
   return map
 })
 
-function sumWeights (rarity) {
-  return (grouped.value[rarity] || []).reduce(
-    (sum, id) => sum + (weights.value[id] || 0),
-    0
-  )
-}
-function rebalance (rarity, fixedId = null) {
-  const ids = grouped.value[rarity] || []
-  if (!ids.length) return
-  let remaining = 100
-  if (fixedId) remaining -= weights.value[fixedId]
-  const others = fixedId ? ids.filter(i => i !== fixedId) : ids
-  const base   = Math.floor(remaining / others.length)
-  let rem      = remaining - base * others.length
-  for (const id of others) {
-    weights.value[id] = base + (rem > 0 ? 1 : 0)
-    rem--
-  }
+// rarity × cToon.inCmart → static default weight map
+const defaultWeightConfigs = {
+  Common:      { true:  12,   false: 20   },
+  Uncommon:    { true:   7.5, false: 35   },
+  Rare:        { true:  18,   false: 45   },
+  'Very Rare': { true:  12.5, false: 75   },
+  'Crazy Rare':{ true:  10,   false: 90   }
 }
 
-/* 5. Autocomplete ---------------------------------------------------- */
+/** return a map of id → default weight for this rarity */
+function assignDefaultWeights(rarity) {
+  const ids = grouped.value[rarity] || []
+  const result = {}
+  const map = defaultWeightConfigs[rarity] || {}
+  ids.forEach(id => {
+    const c = lookup.value[id]
+    result[id] = map[ Boolean(c?.inCmart) ] ?? 0
+  })
+  return result
+}
+
+function sumWeights(rarity) {
+  return (grouped.value[rarity]||[])
+    .reduce((sum,id) => sum + (weights.value[id]||0), 0)
+}
+
+// 5️⃣ Autocomplete & selection
 const suggestionsOpen = ref(false)
 const highlighted     = ref(-1)
 const suggestions = computed(() => {
@@ -384,70 +382,69 @@ const suggestions = computed(() => {
   if (term) list = list.filter(c => c.name.toLowerCase().includes(term))
   return list.slice(0, 50)
 })
-function onInputFocus () { suggestionsOpen.value = true }
+function onInputFocus() { suggestionsOpen.value = true }
 watch(search, () => { suggestionsOpen.value = true })
-function highlightNext () {
+function highlightNext() {
   if (!suggestions.value.length) return
   highlighted.value = (highlighted.value + 1) % suggestions.value.length
 }
-function highlightPrev () {
+function highlightPrev() {
   if (!suggestions.value.length) return
   highlighted.value =
     (highlighted.value - 1 + suggestions.value.length) % suggestions.value.length
 }
-function chooseHighlighted () {
+function chooseHighlighted() {
   if (highlighted.value >= 0) toggleSelect(suggestions.value[highlighted.value])
 }
-function toggleSelect (cto) {
+function toggleSelect(cto) {
   const { id, rarity } = cto
   const idx = selectedIds.value.indexOf(id)
   if (idx === -1) {
     selectedIds.value.push(id)
-    weights.value[id] = 0
   } else {
     selectedIds.value.splice(idx, 1)
     delete weights.value[id]
   }
-  rebalance(rarity)
-  search.value = ''
+  // apply defaults
+  const norm = assignDefaultWeights(rarity)
+  Object.entries(norm).forEach(([iid,val]) => {
+    weights.value[iid] = val
+  })
   suggestionsOpen.value = false
-  highlighted.value = -1
-  searchInput.value?.blur()        // ⇠ unfocus after selection
+  highlighted.value     = -1
+  searchInput.value?.blur()
 }
-function onManualWeight (rarity, id) {
+function onManualWeight(rarity, id) {
   weights.value[id] = Math.min(99, Math.max(1, Number(weights.value[id] || 0)))
-  rebalance(rarity, id)
 }
-
-/* close dropdown on outside click */
 if (process.client) {
   window.addEventListener('click', e => {
     if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
   })
 }
 
-/* 6. Validation ------------------------------------------------------ */
+// 6️⃣ Validation
 const countsValid = computed(() =>
-  Object.entries(grouped.value).every(
-    ([r, ids]) =>
-      !ids.length ||
-      (countsByRarity[r].count >= 1 && countsByRarity[r].count <= ids.length &&
-       countsByRarity[r].probabilityPercent >= 1 && countsByRarity[r].probabilityPercent <= 100)
+  Object.entries(grouped.value).every(([r,ids]) =>
+    !ids.length ||
+    (
+      countsByRarity[r].count >= 1 && countsByRarity[r].count <= ids.length &&
+      countsByRarity[r].probabilityPercent >= 1 && countsByRarity[r].probabilityPercent <= 100
+    )
   ) && rarityConfigs.value.some(r => r.probabilityPercent === 100)
 )
-
-const allValid = computed(() =>
-  countsValid.value &&
-  rarities.every(r => !grouped.value[r]?.length || sumWeights(r) === 100)
-)
+const allValid = computed(() => {
+  const groups = Object.keys(grouped.value)
+  return groups.length > 0 && groups.every(r => sumWeights(r) === 100)
+})
 const submitTooltip = computed(() => {
   if (!imageFile.value) return 'Thumbnail image required'
-  if (!countsValid.value) return 'Ensure at least one rarity has 100% probability and others between 1% and 100%'
+  if (!countsValid.value) return 'Ensure at least one rarity has 100% and others 1–100%'
   if (!allValid.value) return 'Fix card counts or weights'
   return ''
 })
 
-/* 7. Fetch data ------------------------------------------------------ */
+// 7️⃣ Fetch data
 onMounted(async () => {
   try {
     const data = await $fetch('/api/admin/ctoon-pool')
@@ -458,26 +455,29 @@ onMounted(async () => {
   }
 })
 
-/* 8. Submit ---------------------------------------------------------- */
-const router = useRouter()
-async function submit () {
-  if (!allValid.value || !countsValid.value || !imageFile.value) return
+// watch for bulk changes
+watch(selectedIds, () => {
+  Object.keys(grouped.value).forEach(r => {
+    const norm = assignDefaultWeights(r)
+    Object.entries(norm).forEach(([iid,val]) => weights.value[iid] = val)
+  })
+})
 
+// 8️⃣ Submit
+const router = useRouter()
+async function submit() {
+  if (!allValid.value || !countsValid.value || !imageFile.value) return
   const form = new FormData()
-  form.append('meta', JSON.stringify({
+  const meta = {
     name: name.value,
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
-    rarityConfigs: rarityConfigs.value, // already includes probabilityPercent
-    ctoonOptions: selectedIds.value.map(id => ({
-      ctoonId: id,
-      weight: weights.value[id]
-    }))
-  }))
-
+    rarityConfigs: rarityConfigs.value,
+    ctoonOptions: selectedIds.value.map(id => ({ ctoonId: id, weight: weights.value[id] }))
+  }
+  form.append('meta', JSON.stringify(meta))
   form.append('image', imageFile.value)
-
   try {
     await $fetch('/api/admin/packs', { method: 'POST', body: form })
     router.push('/admin/packs')
