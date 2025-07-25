@@ -113,13 +113,13 @@ async function endMatch(io, match, result) {
         // 8) Award if possible
         if (toGive > 0) {
           await db.gamePointLog.create({ data: { userId, points: toGive } });
-          await db.userPoints.upsert({
+          const updated = await db.userPoints.upsert({
             where: { userId },
             create: { userId, points: toGive },
             update: { points: { increment: toGive } }
           });
           await db.pointsLog.create({
-            data: { userId, points: toGive, method: "Game - gToons Clash", direction: 'increase' }
+            data: { userId, points: toGive, total: updated.points, method: "Game - gToons Clash", direction: 'increase' }
           });
         }
       }
@@ -870,24 +870,24 @@ setInterval(async () => {
 
       if (shouldFinalize && highestBid > 0) {
         // debit the winner
-        await tx.userPoints.update({
+        const loser = await tx.userPoints.update({
           where: { userId: highestBidderId },
           data: { points: { decrement: highestBid } }
         });
 
         await tx.pointsLog.create({
-          data: { userId: highestBidderId, points: highestBid, method: "Auction", direction: 'decrease' }
+          data: { userId: highestBidderId, points: highestBid, total: loser.points, method: "Auction", direction: 'decrease' }
         });
 
         // credit the creator
-        await tx.userPoints.upsert({
+        const winner = await tx.userPoints.upsert({
           where: { userId: creatorId },
           create: { userId: creatorId, points: highestBid },
           update: { points: { increment: highestBid } }
         });
 
         await tx.pointsLog.create({
-          data: { userId: creatorId, points: highestBid, method: "Auction", direction: 'increase' }
+          data: { userId: creatorId, points: highestBid, total: winner.points, method: "Auction", direction: 'increase' }
         });
 
         // transfer the cToon

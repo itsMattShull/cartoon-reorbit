@@ -337,6 +337,7 @@ model PointsLog {
   userId     String
   direction  String? // 'increase' or 'decrease'
   points     Int
+  total      Int?      // the user’s total points _after_ this change
   method     String?
   createdAt  DateTime @default(now())
 

@@ -54,12 +54,12 @@ export default defineEventHandler(async (event) => {
   if ((up?.points || 0) < spinCost) {
     throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
   }
-  await prisma.userPoints.update({
+  const updated = await prisma.userPoints.update({
     where: { userId },
     data: { points: { decrement: spinCost } },
   })
   await prisma.pointsLog.create({
-    data: { userId, direction: 'decrease', points: spinCost, method: 'Game - Win Wheel' },
+    data: { userId, direction: 'decrease', points: spinCost, total: updated.points, method: 'Game - Win Wheel' },
   })
 
   // — Spin the wheel —
@@ -141,8 +141,8 @@ export default defineEventHandler(async (event) => {
       create: { userId, points: prizePoints },
       update: { points: { increment: prizePoints } }
     })
-    await prisma.pointsLog.create({
-      data: { userId, direction: 'increase', points: prizePoints, method: 'Game - Win Wheel' }
+    const updated = await prisma.pointsLog.create({
+      data: { userId, direction: 'increase', points: prizePoints, total: updated.points, method: 'Game - Win Wheel' }
     })
   }
 

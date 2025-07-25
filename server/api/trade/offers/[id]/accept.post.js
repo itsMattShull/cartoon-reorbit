@@ -1,4 +1,3 @@
-// server/api/trade/offers/[id]/accept.post.js
 import {
   defineEventHandler,
   getRequestHeader,
@@ -23,9 +22,7 @@ export default defineEventHandler(async (event) => {
   const offer = await prisma.tradeOffer.findUnique({
     where: { id: offerId },
     include: {
-      ctoons: {
-        include: { userCtoon: true }
-      }
+      ctoons: { include: { userCtoon: true } }
     }
   })
   if (!offer) throw createError({ statusCode: 404, statusMessage: 'Offer not found' })
@@ -100,61 +97,57 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 6) All good → transfer cToons, deduct points (if any), & accept
-  const txOps = []
-
-  // only do points updates/logs if there's actually an amount offered
-  if (offer.pointsOffered > 0) {
-    txOps.push(
-      // deduct from initiator
-      prisma.userPoints.update({
+  // 6) All good → transfer cToons, deduct points, log totals, & accept
+  await prisma.$transaction(async (tx) => {
+    if (offer.pointsOffered > 0) {
+      // deduct from initiator and capture new total
+      const initiatorPoints = await tx.userPoints.update({
         where: { userId: offer.initiatorId },
-        data: { points: { decrement: offer.pointsOffered } }
-      }),
-      prisma.pointsLog.create({
+        data:  { points: { decrement: offer.pointsOffered } }
+      })
+      await tx.pointsLog.create({
         data: {
-          userId: offer.initiatorId,
-          points: offer.pointsOffered,
-          method: 'Requested Trade',
+          userId:    offer.initiatorId,
+          points:    offer.pointsOffered,
+          total:     initiatorPoints.points,
+          method:    'Requested Trade',
           direction: 'decrease'
         }
-      }),
-      // credit to recipient
-      prisma.userPoints.update({
+      })
+
+      // credit to recipient and capture new total
+      const recipientPoints = await tx.userPoints.update({
         where: { userId: offer.recipientId },
-        data: { points: { increment: offer.pointsOffered } }
-      }),
-      prisma.pointsLog.create({
+        data:  { points: { increment: offer.pointsOffered } }
+      })
+      await tx.pointsLog.create({
         data: {
-          userId: offer.recipientId,
-          points: offer.pointsOffered,
-          method: 'Accepted Trade',
+          userId:    offer.recipientId,
+          points:    offer.pointsOffered,
+          total:     recipientPoints.points,
+          method:    'Accepted Trade',
           direction: 'increase'
         }
       })
-    )
-  }
+    }
 
-  // b) move each cToon to its new owner
-  txOps.push(
-    ...offer.ctoons.map(tc => {
+    // transfer each cToon to its new owner
+    for (const tc of offer.ctoons) {
       const newOwner = tc.role === 'OFFERED'
         ? offer.recipientId
         : offer.initiatorId
-      return prisma.userCtoon.update({
+      await tx.userCtoon.update({
         where: { id: tc.userCtoonId },
-        data: { userId: newOwner }
+        data:  { userId: newOwner }
       })
-    }),
+    }
 
-    // c) mark offer accepted
-    prisma.tradeOffer.update({
+    // mark offer accepted
+    await tx.tradeOffer.update({
       where: { id: offerId },
-      data: { status: 'ACCEPTED' }
+      data:  { status: 'ACCEPTED' }
     })
-  )
-
-  await prisma.$transaction(txOps)
+  })
 
   try {
     // 7) Notify the initiator via Discord DM (unchanged)…

@@ -26,6 +26,7 @@
               <th class="px-4 py-2 text-left">User</th>
               <th class="px-4 py-2 text-left">Direction</th>
               <th class="px-4 py-2 text-right">Points</th>
+              <th class="px-4 py-2 text-right">New Total</th>
               <th class="px-4 py-2 text-left">Method</th>
               <th class="px-4 py-2 text-left">Created At (CDT)</th>
             </tr>
@@ -39,6 +40,7 @@
               <td class="px-4 py-2">{{ log.user?.username ?? '—' }}</td>
               <td class="px-4 py-2 capitalize">{{ log.direction }}</td>
               <td class="px-4 py-2 text-right">{{ log.points }}</td>
+              <td class="px-4 py-2 text-right">{{ log.total }}</td>
               <td class="px-4 py-2">{{ log.method || '—' }}</td>
               <td class="px-4 py-2 whitespace-nowrap">
                 {{ new Date(log.createdAt).toLocaleString('en-US', {

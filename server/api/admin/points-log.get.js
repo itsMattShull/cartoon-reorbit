@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
     id:        l.id,
     user:      l.user,
     direction: l.direction,
+    total:    l.total, // the user’s total points after this change
     points:    l.points,
     method:    l.method,
     createdAt: l.createdAt

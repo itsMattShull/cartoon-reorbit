@@ -124,13 +124,13 @@ export default defineEventHandler(async (event) => {
   // 7) persist points
   if (toGive > 0) {
     await prisma.gamePointLog.create({ data: { userId, points: toGive } })
-    await prisma.userPoints.upsert({
+    const updated = await prisma.userPoints.upsert({
       where: { userId },
       create: { userId, points: toGive },
       update: { points: { increment: toGive } }
     })
     await prisma.pointsLog.create({
-      data: { userId, points: toGive, method: "Game - Winball", direction: 'increase' }
+      data: { userId, points: toGive, total: updated.points, method: "Game - Winball", direction: 'increase' }
     });
   }
 

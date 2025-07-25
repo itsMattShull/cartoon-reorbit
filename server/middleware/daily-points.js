@@ -24,30 +24,33 @@ export default defineEventHandler(async (event) => {
     update: {}
   })
 
-  // 4. Try to award 500 if not yet claimed this window
-  const { count } = await prisma.userPoints.updateMany({
-    where: {
-      userId: user,
-      OR: [
-        { lastDailyAward: null },
-        { lastDailyAward: { lt: boundaryUtc } }
-      ]
-    },
-    data: {
-      points: { increment: 500 },
-      lastDailyAward: chicagoNow.toUTC().toJSDate()
-    }
-  })
-
-  // 5. Only log if we actually incremented
-  if (count > 0) {
-    await prisma.pointsLog.create({
+  // 4 & 5. Award 500 if eligible, and log with updated total
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.userPoints.updateMany({
+      where: {
+        userId: user,
+        OR: [
+          { lastDailyAward: null },
+          { lastDailyAward: { lt: boundaryUtc } }
+        ]
+      },
       data: {
-        userId:    user,
-        points:    500,
-        method:    "Daily Login",
-        direction: 'increase'
+        points:         { increment: 500 },
+        lastDailyAward: chicagoNow.toUTC().toJSDate()
       }
     })
-  }
+
+    if (count > 0) {
+      const updated = await tx.userPoints.findUnique({ where: { userId: user } })
+      await tx.pointsLog.create({
+        data: {
+          userId:    user,
+          points:    500,
+          total:     updated.points,
+          method:    "Daily Login",
+          direction: 'increase'
+        }
+      })
+    }
+  })
 })
