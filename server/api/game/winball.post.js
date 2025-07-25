@@ -147,7 +147,7 @@ export default defineEventHandler(async (event) => {
       const gp = await prisma.ctoon.findUnique({ where: { id: config.grandPrizeCtoonId } })
       if (gp) {
         // enqueue mint job instead of direct DB write
-        await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id })
+        await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id, isSpecial: true })
         grandPrizeCtoonName = gp.name
       }
     }
