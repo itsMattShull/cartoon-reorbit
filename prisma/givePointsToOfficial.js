@@ -1,4 +1,4 @@
-import { prisma } from '@/server/prisma'
+import { prisma } from '../server/prisma'
 
 async function main() {
   // 1) Look up that one user by username
