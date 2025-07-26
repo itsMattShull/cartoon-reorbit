@@ -91,6 +91,10 @@
         >
           Place Bid
         </button>
+        <!-- new: tell the user they’re already highest bidder -->
+        <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
+          You are currently the highest bidder and cannot bid again.
+        </p>
         <p v-if="!hasEnoughPoints" class="text-sm text-red-500 mt-2">
           You only have {{ userPoints }} pts.
         </p>
@@ -164,8 +168,14 @@ const displayWinner = computed(() =>
   auction.value.winnerUsername || topBidderFromHistory.value
 )
 
+// new: detect whether *this* user is currently top bidder
+const isTopBidder = computed(() =>
+  user.value?.username && topBidderFromHistory.value === user.value.username
+)
+
 const canBid = computed(() =>
   !ended.value &&
+  !isTopBidder.value &&
   bidAmount.value >= currentBid.value + 1 &&
   bidAmount.value <= userPoints.value
 )
@@ -237,6 +247,12 @@ onMounted(async () => {
       bids.value.unshift({ user: payload.user, amount: payload.amount })
       currentBid.value = payload.amount
       bidAmount.value  = payload.amount + 1
+
+      // if server extended the auction, pick up the new end time
+      if (payload.newEndAt) {
+        auction.value.endAt = payload.newEndAt
+        showToast('Auction extended by 30 s due to a late bid.', 'info')
+      }
     }
   })
 

@@ -828,9 +828,9 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('new-bid', ({ auctionId, user, amount }) => {
-    // broadcast to everyone in auction_<id>
-    io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
+  socket.on('new-bid', payload => {
+    // forward every property, including newEndAt when present
+    io.to(`auction_${payload.auctionId}`).emit('new-bid', payload)
   })
 
   socket.on('join-auction', ({ auctionId }) => {
