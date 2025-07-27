@@ -136,12 +136,12 @@ export default defineEventHandler(async (event) => {
 
   // — Award points if needed —
   if (result === 'points') {
-    await prisma.userPoints.upsert({
+    const updated = await prisma.userPoints.upsert({
       where: { userId },
       create: { userId, points: prizePoints },
       update: { points: { increment: prizePoints } }
     })
-    const updated = await prisma.pointsLog.create({
+    await prisma.pointsLog.create({
       data: { userId, direction: 'increase', points: prizePoints, total: updated.points, method: 'Game - Win Wheel' }
     })
   }
