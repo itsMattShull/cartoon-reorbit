@@ -881,6 +881,7 @@ setInterval(async () => {
         data: {
           status:   'CLOSED',
           winnerId: winningBid?.userId || null,
+          highestBidderId: winningBid?.userId || null,
           winnerAt: now,
           // if we found a valid winningBid, update highestBid to match it
           ...(winningBid && { highestBid: winningBid.amount })
