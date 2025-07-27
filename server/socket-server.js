@@ -845,66 +845,96 @@ io.on('connection', socket => {
 
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
+// in your socket‐server.js (or wherever you close auctions):
 setInterval(async () => {
-  const now = new Date();
+  const now = new Date()
+  // find all auctions that have just expired
   const toClose = await db.auction.findMany({
     where: { status: 'ACTIVE', endAt: { lte: now } }
-  });
+  })
 
   for (const auc of toClose) {
-    const { id, highestBidderId, creatorId, highestBid, userCtoonId } = auc;
+    const { id, creatorId, userCtoonId } = auc
 
-    // only adjust points/ownership if there's a bidder who isn't the creator
-    const shouldFinalize = highestBidderId && highestBidderId !== creatorId;
+    // 1) fetch *all* bids for this auction, descending
+    const allBids = await db.bid.findMany({
+      where: { auctionId: id },
+      orderBy: { amount: 'desc' }
+    })
 
+    // 2) pick the first bid whose bidder still has ≥ that many points
+    let winningBid = null
+    for (const b of allBids) {
+      const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
+      const pts     = ptsRec?.points ?? 0
+      if (pts >= b.amount) {
+        winningBid = b
+        break
+      }
+    }
+
+    // 3) Now wrap the final update & any transfers in a transaction
     await db.$transaction(async tx => {
-      // close the auction
+      // close the auction record
       await tx.auction.update({
         where: { id },
         data: {
-          status: 'CLOSED',
-          winnerId: highestBidderId,
-          winnerAt: now
+          status:   'CLOSED',
+          winnerId: winningBid?.userId || null,
+          winnerAt: now,
+          // if we found a valid winningBid, update highestBid to match it
+          ...(winningBid && { highestBid: winningBid.amount })
         }
-      });
+      })
 
-      if (shouldFinalize && highestBid > 0) {
+      // 4) if we have a real winner, do the point transfers + cToon transfer
+      if (winningBid) {
         // debit the winner
-        const loser = await tx.userPoints.update({
-          where: { userId: highestBidderId },
-          data: { points: { decrement: highestBid } }
-        });
-
+        const loserPts = await tx.userPoints.update({
+          where: { userId: winningBid.userId },
+          data: { points: { decrement: winningBid.amount } }
+        })
         await tx.pointsLog.create({
-          data: { userId: highestBidderId, points: highestBid, total: loser.points, method: "Auction", direction: 'decrease' }
-        });
+          data: {
+            userId:   winningBid.userId,
+            points:   winningBid.amount,
+            total:    loserPts.points,
+            method:   'Auction',
+            direction:'decrease'
+          }
+        })
 
         // credit the creator
-        const winner = await tx.userPoints.upsert({
-          where: { userId: creatorId },
-          create: { userId: creatorId, points: highestBid },
-          update: { points: { increment: highestBid } }
-        });
-
+        const creatorPts = await tx.userPoints.upsert({
+          where:  { userId: creatorId },
+          create: { userId: creatorId, points: winningBid.amount },
+          update: { points: { increment: winningBid.amount } }
+        })
         await tx.pointsLog.create({
-          data: { userId: creatorId, points: highestBid, total: winner.points, method: "Auction", direction: 'increase' }
-        });
+          data: {
+            userId:   creatorId,
+            points:   winningBid.amount,
+            total:    creatorPts.points,
+            method:   'Auction',
+            direction:'increase'
+          }
+        })
 
         // transfer the cToon
         await tx.userCtoon.update({
           where: { id: userCtoonId },
-          data: { userId: highestBidderId, isTradeable: true }
-        });
+          data:  { userId: winningBid.userId, isTradeable: true }
+        })
       }
-    });
+    })
 
-    // notify clients regardless
+    // 5) notify clients of the final outcome
     io.to(`auction_${id}`).emit('auction-ended', {
-      winnerId: highestBidderId,
-      winningBid: highestBid
-    });
+      winnerId:   winningBid?.userId ?? null,
+      winningBid: winningBid?.amount ?? 0
+    })
   }
-}, 60 * 1000);
+}, 60 * 1000)
 
 // Auction notifications
 setInterval(async () => {
