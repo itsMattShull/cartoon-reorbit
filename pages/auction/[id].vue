@@ -76,20 +76,12 @@
 
       <!-- Bid Form -->
       <div v-if="!ended" class="mb-6">
-        <label for="bid" class="block text-sm font-medium mb-1">Your Bid (pts)</label>
-        <input
-          id="bid"
-          type="number"
-          v-model.number="bidAmount"
-          :min="currentBid + 1"
-          class="w-full border border-gray-300 rounded px-3 py-2 mb-2"
-        />
         <button
           @click="placeBid"
           :disabled="!canBid"
           class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
         >
-          Place Bid
+          Bid {{ bidIncrement }} pts
         </button>
         <!-- new: tell the user they’re already highest bidder -->
         <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
@@ -176,8 +168,7 @@ const isTopBidder = computed(() =>
 const canBid = computed(() =>
   !ended.value &&
   !isTopBidder.value &&
-  bidAmount.value >= currentBid.value + 1 &&
-  bidAmount.value <= userPoints.value
+  userPoints.value >= bidIncrement.value
 )
 
 const hasEnoughPoints = computed(() =>
@@ -215,14 +206,20 @@ async function loadAuction() {
   userPoints.value = pts.points
 }
 
+const bidIncrement = computed(() => {
+  if (currentBid.value < 1_000)    return 10
+  if (currentBid.value < 10_000)   return 100
+  /* else */                       return 1_000
+})
+
 async function placeBid() {
   if (!canBid.value) return
   try {
     await $fetch(`/api/auction/${auctionId}/bid`, {
       method: 'POST',
-      body: { amount: bidAmount.value }
+      body: { amount: currentBid.value + bidIncrement.value }
     })
-    showToast('Bid placed!', 'success')
+    showToast(`Bid +${bidIncrement.value} placed!`, 'success')
   } catch (err) {
     showToast(err.data?.message || 'Bid failed.')
   }

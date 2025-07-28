@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse auction ID from URL and bid amount from body
-  const { id } = event.context.params   // ← make sure we grab `id` here!
+  const { id } = event.context.params
   const { amount } = await readBody(event)
   if (!id || typeof amount !== 'number') {
     throw createError({ statusCode: 422, statusMessage: 'Missing auction ID or bid amount' })
@@ -51,6 +51,19 @@ export default defineEventHandler(async (event) => {
   })
   const currentBid = highest ? highest.amount : auction.initialBet
 
+  // 4.a) Enforce the exact increment
+  const expectedIncrement = 
+    currentBid < 1_000   ? 10   :
+    currentBid < 10_000  ? 100  :
+                           1_000
+
+  if (amount !== currentBid + expectedIncrement) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `You must bid exactly +${expectedIncrement} points`
+    })
+  }
+
   // 5. Validate new bid is higher
   if (amount <= currentBid) {
     throw createError({ statusCode: 400, statusMessage: 'Bid must be higher than current bid' })
@@ -72,7 +85,7 @@ export default defineEventHandler(async (event) => {
     if (a.endAt.getTime() - now.getTime() <= 60_000) {
       extended = new Date(a.endAt.getTime() + 30_000)
     }
- 
+
     const bidRec = await tx.bid.create({
       data: { auctionId: id, userId, amount }
     })
@@ -115,6 +128,7 @@ export default defineEventHandler(async (event) => {
     })
 
     socket.on('disconnect', (reason) => {
+      // no-op
     })
 
     // give it a moment to fire off the emit
