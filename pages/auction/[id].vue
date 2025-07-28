@@ -70,7 +70,7 @@
           :disabled="!canBid"
           class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
         >
-          Bid {{ bidIncrement }} pts
+          Increase bid to {{ currentBid + bidIncrement }} pts
         </button>
         <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
           You are currently the highest bidder and cannot bid again.
