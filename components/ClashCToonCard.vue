@@ -2,6 +2,7 @@
   <div
     :class="outerClasses"
     :draggable="afford !== false"
+    @contextmenu.prevent
     @dragstart="dragStart"
     @pointerdown="startPress"
     @pointerup="endPress"
@@ -62,6 +63,7 @@ let longPressFired    = false
 
 function startPress(evt) {
   if (props.afford === false) return
+  evt.preventDefault()
   longPressFired = false
 
   // start a timer; if it completes, fire “info”
@@ -88,7 +90,8 @@ function cancelPress() {
 // build the container classes
 const outerClasses = computed(() => [
   // base layout
-  'flex flex-col items-center justify-center bg-white select-none transition',
+  'flex flex-col items-center justify-center select-none transition', // transparent if small, white if large
+  isSmall.value ? 'bg-transparent' : 'bg-white',
   'w-24 text-xs rounded',
 
   // only large cards get a border
@@ -142,5 +145,10 @@ function handleClick() {
 }
 .drop-shadow-lg {
   text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
+/* disable the iOS “touch callout” on long-press */
+:deep(img) {
+  -webkit-touch-callout: none;
 }
 </style>
