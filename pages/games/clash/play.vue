@@ -95,6 +95,7 @@
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
+      @info="showCardInfo"
       :selected="selected"
       :confirmed="confirmed"
     />
@@ -119,6 +120,7 @@
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
       @select="c => (selected = c)"
+      @info="showCardInfo"
     />
 
     <!-- Mobile confirm button -->
@@ -150,6 +152,13 @@
     >
       {{ confirmed ? 'Waiting…' : `Confirm (${secondsLeft}s)` }}
     </button>
+
+    <!-- card-info modal -->
+    <CardInfoModal
+      v-if="infoCard"
+      :card="infoCard"
+      @close="infoCard = null"
+    />
 
     <!-- Game-over modal -->
     <transition name="fade">
@@ -194,6 +203,7 @@ import { useClashSocket } from '@/composables/useClashSocket'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
+import CardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -209,6 +219,12 @@ const placements = ref([])     // [{ cardId, laneIndex }]
 const confirmed  = ref(false)
 const log        = ref([])
 const summary    = ref(null)
+
+// state for which card’s info is showing
+const infoCard = ref(null)
+function showCardInfo(card) {
+  infoCard.value = card
+}
 
 // countdown
 const secondsLeft = ref(60)

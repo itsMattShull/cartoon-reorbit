@@ -681,7 +681,6 @@ const filteredAndSortedWishlistCtoons = computed(() =>
 // ─── TAB SWITCH & DATA LOADERS ─────────────────────────────────────────────────
 function switchTab(tab) {
   activeTab.value = tab
-  console.log('[switchTab] now →', tab)
 
   if (tab === 'MyCollection') {
     // only MyCollection

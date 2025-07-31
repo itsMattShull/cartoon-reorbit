@@ -3,7 +3,10 @@
     :class="outerClasses"
     :draggable="afford !== false"
     @dragstart="dragStart"
-    @click="handleClick"
+    @pointerdown="startPress"
+    @pointerup="endPress"
+    @pointerleave="cancelPress"
+    @pointercancel="cancelPress"
   >
     <div class="relative w-24 h-24">
       <!-- the toon art -->
@@ -47,11 +50,40 @@ const props = defineProps({
   afford:   { type: Boolean, default: null },    // passed from ClashHand
   size:     { type: String,  default: 'large' }  // 'large' | 'small'
 })
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select','info'])
 
 const currentPower = computed(() => props.card.power)
 
 const isSmall = computed(() => props.size === 'small')
+// Long‐press vs short‐press logic:
+const PRESS_DURATION = 600  // ms threshold
+let pressTimer        = null
+let longPressFired    = false
+
+function startPress(evt) {
+  if (props.afford === false) return
+  longPressFired = false
+
+  // start a timer; if it completes, fire “info”
+  pressTimer = setTimeout(() => {
+    longPressFired = true
+    emit('info', props.card)
+  }, PRESS_DURATION)
+}
+
+function endPress(evt) {
+  if (props.afford === false) return
+  clearTimeout(pressTimer)
+
+  // if we didn’t already trigger the long-press, it’s a tap → select
+  if (!longPressFired) {
+    emit('select', props.card)
+  }
+}
+
+function cancelPress() {
+  clearTimeout(pressTimer)
+}
 
 // build the container classes
 const outerClasses = computed(() => [
@@ -93,7 +125,8 @@ function dragStart(evt) {
 
 function handleClick() {
   if (props.afford === false) return
-  emit('select', props.card)
+  // emit('select', props.card)
+  emit('info', props.card)
 }
 </script>
 

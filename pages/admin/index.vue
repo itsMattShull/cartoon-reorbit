@@ -677,7 +677,6 @@ async function fetchData() {
     { credentials: 'include' }
   )
   const np = await res.json()
-  console.log('np: ', np)
   netWindowDays.value = np.days
 
   // populate the chart

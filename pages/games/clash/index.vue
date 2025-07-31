@@ -19,6 +19,7 @@
           :key="c.id"
           :card="c"
           size="large"
+          @info="showCardInfo"
         />
       </div>
 
@@ -58,6 +59,13 @@
     </button>
   </section>
 
+  <!-- Info modal for long-presses on the lobby cards -->
+  <ClashCardInfoModal
+    v-if="infoCard"
+    :card="infoCard"
+    @close="infoCard = null"
+  />
+
   <!-- Child route for /games/clash/play -->
   <NuxtPage v-if="route.path === '/games/clash/play'" />
 </template>
@@ -70,6 +78,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useClashSocket } from '@/composables/useClashSocket'
 import ClashCToonCard from '@/components/ClashCToonCard.vue'
 import Nav from '@/components/Nav.vue'
+import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -82,6 +91,12 @@ await fetchSelf()
 const deck     = ref([])
 const loaded   = ref(false)
 const starting = ref(false)
+
+// which card (if any) is being shown in the info modal
+const infoCard = ref(null)
+function showCardInfo(card) {
+  infoCard.value = card
+}
 
 // Fisher–Yates shuffle
 function shuffle(arr) {

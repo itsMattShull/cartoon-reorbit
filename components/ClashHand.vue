@@ -22,6 +22,7 @@
         :selected="selected && selected.id === c.id"
         :afford="c.cost <= remainingEnergy"
         @select="handleSelect"
+        @info="emit('info',$event)"
       />
     </div>
   </div>
@@ -37,7 +38,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   remainingEnergy: { type: Number, default: 1 },
 })
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select','info'])
 
 function handleSelect (card) {
   if (props.disabled) return

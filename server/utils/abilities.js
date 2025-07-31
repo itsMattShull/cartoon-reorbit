@@ -18,128 +18,117 @@
 
 export const abilityRegistry = {
   /* ----------------------------------------------------------------
-   *  Simple shared abilities (existing)
-   * ----------------------------------------------------------------*/
-
-  /** Flame Bug – Deal damage to a random enemy in lane */
-  flame_bug: {
-    onReveal ({ game, side, laneIndex, card }) {
-      const target = side === 'player' ? 'ai' : 'player'
-      const laneArr = game.state.lanes[laneIndex][target]
-      if (!laneArr.length) return
-      const idx  = Math.floor(Math.random() * laneArr.length)
-      const dmg  = card.abilityData?.damage ?? 1
-      laneArr[idx].power = Math.max(0, laneArr[idx].power - dmg)
-      game.log.push(`${card.name} deals ${dmg} dmg to ${laneArr[idx].name}`)
-    }
-  },
-
-  /** Heal Ally – Heals all friendlies in lane by N (default 1) */
-  heal_ally: {
-    onReveal ({ game, side, laneIndex, card }) {
-      const amt = card.abilityData?.heal ?? 1
-      const laneArr = game.state.lanes[laneIndex][side]
-      laneArr.forEach(c => { c.power += amt })
-      game.log.push(`${card.name} heals allies in lane +${amt}`)
-    }
-  },
-
-  /* ----------------------------------------------------------------
    *  Spreadsheet Abilities (one per g‑toon) – keys match admin UI
    * ----------------------------------------------------------------*/
 
   /** Ed – Always Sneaking Up */
   always_sneaking_up: {
     onStart ({ game, side, card }) {
+      // console.log(`${card.name} is always sneaking up for ${side}!`)
+      game.log.push(`${card.name} is always sneaking up for ${side}!`)
       const hand = side === 'player' ? game.state.playerHand : game.state.aiHand
       if (!hand.find(c => c.id === card.id)) hand.unshift(card)
     }
   },
 
-  /** Pebbles Flintstone – Heals allies by 3 */
-  heal_ally_big: {
-    onReveal ({ game, side, laneIndex, card }) {
-      const amt = 3
-      game.state.lanes[laneIndex][side].forEach(c => (c.power += amt))
-      game.log.push(`${card.name} heals lane allies +${amt}`)
-    }
-  },
-
   /** Princess Morbucks – Gotcha Now */
   gotcha_now: {
-    onReveal ({ game, side, laneIndex, card }) {
-      const opponent = side === 'player' ? 'ai' : 'player'
-      const oppAction = game._pendingActions?.[opponent]
-      if (oppAction && oppAction.laneIndex === laneIndex) {
-        card.power += 4
-        game.log.push(`${card.name} gains +4 Power (Gotcha!)`)
-      }
+    onReveal({ game, side, laneIndex, card }) {
+      // figure out if the lane you’re in is a DOUBLE_ABILITIES lane
+      const laneKey = game.state.lanes[laneIndex].abilityKey;
+      // if double-abilities, we want to allow up to 2 buffs, otherwise only 1
+      const maxTriggers = laneKey === 'DOUBLE_ABILITIES' ? 2 : 1;
+
+      // guard so we never buff more than maxTriggers times
+      card._gotchaCount = card._gotchaCount || 0;
+      if (card._gotchaCount >= maxTriggers) return;
+
+      // only buff if the opponent also played here
+      const opponent      = side === 'player' ? 'ai' : 'player';
+      const oppSelections = game._pendingActions?.[opponent] || [];
+      if (!oppSelections.some(sel => sel.laneIndex === laneIndex)) return;
+
+      // do the buff
+      card.power += 4;
+      card._gotchaCount += 1;
+      game.log.push(
+        `${card.name} gains +4 Power (Gotcha Now) in ${game.state.lanes[laneIndex].name}`
+      );
     }
   },
 
   /** Dexter – Time and Space */
   time_and_space: {
     onReveal ({ game, laneIndex, card }) {
-      const newLane = game._allLanes[Math.floor(Math.random() * game._allLanes.length)]
-      game.state.lanes[laneIndex] = {
-        ...newLane,
-        revealed: true,
-        player: [],
-        ai: []
-      }
-      game.log.push(`${card.name} replaced the location!`)
+      // pick a random new “template” from your original lane definitions
+      const newDef = game._allLanes[Math.floor(Math.random() * game._allLanes.length)]
+
+      // grab the existing lane object and its cards
+      const lane = game.state.lanes[laneIndex]
+      const oldPlayers = lane.player
+      const oldAi      = lane.ai
+
+      // overwrite only the metadata, preserve the arrays
+      lane.id         = newDef.id
+      lane.name       = newDef.name
+      lane.desc       = newDef.desc
+      lane.abilityKey = newDef.effect    // assuming your lanes.json uses `effect` → `abilityKey`
+      lane.revealed   = true
+
+      // re-attach the cards you had in that lane
+      lane.player = oldPlayers
+      lane.ai     = oldAi
+
+      game.log.push(`${card.name} replaced the location with ${lane.name}!`)
     }
   },
 
   /** Lee Kanker – Take That */
   take_that: {
-    onTurnStart ({ game, side }) {
-      game.state.lanes.forEach(lane => {
-        lane[side]
-          .filter(c => !c.abilityKey)
-          .forEach(c => (c.power += 2))
-      })
+    onReveal({ game, side, laneIndex, card }) {
+      const laneArr = game.state.lanes[laneIndex][side];
+
+      // buff every non-ability card in that lane once, exactly when
+      // this take_that resolves
+      laneArr
+        .filter(c => !c.abilityKey)
+        .forEach(c => {
+          c.power += 2;
+        });
+      game.log.push(
+        `${card.name} shouts “Take that!” — +2 Power to non-ability toons in ${game.state.lanes[laneIndex].name}`
+      );
     }
   },
 
   /** Mojo Jojo – Watchful Eye */
   watchful_eye: {
-    onReveal ({ laneIndex, card }) {
-      card._watchfulLane = laneIndex
-      card._watchfulPending = true
+    // Single onReveal that both _sets_ the “next‐turn” flag and can cancel it
+    onReveal({ game, side, laneIndex, card }) {
+      // first time we see it in this turn, schedule a buff next turn
+      if (card._watchfulRevealTurn == null) {
+        card._watchfulRevealTurn = game.state.turn
+        card._watchfulLane       = laneIndex
+        card._watchfulCanceled   = false
+      }
     },
-    onTurnStart ({ game, side }) {
-      // apply +5 if flag still pending
-      game.state.lanes.forEach(lane => {
-        lane[side].forEach(c => {
-          if (c._watchfulPending) {
-            c.power += 5
-            c._watchfulPending = false
-            game.log.push(`${c.name} gains +5 Power (Watchful Eye)`)
-          }
-        })
-      })
-    },
-    onReveal ({ side, laneIndex, card }) {
-      // cancel pending buff if you played here again
-      if (card._watchfulLane === laneIndex) card._watchfulPending = false
-    }
   },
 
-  /** Raven – Power Up (double lane power each turn) */
-  power_up: {
-    onTurnEnd ({ game, side, laneIndex }) {
-      const laneArr = game.state.lanes[laneIndex][side]
-      const total = laneArr.reduce((s, c) => s + c.power, 0)
-      laneArr.forEach(c => (c.power += total)) // double total by adding again proportionally
-    }
-  },
-
-  /** Samurai Jack – Helping Hand */
-  helping_hand: {
+  /** Helping Hand */
+  helping_hands: {
     onTurnEnd ({ game, side, laneIndex, card }) {
+      // only apply once per helping_hand
+      if (card._helpingApplied) return
+      card._helpingApplied = true
+
       const laneArr = game.state.lanes[laneIndex][side]
-      laneArr.filter(c => c.id !== card.id).forEach(c => (c.power += 1))
+        // buff every other toon in the lane
+        .filter(c => c.id !== card.id)
+
+      laneArr.forEach(c => c.power += 1)
+      game.log.push(
+        `${card.name} gives Helping Hand ➞ +1 Power to each other toon`
+      )
     }
   },
 
@@ -147,20 +136,20 @@ export const abilityRegistry = {
    *  Lane effects (keys match your lanes.json “effect” field)
    * ----------------------------------------------------------------*/
 
+  /** Dexter’s Lab – trigger a card’s onReveal twice */
   DOUBLE_ABILITIES: {
-    onReveal({ game, laneIndex }) {
-      const lane = game.state.lanes[laneIndex]
-      // apply twice per card on both sides
-      for (const side of ['player','ai']) {
-        lane[side].forEach(card => {
-          const def = abilityRegistry[card.abilityKey]
-          if (def?.onReveal) {
-            def.onReveal({ game, side, laneIndex, card })
-            def.onReveal({ game, side, laneIndex, card })
-          }
-        })
+    onReveal({ game, side, laneIndex, card }) {
+      if (!card) return
+      const cardDef = abilityRegistry[card.abilityKey]
+      if (cardDef?.onReveal) {
+        // run twice
+        cardDef.onReveal({ game, side, laneIndex, card })
+        cardDef.onReveal({ game, side, laneIndex, card })
+        // console.log(`${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`)
+        game.log.push(
+          `${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`
+        )
       }
-      game.log.push(`${lane.name}: Abilities triggered twice`)
     }
   },
 
