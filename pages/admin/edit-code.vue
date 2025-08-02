@@ -73,6 +73,12 @@
                 class="flex-1 border rounded p-2"
                 placeholder="Type or select cToon name"
               />
+              <img
+                v-if="findCtoon(rc.ctoonName)?.assetPath"
+                :src="findCtoon(rc.ctoonName).assetPath"
+                class="w-8 h-8 object-cover rounded"
+                alt="cToon preview"
+              />
               <input
                 v-model.number="rc.quantity"
                 type="number"
@@ -114,6 +120,12 @@
                 type="text"
                 class="flex-1 border rounded p-2"
                 placeholder="Type or select cToon name"
+              />
+              <img
+                v-if="findCtoon(pc.ctoonName)?.assetPath"
+                :src="findCtoon(pc.ctoonName).assetPath"
+                class="w-8 h-8 object-cover rounded"
+                alt="cToon preview"
               />
               <button
                 type="button"
@@ -177,6 +189,10 @@ const ctoonOptions  = ref([])
 // loading state
 const pending       = ref(true)
 const fetchError    = ref(null)
+
+function findCtoon(name) {
+  return ctoonOptions.value.find(ct => ct.name === name)
+}
 
 // helper to format ISO to CST datetime-local
 function isoToCSTLocal(iso) {

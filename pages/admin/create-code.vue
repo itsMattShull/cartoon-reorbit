@@ -60,6 +60,13 @@
               class="flex-1 border rounded p-2"
               placeholder="Type or select cToon name"
             />
+            <!-- inline preview -->
+            <img
+              v-if="findCtoon(pc.ctoonName)"
+              :src="findCtoon(pc.ctoonName).assetPath"
+              class="w-8 h-8 object-cover rounded"
+              alt="cToon preview"
+            />
             <button
               type="button"
               @click="removePrereqCtoon(idx)"
@@ -103,12 +110,23 @@
             class="flex items-center space-x-2 mb-2"
           >
             <input
-              v-model="rc.ctoonName"
+              :value="rc.ctoonName"
+              @input="e => { 
+                const val = e.target.value;
+                rc.ctoonName = val; 
+                onCtoonInput(val);
+              }"
               list="ctoont-list"
               type="text"
               required
               class="flex-1 border rounded p-2"
               placeholder="Type or select cToon name"
+            />
+            <img
+              v-if="findCtoon(rc.ctoonName)"
+              :src="findCtoon(rc.ctoonName).assetPath"
+              class="w-8 h-8 object-cover rounded"
+              alt="cToon preview"
             />
             <input
               v-model.number="rc.quantity"
@@ -190,6 +208,17 @@ function filteredCtoons(input) {
 
 // list of all cToons from the DB
 const ctoonOptions = ref([])
+
+function findCtoon(name) {
+  return ctoonOptions.value.find(ct => ct.name === name)
+}
+
+const highlighted = ref('')
+
+// whenever an input changes, set highlighted to that value
+function onCtoonInput(name) {
+  highlighted.value = name
+}
 
 onMounted(async () => {
   try {
