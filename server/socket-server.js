@@ -1025,7 +1025,7 @@ setInterval(async () => {
   for (const auc of soonAuctions) {
     try {
       const botToken  = process.env.BOT_TOKEN
-      const channelId = '1370959477968339004'
+      const channelId = '1401244687163068528'
       const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : 'http://localhost:3001'
