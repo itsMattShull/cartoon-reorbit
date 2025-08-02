@@ -1,26 +1,26 @@
 [
   {
     "key": "always_sneaking_up",
-    "label": "Always Sneaking Up (Card always starts in hand)"
+    "label": "Always Sneaking Up: Card always starts in hand"
   },
   {
     "key": "gotcha_now",
-    "label": "Gotcha Now (+4 if Opp. also plays a card in this lane)"
+    "label": "Gotcha Now: +4 if Opp. also plays a card in this lane"
   },
   {
     "key": "time_and_space",
-    "label": "Time & Space (Replace lane with a new lane ability)"
+    "label": "Time & Space: Replace lane with a new lane ability"
   },
   {
     "key": "take_that",
-    "label": "Take That (+2 to your ability-less cards in the same lane)"
+    "label": "Take That: +2 to your ability-less cards in the same lane"
   },
   {
     "key": "watchful_eye",
-    "label": "Watchful Eye (+5 next turn if no cards played in this lane)"
+    "label": "Watchful Eye: +5 next turn if no cards played in this lane"
   },
   {
     "key": "helping_hands",
-    "label": "Helping Hands (+1 power to all cards in this lane)"
+    "label": "Helping Hands: +1 power to all cards in this lane"
   }
 ]

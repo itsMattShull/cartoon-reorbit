@@ -33,6 +33,10 @@ const io = new Server(httpServer, { cors: { origin: '*' } })
 const zoneVisitors = {}        // zone → count
 const zoneSockets  = {}        // zone → Set(socketId)
 
+// near top, alongside pveMatches:
+const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
+const pvpMatches = new Map();    // roomId -> { battle, recordId }
+
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
@@ -165,6 +169,68 @@ function startSelectTimer(io, match) {
 
 
 io.on('connection', socket => {
+  // --- List open PvP rooms ---
+  socket.on('listClashRooms', async () => {
+    // fetch only active, waiting rooms
+    const rooms = Array.from(pvpRooms.entries())
+      .filter(([id, data]) => data.players.length === 1)
+      .map(([id, data]) => ({ id, owner: data.players[0] }));
+    socket.emit('clashRooms', rooms);
+  });
+
+  // --- Create a new PvP room ---
+  socket.on('createClashRoom', ({ roomId, userId, deck }) => {
+    // store room
+    pvpRooms.set(roomId, { players: [userId], decks: { [userId]: deck } });
+    // persist to DB
+    db.clashGame.create({ data: { player1UserId: userId, player2UserId: null } })
+      .then(record => {
+        pvpRooms.get(roomId).recordId = record.id;
+      });
+    socket.join(roomId);
+    // notify lobby
+    io.emit('roomCreated', { id: roomId, owner: userId });
+  });
+
+  // --- Join existing PvP room ---
+  socket.on('joinClashRoom', ({ roomId, userId, deck }) => {
+    const room = pvpRooms.get(roomId);
+    if (!room || room.players.length !== 1) {
+      socket.emit('joinError', { message: 'Room unavailable.' });
+      return;
+    }
+    room.players.push(userId);
+    room.decks[userId] = deck;
+    socket.join(roomId);
+    // update DB record with player2UserId
+    db.clashGame.update({ where: { id: room.recordId }, data: { player2UserId: userId } });
+
+    // start PvP match
+    const battleId = randomUUID();
+    const battle = createBattle({
+      playerDeck: room.decks[ room.players[0] ],
+      aiDeck:     room.decks[ room.players[1] ], // reuse second deck field
+      battleId,
+      lanes: LANES
+    });
+    // store match
+    pvpMatches.set(roomId, { battle, recordId: room.recordId });
+
+    // emit gameStart to both
+    io.to(roomId).emit('gameStart', battle.publicState());
+  });
+
+  // --- Relay selectCards & game flow ---
+  socket.on('selectPvPCards', ({ selections }) => {
+    const roomId = socket.data.roomId;
+    const match  = pvpMatches.get(roomId);
+    if (!match) return;
+    const side   = match.battle.state.priority === 'player1' ? 'player' : 'player2';
+    match.battle.select(side, selections);
+    match.battle.confirm(side);
+    broadcastPhase(io, match);
+  });
+
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', async ({ deck, userId }) => {
     const aiDeck = shuffle(deck).slice(0, 12)

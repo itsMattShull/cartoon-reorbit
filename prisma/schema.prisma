@@ -43,6 +43,7 @@ model Ctoon {
   abilityData     Json?
 
   owners          UserCtoon[]
+  deckCards        ClashDeckCard[]
   rewardCtoons    RewardCtoon[]
   packOptions     PackCtoonOption[]
   gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
@@ -101,6 +102,7 @@ model User {
   boosterSince    DateTime? 
 
   cZones           CZone[]
+  clashDecks       ClashDeck[]
   logins           LoginLog[]
   gamePointLogs    GamePointLog[]
   pointsLogs       PointsLog[]
@@ -513,4 +515,24 @@ model WinWheelOption {
 
   @@unique([gameConfigId, ctoonId])
   @@index([ctoonId])
+}
+
+model ClashDeck {
+  id         String           @id @default(uuid())
+  userId     String
+  name       String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id])
+  cards      ClashDeckCard[]
+}
+
+model ClashDeckCard {
+  id        String    @id @default(uuid())
+  deckId    String
+  ctoonId   String
+
+  deck      ClashDeck @relation(fields: [deckId], references: [id])
+  ctoon     Ctoon     @relation(fields: [ctoonId], references: [id])
 }

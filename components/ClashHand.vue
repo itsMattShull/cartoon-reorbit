@@ -16,12 +16,12 @@
       :class="{ 'cursor-not-allowed opacity-50': cards.length === 0 || disabled }"
     >
       <ClashCToonCard
-        v-for="c in cards"
-        :key="c.id"
+        v-for="(c, idx) in cards"
+        :key="idx"                        
         :card="c"
-        :selected="selected && selected.id === c.id"
+        :selected="selected === c"        
         :afford="c.cost <= remainingEnergy"
-        @select="handleSelect"
+        @select="() => emit('select', c)"
         @info="emit('info',$event)"
       />
     </div>

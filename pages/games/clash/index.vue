@@ -1,78 +1,77 @@
 <template>
   <Nav />
 
-  <section
-    v-if="route.path === '/games/clash'"
-    class="pt-20 pb-10 max-w-4xl mx-auto text-center"
-  >
+  <section v-if="route.path === '/games/clash'" class="pt-20 pb-10 max-w-4xl mx-auto text-center">
     <h1 class="text-3xl font-bold mb-6">gToon Clash</h1>
 
-    <!-- Deck preview or loading skeleton -->
-    <div class="mb-8">
-      <!-- Actual cards once loaded -->
-      <div
-        v-if="loaded && deck.length"
-        class="flex flex-wrap justify-center gap-4"
+    <!-- Manage Decks Button -->
+    <div class="mb-6 text-right">
+      <NuxtLink
+        to="/games/clash/decks"
+        class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
       >
+        Manage Decks
+      </NuxtLink>
+    </div>
+
+    <!-- Deck selector -->
+    <div class="mb-6">
+      <label class="block mb-2 font-medium">Choose Your Deck</label>
+      <select v-model="selectedDeckId" class="border rounded px-3 py-2 w-full">
+        <option disabled value="">-- select deck --</option>
+        <option v-for="d in decks" :key="d.id" :value="d.id">
+          {{ d.name }} ({{ d.cards.length }})
+        </option>
+      </select>
+    </div>
+
+    <!-- Deck preview / loading -->
+    <div class="mb-8">
+      <div v-if="loaded && deck.length === 12" class="flex flex-wrap justify-center gap-4">
         <ClashCToonCard
-          v-for="c in deck"
-          :key="c.id"
+          v-for="(c, idx) in deck"
+          :key="`${c.id}-${idx}`"
           :card="c"
           size="large"
           @info="showCardInfo"
         />
       </div>
 
-      <!-- Loading skeleton (12 card placeholders) -->
-      <div
-        v-else-if="!loaded"
-        class="flex flex-wrap justify-center gap-4 animate-pulse"
-      >
-        <div
-          v-for="n in 12"
-          :key="n"
-          class="w-24 h-32 bg-gray-200 rounded flex flex-col items-center justify-center"
-        >
-          <div class="w-20 h-20 bg-gray-300 rounded mb-1" />
-          <div class="h-3 w-16 bg-gray-300 rounded mb-1" />
-          <div class="h-2 w-12 bg-gray-300 rounded" />
-        </div>
+      <div v-else-if="!loaded" class="flex flex-wrap justify-center gap-4 animate-pulse">
+        <div v-for="n in 12" :key="n" class="w-24 h-32 bg-gray-200 rounded" />
+      </div>
+
+      <div v-else class="text-red-600 font-semibold">
+        <p>You need exactly 12 G-toons.</p>
+        <NuxtLink to="/games/clash/decks" class="underline text-indigo-600">
+          Build a deck
+        </NuxtLink>
+        before playing.
       </div>
     </div>
 
-    <!-- Not enough G-toons notice -->
-    <p
-      v-if="loaded && deck.length < 12"
-      class="mt-6 text-red-600 font-semibold max-w-md mx-auto"
-    >
-      You need at least <strong>12 G-toons</strong> to play Clash. Acquire more in the
-      <NuxtLink to="/shop" class="text-indigo-600 underline">cMart</NuxtLink> and come back!
-    </p>
-
-    <!-- Start button -->
     <button
       @click="startMatch"
-      :disabled="starting || deck.length < 12 || !loaded"
+      :disabled="starting || deck.length !== 12 || !loaded || !selectedDeckId"
       class="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white px-6 py-2 rounded mt-8"
     >
       {{ starting ? 'Starting…' : 'Start Match vs AI' }}
     </button>
   </section>
 
-  <!-- Info modal for long-presses on the lobby cards -->
+  <!-- Info modal -->
   <ClashCardInfoModal
     v-if="infoCard"
     :card="infoCard"
     @close="infoCard = null"
   />
 
-  <!-- Child route for /games/clash/play -->
+  <!-- Game route -->
   <NuxtPage v-if="route.path === '/games/clash/play'" />
 </template>
 
 <script setup>
-// ⚔️ gToon Clash Lobby
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useRouter, useRoute } from 'vue-router'
 import { useClashSocket } from '@/composables/useClashSocket'
@@ -83,76 +82,84 @@ import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { socket, battleState } = useClashSocket()
-const router  = useRouter()
-const route   = useRoute()
+const router = useRouter()
+const route = useRoute()
 const { user, fetchSelf } = useAuth()
 await fetchSelf()
 
-const deck     = ref([])
-const loaded   = ref(false)
+const decks = ref([])
+const selectedDeckId = ref('')
+const deck = ref([])
+const loaded = ref(false)
 const starting = ref(false)
-
-// which card (if any) is being shown in the info modal
 const infoCard = ref(null)
+
 function showCardInfo(card) {
   infoCard.value = card
 }
 
-// Fisher–Yates shuffle
+// Fisher–Yates shuffle helper (optional)
 function shuffle(arr) {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
+  const copy = arr.slice()
+  for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
   }
-  return a
+  return copy
 }
 
-async function loadDeck() {
+// Fetch and filter decks on mount
+async function loadDecks() {
   try {
-    const all = await $fetch('/api/user/ctoons?isGtoon=true')
-    deck.value = shuffle(all).slice(0, 12)
-  } catch (err) {
-    console.error('Failed to load G-toons:', err)
-    deck.value = []
-  } finally {
-    loaded.value = true
+    const all = await $fetch('/api/game/clash/decks')
+    decks.value = all.filter(d => d.cards.length === 12)
+  } catch (e) {
+    console.error('Failed to load decks:', e)
+    decks.value = []
   }
+}
+
+// Replace the preview whenever selection changes
+function loadDeckFromSelection(id) {
+  if (!id) {
+    deck.value = []
+  } else {
+    const sel = decks.value.find(d => d.id === id)
+    deck.value = sel ? shuffle(sel.cards) : []
+  }
+  loaded.value = true
 }
 
 function startMatch() {
-  if (deck.value.length < 12) return
+  if (deck.value.length !== 12) return
   starting.value = true
   socket.emit('joinPvE', { deck: deck.value, userId: user.value.id })
 }
 
-onMounted(() => {
-  loadDeck()
-
-  // only now will socket be non-null, so register handlers here
-  socket.on('gameStart', state => {
-    battleState.value = state
-    starting.value    = false
-    router.push('/games/clash/play')
-  })
-
-  socket.on('phaseUpdate', state => {
-    battleState.value = state
-  })
+onMounted(async () => {
+  loaded.value = false
+  await loadDecks()
+  deck.value = []
+  loaded.value = true
 })
 
-onBeforeUnmount(() => {
-  // clean up listeners so they don't pile up if you come back
-  socket.off('gameStart')
-  socket.off('phaseUpdate')
+watch(selectedDeckId, (newId) => {
+  loaded.value = false
+  loadDeckFromSelection(newId)
+})
+
+socket.on('gameStart', state => {
+  battleState.value = state
+  starting.value = false
+  router.push('/games/clash/play')
+})
+
+socket.on('phaseUpdate', state => {
+  battleState.value = state
 })
 </script>
 
 <style scoped>
-/***** Skeleton animation *****/
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.4; }
-}
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
 .animate-pulse > div { animation: pulse 1.5s ease-in-out infinite; }
 </style>

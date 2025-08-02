@@ -314,22 +314,16 @@ function wireSocket() {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
-  // are we un-placing?
-  const idx = placements.value.findIndex(p => p.card?.id === selected.value.id)
+  // try to un-place _this exact card instance_ via object identity
+  const idx = placements.value.findIndex(p => p.card === selected.value)
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
-  // otherwise, check that this new card is still affordable
-  const costSum = pendingCost.value
-  if (selected.value.cost + costSum > game.value.playerEnergy) {
-    // optionally show a toast: “Not enough energy!”
-    return
-  }
-
+  // otherwise push a new placement for this unique card
   placements.value.push({
-    card:    selected.value,
+    card:      selected.value,
     laneIndex: laneIdx
   })
 }
