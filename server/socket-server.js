@@ -955,7 +955,7 @@ setInterval(async () => {
       })
 
       // 4) if we have a real winner, do the point transfers + cToon transfer
-      if (winningBid) {
+      if (winningBid.userId !== null && winningBid.userId !== undefined && winningBid.userId !== '') {
         // debit the winner
         const loserPts = await tx.userPoints.update({
           where: { userId: winningBid.userId },

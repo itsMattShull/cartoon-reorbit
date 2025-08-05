@@ -8,7 +8,7 @@ const connection = {
 }
 
 // Create a BullMQ worker to process mint jobs
-const worker = new Worker('mintQueue', async job => {
+const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
   try {
     const { userId, ctoonId, isSpecial = false } = job.data
 
