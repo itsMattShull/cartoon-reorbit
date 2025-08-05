@@ -6,4 +6,4 @@ const connection = {
   password: process.env.REDIS_PASSWORD || undefined,
 }
 
-export const mintQueue = new Queue('mintQueue', { connection })
+export const mintQueue = new Queue(process.env.MINT_QUEUE_KEY, { connection })
