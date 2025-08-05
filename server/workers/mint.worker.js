@@ -93,10 +93,10 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
 
 // Optional: logging
 worker.on('completed', job => {
-  // console.log(`Mint job ${job.id} completed`)
+  console.log(`Mint job ${job.id} completed`)
 })
 worker.on('failed', (job, err) => {
-  // console.error(`Mint job ${job?.id} failed: ${err.message}`)
+  console.error(`Mint job ${job?.id} failed: ${err.message}`)
 })
 
 export default worker
