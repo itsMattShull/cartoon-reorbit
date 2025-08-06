@@ -954,8 +954,14 @@ setInterval(async () => {
         }
       })
 
+      // unlock the cToon
+      await tx.userCtoon.update({
+        where: { id: userCtoonId },
+        data:  { isTradeable: true }
+      })
+
       // 4) if we have a real winner, do the point transfers + cToon transfer
-      if (winningBid.userId !== null && winningBid.userId !== undefined && winningBid.userId !== '') {
+      if (winningBid) {
         // debit the winner
         const loserPts = await tx.userPoints.update({
           where: { userId: winningBid.userId },
