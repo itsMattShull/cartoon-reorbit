@@ -229,8 +229,23 @@
           <div
             v-for="auction in myAuctions"
             :key="auction.id"
-            class="bg-white rounded-lg shadow p-4 h-full"
+            class="relative bg-white rounded-lg shadow p-4 h-full"
           >
+            <!-- status badge -->
+            <div class="absolute top-2 right-2">
+              <span
+                v-if="new Date(auction.endAt) > now"
+                class="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+              >
+                In Progress
+              </span>
+              <span
+                v-else
+                class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded"
+              >
+                Ended
+              </span>
+            </div>
             <div class="flex-grow flex items-center justify-center mb-4">
               <img :src="auction.assetPath" class="max-w-full rounded" />
             </div>
