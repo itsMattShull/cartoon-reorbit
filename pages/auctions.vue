@@ -5,13 +5,15 @@
     <h1 class="text-3xl font-bold mb-6">Auctions</h1>
 
     <div class="lg:flex lg:gap-6">
-      <!-- Filters & Sort sidebar -->
+      <!-- Toggle Filters on Mobile -->
       <button
         class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
         @click="showFilters = !showFilters"
       >
         {{ showFilters ? 'Hide Filters' : 'Show Filters & Sort' }}
       </button>
+
+      <!-- Sidebar Filters -->
       <aside
         :class="[
           showFilters ? 'block' : 'hidden',
@@ -68,6 +70,40 @@
                 class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
               />
               <span class="ml-2 capitalize">{{ r }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Filter by Ownership -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Ownership</p>
+          <div class="space-y-1">
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="all"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">All</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="owned"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Owned Only</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="unowned"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Un-owned Only</span>
             </label>
           </div>
         </div>
@@ -157,12 +193,18 @@ import Toast from '@/components/Toast.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
-const auctions = ref([])
-const isLoading = ref(false)
+const auctions         = ref([])
+const isLoading        = ref(false)
+const now              = ref(new Date())
+let timer              = null
 
-// for live countdown
-const now = ref(new Date())
-let timer = null
+// Filters & sorting
+const searchQuery      = ref('')
+const selectedSeries   = ref([])
+const selectedRarities = ref([])
+const selectedOwned    = ref('all')
+const sortBy           = ref('endAsc')
+const showFilters      = ref(false)
 
 onMounted(() => {
   timer = setInterval(() => {
@@ -175,21 +217,24 @@ onUnmounted(() => {
   clearInterval(timer)
 })
 
-// Filters & sorting
-const searchQuery = ref('')
-const selectedSeries = ref([])
-const selectedRarities = ref([])
-const sortBy = ref('endAsc')
-const showFilters = ref(false)
-
 function loadAuctions() {
   isLoading.value = true
   $fetch('/api/auctions')
-    .then((data) => { auctions.value = data })
+    .then(data => { auctions.value = data })
     .finally(() => { isLoading.value = false })
 }
 
-// derive unique filter options
+function formatRemaining(endAt) {
+  const diff = new Date(endAt) - now.value
+  if (diff <= 0) return 'ended'
+  const hrs  = Math.floor(diff / 3600000)
+  const mins = Math.floor((diff % 3600000) / 60000)
+  const secs = Math.floor((diff % 60000) / 1000)
+  if (hrs > 0)  return `${hrs}h ${mins}m ${secs}s`
+  if (mins > 0) return `${mins}m ${secs}s`
+  return `${secs}s`
+}
+
 const uniqueSeries = computed(() => {
   const s = new Set(auctions.value.map(a => a.series).filter(Boolean))
   return [...s].sort()
@@ -199,33 +244,25 @@ const uniqueRarities = computed(() => {
   return [...r].sort()
 })
 
-// helper to format remaining time with seconds
-function formatRemaining(endAt) {
-  const diff = new Date(endAt) - now.value
-  if (diff <= 0) return 'ended'
-  const hrs = Math.floor(diff / 3600000)
-  const mins = Math.floor((diff % 3600000) / 60000)
-  const secs = Math.floor((diff % 60000) / 1000)
-  if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`
-  if (mins > 0) return `${mins}m ${secs}s`
-  return `${secs}s`
-}
-
-// filter and sort
 const filteredAuctions = computed(() => {
   return auctions.value
     .filter(a => a.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
     .filter(a => !selectedSeries.value.length || selectedSeries.value.includes(a.series))
     .filter(a => !selectedRarities.value.length || selectedRarities.value.includes(a.rarity))
+    .filter(a => {
+      if (selectedOwned.value === 'owned')   return a.isOwned
+      if (selectedOwned.value === 'unowned') return !a.isOwned
+      return true
+    })
     .sort((a, b) => {
       switch (sortBy.value) {
-        case 'endAsc': return new Date(a.endAt) - new Date(b.endAt)
-        case 'nameAsc': return a.name.localeCompare(b.name)
+        case 'endAsc':   return new Date(a.endAt) - new Date(b.endAt)
+        case 'nameAsc':  return a.name.localeCompare(b.name)
         case 'nameDesc': return b.name.localeCompare(a.name)
-        case 'mintAsc': return (a.mintNumber||0) - (b.mintNumber||0)
+        case 'mintAsc':  return (a.mintNumber||0) - (b.mintNumber||0)
         case 'mintDesc': return (b.mintNumber||0) - (a.mintNumber||0)
-        case 'rarity': return a.rarity.localeCompare(b.rarity)
-        default: return 0
+        case 'rarity':   return a.rarity.localeCompare(b.rarity)
+        default:         return 0
       }
     })
 })
