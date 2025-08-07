@@ -1,5 +1,3 @@
-// server/api/auctions.post.js
-
 import {
   defineEventHandler,
   getRequestHeader,
@@ -25,8 +23,23 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse & validate
-  const { userCtoonId, initialBet, durationDays = 0, durationMinutes = 0 } = await readBody(event)
-  if (!userCtoonId || !initialBet || (durationDays === undefined || durationMinutes === undefined)) {
+  const {
+    userCtoonId,
+    initialBet,
+    durationDays = 0,
+    durationMinutes = 0,
+    createInitialBid = false
+  } = await readBody(event)
+
+  console.log({
+    userCtoonId,
+    initialBet,
+    durationDays,
+    durationMinutes,
+    createInitialBid
+  })
+  if (!userCtoonId || !initialBet ||
+      durationDays === undefined || durationMinutes === undefined) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
@@ -64,20 +77,44 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 7. Disable tradeability
+  // 7. Optionally create initial bid
+  if (createInitialBid) {
+    // find the special user to place the initial bid
+    const initialBidder = await prisma.user.findUnique({
+      where: { username: 'CartoonReOrbitOfficial' }
+    })
+    if (initialBidder) {
+      await prisma.bid.create({
+        data: {
+          auctionId: auction.id,
+          userId: initialBidder.id,
+          amount: initialBet
+        }
+      })
+      await prisma.auction.update({
+        where: { id: auction.id },
+        data: {
+          highestBid: initialBet,
+          highestBidderId: initialBidder.id
+        }
+      })
+    }
+  }
+
+  // 8. Disable tradeability
   await prisma.userCtoon.update({
     where: { id: userCtoonId },
     data: { isTradeable: false }
   })
 
-  // 8. Send Discord notification (best effort)
+  // 9. Send Discord notification (best effort)
   ;(async () => {
     try {
       const config     = useRuntimeConfig()
       const botToken   = process.env.BOT_TOKEN
       const channelId  = '1401244687163068528'
 
-      // get base URL (production vs. dev)
+      // get base URL
       const baseUrl = config.public.baseUrl ||
         (process.env.NODE_ENV === 'production'
           ? 'https://www.cartoonreorbit.com'
@@ -97,33 +134,22 @@ export default defineEventHandler(async (event) => {
         : `${durationDays} day(s)`
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
-
-        // 1. Construct the raw URL
-        const rawImageUrl = assetPath
-        ? assetPath.startsWith('http')
-            ? assetPath
-            : `${baseUrl}${assetPath}`
+      const rawImageUrl = assetPath
+        ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`)
         : null
+      const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
-        // 2. Percent-encode it
-        const imageUrl = rawImageUrl
-        ? encodeURI(rawImageUrl)
-        : null
-
-      // construct payload with embed including image
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
-        embeds: [
-          {
-            title: name,
-            url: auctionLink,
-            description: `**Rarity:** ${rarity}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
-            ...(imageUrl ? { image: { url: imageUrl } } : {})
-          }
-        ]
+        embeds: [{
+          title: name,
+          url: auctionLink,
+          description: `**Rarity:** ${rarity}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
+          ...(imageUrl ? { image: { url: imageUrl } } : {})
+        }]
       }
 
-      const res = await fetch(
+      await fetch(
         `https://discord.com/api/v10/channels/${channelId}/messages`,
         {
           method: 'POST',
@@ -134,13 +160,11 @@ export default defineEventHandler(async (event) => {
           body: JSON.stringify(payload)
         }
       )
-
-      const json = await res.json()
     } catch (discordErr) {
       console.error('Failed to send Discord notification:', discordErr)
     }
   })()
 
-  // 9. Return to client
+  // 10. Return to client
   return { success: true, auction }
 })
