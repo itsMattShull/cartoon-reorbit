@@ -35,7 +35,7 @@ async function main() {
 
   console.log(`Found ${invalidAuctions.length} invalid auctions.`);
 
-  // 4) Process fixes
+  // 4) Process fixes + delete auction & its bids
   await prisma.$transaction(async (tx) => {
     for (const auction of invalidAuctions) {
       const winningBid = auction.bids.sort((a, b) => b.amount - a.amount)[0];
@@ -45,43 +45,54 @@ async function main() {
         `Fixing auction ${auction.id} | Winning bid: ${winningBid.amount} | Creator: ${auction.creator.username}`
       );
 
-      // 4.1 Update UserCtoon owner
-      await tx.userCtoon.update({
-        where: { id: auction.userCtoonId },
-        data: { userId: auction.creator.id }
-      });
+      // 4.1 Update UserCtoon owner (revert to creator)
+      // await tx.userCtoon.update({
+      //   where: { id: auction.userCtoonId },
+      //   data: { userId: auction.creator.id }
+      // });
 
       // 4.2 Deduct winning bid points from creator
-      await tx.userPoints.updateMany({
-        where: { userId: auction.creator.id },
-        data: { points: { decrement: winningBid.amount } }
-      });
+      // await tx.userPoints.updateMany({
+      //   where: { userId: auction.creator.id },
+      //   data: { points: { decrement: winningBid.amount } }
+      // });
 
-      // 4.3 Remove points logs for same day & same amount
+      // 4.3 Remove points logs for same day & same amount (creator)
       const bidDateStart = new Date(winningBid.createdAt);
       bidDateStart.setHours(0, 0, 0, 0);
 
       const bidDateEnd = new Date(winningBid.createdAt);
       bidDateEnd.setHours(23, 59, 59, 999);
 
-      const deletedLogs = await tx.pointsLog.deleteMany({
-        where: {
-          userId: auction.creator.id,
-          points: winningBid.amount,
-          createdAt: {
-            gte: bidDateStart,
-            lte: bidDateEnd
-          }
-        }
+      // const deletedLogs = await tx.pointsLog.deleteMany({
+      //   where: {
+      //     userId: auction.creator.id,
+      //     points: winningBid.amount,
+      //     createdAt: {
+      //       gte: bidDateStart,
+      //       lte: bidDateEnd
+      //     }
+      //   }
+      // });
+
+      // 4.4 Delete all bids for this auction
+      const deletedBids = await tx.bid.deleteMany({
+        where: { auctionId: auction.id }
+      });
+
+      // 4.5 Delete the auction itself
+      await tx.auction.delete({
+        where: { id: auction.id }
       });
 
       console.log(
-        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ${deletedLogs.count} points logs removed`
+        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ` +
+        `${deletedBids.count} bid(s) deleted, auction deleted`
       );
     }
   });
 
-  console.log('🎯 All invalid auctions processed.');
+  console.log('🎯 All invalid auctions processed and deleted.');
 }
 
 main()
