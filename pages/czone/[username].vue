@@ -98,8 +98,12 @@
         >
           View Wishlist
         </button>
-        <button v-if="user?.id !== ownerId" @click="openCollection" class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2">
-          View Collection
+        <button
+          v-if="user?.id !== ownerId"
+          @click="goToOfferTrade"
+          class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+        >
+          Offer Trade
         </button>
         <button
           v-if="user?.id === ownerId"
@@ -261,10 +265,10 @@
               </button>
               <button
                 v-if="user?.id !== ownerId"
-                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
-                @click="openCollection"
+                @click="goToOfferTrade"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
               >
-                View Collection
+                Offer Trade
               </button>
               <button
                 v-if="user?.id === ownerId"
@@ -711,6 +715,12 @@ async function sendOffer() {
     console.error('Trade offer failed', err)
     displayToast('Failed to send trade offer. Please try again.', 'error')
   }
+}
+
+function goToOfferTrade() {
+  const uname = String(route.params.username || '').trim()
+  if (!uname) return
+  router.push(`/create-trade/${encodeURIComponent(uname)}`)
 }
 
 // ——— Zones state ———

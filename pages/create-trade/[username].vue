@@ -135,7 +135,7 @@
       <div class="bg-white rounded-xl shadow-md p-4">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold">2) Your Collection & Points</h2>
-          <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
               <label class="text-sm">Points to offer</label>
               <input
@@ -214,8 +214,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
 // Import SFC components
@@ -226,6 +226,7 @@ import EmptyState from '@/components/EmptyState.vue'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const router = useRouter()
+const route = useRoute()
 const { user, fetchSelf } = useAuth()
 
 const currentStep = ref(1) // 1 or 2
@@ -249,6 +250,52 @@ const userSuggestRef = ref(null)
 
 let userSearchTimer
 const userSearchCache = new Map() // simple in-memory cache by query string
+
+async function initFromRoute() {
+  const param = route.params.username
+  if (!param) return
+  const uname = String(param).trim()
+  if (!uname) return
+
+  // Prefill the input
+  userQuery.value = uname
+
+  // If it’s you, don’t auto-select
+  if (user.value?.username && user.value.username.toLowerCase() === uname.toLowerCase()) {
+    targetError.value = "You can't trade with yourself."
+    targetUser.value = null
+    currentStep.value = 1
+    showUserSuggest.value = false
+    return
+  }
+
+  // Try to auto-select exact username (case-insensitive)
+  try {
+    isSearching.value = true
+    const res = await $fetch('/api/users/search', { params: { q: uname, limit: 8 } })
+    const items = Array.isArray(res) ? res : (res?.items || [])
+    const match = items.find(u => u.username?.toLowerCase() === uname.toLowerCase())
+
+    if (match) {
+      selectTargetUser(match)
+    } else {
+      // No exact match: open suggestions with whatever is typed
+      showUserSuggest.value = true
+      onUserQueryInput()
+    }
+  } catch {
+    // Fallback: just open suggestions
+    showUserSuggest.value = true
+    onUserQueryInput()
+  } finally {
+    isSearching.value = false
+  }
+}
+
+watch(() => route.params.username, async () => {
+  await clearTarget(false)
+  await initFromRoute()
+})
 
 function onUserQueryInput() {
   targetError.value = ''
@@ -341,9 +388,6 @@ async function clearTarget(focusInput = false) {
   filters.other = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
   filters.self  = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
 
-  // Optional: keep cache, but you can clear if you want:
-  // userSearchCache.clear()
-
   if (focusInput) {
     await nextTick()
     userInputRef.value?.focus()
@@ -360,8 +404,10 @@ function onGlobalClick(e) {
   showUserSuggest.value = false
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (process.client) window.addEventListener('click', onGlobalClick)
+  // Autofill from /create-trade/[username]
+  await initFromRoute()
 })
 onBeforeUnmount(() => {
   if (process.client) window.removeEventListener('click', onGlobalClick)
@@ -479,7 +525,6 @@ const pointsToOffer = ref(0)
 const makingOffer = ref(false)
 const toast = reactive({ show:false, message:'' })
 
-// replace your existing sendOffer() with this
 async function sendOffer() {
   if (!targetUser.value) return
   if (pointsToOffer.value < 0) return
@@ -496,11 +541,9 @@ async function sendOffer() {
     makingOffer.value = true
     await $fetch('/api/trade/offers', { method: 'POST', body: payload })
 
-    // Optional toast before navigating
     toast.message = 'Trade offer sent! Redirecting…'
     toast.show = true
 
-    // Redirect to the recipient's cZone
     await router.push(`/czone/${encodeURIComponent(recipient)}`)
   } catch (e) {
     toast.message = 'Failed to send offer. Please try again.'
@@ -510,7 +553,6 @@ async function sendOffer() {
     makingOffer.value = false
   }
 }
-
 </script>
 
 <style>
