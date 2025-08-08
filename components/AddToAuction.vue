@@ -138,7 +138,7 @@ async function sendToAuction() {
         initialBet:      initialBet.value,
         durationDays:    quick3m.value ? 0 : timeframe.value,
         durationMinutes: quick3m.value ? 3 : 0,
-        createInitialBid: true
+        createInitialBid: false
       }
     })
     showToast('Auction created successfully!', 'success')

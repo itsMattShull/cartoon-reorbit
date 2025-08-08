@@ -31,26 +31,37 @@ export default defineEventHandler(async (event) => {
     createInitialBid = false
   } = await readBody(event)
 
-  console.log({
-    userCtoonId,
-    initialBet,
-    durationDays,
-    durationMinutes,
-    createInitialBid
-  })
   if (!userCtoonId || !initialBet ||
       durationDays === undefined || durationMinutes === undefined) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
-  // 3. Ownership check
-  const ownerCheck = await prisma.userCtoon.findUnique({
+  // 3. Ownership check + fetch rarity (and details we’ll reuse later)
+  const userCtoonRec = await prisma.userCtoon.findUnique({
     where: { id: userCtoonId },
-    select: { userId: true }
+    select: {
+      userId: true,
+      mintNumber: true,
+      ctoon: { select: { rarity: true, name: true, assetPath: true } }
+    }
   })
-  if (!ownerCheck || ownerCheck.userId !== userId) {
+  if (!userCtoonRec || userCtoonRec.userId !== userId) {
     throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
   }
+
+  // Helper: map rarity -> expected insta bid
+  const rarityToExpectedBid = (rarityRaw) => {
+    const r = (rarityRaw || '').trim().toLowerCase()
+    switch (r) {
+      case 'common': return 25
+      case 'uncommon': return 50
+      case 'rare': return 100
+      case 'very rare': return 187
+      default: return 312
+    }
+  }
+
+  const expectedInitialBet = rarityToExpectedBid(userCtoonRec.ctoon?.rarity)
 
   // 4. Active auction check
   const existing = await prisma.auction.findFirst({
@@ -77,27 +88,33 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 7. Optionally create initial bid
+  // 7. Optionally create initial bid — but only if the amount matches rarity mapping
   if (createInitialBid) {
-    // find the special user to place the initial bid
-    const initialBidder = await prisma.user.findUnique({
-      where: { username: 'CartoonReOrbitOfficial' }
-    })
-    if (initialBidder) {
-      await prisma.bid.create({
-        data: {
-          auctionId: auction.id,
-          userId: initialBidder.id,
-          amount: initialBet
-        }
+    if (initialBet !== expectedInitialBet) {
+      // console.log(
+      //   `Skipping initial bid: expected ${expectedInitialBet} for rarity "${userCtoonRec.ctoon?.rarity}", got ${initialBet}`
+      // )
+    } else {
+      // find the special user to place the initial bid
+      const initialBidder = await prisma.user.findUnique({
+        where: { username: 'CartoonReOrbitOfficial' }
       })
-      await prisma.auction.update({
-        where: { id: auction.id },
-        data: {
-          highestBid: initialBet,
-          highestBidderId: initialBidder.id
-        }
-      })
+      if (initialBidder) {
+        await prisma.bid.create({
+          data: {
+            auctionId: auction.id,
+            userId: initialBidder.id,
+            amount: initialBet
+          }
+        })
+        await prisma.auction.update({
+          where: { id: auction.id },
+          data: {
+            highestBid: initialBet,
+            highestBidderId: initialBidder.id
+          }
+        })
+      }
     }
   }
 
@@ -120,15 +137,9 @@ export default defineEventHandler(async (event) => {
           ? 'https://www.cartoonreorbit.com'
           : `http://localhost:${config.public.socketPort || 3000}`)
 
-      // fetch ctoon details
-      const userCtoon = await prisma.userCtoon.findUnique({
-        where: { id: userCtoonId },
-        include: { ctoon: true }
-      })
-      if (!userCtoon) throw new Error('Failed to load cToon for Discord message')
-
-      const { name, rarity, assetPath } = userCtoon.ctoon
-      const mintNumber = userCtoon.mintNumber
+      // reuse details we already fetched
+      const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
+      const mintNumber = userCtoonRec.mintNumber
       const durationText = durationMinutes > 0
         ? `${durationMinutes} minute(s)`
         : `${durationDays} day(s)`
@@ -142,9 +153,9 @@ export default defineEventHandler(async (event) => {
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
         embeds: [{
-          title: name,
+          title: name ?? 'cToon',
           url: auctionLink,
-          description: `**Rarity:** ${rarity}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
+          description: `**Rarity:** ${rarity ?? 'N/A'}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
           ...(imageUrl ? { image: { url: imageUrl } } : {})
         }]
       }
