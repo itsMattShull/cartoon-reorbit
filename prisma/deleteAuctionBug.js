@@ -46,16 +46,16 @@ async function main() {
       );
 
       // 4.1 Update UserCtoon owner
-      // await tx.userCtoon.update({
-      //   where: { id: auction.userCtoonId },
-      //   data: { userId: auction.creator.id }
-      // });
+      await tx.userCtoon.update({
+        where: { id: auction.userCtoonId },
+        data: { userId: auction.creator.id }
+      });
 
       // 4.2 Deduct winning bid points from creator
-      // await tx.userPoints.updateMany({
-      //   where: { userId: auction.creator.id },
-      //   data: { points: { decrement: winningBid.amount } }
-      // });
+      await tx.userPoints.updateMany({
+        where: { userId: auction.creator.id },
+        data: { points: { decrement: winningBid.amount } }
+      });
 
       // 4.3 Remove points logs for same day & same amount
       const bidDateStart = new Date(winningBid.createdAt);
@@ -64,22 +64,19 @@ async function main() {
       const bidDateEnd = new Date(winningBid.createdAt);
       bidDateEnd.setHours(23, 59, 59, 999);
 
-      // const deletedLogs = await tx.pointsLog.deleteMany({
-      //   where: {
-      //     userId: auction.creator.id,
-      //     points: winningBid.amount,
-      //     createdAt: {
-      //       gte: bidDateStart,
-      //       lte: bidDateEnd
-      //     }
-      //   }
-      // });
+      const deletedLogs = await tx.pointsLog.deleteMany({
+        where: {
+          userId: auction.creator.id,
+          points: winningBid.amount,
+          createdAt: {
+            gte: bidDateStart,
+            lte: bidDateEnd
+          }
+        }
+      });
 
-      // console.log(
-      //   `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ${deletedLogs.count} points logs removed`
-      // );
       console.log(
-        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted`
+        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ${deletedLogs.count} points logs removed`
       );
     }
   });
