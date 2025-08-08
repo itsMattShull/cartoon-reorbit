@@ -124,13 +124,13 @@ export default defineEventHandler(async (event) => {
   // 7) persist points
   if (toGive > 0) {
     await prisma.gamePointLog.create({ data: { userId, points: toGive } })
-    await prisma.userPoints.upsert({
+    const updated = await prisma.userPoints.upsert({
       where: { userId },
       create: { userId, points: toGive },
       update: { points: { increment: toGive } }
     })
     await prisma.pointsLog.create({
-      data: { userId, points: toGive, method: "Game - Winball", direction: 'increase' }
+      data: { userId, points: toGive, total: updated.points, method: "Game - Winball", direction: 'increase' }
     });
   }
 
@@ -147,7 +147,7 @@ export default defineEventHandler(async (event) => {
       const gp = await prisma.ctoon.findUnique({ where: { id: config.grandPrizeCtoonId } })
       if (gp) {
         // enqueue mint job instead of direct DB write
-        await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id })
+        await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id, isSpecial: true })
         grandPrizeCtoonName = gp.name
       }
     }

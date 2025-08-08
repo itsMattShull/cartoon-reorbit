@@ -33,6 +33,10 @@ const io = new Server(httpServer, { cors: { origin: '*' } })
 const zoneVisitors = {}        // zone → count
 const zoneSockets  = {}        // zone → Set(socketId)
 
+// near top, alongside pveMatches:
+const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
+const pvpMatches = new Map();    // roomId -> { battle, recordId }
+
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
@@ -113,13 +117,13 @@ async function endMatch(io, match, result) {
         // 8) Award if possible
         if (toGive > 0) {
           await db.gamePointLog.create({ data: { userId, points: toGive } });
-          await db.userPoints.upsert({
+          const updated = await db.userPoints.upsert({
             where: { userId },
             create: { userId, points: toGive },
             update: { points: { increment: toGive } }
           });
           await db.pointsLog.create({
-            data: { userId, points: toGive, method: "Game - gToons Clash", direction: 'increase' }
+            data: { userId, points: toGive, total: updated.points, method: "Game - gToons Clash", direction: 'increase' }
           });
         }
       }
@@ -165,6 +169,68 @@ function startSelectTimer(io, match) {
 
 
 io.on('connection', socket => {
+  // --- List open PvP rooms ---
+  socket.on('listClashRooms', async () => {
+    // fetch only active, waiting rooms
+    const rooms = Array.from(pvpRooms.entries())
+      .filter(([id, data]) => data.players.length === 1)
+      .map(([id, data]) => ({ id, owner: data.players[0] }));
+    socket.emit('clashRooms', rooms);
+  });
+
+  // --- Create a new PvP room ---
+  socket.on('createClashRoom', ({ roomId, userId, deck }) => {
+    // store room
+    pvpRooms.set(roomId, { players: [userId], decks: { [userId]: deck } });
+    // persist to DB
+    db.clashGame.create({ data: { player1UserId: userId, player2UserId: null } })
+      .then(record => {
+        pvpRooms.get(roomId).recordId = record.id;
+      });
+    socket.join(roomId);
+    // notify lobby
+    io.emit('roomCreated', { id: roomId, owner: userId });
+  });
+
+  // --- Join existing PvP room ---
+  socket.on('joinClashRoom', ({ roomId, userId, deck }) => {
+    const room = pvpRooms.get(roomId);
+    if (!room || room.players.length !== 1) {
+      socket.emit('joinError', { message: 'Room unavailable.' });
+      return;
+    }
+    room.players.push(userId);
+    room.decks[userId] = deck;
+    socket.join(roomId);
+    // update DB record with player2UserId
+    db.clashGame.update({ where: { id: room.recordId }, data: { player2UserId: userId } });
+
+    // start PvP match
+    const battleId = randomUUID();
+    const battle = createBattle({
+      playerDeck: room.decks[ room.players[0] ],
+      aiDeck:     room.decks[ room.players[1] ], // reuse second deck field
+      battleId,
+      lanes: LANES
+    });
+    // store match
+    pvpMatches.set(roomId, { battle, recordId: room.recordId });
+
+    // emit gameStart to both
+    io.to(roomId).emit('gameStart', battle.publicState());
+  });
+
+  // --- Relay selectCards & game flow ---
+  socket.on('selectPvPCards', ({ selections }) => {
+    const roomId = socket.data.roomId;
+    const match  = pvpMatches.get(roomId);
+    if (!match) return;
+    const side   = match.battle.state.priority === 'player1' ? 'player' : 'player2';
+    match.battle.select(side, selections);
+    match.battle.confirm(side);
+    broadcastPhase(io, match);
+  });
+
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', async ({ deck, userId }) => {
     const aiDeck = shuffle(deck).slice(0, 12)
@@ -828,9 +894,9 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('new-bid', ({ auctionId, user, amount }) => {
-    // broadcast to everyone in auction_<id>
-    io.to(`auction_${auctionId}`).emit('new-bid', { auctionId, user, amount })
+  socket.on('new-bid', payload => {
+    // forward every property, including newEndAt when present
+    io.to(`auction_${payload.auctionId}`).emit('new-bid', payload)
   })
 
   socket.on('join-auction', ({ auctionId }) => {
@@ -845,66 +911,103 @@ io.on('connection', socket => {
 
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
+// in your socket‐server.js (or wherever you close auctions):
 setInterval(async () => {
-  const now = new Date();
+  const now = new Date()
+  // find all auctions that have just expired
   const toClose = await db.auction.findMany({
     where: { status: 'ACTIVE', endAt: { lte: now } }
-  });
+  })
 
   for (const auc of toClose) {
-    const { id, highestBidderId, creatorId, highestBid, userCtoonId } = auc;
+    const { id, creatorId, userCtoonId } = auc
 
-    // only adjust points/ownership if there's a bidder who isn't the creator
-    const shouldFinalize = highestBidderId && highestBidderId !== creatorId;
+    // 1) fetch *all* bids for this auction, descending
+    const allBids = await db.bid.findMany({
+      where: { auctionId: id },
+      orderBy: { amount: 'desc' }
+    })
 
+    // 2) pick the first bid whose bidder still has ≥ that many points
+    let winningBid = null
+    for (const b of allBids) {
+      const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
+      const pts     = ptsRec?.points ?? 0
+      if (pts >= b.amount) {
+        winningBid = b
+        break
+      }
+    }
+
+    // 3) Now wrap the final update & any transfers in a transaction
     await db.$transaction(async tx => {
-      // close the auction
+      // close the auction record
       await tx.auction.update({
         where: { id },
         data: {
-          status: 'CLOSED',
-          winnerId: highestBidderId,
-          winnerAt: now
+          status:   'CLOSED',
+          winnerId: winningBid?.userId || null,
+          highestBidderId: winningBid?.userId || null,
+          winnerAt: now,
+          // if we found a valid winningBid, update highestBid to match it
+          ...(winningBid && { highestBid: winningBid.amount })
         }
-      });
+      })
 
-      if (shouldFinalize && highestBid > 0) {
+      // unlock the cToon
+      await tx.userCtoon.update({
+        where: { id: userCtoonId },
+        data:  { isTradeable: true }
+      })
+
+      // 4) if we have a real winner, do the point transfers + cToon transfer
+      if (winningBid) {
         // debit the winner
-        await tx.userPoints.update({
-          where: { userId: highestBidderId },
-          data: { points: { decrement: highestBid } }
-        });
-
+        const loserPts = await tx.userPoints.update({
+          where: { userId: winningBid.userId },
+          data: { points: { decrement: winningBid.amount } }
+        })
         await tx.pointsLog.create({
-          data: { userId: highestBidderId, points: highestBid, method: "Auction", direction: 'decrease' }
-        });
+          data: {
+            userId:   winningBid.userId,
+            points:   winningBid.amount,
+            total:    loserPts.points,
+            method:   'Auction',
+            direction:'decrease'
+          }
+        })
 
         // credit the creator
-        await tx.userPoints.upsert({
-          where: { userId: creatorId },
-          create: { userId: creatorId, points: highestBid },
-          update: { points: { increment: highestBid } }
-        });
-
+        const creatorPts = await tx.userPoints.upsert({
+          where:  { userId: creatorId },
+          create: { userId: creatorId, points: winningBid.amount },
+          update: { points: { increment: winningBid.amount } }
+        })
         await tx.pointsLog.create({
-          data: { userId: creatorId, points: highestBid, method: "Auction", direction: 'increase' }
-        });
+          data: {
+            userId:   creatorId,
+            points:   winningBid.amount,
+            total:    creatorPts.points,
+            method:   'Auction',
+            direction:'increase'
+          }
+        })
 
         // transfer the cToon
         await tx.userCtoon.update({
           where: { id: userCtoonId },
-          data: { userId: highestBidderId, isTradeable: true }
-        });
+          data:  { userId: winningBid.userId, isTradeable: true }
+        })
       }
-    });
+    })
 
-    // notify clients regardless
+    // 5) notify clients of the final outcome
     io.to(`auction_${id}`).emit('auction-ended', {
-      winnerId: highestBidderId,
-      winningBid: highestBid
-    });
+      winnerId:   winningBid?.userId ?? null,
+      winningBid: winningBid?.amount ?? 0
+    })
   }
-}, 60 * 1000);
+}, 60 * 1000)
 
 // Auction notifications
 setInterval(async () => {
@@ -928,7 +1031,7 @@ setInterval(async () => {
   for (const auc of soonAuctions) {
     try {
       const botToken  = process.env.BOT_TOKEN
-      const channelId = '1370959477968339004'
+      const channelId = '1401244687163068528'
       const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : 'http://localhost:3001'

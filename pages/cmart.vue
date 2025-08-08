@@ -625,7 +625,12 @@ async function buyCtoon(ctoon) {
     showToast('Purchase successful', 'success')
   } catch (err) {
     Sentry.captureException(err)
-    showToast('Failed to buy cToon')
+    const msg =
+      err?.data?.message ||
+      err?.statusMessage ||
+      err?.message ||
+      'Failed to buy cToon'
+    showToast(msg, 'error')
   } finally {
     buyingCtoons.value.delete(ctoon.id)
   }

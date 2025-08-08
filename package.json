@@ -30,6 +30,7 @@
     "canvas-confetti": "^1.9.3",
     "chart.js": "^4.4.9",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-plugin-annotation": "^3.1.0",
     "chartjs-plugin-datalabels": "^2.2.0",
     "crypto": "^1.0.1",
     "date-fns-tz": "^3.2.0",

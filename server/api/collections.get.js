@@ -1,11 +1,9 @@
 // server/api/collections.get.js
 
-
 import {
   defineEventHandler,
   getRequestHeader,
-  createError,
-  getQuery
+  createError
 } from 'h3'
 
 import { prisma } from '@/server/prisma'
@@ -24,28 +22,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  // 2. Read page query (default to 1)
-  const { page: pageRaw } = getQuery(event) || {}
-  const page = parseInt(pageRaw, 10) || 1
-  const take = 200
-  const skip = (page - 1) * take
-
   try {
-    // 3. Fetch UserCtoons + nested Ctoon + only ACTIVE auctions
+    // 2. Fetch all UserCtoons for user, including nested Ctoon and active auctions
     const userCtoons = await prisma.userCtoon.findMany({
       where: { userId },
       include: {
-        ctoon:   true,
+        ctoon: true,
         auctions: {
           where: { status: 'ACTIVE' }
         }
       },
-      skip,
-      take,
       orderBy: { createdAt: 'asc' }
     })
 
-    // 4. Map → include auctions array
+    // 3. Map → shape response
     return userCtoons.map((uc) => ({
       id:              uc.id,
       userId:          uc.userId,
@@ -62,11 +52,10 @@ export default defineEventHandler(async (event) => {
       characters:      uc.ctoon.characters,
       mintNumber:      uc.mintNumber,
       isFirstEdition:  uc.isFirstEdition,
-      // pass through the auctions array (empty if none)
       auctions:        uc.auctions || []
     }))
   } catch (err) {
-    console.error('Error fetching user collections (paginated):', err)
+    console.error('Error fetching user collections:', err)
     return []
   }
 })

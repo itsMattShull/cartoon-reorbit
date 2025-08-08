@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
       isFirstEdition:true,
       ctoon: {
         select: {
+          id:          true,
           assetPath:   true,
           name:        true,
           isGtoon:     true,
@@ -58,6 +59,7 @@ export default defineEventHandler(async (event) => {
   /* 4. Shape response ------------------------------------------- */
   return rows.map(uc => ({
     id:            uc.id,
+    ctoonId:       uc.ctoon.id,
     assetPath:     uc.ctoon.assetPath,
     name:          uc.ctoon.name,
     mintNumber:    uc.mintNumber,

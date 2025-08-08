@@ -144,6 +144,7 @@ export default defineEventHandler(async (event) => {
     ownerId: user.id,
     avatar: user.avatar,
     ownerName: user.username,
+    isBooster: user.isBooster,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

@@ -43,11 +43,14 @@ model Ctoon {
   abilityData     Json?
 
   owners          UserCtoon[]
+  deckCards        ClashDeckCard[]
   rewardCtoons    RewardCtoon[]
   packOptions     PackCtoonOption[]
   gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
   wishlistItems   WishlistItem[]
   prerequisites  ClaimCodePrerequisite[]
+  wheelSpinLogs   WheelSpinLog[]  @relation("WheelSpinLogToCtoon")
+  winWheelOptions WinWheelOption[]
 }
 
 model UserCtoon {
@@ -95,8 +98,11 @@ model User {
   createdAt        DateTime         @default(now())
   lastLogin        DateTime?
   discordCreatedAt DateTime?
+  isBooster       Boolean   @default(false)
+  boosterSince    DateTime? 
 
   cZones           CZone[]
+  clashDecks       ClashDeck[]
   logins           LoginLog[]
   gamePointLogs    GamePointLog[]
   pointsLogs       PointsLog[]
@@ -122,6 +128,7 @@ model User {
   clashGamesAsPlayer1 ClashGame[] @relation("ClashGamePlayer1")
   clashGamesAsPlayer2 ClashGame[] @relation("ClashGamePlayer2")
   clashGamesAsWinner  ClashGame[] @relation("ClashGameWinner")
+  wheelSpinLogs   WheelSpinLog[]   @relation("WheelSpinLogToUser")
 }
 
 model UserIP {
@@ -332,6 +339,7 @@ model PointsLog {
   userId     String
   direction  String? // 'increase' or 'decrease'
   points     Int
+  total      Int?      // the user’s total points _after_ this change
   method     String?
   createdAt  DateTime @default(now())
 
@@ -347,6 +355,12 @@ model GameConfig {
   grandPrizeCtoonId    String? 
   grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
   pointsPerWin         Int?      @default(0)
+
+  // — Win Wheel settings —
+  spinCost             Int       @default(100)
+  pointsWon            Int       @default(250)
+  maxDailySpins        Int       @default(2)
+  exclusiveCtoons      WinWheelOption[]   @relation("WinWheelOptions")
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @default(now()) @updatedAt
@@ -472,4 +486,53 @@ model ClaimCodePrerequisite {
   ctoon    Ctoon     @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@unique([codeId, ctoonId])
+}
+
+model WheelSpinLog {
+  id          String   @id @default(uuid())
+  userId      String
+  result      String               // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive'
+  points      Int?                  // how many points awarded, if any
+  ctoonId     String?               // FK to the minted cToon, if any
+
+  sliceIndex  Int      // 0–5
+  createdAt   DateTime @default(now())
+
+  user        User     @relation("WheelSpinLogToUser", fields: [userId], references: [id])
+  ctoon       Ctoon?   @relation("WheelSpinLogToCtoon", fields: [ctoonId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([ctoonId])
+}
+
+model WinWheelOption {
+  id            String      @id @default(uuid())
+  gameConfigId  String
+  ctoonId       String
+
+  gameConfig    GameConfig  @relation("WinWheelOptions", fields: [gameConfigId], references: [id])
+  ctoon         Ctoon       @relation(fields: [ctoonId], references: [id])
+
+  @@unique([gameConfigId, ctoonId])
+  @@index([ctoonId])
+}
+
+model ClashDeck {
+  id         String           @id @default(uuid())
+  userId     String
+  name       String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id])
+  cards      ClashDeckCard[]
+}
+
+model ClashDeckCard {
+  id        String    @id @default(uuid())
+  deckId    String
+  ctoonId   String
+
+  deck      ClashDeck @relation(fields: [deckId], references: [id])
+  ctoon     Ctoon     @relation(fields: [ctoonId], references: [id])
 }

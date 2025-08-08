@@ -107,7 +107,7 @@ export default defineEventHandler(async (event) => {
         const isOut    = opt.ctoon.quantity !== null && total >= opt.ctoon.quantity
         ;(isOut ? depleted : remaining).push(opt)
       }
-
+      
       /* 2-a delete depleted options */
       if (depleted.length > 0) {
         await tx.packCtoonOption.deleteMany({
@@ -115,28 +115,41 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // 2-b even out weights for survivors — only if we pruned some options
+      // 2-b redistribute depleted weight across remaining — only if we pruned some options
       if (depleted.length > 0 && remaining.length > 0) {
-        const even  = Math.floor(100 / remaining.length)
-        let extra   = 100 - even * remaining.length
+        // 1. total weight of everything we just removed
+        const totalDepletedWeight = depleted.reduce((sum, o) => sum + o.weight, 0)
+
+        // 2. how much “lost” weight each survivor should pick up
+        const baseShare    = Math.floor(totalDepletedWeight / remaining.length)
+        let   extraShare   = totalDepletedWeight - baseShare * remaining.length
+
+        // 3. apply: newWeight = original + share
         for (const opt of remaining) {
-          const newW = even + (extra-- > 0 ? 1 : 0)
-          if (newW !== opt.weight) {
+          const share    = baseShare + (extraShare-- > 0 ? 1 : 0)
+          const newWeight = opt.weight + share
+
+          if (newWeight !== opt.weight) {
             await tx.packCtoonOption.update({
               where: { id: opt.id },
-              data:  { weight: newW }
+              data:  { weight: newWeight }
             })
           }
         }
 
-        /* 2-c  ➜  NEW: keep PackRarityConfig.count in sync */
-        await tx.packRarityConfig.update({
-          where: { id: rc.id },
-          data:  { count: remaining.length }
+        // …then below you can re-sync count as before…
+        const currentRarityConfig = await tx.packRarityConfig.findUnique({
+          where: { id: rc.id }
         })
+        if (currentRarityConfig && remaining.length < currentRarityConfig.count) {
+          await tx.packRarityConfig.update({
+            where: { id: rc.id },
+            data:  { count: remaining.length }
+          })
+        }
       }
 
-      /* 2-d if none left, unlist pack and stop looping */
+      /* 2-c if none left, unlist pack and stop looping */
       if (!remaining.length) {
         await tx.pack.update({ where: { id: packId }, data: { inCmart: false } })
         break

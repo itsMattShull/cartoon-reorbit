@@ -1,4 +1,3 @@
-// server/workers/mint.worker.js
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 
@@ -9,7 +8,7 @@ const connection = {
 }
 
 // Create a BullMQ worker to process mint jobs
-const worker = new Worker('mintQueue', async job => {
+const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
   try {
     const { userId, ctoonId, isSpecial = false } = job.data
 
@@ -34,7 +33,8 @@ const worker = new Worker('mintQueue', async job => {
 
     // Per-user limit enforcement (first 48h window)
     if (!isSpecial && ctoon.releaseDate) {
-      const hoursSinceRelease = (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
+      const hoursSinceRelease =
+        (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
       const enforceLimit = hoursSinceRelease < 48
       if (
         enforceLimit &&
@@ -57,26 +57,35 @@ const worker = new Worker('mintQueue', async job => {
 
     // Perform the minting transaction
     if (!isSpecial) {
-      await prisma.$transaction([
-        prisma.userPoints.update({
+      await prisma.$transaction(async (tx) => {
+        // 1) Deduct points and capture new total
+        const updated = await tx.userPoints.update({
           where: { userId },
-          data: { points: { decrement: ctoon.price } }
-        }),
-        prisma.pointsLog.create({
-          data: { userId, points: ctoon.price, method: "Bought cToon", direction: 'decrease' }
-        }),
-        prisma.userCtoon.create({
+          data:  { points: { decrement: ctoon.price } }
+        })
+        // 2) Log with updated total
+        await tx.pointsLog.create({
+          data: {
+            userId:    userId,
+            points:    ctoon.price,
+            total:     updated.points,
+            method:    'Bought cToon',
+            direction: 'decrease'
+          }
+        })
+        // 3) Create the UserCtoon record
+        await tx.userCtoon.create({
           data: { userId, ctoonId, mintNumber, isFirstEdition }
         })
-      ])
+      })
     } else {
-      await prisma.$transaction([
-        prisma.userCtoon.create({
+      // Special mints bypass cost
+      await prisma.$transaction(async (tx) => {
+        await tx.userCtoon.create({
           data: { userId, ctoonId, mintNumber, isFirstEdition }
         })
-      ])
+      })
     }
-
   } finally {
     await prisma.$disconnect()
   }
@@ -89,3 +98,5 @@ worker.on('completed', job => {
 worker.on('failed', (job, err) => {
   // console.error(`Mint job ${job?.id} failed: ${err.message}`)
 })
+
+export default worker

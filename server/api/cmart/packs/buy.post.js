@@ -51,13 +51,13 @@ export default defineEventHandler(async (event) => {
   /* 4.  transaction: deduct points + create sealed pack ----------------- */
   const result = await db.$transaction(async (tx) => {
     // 4-a  deduct points
-    await tx.userPoints.update({
+    const updated = await tx.userPoints.update({
       where: { userId: me.id },
       data: { points: { decrement: pack.price } }
     })
 
     await tx.pointsLog.create({
-      data: { userId: me.id, points: pack.price, method: "Bought Pack", direction: 'decrease' }
+      data: { userId: me.id, points: pack.price, total: updated.points, method: "Bought Pack", direction: 'decrease' }
     });
 
     // 4-b  create UserPack (sealed)

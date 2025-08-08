@@ -135,6 +135,7 @@ const baseLinks = [
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
+  { label: 'Win Wheel', to: '/games/winwheel' },
   { label: 'gToons Clash', to: '/games/clash' }
 ]
 

@@ -118,13 +118,13 @@ export default defineEventHandler(async (event) => {
   await prisma.$transaction(async (tx) => {
     await tx.claim.create({ data: { userId, codeId: claimCode.id } })
     if (pointsToAward > 0) {
-      await tx.userPoints.upsert({
+      const updated = await tx.userPoints.upsert({
         where: { userId },
         create: { userId, points: pointsToAward },
         update: { points: { increment: pointsToAward } }
       })
       await tx.pointsLog.create({
-        data: { userId, points: pointsToAward, method: "Redeem Code", direction: 'increase' }
+        data: { userId, points: pointsToAward, total: updated.points, method: "Redeem Code", direction: 'increase' }
       });
     }
   })

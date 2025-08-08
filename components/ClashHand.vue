@@ -16,12 +16,13 @@
       :class="{ 'cursor-not-allowed opacity-50': cards.length === 0 || disabled }"
     >
       <ClashCToonCard
-        v-for="c in cards"
-        :key="c.id"
+        v-for="(c, idx) in cards"
+        :key="idx"                        
         :card="c"
-        :selected="selected && selected.id === c.id"
+        :selected="selected === c"        
         :afford="c.cost <= remainingEnergy"
-        @select="handleSelect"
+        @select="() => emit('select', c)"
+        @info="emit('info',$event)"
       />
     </div>
   </div>
@@ -37,7 +38,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   remainingEnergy: { type: Number, default: 1 },
 })
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select','info'])
 
 function handleSelect (card) {
   if (props.disabled) return

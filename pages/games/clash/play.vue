@@ -95,6 +95,7 @@
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
+      @info="showCardInfo"
       :selected="selected"
       :confirmed="confirmed"
     />
@@ -119,6 +120,7 @@
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
       @select="c => (selected = c)"
+      @info="showCardInfo"
     />
 
     <!-- Mobile confirm button -->
@@ -150,6 +152,13 @@
     >
       {{ confirmed ? 'Waiting…' : `Confirm (${secondsLeft}s)` }}
     </button>
+
+    <!-- card-info modal -->
+    <CardInfoModal
+      v-if="infoCard"
+      :card="infoCard"
+      @close="infoCard = null"
+    />
 
     <!-- Game-over modal -->
     <transition name="fade">
@@ -194,6 +203,7 @@ import { useClashSocket } from '@/composables/useClashSocket'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
+import CardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -209,6 +219,12 @@ const placements = ref([])     // [{ cardId, laneIndex }]
 const confirmed  = ref(false)
 const log        = ref([])
 const summary    = ref(null)
+
+// state for which card’s info is showing
+const infoCard = ref(null)
+function showCardInfo(card) {
+  infoCard.value = card
+}
 
 // countdown
 const secondsLeft = ref(60)
@@ -298,22 +314,16 @@ function wireSocket() {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
-  // are we un-placing?
-  const idx = placements.value.findIndex(p => p.card?.id === selected.value.id)
+  // try to un-place _this exact card instance_ via object identity
+  const idx = placements.value.findIndex(p => p.card === selected.value)
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
-  // otherwise, check that this new card is still affordable
-  const costSum = pendingCost.value
-  if (selected.value.cost + costSum > game.value.playerEnergy) {
-    // optionally show a toast: “Not enough energy!”
-    return
-  }
-
+  // otherwise push a new placement for this unique card
   placements.value.push({
-    card:    selected.value,
+    card:      selected.value,
     laneIndex: laneIdx
   })
 }

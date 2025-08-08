@@ -32,6 +32,7 @@
                 :card="lane.player[i-1]"
                 size="small"
                 class="scale-75 md:scale-100"
+                @info="emit('info',$event)"
               />
               <ClashCToonCard
                 v-else-if="phase==='select' && !confirmed && ghostAtSlot(idx, i-1)"
@@ -39,6 +40,7 @@
                 size="small"
                 :afford="false"
                 class="opacity-50 border-2 border-dashed scale-75 md:scale-100"
+                @info="emit('info',$event)"
               />
               <div v-else class="w-24 h-36"></div>
             </div>
@@ -68,6 +70,7 @@
                 :card="lane.ai[i-1]"
                 size="small"
                 class="scale-75 md:scale-100"
+                @info="emit('info',$event)"
               />
               <div v-else class="w-24 h-36"></div>
             </div>
@@ -90,7 +93,7 @@ const props = defineProps({
   selected:          { type: [Object, null], default: null },
   confirmed:         { type: Boolean, required: true }
 })
-const emit = defineEmits(['place'])
+const emit = defineEmits(['place','info'])
 
 function place(idx) {
   emit('place', idx)

@@ -23,7 +23,8 @@ export default defineEventHandler(async (event) => {
     orderBy: { name: 'asc' },
     select: {
       id: true,
-      name: true
+      name: true,
+      assetPath: true
     }
   })
 

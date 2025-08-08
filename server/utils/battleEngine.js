@@ -60,8 +60,12 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   }
 
   // selections pending this turn
-  let _pending = { player: null, ai: null }
-  let _ready   = { player: false, ai: false }
+  let _pending = {}
+  let _ready   = {}
+  _pending.player = null
+  _pending.ai     = null
+  _ready.player   = false
+  _ready.ai       = false
 
   const battle = {
     /* ---------- information ---------- */
@@ -118,7 +122,34 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     }
   }
 
+  battle._allLanes = lanes
+  battle._pendingActions = _pending
   battle.log = state.log
+
+  // 2) now that `battle` exists, do your “always_sneaking_up” deck scan
+  for (const side of ['player', 'ai']) {
+    const deck = state[side + 'Deck'];
+    const hand = state[side + 'Hand'];
+    deck
+      .filter(c => c.abilityKey === 'always_sneaking_up')
+      .forEach(card => {
+        const idx = deck.findIndex(c2 => c2.id === card.id);
+        deck.splice(idx, 1);
+        hand.unshift(card);
+        state.log.push(`${card.name} sneaks into your starting hand!`);
+      });
+  }
+
+  // 3) and only now fire every card’s onStart
+  ;[...state.playerHand, ...state.aiHand].forEach(card => {
+    const side = state.playerHand.includes(card) ? 'player' : 'ai';
+    abilityRegistry[card.abilityKey]?.onStart?.({
+      game: battle,
+      side,
+      laneIndex: null,
+      card
+    });
+  });
 
   /* ───────────── internal helpers ───────────── */
   function applySelections (side) {
@@ -145,27 +176,66 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     return [{ cardId: card.id, laneIndex }]
   }
 
-  function fireReveal (side) {
+  function fireReveal(side) {
     const selections = _pending[side] || []
     selections.forEach(sel => {
-      const lane  = state.lanes[sel.laneIndex]
-      const card  = lane[side][lane[side].length - 1]
-      const def   = abilityRegistry[card.abilityKey]
-      if (def?.onReveal) {
-        def.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
+      const laneIndex = sel.laneIndex
+      const lane = state.lanes[laneIndex]
+      const pile      = lane[side]
+      const card      = pile && pile.length > 0
+                          ? pile[pile.length - 1]
+                          : null
+  
+      if (!card) return                // ← bail out if somehow nothing was pushed
+
+      // 1) Card’s own ability
+      const cardDef = abilityRegistry[card.abilityKey]
+      if (cardDef?.onReveal) {
+        cardDef.onReveal({ game: battle, side, laneIndex, card })
       }
 
-      // ▶︎ also run the lane's onReveal **per-card placement**
+      // 2) Lane’s reaction to that placement
       const laneDef = abilityRegistry[lane.abilityKey]
       if (laneDef?.onReveal) {
-        laneDef.onReveal({ game: battle, side, laneIndex: sel.laneIndex, card })
+        laneDef.onReveal({ game: battle, side, laneIndex, card })
       }
     })
   }
 
+
   function runReveal () {
     // move to REVEAL phase
     state.phase = 'reveal'
+    // ─── Watchful Eye “delayed buff” from last turn ───
+    state.lanes.forEach((lane, laneIndex) => {
+      const isDouble = lane.abilityKey === 'DOUBLE_ABILITIES'
+      for (const side of ['player','ai']) {
+        lane[side].forEach(card => {
+          if (
+            card.abilityKey === 'watchful_eye' &&
+            card._watchfulRevealTurn === state.turn - 1
+          ) {
+            // ← new guard: did any OTHER card (not this one) land here this turn?
+            const playedThisTurn =
+              (_pending.player  || []).some(s => s.laneIndex === laneIndex && s.cardId !== card.id) ||
+              (_pending.ai      || []).some(s => s.laneIndex === laneIndex && s.cardId !== card.id)
+
+            if (!playedThisTurn) {
+              const times = isDouble ? 2 : 1
+              for (let i = 0; i < times; i++) {
+                card.power += 5
+              }
+              state.log.push(
+                `${card.name} gains +${5*times} Power (Watchful Eye${isDouble?'×2':''})`
+              )
+            }
+            // clear flags so it never fires again
+            delete card._watchfulRevealTurn
+            delete card._watchfulLane
+          }
+        })
+      }
+    })
 
     // Apply selections but do NOT trigger abilities yet
     applySelections('player')
@@ -210,6 +280,35 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     })
   }
 
+  function triggerTurnStartAbilities() {
+    // 1) lane-level onTurnStart (side=null)
+    state.lanes.forEach((lane, laneIndex) => {
+      const laneDef = abilityRegistry[lane.abilityKey]
+      laneDef?.onTurnStart?.({
+        game: battle,
+        side: null,
+        laneIndex,
+        card: null
+      })
+    })
+
+    // 2) card-level onTurnStart for both sides
+    state.lanes.forEach((lane, laneIndex) => {
+      for (const side of ['player','ai']) {
+        lane[side].forEach(card => {
+          const def = abilityRegistry[card.abilityKey]
+          def?.onTurnStart?.({
+            game: battle,
+            side,
+            laneIndex,
+            card
+          })
+        })
+      }
+    })
+  }
+
+
   function setupNextTurn () {
     // 1) increment the turn counter
     state.turn += 1
@@ -225,6 +324,30 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
         })
         // (optional) you could set a flag here if you want to avoid double-firing
       }
+    })
+
+    // ─── 1.5) trigger all cards' onTurnStart ───
+    state.lanes.forEach((lane, laneIndex) => {
+      // player-side
+      lane.player.forEach(card => {
+        const def = abilityRegistry[card.abilityKey]
+        def?.onTurnStart?.({
+          game: battle,
+          side: 'player',
+          laneIndex,
+          card
+        })
+      })
+      // ai-side
+      lane.ai.forEach(card => {
+        const def = abilityRegistry[card.abilityKey]
+        def?.onTurnStart?.({
+          game: battle,
+          side: 'ai',
+          laneIndex,
+          card
+        })
+      })
     })
 
     // 2) if we're now on turn 2 or 3, reveal that lane
@@ -256,8 +379,10 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     state.priority = state.priority === 'player' ? 'ai' : 'player'
 
     // 6) reset pending / ready flags
-    _pending = { player: null, ai: null }
-    _ready   = { player: false, ai: false }
+    _pending.player = null
+    _pending.ai     = null
+    _ready.player   = false
+    _ready.ai       = false
 
     // 7) check for game end
     if (state.turn > MAX_TURNS) {
@@ -268,6 +393,8 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     // 8) start the next select phase
     state.phase        = 'select'
     state.selectEndsAt = Date.now() + SELECT_WINDOW
+
+    triggerTurnStartAbilities()
   }
 
   function finishGame() {

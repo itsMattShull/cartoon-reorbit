@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse auction ID from URL and bid amount from body
-  const { id } = event.context.params   // ← make sure we grab `id` here!
+  const { id } = event.context.params
   const { amount } = await readBody(event)
   if (!id || typeof amount !== 'number') {
     throw createError({ statusCode: 422, statusMessage: 'Missing auction ID or bid amount' })
@@ -36,12 +36,33 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Auction has already ended' })
   }
 
+  // 3.a) Prevent the current highest bidder from bidding again
+  if (auction.highestBidderId === userId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'You are already the highest bidder'
+    })
+  }
+
   // 4. Determine current highest bid
   const highest = await prisma.bid.findFirst({
     where: { auctionId: id },
     orderBy: { amount: 'desc' }
   })
   const currentBid = highest ? highest.amount : auction.initialBet
+
+  // 4.a) Enforce the exact increment
+  const expectedIncrement = 
+    currentBid < 1_000   ? 10   :
+    currentBid < 10_000  ? 100  :
+                           1_000
+
+  if (amount !== currentBid + expectedIncrement) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `You must bid exactly +${expectedIncrement} points`
+    })
+  }
 
   // 5. Validate new bid is higher
   if (amount <= currentBid) {
@@ -55,8 +76,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Insufficient points for this bid' })
   }
 
-  // 7. Record bid and update auction in a transaction
-  const newBid = await prisma.$transaction(async (tx) => {
+  // 7. Record bid, update highestBid, maybe extend endAt
+  const { bidRec: newBid, updatedEndAt } = await prisma.$transaction(async (tx) => {
+    // re-fetch to get the most up-to-date endAt
+    const a = await tx.auction.findUnique({ where: { id } })
+    const now = new Date()
+    let extended = a.endAt
+    if (a.endAt.getTime() - now.getTime() <= 60_000) {
+      extended = new Date(a.endAt.getTime() + 30_000)
+    }
+
     const bidRec = await tx.bid.create({
       data: { auctionId: id, userId, amount }
     })
@@ -64,10 +93,11 @@ export default defineEventHandler(async (event) => {
       where: { id },
       data: {
         highestBid: amount,
-        highestBidderId: userId
+        highestBidderId: userId,
+        ...(extended > a.endAt && { endAt: extended })
       }
     })
-    return bidRec
+    return { bidRec, updatedEndAt: extended > a.endAt ? extended : null }
   })
 
   // 8. Emit via Socket.IO client with full logging
@@ -80,7 +110,12 @@ export default defineEventHandler(async (event) => {
     )
 
     socket.on('connect', () => {
-      const payload = { auctionId: id, user: me.username, amount: newBid.amount }
+      const payload = {
+        auctionId: id,
+        user: me.username,
+        amount: newBid.amount,
+        newEndAt: updatedEndAt?.toISOString()
+      }
       socket.emit('new-bid', payload)
     })
 
@@ -93,6 +128,7 @@ export default defineEventHandler(async (event) => {
     })
 
     socket.on('disconnect', (reason) => {
+      // no-op
     })
 
     // give it a moment to fire off the emit

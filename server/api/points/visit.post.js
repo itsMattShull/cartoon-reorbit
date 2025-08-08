@@ -52,14 +52,14 @@ export default defineEventHandler(async (event) => {
   })
 
   // ── 4) award points ─────────────────────────────────────────────────────
-  await prisma.userPoints.upsert({
+  const updated = await prisma.userPoints.upsert({
     where:  { userId: viewerId },
     update: { points: { increment: 20 } },
     create: { userId: viewerId, points: 20 },
   })
 
   await prisma.pointsLog.create({
-    data: { userId: viewerId, points: 20, method: "cZone Visit", direction: 'increase' }
+    data: { userId: viewerId, points: 20, total: updated.points, method: "cZone Visit", direction: 'increase' }
   });
 
   return { success: true, message: 'Points awarded' }

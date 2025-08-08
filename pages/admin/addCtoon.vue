@@ -45,8 +45,8 @@
         <div>
           <label class="block mb-1 font-medium">Series</label>
           <input v-model="series" list="series-list" required class="w-full border rounded p-2" />
-          <datalist id="series-list">
-            <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+          <datalist v-if="series.length >= 2" id="series-list">
+            <option v-for="opt in filteredSeriesOptions" :key="opt" :value="opt" />
           </datalist>
           <p class="text-sm text-gray-500">Used to group similar cToons. Choose from existing or enter a new one.</p>
           <p v-if="errors.series" class="text-red-600 text-sm mt-1">{{ errors.series }}</p>
@@ -56,8 +56,8 @@
         <div>
           <label class="block mb-1 font-medium">Set</label>
           <input v-model="set" list="sets-list" required class="w-full border rounded p-2" />
-          <datalist id="sets-list">
-            <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+          <datalist v-if="set.length >= 2" id="sets-list">
+            <option v-for="opt in filteredSetsOptions" :key="opt" :value="opt" />
           </datalist>
           <p class="text-sm text-gray-500">Which collectible set this cToon belongs to. Choose from existing or enter a new one.</p>
         </div>
@@ -243,6 +243,21 @@ watch(abilityKey, () => { abilityParam.value = null })
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
 const errors = reactive({ image: '', name: '', series: '', rarity: '', cost:  '', power: '' })
+
+// new: only show suggestions once the user has typed ≥2 chars
+const filteredSeriesOptions = computed(() => {
+  if (series.value.length < 2) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(series.value.toLowerCase())
+  )
+})
+
+const filteredSetsOptions = computed(() => {
+  if (set.value.length < 2) return []
+  return setsOptions.value.filter(opt =>
+    opt.toLowerCase().includes(set.value.toLowerCase())
+  )
+})
 
 onMounted(async () => {
   const [seriesRes, setsRes] = await Promise.all([

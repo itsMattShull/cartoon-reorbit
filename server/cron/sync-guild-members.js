@@ -44,14 +44,38 @@ async function syncGuildMembers() {
       data:  { inGuild: false }
     })
 
-    // 3) load database usernames for these IDs
+    // 3) sync Discord “server booster” status
+    //   • anyone in this batch with m.premium_since===null → not boosting
+    //   • anyone with a non-null premium_since → is boosting since that timestamp
+    const nonBoosterIds = memberList
+      .filter(m => m.premium_since === null)
+      .map(m => m.user.id)
+    if (nonBoosterIds.length) {
+      await prisma.user.updateMany({
+        where: { discordId: { in: nonBoosterIds } },
+        data:  { isBooster: false, boosterSince: null }
+      })
+    }
+
+    const boosterMembers = memberList.filter(m => m.premium_since !== null)
+    for (const m of boosterMembers) {
+      await prisma.user.updateMany({
+        where: { discordId: m.user.id },
+        data: {
+          isBooster:   true,
+          boosterSince: new Date(m.premium_since)
+        }
+      })
+    }
+
+    // 4) load database usernames for these IDs
     const dbUsers = await prisma.user.findMany({
       where: { discordId: { in: memberIds } },
       select: { discordId: true, username: true }
     })
     const nameMap = new Map(dbUsers.map(u => [u.discordId, u.username]))
 
-    // 4) synchronize nicknames with backoff & error handling
+    // 5) synchronize nicknames with backoff & error handling
     const updated = []
     for (const m of memberList) {
       const dbName = nameMap.get(m.user.id)
@@ -79,36 +103,27 @@ async function syncGuildMembers() {
           done = true
 
         } else if (patch.status === 429) {
-          // rate limited: wait and retry
           let body = { retry_after: 5 }
           try { body = await patch.json() } catch {}
           const waitMs = (body.retry_after || 5) * 1000
-          // console.warn(
-          //   `[sync-guild] rate limited on ${m.user.id}, retrying in ${waitMs}ms (attempt ${attempts})`
-          // )
           await new Promise(r => setTimeout(r, waitMs))
 
         } else {
-          // non-retryable error: skip Missing Permissions silently
           let err = {}
           try { err = await patch.json() } catch {}
-          if (err.code === 50013) {
-            // Missing Permissions: skip without logging
-          } else {
-            // console.warn(
-            //   `[sync-guild] failed to patch nick for ${m.user.id}:`,
-            //   JSON.stringify(err)
-            // )
+          if (err.code !== 50013) {
+            // optionally log other errors here
           }
           done = true
         }
       }
     }
 
-    // 5) final report
+    // 6) final report (optional logging)
     // console.log(
     //   `[sync-guild] processed ${memberList.length} members, ` +
-    //   `updated ${updated.length} nicknames: ${updated.join(', ')}`
+    //   `nicknames updated: ${updated.length}, ` +
+    //   `boosters: ${boosterMembers.length}`
     // )
 
   } catch (err) {

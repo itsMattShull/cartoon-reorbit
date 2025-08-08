@@ -42,7 +42,8 @@ export default defineEventHandler(async (event) => {
       isAdmin: true,
       inGuild: true,
       points: true,
-      ctoons: true
+      ctoons: true,
+      isBooster: true
     }
   })
 
@@ -67,6 +68,7 @@ export default defineEventHandler(async (event) => {
     needsSetup: !(user.username && user.avatar && user.ctoons.length > 0),
     inGuild: user.inGuild,
     isAdmin: user.isAdmin,
-    ctoons: user.ctoons
+    ctoons: user.ctoons,
+    isBooster: user.isBooster
   }
 })

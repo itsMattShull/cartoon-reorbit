@@ -18,15 +18,12 @@
           <div class="h-4 bg-gray-200 rounded w-1/4"></div>
           <div class="h-4 bg-gray-200 rounded w-1/3"></div>
         </div>
-        <!-- Bid input -->
-        <div class="h-10 bg-gray-200 rounded w-full"></div>
+        <!-- Bid button -->
         <div class="h-10 bg-gray-200 rounded w-1/2"></div>
-        <!-- Bid history -->
-        <div class="h-6 bg-gray-200 rounded w-1/4 mt-4"></div>
-        <div class="space-y-1">
-          <div class="h-4 bg-gray-200 rounded w-full"></div>
-          <div class="h-4 bg-gray-200 rounded w-5/6"></div>
-          <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+        <!-- History cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="h-32 bg-gray-200 rounded"></div>
+          <div class="h-32 bg-gray-200 rounded"></div>
         </div>
       </div>
     </template>
@@ -66,45 +63,50 @@
         <p><strong>Current Highest Bid:</strong> {{ currentBid }} pts</p>
       </div>
 
-      <div v-if="ended" class="mb-6">
-        <span
-          class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
-        >
-          🎉 Winner: {{ displayWinner || '—' }} 🎉
-        </span>
-      </div>
-
       <!-- Bid Form -->
       <div v-if="!ended" class="mb-6">
-        <label for="bid" class="block text-sm font-medium mb-1">Your Bid (pts)</label>
-        <input
-          id="bid"
-          type="number"
-          v-model.number="bidAmount"
-          :min="currentBid + 1"
-          class="w-full border border-gray-300 rounded px-3 py-2 mb-2"
-        />
         <button
           @click="placeBid"
           :disabled="!canBid"
           class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
         >
-          Place Bid
+          Increase bid to {{ currentBid + bidIncrement }} pts
         </button>
-        <p v-if="!hasEnoughPoints" class="text-sm text-red-500 mt-2">
+        <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
+          You are currently the highest bidder and cannot bid again.
+        </p>
+        <p v-if="!canBid && !isTopBidder" class="text-sm text-red-500 mt-2">
           You only have {{ userPoints }} pts.
+        </p>
+        <!-- Countdown / Ended Message -->
+        <p v-if="!ended" class="text-sm text-red-600 mb-6">
+          {{ `Ending in ${formatRemaining(auction.endAt)}` }}
         </p>
       </div>
 
-      <!-- Bid History -->
-      <div class="border-t pt-4">
-        <h2 class="text-xl font-semibold mb-2">Bid History</h2>
-        <ul class="space-y-1 text-sm">
-          <li v-for="(b, i) in bids" :key="i">
-            {{ b.user }}: {{ b.amount }} pts
-          </li>
-          <li v-if="!bids.length" class="text-gray-500">No bids yet.</li>
-        </ul>
+      <!-- History & Sales Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <!-- Bid History Card -->
+        <div class="bg-white shadow rounded p-4">
+          <h2 class="text-xl font-semibold mb-2">Bid History</h2>
+          <ul class="space-y-1 text-sm">
+            <li v-for="(b, i) in bids" :key="i">
+              {{ b.user }}: {{ b.amount }} pts
+            </li>
+            <li v-if="!bids.length" class="text-gray-500">No bids yet.</li>
+          </ul>
+        </div>
+
+        <!-- Recent Sales Card -->
+        <div class="bg-white shadow rounded p-4">
+          <h2 class="text-xl font-semibold mb-2">Recent Sales</h2>
+          <ul class="space-y-1 text-sm">
+            <li v-for="(sale, i) in recentSales" :key="i">
+              {{ formatDate(sale.endedAt) }}: {{ sale.soldFor }} pts
+            </li>
+            <li v-if="!recentSales.length" class="text-gray-500">No past sales.</li>
+          </ul>
+        </div>
       </div>
 
       <!-- Toast -->
@@ -123,23 +125,23 @@ import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
 // --- Setup & state ---
-const route     = useRoute()
-const auctionId = route.params.id
+const route       = useRoute()
+const auctionId   = route.params.id
 const { user, fetchSelf } = useAuth()
 
-const loading       = ref(true)
-const auction       = ref({ ctoon: {}, winnerUsername: null, endAt: null })
-const bids          = ref([])
-const currentBid    = ref(0)
-const bidAmount     = ref(0)
-const userPoints    = ref(0)
-const toastMessage  = ref('')
-const toastType     = ref('error')
+const loading      = ref(true)
+const auction      = ref({ ctoon: {}, winnerUsername: null, endAt: null })
+const bids         = ref([])
+const currentBid   = ref(0)
+const userPoints   = ref(0)
+const recentSales  = ref([])
+const toastMessage = ref('')
+const toastType    = ref('error')
 
 const now = ref(new Date())
 let timer
 
-// --- Socket.IO client (lazy) ---
+// --- Socket.IO client ---
 const config = useRuntimeConfig()
 const socket = io(
   import.meta.env.PROD
@@ -152,35 +154,33 @@ const socket = io(
 const ended = computed(() =>
   auction.value.endAt && new Date(auction.value.endAt) <= now.value
 )
-
 const topBidderFromHistory = computed(() => {
   if (!bids.value.length) return null
-  return bids.value
-    .reduce((max, b) => b.amount > max.amount ? b : max, bids.value[0])
-    .user
+  return bids.value.reduce((max, b) => b.amount > max.amount ? b : max, bids.value[0]).user
 })
-
 const displayWinner = computed(() =>
   auction.value.winnerUsername || topBidderFromHistory.value
 )
-
+const isTopBidder = computed(() =>
+  user.value?.username && topBidderFromHistory.value === user.value.username
+)
+const bidIncrement = computed(() =>
+  currentBid.value < 1_000   ? 10  :
+  currentBid.value < 10_000  ? 100 :
+                              1_000
+)
 const canBid = computed(() =>
   !ended.value &&
-  bidAmount.value >= currentBid.value + 1 &&
-  bidAmount.value <= userPoints.value
-)
-
-const hasEnoughPoints = computed(() =>
-  bidAmount.value <= userPoints.value
+  !isTopBidder.value &&
+  userPoints.value >= bidIncrement.value
 )
 
 // --- Helpers ---
 function showToast(msg, type = 'error') {
   toastMessage.value = msg
-  toastType.value = type
+  toastType.value    = type
   setTimeout(() => { toastMessage.value = '' }, 5000)
 }
-
 function formatRemaining(endAt) {
   const diff = new Date(endAt) - now.value
   if (diff <= 0) return '0s'
@@ -191,18 +191,22 @@ function formatRemaining(endAt) {
   if (mins > 0) return `${mins}m ${secs}s`
   return `${secs}s`
 }
+function formatDate(dt) {
+  return new Date(dt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
 
 // --- Data loading & actions ---
 async function loadAuction() {
   await fetchSelf()
   const data = await $fetch(`/api/auction/${auctionId}`)
   const pts  = await $fetch('/api/user/points')
-
   auction.value    = data
   bids.value       = data.bids
   currentBid.value = data.currentBid
-  bidAmount.value  = data.currentBid + 1
   userPoints.value = pts.points
+
+  // fetch last 3 sales
+  recentSales.value = await $fetch(`/api/auction/${auctionId}/getRecentAuctions`)
 }
 
 async function placeBid() {
@@ -210,9 +214,9 @@ async function placeBid() {
   try {
     await $fetch(`/api/auction/${auctionId}/bid`, {
       method: 'POST',
-      body: { amount: bidAmount.value }
+      body: { amount: currentBid.value + bidIncrement.value }
     })
-    showToast('Bid placed!', 'success')
+    showToast(`Bid +${bidIncrement.value} placed!`, 'success')
   } catch (err) {
     showToast(err.data?.message || 'Bid failed.')
   }
@@ -220,31 +224,24 @@ async function placeBid() {
 
 // --- Lifecycle ---
 onMounted(async () => {
-  // load data
   await loadAuction()
   loading.value = false
-
-  // countdown
   timer = setInterval(() => { now.value = new Date() }, 1000)
 
-  // socket handlers
   socket.on('connect', () => {
     socket.emit('join-auction', { auctionId })
   })
-
   socket.on('new-bid', payload => {
     if (payload.auctionId.toString() === auctionId) {
       bids.value.unshift({ user: payload.user, amount: payload.amount })
       currentBid.value = payload.amount
-      bidAmount.value  = payload.amount + 1
+      // update increment etc.
     }
   })
-
   socket.on('auction-ended', ({ winnerUsername, winningBid }) => {
-    currentBid.value = winningBid ?? currentBid.value
     auction.value.winnerUsername = winnerUsername || auction.value.winnerUsername
+    currentBid.value = winningBid ?? currentBid.value
   })
-
   socket.connect()
 })
 

@@ -7,18 +7,12 @@
   </button>
 
   <!-- Inline modal overlay -->
-  <div
-    v-if="showModal"
-    class="fixed inset-0 z-50 flex items-center justify-center"
-  >
+  <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
     <!-- Backdrop -->
-    <div
-      class="absolute inset-0 bg-black bg-opacity-50"
-      @click="closeModal"
-    ></div>
+    <div class="absolute inset-0 bg-black bg-opacity-50" @click="closeModal"></div>
 
     <!-- Modal content -->
-    <div class="relative bg-white p-6 rounded-lg shadow-lg z-10 w-full max-w-md">
+    <div class="relative bg-white p-6 rounded-lg shadow-lg z-10 w-full max-w-lg">
       <h3 class="text-lg font-semibold mb-4">Send {{ userCtoon.name }} to Auction</h3>
       <div class="space-y-4">
         <div>
@@ -36,11 +30,7 @@
         <div>
           <p class="block mb-1 font-medium">Duration</p>
           <label class="inline-flex items-center mr-4">
-            <input
-              type="checkbox"
-              v-model="quick3m"
-              class="form-checkbox"
-            />
+            <input type="checkbox" v-model="quick3m" class="form-checkbox" />
             <span class="ml-2">Quick: 3 minutes</span>
           </label>
           <div v-if="!quick3m">
@@ -59,15 +49,24 @@
           </div>
         </div>
       </div>
-      <div class="mt-6 flex justify-end space-x-2">
-        <button @click="closeModal" class="btn-secondary">Cancel</button>
+      <div class="mt-6 flex justify-between items-center">
         <button
-          @click="sendToAuction"
-          :disabled="sending || initialBet < 1"
-          class="btn-primary"
+          @click="instaBid"
+          :disabled="sending"
+          class="btn-secondary"
         >
-          {{ sending ? 'Sending...' : 'Send to Auction' }}
+          Insta-bid for {{ instaBidValue }} Points
         </button>
+        <div class="flex space-x-2">
+          <button @click="closeModal" class="btn-secondary">Cancel</button>
+          <button
+            @click="sendToAuction"
+            :disabled="sending || initialBet < 1"
+            class="btn-primary"
+          >
+            {{ sending ? 'Sending...' : 'Send to Auction' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -98,6 +97,16 @@ const disabled = computed(() =>
   !props.isOwner || props.hasActiveAuction || auctionSent.value
 )
 
+const instaBidValue = computed(() => {
+  switch (props.userCtoon.rarity.toLowerCase()) {
+    case 'common': return 25
+    case 'uncommon': return 50
+    case 'rare': return 100
+    case 'very rare': return 187
+    default: return 312
+  }
+})
+
 function showToast(message, type = 'error') {
   toastMessage.value = message
   toastType.value    = type
@@ -122,16 +131,49 @@ async function sendToAuction() {
   }
   sending.value = true
   try {
-    await $fetch('/api/auctions', {
+    const { auction } = await $fetch('/api/auctions', {
       method: 'POST',
       body: {
         userCtoonId:     props.userCtoon.id,
         initialBet:      initialBet.value,
         durationDays:    quick3m.value ? 0 : timeframe.value,
-        durationMinutes: quick3m.value ? 3 : 0
+        durationMinutes: quick3m.value ? 3 : 0,
+        createInitialBid: false
       }
     })
     showToast('Auction created successfully!', 'success')
+    auctionSent.value = true
+    emit('auctionCreated', props.userCtoon.id)
+    closeModal()
+  } catch (error) {
+    showToast(error.data?.message || 'Failed to create auction.', 'error')
+  } finally {
+    sending.value = false
+  }
+}
+
+async function instaBid() {
+  if (sending.value || disabled.value) return
+  sending.value = true
+  try {
+    // Set initial bid and duration
+    initialBet.value = instaBidValue.value
+    quick3m.value = false
+    timeframe.value = 1
+
+    // Create auction with server-side initial bid
+    const { auction } = await $fetch('/api/auctions', {
+      method: 'POST',
+      body: {
+        userCtoonId:      props.userCtoon.id,
+        initialBet:       initialBet.value,
+        durationDays:     1,
+        durationMinutes:  0,
+        createInitialBid: true
+      }
+    })
+
+    showToast('Auction created with initial bid!', 'success')
     auctionSent.value = true
     emit('auctionCreated', props.userCtoon.id)
     closeModal()
