@@ -65,6 +65,20 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 4) Verify initiator has enough points
+  const initiator = await prisma.user.findUnique({
+    where: { id: initiatorId },
+    select: { points: { select: { points: true } } } // UserPoints relation
+  })
+  const initiatorBalance = initiator?.points?.points ?? 0
+
+  if (pointsOffered > initiatorBalance) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Insufficient points: you have ${initiatorBalance} but tried to offer ${pointsOffered}`
+    })
+  }
+
   // 5) Verify ownership of requested cToons
   if (ctoonIdsRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({

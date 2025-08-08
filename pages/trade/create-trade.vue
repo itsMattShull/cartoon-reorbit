@@ -1,5 +1,6 @@
 <template>
-  <div class="pt-20 px-4 max-w-7xl mx-auto">
+  <Nav />
+  <div class="pt-20 px-4 max-w-7xl mx-auto mt-6">
     <!-- Title -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Create Trade</h1>
@@ -13,19 +14,40 @@
       <label class="block text-sm font-medium mb-2">Find a user to trade with</label>
       <div class="relative">
         <input
+          ref="userInputRef"
           v-model.trim="userQuery"
           @input="onUserQueryInput"
+          @keydown="onUserKeydown"
           type="text"
           placeholder="Type a username…"
+          autocomplete="off"
+          role="combobox"
+          aria-expanded="showUserSuggest"
+          aria-controls="user-suggest-listbox"
+          aria-autocomplete="list"
           class="w-full border rounded px-3 py-2"
         />
         <!-- suggestions -->
-        <div v-if="showUserSuggest" class="absolute z-20 bg-white border rounded w-full mt-1 max-h-64 overflow-auto">
-          <template v-if="userResults.length">
+        <div
+          v-if="showUserSuggest"
+          ref="userSuggestRef"
+          id="user-suggest-listbox"
+          class="absolute z-20 bg-white border rounded w-full mt-1 max-h-64 overflow-auto"
+          role="listbox"
+        >
+          <div v-if="isSearching" class="px-3 py-2 text-sm text-gray-600">Searching…</div>
+
+          <template v-else-if="userResults.length">
             <button
-              v-for="u in userResults"
+              v-for="(u, idx) in userResults"
               :key="u.username"
-              class="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2"
+              :class="[
+                'w-full text-left px-3 py-2 flex items-center gap-2',
+                highlightedIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
+              ]"
+              role="option"
+              :aria-selected="highlightedIndex === idx"
+              @mouseenter="highlightedIndex = idx"
               @click="selectTargetUser(u)"
             >
               <img :src="`/avatars/${u.avatar || 'default.png'}`" class="w-6 h-6 rounded-full border" />
@@ -33,6 +55,7 @@
               <span v-if="u.isBooster" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Booster</span>
             </button>
           </template>
+
           <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
         </div>
       </div>
@@ -42,18 +65,26 @@
         <img :src="`/avatars/${targetUser.avatar || 'default.png'}`" class="w-10 h-10 rounded-full border" />
         <div class="flex items-center gap-2">
           <p class="font-semibold">Trading with {{ targetUser.username }}</p>
-          <button class="text-xs px-2 py-1 border rounded hover:bg-gray-50" @click="clearTarget">Change</button>
+          <button class="text-xs px-2 py-1 border rounded hover:bg-gray-50" @click="clearTarget(true)">Change</button>
         </div>
       </div>
     </section>
 
-    <!-- Steps -->
-    <section v-if="targetUser" class="grid lg:grid-cols-2 gap-6">
-      <!-- STEP 1: Pick their cToons -->
+    <!-- STEP 1: Other user's collection (only) -->
+    <section v-if="targetUser && currentStep === 1" class="mb-6">
       <div class="bg-white rounded-xl shadow-md p-4">
-        <div class="flex items-baseline justify-between mb-3">
-          <h2 class="text-lg font-semibold">1) {{ targetUser.username }}’s Collection</h2>
-          <span class="text-xs text-gray-500">Select one or more</span>
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-lg font-semibold">1) {{ targetUser.username }}’s Collection</h2>
+            <span class="text-xs text-gray-500">Select one or more</span>
+          </div>
+          <button
+            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+            :disabled="!selectedTargetCtoons.length"
+            @click="currentStep = 2"
+          >
+            Next
+          </button>
         </div>
 
         <FilterBar
@@ -92,25 +123,39 @@
             class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
             :disabled="!selectedTargetCtoons.length"
             @click="currentStep = 2"
-          >Next</button>
+          >
+            Next
+          </button>
         </div>
       </div>
+    </section>
 
-      <!-- STEP 2: Pick your cToons + points -->
-      <div class="bg-white rounded-xl shadow-md p-4" :class="{'opacity-50 pointer-events-none': currentStep !== 2}">
-        <div class="flex items-baseline justify-between mb-3">
+    <!-- STEP 2: Your collection & points (only) -->
+    <section v-if="targetUser && currentStep === 2" class="mb-6">
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold">2) Your Collection & Points</h2>
-          <div class="flex items-center gap-2">
-            <label class="text-sm">Points to offer</label>
-            <input
-              type="number"
-              v-model.number="pointsToOffer"
-              :max="user?.points || 0"
-              min="0"
-              @input="pointsToOffer = Math.max(0, pointsToOffer)"
-              class="w-24 border rounded px-2 py-1"
-              placeholder="0"
-            />
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <label class="text-sm">Points to offer</label>
+              <input
+                type="number"
+                v-model.number="pointsToOffer"
+                :max="user?.points || 0"
+                min="0"
+                @input="pointsToOffer = Math.max(0, pointsToOffer)"
+                class="w-24 border rounded px-2 py-1"
+                placeholder="0"
+              />
+            </div>
+            <button
+              class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+              :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer"
+              @click="sendOffer"
+            >
+              <span v-if="makingOffer">Making Offer…</span>
+              <span v-else>Make Offer</span>
+            </button>
           </div>
         </div>
 
@@ -169,16 +214,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
-/**
- * Trading API endpoints used here (same shapes as your existing cZone page):
- *  - GET  /api/collection/:username         -> array of cToons in that user's collection
- *  - POST /api/trade/offers                 -> { recipientUsername, ctoonIdsRequested, ctoonIdsOffered, pointsOffered }
- *  - GET  /api/users/search?q=<query>       -> array of { username, avatar, isBooster? }
- */
+// Import SFC components
+import FilterBar from '@/components/trade/FilterBar.vue'
+import CtoonCard from '@/components/trade/CtoonCard.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -188,33 +231,82 @@ const { user, fetchSelf } = useAuth()
 const currentStep = ref(1) // 1 or 2
 
 // ────────────────────────────────────────────────────────────────────────────────
-// User search w/ autocomplete
+// User search w/ autocomplete (3+ chars, debounced, keyboard nav)
 // ────────────────────────────────────────────────────────────────────────────────
+const MIN_CHARS = 3
+const DEBOUNCE_MS = 250
+
 const userQuery = ref('')
 const userResults = ref([])
 const showUserSuggest = ref(false)
+const isSearching = ref(false)
+const highlightedIndex = ref(-1) // for ↑/↓ nav
 const targetUser = ref(null) // { username, avatar }
 const targetError = ref('')
+
+const userInputRef = ref(null)
+const userSuggestRef = ref(null)
+
 let userSearchTimer
+const userSearchCache = new Map() // simple in-memory cache by query string
 
 function onUserQueryInput() {
   targetError.value = ''
   showUserSuggest.value = true
+  highlightedIndex.value = -1
   clearTimeout(userSearchTimer)
-  const q = userQuery.value
-  if (!q || q.length < 2) {
+
+  const q = userQuery.value || ''
+  if (q.length < MIN_CHARS) {
     userResults.value = []
+    isSearching.value = false
     return
   }
+
   userSearchTimer = setTimeout(async () => {
+    const key = q.toLowerCase()
     try {
-      const res = await $fetch(`/api/users/search`, { params: { q } })
-      // Eliminate yourself from suggestions
-      userResults.value = (res || []).filter(r => r.username !== user.value?.username)
+      isSearching.value = true
+      if (userSearchCache.has(key)) {
+        userResults.value = filterOutSelf(userSearchCache.get(key))
+        isSearching.value = false
+        return
+      }
+
+      const res = await $fetch('/api/users/search', { params: { q, limit: 8 } })
+      const items = Array.isArray(res) ? res : (res?.items || [])
+      userSearchCache.set(key, items)
+      userResults.value = filterOutSelf(items)
     } catch (e) {
       userResults.value = []
+    } finally {
+      isSearching.value = false
     }
-  }, 250)
+  }, DEBOUNCE_MS)
+}
+
+function filterOutSelf(items) {
+  const me = user.value?.username
+  return (items || []).filter(r => r.username && r.username !== me)
+}
+
+function onUserKeydown(e) {
+  if (!showUserSuggest.value) return
+  const max = userResults.value.length - 1
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    highlightedIndex.value = highlightedIndex.value < max ? highlightedIndex.value + 1 : 0
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    highlightedIndex.value = highlightedIndex.value > 0 ? highlightedIndex.value - 1 : max
+  } else if (e.key === 'Enter') {
+    if (highlightedIndex.value >= 0 && highlightedIndex.value <= max) {
+      e.preventDefault()
+      selectTargetUser(userResults.value[highlightedIndex.value])
+    }
+  } else if (e.key === 'Escape') {
+    showUserSuggest.value = false
+  }
 }
 
 function selectTargetUser(u) {
@@ -225,31 +317,55 @@ function selectTargetUser(u) {
   targetUser.value = u
   userQuery.value = u.username
   showUserSuggest.value = false
+  highlightedIndex.value = -1
+  currentStep.value = 1              // start at Step 1
   bootstrapCollections()
 }
 
-function clearTarget() {
+/**
+ * Clear everything and (optionally) focus the username input
+ */
+async function clearTarget(focusInput = false) {
   targetUser.value = null
   currentStep.value = 1
   userQuery.value = ''
   userResults.value = []
-  selfCtoons.value = []
-  otherCtoons.value = []
+  highlightedIndex.value = -1
+  showUserSuggest.value = false
+  isSearching.value = false
   selectedTargetCtoons.value = []
   selectedInitiatorCtoons.value = []
   pointsToOffer.value = 0
+  otherCtoons.value = []
+  selfCtoons.value = []
+  filters.other = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
+  filters.self  = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
+
+  // Optional: keep cache, but you can clear if you want:
+  // userSearchCache.clear()
+
+  if (focusInput) {
+    await nextTick()
+    userInputRef.value?.focus()
+  }
 }
 
-// close suggest on outside click
-if (process.client) {
-  window.addEventListener('click', (e) => {
-    const inputEl = document.querySelector('input[placeholder="Type a username…"]')
-    if (!inputEl) return
-    if (!inputEl.contains(e.target)) {
-      showUserSuggest.value = false
-    }
-  })
+// close suggest on outside click (but not when clicking inside the list)
+function onGlobalClick(e) {
+  const inputEl = userInputRef.value
+  const boxEl = userSuggestRef.value
+  if (!inputEl) return
+  const target = e.target
+  if (inputEl.contains(target) || (boxEl && boxEl.contains(target))) return
+  showUserSuggest.value = false
 }
+
+onMounted(() => {
+  if (process.client) window.addEventListener('click', onGlobalClick)
+})
+onBeforeUnmount(() => {
+  if (process.client) window.removeEventListener('click', onGlobalClick)
+})
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Collections + ownership sets
@@ -305,7 +421,6 @@ const filters = reactive({
   self:  { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
 })
 
-// options
 const setOptionsOther = computed(() => ['All', ...uniqueTruthies(otherCtoons.value.map(c => c.set))])
 const seriesOptionsOther = computed(() => ['All', ...uniqueTruthies(otherCtoons.value.map(c => c.series))])
 const setOptionsSelf = computed(() => ['All', ...uniqueTruthies(selfCtoons.value.map(c => c.set))])
@@ -313,7 +428,6 @@ const seriesOptionsSelf = computed(() => ['All', ...uniqueTruthies(selfCtoons.va
 
 function uniqueTruthies(arr) { return [...new Set(arr.filter(Boolean))] }
 
-// name suggestions (after 3 chars)
 const nameSuggestionsOther = ref([])
 const nameSuggestionsSelf = ref([])
 
@@ -333,11 +447,9 @@ function buildNameSuggestions(q, list) {
     .slice(0, 8)
 }
 
-// filtered lists
 const filteredOther = computed(() => applyFilters(otherCtoons.value, filters.other, {
   ownedPredicate: (c) => selfOwnedIds.value.has(c.ctoonId) // Owned (by viewer)
 }))
-
 const filteredSelf = computed(() => applyFilters(selfCtoons.value, filters.self, {
   ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId) // Owned (by target user)
 }))
@@ -354,7 +466,6 @@ function applyFilters(items, f, ctx) {
     if (f.owned === 'unowned' && isOwned) return false
     return true
   }).sort((a,b) => {
-    // Prefer unowned first in both contexts to surface likely-tradables
     const aOwned = ctx.ownedPredicate(a)
     const bOwned = ctx.ownedPredicate(b)
     return aOwned === bOwned ? 0 : (aOwned ? 1 : -1)
@@ -385,125 +496,15 @@ async function sendOffer() {
     toast.show = true
     setTimeout(() => (toast.show = false), 3000)
 
-    // Reset state but keep you on the page
-    selectedTargetCtoons.value = []
-    selectedInitiatorCtoons.value = []
-    pointsToOffer.value = 0
-    currentStep.value = 1
+    // Hard reset: clear selections AND require a new username
+    await clearTarget(true) // true => focus username input
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (e) {
     toast.message = 'Failed to send offer. Please try again.'
     toast.show = true
     setTimeout(() => (toast.show = false), 3500)
   } finally {
     makingOffer.value = false
-  }
-}
-</script>
-
-<script>
-// Local components for tidy SFC: FilterBar, CtoonCard, EmptyState
-export default {
-  components: {
-    FilterBar: {
-      props: {
-        context: { type: String, required: true }, // 'other' | 'self'
-        nameQuery: { type: String, default: '' },
-        nameSuggestions: { type: Array, default: () => [] },
-        setOptions: { type: Array, default: () => ['All'] },
-        seriesOptions: { type: Array, default: () => ['All'] },
-        ownedFilter: { type: String, default: 'all' },
-      },
-      emits: ['update:name-query','update:set-filter','update:series-filter','update:owned-filter','request-name-suggest'],
-      data() {
-        return { internalName: this.nameQuery, showSuggest: false }
-      },
-      watch: {
-        nameQuery(n) { this.internalName = n }
-      },
-      methods: {
-        onNameInput() {
-          this.$emit('update:name-query', this.internalName)
-          this.showSuggest = true
-          this.$emit('request-name-suggest', this.internalName)
-        },
-        applySuggestion(s) {
-          this.internalName = s
-          this.$emit('update:name-query', s)
-          this.showSuggest = false
-        }
-      },
-      template: `
-        <div class="flex flex-col md:flex-row md:items-end gap-3 mb-4">
-          <div class="flex-1">
-            <label class="block text-xs font-medium mb-1">cToon Name</label>
-            <div class="relative">
-              <input
-                :value="internalName"
-                @input="(e)=>{ internalName = e.target.value; onNameInput() }"
-                type="text" placeholder="Type at least 3 characters…"
-                class="w-full border rounded px-3 py-2"
-              />
-              <div v-if="showSuggest && nameSuggestions.length" class="absolute z-10 w-full bg-white border rounded mt-1 max-h-48 overflow-auto">
-                <button v-for="s in nameSuggestions" :key="s" class="w-full text-left px-3 py-1.5 hover:bg-indigo-50" @click="applySuggestion(s)">{{ s }}</button>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-medium mb-1">Set</label>
-            <select class="border rounded px-3 py-2" @change="$emit('update:set-filter', $event.target.value)">
-              <option v-for="opt in setOptions" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium mb-1">Series</label>
-            <select class="border rounded px-3 py-2" @change="$emit('update:series-filter', $event.target.value)">
-              <option v-for="opt in seriesOptions" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium mb-1">{{ context === 'other' ? 'Owned (by you)' : 'Owned by User' }}</label>
-            <select class="border rounded px-3 py-2" :value="ownedFilter" @change="$emit('update:owned-filter', $event.target.value)">
-              <option value="all">All</option>
-              <option value="owned">Owned</option>
-              <option value="unowned">Unowned</option>
-            </select>
-          </div>
-        </div>
-      `
-    },
-    CtoonCard: {
-      props: {
-        ctoon: { type: Object, required: true },
-        selected: { type: Boolean, default: false },
-        badge: { type: String, default: '' },
-        badgeClassOwned: { type: String, default: 'bg-green-100 text-green-800' },
-        badgeClassUnowned: { type: String, default: 'bg-gray-200 text-gray-600' },
-      },
-      emits: ['toggle'],
-      computed: {
-        badgeClass() {
-          return this.badge.toLowerCase().includes('unowned') ? this.badgeClassUnowned : this.badgeClassOwned
-        }
-      },
-      methods: {
-        editionLabel(c) { return c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }
-      },
-      template: `
-        <button @click="$emit('toggle')" :class="['relative w-full text-left border rounded p-2 hover:shadow transition', selected ? 'border-indigo-500 bg-indigo-50' : '']">
-          <span class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full" :class="badgeClass">{{ badge }}</span>
-          <img :src="ctoon.assetPath" class="w-full h-28 object-contain mb-2 mt-6" :alt="ctoon.name" />
-          <p class="text-sm font-medium leading-tight">{{ ctoon.name }}</p>
-          <p class="text-xs text-gray-600">{{ ctoon.rarity }}</p>
-          <p class="text-xs text-gray-600">Mint #{{ ctoon.mintNumber }} of {{ ctoon.quantity !== null ? ctoon.quantity : 'Unlimited' }}</p>
-          <p class="text-xs text-gray-600">{{ editionLabel(ctoon) }}</p>
-          <div v-if="selected" class="absolute -top-2 -left-2 bg-indigo-500 text-white text-xs px-2 py-0.5 rounded">Selected</div>
-        </button>
-      `
-    },
-    EmptyState: {
-      props: { label: { type:String, default:'Nothing here' } },
-      template: `<div class="py-12 text-center text-gray-500">{{ label }}</div>`
-    }
   }
 }
 </script>
