@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     default:   startDate = null
   }
 
-  const floorDate = new Date('2025-08-10T00:00:00Z')
+  const floorDate = new Date('2025-08-10T010:00:00Z')
 
   // If timeframe would start earlier (or is 'all'), use the floor instead
   const effectiveStart = (startDate && startDate > floorDate) ? startDate : floorDate
