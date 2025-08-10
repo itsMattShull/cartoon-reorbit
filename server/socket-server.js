@@ -43,6 +43,17 @@ const pvpMatches = new Map();    // roomId -> { battle, recordId }
 const tradeRooms   = {}
 const tradeSockets = {}
 
+const ASSET_BASE =
+  process.env.NODE_ENV === 'production'
+    ? 'https://www.cartoonreorbit.com'
+    : 'http://localhost:3000';
+
+const withAsset = p => (p
+  ? (p.startsWith('http') ? p : `${ASSET_BASE}${p}`)
+  : null);
+
+const sid = v => String(v)
+
 /* ── Clash PvE: Select → Reveal → Setup ───────────────────── */
 // Fisher–Yates shuffle helper
 function shuffle(arr) {
@@ -52,6 +63,74 @@ function shuffle(arr) {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+function maybeStartPvp(roomId) {
+  const room = pvpRooms.get(roomId)
+  if (!room || room.players.length !== 2) return
+  const [p1, p2] = room.players
+  if (!room.decks?.[p1] || !room.decks?.[p2]) return
+
+  const battleId = randomUUID()
+  const battle = createBattle({
+    playerDeck: room.decks[p1],
+    aiDeck:     room.decks[p2],   // using second deck slot for opponent
+    battleId,
+    lanes: LANES
+  })
+  pvpMatches.set(roomId, { battle, recordId: room.recordId })
+
+  // remove from lobby now that it’s full
+  io.emit('roomRemoved', { id: roomId })
+  pvpRooms.delete(roomId)
+
+  io.to(roomId).emit('gameStart', battle.publicState())
+}
+
+async function awardClashWinPoints(userId) {
+  let toGive = 0
+  try {
+    const clashConfig  = await db.gameConfig.findUnique({
+      where: { gameName: 'Clash' },
+      select: { pointsPerWin: true }
+    })
+    const globalConfig = await db.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { dailyPointLimit: true }
+    })
+    if (!clashConfig || !globalConfig) return 0
+
+    const { pointsPerWin }         = clashConfig
+    const { dailyPointLimit: cap } = globalConfig
+
+    const nowCST    = DateTime.now().setZone('America/Chicago')
+    const cutoffCST = nowCST.hour >= 20
+      ? nowCST.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+      : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+    const cutoffUTC = cutoffCST.toUTC().toJSDate()
+
+    const agg = await db.gamePointLog.aggregate({
+      where: { userId, createdAt: { gte: cutoffUTC } },
+      _sum:  { points: true }
+    })
+    const used = agg._sum.points || 0
+    const remaining = Math.max(0, cap - used)
+    toGive = Math.min(pointsPerWin, remaining)
+    if (toGive > 0) {
+      await db.gamePointLog.create({ data: { userId, points: toGive } })
+      const updated = await db.userPoints.upsert({
+        where:  { userId },
+        create: { userId, points: toGive },
+        update: { points: { increment: toGive } }
+      })
+      await db.pointsLog.create({
+        data: { userId, points: toGive, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
+      })
+    }
+  } catch (e) {
+    console.error('Failed to award PvP Clash points:', e)
+  }
+  return toGive
 }
 
 function aiChooseSelections(battle) {
@@ -167,68 +246,522 @@ function startSelectTimer(io, match) {
   }, 1000)
 }
 
+const clone = o => JSON.parse(JSON.stringify(o));
+
+function viewForUser(match, uid, baseState = null) {
+  // engine uses 'player' (owner) and 'ai' (joiner). We remap so
+  // each client always sees themselves as "player".
+  const engineSide = match.userSide?.[uid]; // 'player' or 'ai'
+  const raw = clone(baseState || match.battle.state);
+
+  if (engineSide === 'player') {
+    // Hide opponent hand/deck
+    raw.aiHand = undefined;
+    raw.aiDeck = undefined;
+    return raw;
+  }
+
+  // engineSide === 'ai'  -> this is PLAYER 2. Swap fields so they see "me" as player.
+  [raw.playerEnergy, raw.aiEnergy] = [raw.aiEnergy, raw.playerEnergy];
+  [raw.playerHand,   raw.aiHand  ] = [raw.aiHand,   raw.playerHand  ];
+  [raw.playerDeck,   raw.aiDeck  ] = [raw.aiDeck,   raw.playerDeck  ];
+  raw.lanes.forEach(l => { [l.player, l.ai] = [l.ai, l.player]; });
+
+  // Flip priority wording so UI texts ("You attack first") stay correct.
+  if (raw.priority === 'player') raw.priority = 'ai';
+  else if (raw.priority === 'ai') raw.priority = 'player';
+
+  // Now hide opponent (which is 'ai' after swap)
+  raw.aiHand = undefined;
+  raw.aiDeck = undefined;
+  return raw;
+}
+
+async function emitStateToRoom(io, roomId, match, build) {
+  const sockets = await io.in(roomId).fetchSockets();
+  for (const s of sockets) {
+    const uid = s.data.userId;
+    s.emit('phaseUpdate', build(uid));
+  }
+}
+
+function roomSize(io, roomId) {
+  const set = io.sockets.adapter.rooms.get(roomId)
+  return set ? set.size : 0
+}
+
+async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
+  if (!roomId) return
+
+  // If there is an active PvP match in this room, end it as incomplete.
+  const match = pvpMatches.get(roomId)
+  if (match) {
+    // compute “future” size after this socket leaves
+    let size = roomSize(io, roomId)
+    const set = io.sockets.adapter.rooms.get(roomId)
+    if (leavingSocketId && set && set.has(leavingSocketId)) size -= 1
+
+    // stop the timer and mark DB
+    if (match.timer) clearInterval(match.timer)
+    try {
+      await db.clashGame.update({
+        where: { id: match.recordId },
+        data: { endedAt: new Date(), outcome: 'incomplete', winnerUserId: null, whoLeftUserId: userId || null }
+      })
+    } catch (e) {
+      console.error('Failed to mark PvP game incomplete:', e)
+    }
+
+    // If someone is still in the room, show them the modal via gameEnd
+    if (size >= 1) {
+      io.to(roomId).emit('gameEnd', {
+        winner: 'incomplete',
+        playerLanesWon: 0,
+        aiLanesWon: 0,
+        reason: 'opponent_disconnect',
+        pointsAwarded: 0
+      })
+    }
+
+    // cleanup
+    pvpMatches.delete(roomId)
+    io.emit('roomRemoved', { id: roomId })
+    return
+  }
+
+  // ── Otherwise handle *lobby* rooms (unchanged logic) ──
+  const lobby = pvpRooms.get(roomId)
+  if (lobby) {
+    if (userId) {
+      lobby.players = lobby.players.filter(id => id !== String(userId))
+      if (lobby.decks) delete lobby.decks[String(userId)]
+    }
+
+    // recompute future size after this socket leaves
+    let size = roomSize(io, roomId)
+    const set = io.sockets.adapter.rooms.get(roomId)
+    if (leavingSocketId && set && set.has(leavingSocketId)) size -= 1
+
+    if (size <= 0) {
+      pvpRooms.delete(roomId)
+      io.emit('roomRemoved', { id: roomId })
+    } else if (lobby.players.length === 1) {
+      const u = await db.user.findUnique({
+        where: { id: lobby.players[0] },
+        select: { username: true }
+      })
+      io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown' })
+    }
+  }
+}
+
+function lobbySnapshot(room) {
+  const [p1, p2] = room.players
+  return {
+    players: room.players,
+    usernames: room.usernames || {},
+    haveDeck: {
+      [p1]: !!room.decks?.[p1],
+      [p2]: !!room.decks?.[p2],
+    },
+    ready: room.ready || {}
+  }
+}
+
+async function startPvpMatch(roomId) {
+  const room = pvpRooms.get(roomId)
+  if (!room || pvpMatches.has(roomId)) return
+  const [p1, p2] = room.players
+  if (!room.decks?.[p1] || !room.decks?.[p2]) return
+  if (!room.ready?.[p1] || !room.ready?.[p2]) return
+
+  const battleId = randomUUID()
+  const battle = createBattle({
+    playerDeck: room.decks[p1],
+    aiDeck:     room.decks[p2],   // 2nd player as opponent
+    battleId,
+    lanes: LANES
+  })
+
+  // create the DB record *now* (game really starts here)
+  const record = await db.clashGame.create({
+    data: {
+      player1UserId: p1,
+      player2UserId: p2,
+      startedAt:     new Date()
+    }
+  })
+
+  pvpMatches.set(roomId, {
+    battle,
+    recordId: record.id,
+    // map userId -> battle side ("player" is owner, "ai" is joiner)
+    userSide: { [p1]: 'player', [p2]: 'ai' },
+    pending:  { player: null, ai: null },
+    confirmed:{ player: false, ai: false },
+    timer: null
+  })
+  pvpRooms.delete(roomId); // no longer a lobby entity
+
+  (async () => {
+    const match = pvpMatches.get(roomId);
+    const sockets = await io.in(roomId).fetchSockets();
+    for (const s of sockets) {
+      s.emit('gameStart', viewForUser(match, s.data.userId));
+    }
+  })();
+  startPvpTimer(io, roomId)
+}
+
+function startPvpTimer(io, roomId) {
+  const match = pvpMatches.get(roomId);
+  if (!match) return;
+
+  match.selectDeadline = Date.now() + 60_000;
+  if (match.timer) clearInterval(match.timer);
+
+  match.timer = setInterval(async () => {
+    const now = Date.now();
+
+    // ----- HARD TIMEOUT ON SELECT -----
+    if (match.battle.state.phase === 'select' &&
+        match.selectDeadline &&
+        now >= match.selectDeadline) {
+
+      const pConf = !!match.confirmed.player;
+      const aConf = !!match.confirmed.ai;
+
+      // Stop ticking and close the room no matter what.
+      clearInterval(match.timer);
+      match.timer = null;
+
+      if (!pConf && !aConf) {
+        // Case A: nobody confirmed → INCOMPLETE
+        try {
+          await db.clashGame.update({
+            where: { id: match.recordId },
+            data: {
+              endedAt:      new Date(),
+              outcome:      'incomplete',
+              winnerUserId: null
+            }
+          });
+        } catch (e) {
+          console.error('Failed to mark PvP timeout incomplete:', e);
+        }
+
+        const sockets = await io.in(roomId).fetchSockets();
+        for (const s of sockets) {
+          s.emit('gameEnd', {
+            winner: 'incomplete',
+            playerLanesWon: 0,
+            aiLanesWon:     0,
+            reason:          'turn_timeout',
+            pointsAwarded:   0
+          });
+        }
+        pvpMatches.delete(roomId);
+        return;
+      }
+
+      // Case B: exactly one confirmed → that side wins
+      const winnerSide = pConf ? 'player' : 'ai';
+      const p1Id = Object.entries(match.userSide).find(([, side]) => side === 'player')?.[0] || null;
+      const p2Id = Object.entries(match.userSide).find(([, side]) => side === 'ai')?.[0] || null;
+      const winnerUserId = winnerSide === 'player' ? p1Id : p2Id;
+
+      let awarded = 0;
+      try {
+        await db.clashGame.update({
+          where: { id: match.recordId },
+          data: {
+            endedAt:      new Date(),
+            winnerUserId: winnerUserId,
+            outcome:      'player'       // 'player' or 'ai'
+          }
+        });
+        if (winnerUserId) {
+          awarded = await awardClashWinPoints(winnerUserId);
+        }
+      } catch (e) {
+        console.error('Failed to close PvP on timeout win:', e);
+      }
+
+      const sockets = await io.in(roomId).fetchSockets();
+      for (const s of sockets) {
+        const mine = match.userSide?.[s.data.userId] || 'player';
+        const winner =
+          winnerSide === 'player'
+            ? (mine === 'player' ? 'player' : 'ai')
+            : (mine === 'player' ? 'ai' : 'player');
+
+        s.emit('gameEnd', {
+          winner,
+          playerLanesWon: 0,
+          aiLanesWon:     0,
+          reason:         'turn_timeout',
+          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0)
+        });
+      }
+
+      pvpMatches.delete(roomId);
+      return;
+    }
+    // -----------------------------------
+
+    // Freeze engine if one side has confirmed and we’re waiting on the other
+    const waitingOnOther =
+      match.battle.state.phase === 'select' &&
+      (match.confirmed.player || match.confirmed.ai) &&
+      !(match.confirmed.player && match.confirmed.ai);
+
+    if (!waitingOnOther) {
+      match.battle.tick(now);
+    }
+
+    const raw = clone(match.battle.state);
+
+    await emitStateToRoom(io, roomId, match, uid => {
+      const snap = viewForUser(match, uid, raw);
+      if (snap.phase === 'select' && !snap.selectEndsAt && match.selectDeadline) {
+        snap.selectEndsAt = match.selectDeadline;
+      }
+      return snap;
+    });
+
+    if (raw.phase === 'gameEnd') {
+      clearInterval(match.timer);
+      match.timer = null;
+
+      const p1Id = Object.entries(match.userSide).find(([, side]) => side === 'player')?.[0] || null;
+      const p2Id = Object.entries(match.userSide).find(([, side]) => side === 'ai')?.[0] || null;
+      const winnerUserId =
+        raw.winner === 'player' ? p1Id :
+        raw.winner === 'ai'     ? p2Id : null;
+
+      let awarded = 0;
+      try {
+        await db.clashGame.update({
+          where: { id: match.recordId },
+          data: {
+            endedAt:      new Date(),
+            winnerUserId: winnerUserId,
+            outcome:      'player'
+          }
+        });
+        if (winnerUserId) {
+          awarded = await awardClashWinPoints(winnerUserId);
+        }
+      } catch (e) {
+        console.error('Failed to finalize PvP game:', e);
+      }
+
+      const sockets = await io.in(roomId).fetchSockets();
+      for (const s of sockets) {
+        const mine = match.userSide?.[s.data.userId] || 'player';
+        const winner =
+          raw.winner === 'tie' ? 'tie'
+          : raw.winner === 'player'
+            ? (mine === 'player' ? 'player' : 'ai')
+            : (mine === 'player' ? 'ai'     : 'player');
+
+        const youLanes =  mine === 'player' ? raw.playerLanesWon : raw.aiLanesWon;
+        const oppLanes =  mine === 'player' ? raw.aiLanesWon     : raw.playerLanesWon;
+
+        s.emit('gameEnd', {
+          winner,
+          playerLanesWon: youLanes,
+          aiLanesWon:     oppLanes,
+          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0)
+        });
+      }
+      pvpMatches.delete(roomId);
+    }
+  }, 1000);
+}
 
 io.on('connection', socket => {
+
+  socket.on('leaveClashRoom', async ({ roomId, userId }) => {
+    try {
+      // leave socket.io room
+      socket.leave(roomId)
+
+      // delegate everything else (lobby or active match) to one place
+      await handleClashLeave(io, {
+        roomId,
+        userId,
+        leavingSocketId: socket.id
+      })
+    } catch (e) {
+      console.error('leaveClashRoom failed:', e)
+    }
+  })
+
   // --- List open PvP rooms ---
   socket.on('listClashRooms', async () => {
-    // fetch only active, waiting rooms
-    const rooms = Array.from(pvpRooms.entries())
-      .filter(([id, data]) => data.players.length === 1)
-      .map(([id, data]) => ({ id, owner: data.players[0] }));
-    socket.emit('clashRooms', rooms);
-  });
+    // waiting rooms = exactly one player
+    const waiting = Array.from(pvpRooms.entries()).filter(([, data]) => data.players.length === 1)
+    const ownerIds = waiting.map(([, data]) => data.players[0])
+    const users = ownerIds.length
+      ? await db.user.findMany({
+          where: { id: { in: ownerIds } },
+          select: { id: true, username: true }
+        })
+      : []
+    const nameById = Object.fromEntries(users.map(u => [u.id, u.username || 'Unknown']))
+    const rooms = waiting.map(([id, data]) => ({
+      id,
+      owner: nameById[data.players[0]] || 'Unknown'
+    }))
+    socket.emit('clashRooms', rooms)
+  })
 
   // --- Create a new PvP room ---
-  socket.on('createClashRoom', ({ roomId, userId, deck }) => {
+  socket.on('createClashRoom', async ({ roomId, userId, deck }) => {
     // store room
-    pvpRooms.set(roomId, { players: [userId], decks: { [userId]: deck } });
-    // persist to DB
-    db.clashGame.create({ data: { player1UserId: userId, player2UserId: null } })
-      .then(record => {
-        pvpRooms.get(roomId).recordId = record.id;
-      });
+    const uid = sid(userId)
+    pvpRooms.set(roomId, {
+      players: [uid],
+      decks: {},          // set later via setPvpDeck
+      ready: {},          // userId -> bool
+      usernames: {}       // userId -> username
+    })
     socket.join(roomId);
+    socket.data.roomId = roomId
+    socket.data.userId = uid
     // notify lobby
-    io.emit('roomCreated', { id: roomId, owner: userId });
+    const u = await db.user.findUnique({ where: { id: userId }, select: { username: true } })
+    pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
+    io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown' })
   });
 
   // --- Join existing PvP room ---
-  socket.on('joinClashRoom', ({ roomId, userId, deck }) => {
+  socket.on('joinClashRoom', async ({ roomId, userId, deck }) => {
     const room = pvpRooms.get(roomId);
     if (!room || room.players.length !== 1) {
       socket.emit('joinError', { message: 'Room unavailable.' });
       return;
     }
-    room.players.push(userId);
-    room.decks[userId] = deck;
-    socket.join(roomId);
-    // update DB record with player2UserId
-    db.clashGame.update({ where: { id: room.recordId }, data: { player2UserId: userId } });
+    socket.join(roomId)
+    socket.data.roomId = roomId
+    const uid = sid(userId)
+    socket.data.userId = uid
 
-    // start PvP match
-    const battleId = randomUUID();
-    const battle = createBattle({
-      playerDeck: room.decks[ room.players[0] ],
-      aiDeck:     room.decks[ room.players[1] ], // reuse second deck field
-      battleId,
-      lanes: LANES
-    });
-    // store match
-    pvpMatches.set(roomId, { battle, recordId: room.recordId });
+    const ownerId = room.players[0]
+    // If the owner opens their own room page, don't "take" the second slot.
+    if (uid === ownerId) {
+      // Owner loading their page; idle until opponent arrives
+      io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
+      return
+    }
 
-    // emit gameStart to both
-    io.to(roomId).emit('gameStart', battle.publicState());
+    // A different user is joining: fill second slot
+    if (!room.players.includes(uid)) room.players.push(uid)
+    const u2 = await db.user.findUnique({ where: { id: userId }, select: { username: true } })
+    room.usernames[uid] = u2?.username || 'Unknown'
+
+    // Now this room is no longer "waiting" → remove from lobby lists
+    io.emit('roomRemoved', { id: roomId })
+    // Tell both clients the current pregame state
+    io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
   });
 
+  socket.on('listClashDecks', async ({ userId }) => {
+    const decks = await db.clashDeck.findMany({
+      where: { userId },
+      include: { cards: { include: { ctoon: true } } }
+    })
+    const payload = decks.map(d => ({
+      id: d.id,
+      name: d.name,
+      size: d.cards.length,
+      // For preview; server will refetch on selection anyway if you want
+      sampleNames: d.cards.slice(0, 3).map(c => c.ctoon.name)
+    }))
+    socket.emit('clashDecks', payload)
+  })
+
+  socket.on('setPvpDeck', async ({ roomId, userId, deckId }) => {
+    const room = pvpRooms.get(roomId)
+    const uid = sid(userId)
+    if (!room || !room.players.includes(uid)) return
+
+    const deck = await db.clashDeck.findUnique({
+      where: { id: deckId },
+      include: { cards: { include: { ctoon: true } } }
+    })
+    if (!deck || deck.userId !== userId) {
+      socket.emit('deckError', { message: 'Invalid deck' })
+      return
+    }
+
+    const cards = deck.cards.map(dc => dc.ctoon).slice(0, 12)
+    room.decks[uid] = cards.map(c => ({
+      id: c.id,
+      name: c.name,
+      assetPath: withAsset(c.assetPath),
+      cost: c.cost ?? 1,
+      power: c.power ?? 1,
+      abilityKey: c.abilityKey || null,
+      abilityData: c.abilityData || null
+    }))
+
+    io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
+    await startPvpMatch(roomId)
+  })
+
+  socket.on('readyPvp', async ({ roomId, userId, ready }) => {
+    const room = pvpRooms.get(roomId)
+    const uid = sid(userId)
+    if (!room || !room.players.includes(uid)) return
+    room.ready = room.ready || {}
+    room.ready[uid] = !!ready
+
+    io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
+    await startPvpMatch(roomId)
+  })
+
   // --- Relay selectCards & game flow ---
-  socket.on('selectPvPCards', ({ selections }) => {
+  socket.on('selectPvPCards', async ({ selections }) => {
     const roomId = socket.data.roomId;
     const match  = pvpMatches.get(roomId);
     if (!match) return;
-    const side   = match.battle.state.priority === 'player1' ? 'player' : 'player2';
-    match.battle.select(side, selections);
-    match.battle.confirm(side);
-    broadcastPhase(io, match);
+
+    const uid  = socket.data.userId;
+    const side = match.userSide?.[uid]; // 'player' | 'ai'
+    if (!side) return;
+
+    // record this player's selections
+    match.pending[side]   = selections;
+    match.confirmed[side] = true;
+
+    // If both are in, apply and jump straight to the next SELECT (no reveal frame)
+    if (match.confirmed.player && match.confirmed.ai) {
+      // Apply → confirm both sides; engine will do reveal+setup internally
+      match.battle.select('player', match.pending.player || []);
+      match.battle.select('ai',     match.pending.ai     || []);
+      match.battle.confirm('player');
+      match.battle.confirm('ai');
+
+      // clear for next turn
+      match.pending   = { player: null, ai: null };
+      match.confirmed = { player: false, ai: false };
+
+      // New countdown window for the next turn’s SELECT
+      match.selectDeadline = Date.now() + 60_000;
+
+      // Send the *post-advance* state (usually phase === 'select' of the next turn)
+      const afterRaw = clone(match.battle.state);
+      const sockets  = await io.in(roomId).fetchSockets();
+      for (const s of sockets) {
+        const snap = viewForUser(match, s.data.userId, afterRaw);
+        if (snap.phase === 'select' && !snap.selectEndsAt && match.selectDeadline) {
+          snap.selectEndsAt = match.selectDeadline;
+        }
+        s.emit('phaseUpdate', snap);
+      }
+    }
   });
 
   /* ──────────   Clash PvE   ────────── */
@@ -656,6 +1189,15 @@ io.on('connection', socket => {
   })
 
   socket.on('disconnecting', async () => {
+    // Clash PvP cleanup if user leaves the game page / disconnects
+    if (socket.data?.roomId) {
+      await handleClashLeave(io, {
+        roomId: socket.data.roomId,
+        userId: socket.data.userId,
+        leavingSocketId: socket.id
+      })
+    }
+
     const zone = socket.zone
     if (zone && zoneSockets[zone] && zoneSockets[zone].has(socket.id)) {
       zoneSockets[zone].delete(socket.id)
@@ -1034,7 +1576,7 @@ setInterval(async () => {
       const channelId = '1401244687163068528'
       const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
-        : 'http://localhost:3001'
+        : 'http://localhost:3000'
       const auctionLink = `${baseUrl}/auction/${auc.id}`
 
       // cToon details

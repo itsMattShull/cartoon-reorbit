@@ -1,14 +1,14 @@
 // server/api/admin/clash-stats.get.js
 import {
   defineEventHandler,
+  getQuery,
   getRequestHeader,
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // ——————————————————————————————————————————————
-  // 1️⃣ Admin auth via /api/auth/me
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -20,41 +20,52 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // ——————————————————————————————————————————————
-  // 2️⃣ Raw SQL: group by day using Chicago time, count total & finished
+  // 2) Parse timeframe → startDate (default 3m to match other endpoints)
+  const { timeframe = '3m' } = getQuery(event)
+  const now = new Date()
+  const startDate = new Date(now)
+  switch (timeframe) {
+    case '1m': startDate.setMonth(startDate.getMonth() - 1); break
+    case '3m': startDate.setMonth(startDate.getMonth() - 3); break
+    case '6m': startDate.setMonth(startDate.getMonth() - 6); break
+    case '1y': startDate.setFullYear(startDate.getFullYear() - 1); break
+    default:   startDate.setMonth(startDate.getMonth() - 3)
+  }
+
+  // 3) Aggregate by local day (America/Chicago), filtered by timeframe
   const rows = await prisma.$queryRaw`
+    WITH base AS (
+      SELECT
+        ("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Chicago')::date AS day_local,
+        outcome
+      FROM "ClashGame"
+      WHERE "startedAt" >= ${startDate}
+    )
     SELECT
-      to_char(
-        "startedAt" AT TIME ZONE 'UTC'
-                     AT TIME ZONE 'America/Chicago',
-        'YYYY-MM-DD'
-      ) AS day,
-      COUNT(*) AS total,
+      to_char(day_local, 'YYYY-MM-DD')           AS day,
+      COUNT(*)::int                               AS total,
       SUM(
         CASE
           WHEN outcome IS NOT NULL
            AND outcome != 'incomplete'
            AND outcome != ''
-          THEN 1
-          ELSE 0
+          THEN 1 ELSE 0
         END
-      ) AS finished
-    FROM "ClashGame"
+      )::int                                      AS finished
+    FROM base
     GROUP BY day
     ORDER BY day
   `
 
-  // ——————————————————————————————————————————————
-  // 3️⃣ Map into the shape you want
+  // 4) Shape for the chart
   const results = rows.map(r => {
     const total    = Number(r.total)
     const finished = Number(r.finished)
     return {
       day:             r.day,
       count:           total,
-      percentFinished: total > 0
-        ? Math.round((finished / total) * 100)
-        : 0
+      finishedCount:   finished,
+      percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
     }
   })
 

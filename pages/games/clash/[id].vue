@@ -1,8 +1,34 @@
 <template>
   <Nav />
-  <!-- Waiting for both players -->
-  <div v-if="!game" class="pt-20 text-center">
-    <p class="text-gray-600">Waiting for opponent...</p>
+  <!-- Pregame: deck select + ready -->
+  <div v-if="!game" class="pt-20">
+    <div class="max-w-3xl mx-auto bg-white border rounded p-4">
+      <h2 class="text-xl font-bold mb-3">gToons Clash – Pregame</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="border rounded p-3">
+          <h3 class="font-semibold mb-2">Your Deck</h3>
+          <select v-model="selectedDeckId" class="w-full border rounded px-2 py-1">
+            <option disabled value="">Select a deck…</option>
+            <option v-for="d in myDecks" :key="d.id" :value="d.id">
+              {{ d.name }} ({{ d.size }})
+            </option>
+          </select>
+          <button
+            class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+            :disabled="!selectedDeckId || myReady"
+            @click="readyUp"
+          >{{ myReady ? 'Ready!' : 'Start Game' }}</button>
+        </div>
+        <div class="border rounded p-3">
+          <h3 class="font-semibold mb-2">Opponent</h3>
+          <p class="text-sm">Deck: <span class="font-medium">{{ oppHasDeck ? 'Selected' : 'Not selected' }}</span></p>
+          <p class="text-sm">Ready: <span class="font-medium">{{ oppReady ? 'Yes' : 'No' }}</span></p>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500">
+        Game will start automatically when both players selected a deck and clicked <em>Start Game</em>.
+      </p>
+    </div>
   </div>
   <section
     v-else
@@ -140,11 +166,23 @@
                 ? '🏆 You Win!'
                 : summary.winner==='ai'
                   ? 'Defeat'
-                  : 'Tie'
+                  : summary.winner==='incomplete'
+                    ? 'Game Incomplete'
+                    : 'Tie'
             }}
           </h3>
-          <p class="mb-6">
-            Lanes Won: You {{ summary.playerLanesWon }} – Opponent {{ summary.aiLanesWon }}
+
+          <p class="mb-6" v-if="summary.winner==='incomplete'">
+            {{ summary.reason === 'opponent_disconnect'
+                ? 'The other player disconnected.'
+                : 'This game did not complete.'
+            }}
+          </p>
+
+          <p class="mb-6" v-else>
+            Lanes Won <br>
+            - You:      {{ summary.playerLanesWon }}<br>
+            - Opponent: {{ summary.aiLanesWon }}
           </p>
           <NuxtLink
             to="/games/clash/rooms"
@@ -172,28 +210,13 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 const { user, fetchSelf } = useAuth()
 await fetchSelf()
 
-const deck = ref([])
-const loaded = ref(false)
-
-function shuffle(arr) {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
-async function loadDeck() {
-  try {
-    const all = await $fetch('/api/user/ctoons?isGtoon=true')
-    deck.value = shuffle(all).slice(0, 12)
-  } catch {
-    deck.value = []
-  } finally {
-    loaded.value = true
-  }
-}
+// Pregame state
+const myDecks = ref([])            // [{id,name,size}]
+const selectedDeckId = ref('')
+const myReady = ref(false)
+const awaitingTurn = ref(null)
+const oppReady = ref(false)
+const oppHasDeck = ref(false)
 
 // — Routing & Socket Setup —
 const route = useRoute()
@@ -209,24 +232,35 @@ const socket = io(
 )
 
 // Handle incoming events
-socket.on('gameStart', state => { game.value = state })
+socket.on('gameStart', state => { 
+  game.value = state 
+  startTimer(state.selectEndsAt)
+})
 socket.on('phaseUpdate', state => { game.value = state })
 socket.on('gameEnd', sum   => { game.value = { ...game.value, summary: sum } })
+socket.on('clashDecks', list => { myDecks.value = list || [] })
+socket.on('pvpLobbyState', snap => {
+  // snap = { players, usernames, haveDeck, ready }
+  const me = String(user.value.id)
+  const opp = (snap.players || []).find(p => p !== me)
+  myReady.value   = !!snap.ready?.[me]
+  oppReady.value  = !!snap.ready?.[opp]
+  oppHasDeck.value = !!snap.haveDeck?.[opp]
+})
 
 onMounted(async () => {
-  await loadDeck()
-  if (deck.value.length < 12) {
-    // not enough cards—bounce back to lobby
-    router.push('/games/clash')
-    return
-  }
-  // join the PvP room with your deck
-  socket.emit('joinClashRoom', {
-    roomId,
-    userId: user.value.id,
-    deck:   deck.value
-  })
+  // 1) join the PvP room (no deck yet)
+  socket.emit('joinClashRoom', { roomId, userId: user.value.id })
+  // 2) fetch my saved decks for the dropdown
+  socket.emit('listClashDecks', { userId: user.value.id })
 })
+
+async function readyUp() {
+  if (!selectedDeckId.value) return
+  // set the deck then mark ready
+  socket.emit('setPvpDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
+  socket.emit('readyPvp',   { roomId, userId: user.value.id, ready: true })
+}
 
 // — UI State —
 const selected   = ref(null)
@@ -302,7 +336,7 @@ function showCardInfo(card) {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
   // toggle placement
-  const idx = placements.value.findIndex(p => p.card.id === selected.value.id)
+  const idx = placements.value.findIndex(p => p.card === selected.value)
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
@@ -318,10 +352,9 @@ function confirmSelections() {
     cardId:    p.card.id,
     laneIndex: p.laneIndex
   }))
-  socket.emit('selectCards', { selections })
+  socket.emit('selectPvPCards', { selections })
   confirmed.value = true
-  // clear previews if desired
-  placements.value = []
+  awaitingTurn.value = game.value?.turn ?? null
 }
 
 function resetLocal() {
@@ -332,14 +365,24 @@ function resetLocal() {
 
 // — Real-time Sync —
 socket.on('phaseUpdate', state => {
+  const prevTurn = game.value?.turn ?? null
   game.value = state
-  if (isSelecting.value && !confirmed.value) {
+
+  if (state.phase === 'select') {
     startTimer(state.selectEndsAt)
+
+    // If we had confirmed for prev turn, don't re-enable the hand
+    // until the server advances the turn.
+    if (
+      confirmed.value &&
+      awaitingTurn.value != null &&
+      state.turn > awaitingTurn.value
+    ) {
+      resetLocal()               // clears placements, sets confirmed=false
+      awaitingTurn.value = null  // clear the guard for the new turn
+    }
   } else {
     clearInterval(timerId)
-  }
-  if ((state.phase === 'select' || state.phase === 'setup') && confirmed.value) {
-    resetLocal()
   }
 })
 
@@ -350,6 +393,12 @@ socket.on('gameEnd', sum => {
 
 // — Cleanup —
 onBeforeUnmount(() => {
+  // tell server we left this clash room
+  if (roomId && user.value?.id) {
+    socket.emit('leaveClashRoom', { roomId, userId: user.value.id })
+  }
+
+  socket.emit('leaveClashRoom', { roomId, userId: user.value?.id })
   socket.off('gameStart')
   socket.off('phaseUpdate')
   socket.off('gameEnd')

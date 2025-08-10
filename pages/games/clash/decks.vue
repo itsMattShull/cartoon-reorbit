@@ -71,12 +71,13 @@
     <!-- Main form & card picker -->
     <div class="flex-1 pl-0 md:pl-6">
       <div class="mb-6 text-right px-4 md:px-0">
-        <NuxtLink
-          to="/games/clash"
+        <button
+          type="button"
+          @click="goBack"
           class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
         >
           Back to Clash
-        </NuxtLink>
+        </button>
       </div>
 
       <!-- Form Skeleton -->
@@ -184,6 +185,7 @@ import { ref, computed, onMounted } from 'vue'
 import Toast from '@/components/Toast.vue'
 import abilitiesJson from '~/data/abilities.json'
 import Nav from '@/components/Nav.vue'
+import { useRouter } from 'vue-router'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -197,11 +199,22 @@ function showToast(message, type = 'success') {
   }, 4000)
 }
 
+const router = useRouter()
+
 // map ability keys to labels
 const abilityLabels = {}
 abilitiesJson.forEach(a => {
   abilityLabels[a.key] = a.label
 })
+
+function goBack() {
+  // if there's a previous history entry, go back; otherwise go to rooms
+  if (process.client && window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/games/clash/rooms')
+  }
+}
 
 const gtoons = ref([])
 const decks  = ref([])

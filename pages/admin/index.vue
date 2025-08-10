@@ -78,6 +78,9 @@
       <!-- 4) gToons Clash Games -->
       <div>
         <h2 class="text-xl font-semibold mb-2">gToons Clash Games</h2>
+        <h3 class="text-sm text-gray-600 mb-1">
+          Total (window): {{ clashTotal }} — Finished: {{ clashPctFinished }}%
+        </h3>
         <div class="chart-container mb-6">
           <canvas ref="clashCanvas"></canvas>
         </div>
@@ -240,6 +243,9 @@ const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
 const netWindowDays = ref(0)
+const clashTotal         = ref(0)
+const clashFinished      = ref(0)
+const clashPctFinished   = ref(0)
 // 1) New refs & state
 const turnoverCanvas      = ref(null)
 const turnoverWindowDays  = ref(0)
@@ -780,6 +786,11 @@ async function fetchData() {
   // 5) clash stats
   res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
   const cs = await res.json()
+  const total    = cs.reduce((s, d) => s + (d.count || 0), 0)
+  const finished = cs.reduce((s, d) => s + (d.finishedCount || 0), 0)
+  clashTotal.value       = total
+  clashFinished.value    = finished
+  clashPctFinished.value = total ? Math.round((finished / total) * 100) : 0
   clashChart.data.labels = cs.map(s => new Date(s.day))
   clashChart.data.datasets = [
     {

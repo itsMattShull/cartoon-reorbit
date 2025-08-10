@@ -127,6 +127,7 @@ model User {
   auctionsCreated  Auction[]   @relation("AuctionsCreated")
   clashGamesAsPlayer1 ClashGame[] @relation("ClashGamePlayer1")
   clashGamesAsPlayer2 ClashGame[] @relation("ClashGamePlayer2")
+  clashGamesWhoLeft   ClashGame[] @relation("ClashGameWhoLeft")
   clashGamesAsWinner  ClashGame[] @relation("ClashGameWinner")
   wheelSpinLogs   WheelSpinLog[]   @relation("WheelSpinLogToUser")
 }
@@ -471,7 +472,9 @@ model ClashGame {
   outcome       String?   // 'player' | 'ai' | 'tie' | 'incomplete'
   startedAt     DateTime @default(now())
   endedAt       DateTime?
+  whoLeftUserId   String?
 
+  whoLeft         User?    @relation("ClashGameWhoLeft", fields: [whoLeftUserId], references: [id])
   player1       User     @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
   player2       User?    @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
   winner        User?    @relation("ClashGameWinner", fields: [winnerUserId], references: [id])

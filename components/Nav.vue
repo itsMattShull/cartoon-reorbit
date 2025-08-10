@@ -136,7 +136,7 @@ const baseLinks = [
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
-  { label: 'gToons Clash', to: '/games/clash' }
+  { label: 'gToons Clash', to: '/games/clash/rooms' }
 ]
 
 const links = computed(() => {
@@ -152,7 +152,8 @@ const links = computed(() => {
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
-      { label: 'Point Logs', to: '/admin/points-log' }
+      { label: 'Point Logs', to: '/admin/points-log' },
+      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' }
     )
   }
   return all
