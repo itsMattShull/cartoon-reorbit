@@ -26,8 +26,12 @@ export default defineEventHandler(async (event) => {
     default:   startDate = null
   }
 
-  const startedFilter =
-    startDate ? Prisma.sql`"startedAt" >= ${startDate}` : Prisma.sql`TRUE`
+  const floorDate = new Date('2025-08-10T00:00:00Z')
+
+  // If timeframe would start earlier (or is 'all'), use the floor instead
+  const effectiveStart = (startDate && startDate > floorDate) ? startDate : floorDate
+
+  const startedFilter = Prisma.sql`"startedAt" >= ${effectiveStart}`
 
   // mode filter helper
   const modeWhere =
@@ -102,7 +106,7 @@ export default defineEventHandler(async (event) => {
     FROM "ClashGame"
     WHERE ${startedFilter}
       AND "player2UserId" IS NULL
-      AND outcome = 'ai'
+      AND LOWER(outcome) = 'ai'
     GROUP BY "player1UserId"
   `
 
