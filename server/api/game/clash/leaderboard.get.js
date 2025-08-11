@@ -126,10 +126,11 @@ export default defineEventHandler(async (event) => {
   // derive finished + %s
   const rows = []
   for (const [uid, v] of byUser.entries()) {
-    const finished = (v.wins || 0) + (v.losses || 0) // ties/incomplete excluded
-    const winPct   = finished > 0 ? (v.wins   / finished) * 100 : 0
-    const lossPct  = finished > 0 ? (v.losses / finished) * 100 : 0
-    rows.push({ uid, played: v.played || 0, wins: v.wins || 0, losses: v.losses || 0, finished, winPct, lossPct })
+    const finished = (v.wins || 0) + (v.losses || 0) // still useful for tie-breaks
+    const played   = v.played || 0
+    const winPct   = played > 0 ? (v.wins   / played) * 100 : 0
+    const lossPct  = played > 0 ? (v.losses / played) * 100 : 0
+    rows.push({ uid, played, wins: v.wins || 0, losses: v.losses || 0, finished, winPct, lossPct })
   }
 
   // rank helpers
@@ -140,8 +141,8 @@ export default defineEventHandler(async (event) => {
   const winsTopRows    = topRows(rows, 'wins',    r => r.wins   > 0)
   const lossesTopRows  = topRows(rows, 'losses',  r => r.losses > 0)
   const playedTopRows  = topRows(rows, 'played',  r => r.played > 0)
-  const winPctTopRows  = topRows(rows, 'winPct',  r => r.finished >= minFinished)
-  const lossPctTopRows = topRows(rows, 'lossPct', r => r.finished >= minFinished)
+  const winPctTopRows  = topRows(rows, 'winPct',  r => r.played >= minFinished)
+  const lossPctTopRows = topRows(rows, 'lossPct', r => r.played >= minFinished)
 
   // resolve usernames
   const allIds = Array.from(new Set(
@@ -158,7 +159,7 @@ export default defineEventHandler(async (event) => {
     username: nameById[r.uid] || 'Unknown',
     value: r[key],
     num:   r[numKey],
-    den:   r.finished
+    den:   r.played
   }))
 
   return {
