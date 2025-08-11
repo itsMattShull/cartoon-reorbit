@@ -27,24 +27,23 @@ export default defineEventHandler(async (event) => {
       maxClaims: true,
       expiresAt: true,
       prerequisites: {
-        select: {
-          ctoonId: true,
-          ctoon: { select: { id: true, name: true } }
-        }
+        select: { ctoonId: true, ctoon: { select: { id: true, name: true } } }
       },
       rewards: {
         select: {
           points: true,
-          ctoons: {
+          ctoons: { select: { ctoonId: true, quantity: true } },
+          backgrounds: {
             select: {
-              ctoonId: true,
-              quantity: true
+              backgroundId: true,
+              background: { select: { label: true, imagePath: true, id: true } }
             }
           }
         }
       }
     }
   })
+
 
   return codes
 })

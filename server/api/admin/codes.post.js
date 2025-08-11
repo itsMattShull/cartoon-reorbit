@@ -1,6 +1,5 @@
 // server/api/admin/codes.post.js
 
-
 import {
   defineEventHandler,
   readBody,
@@ -11,7 +10,7 @@ import {
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // ── 1. Admin check via your auth endpoint ────────────────────────────────
+  // ── 1. Admin check ──────────────────────────────────────────────────────
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -24,14 +23,24 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 2. Parse & validate input ───────────────────────────────────────────
-  const { code, maxClaims, expiresAt, rewards, prerequisites } = await readBody(event)
+  const body = await readBody(event)
+  const {
+    code,
+    maxClaims,
+    expiresAt,
+    rewards,
+    prerequisites,
+    // possible top-level fallbacks:
+    backgrounds: topLevelBackgrounds,
+    backgroundIds: topLevelBackgroundIds
+  } = body || {}
 
   // validate prerequisites
   if (prerequisites && !Array.isArray(prerequisites)) {
     throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
   }
   const prereqCreates = (prerequisites || []).map((p, i) => {
-    if (!p.ctoonId || typeof p.ctoonId !== 'string') {
+    if (!p?.ctoonId || typeof p.ctoonId !== 'string') {
       throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
     }
     return { ctoonId: p.ctoonId }
@@ -56,9 +65,35 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'At least one reward batch is required.' })
   }
 
-  // Build nested creation payload for ClaimCodeReward + RewardCtoon
+  // helper: normalize an array of background entries into ids
+  function normalizeBackgroundIds(arr, where = 'rewards[].backgrounds') {
+    if (!Array.isArray(arr)) return []
+    const ids = []
+    arr.forEach((b, idx) => {
+      const id =
+        typeof b === 'string' ? b :
+        (b && typeof b.backgroundId === 'string') ? b.backgroundId :
+        (b && typeof b.id === 'string') ? b.id :
+        null
+      if (!id) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Invalid background entry at ${where}[${idx}]`
+        })
+      }
+      ids.push(id)
+    })
+    return ids
+  }
+
+  const topLevelIds = [
+    ...normalizeBackgroundIds(topLevelBackgrounds, 'backgrounds'),
+    ...normalizeBackgroundIds(topLevelBackgroundIds, 'backgroundIds')
+  ]
+
+  // ── 3. Build nested creation payload for ClaimCodeReward + RewardCtoon ──
   const rewardCreates = rewards.map((r, i) => {
-    const { points, ctoons } = r
+    const { points, ctoons } = r || {}
 
     if (points != null && (typeof points !== 'number' || points < 0)) {
       throw createError({ statusCode: 400, statusMessage: `Invalid points in rewards[${i}].` })
@@ -68,7 +103,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const ctoonCreates = ctoons.map((c, j) => {
-      if (!c.ctoonId || typeof c.ctoonId !== 'string') {
+      if (!c?.ctoonId || typeof c.ctoonId !== 'string') {
         throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in rewards[${i}].ctoons[${j}].` })
       }
       if (typeof c.quantity !== 'number' || c.quantity < 1) {
@@ -77,15 +112,31 @@ export default defineEventHandler(async (event) => {
       return { ctoonId: c.ctoonId, quantity: c.quantity }
     })
 
+    // backgrounds can be per-reward OR (fallback) top-level
+    let perRewardIds = [
+      ...normalizeBackgroundIds(r?.backgrounds, `rewards[${i}].backgrounds`),
+      ...normalizeBackgroundIds(r?.backgroundIds, `rewards[${i}].backgroundIds`)
+    ]
+
+    if (perRewardIds.length === 0 && topLevelIds.length > 0) {
+      // fallback: use top-level for this reward if none provided at reward level
+      perRewardIds = topLevelIds
+    }
+
+    const backgroundCreates = perRewardIds.map(id => ({ backgroundId: id }))
+
+    // dev visibility
+    // eslint-disable-next-line no-console
+    console.log(`[codes.post] reward[${i}] -> backgrounds:`, backgroundCreates.length)
+
     return {
       points: points ?? 0,
-      ctoons: {
-        create: ctoonCreates
-      }
+      ctoons: { create: ctoonCreates },
+      ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
     }
   })
 
-  // ── 3. Create the code and its rewards ───────────────────────────────────
+  // ── 4. Create the code and its rewards ───────────────────────────────────
   let created
   try {
     created = await prisma.claimCode.create({
@@ -93,20 +144,17 @@ export default defineEventHandler(async (event) => {
         code: code.trim(),
         maxClaims,
         expiresAt: expiresDate,
-        rewards: {
-          create: rewardCreates
-        },
+        rewards: { create: rewardCreates },
         prerequisites: { create: prereqCreates }
       }
     })
   } catch (e) {
-    // handle unique constraint on code
     if (e.code === 'P2002') {
       throw createError({ statusCode: 400, statusMessage: 'Code already exists.' })
     }
     throw e
   }
 
-  // ── 4. Return the new code record ────────────────────────────────────────
+  // ── 5. Return the new code record ────────────────────────────────────────
   return created
 })

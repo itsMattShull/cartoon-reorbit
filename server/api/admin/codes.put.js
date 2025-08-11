@@ -1,5 +1,4 @@
 // server/api/admin/codes.put.js
-
 import {
   defineEventHandler,
   readBody,
@@ -9,7 +8,7 @@ import {
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1. Admin check
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -21,8 +20,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2. Parse & validate input
+  // 2) Parse & validate input
   const { code, maxClaims, expiresAt, rewards, prerequisites } = await readBody(event)
+
   if (!code || typeof code !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   }
@@ -32,10 +32,11 @@ export default defineEventHandler(async (event) => {
 
   let expiresDate = null
   if (expiresAt) {
-    expiresDate = new Date(expiresAt)
-    if (isNaN(expiresDate.getTime())) {
+    const dt = new Date(expiresAt)
+    if (isNaN(dt.getTime())) {
       throw createError({ statusCode: 400, statusMessage: 'Invalid expiresAt.' })
     }
+    expiresDate = dt
   }
 
   if (!Array.isArray(rewards) || rewards.length === 0) {
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
   }
 
-  // 3. Ensure the code exists
+  // 3) Ensure the code exists
   const existing = await prisma.claimCode.findUnique({
     where: { code },
     select: { id: true }
@@ -55,17 +56,19 @@ export default defineEventHandler(async (event) => {
   }
   const codeId = existing.id
 
-  // 4. Build nested payloads for rewards & prerequisites
+  // 4) Build nested payloads for rewards & prerequisites
   const rewardCreates = rewards.map((r, i) => {
-    const { points, ctoons } = r
+    const { points, ctoons } = r || {}
+
     if (points != null && (typeof points !== 'number' || points < 0)) {
       throw createError({ statusCode: 400, statusMessage: `Invalid points in rewards[${i}].` })
     }
     if (!Array.isArray(ctoons)) {
       throw createError({ statusCode: 400, statusMessage: `ctoons must be an array in rewards[${i}].` })
     }
+
     const ctoonCreates = ctoons.map((c, j) => {
-      if (!c.ctoonId || typeof c.ctoonId !== 'string') {
+      if (!c?.ctoonId || typeof c.ctoonId !== 'string') {
         throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in rewards[${i}].ctoons[${j}].` })
       }
       if (typeof c.quantity !== 'number' || c.quantity < 1) {
@@ -73,39 +76,41 @@ export default defineEventHandler(async (event) => {
       }
       return { ctoonId: c.ctoonId, quantity: c.quantity }
     })
+
+    // Accept backgrounds as either [{backgroundId}] or ["id","id"]
+    const rawBgs =
+      Array.isArray(r.backgrounds) ? r.backgrounds :
+      Array.isArray(r.backgroundIds) ? r.backgroundIds :
+      []
+
+    const backgroundCreates = rawBgs.map((b, k) => {
+      const id = typeof b === 'string' ? b : b?.backgroundId
+      if (!id || typeof id !== 'string') {
+        throw createError({ statusCode: 400, statusMessage: `Invalid backgroundId in rewards[${i}].backgrounds[${k}]` })
+      }
+      return { backgroundId: id }
+    })
+
     return {
       points: points ?? 0,
-      ctoons: { create: ctoonCreates }
+      ctoons: { create: ctoonCreates },
+      ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
     }
   })
 
   const prereqCreates = (prerequisites || []).map((p, i) => {
-    if (!p.ctoonId || typeof p.ctoonId !== 'string') {
+    if (!p?.ctoonId || typeof p.ctoonId !== 'string') {
       throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
     }
     return { ctoonId: p.ctoonId }
   })
 
-  // 5. In one transaction: delete old rewards & prereqs, then update code
-  const [
-    ,
-    ,
-    ,
-    updated
-  ] = await prisma.$transaction([
-    // remove existing reward ctoon links
-    prisma.rewardCtoon.deleteMany({
-      where: { reward: { codeId } }
-    }),
-    // remove existing reward definitions
-    prisma.claimCodeReward.deleteMany({
-      where: { codeId }
-    }),
-    // remove existing prerequisites
-    prisma.claimCodePrerequisite.deleteMany({
-      where: { codeId }
-    }),
-    // update the code with new batches
+  // 5) In one transaction: clear old rewards/prereqs then update with new batches
+  const results = await prisma.$transaction([
+    prisma.rewardCtoon.deleteMany({ where: { reward: { codeId } } }),
+    prisma.rewardBackground.deleteMany({ where: { reward: { codeId } } }),
+    prisma.claimCodeReward.deleteMany({ where: { codeId } }),
+    prisma.claimCodePrerequisite.deleteMany({ where: { codeId } }),
     prisma.claimCode.update({
       where: { code },
       data: {
@@ -117,5 +122,6 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
+  const updated = results[results.length - 1]
   return updated
 })

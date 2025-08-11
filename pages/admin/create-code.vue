@@ -152,6 +152,19 @@
           </button>
         </div>
 
+        <div>
+          <label class="block font-medium mb-1">Background Rewards (CODE_ONLY)</label>
+          <datalist id="bg-list">
+            <option v-for="b in bgOptions" :key="b.id" :value="b.label || b.id" />
+          </datalist>
+          <div v-for="(rb, idx) in bgRewards" :key="idx" class="flex items-center gap-2 mb-2">
+            <input v-model="rb.bgLabel" list="bg-list" class="flex-1 border rounded p-2" placeholder="Type or select background label" />
+            <img v-if="findBg(rb.bgLabel)?.imagePath" :src="findBg(rb.bgLabel).imagePath" class="w-12 h-8 object-cover rounded border" />
+            <button type="button" @click="removeBgReward(idx)" class="text-red-600 hover:underline">Remove</button>
+          </div>
+          <button type="button" @click="addBgReward" class="text-blue-600 hover:underline text-sm">+ Add background</button>
+        </div>
+
         <!-- Submit & Errors -->
         <div class="pt-4 border-t">
           <button
@@ -188,6 +201,7 @@ const ctoonRewards = ref([
   { ctoonName: '', quantity: 1 }
 ])
 const error = ref('')
+const bgOptions = ref([])
 
 // at the top, alongside your other refs
 const prereqCtoons = ref([{ ctoonName: '' }])
@@ -198,6 +212,15 @@ function addPrereqCtoon() {
 function removePrereqCtoon(index) {
   prereqCtoons.value.splice(index, 1)
 }
+
+const bgRewards = ref([{ bgLabel: '' }])
+// Match by label OR id (since the datalist value is label || id)
+function findBg(value) {
+  const v = (value ?? '').trim()
+  return bgOptions.value.find(b => b.label === v || b.id === v)
+}
+function addBgReward() { bgRewards.value.push({ bgLabel: '' }) }
+function removeBgReward(i) { bgRewards.value.splice(i,1) }
 
 function filteredCtoons(input) {
   if (input.length < 2) return []
@@ -226,6 +249,9 @@ onMounted(async () => {
     if (res.ok) {
       ctoonOptions.value = await res.json()  // expected [{ id, name }]
     }
+
+    const resBgs = await fetch('/api/admin/list-backgrounds', { credentials: 'include' })
+    if (resBgs.ok) bgOptions.value = await resBgs.json() // [{id,label,imagePath}]
   } catch (e) {
     console.error('Failed to load cToons', e)
   }
@@ -266,6 +292,20 @@ async function submitForm() {
     expiresIso = dt.toISOString()
   }
 
+  // Build backgrounds payload at submit-time (so it reflects current selections)
+  const backgroundsPayload = bgRewards.value
+    .map(r => {
+      const v = (r.bgLabel || '').trim()
+      if (!v) return null
+      const match = bgOptions.value.find(b => b.label === v || b.id === v)
+      if (!match) {
+        error.value = `Unrecognized background: “${v}”`
+        throw new Error(error.value)
+      }
+      return { backgroundId: match.id }
+    })
+    .filter(Boolean)
+
   // prepare ctoon array, looking up IDs by name
   const validCtoons = []
   for (const r of ctoonRewards.value) {
@@ -303,7 +343,8 @@ async function submitForm() {
     rewards: [
       {
         points: points.value,
-        ctoons: validCtoons
+        ctoons: validCtoons,
+        backgrounds: backgroundsPayload
       }
     ]
   }

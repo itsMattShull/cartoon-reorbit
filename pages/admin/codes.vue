@@ -53,6 +53,7 @@
                 <th class="px-4 py-2 text-left">Code</th>
                 <th class="px-4 py-2 text-left">Expires At</th>
                 <th class="px-4 py-2 text-right"># cToons</th>
+                <th class="px-4 py-2 text-right"># of Backgrounds</th>
                 <th class="px-4 py-2 text-right">Points</th>
                 <th class="px-4 py-2 text-right">Actions</th>
               </tr>
@@ -71,6 +72,7 @@
                   <span v-else class="text-gray-500">Never</span>
                 </td>
                 <td class="px-4 py-2 text-right">{{ countCtoons(c) }}</td>
+                <td class="px-4 py-2 text-right">{{ countBackgrounds(c) }}</td>
                 <td class="px-4 py-2 text-right">{{ countPoints(c) }}</td>
                 <td class="px-4 py-2 text-right">
                   <NuxtLink
@@ -106,6 +108,7 @@
                 <span v-else>Never</span>
               </p>
               <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
+              <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
               <p><strong>Points:</strong> {{ countPoints(c) }}</p>
             </div>
             <NuxtLink
@@ -204,6 +207,20 @@ const {
   pending: claimedPending,
   error: claimedError
 } = await useFetch('/api/admin/codes/claimed')
+
+function countBackgrounds(code) {
+  const ids = new Set()
+  for (const r of (code.rewards || [])) {
+    for (const rb of (r.backgrounds || [])) {
+      const id =
+        rb.backgroundId ||           // { backgroundId: '...' }
+        rb?.background?.id ||        // { background: { id, ... } } if selected that way
+        rb?.id                       // fallback if your select returns id directly
+      if (id) ids.add(id)
+    }
+  }
+  return ids.size
+}
 
 // Helper to sum up all points for a code
 function countPoints(code) {

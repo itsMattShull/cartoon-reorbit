@@ -130,6 +130,8 @@ model User {
   clashGamesWhoLeft   ClashGame[] @relation("ClashGameWhoLeft")
   clashGamesAsWinner  ClashGame[] @relation("ClashGameWinner")
   wheelSpinLogs   WheelSpinLog[]   @relation("WheelSpinLogToUser")
+  backgroundsCreated Background[]   @relation("BackgroundCreatedBy")
+  ownedBackgrounds   UserBackground[] @relation("User_UserBackgrounds")
 }
 
 model UserIP {
@@ -161,9 +163,11 @@ model ClaimCode {
   maxClaims  Int
   createdAt  DateTime           @default(now())
   expiresAt  DateTime?
+  
   claims     Claim[]
   rewards    ClaimCodeReward[]
   prerequisites  ClaimCodePrerequisite[]
+  userBackgroundUnlocks UserBackground[] @relation("UserBackgroundSourceCode")
 }
 
 model Claim {
@@ -186,6 +190,7 @@ model ClaimCodeReward {
   code     ClaimCode         @relation(fields: [codeId], references: [id])
   ctoons   RewardCtoon[]
   packs    RewardPack[]
+  backgrounds RewardBackground[]
 }
 
 model RewardCtoon {
@@ -538,4 +543,56 @@ model ClashDeckCard {
 
   deck      ClashDeck @relation(fields: [deckId], references: [id])
   ctoon     Ctoon     @relation(fields: [ctoonId], references: [id])
+}
+
+// ── Add enum ──────────────────────────────────────────────────────────
+enum BackgroundVisibility {
+  PUBLIC
+  CODE_ONLY
+}
+
+// ── New table ─────────────────────────────────────────────────────────
+model Background {
+  id          String                 @id @default(uuid())
+  label       String?
+  imagePath   String
+  filename    String                 @unique
+  width       Int
+  height      Int
+  mimeType    String
+  visibility  BackgroundVisibility   @default(PUBLIC)
+  createdAt   DateTime               @default(now())
+  createdById String?
+  createdBy   User?                  @relation("BackgroundCreatedBy", fields: [createdById], references: [id])
+
+  // back‑relations
+  rewardBackgrounds RewardBackground[] @relation("BackgroundReward")
+  owners            UserBackground[]   @relation("Background_UserBackgrounds")
+
+  @@index([createdAt])
+}
+
+model RewardBackground {
+  id            String      @id @default(uuid())
+  rewardId      String
+  backgroundId  String
+
+  reward        ClaimCodeReward @relation(fields: [rewardId], references: [id])
+  background    Background      @relation("BackgroundReward", fields: [backgroundId], references: [id])
+
+  @@unique([rewardId, backgroundId])
+}
+
+model UserBackground {
+  id             String     @id @default(uuid())
+  userId         String
+  backgroundId   String
+  unlockedAt     DateTime   @default(now())
+  sourceCodeId   String?
+
+  user         User        @relation("User_UserBackgrounds", fields: [userId], references: [id])
+  background   Background  @relation("Background_UserBackgrounds", fields: [backgroundId], references: [id])
+  sourceCode   ClaimCode?  @relation("UserBackgroundSourceCode", fields: [sourceCodeId], references: [id])
+
+  @@unique([userId, backgroundId])
 }

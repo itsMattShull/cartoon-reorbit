@@ -59,6 +59,19 @@
                 </small>
               </span>
             </li>
+            <li
+              v-for="bg in rewards.backgrounds"
+              :key="bg.id"
+              class="flex items-center gap-2"
+            >
+              <img
+                v-if="bg.imagePath"
+                :src="bg.imagePath"
+                class="w-12 h-8 object-cover rounded border"
+                alt="Background"
+              />
+              <span>Background unlocked: <strong>{{ bg.label || 'Untitled' }}</strong></span>
+            </li>
           </ul>
         </div>
         <ClientOnly>
@@ -84,7 +97,8 @@ const error = ref('')
 const success = ref(false)
 const rewards = ref({
   points: 0,
-  ctoons: [] // Array<{ id, name, quantity, mintNumber, isFirstEdition }>
+  ctoons: [], // Array<{ id, name, quantity, mintNumber, isFirstEdition }>
+  backgrounds: []
 })
 
 // balloon state
@@ -104,6 +118,7 @@ async function submit() {
       body: JSON.stringify({ code: code.value.trim() })
     })
     const payload = await res.json()
+    console.log('Redeem response:', payload)
     if (!res.ok) {
       error.value = payload.message || 'Invalid or expired code.'
       return
@@ -112,6 +127,7 @@ async function submit() {
     // assign rewards
     rewards.value.points = payload.points ?? 0
     rewards.value.ctoons = payload.ctoons ?? []
+    rewards.value.backgrounds = payload.backgrounds ?? []
     success.value = true
     code.value = ''
 

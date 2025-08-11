@@ -87,6 +87,11 @@ export default defineEventHandler(async (event) => {
     include: {
       ctoons: {
         include: { ctoon: { select: { id: true, name: true, initialQuantity: true } } }
+      },
+      backgrounds: {
+        include: {
+          background: { select: { id: true, label: true, imagePath: true, visibility: true } }
+        }
       }
     }
   })
@@ -104,6 +109,24 @@ export default defineEventHandler(async (event) => {
       initialQuantity: rc.ctoon.initialQuantity ?? 0
     }))
   )
+
+  // ⬇️ compute background unlocks (unique by id)
+  const backgroundRewardsRaw = rewardDefs.flatMap(r =>
+    r.backgrounds.map(rb => ({
+      id: rb.backgroundId,
+      label: rb.background?.label || null,
+      imagePath: rb.background?.imagePath || null,
+      visibility: rb.background?.visibility || 'CODE_ONLY'
+    }))
+  )
+  const seenBg = new Set()
+  const backgroundRewards = []
+  for (const b of backgroundRewardsRaw) {
+    if (!seenBg.has(b.id)) {
+      seenBg.add(b.id)
+      backgroundRewards.push(b)
+    }
+  }
 
   // 8. Preload existing counts for each ctoon
   const counts = {}
@@ -127,6 +150,16 @@ export default defineEventHandler(async (event) => {
         data: { userId, points: pointsToAward, total: updated.points, method: "Redeem Code", direction: 'increase' }
       });
     }
+    if (backgroundRewards.length) {
+      await tx.userBackground.createMany({
+        data: backgroundRewards.map(b => ({
+          userId,
+          backgroundId: b.id,
+          sourceCodeId: claimCode.id
+        })),
+        skipDuplicates: true
+      })
+    }
   })
 
   // 10. Enqueue mint jobs and prepare return data
@@ -149,6 +182,7 @@ export default defineEventHandler(async (event) => {
   // 11. Return summary
   return {
     points: pointsToAward,
-    ctoons: mintedRecords
+    ctoons: mintedRecords,
+    backgrounds: backgroundRewards
   }
 })

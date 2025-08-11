@@ -145,6 +145,20 @@
             <p class="text-sm text-gray-500">Leave empty for no prerequisites.</p>
           </div>
 
+          <!-- Background Rewards -->
+          <div>
+            <label class="block font-medium mb-1">Background Rewards (CODE_ONLY)</label>
+            <datalist id="bg-list">
+              <option v-for="b in bgOptions" :key="b.id" :value="b.label || b.id" />
+            </datalist>
+            <div v-for="(rb, idx) in bgRewards" :key="idx" class="flex items-center gap-2 mb-2">
+              <input v-model="rb.bgLabel" list="bg-list" class="flex-1 border rounded p-2" placeholder="Type or select background label" />
+              <img v-if="findBg(rb.bgLabel)?.imagePath" :src="findBg(rb.bgLabel).imagePath" class="w-12 h-8 object-cover rounded border" />
+              <button type="button" @click="removeBgReward(idx)" class="text-red-600 hover:underline">Remove</button>
+            </div>
+            <button type="button" @click="addBgReward" class="text-blue-600 hover:underline text-sm">+ Add background</button>
+          </div>
+
           <!-- Submit & Errors -->
           <div class="pt-4 border-t flex items-center justify-between">
             <button
@@ -183,16 +197,27 @@ const ctoonRewards  = ref([])
 const prereqCtoons  = ref([{ ctoonName: '' }])
 const error         = ref('')
 
-// cToon options from DB
+// options
 const ctoonOptions  = ref([])
+const bgOptions     = ref([])
 
 // loading state
 const pending       = ref(true)
 const fetchError    = ref(null)
 
+// helpers
 function findCtoon(name) {
   return ctoonOptions.value.find(ct => ct.name === name)
 }
+
+// backgrounds state + helpers
+const bgRewards = ref([{ bgLabel: '' }])
+function findBg(value) {
+  const v = (value ?? '').trim()
+  return bgOptions.value.find(b => b.label === v || b.id === v)
+}
+function addBgReward() { bgRewards.value.push({ bgLabel: '' }) }
+function removeBgReward(i) { bgRewards.value.splice(i,1) }
 
 // helper to format ISO to CST datetime-local
 function isoToCSTLocal(iso) {
@@ -214,7 +239,11 @@ onMounted(async () => {
     if (!ctoonRes.ok) throw new Error(await ctoonRes.text())
     ctoonOptions.value = await ctoonRes.json()
 
-    // 2) fetch codes list
+    // 2) fetch backgrounds options
+    const resBgs = await fetch('/api/admin/list-backgrounds', { credentials: 'include' })
+    if (resBgs.ok) bgOptions.value = await resBgs.json() // [{id,label,imagePath}]
+
+    // 3) fetch codes list
     const codesRes = await fetch('/api/admin/codes', { credentials: 'include' })
     if (!codesRes.ok) throw new Error(await codesRes.text())
     const all = await codesRes.json()
@@ -229,6 +258,15 @@ onMounted(async () => {
     maxClaims.value = entry.maxClaims
     expiresAt.value = entry.expiresAt ? isoToCSTLocal(entry.expiresAt) : ''
     points.value    = entry.rewards.reduce((sum,r) => sum + (r.points||0), 0)
+
+    // map existing backgrounds into UI, using label OR id so it round-trips
+    bgRewards.value = entry.rewards.flatMap(r =>
+      (r.backgrounds||[]).map(rb => {
+        const found = bgOptions.value.find(b => b.id === rb.backgroundId)
+        return { bgLabel: found?.label || found?.id || rb.backgroundId }
+      })
+    )
+    if (!bgRewards.value.length) bgRewards.value = [{ bgLabel: '' }]
 
     // map existing cToon rewards
     ctoonRewards.value = entry.rewards.flatMap(r =>
@@ -276,29 +314,43 @@ async function submitForm() {
 
   const validCtoons = []
   for (const r of ctoonRewards.value) {
-    const name = r.ctoonName.trim()
-    if (!name||r.quantity<1) continue
-    const found = ctoonOptions.value.find(ct=>ct.name===name)
-    if (!found) { error.value = `Unrecognized cToon: "${name}"`; return }
+    const name = (r.ctoonName||'').trim()
+    if (!name || r.quantity < 1) continue
+    const found = ctoonOptions.value.find(ct => ct.name === name)
+    if (!found) { error.value = `Unrecognized cToon: “${name}”`; return }
     validCtoons.push({ ctoonId: found.id, quantity: r.quantity })
   }
 
   const validPrereqs = []
   for (const p of prereqCtoons.value) {
-    const name = p.ctoonName.trim()
+    const name = (p.ctoonName||'').trim()
     if (!name) continue
-    const found = ctoonOptions.value.find(ct=>ct.name===name)
-    if (!found) { error.value = `Unrecognized prerequisite cToon: "${name}"`; return }
+    const found = ctoonOptions.value.find(ct => ct.name === name)
+    if (!found) { error.value = `Unrecognized prerequisite cToon: “${name}”`; return }
     validPrereqs.push({ ctoonId: found.id })
   }
+
+  // Build backgrounds payload *now* so it reflects current selections
+  const backgroundsPayload = bgRewards.value
+    .map(r => {
+      const v = (r.bgLabel || '').trim()
+      if (!v) return null
+      const match = bgOptions.value.find(b => b.label === v || b.id === v)
+      if (!match) { error.value = `Unrecognized background: “${v}”`; throw new Error(error.value) }
+      return { backgroundId: match.id }
+    })
+    .filter(Boolean)
 
   const payload = {
     code:          code.value,
     maxClaims:     maxClaims.value,
     expiresAt:     expiresIso,
-    rewards:       [{ points: points.value, ctoons: validCtoons }],
+    rewards:       [{ points: points.value, ctoons: validCtoons, backgrounds: backgroundsPayload }],
     prerequisites: validPrereqs
   }
+
+  // Debug (optional)
+  // console.log('PUT payload.rewards[0].backgrounds:', payload.rewards[0].backgrounds)
 
   try {
     const res = await fetch('/api/admin/codes', {
