@@ -133,6 +133,23 @@ function loadDeckFromSelection(id) {
 function startMatch() {
   if (deck.value.length !== 12) return
   starting.value = true
+
+  // be safe: remove any previous one-off listeners
+  socket.off('gameStart')
+  socket.off('joinError')
+
+  socket.once('gameStart', state => {
+    battleState.value = state
+    starting.value = false
+    router.push('/games/clash/play')
+  })
+
+  socket.once('joinError', (err) => {
+    starting.value = false
+    console.error('joinPvE failed:', err)
+    // swap for your toast/notifier of choice
+    alert(err?.message || 'Failed to start match.')
+  })
   // Normalize deck to what the server/engine expects
   const base = import.meta.env.PROD
     ? 'https://www.cartoonreorbit.com'
