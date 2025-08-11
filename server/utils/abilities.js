@@ -82,22 +82,33 @@ export const abilityRegistry = {
       game.log.push(`${card.name} replaced the location with ${lane.name}!`)
     }
   },
-
-  /** Lee Kanker – Take That */
   take_that: {
     onReveal({ game, side, laneIndex, card }) {
-      const laneArr = game.state.lanes[laneIndex][side];
+      const lane = game.state.lanes[laneIndex]
+      const laneArr = lane[side]
 
-      // buff every non-ability card in that lane once, exactly when
-      // this take_that resolves
+      // Max triggers this turn: 2 if DOUBLE_ABILITIES lane, otherwise 1
+      const maxTriggers = lane.abilityKey === 'DOUBLE_ABILITIES' ? 2 : 1
+
+      // Per-turn guard so we can't exceed maxTriggers
+      const turn = game.state.turn
+      if (card._takeThatSeenTurn !== turn) {
+        card._takeThatSeenTurn = turn
+        card._takeThatTriggers = 0
+      }
+      if (card._takeThatTriggers >= maxTriggers) return
+
+      // +2 to *non-ability* allies in THIS lane, THIS side, right now
       laneArr
-        .filter(c => !c.abilityKey)
-        .forEach(c => {
-          c.power += 2;
-        });
+        .filter(c => !c.abilityKey) // excludes ability cards (including this one)
+        .forEach(c => { c.power += 2 })
+
+      card._takeThatTriggers += 1
+
       game.log.push(
-        `${card.name} shouts “Take that!” — +2 Power to non-ability toons in ${game.state.lanes[laneIndex].name}`
-      );
+        `${card.name} shouts “Take that!” — +2 Power to non-ability allies in ${lane.name}`
+        + (maxTriggers > 1 ? ' (DOUBLE)' : '')
+      )
     }
   },
 
@@ -142,10 +153,8 @@ export const abilityRegistry = {
       if (!card) return
       const cardDef = abilityRegistry[card.abilityKey]
       if (cardDef?.onReveal) {
-        // run twice
+        // The card already fired once in fireReveal → fire exactly one *extra* time
         cardDef.onReveal({ game, side, laneIndex, card })
-        cardDef.onReveal({ game, side, laneIndex, card })
-        // console.log(`${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`)
         game.log.push(
           `${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`
         )
