@@ -133,7 +133,25 @@ function loadDeckFromSelection(id) {
 function startMatch() {
   if (deck.value.length !== 12) return
   starting.value = true
-  socket.emit('joinPvE', { deck: deck.value, userId: user.value.id })
+  // Normalize deck to what the server/engine expects
+  const base = import.meta.env.PROD
+    ? 'https://www.cartoonreorbit.com'
+    : 'http://localhost:3000'
+  const normalized = deck.value.map(d => {
+    const c = d.ctoon ?? d
+    return {
+      id: c.id,
+      name: c.name,
+      assetPath: c.assetPath
+        ? (c.assetPath.startsWith('http') ? c.assetPath : `${base}${c.assetPath}`)
+        : null,
+      cost: c.cost ?? 1,
+      power: c.power ?? 1,
+      abilityKey: c.abilityKey || null,
+      abilityData: c.abilityData || null
+    }
+  }).slice(0, 12)
+  socket.emit('joinPvE', { deck: normalized, userId: user.value.id })
 }
 
 onMounted(async () => {

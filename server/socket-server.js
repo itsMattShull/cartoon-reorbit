@@ -766,41 +766,59 @@ io.on('connection', socket => {
 
   /* ──────────   Clash PvE   ────────── */
   socket.on('joinPvE', async ({ deck, userId }) => {
-    const aiDeck = shuffle(deck).slice(0, 12)
-    const gameId = randomUUID()
-    const battle = createBattle({
-      playerDeck: deck,
-      aiDeck,
-      battleId: gameId,
-      lanes: LANES
-    })
+    try {
+      const normalize = (arr = []) => arr.slice(0, 12).map(d => {
+        const c = d?.ctoon ?? d
+        return {
+          id: c.id,
+          name: c.name,
+          assetPath: withAsset(c.assetPath),
+          cost: c.cost ?? 1,
+          power: c.power ?? 1,
+          abilityKey: c.abilityKey || null,
+          abilityData: c.abilityData || null
+        }
+      })
+      const playerDeck = normalize(deck)
+      const aiDeck     = shuffle(playerDeck).slice(0, 12)
+      const gameId = randomUUID()
+      const battle = createBattle({
+        playerDeck,
+        aiDeck,
+        battleId: gameId,
+        lanes: LANES
+      })
 
-    const { id: recordId } = await db.clashGame.create({
-      data: {
-        player1UserId: userId,
-        player2UserId: null
+      const { id: recordId } = await db.clashGame.create({
+        data: {
+          player1UserId: userId,
+          player2UserId: null
+        }
+      })
+
+      const match = {
+        id:           gameId,
+        socketId:     socket.id,
+        battle,
+        playerConfirmed: false,
+        recordId,
+        aiConfirmed:     false,
+        timer:           null,
+        selectDeadline:  null,
+        playerUserId: userId
       }
-    })
 
-    const match = {
-      id:           gameId,
-      socketId:     socket.id,
-      battle,
-      playerConfirmed: false,
-      recordId,
-      aiConfirmed:     false,
-      timer:           null,
-      selectDeadline:  null,
-      playerUserId: userId
+      pveMatches.set(gameId, match)
+
+      socket.data.gameId = gameId
+      socket.join(gameId)
+
+      startSelectTimer(io, match)
+      socket.emit('gameStart', battle.publicState())
+    } catch (e) {
+      console.error('joinPvE failed:', e)
+      socket.emit('joinError', { message: 'Failed to start match.' })
     }
-
-    pveMatches.set(gameId, match)
-
-    socket.data.gameId = gameId
-    socket.join(gameId)
-
-    startSelectTimer(io, match)
-    socket.emit('gameStart', battle.publicState())
   })
 
   /* ── Handle player selection ──────────────────────────── */
