@@ -333,16 +333,30 @@ function showCardInfo(card) {
   infoCard.value = card
 }
 
+const LANE_CAP = 4
+
+function laneCountAfterPlacements(laneIdx) {
+  const existing = game.value?.lanes?.[laneIdx]?.player?.length || 0
+  const pending  = placements.value.filter(p => p.laneIndex === laneIdx).length
+  return existing + pending
+}
+
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
-  // toggle placement
+
+  // toggle off if this card is already placed
   const idx = placements.value.findIndex(p => p.card === selected.value)
-  if (idx >= 0) {
-    placements.value.splice(idx, 1)
+  if (idx >= 0) { placements.value.splice(idx, 1); return }
+
+  // energy check
+  if (selected.value.cost + pendingCost.value > game.value.playerEnergy) return
+
+  // capacity check
+  if (laneCountAfterPlacements(laneIdx) >= LANE_CAP) {
+    log.value.push('That lane is full (max 4).')
     return
   }
-  // ensure within energy
-  if (selected.value.cost + pendingCost.value > game.value.playerEnergy) return
+
   placements.value.push({ card: selected.value, laneIndex: laneIdx })
 }
 

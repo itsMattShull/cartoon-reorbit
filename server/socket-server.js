@@ -149,6 +149,20 @@ function broadcastPhase(io, match) {
   io.to(match.id).emit('phaseUpdate', match.battle.publicState())
 }
 
+function clampSelectionsToLaneCap(state, selections, side, cap = 4) {
+  if (!Array.isArray(selections)) return []
+  const counts = state.lanes.map(l => side === 'player' ? l.player.length : l.ai.length)
+  const out = []
+  for (const sel of selections) {
+    const i = sel.laneIndex
+    if (Number.isInteger(i) && i >= 0 && i < counts.length && counts[i] < cap) {
+      out.push(sel)
+      counts[i]++
+    }
+  }
+  return out
+}
+
 async function endMatch(io, match, result) {
   const { winner, playerLanesWon, aiLanesWon } = result;
   let toGive = 0;
@@ -774,8 +788,11 @@ io.on('connection', socket => {
     // If both are in, apply and jump straight to the next SELECT (no reveal frame)
     if (match.confirmed.player && match.confirmed.ai) {
       // Apply → confirm both sides; engine will do reveal+setup internally
-      match.battle.select('player', match.pending.player || []);
-      match.battle.select('ai',     match.pending.ai     || []);
+      const pSel = clampSelectionsToLaneCap(match.battle.state, match.pending.player || [], 'player')
+      const aSel = clampSelectionsToLaneCap(match.battle.state, match.pending.ai     || [], 'ai')
+
+      match.battle.select('player', pSel)
+      match.battle.select('ai',     aSel)
       match.battle.confirm('player');
       match.battle.confirm('ai');
 
@@ -871,12 +888,14 @@ io.on('connection', socket => {
       return
     }
 
-    // AI makes its selection
-    const aiSel = aiChooseSelections(match.battle)
-
     // Apply & confirm both sides (engine will run reveal→setup)
-    match.battle.select('player', selections)
-    match.battle.select('ai', aiSel)
+    const playerSel = clampSelectionsToLaneCap(match.battle.state, selections, 'player')
+    const aiSel     = clampSelectionsToLaneCap(match.battle.state, aiChooseSelections(match.battle), 'ai')
+
+    match.battle.select('player', playerSel)
+    match.battle.select('ai',     aiSel)
+    match.battle.confirm('player')
+    match.battle.confirm('ai')
     match.battle.confirm('player')
     match.battle.confirm('ai')
 

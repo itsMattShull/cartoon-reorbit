@@ -7,22 +7,27 @@
       <div
         v-for="(lane, idx) in lanes"
         :key="idx"
-        @click="phase==='select' && place(idx)"
+        @click="phase==='select' && !confirmed && !isLaneFull(idx) && place(idx)"
         :class="[
-          /* mobile: horizontal lane; desktop: vertical lane */
+          'relative', // so we can show a small 'Full' badge
           'flex flex-row md:flex-col items-center bg-white rounded-lg shadow-lg p-4 transition',
-          /* width: full on mobile, one-third on md+ */
           'w-full md:w-1/3',
-          /* disabled / hover states */
           phase!=='select'
             ? 'pointer-events-none opacity-70'
-            : 'cursor-pointer hover:ring-2 hover:ring-indigo-300',
-          /* selected ring */
+            : (isLaneFull(idx)
+                ? 'cursor-not-allowed opacity-60'
+                : 'cursor-pointer hover:ring-2 hover:ring-indigo-300'),
           isLaneSelected(idx) ? 'ring-4 ring-indigo-500' : '',
-          /* reveal pulse */
           phase==='reveal' && highlightLane(idx)
         ]"
       >
+        <!-- small badge -->
+        <div
+          v-if="phase==='select' && isLaneFull(idx)"
+          class="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded bg-gray-200"
+        >
+          Full
+        </div>
         <!-- ── Player cards on the left (order-1 on mobile, order-3 on md) ── -->
         <div class="grid grid-cols-2 gap-0.5 mb-3 w-full auto-rows-[9rem] order-1 md:order-3">
           <template v-for="i in 4" :key="i">
@@ -127,6 +132,14 @@ function isLaneSelected(idx) {
 
 function sumPower(cards) {
   return cards.reduce((sum, c) => sum + (c.power || 0), 0)
+}
+
+function lanePendingCount(idx) {
+  return props.previewPlacements.filter(p => p.laneIndex === idx).length
+}
+function isLaneFull(idx) {
+  const existing = props.lanes[idx].player.length
+  return existing + lanePendingCount(idx) >= 4
 }
 </script>
 
