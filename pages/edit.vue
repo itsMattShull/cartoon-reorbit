@@ -59,15 +59,15 @@
           </div>
         </div>
       </div>
-      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto h-[500px]">
+      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto">
         <div
-          v-for="bg in backgrounds"
-          :key="bg"
+          v-for="bg in availableBackgrounds"
+          :key="bg.id"
           class="border p-1 cursor-pointer"
-          :class="{ 'border-blue-500': selectedBackground === bg }"
-          @click="selectBackground(bg)"
+          :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
+          @click="selectBackground(bg.imagePath)"
         >
-          <img :src="`/backgrounds/${bg}`" class="w-full h-auto object-cover" />
+          <img :src="bg.imagePath" class="w-full h-auto object-cover" />
         </div>
       </div>
     </div>
@@ -192,15 +192,15 @@
             </div>
           </div>
         </div>
-        <div v-else class="grid grid-cols-2 gap-2 max-h-[450px] overflow-y-auto">
+        <div v-else class="grid grid-cols-2 gap-2 max-h[450px] overflow-y-auto">
           <div
-            v-for="bg in backgrounds"
-            :key="bg"
+            v-for="bg in availableBackgrounds"
+            :key="bg.id"
             class="border p-1 cursor-pointer"
-            :class="{ 'border-blue-500': selectedBackground === bg }"
-            @click="selectBackground(bg)"
+            :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
+            @click="selectBackground(bg.imagePath)"
           >
-            <img :src="`/backgrounds/${bg}`" class="w-full h-auto object-cover" />
+            <img :src="bg.imagePath" class="w-full h-auto object-cover" />
           </div>
         </div>
       </div>
@@ -279,11 +279,10 @@ const selectedBackground = computed({
 
 // These two give us quick access in the template
 const canvasBackgroundStyle = computed(() => {
-  if (!selectedBackground.value) {
-    return { backgroundColor: 'transparent' }
-  }
+  const src = toUrl(selectedBackground.value)
+  if (!src) return { backgroundColor: 'transparent' }
   return {
-    backgroundImage: `url('/backgrounds/${selectedBackground.value}')`,
+    backgroundImage: `url('${src}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -293,7 +292,13 @@ const canvasBackgroundStyle = computed(() => {
 const toastMessage = ref('')
 const toastType = ref('error')
 const ctoons = ref([])
-const backgrounds = ref([])
+const availableBackgrounds = ref([])
+
+// helper so old saved values (e.g., "foo.png") still render nicely
+function toUrl(v) {
+  if (!v) return ''
+  return v.startsWith('/') ? v : `/backgrounds/${v}`
+}
 
 // Filter dropdown options
 const uniqueSeries = computed(() =>
@@ -534,8 +539,8 @@ async function saveZones(showToast = false) {
   }
 }
 
-async function selectBackground(bg) {
-  selectedBackground.value = bg
+async function selectBackground(bgPath) {
+  selectedBackground.value = bgPath
   await saveZones(false)
 }
 
@@ -583,7 +588,13 @@ onMounted(async () => {
 
   const res = await $fetch('/api/czone/edit')
   ctoons.value = res.ctoons
-  backgrounds.value = res.backgrounds
+  // NEW: load only backgrounds the user can use now (PUBLIC or unlocked)
+  try {
+    availableBackgrounds.value = await $fetch('/api/czone/backgrounds-available')
+  } catch (e) {
+    console.error('Failed to load available backgrounds', e)
+    availableBackgrounds.value = []
+  }
 
   if (
     res.zones &&

@@ -560,6 +560,15 @@ definePageMeta({
   layout: 'default'
 })
 
+function bgUrl(v) {
+  if (!v) return ''
+  const s = String(v)
+  // absolute/protocol-relative URLs or already-rooted paths
+  if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
+  // legacy filename like "foo.png"
+  return `/backgrounds/${s}`
+}
+
 // ——— Date formatter ———
 function formatDate(dateStr) {
   if (!dateStr) return ''
@@ -888,12 +897,10 @@ async function goToRandomUser() {
 const editPath = computed(() => `/edit`)
 
 const canvasBackgroundStyle = computed(() => {
-  const bg = currentZone.value.background
-  if (!bg || typeof bg !== 'string') {
-    return { backgroundColor: 'transparent' }
-  }
+  const src = bgUrl(currentZone.value.background)
+  if (!src) return { backgroundColor: 'transparent' }
   return {
-    backgroundImage: `url(/backgrounds/${bg})`,
+    backgroundImage: `url('${src}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat'

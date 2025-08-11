@@ -7,5 +7,6 @@ ecosystem.config.js
 public/images/*
 public/cToons/*
 public/packs/*
+public/backgrounds/*
 # Sentry Config File
 .env.sentry-build-plugin

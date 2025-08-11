@@ -31,7 +31,7 @@
             <label class="text-sm font-medium">Image (PNG, GIF, or JPEG)</label>
             <input ref="fileInput" type="file" accept="image/png,image/gif,image/jpeg" @change="onFile"
               class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
-            <p class="text-xs text-gray-500">Exactly <strong>510×344</strong> or <strong>512×346</strong> px.</p>
+            <p class="text-xs text-gray-500">Exactly <strong>510×344</strong> or <strong>512×346</strong> or <strong>800x600</strong> px.</p>
           </div>
 
           <button type="submit" :disabled="!imageFile || uploading" :title="!imageFile ? 'Choose an image' : ''"
@@ -100,9 +100,9 @@ function onFile(e) {
   const url = URL.createObjectURL(file)
   const img = new Image()
   img.onload = () => {
-    const ok = (img.width === 510 && img.height === 344) || (img.width === 512 && img.height === 346)
+    const ok = (img.width === 510 && img.height === 344) || (img.width === 512 && img.height === 346) || (img.width === 800 && img.height === 600)
     if (!ok) {
-      alert('Image must be exactly 510×344 or 512×346 px.')
+      alert('Image must be exactly 510×344 or 512×346 or 800x600 px.')
       fileInput.value.value = ''
       URL.revokeObjectURL(url)
       imageFile.value = null

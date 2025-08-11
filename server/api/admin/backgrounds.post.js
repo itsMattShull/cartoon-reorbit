@@ -16,7 +16,7 @@ const baseDir = process.env.NODE_ENV === 'production'
   : process.cwd()
 
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/gif']
-const ALLOWED_SIZES = [ [510,344], [512,346] ]
+const ALLOWED_SIZES = [ [510,344], [512,346], [800,600] ]
 
 function sanitize(name = '') {
   return name.replace(/[^A-Za-z0-9._-]/g, '')
