@@ -59,7 +59,7 @@
           </div>
         </div>
       </div>
-      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto">
+      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto max-h-[500px] pr-1">
         <div
           v-for="bg in availableBackgrounds"
           :key="bg.id"
@@ -192,7 +192,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="grid grid-cols-2 gap-2 max-h[450px] overflow-y-auto">
+        <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto max-h-[500px] pr-1">
           <div
             v-for="bg in availableBackgrounds"
             :key="bg.id"
