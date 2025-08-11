@@ -631,9 +631,44 @@ io.on('connection', socket => {
     socket.data.roomId = roomId
     socket.data.userId = uid
     // notify lobby
-    const u = await db.user.findUnique({ where: { id: userId }, select: { username: true } })
+    const u = await db.user.findUnique({
+      where: { id: userId },
+      select: { username: true, discordId: true }
+    })
     pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
     io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown' })
+
+    // ── Discord announce: new gToons Clash PvP room ─────────────────────────
+    try {
+      const botToken  = process.env.BOT_TOKEN
+      const channelId = '1404262134527033416'
+      if (!botToken) {
+        console.warn('BOT_TOKEN not set; skipping PvP room Discord notify')
+      } else {
+        const display = u?.discordId ? `<@${u.discordId}>` : (u?.username || 'Unknown')
+        const payload = {
+          content: `🎮 ${display} created a gToons Clash **PvP** room and is looking for a match!  Head over here to play them: https://www.cartoonreorbit.com/games/clash/rooms`
+        }
+        const res = await fetch(
+          `https://discord.com/api/v10/channels/${channelId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `${botToken}`, // keep consistent with your auction code
+              'Content-Type':  'application/json'
+            },
+            body: JSON.stringify(payload)
+          }
+        )
+        if (!res.ok) {
+          let errJson = null
+          try { errJson = await res.json() } catch {}
+          console.error('Failed to send PvP room Discord message:', res.status, errJson)
+        }
+      }
+    } catch (err) {
+      console.error('Discord PvP room notify failed:', err)
+    }
   });
 
   // --- Join existing PvP room ---
