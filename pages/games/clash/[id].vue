@@ -113,6 +113,10 @@
       </div>
     </div>
 
+    <p class="py-1 px-4 text-center text-xs text-gray-600">
+      {{ instructionText }}
+    </p>
+
     <!-- Player hand -->
     <ClashHand
       :cards="game.playerHand"
@@ -225,6 +229,19 @@ const roomId = route.params.id
 
 const game = ref(null)
 
+const MAX_PER_LANE = 4 // TODO: if your server exposes this, read from state instead
+
+const playerLaneCount = lane =>
+  (lane.player?.length ?? lane.playerCards?.length ?? 0)
+
+const hasOpenLane = computed(() =>
+  !!game.value?.lanes?.some(l => playerLaneCount(l) < MAX_PER_LANE)
+)
+
+const allPlayerLanesFull = computed(() =>
+  !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
+)
+
 const socket = io(
   import.meta.env.PROD
     ? undefined
@@ -296,8 +313,9 @@ const progressPercent = computed(
   () => Math.max(0, Math.min(100, (secondsLeft.value/60)*100))
 )
 
-const hasPlayable = computed(
-  () => game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
+const hasPlayable = computed(() =>
+  hasOpenLane.value &&
+  game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
 )
 
 const canConfirm = computed(() =>
@@ -317,12 +335,14 @@ const instructionText = computed(() => {
   if (game.value.phase === 'setup')
     return 'Prepare your first move – select a card and place it on a lane.'
   if (game.value.phase === 'select') {
-    if (confirmed.value) return 'Waiting for opponent…'
-    if (!selected.value) return 'Click a card, then a lane to place it.'
+    if (confirmed.value)        return 'Waiting for opponent…'
+    if (allPlayerLanesFull.value)
+      return 'All your lanes are full — confirm to end your turn without placing.'
+    if (!selected.value)        return 'Click a card, then a lane to place it.'
     return 'Choose a lane and confirm your selection.'
   }
   if (game.value.phase === 'reveal')
-    return game.value.priority === 'player'
+    return game.value.priority==='player'
       ? 'You attack first – watch the reveal!'
       : 'Opponent attacks first – watch the reveal.'
   return ''
@@ -344,16 +364,20 @@ function laneCountAfterPlacements(laneIdx) {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
-  // toggle off if this card is already placed
+  const lane = game.value?.lanes?.[laneIdx]
+  if (!lane) return
+
+  // prevent overfilling this lane, including previews this turn
+  const pendingInLane = placements.value.filter(p => p.laneIndex === laneIdx).length
+  if (playerLaneCount(lane) + pendingInLane >= MAX_PER_LANE) {
+    log.value.push('That lane is full.')
+    return
+  }
+
+  // toggle this exact card’s preview
   const idx = placements.value.findIndex(p => p.card === selected.value)
-  if (idx >= 0) { placements.value.splice(idx, 1); return }
-
-  // energy check
-  if (selected.value.cost + pendingCost.value > game.value.playerEnergy) return
-
-  // capacity check
-  if (laneCountAfterPlacements(laneIdx) >= LANE_CAP) {
-    log.value.push('That lane is full (max 4).')
+  if (idx >= 0) {
+    placements.value.splice(idx, 1)
     return
   }
 

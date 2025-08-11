@@ -112,6 +112,11 @@
       >{{ entry }}</div>
     </div>
 
+    <!-- Next steps instructions -->
+    <p class="py-1 px-4 text-center text-xs text-gray-600">
+      {{ instructionText }}
+    </p>
+
     <!-- Player hand & energy -->
     <ClashHand
       :cards="game.playerHand"
@@ -240,7 +245,21 @@ function startTimer(deadline) {
   }, 1000)
 }
 
+const MAX_PER_LANE = 4 // TODO: if your server exposes this, read from state instead
+
+const playerLaneCount = lane =>
+  (lane.player?.length ?? lane.playerCards?.length ?? 0)
+
+const hasOpenLane = computed(() =>
+  !!game.value?.lanes?.some(l => playerLaneCount(l) < MAX_PER_LANE)
+)
+
+const allPlayerLanesFull = computed(() =>
+  !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
+)
+
 const hasPlayable = computed(() =>
+  hasOpenLane.value &&
   game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
 )
 
@@ -276,6 +295,8 @@ const instructionText = computed(() => {
     return 'Prepare your first move – select a card and place it on a lane.'
   if (game.value.phase === 'select') {
     if (confirmed.value)        return 'Waiting for opponent…'
+    if (allPlayerLanesFull.value)
+      return 'All your lanes are full — confirm to end your turn without placing.'
     if (!selected.value)        return 'Click a card, then a lane to place it.'
     return 'Choose a lane and confirm your selection.'
   }
@@ -314,18 +335,24 @@ function wireSocket() {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
-  // try to un-place _this exact card instance_ via object identity
+  const lane = game.value?.lanes?.[laneIdx]
+  if (!lane) return
+
+  // prevent overfilling this lane, including previews this turn
+  const pendingInLane = placements.value.filter(p => p.laneIndex === laneIdx).length
+  if (playerLaneCount(lane) + pendingInLane >= MAX_PER_LANE) {
+    log.value.push('That lane is full.')
+    return
+  }
+
+  // toggle this exact card’s preview
   const idx = placements.value.findIndex(p => p.card === selected.value)
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
-  // otherwise push a new placement for this unique card
-  placements.value.push({
-    card:      selected.value,
-    laneIndex: laneIdx
-  })
+  placements.value.push({ card: selected.value, laneIndex: laneIdx })
 }
 
 function confirmSelections() {
