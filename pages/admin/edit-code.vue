@@ -57,22 +57,30 @@
           <!-- cToon Rewards -->
           <div>
             <label class="block font-medium mb-1">cToon Rewards</label>
-            <datalist id="ctoont-list">
-              <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
-            </datalist>
+
             <div
               v-for="(rc, idx) in ctoonRewards"
               :key="idx"
               class="flex items-center space-x-2 mb-2"
             >
+              <!-- per-row datalist, filtered by current input -->
+              <datalist :id="`reward-ctoon-list-${idx}`">
+                <option
+                  v-for="ct in filteredCtoons(rc.ctoonName)"
+                  :key="ct.id"
+                  :value="ct.name"
+                />
+              </datalist>
+
               <input
                 v-model="rc.ctoonName"
-                list="ctoont-list"
+                :list="`reward-ctoon-list-${idx}`"
                 type="text"
                 required
                 class="flex-1 border rounded p-2"
-                placeholder="Type or select cToon name"
+                placeholder="Type 3+ characters to search"
               />
+
               <img
                 v-if="findCtoon(rc.ctoonName)?.assetPath"
                 :src="findCtoon(rc.ctoonName).assetPath"
@@ -94,6 +102,7 @@
                 Remove
               </button>
             </div>
+
             <button
               type="button"
               @click="addCtoonReward"
@@ -106,21 +115,29 @@
           <!-- Prerequisite cToons -->
           <div>
             <label class="block font-medium mb-1">Prerequisite cToons</label>
-            <datalist id="ctoont-list">
-              <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
-            </datalist>
+
             <div
               v-for="(pc, idx) in prereqCtoons"
               :key="idx"
               class="flex items-center space-x-2 mb-2"
             >
+              <!-- per-row datalist, filtered by current input -->
+              <datalist :id="`prereq-ctoon-list-${idx}`">
+                <option
+                  v-for="ct in filteredCtoons(pc.ctoonName)"
+                  :key="ct.id"
+                  :value="ct.name"
+                />
+              </datalist>
+
               <input
                 v-model="pc.ctoonName"
-                list="ctoont-list"
+                :list="`prereq-ctoon-list-${idx}`"
                 type="text"
                 class="flex-1 border rounded p-2"
-                placeholder="Type or select cToon name"
+                placeholder="Type 3+ characters to search"
               />
+
               <img
                 v-if="findCtoon(pc.ctoonName)?.assetPath"
                 :src="findCtoon(pc.ctoonName).assetPath"
@@ -135,6 +152,7 @@
                 Remove
               </button>
             </div>
+
             <button
               type="button"
               @click="addPrereqCtoon"
@@ -297,6 +315,12 @@ function addCtoonReward() { ctoonRewards.value.push({ ctoonName: '', quantity: 1
 function removeCtoonReward(i)  { ctoonRewards.value.splice(i,1) }
 function addPrereqCtoon()       { prereqCtoons.value.push({ ctoonName: '' }) }
 function removePrereqCtoon(i)   { prereqCtoons.value.splice(i,1) }
+function filteredCtoons(input) {
+  const v = (input || '').trim()
+  if (v.length < 2) return []
+  const low = v.toLowerCase()
+  return ctoonOptions.value.filter(ct => ct.name.toLowerCase().includes(low))
+}
 
 async function submitForm() {
   error.value = ''

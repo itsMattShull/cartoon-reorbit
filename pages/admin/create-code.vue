@@ -45,24 +45,30 @@
         <!-- Prerequisite cToons -->
         <div>
           <label class="block font-medium mb-1">Prerequisite cToons</label>
-          <datalist id="ctoont-list">
-            <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
-          </datalist>
+
           <div
             v-for="(pc, idx) in prereqCtoons"
             :key="idx"
             class="flex items-center space-x-2 mb-2"
           >
+            <datalist :id="`prereq-ctoon-list-${idx}`">
+              <option
+                v-for="ct in filteredCtoons(pc.ctoonName)"
+                :key="ct.id"
+                :value="ct.name"
+              />
+            </datalist>
+
             <input
               v-model="pc.ctoonName"
-              list="ctoont-list"
+              :list="`prereq-ctoon-list-${idx}`"
               type="text"
               class="flex-1 border rounded p-2"
-              placeholder="Type or select cToon name"
+              placeholder="Type 3+ characters to search"
             />
-            <!-- inline preview -->
+
             <img
-              v-if="findCtoon(pc.ctoonName)"
+              v-if="findCtoon(pc.ctoonName)?.assetPath"
               :src="findCtoon(pc.ctoonName).assetPath"
               class="w-8 h-8 object-cover rounded"
               alt="cToon preview"
@@ -75,6 +81,7 @@
               Remove
             </button>
           </div>
+
           <button
             type="button"
             @click="addPrereqCtoon"
@@ -82,9 +89,7 @@
           >
             + Add prerequisite cToon
           </button>
-          <p class="text-sm text-gray-500">
-            Leave empty for no prerequisites.
-          </p>
+          <p class="text-sm text-gray-500">Leave empty for no prerequisites.</p>
         </div>
 
         <!-- Points Reward -->
@@ -101,14 +106,21 @@
         <!-- cToon Rewards -->
         <div>
           <label class="block font-medium mb-1">cToon Rewards</label>
-          <datalist id="ctoont-list">
-            <option v-for="ct in ctoonOptions" :key="ct.id" :value="ct.name" />
-          </datalist>
+
           <div
             v-for="(rc, idx) in ctoonRewards"
             :key="idx"
             class="flex items-center space-x-2 mb-2"
           >
+            <!-- per-row datalist fed by filtered options -->
+            <datalist :id="`ctoon-list-${idx}`">
+              <option
+                v-for="ct in filteredCtoons(rc.ctoonName)"
+                :key="ct.id"
+                :value="ct.name"
+              />
+            </datalist>
+
             <input
               :value="rc.ctoonName"
               @input="e => { 
@@ -116,18 +128,20 @@
                 rc.ctoonName = val; 
                 onCtoonInput(val);
               }"
-              list="ctoont-list"
+              :list="`ctoon-list-${idx}`"
               type="text"
               required
               class="flex-1 border rounded p-2"
-              placeholder="Type or select cToon name"
+              placeholder="Type 3+ characters to search"
             />
+
             <img
               v-if="findCtoon(rc.ctoonName)"
               :src="findCtoon(rc.ctoonName).assetPath"
               class="w-8 h-8 object-cover rounded"
               alt="cToon preview"
             />
+
             <input
               v-model.number="rc.quantity"
               type="number"
@@ -143,6 +157,7 @@
               Remove
             </button>
           </div>
+
           <button
             type="button"
             @click="addCtoonReward"
@@ -151,6 +166,7 @@
             + Add another cToon
           </button>
         </div>
+
 
         <div>
           <label class="block font-medium mb-1">Background Rewards (CODE_ONLY)</label>
@@ -223,9 +239,10 @@ function addBgReward() { bgRewards.value.push({ bgLabel: '' }) }
 function removeBgReward(i) { bgRewards.value.splice(i,1) }
 
 function filteredCtoons(input) {
-  if (input.length < 2) return []
+  const v = (input || '').trim()
+  if (v.length < 2) return []
   return ctoonOptions.value.filter(ct =>
-    ct.name.toLowerCase().includes(input.toLowerCase())
+    ct.name.toLowerCase().includes(v.toLowerCase())
   )
 }
 
