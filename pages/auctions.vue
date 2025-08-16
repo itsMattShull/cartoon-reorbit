@@ -18,6 +18,19 @@
       >
         Current Auctions
       </button>
+
+      <button
+        :class="[
+          'ml-6 px-4 py-2 -mb-px font-semibold',
+          activeTab === 'mybids'
+            ? 'border-b-2 border-indigo-600 text-indigo-600'
+            : 'text-gray-600'
+        ]"
+        @click="activeTab = 'mybids'"
+      >
+        My Bids
+      </button>
+
       <button
         :class="[
           'ml-6 px-4 py-2 -mb-px font-semibold',
@@ -69,7 +82,7 @@
           <div class="mb-4">
             <p class="text-sm font-medium text-gray-700 mb-2">Filter by Series</p>
             <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
-              <label v-for="ser in uniqueSeries" :key="ser" class="flex items-center text-sm">
+              <label v-for="(ser, i) in uniqueSeries" :key="ser + i" class="flex items-center text-sm">
                 <input
                   type="checkbox"
                   :value="ser"
@@ -85,7 +98,7 @@
           <div class="mb-4">
             <p class="text-sm font-medium text-gray-700 mb-2">Filter by Rarity</p>
             <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
-              <label v-for="r in uniqueRarities" :key="r" class="flex items-center text-sm">
+              <label v-for="(r, i) in uniqueRarities" :key="r + i" class="flex items-center text-sm">
                 <input
                   type="checkbox"
                   :value="r"
@@ -153,11 +166,7 @@
         <div class="w-full lg:w-3/4">
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <template v-if="isLoading">
-              <div
-                v-for="n in 6"
-                :key="n"
-                class="bg-white rounded-lg shadow p-4 animate-pulse h-64"
-              ></div>
+              <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
             </template>
             <template v-else>
               <div
@@ -177,31 +186,22 @@
                 >
                   Un-owned
                 </span>
+
                 <div class="flex-grow flex items-center justify-center">
-                  <img
-                    :src="auction.assetPath"
-                    class="block max-w-full mx-auto rounded mb-4"
-                  />
+                  <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
                 </div>
+
                 <div class="mt-4">
                   <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
+                  <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
+                  <p class="text-sm text-gray-600 mb-1">Mint #{{ auction.mintNumber ?? 'N/A' }}</p>
                   <p class="text-sm text-gray-600 mb-1">
-                    Rarity: {{ auction.rarity }}
-                  </p>
-                  <p class="text-sm text-gray-600 mb-1">
-                    Mint #{{ auction.mintNumber ?? 'N/A' }}
-                  </p>
-                  <p class="text-sm text-gray-600 mb-1">
-                    Highest Bid:
-                    {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                    Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
                   </p>
                   <p class="text-sm text-red-600 mb-4">
                     Ending in {{ formatRemaining(auction.endAt) }}
                   </p>
-                  <NuxtLink
-                    :to="`/auction/${auction.id}`"
-                    class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center"
-                  >
+                  <NuxtLink :to="`/auction/${auction.id}`" class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center">
                     View Auction
                   </NuxtLink>
                 </div>
@@ -212,19 +212,85 @@
       </div>
     </div>
 
+    <!-- My Bids -->
+    <div v-else-if="activeTab === 'mybids'">
+      <div v-if="isLoadingMyBids" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
+      </div>
+
+      <div v-else>
+        <div v-if="sortedMyBids.length === 0" class="text-gray-500">
+          You haven't bid on any auctions yet.
+        </div>
+
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            v-for="bid in sortedMyBids"
+            :key="bid.id"
+            class="relative bg-white rounded-lg shadow p-4 h-full flex flex-col"
+          >
+            <!-- Outcome badge (ended only) -->
+            <div class="absolute top-2 right-2">
+              <span
+                v-if="isEnded(bid.endAt) && bid.didWin"
+                class="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded"
+              >
+                Won
+              </span>
+              <span
+                v-else-if="isEnded(bid.endAt) && !bid.didWin"
+                class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
+              >
+                Lost
+              </span>
+            </div>
+
+            <div class="flex-grow flex items-center justify-center mb-4">
+              <img :src="bid.assetPath" class="max-w-full rounded" />
+            </div>
+
+            <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
+            <p class="text-sm text-gray-600 mb-1">
+              Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
+            </p>
+            <p class="text-sm text-gray-600 mb-1">
+              Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
+            </p>
+
+            <p
+              class="text-sm mb-4"
+              :class="isEnded(bid.endAt) ? 'text-gray-600' : 'text-red-600'"
+            >
+              <template v-if="!isEnded(bid.endAt)">
+                Ending in {{ formatRemaining(bid.endAt) }}
+              </template>
+              <template v-else>
+                Ended on {{ formatDate(bid.endAt) }}
+              </template>
+            </p>
+
+            <NuxtLink
+              :to="`/auction/${bid.id}`"
+              class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center mt-auto"
+            >
+              View Auction
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- My Auctions -->
     <div v-else>
       <div v-if="isLoadingMy" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div
-          v-for="n in 6"
-          :key="n"
-          class="bg-white rounded-lg shadow p-4 animate-pulse h-64"
-        ></div>
+        <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
       </div>
+
       <div v-else>
         <div v-if="myAuctions.length === 0" class="text-gray-500">
           You haven't created any auctions yet.
         </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
             v-for="auction in myAuctions"
@@ -239,26 +305,20 @@
               >
                 In Progress
               </span>
-              <span
-                v-else
-                class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded"
-              >
+              <span v-else class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded">
                 Ended
               </span>
             </div>
+
             <div class="flex-grow flex items-center justify-center mb-4">
               <img :src="auction.assetPath" class="max-w-full rounded" />
             </div>
+
             <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
+            <p class="text-sm text-gray-600 mb-1">Created: {{ formatDate(auction.createdAt) }}</p>
+            <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
             <p class="text-sm text-gray-600 mb-1">
-              Created: {{ formatDate(auction.createdAt) }}
-            </p>
-            <p class="text-sm text-gray-600 mb-1">
-              Initial Bid: {{ auction.initialBid }} points
-            </p>
-            <p class="text-sm text-gray-600 mb-1">
-              Winning Bid:
-              {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
+              Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
             </p>
             <p v-if="auction.winningBidder" class="text-sm text-gray-600">
               Winner: {{ auction.winningBidder }}
@@ -284,10 +344,13 @@ const isLoading = ref(false)
 const myAuctions = ref([])
 const isLoadingMy = ref(false)
 
+const myBids = ref([])
+const isLoadingMyBids = ref(false)
+
 const now = ref(new Date())
 let timer = null
 
-// Filters & sorting
+// Filters & sorting (Current Auctions)
 const searchQuery = ref('')
 const selectedSeries = ref([])
 const selectedRarities = ref([])
@@ -328,11 +391,31 @@ function loadMyAuctions() {
     })
 }
 
+function loadMyBids() {
+  isLoadingMyBids.value = true
+  $fetch('/api/auction/mybids')
+    .then(data => {
+      // Expect each item to include at least:
+      // { id, name, assetPath, endAt, myBid, highestBid, didWin }
+      myBids.value = Array.isArray(data) ? data : []
+    })
+    .finally(() => {
+      isLoadingMyBids.value = false
+    })
+}
+
 watch(activeTab, newTab => {
   if (newTab === 'mine' && myAuctions.value.length === 0) {
     loadMyAuctions()
   }
+  if (newTab === 'mybids' && myBids.value.length === 0) {
+    loadMyBids()
+  }
 })
+
+function isEnded(endAt) {
+  return new Date(endAt) <= now.value
+}
 
 function formatRemaining(endAt) {
   const diff = new Date(endAt) - now.value
@@ -377,6 +460,20 @@ const filteredAuctions = computed(() => {
         default:         return 0
       }
     })
+})
+
+/**
+ * My Bids sorting:
+ *  - Active auctions first (not ended)
+ *  - Within each group, ending soonest first
+ */
+const sortedMyBids = computed(() => {
+  return [...myBids.value].sort((a, b) => {
+    const aEnded = isEnded(a.endAt)
+    const bEnded = isEnded(b.endAt)
+    if (aEnded !== bEnded) return aEnded ? 1 : -1
+    return new Date(a.endAt) - new Date(b.endAt)
+  })
 })
 </script>
 

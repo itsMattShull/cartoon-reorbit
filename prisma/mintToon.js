@@ -17,11 +17,21 @@ const USER_PURCHASED_FLAG = false
 
 async function main() {
   console.log('🔎 Loading users…')
-  const users = await prisma.user.findMany({
+  let users = await prisma.user.findMany({
+    where: {
+      AND: [
+        { username: { not: null } }, // exclude NULL
+        { username: { not: '' } },   // exclude empty string
+      ],
+    },
     select: { id: true, username: true },
     // no orderBy — we’ll shuffle below
   })
-  console.log(`👥 Found ${users.length} users`)
+
+  // Extra guard: exclude whitespace-only usernames
+  users = users.filter(u => typeof u.username === 'string' && u.username.trim().length > 0)
+
+  console.log(`👥 Found ${users.length} users with a valid username`)
 
   // Cryptographically fair Fisher–Yates shuffle
   for (let i = users.length - 1; i > 0; i--) {
@@ -39,20 +49,15 @@ async function main() {
   const info = Object.fromEntries(targets.map(t => [t.id, t]))
   if (!info[CTOON_A] || !info[CTOON_B]) {
     throw new Error(
-      `Could not find both target cToons. Found: ${targets
-        .map(t => t.id)
-        .join(', ')}`
+      `Could not find both target cToons. Found: ${targets.map(t => t.id).join(', ')}`
     )
   }
 
-  // Current global minted counts for each target cToon (existing owners)
   const startingCountA = await prisma.userCtoon.count({ where: { ctoonId: CTOON_A } })
   const startingCountB = await prisma.userCtoon.count({ where: { ctoonId: CTOON_B } })
 
-  // We'll advance these as we mint during this script
   const mintedNow = { [CTOON_A]: 0, [CTOON_B]: 0 }
 
-  // Quick helpers
   const projectedTotal = (ctoonId) =>
     (ctoonId === CTOON_A ? startingCountA : startingCountB) + mintedNow[ctoonId]
 
@@ -68,7 +73,6 @@ async function main() {
 
   console.log('🚀 Beginning mints…')
   for (const u of users) {
-    // Which of the two does the user already own?
     const already = await prisma.userCtoon.findMany({
       where: { userId: u.id, ctoonId: { in: [CTOON_A, CTOON_B] } },
       select: { ctoonId: true },
@@ -81,16 +85,12 @@ async function main() {
       continue
     }
 
-    // 50/50 pick
     let chosen = randomInt(2) === 0 ? CTOON_A : CTOON_B
-    // If they already own the chosen one, give them the other (if possible)
     if (owned.has(chosen)) {
       chosen = chosen === CTOON_A ? CTOON_B : CTOON_A
     }
 
-    // Respect stock limits if requested
     if (!canMintMore(chosen)) {
-      // Try the other one if possible
       const other = chosen === CTOON_A ? CTOON_B : CTOON_A
       if (!owned.has(other) && canMintMore(other)) {
         chosen = other
@@ -100,13 +100,10 @@ async function main() {
       }
     }
 
-    // Compute next mint number *for that cToon* as if appended to the end
     const nextMintNumber = projectedTotal(chosen) + 1
-    const initialQty = info[chosen].initialQuantity // null ⇒ all first edition
-    const isFirstEdition =
-      initialQty == null ? true : nextMintNumber <= initialQty
+    const initialQty = info[chosen].initialQuantity
+    const isFirstEdition = initialQty == null ? true : nextMintNumber <= initialQty
 
-    // Create the UserCtoon entry
     await prisma.userCtoon.create({
       data: {
         userId: u.id,
