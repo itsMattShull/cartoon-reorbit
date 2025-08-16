@@ -19,9 +19,16 @@ async function main() {
   console.log('🔎 Loading users…')
   const users = await prisma.user.findMany({
     select: { id: true, username: true },
-    orderBy: { createdAt: 'asc' },
+    // no orderBy — we’ll shuffle below
   })
   console.log(`👥 Found ${users.length} users`)
+
+  // Cryptographically fair Fisher–Yates shuffle
+  for (let i = users.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1) // 0..i inclusive
+    ;[users[i], users[j]] = [users[j], users[i]]
+  }
+  console.log('🔀 Users shuffled randomly')
 
   console.log('🔎 Loading target cToons…')
   const targets = await prisma.ctoon.findMany({
