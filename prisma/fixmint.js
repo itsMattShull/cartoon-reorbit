@@ -3,9 +3,9 @@
 //   DATABASE_URL="postgres://..." node server/scripts/assign-orphaned-ctoones.js
 //
 // What it does:
-//  - Looks for minted UserCtoons for the two specified ctoonIds
-//  - If a minted entry has no owner (userId == NULL), it assigns it to the user
-//    with username "CartoonReOrbitOfficial"
+//  - Finds minted UserCtoons for the two specified ctoonIds
+//  - Reassigns any with no owner (userId == NULL) to "CartoonReOrbitOfficial"
+//  - Reassigns any whose current owner's username is missing (NULL or empty) to "CartoonReOrbitOfficial"
 
 import { prisma } from '../server/prisma.js'
 
@@ -23,16 +23,20 @@ async function main() {
   })
 
   if (!targetUser) {
-    throw new Error(
-      `❌ No user found with username "${TARGET_USERNAME}". Aborting.`
-    )
+    throw new Error(`❌ No user found with username "${TARGET_USERNAME}". Aborting.`)
   }
-  console.log(`👤 Assigning orphaned cToons to user: ${targetUser.username} (${targetUser.id})`)
+  console.log(`👤 Assigning to: ${targetUser.username} (${targetUser.id})`)
 
-  // 2) Load all minted entries for the target ctoonIds
+  // 2) Load all minted entries for the target ctoonIds (with current owner info)
   const minted = await prisma.userCtoon.findMany({
     where: { ctoonId: { in: TARGET_CTOON_IDS } },
-    select: { id: true, ctoonId: true, userId: true, createdAt: true },
+    select: {
+      id: true,
+      ctoonId: true,
+      userId: true,
+      createdAt: true,
+      user: { select: { id: true, username: true } },
+    },
     orderBy: { createdAt: 'asc' },
   })
 
@@ -41,33 +45,54 @@ async function main() {
     return
   }
 
-  // 3) Filter to "owner is null"
-  const orphans = minted.filter(m => m.userId == null)
+  // 3) Determine which rows need reassignment
+  const needsReassign = minted.filter((m) => {
+    // Case A: truly orphaned (no owner)
+    if (!m.userId) return true
+
+    // Case B: owner exists but has no username (null/empty/whitespace)
+    const uname = m.user?.username
+    const hasNoUsername = typeof uname !== 'string' || uname.trim().length === 0
+
+    // Skip if it's already owned by target user (even if no username—shouldn't happen—but safe)
+    const alreadyTarget = m.userId === targetUser.id
+
+    return hasNoUsername && !alreadyTarget
+  })
 
   console.log(
     `Found ${minted.length} minted entries for target ctoonIds; ` +
-    `${orphans.length} without an owner.`
+    `${needsReassign.length} need reassignment (no owner or owner without username).`
   )
 
-  if (orphans.length === 0) {
-    console.log('✅ No orphaned entries to fix.')
+  if (needsReassign.length === 0) {
+    console.log('✅ Nothing to reassign.')
     return
   }
 
-  // 4) Assign each orphan to the target user
-  for (const row of orphans) {
-    await prisma.userCtoon.update({
+  // 4) Reassign
+  const ops = needsReassign.map((row) =>
+    prisma.userCtoon.update({
       where: { id: row.id },
       data: { userId: targetUser.id },
     })
-    console.log(`➡️  Reassigned UserCtoon ${row.id} (ctoonId ${row.ctoonId}) to ${targetUser.username}`)
+  )
+
+  await prisma.$transaction(ops)
+
+  // 5) Logging
+  for (const row of needsReassign) {
+    const reason = !row.userId
+      ? 'no owner'
+      : `owner username missing (${row.user?.id ?? 'unknown user id'})`
+    console.log(`➡️  Reassigned UserCtoon ${row.id} (ctoonId ${row.ctoonId}) to ${targetUser.username} — reason: ${reason}`)
   }
 
-  console.log('🎉 Done reassigning orphaned cToons!')
+  console.log('🎉 Done reassigning cToons without valid usernames!')
 }
 
 main()
-  .catch(err => {
+  .catch((err) => {
     console.error(err)
     process.exit(1)
   })
