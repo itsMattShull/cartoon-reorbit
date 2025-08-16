@@ -41,7 +41,7 @@
             </span>
           </template>
           <template v-else>
-            {{ formatInt(row.value) }}
+            {{ formatInt(row.value) }} <span v-if="suffix" class="text-gray-500 font-normal">{{ suffix }}</span>
           </template>
         </div>
       </li>
@@ -55,9 +55,10 @@
 <script setup>
 defineProps({
   title: { type: String, required: true },
-  rows: { type: Array, default: () => [] },       // [{ username, value, num?, den? }]
+  rows: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  valueType: { type: String, default: 'count' }   // 'count' | 'percent'
+  valueType: { type: String, default: 'count' }, // 'count' | 'percent'
+  suffix: { type: String, default: '' }          // ← optional
 })
 
 const hasFrac = (row) =>

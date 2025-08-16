@@ -119,12 +119,6 @@ async function settleStakes(recordId, { outcome, winnerUserId, whoLeftUserId } =
       })
     }
 
-    // Zero the stakes so re-entrant calls can’t double-pay.
-    await tx.clashGame.update({
-      where: { id: recordId },
-      data:  { player1Points: 0, player2Points: 0 }
-    })
-
     return { payouts }
   })
 }

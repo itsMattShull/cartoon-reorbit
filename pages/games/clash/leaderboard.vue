@@ -26,9 +26,16 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <LeaderboardCard title="Total Games Won" :rows="wins" :loading="loading" />
         <LeaderboardCard title="Win Percentage" :rows="winPct" value-type="percent" :loading="loading" />
-        <LeaderboardCard title="Total Games Lost" :rows="losses" :loading="loading" />
-        <LeaderboardCard title="Loss Percentage" :rows="lossPct" value-type="percent" :loading="loading" />
-        <LeaderboardCard class="md:col-span-2" title="Total Games Played" :rows="played" :loading="loading" />
+
+        <!-- 🔹 NEW: replace losses/loss% with top earners -->
+        <LeaderboardCard
+          title="Stake Points Earned (Top 10)"
+          :rows="earned"
+          suffix="pts"
+          :loading="loading"
+        />
+
+        <LeaderboardCard title="Total Games Played" :rows="played" :loading="loading" />
       </div>
     </section>
   </div>
@@ -39,11 +46,16 @@ import Nav from '@/components/Nav.vue'
 import LeaderboardCard from '@/components/LeaderboardCard.vue'
 import { ref, onMounted, watch } from 'vue'
 
-const timeframe = ref('1m') // '1w','1m','3m','6m','1y','all'
-const mode = ref('all')     // 'all' | 'pve' | 'pvp'
+const timeframe = ref('1m')
+const mode = ref('all') // keep mode selector working (all/pve/pvp)
 const loading = ref(true)
-const wins = ref([]), winPct = ref([])
-const losses = ref([]), lossPct = ref([]), played = ref([])
+
+const wins   = ref([])
+const winPct = ref([])
+const played = ref([])
+
+// 🔹 NEW: top earners (stake points won/returned per rules)
+const earned = ref([])
 
 async function loadData() {
   loading.value = true
@@ -53,11 +65,10 @@ async function loadData() {
       { credentials: 'include' }
     )
     const data = await res.json()
-    wins.value    = data.wins || []
-    winPct.value  = data.winPct || []
-    losses.value  = data.losses || []
-    lossPct.value = data.lossPct || []
-    played.value  = data.played || []
+    wins.value    = data.wins    || []
+    winPct.value  = data.winPct  || []
+    played.value  = data.played  || []
+    earned.value  = data.earned  || []   // 🔹 NEW
   } finally {
     loading.value = false
   }
