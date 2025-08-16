@@ -65,26 +65,68 @@ function shuffle(arr) {
   return a
 }
 
-function maybeStartPvp(roomId) {
-  const room = pvpRooms.get(roomId)
-  if (!room || room.players.length !== 2) return
-  const [p1, p2] = room.players
-  if (!room.decks?.[p1] || !room.decks?.[p2]) return
+// --- Stake settlement helper: pays out based on outcome, safely once ---
+async function settleStakes(recordId, { outcome, winnerUserId, whoLeftUserId } = {}) {
+  return db.$transaction(async tx => {
+    const rec = await tx.clashGame.findUnique({
+      where: { id: recordId },
+      select: {
+        player1UserId: true, player2UserId: true,
+        player1Points: true, player2Points: true
+      }
+    })
+    if (!rec) return { payouts: {} }
 
-  const battleId = randomUUID()
-  const battle = createBattle({
-    playerDeck: room.decks[p1],
-    aiDeck:     room.decks[p2],   // using second deck slot for opponent
-    battleId,
-    lanes: LANES
+    const p1 = rec.player1UserId
+    const p2 = rec.player2UserId
+    const s1 = rec.player1Points || 0
+    const s2 = rec.player2Points || 0
+    const pot = s1 + s2
+
+    // If already settled (stakes zeroed), do nothing.
+    if (pot === 0 && s1 === 0 && s2 === 0) return { payouts: {} }
+
+    const payouts = {}
+
+    if (outcome === 'tie') {
+      if (p1 && s1 > 0) payouts[p1] = (payouts[p1] || 0) + s1
+      if (p2 && s2 > 0) payouts[p2] = (payouts[p2] || 0) + s2
+    } else {
+      // Winner path: either explicit winnerUserId or survivor on disconnect
+      let winner = winnerUserId
+      if (!winner && whoLeftUserId) {
+        winner = whoLeftUserId === p1 ? p2 : p1
+      }
+      if (winner && pot > 0) payouts[winner] = (payouts[winner] || 0) + pot
+    }
+
+    // credit users & log
+    for (const [uid, amt] of Object.entries(payouts)) {
+      if (amt <= 0) continue
+      const updated = await tx.userPoints.upsert({
+        where: { userId: uid },
+        create: { userId: uid, points: amt },
+        update: { points: { increment: amt } }
+      })
+      await tx.pointsLog.create({
+        data: {
+          userId: uid,
+          points: amt,
+          total:  updated.points,
+          method: 'Game - gToons Clash',
+          direction: 'increase'
+        }
+      })
+    }
+
+    // Zero the stakes so re-entrant calls can’t double-pay.
+    await tx.clashGame.update({
+      where: { id: recordId },
+      data:  { player1Points: 0, player2Points: 0 }
+    })
+
+    return { payouts }
   })
-  pvpMatches.set(roomId, { battle, recordId: room.recordId })
-
-  // remove from lobby now that it’s full
-  io.emit('roomRemoved', { id: roomId })
-  pvpRooms.delete(roomId)
-
-  io.to(roomId).emit('gameStart', battle.publicState())
 }
 
 async function awardClashWinPoints(userId) {
@@ -315,25 +357,46 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
     const set = io.sockets.adapter.rooms.get(roomId)
     if (leavingSocketId && set && set.has(leavingSocketId)) size -= 1
 
-    // stop the timer and mark DB
     if (match.timer) clearInterval(match.timer)
+
+    // Figure out survivor/winner for stake payout
+    const p1Id = Object.entries(match.userSide).find(([, side]) => side === 'player')?.[0] || null;
+    const p2Id = Object.entries(match.userSide).find(([, side]) => side === 'ai')?.[0] || null;
+
+    // Mark DB and settle stakes to survivor
+    let stakePayouts = {}
     try {
       await db.clashGame.update({
         where: { id: match.recordId },
-        data: { endedAt: new Date(), outcome: 'incomplete', winnerUserId: null, whoLeftUserId: userId || null }
+        data: {
+          endedAt:       new Date(),
+          outcome:       'incomplete',
+          winnerUserId:  null,
+          whoLeftUserId: userId || null
+        }
       })
+
+      const { payouts } = await settleStakes(match.recordId, {
+        outcome: 'win',
+        winnerUserId: null,
+        whoLeftUserId: userId || null
+      })
+      stakePayouts = payouts || {}
     } catch (e) {
-      console.error('Failed to mark PvP game incomplete:', e)
+      console.error('Failed to mark PvP game incomplete / settle stakes:', e)
     }
 
-    // If someone is still in the room, show them the modal via gameEnd
-    if (size >= 1) {
-      io.to(roomId).emit('gameEnd', {
+    // Notify remaining sockets with individualized payout amount
+    const sockets = await io.in(roomId).fetchSockets();
+    for (const s of sockets) {
+      s.emit('gameEnd', {
         winner: 'incomplete',
         playerLanesWon: 0,
         aiLanesWon: 0,
         reason: 'opponent_disconnect',
-        pointsAwarded: 0
+        pointsAwarded: 0,
+        // 👇 NEW
+        stakeAwarded: Number(stakePayouts[s.data.userId] || 0)
       })
     }
 
@@ -364,7 +427,11 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
         where: { id: lobby.players[0] },
         select: { username: true }
       })
-      io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown' })
+      io.emit('roomCreated', { 
+        id: roomId, 
+        owner: u?.username || 'Unknown',
+        points: lobby.stakePoints ?? 0
+      })
     }
   }
 }
@@ -374,6 +441,7 @@ function lobbySnapshot(room) {
   return {
     players: room.players,
     usernames: room.usernames || {},
+    points: room.stakePoints || 0,
     haveDeck: {
       [p1]: !!room.decks?.[p1],
       [p2]: !!room.decks?.[p2],
@@ -388,6 +456,7 @@ async function startPvpMatch(roomId) {
   const [p1, p2] = room.players
   if (!room.decks?.[p1] || !room.decks?.[p2]) return
   if (!room.ready?.[p1] || !room.ready?.[p2]) return
+  const stake = Math.max(0, Math.floor(Number(room.stakePoints || 0)))
 
   const battleId = randomUUID()
   const battle = createBattle({
@@ -398,13 +467,65 @@ async function startPvpMatch(roomId) {
   })
 
   // create the DB record *now* (game really starts here)
-  const record = await db.clashGame.create({
-    data: {
-      player1UserId: p1,
-      player2UserId: p2,
-      startedAt:     new Date()
+  let record
+  try {
+    record = await db.$transaction(async tx => {
+      // Ensure UserPoints rows exist
+      await tx.userPoints.upsert({ where: { userId: p1 }, create: { userId: p1, points: 0 }, update: {} })
+      await tx.userPoints.upsert({ where: { userId: p2 }, create: { userId: p2, points: 0 }, update: {} })
+
+      // Load balances now that rows exist
+      const a = await tx.userPoints.findUnique({ where: { userId: p1 } })
+      const b = await tx.userPoints.findUnique({ where: { userId: p2 } })
+
+      if ((a?.points ?? 0) < stake || (b?.points ?? 0) < stake) {
+        throw new Error('INSUFFICIENT_STAKE_BALANCE')
+      }
+
+      // Debit both (only if stake > 0)
+      let aAfter = a, bAfter = b
+      if (stake > 0) {
+        aAfter = await tx.userPoints.update({
+          where: { userId: p1 },
+          data:  { points: { decrement: stake } }
+        })
+        await tx.pointsLog.create({
+          data: { userId: p1, points: stake, total: aAfter.points, method: 'Game - gToons Clash', direction: 'decrease' }
+        })
+
+        bAfter = await tx.userPoints.update({
+          where: { userId: p2 },
+          data:  { points: { decrement: stake } }
+        })
+        await tx.pointsLog.create({
+          data: { userId: p2, points: stake, total: bAfter.points, method: 'Game - gToons Clash', direction: 'decrease' }
+        })
+      }
+
+      // Create the ClashGame with the stake on both sides
+      const rec = await tx.clashGame.create({
+        data: {
+          player1UserId: p1,
+          player2UserId: p2,
+          player1Points: stake,     // 👈 NEW
+          player2Points: stake,     // 👈 NEW
+          startedAt:     new Date()
+        }
+      })
+      return rec
+    })
+  } catch (err) {
+    if (String(err?.message) === 'INSUFFICIENT_STAKE_BALANCE') {
+      // Notify room that the match cannot start due to stake issues
+      io.to(roomId).emit('pvpStakeError', { message: 'One or both players lack enough points to stake.' })
+      // Return the room to “waiting” state if needed
+      // (Nothing debited; lobby stays intact.)
+      return
     }
-  })
+    console.error('Failed to create staked ClashGame:', err)
+    io.to(roomId).emit('pvpStakeError', { message: 'Failed to initialize staked match.' })
+    return
+  }
 
   pvpMatches.set(roomId, {
     battle,
@@ -485,18 +606,25 @@ function startPvpTimer(io, roomId) {
       const winnerUserId = winnerSide === 'player' ? p1Id : p2Id;
 
       let awarded = 0;
+      let stakePayouts = {};
       try {
         await db.clashGame.update({
           where: { id: match.recordId },
           data: {
             endedAt:      new Date(),
             winnerUserId: winnerUserId,
-            outcome:      'player'       // 'player' or 'ai'
+            outcome:      'player'       // keep your outcome mapping as-is
           }
         });
         if (winnerUserId) {
           awarded = await awardClashWinPoints(winnerUserId);
         }
+        // 👇 NEW: settle the pot for the winner
+        const { payouts } = await settleStakes(match.recordId, {
+          outcome: 'win',
+          winnerUserId
+        });
+        stakePayouts = payouts || {};
       } catch (e) {
         console.error('Failed to close PvP on timeout win:', e);
       }
@@ -514,7 +642,9 @@ function startPvpTimer(io, roomId) {
           playerLanesWon: 0,
           aiLanesWon:     0,
           reason:         'turn_timeout',
-          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0)
+          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0),
+          // 👇 NEW: amount of stake they personally received
+          stakeAwarded:   Number(stakePayouts[s.data.userId] || 0)
         });
       }
 
@@ -549,23 +679,31 @@ function startPvpTimer(io, roomId) {
 
       const p1Id = Object.entries(match.userSide).find(([, side]) => side === 'player')?.[0] || null;
       const p2Id = Object.entries(match.userSide).find(([, side]) => side === 'ai')?.[0] || null;
-      const winnerUserId =
-        raw.winner === 'player' ? p1Id :
-        raw.winner === 'ai'     ? p2Id : null;
+      const outcome = raw.winner; // 'player' | 'ai' | 'tie'
+      const winnerUserId = outcome === 'player' ? p1Id : outcome === 'ai' ? p2Id : null;
 
       let awarded = 0;
+      let stakePayouts = {};
       try {
         await db.clashGame.update({
           where: { id: match.recordId },
           data: {
             endedAt:      new Date(),
             winnerUserId: winnerUserId,
-            outcome:      'player'
+            outcome:      outcome    // 👈 keep actual outcome (not always 'player')
           }
         });
+
         if (winnerUserId) {
           awarded = await awardClashWinPoints(winnerUserId);
         }
+
+        // 👇 NEW: settle pot (winner gets pot; tie returns each stake)
+        const { payouts } = await settleStakes(match.recordId, {
+          outcome: outcome === 'tie' ? 'tie' : 'win',
+          winnerUserId
+        });
+        stakePayouts = payouts || {};
       } catch (e) {
         console.error('Failed to finalize PvP game:', e);
       }
@@ -586,7 +724,9 @@ function startPvpTimer(io, roomId) {
           winner,
           playerLanesWon: youLanes,
           aiLanesWon:     oppLanes,
-          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0)
+          pointsAwarded:  (s.data.userId === winnerUserId ? awarded : 0),
+          // 👇 NEW
+          stakeAwarded:   Number(stakePayouts[s.data.userId] || 0)
         });
       }
       pvpMatches.delete(roomId);
@@ -626,20 +766,29 @@ io.on('connection', socket => {
     const nameById = Object.fromEntries(users.map(u => [u.id, u.username || 'Unknown']))
     const rooms = waiting.map(([id, data]) => ({
       id,
-      owner: nameById[data.players[0]] || 'Unknown'
+      owner: nameById[data.players[0]] || 'Unknown',
+      points: data.stakePoints ?? 0 
     }))
     socket.emit('clashRooms', rooms)
   })
 
   // --- Create a new PvP room ---
-  socket.on('createClashRoom', async ({ roomId, userId, deck }) => {
+  socket.on('createClashRoom', async ({ roomId, userId, deck, points }) => {
     // store room
     const uid = sid(userId)
+
+    // Validate & clamp stake against creator's balance server-side
+    const requested = Math.max(0, Math.floor(Number(points || 0)))
+    const up = await db.userPoints.findUnique({ where: { userId: uid } })
+    const balance = up?.points ?? 0
+    const stake = Math.min(requested, balance)   // never exceed current balance
+
     pvpRooms.set(roomId, {
       players: [uid],
       decks: {},          // set later via setPvpDeck
       ready: {},          // userId -> bool
-      usernames: {}       // userId -> username
+      usernames: {},       // userId -> username
+      stakePoints: stake
     })
     socket.join(roomId);
     socket.data.roomId = roomId
@@ -650,7 +799,7 @@ io.on('connection', socket => {
       select: { username: true, discordId: true }
     })
     pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
-    io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown' })
+    io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown', points: stake })
 
     // ── Discord announce: new gToons Clash PvP room ─────────────────────────
     try {

@@ -13,6 +13,13 @@
               {{ d.name }} ({{ d.size }})
             </option>
           </select>
+
+          <!-- 🔹 Stake notice shown ABOVE the Ready button -->
+          <p v-if="roomStake > 0 && !myReady" class="mt-2 text-xs text-gray-600">
+            By clicking this button you agree to bet
+            <span class="font-semibold">{{ roomStake.toLocaleString() }}</span> points.
+          </p>
+
           <button
             class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
             :disabled="!selectedDeckId || myReady"
@@ -159,10 +166,7 @@
 
     <!-- Game-over modal -->
     <transition name="fade">
-      <div
-        v-if="summary"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-      >
+      <div v-if="summary" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-lg p-8 text-center w-72">
           <h3 class="text-2xl font-bold mb-4">
             {{
@@ -176,18 +180,43 @@
             }}
           </h3>
 
-          <p class="mb-6" v-if="summary.winner==='incomplete'">
-            {{ summary.reason === 'opponent_disconnect'
-                ? 'The other player disconnected.'
-                : 'This game did not complete.'
-            }}
-          </p>
+          <!-- 🔸 Details block -->
+          <div class="mb-6 space-y-2">
+            <!-- Opponent left / incomplete -->
+            <template v-if="summary.winner==='incomplete'">
+              <p>
+                {{ summary.reason === 'opponent_disconnect'
+                    ? 'The other player disconnected.'
+                    : 'This game did not complete.'
+                }}
+              </p>
+              <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
+                You were awarded
+                <strong>{{ Number(summary.stakeAwarded).toLocaleString() }}</strong>
+                points from the stake.
+              </p>
+            </template>
 
-          <p class="mb-6" v-else>
-            Lanes Won <br>
-            - You:      {{ summary.playerLanesWon }}<br>
-            - Opponent: {{ summary.aiLanesWon }}
-          </p>
+            <!-- Normal end (win/lose/tie) -->
+            <template v-else>
+              <p>
+                Lanes Won <br>
+                - You:      {{ summary.playerLanesWon }}<br>
+                - Opponent: {{ summary.aiLanesWon }}
+              </p>
+
+              <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
+                {{ summary.winner==='tie' ? 'Returned' : 'You won' }}
+                <strong>{{ Number(summary.stakeAwarded).toLocaleString() }}</strong>
+                points.
+              </p>
+
+              <p v-if="Number(summary.pointsAwarded) > 0" class="mt-1 text-sm text-gray-600">
+                (+{{ Number(summary.pointsAwarded).toLocaleString() }} bonus points)
+              </p>
+            </template>
+          </div>
+
           <NuxtLink
             to="/games/clash/rooms"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded"
@@ -195,6 +224,7 @@
         </div>
       </div>
     </transition>
+
   </section>
 </template>
 
@@ -221,6 +251,9 @@ const myReady = ref(false)
 const awaitingTurn = ref(null)
 const oppReady = ref(false)
 const oppHasDeck = ref(false)
+
+// 🔹 Stake for this room (sent from server via pvpLobbyState)
+const roomStake = ref(0)
 
 // — Routing & Socket Setup —
 const route = useRoute()
@@ -256,13 +289,18 @@ socket.on('gameStart', state => {
 socket.on('phaseUpdate', state => { game.value = state })
 socket.on('gameEnd', sum   => { game.value = { ...game.value, summary: sum } })
 socket.on('clashDecks', list => { myDecks.value = list || [] })
+
 socket.on('pvpLobbyState', snap => {
-  // snap = { players, usernames, haveDeck, ready }
-  const me = String(user.value.id)
+  // snap = { players, usernames, haveDeck, ready, points? }
+  const me  = String(user.value.id)
   const opp = (snap.players || []).find(p => p !== me)
-  myReady.value   = !!snap.ready?.[me]
-  oppReady.value  = !!snap.ready?.[opp]
+  myReady.value    = !!snap.ready?.[me]
+  oppReady.value   = !!snap.ready?.[opp]
   oppHasDeck.value = !!snap.haveDeck?.[opp]
+
+  // Accept either `points` or `stakePoints` from server
+  const raw = Number(snap.points ?? snap.stakePoints ?? 0)
+  roomStake.value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
 })
 
 onMounted(async () => {
@@ -409,15 +447,13 @@ socket.on('phaseUpdate', state => {
   if (state.phase === 'select') {
     startTimer(state.selectEndsAt)
 
-    // If we had confirmed for prev turn, don't re-enable the hand
-    // until the server advances the turn.
     if (
       confirmed.value &&
       awaitingTurn.value != null &&
       state.turn > awaitingTurn.value
     ) {
-      resetLocal()               // clears placements, sets confirmed=false
-      awaitingTurn.value = null  // clear the guard for the new turn
+      resetLocal()
+      awaitingTurn.value = null
     }
   } else {
     clearInterval(timerId)
@@ -431,7 +467,6 @@ socket.on('gameEnd', sum => {
 
 // — Cleanup —
 onBeforeUnmount(() => {
-  // tell server we left this clash room
   if (roomId && user.value?.id) {
     socket.emit('leaveClashRoom', { roomId, userId: user.value.id })
   }
@@ -440,6 +475,7 @@ onBeforeUnmount(() => {
   socket.off('gameStart')
   socket.off('phaseUpdate')
   socket.off('gameEnd')
+  socket.off('pvpLobbyState')
   clearInterval(timerId)
 })
 </script>

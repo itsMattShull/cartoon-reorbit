@@ -163,7 +163,7 @@ model ClaimCode {
   maxClaims  Int
   createdAt  DateTime           @default(now())
   expiresAt  DateTime?
-  
+
   claims     Claim[]
   rewards    ClaimCodeReward[]
   prerequisites  ClaimCodePrerequisite[]
@@ -472,6 +472,8 @@ model ClashGame {
   id              String   @id @default(uuid())
   player1UserId   String
   player2UserId   String?   // null for AI
+  player1Points   Int      @default(0) // staked by P1
+  player2Points   Int      @default(0) // staked by P2
 
   winnerUserId  String?   // null if AI won or tie
   outcome       String?   // 'player' | 'ai' | 'tie' | 'incomplete'
