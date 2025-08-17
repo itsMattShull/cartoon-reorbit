@@ -390,7 +390,11 @@ function laneCountAfterPlacements(laneIdx) {
 
 function sameCard(a, b) {
   if (!a || !b) return false
-  return a.id ? a.id === b.id : a === b
+  return (
+    a === b ||
+    (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId) ||
+    (a.instanceId && b.instanceId && a.instanceId === b.instanceId)
+  )
 }
 
 function selectFromHand(c) {
@@ -437,10 +441,13 @@ function handleUnplace(laneIdx) {
 
 function confirmSelections() {
   if (confirmed.value || !canConfirm.value) return
+
   const selections = placements.value.map(p => ({
-    cardId:    p.card.id,
+    // send a per-instance identifier (prefer userCtoonId)
+    cardId:    p.card.userCtoonId ?? p.card.instanceId ?? p.card.id ?? p.card.ctoonId,
     laneIndex: p.laneIndex
   }))
+
   socket.emit('selectPvPCards', { selections })
   confirmed.value = true
   awaitingTurn.value = game.value?.turn ?? null

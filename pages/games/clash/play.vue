@@ -330,7 +330,11 @@ function handlePlace(laneIdx) {
   }
 
   // toggle this exact card’s preview
-  const sameCard = (a,b) => a && b && (a.id ? a.id === b.id : a === b)
+  const sameCard = (a, b) =>
+  !!a && !!b && (
+    a === b ||
+    (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId)
+  )
   const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
   if (idx >= 0) {
     placements.value.splice(idx, 1)
@@ -357,18 +361,16 @@ function handleUnplace(laneIdx) {
 function confirmSelections() {
   if (confirmed.value || !canConfirm.value) return
 
-  // only keep the entries that actually have a `.card`
   const good = placements.value.filter(p => p && p.card && p.laneIndex != null)
 
   const selections = good.map(p => ({
-    cardId:    p.card.id,
+    // prefer per-instance identifier
+    cardId:    p.card.userCtoonId ?? p.card.instanceId ?? p.card.id ?? p.card.ctoonId,
     laneIndex: p.laneIndex
   }))
 
   socket.emit('selectCards', { selections })
   confirmed.value = true
-
-  // clear previews if you want them to vanish immediately:
   placements.value = []
 }
 
