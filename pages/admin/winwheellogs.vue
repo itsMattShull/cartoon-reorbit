@@ -65,6 +65,10 @@ import ChartDataLabels from 'chartjs-plugin-datalabels'
 
 Chart.register(PieController, ArcElement, Tooltip, Legend, ChartDataLabels)
 
+// 🔹 make all chart text white by default
+Chart.defaults.color = '#fff'
+Chart.defaults.plugins.legend.labels.color = '#fff'
+
 definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
 
 // --- date state ---
@@ -159,8 +163,12 @@ onMounted(() => {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: 'bottom' },
+        legend: {
+          position: 'bottom',
+          labels: { color: '#fff' } // ← legend text white
+        },
         datalabels: {
+          color: '#fff',            // ← slice labels white
           formatter: (val, ctx) => {
             const total = ctx.chart.data.datasets[0].data.reduce((s, v) => s + v, 0)
             const p = total ? (val / total * 100).toFixed(1) : 0
@@ -168,6 +176,8 @@ onMounted(() => {
           }
         },
         tooltip: {
+          titleColor: '#fff',       // ← tooltip title white
+          bodyColor: '#fff',        // ← tooltip body white
           callbacks: {
             label: (ctx) => `${ctx.label}: ${ctx.parsed}`
           }
