@@ -57,9 +57,6 @@
           Setup
         </template>
       </div>
-      <p class="py-1 px-4 text-center text-xs text-gray-600">
-        {{ instructionText }}
-      </p>
       <div v-if="isSelecting" class="h-2 w-full bg-gray-200 rounded">
         <div
           class="h-full bg-indigo-500 rounded"
@@ -81,12 +78,6 @@
         Setup
       </span>
     </h2>
-    <p
-      v-if="instructionText"
-      class="hidden md:block text-center text-sm text-gray-700"
-    >
-      {{ instructionText }}
-    </p>
     <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
         class="h-full bg-indigo-500 rounded"
@@ -101,6 +92,7 @@
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
+      @unplace="handleUnplace"
       @info="showCardInfo"
       :selected="selected"
       :confirmed="confirmed"
@@ -120,18 +112,15 @@
       </div>
     </div>
 
-    <p class="py-1 px-4 text-center text-xs text-gray-600">
-      {{ instructionText }}
-    </p>
-
     <!-- Player hand -->
     <ClashHand
       :cards="game.playerHand"
       :energy="game.playerEnergy"
       :selected="selected"
+      :status="instructionText"
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
-      @select="c => (selected = c)"
+      @select="selectFromHand"
       @info="showCardInfo"
     />
 
@@ -399,13 +388,21 @@ function laneCountAfterPlacements(laneIdx) {
   return existing + pending
 }
 
+function sameCard(a, b) {
+  if (!a || !b) return false
+  return a.id ? a.id === b.id : a === b
+}
+
+function selectFromHand(c) {
+  selected.value = sameCard(selected.value, c) ? null : c
+}
+
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
   const lane = game.value?.lanes?.[laneIdx]
   if (!lane) return
 
-  // prevent overfilling this lane, including previews this turn
   const pendingInLane = placements.value.filter(p => p.laneIndex === laneIdx).length
   if (playerLaneCount(lane) + pendingInLane >= MAX_PER_LANE) {
     log.value.push('That lane is full.')
@@ -413,13 +410,29 @@ function handlePlace(laneIdx) {
   }
 
   // toggle this exact card’s preview
-  const idx = placements.value.findIndex(p => p.card === selected.value)
+  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
   placements.value.push({ card: selected.value, laneIndex: laneIdx })
+
+  // 🔹 hide the ability banner after placing
+  selected.value = null
+}
+
+function handleUnplace(laneIdx) {
+  if (!isSelecting.value || confirmed.value) return
+  // remove the last-added preview in this lane (LIFO)
+  for (let i = placements.value.length - 1; i >= 0; i--) {
+    if (placements.value[i].laneIndex === laneIdx) {
+      const [removed] = placements.value.splice(i, 1)
+      // reselect the card so the player can drop it elsewhere
+      selected.value = removed.card
+      break
+    }
+  }
 }
 
 function confirmSelections() {

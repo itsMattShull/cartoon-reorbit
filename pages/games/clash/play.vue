@@ -20,11 +20,6 @@
       </template>
     </div>
 
-    <!-- Next steps instructions -->
-    <p class="py-1 px-4 text-center text-xs text-gray-600">
-      {{ instructionText }}
-    </p>
-
     <!-- Progress bar -->
     <div v-if="isSelecting" class="md:hidden h-2 w-full bg-gray-200 rounded">
       <div
@@ -72,14 +67,6 @@
       </span>
     </h2>
 
-    <!-- Desktop instructions (below header) -->
-    <p
-      v-if="instructionText"
-      class="hidden md:block text-center text-sm text-gray-700"
-    >
-      {{ instructionText }}
-    </p>
-
     <!-- Progress bar -->
     <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
@@ -96,6 +83,7 @@
       :previewPlacements="placements"
       @place="handlePlace"
       @info="showCardInfo"
+      @unplace="handleUnplace"
       :selected="selected"
       :confirmed="confirmed"
     />
@@ -112,15 +100,11 @@
       >{{ entry }}</div>
     </div>
 
-    <!-- Next steps instructions -->
-    <p class="py-1 px-4 text-center text-xs text-gray-600">
-      {{ instructionText }}
-    </p>
-
     <!-- Player hand & energy -->
     <ClashHand
       :cards="game.playerHand"
       :energy="game.playerEnergy"
+      :status="instructionText"
       :selected="selected"
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
@@ -346,14 +330,29 @@ function handlePlace(laneIdx) {
   }
 
   // toggle this exact card’s preview
-  const idx = placements.value.findIndex(p => p.card === selected.value)
+  const sameCard = (a,b) => a && b && (a.id ? a.id === b.id : a === b)
+  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
   placements.value.push({ card: selected.value, laneIndex: laneIdx })
+  selected.value = null
 }
+
+function handleUnplace(laneIdx) {
+   if (!isSelecting.value || confirmed.value) return
+   // remove the last-added preview in this lane (LIFO)
+   for (let i = placements.value.length - 1; i >= 0; i--) {
+     if (placements.value[i].laneIndex === laneIdx) {
+       const [removed] = placements.value.splice(i, 1)
+       // reselect the card so the player can drop it elsewhere
+       selected.value = removed.card
+       break
+     }
+   }
+ }
 
 function confirmSelections() {
   if (confirmed.value || !canConfirm.value) return
