@@ -154,7 +154,8 @@ const links = computed(() => {
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
       { label: 'Point Logs', to: '/admin/points-log' },
-      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' }
+      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
+      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' }
     )
   }
   return all
