@@ -138,7 +138,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useClashSocket } from '@/composables/useClashSocket'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: 'auth' })
 
 const rooms = ref([])
 const router = useRouter()
