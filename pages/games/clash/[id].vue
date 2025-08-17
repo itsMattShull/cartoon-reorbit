@@ -28,6 +28,7 @@
         </div>
         <div class="border rounded p-3">
           <h3 class="font-semibold mb-2">Opponent</h3>
+          <p class="text-sm">User: <span class="font-medium">{{ oppUsername || 'Waiting…' }}</span></p>
           <p class="text-sm">Deck: <span class="font-medium">{{ oppHasDeck ? 'Selected' : 'Not selected' }}</span></p>
           <p class="text-sm">Ready: <span class="font-medium">{{ oppReady ? 'Yes' : 'No' }}</span></p>
         </div>
@@ -240,6 +241,7 @@ const myReady = ref(false)
 const awaitingTurn = ref(null)
 const oppReady = ref(false)
 const oppHasDeck = ref(false)
+const oppUsername = ref('')
 
 // 🔹 Stake for this room (sent from server via pvpLobbyState)
 const roomStake = ref(0)
@@ -286,6 +288,9 @@ socket.on('pvpLobbyState', snap => {
   myReady.value    = !!snap.ready?.[me]
   oppReady.value   = !!snap.ready?.[opp]
   oppHasDeck.value = !!snap.haveDeck?.[opp]
+  oppUsername.value = opp
+    ? (snap.usernames?.[opp] || 'Unknown')
+    : 'Waiting…'
 
   // Accept either `points` or `stakePoints` from server
   const raw = Number(snap.points ?? snap.stakePoints ?? 0)
