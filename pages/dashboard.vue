@@ -55,7 +55,7 @@
           </div>
           <div class="rounded-xl shadow-md w-full lg:w-1/2">
             <nuxt-link to="/games/winwheel">
-              <img src="/images/poster.png" alt="Fantastic Four Poster">
+              <img src="/images/poster08172025.png" alt="Fantastic Four Poster">
             </nuxt-link>
           </div>
         </div>
