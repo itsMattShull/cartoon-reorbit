@@ -65,9 +65,9 @@ import ChartDataLabels from 'chartjs-plugin-datalabels'
 
 Chart.register(PieController, ArcElement, Tooltip, Legend, ChartDataLabels)
 
-// 🔹 make all chart text white by default
-Chart.defaults.color = '#fff'
-Chart.defaults.plugins.legend.labels.color = '#fff'
+// ⛔️ Removed global white defaults so legend can be black
+// Chart.defaults.color = '#fff'
+// Chart.defaults.plugins.legend.labels.color = '#fff'
 
 definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
 
@@ -165,23 +165,17 @@ onMounted(() => {
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { color: '#fff' } // ← legend text white
+          labels: { color: '#000' } // ✅ legend labels under the chart are black
         },
         datalabels: {
-          color: '#fff',            // ← slice labels white
+          color: '#fff',            // ✅ text ON the pie slices is white
           formatter: (val, ctx) => {
             const total = ctx.chart.data.datasets[0].data.reduce((s, v) => s + v, 0)
             const p = total ? (val / total * 100).toFixed(1) : 0
             return `${val} (${p}%)`
           }
         },
-        tooltip: {
-          titleColor: '#fff',       // ← tooltip title white
-          bodyColor: '#fff',        // ← tooltip body white
-          callbacks: {
-            label: (ctx) => `${ctx.label}: ${ctx.parsed}`
-          }
-        }
+        // Use default tooltip colors (dark on light) for readability
       }
     }
   })
