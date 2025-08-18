@@ -110,7 +110,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(f, i) in imageFiles" :key="f.nameField+'-'+i" class="border-b">
+              <tr v-for="(f, i) in imageFiles" :key="f.id" class="border-b">
                 <td class="px-4 py-2">
                   <img :src="f.preview" alt class="h-12 w-auto rounded" />
                 </td>
@@ -151,7 +151,7 @@
         <div class="space-y-4 block sm:hidden">
           <div
             v-for="(f, i) in imageFiles"
-            :key="`${f.nameField}-${i}`"
+            :key="f.id"
             class="bg-gray-100 rounded-lg p-4"
           >
             <!-- Image on top -->
@@ -334,6 +334,14 @@ const canUpload = computed(() => {
   )
 })
 
+const RARITY_PATTERNS = [
+  { key: 'Crazy Rare', re: /crazy[\s_]*rare/i },
+  { key: 'Very Rare',  re: /very[\s_]*rare/i },
+  { key: 'Uncommon',   re: /un[\s_]*common/i },
+  { key: 'Common',     re: /common/i },
+  { key: 'Rare',       re: /rare/i },
+]
+
 const rarityOptions = [
   'Common',
   'Uncommon',
@@ -345,6 +353,12 @@ const rarityOptions = [
   'Auction Only'
 ]
 
+const makeRowId = (() => {
+  let n = 0
+  return () =>
+    (globalThis.crypto?.randomUUID?.() ?? `row_${Date.now().toString(36)}_${n++}`)
+})()
+
 // toast state
 const toasts = ref([])
 function showToast(message, type = 'error') {
@@ -353,6 +367,33 @@ function showToast(message, type = 'error') {
   setTimeout(() => {
     toasts.value = toasts.value.filter(t => t.id !== id)
   }, 5000)
+}
+
+function profileFromName(basename) {
+  let working = basename
+  let detected = ''
+
+  // Detect & strip rarity (first match wins)
+  for (const { key, re } of RARITY_PATTERNS) {
+    if (re.test(working)) {
+      detected = key
+      // remove ALL instances of the matched rarity pattern
+      const rm = new RegExp(re.source, 'ig')
+      working = working.replace(rm, '')
+      break
+    }
+  }
+
+  // Remove any "_pic" (before stripping underscores)
+  working = working.replace(/_pic/ig, '')
+
+  // Remove all underscores
+  working = working.replace(/_/g, '')
+
+  // Collapse extra spaces and trim
+  working = working.replace(/\s{2,}/g, ' ').trim()
+
+  return { name: working, rarity: detected }
 }
 
 // apply the same defaults logic as addCtoon.vue
@@ -391,7 +432,7 @@ function updateDefaults(f) {
     case 'Crazy Rare':
       f.totalQuantity   = 25
       f.initialQuantity = 25
-      f.perUserLimit    = 2
+      f.perUserLimit    = 1
       break
     default:
       // for Prize Only / Auction Only or others, leave as-is
@@ -424,19 +465,28 @@ onMounted(async () => {
 })
 
 function handleFiles(e) {
-  const files = Array.from(e.target.files)
-  imageFiles.value = files.map(file => ({
-    file,
-    preview: URL.createObjectURL(file),
-    nameField: file.name.replace(/\.[^/.]+$/, ''),
-    rarity: '',
-    characters: '',
-    totalQuantity: null,
-    initialQuantity: null,
-    perUserLimit: null,
-    inCmart: false,
-    price: 0
-  }))
+  const files = Array.from(e.target.files || [])
+  imageFiles.value = files.map((file) => {
+    const stem = file.name.replace(/\.[^/.]+$/, '')
+    const { name: cleanedName, rarity } = profileFromName?.(stem) ?? { name: stem, rarity: '' }
+
+    const row = {
+      id: makeRowId(),
+      file,
+      preview: URL.createObjectURL(file),
+      nameField: cleanedName,      // ← prefilled name
+      characters: cleanedName,     // ← prefilled to match name
+      rarity: rarity || '',
+      totalQuantity: null,
+      initialQuantity: null,
+      perUserLimit: null,
+      inCmart: false,
+      price: 0,
+    }
+
+    if (row.rarity) updateDefaults?.(row)
+    return row
+  })
 }
 
 async function uploadAll() {
