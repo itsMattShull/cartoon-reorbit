@@ -158,45 +158,62 @@
       </div>
 
       <!-- infinite scroll sentinel -->
-      <div ref="sentinel" class="h-2"></div>
-      <div v-if="loading" class="text-center py-4">Loading more…</div>
-      <div v-if="finished" class="text-center py-4 text-gray-500">No more cToons.</div>
+      <div v-if="!isSearching" ref="sentinel" class="h-2"></div>
+
+      <div v-if="isSearching && searching" class="text-center py-4">Searching…</div>
+      <div v-if="isSearching && !searching && sourceCtoons.length===0" class="text-center py-4 text-gray-500">
+        No matches for "{{ searchTerm }}"
+      </div>
+
+      <div v-if="!isSearching && loading" class="text-center py-4">Loading more…</div>
+      <div v-if="!isSearching && finished" class="text-center py-4 text-gray-500">No more cToons.</div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-definePageMeta({
-  middleware: ['auth','admin'],
-  layout: 'default'
-})
-import { ref, onMounted, computed } from 'vue'
+definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+
+import { ref, onMounted, computed, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 const take = 50
 const skip = ref(0)
-const rawCtoons = ref([])       // all loaded pages
+const rawCtoons = ref([])          // paged browse data
 const loading   = ref(false)
 const finished  = ref(false)
 const sentinel  = ref(null)
+const io        = ref(null)        // IntersectionObserver
 
-// FILTER STATE
-const searchTerm    = ref('')
-const selectedSet   = ref('')
-const selectedSeries= ref('')
+// SEARCH STATE
+const searchTerm     = ref('')
+const isSearching    = ref(false)
+const searching      = ref(false)
+const searchResults  = ref([])
+let   searchTimer    = null        // debounce
+let   lastSearchKey  = 0           // race-guard
 
-// derived unique options
+// FILTERS
+const selectedSet    = ref('')
+const selectedSeries = ref('')
+
+// single source for derived UI: browse vs search
+const sourceCtoons = computed(() => isSearching.value ? searchResults.value : rawCtoons.value)
+
+// unique options come from *current* source
 const uniqueSets = computed(() =>
-  Array.from(new Set(rawCtoons.value.map(c=>c.set).filter(Boolean))).sort()
+  Array.from(new Set(sourceCtoons.value.map(c=>c.set).filter(Boolean))).sort()
 )
 const uniqueSeries = computed(() =>
-  Array.from(new Set(rawCtoons.value.map(c=>c.series).filter(Boolean))).sort()
+  Array.from(new Set(sourceCtoons.value.map(c=>c.series).filter(Boolean))).sort()
 )
 
-// filtered list
+// filtered list (keep local name filter so it still works for <3 chars)
 const displayedCtoons = computed(() => {
-  return rawCtoons.value.filter(c => {
-    const matchesName   = c.name.toLowerCase().includes(searchTerm.value.toLowerCase())
+  const q = (searchTerm.value || '').toLowerCase()
+  return sourceCtoons.value.filter(c => {
+    const matchesName   = !q || c.name.toLowerCase().includes(q)
     const matchesSet    = !selectedSet.value || c.set === selectedSet.value
     const matchesSeries = !selectedSeries.value || c.series === selectedSeries.value
     return matchesName && matchesSet && matchesSeries
@@ -204,12 +221,9 @@ const displayedCtoons = computed(() => {
 })
 
 async function loadNext() {
-  if (loading.value || finished.value) return
+  if (loading.value || finished.value || isSearching.value) return
   loading.value = true
-  const res = await fetch(
-    `/api/admin/all-ctoons?skip=${skip.value}&take=${take}`,
-    { credentials: 'include' }
-  )
+  const res = await fetch(`/api/admin/all-ctoons?skip=${skip.value}&take=${take}`, { credentials: 'include' })
   if (!res.ok) { loading.value=false; return }
   const page = await res.json()
   if (page.length < take) finished.value = true
@@ -218,13 +232,64 @@ async function loadNext() {
   loading.value = false
 }
 
+async function runSearch(q) {
+  // race guard
+  const key = ++lastSearchKey
+  searching.value = true
+  try {
+    const res = await fetch(`/api/admin/search-ctoons?q=${encodeURIComponent(q)}`, { credentials: 'include' })
+    if (!res.ok) throw new Error('Search failed')
+    const data = await res.json()
+    // only apply if this is the latest search
+    if (key === lastSearchKey) searchResults.value = data
+  } catch (e) {
+    if (key === lastSearchKey) searchResults.value = []
+    // optional: console.error(e)
+  } finally {
+    if (key === lastSearchKey) searching.value = false
+  }
+}
+
+function enterSearchMode() {
+  if (isSearching.value) return
+  isSearching.value = true
+  // pause infinite scroll
+  if (io.value && sentinel.value) io.value.unobserve(sentinel.value)
+}
+
+function exitSearchMode() {
+  if (!isSearching.value) return
+  isSearching.value = false
+  searchResults.value = []
+  searching.value = false
+  // resume infinite scroll
+  if (io.value && sentinel.value) io.value.observe(sentinel.value)
+}
+
+// debounce searchTerm: ≥3 chars => server search, otherwise exit search
+watch(searchTerm, (val) => {
+  clearTimeout(searchTimer)
+  const q = (val || '').trim()
+  if (q.length >= 3) {
+    searchTimer = setTimeout(() => {
+      enterSearchMode()
+      runSearch(q)
+    }, 300)
+  } else {
+    // if user cleared or <3, snap back to scroll mode
+    exitSearchMode()
+  }
+})
+
 onMounted(() => {
   loadNext()
-  const obs = new IntersectionObserver(
-    entries => { if (entries[0].isIntersecting) loadNext() },
+  io.value = new IntersectionObserver(
+    entries => {
+      if (entries[0].isIntersecting && !isSearching.value) loadNext()
+    },
     { rootMargin: '200px' }
   )
-  if (sentinel.value) obs.observe(sentinel.value)
+  if (sentinel.value) io.value.observe(sentinel.value)
 })
 </script>
 
