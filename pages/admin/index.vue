@@ -13,20 +13,33 @@
       </div>
     </div>
 
-    <!-- Timeframe selector -->
-    <div class="px-6 py-4 flex items-center space-x-4">
-      <label for="timeframe" class="font-medium">Timeframe:</label>
-      <select
-        id="timeframe"
-        v-model="selectedTimeframe"
-        class="border rounded px-2 py-1"
-      >
-        <option
-          v-for="opt in timeframeOptions"
-          :key="opt.value"
-          :value="opt.value"
-        >{{ opt.label }}</option>
-      </select>
+    <!-- Timeframe + GroupBy selector -->
+    <div class="px-6 py-4 flex flex-wrap items-center gap-4">
+      <div class="flex items-center space-x-2">
+        <label for="timeframe" class="font-medium">Timeframe:</label>
+        <select
+          id="timeframe"
+          v-model="selectedTimeframe"
+          class="border rounded px-2 py-1"
+        >
+          <option v-for="opt in timeframeOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <label for="groupBy" class="font-medium">Group by:</label>
+        <select
+          id="groupBy"
+          v-model="groupBy"
+          class="border rounded px-2 py-1"
+        >
+          <option v-for="opt in groupOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <!-- Charts grid -->
@@ -40,14 +53,14 @@
       <!-- 2) % First Purchase -->
       <div>
         <h2 class="text-xl font-semibold mb-2">
-          % of Users Buying First cToon within 1 Day
+          % of Users Buying First cToon within 1 {{ groupUnitLabel }}
         </h2>
         <div class="chart-container"><canvas ref="pctCanvas"></canvas></div>
       </div>
 
-      <!-- 3) Unique Daily Logons -->
+      <!-- 3) Unique Logons -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Unique Daily Logons</h2>
+        <h2 class="text-xl font-semibold mb-2">Unique {{ groupLabel }} Logons</h2>
         <div class="chart-container"><canvas ref="uniqueCanvas"></canvas></div>
       </div>
 
@@ -97,9 +110,9 @@
         <h2 class="text-xl font-semibold mb-2 flex items-center">
           Net Points Issued
           <span class="ml-2 text-sm text-gray-500">
-            (last {{ netWindowDays }} days)
+            (last {{ netWindowCount }} {{ windowUnitPlural }})
           </span>
-          <span 
+          <span
             class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
             :class="badgeClass"
           >
@@ -125,7 +138,7 @@
         <h2 class="text-xl font-semibold mb-2 flex items-center">
           Spend / Earn Ratio
           <span class="ml-2 text-sm text-gray-500">
-            (last {{ ratioWindowDays }} days)
+            (last {{ ratioWindowCount }} {{ windowUnitPlural }})
           </span>
           <span
             class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
@@ -152,7 +165,7 @@
         <h2 class="text-xl font-semibold mb-2 flex items-center">
           Rarity Turnover Rate
           <span class="ml-2 text-sm text-gray-500">
-            (last {{ turnoverWindowDays }} days)
+            (last {{ turnoverWindowCount }} {{ windowUnitPlural }})
           </span>
           <span
             class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
@@ -162,7 +175,7 @@
           </span>
         </h2>
 
-        <!-- NEW: healthy‐ranges subtitle -->
+        <!-- healthy ranges subtitle -->
         <div class="text-sm text-gray-500 mb-4">
           <span v-for="(range, rarity) in healthyRanges" :key="rarity" class="mr-6">
             {{ rarity }}: {{ range }}
@@ -219,14 +232,27 @@ definePageMeta({
   layout: 'default'
 })
 
-// --- state & refs ---
+// --- timeframe & groupBy ---
 const timeframeOptions = [
   { value: '1m', label: '1 Month' },
   { value: '3m', label: '3 Months' },
   { value: '6m', label: '6 Months' },
   { value: '1y', label: '1 Year' }
 ]
-const selectedTimeframe = ref('1m')
+const selectedTimeframe = ref('3m')
+
+const groupOptions = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' }
+]
+// default to weekly as requested
+const groupBy = ref('weekly')
+
+// derived labels/units for charts & headings
+const groupUnit = computed(() => groupBy.value === 'weekly' ? 'week' : 'day')
+const groupUnitLabel = computed(() => groupBy.value === 'weekly' ? 'Week' : 'Day') // axis title, singular
+const groupLabel = computed(() => groupBy.value === 'weekly' ? 'Weekly' : 'Daily') // for headings
+const windowUnitPlural = computed(() => groupBy.value === 'weekly' ? 'weeks' : 'days')
 
 // Active Discord meta
 const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
@@ -237,18 +263,23 @@ const pctCanvas     = ref(null)
 const uniqueCanvas  = ref(null)
 const clashCanvas   = ref(null)
 const tradesCanvas  = ref(null)
-const netCanvas    = ref(null)
+const netCanvas     = ref(null)
 const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
-const netWindowDays = ref(0)
-const clashTotal         = ref(0)
-const clashFinished      = ref(0)
-const clashPctFinished   = ref(0)
-// 1) New refs & state
+
+// window counts (respecting daily/weekly)
+const netWindowCount      = ref(0)
+const ratioWindowCount    = ref(0)
+const turnoverWindowCount = ref(0)
+
+const clashTotal       = ref(0)
+const clashFinished    = ref(0)
+const clashPctFinished = ref(0)
+
+// rarity turnover state/badges
 const turnoverCanvas      = ref(null)
-const turnoverWindowDays  = ref(0)
 const turnoverStatus      = ref('good')   // 'good' | 'caution' | 'danger'
 const turnoverSuggestions = ref([])
 
@@ -272,7 +303,8 @@ const healthyRanges = {
   'Crazy Rare':'≥2%'
 }
 
-const netStatus      = ref('good')   // 'good' | 'caution' | 'danger'
+// net points badges
+const netStatus      = ref('good')
 const netSuggestions = ref([])
 
 const badgeClass = computed(() => {
@@ -282,7 +314,6 @@ const badgeClass = computed(() => {
     case 'danger': return 'bg-red-100   text-red-800'
   }
 })
-
 const badgeText = computed(() => {
   switch (netStatus.value) {
     case 'good':   return 'Healthy'
@@ -291,9 +322,9 @@ const badgeText = computed(() => {
   }
 })
 
+// ratio badges
 const ratioCanvas     = ref(null)
-const ratioWindowDays = ref(0)
-const ratioStatus     = ref('good')    // 'good' | 'caution' | 'danger'
+const ratioStatus     = ref('good')
 const ratioSuggestions= ref([])
 
 const ratioBadgeClass = computed(() => ({
@@ -301,7 +332,6 @@ const ratioBadgeClass = computed(() => ({
   caution: 'bg-yellow-100 text-yellow-800',
   danger:  'bg-red-100 text-red-800'
 })[ratioStatus.value])
-
 const ratioBadgeText = computed(() => ({
   good:    'Healthy',
   caution: 'Caution',
@@ -312,7 +342,7 @@ const ratioBadgeText = computed(() => ({
 let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart, netChart, ratioChart, turnoverChart
 
-// --- color palette (solid, no opacity) ---
+// --- color palette ---
 const colors = {
   line:      '#4F46E5', // Indigo
   codesBar:  '#EF4444', // Red
@@ -322,16 +352,15 @@ const colors = {
   packBar:   '#3B82F6', // Blue
   histBar:   '#F59E0B'  // Amber
 }
-
 colors.turnover = {
-  Common:    '#9CA3AF', // gray
-  Uncommon:  '#3B82F6', // blue
-  Rare:      '#8B5CF6', // purple
-  'Very Rare':'#F59E0B', // amber
-  'Crazy Rare':'#EF4444'  // red
+  Common:    '#9CA3AF',
+  Uncommon:  '#3B82F6',
+  Rare:      '#8B5CF6',
+  'Very Rare':'#F59E0B',
+  'Crazy Rare':'#EF4444'
 }
 
-// --- chart options ---
+// --- chart options (base; x.time.unit will be adjusted dynamically) ---
 const commonLineOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -368,31 +397,11 @@ const ratioOptions = {
     legend: { display: false },
     annotation: {
       annotations: {
-        green: {
-          type: 'line', yMin: 1, yMax: 1, scaleID: 'y',
-          borderColor: 'green', borderWidth: 2,
-          label: { enabled: true, content: '1.0' }
-        },
-        yellowLow: {
-          type: 'line', yMin: 0.9, yMax: 0.9, scaleID: 'y',
-          borderColor: 'orange', borderWidth: 1,
-          label: { enabled: true, content: '0.9' }
-        },
-        yellowHigh: {
-          type: 'line', yMin: 1.1, yMax: 1.1, scaleID: 'y',
-          borderColor: 'orange', borderWidth: 1,
-          label: { enabled: true, content: '1.1' }
-        },
-        redLow: {
-          type: 'line', yMin: 0.75, yMax: 0.75, scaleID: 'y',
-          borderColor: 'red', borderWidth: 1,
-          label: { enabled: true, content: '0.75' }
-        },
-        redHigh: {
-          type: 'line', yMin: 1.25, yMax: 1.25, scaleID: 'y',
-          borderColor: 'red', borderWidth: 1,
-          label: { enabled: true, content: '1.25' }
-        }
+        green:      { type: 'line', yMin: 1,    yMax: 1,    scaleID: 'y', borderColor: 'green',  borderWidth: 2, label: { enabled: true, content: '1.0' } },
+        yellowLow:  { type: 'line', yMin: 0.9,  yMax: 0.9,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '0.9' } },
+        yellowHigh: { type: 'line', yMin: 1.1,  yMax: 1.1,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '1.1' } },
+        redLow:     { type: 'line', yMin: 0.75, yMax: 0.75, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '0.75' } },
+        redHigh:    { type: 'line', yMin: 1.25, yMax: 1.25, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '1.25' } }
       }
     }
   }
@@ -403,25 +412,18 @@ const uniqueOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-
     datalabels: {
-      anchor: 'center',   // center on the point
-      align:  'top',   // push below
-      offset: 4,          // a few pixels of breathing room
+      anchor: 'center',
+      align:  'top',
+      offset: 4,
       display: ctx => {
-        const chart = ctx.chart;
-        const xScale = chart.scales.x;
-        const labels = chart.data.labels;
-
-        // always show the very first point
-        if (ctx.dataIndex === 0) return true;
-
-        // get pixel X for this label vs. the previous one
-        const currX = xScale.getPixelForValue(labels[ctx.dataIndex]);
-        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1]);
-
-        // only show if they’re at least 30px apart
-        return Math.abs(currX - prevX) > 30;
+        const chart  = ctx.chart
+        const xScale = chart.scales.x
+        const labels = chart.data.labels
+        if (ctx.dataIndex === 0) return true
+        const currX = xScale.getPixelForValue(labels[ctx.dataIndex])
+        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1])
+        return Math.abs(currX - prevX) > 30
       }
     }
   },
@@ -429,15 +431,10 @@ const uniqueOptions = {
     x: {
       type: 'time',
       offset: true,
-      time: {
-        unit: 'day',
-        tooltipFormat: 'PP'
-      },
+      time: { unit: 'day', tooltipFormat: 'PP' },
       title: { display: true, text: 'Day' }
     },
-    y: {
-      title: { display: true, text: 'Unique Daily Logons' }
-    }
+    y: { title: { display: true, text: 'Unique Logons' } }
   }
 }
 
@@ -451,211 +448,140 @@ const netOptions = {
       time: { unit: 'day', tooltipFormat: 'PP' },
       title: { display: true, text: 'Day' }
     },
-    y: {
-      title: { display: true, text: 'Net Points Issued' },
-      beginAtZero: false
-    }
+    y: { title: { display: true, text: 'Net Points Issued' }, beginAtZero: false }
   },
   plugins: {
     legend: {
       display: true,
-      position: 'top',     // or 'bottom', 'left', 'right'
+      position: 'top',
       onClick: (e, legendItem, legend) => {
-        const ci = legend.chart;
-        const idx = legendItem.datasetIndex;
-        const meta = ci.getDatasetMeta(idx);
-        // toggle hidden flag
-        meta.hidden = !meta.hidden;
-        ci.update();
+        const ci  = legend.chart
+        const idx = legendItem.datasetIndex
+        const meta= ci.getDatasetMeta(idx)
+        meta.hidden = !meta.hidden
+        ci.update()
       }
     },
     annotation: {
       annotations: {
-        greenLine: {
-          type: 'line',
-          yMin: 0, yMax: 0,
-          scaleID: 'y',
-          borderColor: 'green',
-          borderWidth: 2,
-          label: { enabled: true, content: 'Zero' }
-        },
-        yellowLine: {
-          type: 'line',
-          yMin: 500, yMax: 500,
-          scaleID: 'y',
-          borderColor: 'orange',
-          borderWidth: 1,
-          label: { enabled: true, content: '+500' }
-        },
-        yellowLineNeg: {
-          type: 'line',
-          yMin: -500, yMax: -500,
-          scaleID: 'y',
-          borderColor: 'orange',
-          borderWidth: 1,
-          label: { enabled: true, content: '-500' }
-        },
-        redLine: {
-          type: 'line',
-          yMin: 1000, yMax: 1000,
-          scaleID: 'y',
-          borderColor: 'red',
-          borderWidth: 1,
-          label: { enabled: true, content: '+1000' }
-        },
-        redLineNeg: {
-          type: 'line',
-          yMin: -1000, yMax: -1000,
-          scaleID: 'y',
-          borderColor: 'red',
-          borderWidth: 1,
-          label: { enabled: true, content: '-1000' }
-        }
+        greenLine:    { type: 'line', yMin: 0,    yMax: 0,    scaleID: 'y', borderColor: 'green',  borderWidth: 2, label: { enabled: true, content: 'Zero' } },
+        yellowLine:   { type: 'line', yMin: 500,  yMax: 500,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '+500' } },
+        yellowLineNeg:{ type: 'line', yMin: -500, yMax: -500, scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '-500' } },
+        redLine:      { type: 'line', yMin: 1000, yMax: 1000, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '+1000' } },
+        redLineNeg:   { type: 'line', yMin: -1000,yMax: -1000,scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '-1000' } }
       }
     }
   }
 }
 
-// Clash games: bar+line combo
+// Clash games
 const clashOptions = {
   responsive: true,
   maintainAspectRatio: false,
   scales: {
-    // ← exactly the same X‐axis settings you used for codesChart
     x: {
       type: 'time',
       offset: true,
-      time: {
-        unit: 'day',
-        tooltipFormat: 'PP',
-        displayFormats: { day: 'MMM d' }
-      },
+      time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } },
       title: { display: true, text: 'Day' },
-      ticks: {
-        source: 'labels',
-        autoSkip: true,
-        maxRotation: 45,
-        minRotation: 45
-      }
+      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 }
     },
-    y: {
-      title: { display: true, text: 'Games Played' },
-      beginAtZero: true
-    },
-    y1: {
-      position: 'right',
-      title: { display: true, text: '% Finished' },
-      grid: { drawOnChartArea: false },
-      ticks: { callback: v => v + '%' },
-      min: 0,
-      max: 100
-    }
+    y:  { title: { display: true, text: 'Games Played' }, beginAtZero: true },
+    y1: { position: 'right', title: { display: true, text: '% Finished' }, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, min: 0, max: 100 }
   },
   plugins: { legend: { position: 'top' } }
 }
 
-
+// cumulative users
 const cumOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-
-    // ← add this block
     datalabels: {
-      anchor:  'center',     // center the label on the point
-      align:   'bottom',     // put it just under the point
-      offset:  4,            // a few pixels away
+      anchor:  'center',
+      align:   'bottom',
+      offset:  4,
       display: ctx => {
-        const chart = ctx.chart;
-        const xScale = chart.scales.x;
-        const labels = chart.data.labels;
-
-        // always show the very first point
-        if (ctx.dataIndex === 0) return true;
-
-        // get pixel X for this label vs. the previous one
-        const currX = xScale.getPixelForValue(labels[ctx.dataIndex]);
-        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1]);
-
-        // only show if they’re at least 30px apart
-        return Math.abs(currX - prevX) > 30;
+        const chart  = ctx.chart
+        const xScale = chart.scales.x
+        const labels = chart.data.labels
+        if (ctx.dataIndex === 0) return true
+        const currX = xScale.getPixelForValue(labels[ctx.dataIndex])
+        const prevX = xScale.getPixelForValue(labels[ctx.dataIndex - 1])
+        return Math.abs(currX - prevX) > 30
       }
     }
   },
   scales: {
-    x: {
-      type: 'time',
-      time: {
-        unit:         'week',
-        tooltipFormat:'PP'
-      },
-      title: { display: true, text: 'Week' }
-    },
-    y: {
-      title: { display: true, text: 'Cumulative Users' }
-    }
+    x: { type: 'time', time: { unit: 'week', tooltipFormat: 'PP' }, title: { display: true, text: 'Week' } },
+    y: { title: { display: true, text: 'Cumulative Users' } }
   }
 }
 
-// both Codes, cToons & Packs use the same barOptions
+// shared bar options (codes/ctoons/packs/trades)
 const barOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    datalabels: {
-      anchor: 'center',
-      align: 'center',
-      color: '#ffffff',
-      font: { weight: 'bold' }
-    }
+    datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
   },
   scales: {
     x: {
       type: 'time',
       offset: true,
-      time: {
-        unit: 'day',
-        tooltipFormat: 'PP',
-        displayFormats: { day: 'MMM d' }
-      },
+      time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } },
       title: { display: true, text: 'Day' },
-      ticks: {
-        source:    'labels',
-        autoSkip: true,
-        maxRotation: 45,
-        minRotation: 45
-      }
+      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 }
     },
     y: { title: { display: true, text: 'Count' }, beginAtZero: true }
   }
 }
 
+// histogram (not time-based)
 const histOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    datalabels: {
-      anchor: 'center',
-      align: 'center',
-      color: '#ffffff',
-      font: { weight: 'bold' }
-    }
-  },
+  plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
   scales: {
     x: { title: { display: true, text: 'Points Range' } },
     y: { title: { display: true, text: 'Users' }, beginAtZero: true }
   }
 }
 
+// --- helpers ---
+const dateOf = (d) => new Date(d.period || d.day || d.week || d.date)
+
+// Apply selected day/week to all time-based charts without recreating them
+function applyTimeUnit () {
+  const unit  = groupUnit.value
+  const label = groupUnitLabel.value
+
+  const set = (chart) => {
+    if (!chart || !chart.options?.scales?.x) return
+    chart.options.scales.x.time.unit = unit
+    if (chart.options.scales.x.title) {
+      chart.options.scales.x.title.text = label
+    }
+    // ensure displayFormats has the unit
+    const df = chart.options.scales.x.time.displayFormats || {}
+    df[unit] = df[unit] || (unit === 'day' ? 'MMM d' : 'MMM d')
+    chart.options.scales.x.time.displayFormats = df
+    chart.update('none')
+  }
+
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(set)
+}
+
 // --- fetch & populate ---
 async function fetchData() {
+  const groupParam = `&groupBy=${groupBy.value}`
+
   // 1) cumulative users
-  let res = await fetch(`/api/admin/cumulative-users?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  let res = await fetch(`/api/admin/cumulative-users?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let data = await res.json()
-  cumChart.data.labels   = data.map(d => new Date(d.week))
+  cumChart.data.labels   = data.map(d => dateOf(d))
   cumChart.data.datasets = [{
     data: data.map(d => d.cumulative),
     borderColor: colors.line,
@@ -666,9 +592,9 @@ async function fetchData() {
   cumChart.update()
 
   // trades requested
-  res = await fetch(`/api/admin/trades-requested?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/trades-requested?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const tr = await res.json()
-  tradesChart.data.labels   = tr.map(d => new Date(d.period))
+  tradesChart.data.labels   = tr.map(d => dateOf(d))
   tradesChart.data.datasets = [{
     data: tr.map(d => d.count),
     backgroundColor: colors.tradesBar,
@@ -678,69 +604,55 @@ async function fetchData() {
   tradesChart.update()
 
   // Net Points Issued
-  res = await fetch(
-    `/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}`,
-    { credentials: 'include' }
-  )
+  res = await fetch(`/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const np = await res.json()
-  netWindowDays.value = np.days
+  // support either .days or .weeks coming from API
+  netWindowCount.value = np.days ?? np.weeks ?? 0
 
-  // populate the chart
-  netChart.data.labels           = np.daily.map(d => new Date(d.period))
-  netChart.data.datasets[0].data = np.daily.map(d => d.netPoints)
-  netChart.data.datasets[1].data = np.daily.map(d => d.movingAvg7Day)
+  netChart.data.labels           = (np.daily || np.series || []).map(d => dateOf(d))
+  netChart.data.datasets[0].data = (np.daily || np.series || []).map(d => d.netPoints)
+  netChart.data.datasets[1].data = (np.daily || np.series || []).map(d => d.movingAvg7Day ?? d.movingAvg)
   netChart.update()
 
-  // **Compute health status off the 7-day moving average of the latest day**
-  const last = np.daily[np.daily.length - 1]
-  const avg7 = last ? last.movingAvg7Day : 0
+  // **Compute health status off the 7-day moving average of the latest period**
+  const last = (np.daily || np.series || [])[((np.daily || np.series || []).length - 1)] || null
+  const avg7 = last ? (last.movingAvg7Day ?? last.movingAvg ?? 0) : 0
 
   const healthyThreshold = 500
   const cautionThreshold = 1000
 
   if (Math.abs(avg7) <= healthyThreshold) {
-    // 🎉 Healthy: within ±500 of zero
     netStatus.value = 'good'
     netSuggestions.value = []
-  }
-  else if (Math.abs(avg7) <= cautionThreshold) {
-    // ⚠️ Caution: between ±500 and ±1000
+  } else if (Math.abs(avg7) <= cautionThreshold) {
     netStatus.value = 'caution'
-
     if (avg7 > healthyThreshold) {
-      // Slightly too high: net points are above +500
       netSuggestions.value = [
-        `Your 7-day avg is **${avg7}**, above the healthy target (should be near 0 ±${healthyThreshold}). To pull it back toward 0:`,
+        `Your 7-period avg is **${avg7}**, above the healthy target (near 0 ±${healthyThreshold}). To pull it back toward 0:`,
         '• Increase point sinks (raise auction fees or pack prices)',
         '• Launch limited-time, high-cost cosmetics to burn points',
         '• Add small periodic point-burn challenges or raffles'
       ]
     } else {
-      // Slightly too low: net points are below −500
       netSuggestions.value = [
-        `Your 7-day avg is **${avg7}**, below the healthy target (should be near 0 ±${healthyThreshold}). To boost it up toward 0:`,
+        `Your 7-period avg is **${avg7}**, below the healthy target (near 0 ±${healthyThreshold}). To boost it up toward 0:`,
         '• Introduce earn-focused events (bonus quests, referral rewards)',
         '• Temporarily lower pack prices or auction fees to spur spending',
         '• Run double-points days or time-limited earn bonuses'
       ]
     }
-  }
-  else {
-    // 🔥 Danger: beyond ±1000
+  } else {
     netStatus.value = 'danger'
-
     if (avg7 > cautionThreshold) {
-      // Way too high
       netSuggestions.value = [
-        `Your 7-day avg is **${avg7}**, well above the danger threshold (>±${cautionThreshold}). It should be near 0 ±${healthyThreshold}. Immediately remove points by:`,
+        `Your 7-period avg is **${avg7}**, well above the danger threshold (>±${cautionThreshold}). Immediately remove points by:`,
         '• Introducing premium limited-edition items with steep point costs',
         '• Significantly raising auction fees or new sink mechanics',
         '• Running high-visibility, large-scale point-burn events'
       ]
     } else {
-      // Way too low
       netSuggestions.value = [
-        `Your 7-day avg is **${avg7}**, far below the danger threshold (<−${cautionThreshold}). It should be near 0 ±${healthyThreshold}. Immediately inject points by:`,
+        `Your 7-period avg is **${avg7}**, far below the danger threshold (<−${cautionThreshold}). Immediately inject points by:`,
         '• Granting large event-based point bonuses (double or triple points)',
         '• Temporarily removing or reducing all point sinks',
         '• Offering generous referral or activity rewards'
@@ -749,9 +661,9 @@ async function fetchData() {
   }
 
   // 2) % first purchase
-  res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   data = await res.json()
-  pctChart.data.labels   = data.map(d => new Date(d.week))
+  pctChart.data.labels   = data.map(d => dateOf(d))
   pctChart.data.datasets = [{
     data: data.map(d => d.percentage),
     borderColor: colors.line,
@@ -762,9 +674,9 @@ async function fetchData() {
   pctChart.update()
 
   // 3) unique logins
-  res = await fetch(`/api/admin/unique-logins?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/unique-logins?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   data = await res.json()
-  uniqueChart.data.labels   = data.map(d => new Date(d.day))
+  uniqueChart.data.labels   = data.map(d => dateOf(d))
   uniqueChart.data.datasets = [{
     data: data.map(d => d.count),
     borderColor: colors.line,
@@ -784,14 +696,14 @@ async function fetchData() {
   }
 
   // 5) clash stats
-  res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const cs = await res.json()
   const total    = cs.reduce((s, d) => s + (d.count || 0), 0)
   const finished = cs.reduce((s, d) => s + (d.finishedCount || 0), 0)
   clashTotal.value       = total
   clashFinished.value    = finished
   clashPctFinished.value = total ? Math.round((finished / total) * 100) : 0
-  clashChart.data.labels = cs.map(s => new Date(s.day))
+  clashChart.data.labels = cs.map(s => dateOf(s))
   clashChart.data.datasets = [
     {
       type: 'bar',
@@ -802,93 +714,68 @@ async function fetchData() {
       borderColor: colors.clashBar,
       borderWidth: 1,
       order: 1,
-      datalabels: {
-        anchor: 'center',   // center vertically
-        align: 'center',    // center horizontally
-        color: '#ffffff',   // white text
-        font: { weight: 'bold' }
-      }
+      datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
     },
     {
       type: 'line',
       label: '% Finished',
       data: cs.map(s => s.percentFinished),
       yAxisID: 'y1',
-      borderColor: '#FACC15',   // red line
+      borderColor: '#FACC15',
       backgroundColor: '#FACC15',
       fill: false,
       tension: 0.3,
       order: 0,
       pointBackgroundColor: '#FACC15',
-      datalabels: {
-        anchor: 'end',     // place above the point
-        align: 'top',
-        color: '#222222',  // dark color for max contrast on light or dark
-        font: { weight: 'bold' }
-      }
+      datalabels: { anchor: 'end', align: 'top', color: '#222222', font: { weight: 'bold' } }
     }
   ]
   clashChart.update()
 
-  res = await fetch(
-    `/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}`,
-    { credentials: 'include' }
-  )
-  // --- after fetching your spend/earn series above ---
+  // spend/earn ratio
+  res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const sr = await res.json()
-  ratioWindowDays.value = sr.days
-
-  // 1) re-populate the chart with two datasets
-  ratioChart.data.labels               = sr.daily.map(d => new Date(d.period))
-  ratioChart.data.datasets[0].data     = sr.daily.map(d => d.spendEarnRatio)
-  ratioChart.data.datasets[1].data     = sr.daily.map(d => d.movingAvg7Day)
+  ratioWindowCount.value = sr.days ?? sr.weeks ?? 0
+  ratioChart.data.labels           = (sr.daily || sr.series || []).map(d => dateOf(d))
+  ratioChart.data.datasets[0].data = (sr.daily || sr.series || []).map(d => d.spendEarnRatio)
+  ratioChart.data.datasets[1].data = (sr.daily || sr.series || []).map(d => d.movingAvg7Day ?? d.movingAvg)
   ratioChart.update()
 
-  // 2) compute health off the 7-day moving avg of the last day
-  const lastEntry = sr.daily[sr.daily.length - 1] || { movingAvg7Day: 0 }
-  const avg7forRatio      = lastEntry.movingAvg7Day
+  const lastEntry = (sr.daily || sr.series || [])[((sr.daily || sr.series || []).length - 1)] || { movingAvg7Day: 0, movingAvg: 0 }
+  const avg7forRatio = lastEntry.movingAvg7Day ?? lastEntry.movingAvg ?? 0
 
   if (avg7forRatio >= 0.9 && avg7forRatio <= 1.1) {
-    // 🎉 Healthy
     ratioStatus.value      = 'good'
     ratioSuggestions.value = []
-  }
-  else if (avg7forRatio >= 0.75 && avg7forRatio <= 1.25) {
-    // ⚠️ Caution
+  } else if (avg7forRatio >= 0.75 && avg7forRatio <= 1.25) {
     ratioStatus.value = 'caution'
     if (avg7forRatio < 0.9) {
-      // MA slightly too low → need to inject more points (earn)
       ratioSuggestions.value = [
-        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, just below the healthy band (0.9–1.1). To pull it up toward 1.0:`,
+        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, just below the healthy band (0.9–1.1). To pull it up toward 1.0:`,
         '• Run earn-focused events (bonus quests, referral rewards)',
         '• Temporarily lower pack prices or auction fees to drive more spending',
         '• Offer short-lived double-points days'
       ]
     } else {
-      // MA slightly too high → need to sink more points (spend)
       ratioSuggestions.value = [
-        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, just above the healthy band (0.9–1.1). To bring it down toward 1.0:`,
+        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, just above the healthy band (0.9–1.1). To bring it down toward 1.0:`,
         '• Introduce small time-boxed point sinks (new cosmetics or auction fees)',
         '• Run burn-and-earn events that balance give/take',
         '• Add low-cost point-burn challenges'
       ]
     }
-  }
-  else {
-    // 🔥 Danger
+  } else {
     ratioStatus.value = 'danger'
     if (avg7forRatio < 0.75) {
-      // MA well under → massive earn needed
       ratioSuggestions.value = [
-        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, far below healthy. Urgently boost earning:`,
+        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, far below healthy. Urgently boost earning:`,
         '• Add large event-based point bonuses (double/triple points)',
         '• Temporarily pause major point sinks (auctions, high-cost packs)',
         '• Launch generous referral or activity rewards'
       ]
     } else {
-      // MA well over → massive sink needed
       ratioSuggestions.value = [
-        `Your 7-day avg is ${avg7forRatio.toFixed(3)}, far above healthy. Immediately remove points by:`,
+        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, far above healthy. Immediately remove points by:`,
         '• Introducing premium limited-edition items with steep point costs',
         '• Significantly raising auction fees or new sink mechanics',
         '• Running large-scale point-burn events'
@@ -897,9 +784,9 @@ async function fetchData() {
   }
 
   // 5) codes redeemed
-  res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let cr = await res.json()
-  codesChart.data.labels   = cr.map(d => new Date(d.period))
+  codesChart.data.labels   = cr.map(d => dateOf(d))
   codesChart.data.datasets = [{
     data: cr.map(d => d.count),
     backgroundColor: colors.codesBar,
@@ -909,10 +796,10 @@ async function fetchData() {
   codesChart.update()
 
   // 6) cToons purchased
-  res = await fetch(`/api/admin/purchases?method=ctoon&timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/purchases?method=ctoon&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let pd = await res.json()
   if (pd.ctoonPurchases) pd = pd.ctoonPurchases
-  ctoonChart.data.labels   = pd.map(d => new Date(d.period))
+  ctoonChart.data.labels   = pd.map(d => dateOf(d))
   ctoonChart.data.datasets = [{
     data: pd.map(d => d.count),
     backgroundColor: colors.ctoonBar,
@@ -922,10 +809,10 @@ async function fetchData() {
   ctoonChart.update()
 
   // 7) packs purchased
-  res = await fetch(`/api/admin/purchases?method=pack&timeframe=${selectedTimeframe.value}`, { credentials: 'include' })
+  res = await fetch(`/api/admin/purchases?method=pack&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let pp = await res.json()
   if (pp.packPurchases) pp = pp.packPurchases
-  packChart.data.labels   = pp.map(d => new Date(d.period))
+  packChart.data.labels   = pp.map(d => dateOf(d))
   packChart.data.datasets = [{
     data: pp.map(d => d.count),
     backgroundColor: colors.packBar,
@@ -934,7 +821,7 @@ async function fetchData() {
   }]
   packChart.update()
 
-  // 8) points distribution
+  // 8) points distribution (not grouped)
   res = await fetch('/api/admin/points-distribution', { credentials: 'include' })
   const hd = await res.json()
   ptsHistChart.data.labels   = hd.map(b => b.label)
@@ -946,34 +833,25 @@ async function fetchData() {
   }]
   ptsHistChart.update()
 
-  res = await fetch(
-    `/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}`,
-    { credentials: 'include' }
-  )
-
+  // 9) rarity turnover (window label respects group)
+  res = await fetch(`/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const turnrate = await res.json()
-  turnoverWindowDays.value = turnrate.days
+  turnoverWindowCount.value = turnrate.days ?? turnrate.weeks ?? 0
 
-  // populate chart
   turnoverChart.data.labels = turnrate.data.map(d => d.rarity)
   turnoverChart.data.datasets[0].data = turnrate.data.map(d => d.turnoverRate)
-  // assign colors per rarity
-  turnoverChart.data.datasets[0].backgroundColor =
-    turnrate.data.map(d => colors.turnover[d.rarity])
-  turnoverChart.data.datasets[0].borderColor =
-    turnrate.data.map(d => colors.turnover[d.rarity])
+  turnoverChart.data.datasets[0].backgroundColor = turnrate.data.map(d => colors.turnover[d.rarity])
+  turnoverChart.data.datasets[0].borderColor     = turnrate.data.map(d => colors.turnover[d.rarity])
   turnoverChart.update()
 
-  // compute overall health (avg turnover)
-  const avg = turnrate.data.reduce((sum,d) => sum + d.turnoverRate, 0) / turnrate.data.length
+  // compute overall health
+  const avg = turnrate.data.reduce((sum,d) => sum + d.turnoverRate, 0) / Math.max(1, turnrate.data.length)
   const healthyT = 0.05   // 5%
   const cautionT = 0.02   // 2%
-
   if (avg >= healthyT) {
     turnoverStatus.value = 'good'
     turnoverSuggestions.value = []
-  }
-  else if (avg >= cautionT) {
+  } else if (avg >= cautionT) {
     turnoverStatus.value = 'caution'
     turnoverSuggestions.value = [
       `Your average turnover is ${(avg*100).toFixed(1)}%, slightly below target (≥${healthyT*100}%). To boost trading:`,
@@ -982,8 +860,7 @@ async function fetchData() {
       '• Offer a small point-fee discount or coupon (via daily login bonus) for Crazy Rare trades',
       '• Promote visiting czones with “trade boost” rewards to unlock lower auction fees'
     ]
-  }
-  else {
+  } else {
     turnoverStatus.value = 'danger'
     turnoverSuggestions.value = [
       `Turnover is very low at ${(avg*100).toFixed(1)}% (<${cautionT*100}%). Immediate actions:`,
@@ -1001,43 +878,22 @@ onMounted(async () => {
   pctChart    = new Chart(pctCanvas.value.getContext('2d'),    { type: 'line', data: { labels: [], datasets: [] }, options: pctOptions })
   uniqueChart = new Chart(uniqueCanvas.value.getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: uniqueOptions })
 
-  // init bar & histogram charts
+  // init bars & histogram
   codesChart  = new Chart(codesCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ctoonChart  = new Chart(ctoonCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
-  tradesChart = new Chart(tradesCanvas.value.getContext('2d'), { type: 'bar', data: { labels: [], datasets: [] }, options: barOptions })
+  tradesChart = new Chart(tradesCanvas.value.getContext('2d'), { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
 
-  // in your onMounted or wherever you init charts:
+  // spend/earn ratio chart
   ratioChart = new Chart(ratioCanvas.value.getContext('2d'), {
     type: 'line',
     data: {
       labels: [],
       datasets: [
-        {
-          label: 'Daily spend/earn',
-          data: [],
-          borderColor: '#6366F1',
-          borderWidth: 2,
-          fill: false,
-          datalabels: {
-            anchor: 'end',   // above the point
-            align:  'top'
-          }
-        },
-        {
-          label: '7-day moving avg',
-          data: [],
-          borderColor: '#FACC15',
-          borderWidth: 2,
-          borderDash: [5, 5],
-          fill: false,
-          datalabels: {
-            anchor: 'start', // below the point
-            align:  'bottom'
-          }
-        }
+        { label: 'Per-period ratio', data: [], borderColor: '#6366F1', borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top' } },
+        { label: '7-period moving avg', data: [], borderColor: '#FACC15', borderWidth: 2, borderDash: [5, 5], fill: false, datalabels: { anchor: 'start', align: 'bottom' } }
       ]
     },
     options: {
@@ -1048,17 +904,18 @@ onMounted(async () => {
           display: true,
           position: 'top',
           onClick: (e, legendItem, legend) => {
-            const chart = legend.chart;
-            const idx   = legendItem.datasetIndex;
-            const meta  = chart.getDatasetMeta(idx);
-            meta.hidden = !meta.hidden;
-            chart.update();
+            const chart = legend.chart
+            const idx   = legendItem.datasetIndex
+            const meta  = chart.getDatasetMeta(idx)
+            meta.hidden = !meta.hidden
+            chart.update()
           }
         }
       }
     }
-  });
+  })
 
+  // turnover chart (not time-based)
   turnoverChart = new Chart(turnoverCanvas.value.getContext('2d'), {
     type: 'bar',
     data: { labels: [], datasets: [{
@@ -1066,28 +923,17 @@ onMounted(async () => {
       backgroundColor: [],
       borderColor:  [],
       borderWidth: 1,
-      datalabels: { 
-        anchor: 'end', 
-        align: 'top',
-        formatter: v => (v * 100).toFixed(1) + '%'
-      }
+      datalabels: { anchor: 'end', align: 'top', formatter: v => (v * 100).toFixed(1) + '%' }
     }]},
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        datalabels: {}
-      },
+      plugins: { legend: { display: false }, datalabels: {} },
       scales: {
-        x: {
-          title: { display: true, text: 'Rarity' }
-        },
+        x: { title: { display: true, text: 'Rarity' } },
         y: {
           title: { display: true, text: 'Turnover Rate' },
-          ticks: {
-            callback: v => (v * 100).toFixed(0) + '%'
-          },
+          ticks: { callback: v => (v * 100).toFixed(0) + '%' },
           beginAtZero: true
         }
       }
@@ -1095,60 +941,42 @@ onMounted(async () => {
     plugins: [ ChartDataLabels ]
   })
 
-
+  // net chart
   netChart = new Chart(netCanvas.value.getContext('2d'), {
     type: 'line',
-    data: { labels: [], datasets: [
-      {
-        label: 'Daily net points',
-        data: [],
-        borderColor: colors.line,
-        backgroundColor: colors.line,
-        borderWidth: 2,
-        fill: false,
-        datalabels: {
-          anchor: 'end',
-          align:  'top'
-        }
-      },
-      {
-        label: '7-day moving avg',
-        data: [],
-        borderColor: '#FACC15',  // yellow
-        backgroundColor: '#FACC15',
-        borderWidth: 2,
-        fill: false,
-        borderDash: [5,5],
-        datalabels: {
-          anchor: 'start',
-          align:  'bottom'
-        }
-      }
-    ]},
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Per-period net points', data: [], borderColor: colors.line, backgroundColor: colors.line, borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top' } },
+        { label: '7-period moving avg',  data: [], borderColor: '#FACC15', backgroundColor: '#FACC15', borderWidth: 2, fill: false, borderDash: [5,5], datalabels: { anchor: 'start', align: 'bottom' } }
+      ]
+    },
     options: netOptions
   })
+
+  // apply the initial Weekly grouping to all time axes
+  applyTimeUnit()
 
   // fetch all
   await nextTick()
   await fetchData()
 })
 
-// re-fetch whenever timeframe changes
-watch(
-  selectedTimeframe,
-  async () => {
-    // don’t run until the chart is built
-    if (!netChart) return
+// re-fetch whenever timeframe or grouping changes
+watch([selectedTimeframe, groupBy], async () => {
+  if (!netChart) return
+  applyTimeUnit()
 
-    // clear out old data so Chart.js redraws axes properly
-    netChart.data.labels = []
-    netChart.data.datasets.forEach(ds => (ds.data = []))
-    netChart.update()
+  // clear series for proper axis redraw before refill
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(ch => {
+    if (!ch) return
+    ch.data.labels = []
+    ch.data.datasets.forEach(ds => (ds.data = []))
+    ch.update('none')
+  })
 
-    // now actually re-fetch & re-populate
-    await fetchData()
-  }
-)
+  await fetchData()
+})
 </script>
 
 <style scoped>

@@ -20,8 +20,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse timeframe → startDate (default 3m to match other endpoints)
-  const { timeframe = '3m' } = getQuery(event)
+  // 2) Parse timeframe + grouping
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -32,7 +34,49 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Aggregate by local day (America/Chicago), filtered by timeframe
+  if (groupBy === 'weekly') {
+    // ---- Weekly buckets (week starts Monday per Postgres date_trunc) ----
+    const rows = await prisma.$queryRaw`
+      WITH base AS (
+        SELECT
+          ("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Chicago') AS local_ts,
+          outcome
+        FROM "ClashGame"
+        WHERE "startedAt" >= ${startDate}
+      ),
+      wk AS (
+        SELECT
+          date_trunc('week', local_ts)::date AS week_start,
+          outcome
+        FROM base
+      )
+      SELECT
+        to_char(week_start, 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS total,
+        SUM(CASE
+              WHEN outcome IS NOT NULL
+               AND outcome != 'incomplete'
+               AND outcome != ''
+              THEN 1 ELSE 0
+            END)::int AS finished
+      FROM wk
+      GROUP BY period
+      ORDER BY period
+    `
+
+    return rows.map(r => {
+      const total    = Number(r.total)
+      const finished = Number(r.finished)
+      return {
+        period:          r.period,               // week start (local)
+        count:           total,
+        finishedCount:   finished,
+        percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
+      }
+    })
+  }
+
+  // ---- Daily buckets (existing behavior) ----
   const rows = await prisma.$queryRaw`
     WITH base AS (
       SELECT
@@ -42,8 +86,8 @@ export default defineEventHandler(async (event) => {
       WHERE "startedAt" >= ${startDate}
     )
     SELECT
-      to_char(day_local, 'YYYY-MM-DD')           AS day,
-      COUNT(*)::int                               AS total,
+      to_char(day_local, 'YYYY-MM-DD') AS day,
+      COUNT(*)::int AS total,
       SUM(
         CASE
           WHEN outcome IS NOT NULL
@@ -51,23 +95,20 @@ export default defineEventHandler(async (event) => {
            AND outcome != ''
           THEN 1 ELSE 0
         END
-      )::int                                      AS finished
+      )::int AS finished
     FROM base
     GROUP BY day
     ORDER BY day
   `
 
-  // 4) Shape for the chart
-  const results = rows.map(r => {
+  return rows.map(r => {
     const total    = Number(r.total)
     const finished = Number(r.finished)
     return {
-      day:             r.day,
-      count:           total,
-      finishedCount:   finished,
-      percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
+      day:              r.day,                  // local day
+      count:            total,
+      finishedCount:    finished,
+      percentFinished:  total > 0 ? Math.round((finished / total) * 100) : 0
     }
   })
-
-  return results
 })

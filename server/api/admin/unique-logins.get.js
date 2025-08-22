@@ -1,6 +1,5 @@
-
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
-import { addDays, subMonths, subYears, format } from 'date-fns'
+import { addDays, addWeeks, subMonths, subYears, format, startOfWeek } from 'date-fns'
 
 import { prisma } from '@/server/prisma'
 
@@ -20,6 +19,9 @@ function getStartDate(timeframe) {
   }
 }
 
+// Adjust this if you want weeks to start on Sunday (0) instead of Monday (1)
+const WEEK_STARTS_ON = 1 // Monday
+
 export default defineEventHandler(async (event) => {
   // Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -35,6 +37,9 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const timeframe = query.timeframe || '3m'
+  // New: grouping (daily | weekly). Default to daily for backward compatibility with existing clients.
+  const groupBy = (query.groupBy === 'weekly') ? 'weekly' : 'daily'
+
   const startDate = getStartDate(timeframe)
   const today = new Date()
   const endDate = new Date(format(today, 'yyyy-MM-dd')) // strip time
@@ -55,27 +60,58 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // Group by day and filter for unique users per day
-  const dayMap = new Map()
-  for (const log of logs) {
-    const day = format(log.createdAt, 'yyyy-MM-dd')
-    if (!dayMap.has(day)) {
-      dayMap.set(day, new Set())
+  if (groupBy === 'weekly') {
+    // ---- Weekly unique users (per week) ----
+    // Map weekStart(yyyy-MM-dd) -> Set<userId>
+    const weekMap = new Map()
+    for (const log of logs) {
+      const wkStart = startOfWeek(log.createdAt, { weekStartsOn: WEEK_STARTS_ON })
+      const key = format(wkStart, 'yyyy-MM-dd')
+      if (!weekMap.has(key)) weekMap.set(key, new Set())
+      weekMap.get(key).add(log.userId)
     }
-    dayMap.get(day).add(log.userId)
-  }
 
-  // Fill in missing days with count: 0
-  const result = []
-  let d = new Date(format(startDate, 'yyyy-MM-dd'))
-  while (d <= endDate) {
-    const dayStr = format(d, 'yyyy-MM-dd')
-    result.push({
-      day: dayStr,
-      count: dayMap.has(dayStr) ? dayMap.get(dayStr).size : 0
-    })
-    d = addDays(d, 1)
-  }
+    // Fill missing weeks
+    const result = []
+    const startWeek = startOfWeek(new Date(format(startDate, 'yyyy-MM-dd')), { weekStartsOn: WEEK_STARTS_ON })
+    const endWeek   = startOfWeek(endDate, { weekStartsOn: WEEK_STARTS_ON })
 
-  return result
+    let w = startWeek
+    while (w <= endWeek) {
+      const key = format(w, 'yyyy-MM-dd')
+      result.push({
+        // Use "period" so the frontend can read d.period || d.day || d.week
+        period: key,
+        count: weekMap.has(key) ? weekMap.get(key).size : 0
+      })
+      w = addWeeks(w, 1)
+    }
+
+    return result
+  } else {
+    // ---- Daily unique users (existing behavior) ----
+    // Group by day and filter for unique users per day
+    const dayMap = new Map()
+    for (const log of logs) {
+      const day = format(log.createdAt, 'yyyy-MM-dd')
+      if (!dayMap.has(day)) {
+        dayMap.set(day, new Set())
+      }
+      dayMap.get(day).add(log.userId)
+    }
+
+    // Fill in missing days with count: 0
+    const result = []
+    let d = new Date(format(startDate, 'yyyy-MM-dd'))
+    while (d <= endDate) {
+      const dayStr = format(d, 'yyyy-MM-dd')
+      result.push({
+        day: dayStr,
+        count: dayMap.has(dayStr) ? dayMap.get(dayStr).size : 0
+      })
+      d = addDays(d, 1)
+    }
+
+    return result
+  }
 })

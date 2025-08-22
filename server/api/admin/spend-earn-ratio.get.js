@@ -15,8 +15,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Timeframe → days
-  const { timeframe = '3m' } = getQuery(event)
+  // 2) Params: timeframe → days, groupBy (daily | weekly; default daily)
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
+
   let days
   switch (timeframe) {
     case '1m': days = 30;  break
@@ -26,7 +28,64 @@ export default defineEventHandler(async (event) => {
     default:   days = 90
   }
 
-  // 3a) Daily series with gaps filled, plus 7-day MA
+  if (groupBy === 'weekly') {
+    // ---- Weekly series (with gaps) + 7-week moving average ----
+    const weekly = await prisma.$queryRawUnsafe(`
+      WITH
+        week_series AS (
+          SELECT generate_series(
+            date_trunc('week', (now() - INTERVAL '${days} days')::date),
+            date_trunc('week', now()::date),
+            '1 week'
+          ) AS period
+        ),
+        raw_agg AS (
+          SELECT
+            date_trunc('week', "createdAt")::date AS period,
+            COALESCE(
+              SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
+              / NULLIF(SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END), 0),
+              0
+            ) AS ratio
+          FROM "PointsLog"
+          WHERE "createdAt" >= now() - INTERVAL '${days} days'
+          GROUP BY 1
+        )
+      SELECT
+        ws.period,
+        -- ratio as numeric(…): OK to round with scale arg
+        ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
+        -- CAST windowed avg to numeric BEFORE rounding (fixes round(double, int) error)
+        ROUND(
+          (
+            AVG(COALESCE(ra.ratio, 0))
+              OVER (
+                ORDER BY ws.period
+                ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+              )
+          )::numeric,
+          3
+        ) AS moving_avg_7period
+      FROM week_series ws
+      LEFT JOIN raw_agg ra ON ra.period = ws.period
+      ORDER BY ws.period;
+    `)
+
+    const series = weekly.map(r => ({
+      period: r.period,
+      spendEarnRatio: Number(r.spend_earn_ratio),
+      // keep key name for UI compatibility (represents 7-week MA here)
+      movingAvg7Day: Number(r.moving_avg_7period)
+    }))
+
+    return {
+      timeframe,
+      weeks: series.length,
+      series
+    }
+  }
+
+  // ---- Daily series (with gaps) + 7-day moving average ----
   const daily = await prisma.$queryRawUnsafe(`
     WITH
       day_series AS (
@@ -41,10 +100,7 @@ export default defineEventHandler(async (event) => {
           date_trunc('day', "createdAt")::date AS period,
           COALESCE(
             SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
-            / NULLIF(
-                SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
-                0
-              ),
+            / NULLIF(SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END), 0),
             0
           ) AS ratio
         FROM "PointsLog"
@@ -53,16 +109,16 @@ export default defineEventHandler(async (event) => {
       )
     SELECT
       ds.period,
-      COALESCE(ra.ratio, 0) AS spend_earn_ratio,
+      ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
+      -- CAST windowed avg to numeric BEFORE rounding
       ROUND(
-        CAST(
+        (
           AVG(COALESCE(ra.ratio, 0))
             OVER (
               ORDER BY ds.period
               ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
             )
-          AS numeric
-        ),
+        )::numeric,
         3
       ) AS moving_avg_7day
     FROM day_series ds
@@ -70,58 +126,13 @@ export default defineEventHandler(async (event) => {
     ORDER BY ds.period;
   `)
 
-  // 3b) Weekly buckets
-  const weekly = await prisma.$queryRawUnsafe(`
-    SELECT
-      date_trunc('week', "createdAt")::date AS period,
-      COALESCE(
-        SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
-        / NULLIF(
-            SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
-            0
-          ),
-        0
-      ) AS spend_earn_ratio
-    FROM "PointsLog"
-    WHERE "createdAt" >= now() - INTERVAL '${days} days'
-    GROUP BY 1
-    ORDER BY 1;
-  `)
-
-  // 3c) Monthly buckets
-  const monthly = await prisma.$queryRawUnsafe(`
-    SELECT
-      date_trunc('month', "createdAt")::date AS period,
-      COALESCE(
-        SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
-        / NULLIF(
-            SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END),
-            0
-          ),
-        0
-      ) AS spend_earn_ratio
-    FROM "PointsLog"
-    WHERE "createdAt" >= now() - INTERVAL '${days} days'
-    GROUP BY 1
-    ORDER BY 1;
-  `)
-
-  // 4) Shape JSON
   return {
-    timeframe,  // '1m','3m','6m','1y'
-    days,       // numeric window length
+    timeframe,
+    days,
     daily: daily.map(r => ({
-      period:          r.period,
-      spendEarnRatio:  Number(r.spend_earn_ratio.toFixed(3)),
-      movingAvg7Day:   Number(r.moving_avg_7day.toFixed(3))
-    })),
-    weekly: weekly.map(r => ({
       period:         r.period,
-      spendEarnRatio: Number(r.spend_earn_ratio.toFixed(3))
-    })),
-    monthly: monthly.map(r => ({
-      period:         r.period,
-      spendEarnRatio: Number(r.spend_earn_ratio.toFixed(3))
+      spendEarnRatio: Number(r.spend_earn_ratio),
+      movingAvg7Day:  Number(r.moving_avg_7day)
     }))
   }
 })

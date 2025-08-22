@@ -16,8 +16,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse & normalize timeframe (default 3m)
-  const { timeframe = '3m' } = getQuery(event)
+  // 2) Parse & normalize timeframe (default 3m) + grouping (default weekly)
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly') ? rawGroupBy : 'weekly'
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -28,8 +30,50 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Build the per-week series, plus an “offset” of all users before startDate,
-  //    but only count in `stats` those who actually joined on/after startDate.
+  if (groupBy === 'daily') {
+    // ---- Daily cumulative users ----
+    const raw = await prisma.$queryRaw`
+      WITH
+        days AS (
+          SELECT generate_series(
+            date_trunc('day', ${startDate}),
+            date_trunc('day', now()),
+            '1 day'
+          ) AS day
+        ),
+        base AS (
+          SELECT COUNT(*)::int AS before_count
+          FROM "User"
+          WHERE "createdAt" < ${startDate}
+        ),
+        stats AS (
+          SELECT
+            date_trunc('day', "createdAt") AS day,
+            COUNT(*)::int AS cnt
+          FROM "User"
+          WHERE "createdAt" >= ${startDate}
+          GROUP BY day
+        )
+      SELECT
+        to_char(d.day, 'YYYY-MM-DD') AS day,
+        (b.before_count + COALESCE(
+          SUM(s.cnt) OVER (ORDER BY d.day),
+          0
+        ))::int AS cumulative
+      FROM days d
+      LEFT JOIN stats s
+        ON s.day = d.day
+      CROSS JOIN base b
+      ORDER BY d.day
+    `
+
+    return raw.map(r => ({
+      day: r.day,
+      cumulative: typeof r.cumulative === 'bigint' ? Number(r.cumulative) : r.cumulative
+    }))
+  }
+
+  // ---- Weekly cumulative users (original behavior) ----
   const raw = await prisma.$queryRaw`
     WITH
       weeks AS (
@@ -39,13 +83,11 @@ export default defineEventHandler(async (event) => {
           '1 week'
         ) AS week
       ),
-
       base AS (
         SELECT COUNT(*)::int AS before_count
         FROM "User"
         WHERE "createdAt" < ${startDate}
       ),
-
       stats AS (
         SELECT
           date_trunc('week', "createdAt") AS week,
@@ -54,10 +96,8 @@ export default defineEventHandler(async (event) => {
         WHERE "createdAt" >= ${startDate}
         GROUP BY week
       )
-
     SELECT
       to_char(w.week, 'YYYY-MM-DD') AS week,
-      -- offset + running sum of only the new users in each week
       (b.before_count + COALESCE(
         SUM(s.cnt) OVER (ORDER BY w.week),
         0
@@ -69,11 +109,8 @@ export default defineEventHandler(async (event) => {
     ORDER BY w.week
   `
 
-  // 4) Serialize BigInt → Number
   return raw.map(r => ({
-    week:       r.week,
-    cumulative: typeof r.cumulative === 'bigint'
-                ? Number(r.cumulative)
-                : r.cumulative
+    week: r.week,
+    cumulative: typeof r.cumulative === 'bigint' ? Number(r.cumulative) : r.cumulative
   }))
 })
