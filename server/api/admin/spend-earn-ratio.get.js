@@ -15,29 +15,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Params: timeframe → days, groupBy (daily | weekly; default daily)
+  // 2) Params: timeframe → exact window sizes; groupBy (default daily)
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
   const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
 
-  let days
-  switch (timeframe) {
-    case '1m': days = 30;  break
-    case '3m': days = 90;  break
-    case '6m': days = 180; break
-    case '1y': days = 365; break
-    default:   days = 90
-  }
+  const TF_DAYS  = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }
+  const TF_WEEKS = { '1m':  4, '3m': 13, '6m':  26, '1y':  52 }
+
+  const days  = TF_DAYS[timeframe]  ?? 90
+  const weeks = TF_WEEKS[timeframe] ?? 13
 
   if (groupBy === 'weekly') {
-    // ---- Weekly series (with gaps) + 7-week moving average ----
+    // Exact N weeks ending this week
     const weekly = await prisma.$queryRawUnsafe(`
       WITH
+        bounds AS (
+          SELECT date_trunc('week', now()::date) AS end_wk,
+                 date_trunc('week', now()::date) - INTERVAL '${weeks - 1} week' AS start_wk
+        ),
         week_series AS (
-          SELECT generate_series(
-            date_trunc('week', (now() - INTERVAL '${days} days')::date),
-            date_trunc('week', now()::date),
-            '1 week'
-          ) AS period
+          SELECT generate_series((SELECT start_wk FROM bounds),
+                                 (SELECT end_wk   FROM bounds),
+                                 '1 week') AS period
         ),
         raw_agg AS (
           SELECT
@@ -48,52 +47,48 @@ export default defineEventHandler(async (event) => {
               0
             ) AS ratio
           FROM "PointsLog"
-          WHERE "createdAt" >= now() - INTERVAL '${days} days'
+          WHERE "createdAt" >= (SELECT start_wk FROM bounds)
+            AND "createdAt" <  (SELECT end_wk   FROM bounds) + INTERVAL '1 week'
           GROUP BY 1
         )
       SELECT
         ws.period,
-        -- ratio as numeric(…): OK to round with scale arg
         ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
-        -- CAST windowed avg to numeric BEFORE rounding (fixes round(double, int) error)
-        ROUND(
-          (
-            AVG(COALESCE(ra.ratio, 0))
-              OVER (
-                ORDER BY ws.period
-                ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-              )
-          )::numeric,
-          3
-        ) AS moving_avg_7period
+        ROUND((
+          AVG(COALESCE(ra.ratio, 0))
+            OVER (ORDER BY ws.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
+        )::numeric, 3) AS moving_avg_7period
       FROM week_series ws
       LEFT JOIN raw_agg ra ON ra.period = ws.period
       ORDER BY ws.period;
     `)
 
     const series = weekly.map(r => ({
-      period: r.period,
+      period:         r.period,
       spendEarnRatio: Number(r.spend_earn_ratio),
-      // keep key name for UI compatibility (represents 7-week MA here)
-      movingAvg7Day: Number(r.moving_avg_7period)
+      // keep key name for UI: 7-week MA here
+      movingAvg7Day:  Number(r.moving_avg_7period)
     }))
 
     return {
       timeframe,
-      weeks: series.length,
-      series
+      days,   // expose both for UI convenience
+      weeks,  // exact weeks for timeframe
+      series  // length === weeks
     }
   }
 
-  // ---- Daily series (with gaps) + 7-day moving average ----
+  // ---- Daily series (exact N days) + 7-day moving average ----
   const daily = await prisma.$queryRawUnsafe(`
     WITH
+      bounds AS (
+        SELECT (now() - INTERVAL '${days} days')::date AS start_day,
+               now()::date                            AS end_day
+      ),
       day_series AS (
-        SELECT generate_series(
-          (now() - INTERVAL '${days} days')::date,
-          now()::date,
-          '1 day'
-        ) AS period
+        SELECT generate_series((SELECT start_day FROM bounds),
+                               (SELECT end_day   FROM bounds),
+                               '1 day') AS period
       ),
       raw_agg AS (
         SELECT
@@ -104,23 +99,17 @@ export default defineEventHandler(async (event) => {
             0
           ) AS ratio
         FROM "PointsLog"
-        WHERE "createdAt" >= now() - INTERVAL '${days} days'
+        WHERE "createdAt" >= (SELECT start_day FROM bounds)
+          AND "createdAt" <  (SELECT end_day   FROM bounds) + INTERVAL '1 day'
         GROUP BY 1
       )
     SELECT
       ds.period,
       ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
-      -- CAST windowed avg to numeric BEFORE rounding
-      ROUND(
-        (
-          AVG(COALESCE(ra.ratio, 0))
-            OVER (
-              ORDER BY ds.period
-              ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-            )
-        )::numeric,
-        3
-      ) AS moving_avg_7day
+      ROUND((
+        AVG(COALESCE(ra.ratio, 0))
+          OVER (ORDER BY ds.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
+      )::numeric, 3) AS moving_avg_7day
     FROM day_series ds
     LEFT JOIN raw_agg ra ON ra.period = ds.period
     ORDER BY ds.period;
@@ -128,7 +117,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     timeframe,
-    days,
+    days,   // exact days for timeframe
     daily: daily.map(r => ({
       period:         r.period,
       spendEarnRatio: Number(r.spend_earn_ratio),

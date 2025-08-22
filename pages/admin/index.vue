@@ -241,6 +241,9 @@ const timeframeOptions = [
 ]
 const selectedTimeframe = ref('3m')
 
+const TF_DAYS  = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }
+const TF_WEEKS = { '1m':  4, '3m': 13, '6m':  26, '1y':  52 }
+
 const groupOptions = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' }
@@ -607,7 +610,9 @@ async function fetchData() {
   res = await fetch(`/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const np = await res.json()
   // support either .days or .weeks coming from API
-  netWindowCount.value = np.days ?? np.weeks ?? 0
+  netWindowCount.value = groupBy.value === 'weekly'
+    ? TF_WEEKS[selectedTimeframe.value]
+    : TF_DAYS[selectedTimeframe.value]
 
   netChart.data.labels           = (np.daily || np.series || []).map(d => dateOf(d))
   netChart.data.datasets[0].data = (np.daily || np.series || []).map(d => d.netPoints)
@@ -735,7 +740,9 @@ async function fetchData() {
   // spend/earn ratio
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const sr = await res.json()
-  ratioWindowCount.value = sr.days ?? sr.weeks ?? 0
+  ratioWindowCount.value = groupBy.value === 'weekly'
+    ? TF_WEEKS[selectedTimeframe.value]
+    : TF_DAYS[selectedTimeframe.value]
   ratioChart.data.labels           = (sr.daily || sr.series || []).map(d => dateOf(d))
   ratioChart.data.datasets[0].data = (sr.daily || sr.series || []).map(d => d.spendEarnRatio)
   ratioChart.data.datasets[1].data = (sr.daily || sr.series || []).map(d => d.movingAvg7Day ?? d.movingAvg)
