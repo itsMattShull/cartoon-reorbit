@@ -4,7 +4,7 @@
 // Usage: node server/scripts/nuke.js <username>
 // Default username: "MysticNinjaWizard"
 
-import { prisma } from '../server/prisma'
+import { prisma } from '../server/prisma.js'
 
 async function nukeUserByUsername(username = 'MysticNinjaWizard') {
   const log = (m) => console.log(m)
