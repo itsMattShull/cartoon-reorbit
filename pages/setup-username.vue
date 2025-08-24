@@ -295,6 +295,7 @@ async function chooseStarterSet () {
       credentials: 'include'
     })
     if (response?.success) {
+      await new Promise(resolve => setTimeout(resolve, 5000))
       window.location.reload()
     } else {
       throw new Error('Starter set not granted')
