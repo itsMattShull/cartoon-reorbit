@@ -51,6 +51,7 @@ model Ctoon {
   prerequisites  ClaimCodePrerequisite[]
   wheelSpinLogs   WheelSpinLog[]  @relation("WheelSpinLogToCtoon")
   winWheelOptions WinWheelOption[]
+  starterSetItems StarterSetItem[]
 }
 
 model UserCtoon {
@@ -597,4 +598,31 @@ model UserBackground {
   sourceCode   ClaimCode?  @relation("UserBackgroundSourceCode", fields: [sourceCodeId], references: [id])
 
   @@unique([userId, backgroundId])
+}
+
+model StarterSet {
+  id          String            @id @default(uuid())
+  key         String            @unique                // machine-friendly key/slug
+  name        String                                     // admin-facing label
+  description String?
+  isActive    Boolean           @default(true)         // only active sets are shown to new users
+  sortOrder   Int               @default(0)            // order sets in UI
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  items       StarterSetItem[]
+}
+
+model StarterSetItem {
+  id        String     @id @default(uuid())
+  setId     String
+  ctoonId   String
+  position  Int        @default(0)     // display order within a set
+
+  set       StarterSet @relation(fields: [setId],   references: [id], onDelete: Cascade)
+  ctoon     Ctoon      @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([setId, ctoonId])           // don't allow the same cToon twice in one set
+  @@index([setId, position])
+  @@index([ctoonId])
 }
