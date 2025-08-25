@@ -71,7 +71,6 @@ export default defineEventHandler(async (event) => {
     // Enforce increment schedule against the current price
     const requiredInc   = incrementFor(fresh.highestBid || 0)
     const requiredBid   = (fresh.highestBid || 0) + requiredInc
-    console.log({ highestBid: fresh.highestBid, requiredInc, requiredBid, manualAmount })
     if (manualAmount !== requiredBid) {
       throw createError({
         statusCode: 400,

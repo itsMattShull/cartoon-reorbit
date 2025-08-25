@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
   // 5. Compute current highest bid
   const currentBid = bids.length > 0
     ? Math.max(...bids.map((b) => b.amount))
-    : 0
+    : auction.initialBet
 
   // 6. Map and return
   return {
