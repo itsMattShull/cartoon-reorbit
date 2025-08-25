@@ -2,7 +2,7 @@
   <Nav />
 
   <div class="pt-16 px-4 py-6 max-w-3xl mx-auto">
-    <!-- Skeleton -->
+    <!-- Skeleton when loading -->
     <template v-if="loading">
       <div class="animate-pulse space-y-4">
         <div class="h-8 bg-gray-200 rounded w-1/3"></div>
@@ -24,18 +24,23 @@
 
     <!-- Real content -->
     <template v-else>
+      <!-- Auction Header -->
       <h1 class="text-3xl font-bold mb-4">Auction: {{ auction.ctoon.name }}</h1>
 
-      <p v-if="!ended" class="text-sm text-red-600 mb-6">
-        {{ `Ending in ${formatRemaining(auction.endAt)}` }}
-      </p>
-
-      <div v-if="ended" class="mb-6">
-        <span class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full">
+      <!-- Countdown / Ended Message -->
+      <div class="mb-6">
+        <p v-if="!ended" class="text-sm text-red-600">
+          {{ `Ending in ${formatRemaining(auction.endAt)}` }}
+        </p>
+        <span
+          v-else
+          class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
+        >
           🎉 Winner: {{ displayWinner || '—' }} 🎉
         </span>
       </div>
 
+      <!-- Ctoon Image Centered -->
       <div class="flex justify-center mb-6">
         <img
           :src="auction.ctoon.assetPath"
@@ -44,46 +49,99 @@
         />
       </div>
 
+      <!-- Details -->
       <div class="mb-6 space-y-2">
         <p><strong>Series:</strong> {{ auction.ctoon.series }}</p>
         <p><strong>Rarity:</strong> {{ auction.ctoon.rarity }}</p>
         <p><strong>Mint #:</strong> {{ auction.ctoon.mintNumber ?? 'N/A' }}</p>
-        <p>
-          <strong>Current Highest Bid:</strong>
-          {{ displayCurrentBid }} pts
-          <span v-if="!hasBids" class="text-xs text-gray-500 ml-2">(starting price)</span>
+        <p><strong>Current Highest Bid:</strong> {{ displayedBid }} pts</p>
+        <p v-if="hasBids && currentTopBidder">
+          <strong>Top Bidder:</strong> {{ currentTopBidder }}
         </p>
       </div>
 
-      <!-- Bid Form -->
-      <div v-if="!ended" class="mb-6">
-        <button
-          @click="placeBid"
-          :disabled="!canBid"
-          class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
-        >
-          <template v-if="hasBids">
-            Increase bid to {{ displayCurrentBid + bidIncrement }} pts
-          </template>
-          <template v-else>
-            Place opening bid at {{ auction.initialBet }} pts
-          </template>
-        </button>
+      <!-- Bid + Auto-bid Section -->
+      <div v-if="!ended" class="mb-8 space-y-6">
+        <!-- Manual Bid -->
+        <div class="bg-white shadow rounded p-4">
+          <h2 class="text-lg font-semibold mb-3">Place Bid</h2>
+          <button
+            @click="placeBid"
+            :disabled="!canBid"
+            class="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+          >
+            <template v-if="!hasBids">
+              Bid {{ nextBidAmount }} pts
+            </template>
+            <template v-else>
+              Increase bid to {{ nextBidAmount }} pts
+            </template>
+          </button>
+          <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
+            You are currently the highest bidder and cannot bid again.
+          </p>
+          <p v-if="!canBid && !isTopBidder" class="text-sm text-red-500 mt-2">
+            You need {{ Math.max(0, nextBidAmount - userPoints) }} more pts (you have {{ userPoints }}).
+          </p>
+          <p v-if="!ended" class="text-sm text-red-600">
+            {{ `Ending in ${formatRemaining(auction.endAt)}` }}
+          </p>
+        </div>
 
-        <p v-if="isTopBidder" class="text-sm text-gray-500 mt-2">
-          You are currently the highest bidder and cannot bid again.
-        </p>
-        <p v-else-if="!canBid" class="text-sm text-red-500 mt-2">
-          You need {{ nextBidAmount }} pts but only have {{ userPoints }} pts.
-        </p>
+        <!-- Max Auto Bid -->
+        <div class="bg-white shadow rounded p-4">
+          <h2 class="text-lg font-semibold mb-3">Max Auto Bid</h2>
 
-        <p v-if="!ended" class="text-sm text-red-600 mb-6 mt-4">
-          {{ `Ending in ${formatRemaining(auction.endAt)}` }}
-        </p>
+          <div class="mb-2 text-sm text-gray-600">
+            When someone outbids you, we'll automatically raise your bid by the next increment
+            ({{ bidIncrement }} pts at the current level), up to your max — but only if you have
+            enough points at that moment.
+          </div>
+
+          <div class="flex items-center gap-3 mb-3">
+            <input
+              v-model.number="autoBidInput"
+              type="number"
+              min="0"
+              class="border rounded px-3 py-2 w-48"
+              :disabled="ended"
+              :placeholder="displayedBid + bidIncrement"
+            />
+            <button
+              @click="saveAutoBid"
+              :disabled="!canSaveAutoBid"
+              class="px-4 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
+            >
+              {{ myAutoBid ? 'Update Max' : 'Set Max' }}
+            </button>
+            <button
+              v-if="myAutoBid"
+              @click="disableAutoBid"
+              class="px-4 py-2 bg-gray-200 text-gray-800 rounded"
+            >
+              Disable
+            </button>
+          </div>
+
+          <div class="text-sm">
+            <p v-if="myAutoBid">
+              <strong>Your current Max:</strong> {{ myAutoBid.maxAmount }} pts
+              <span v-if="!myAutoBid.isActive" class="ml-2 inline-block px-2 py-0.5 text-xs bg-gray-100 rounded">inactive</span>
+            </p>
+            <p v-else class="text-gray-500">No Max Auto Bid set.</p>
+          </div>
+
+          <ul class="mt-3 text-xs text-gray-500 list-disc list-inside">
+            <li>Must be &gt; current price ({{ displayedBid }} pts).</li>
+            <li>We recommend setting ≤ your current points ({{ userPoints }} pts).</li>
+            <li>Priority when multiple users have auto-bids: first created goes first each step.</li>
+          </ul>
+        </div>
       </div>
 
-      <!-- History & Sales -->
+      <!-- History & Sales Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <!-- Bid History Card -->
         <div class="bg-white shadow rounded p-4">
           <h2 class="text-xl font-semibold mb-2">Bid History</h2>
           <ul class="space-y-1 text-sm">
@@ -94,6 +152,7 @@
           </ul>
         </div>
 
+        <!-- Recent Sales Card -->
         <div class="bg-white shadow rounded p-4">
           <h2 class="text-xl font-semibold mb-2">Recent Sales</h2>
           <ul class="space-y-1 text-sm">
@@ -105,6 +164,7 @@
         </div>
       </div>
 
+      <!-- Toast -->
       <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
     </template>
   </div>
@@ -119,34 +179,105 @@ import { useRuntimeConfig } from '#imports'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
-const route = useRoute()
-const auctionId = route.params.id
+// --- Setup & state ---
+const route       = useRoute()
+const auctionId   = route.params.id
 const { user, fetchSelf } = useAuth()
 
 const loading      = ref(true)
-const auction      = ref({ ctoon: {}, winnerUsername: null, endAt: null, initialBet: 0, highestBidderId: null, highestBid: 0 })
+const auction      = ref({ ctoon: {}, winnerUsername: null, endAt: null, highestBid: 0, initialBet: 0 })
 const bids         = ref([])
-const currentBid   = ref(0)   // will mirror the latest broadcast amount after first bid
 const userPoints   = ref(0)
 const recentSales  = ref([])
 const toastMessage = ref('')
 const toastType    = ref('error')
 
+const currentTopBidder = ref(null)  // live top bidder username (socket/server)
+
+// Auto-bid state
+const myAutoBid    = ref(null)       // { maxAmount, isActive } or null
+const autoBidInput = ref(null)
+
 const now = ref(new Date())
 let timer
 
+// --- Socket.IO client ---
 const config = useRuntimeConfig()
 const socket = io(
-  import.meta.env.PROD ? undefined : `http://localhost:${config.public.socketPort}`,
+  import.meta.env.PROD
+    ? undefined
+    : `http://localhost:${config.public.socketPort}`,
   { autoConnect: false }
 )
 
-// Helpers
+// --- Computed ---
+const ended = computed(() =>
+  auction.value.endAt && new Date(auction.value.endAt) <= now.value
+)
+
+// Do we have any bids yet?
+const hasBids = computed(() => {
+  const hb = auction.value?.highestBid ?? 0
+  return hb > 0 || (bids.value?.length ?? 0) > 0
+})
+
+// Price to show as "current": highestBid if present, else initialBet
+const displayedBid = computed(() => {
+  const hb = auction.value?.highestBid ?? 0
+  return hb > 0 ? hb : (auction.value?.initialBet ?? 0)
+})
+
+// Increment schedule based on displayed price
+const bidIncrement = computed(() => {
+  const v = displayedBid.value
+  return v < 1_000 ? 10 : v < 10_000 ? 100 : 1_000
+})
+
+// Next amount the button will submit
+// - first bid: exactly initial price (displayedBid)
+// - subsequent bids: displayedBid + increment
+const nextBidAmount = computed(() => {
+  return hasBids.value ? displayedBid.value + bidIncrement.value : displayedBid.value
+})
+
+// Prefer live top-bidder; fallback to winner or history for display
+const topBidderFromHistory = computed(() => {
+  if (!bids.value.length) return null
+  return bids.value.reduce((max, b) => (b.amount > max.amount ? b : max), bids.value[0]).user
+})
+
+const displayWinner = computed(() =>
+  auction.value.winnerUsername || currentTopBidder.value || topBidderFromHistory.value
+)
+
+const isTopBidder = computed(() =>
+  user.value?.username && currentTopBidder.value === user.value.username
+)
+
+// Can bid if not ended, not already top, and can afford the whole nextBidAmount
+const canBid = computed(() =>
+  !ended.value &&
+  !isTopBidder.value &&
+  userPoints.value >= nextBidAmount.value
+)
+
+// Auto-bid must be strictly greater than current displayed price, and ≤ balance (UI guard)
+const canSaveAutoBid = computed(() => {
+  if (ended.value) return false
+  const v = Number(autoBidInput.value)
+  if (!Number.isFinite(v)) return false
+  if (v <= displayedBid.value) return false
+  if (v > userPoints.value) return false
+  return true
+})
+
+// --- Helpers ---
 function showToast(msg, type = 'error') {
   toastMessage.value = msg
   toastType.value    = type
   setTimeout(() => { toastMessage.value = '' }, 5000)
 }
+
 function formatRemaining(endAt) {
   const diff = new Date(endAt) - now.value
   if (diff <= 0) return '0s'
@@ -157,81 +288,33 @@ function formatRemaining(endAt) {
   if (mins > 0) return `${mins}m ${secs}s`
   return `${secs}s`
 }
+
 function formatDate(dt) {
   return new Date(dt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// Data load
+// --- Data loading & actions ---
 async function loadAuction() {
   await fetchSelf()
   const data = await $fetch(`/api/auction/${auctionId}`)
   const pts  = await $fetch('/api/user/points')
 
-  auction.value = data
-  bids.value    = data.bids || []
-  // If backend returns currentBid, keep it; otherwise derive:
-  currentBid.value = data.currentBid ?? data.highestBid ?? 0
+  auction.value       = data
+  bids.value          = data.bids || []
+  userPoints.value    = pts.points
+  currentTopBidder.value = data.topBidderUsername || (bids.value[0]?.user ?? null)
 
-  userPoints.value = pts.points
+  // fetch last 3 sales
   recentSales.value = await $fetch(`/api/auction/${auctionId}/getRecentAuctions`)
+
+  // Load my current auto-bid (ignore if endpoint not present)
+  try {
+    const ab = await $fetch(`/api/auction/${auctionId}/autobid`)
+    myAutoBid.value = ab || null
+    autoBidInput.value = ab?.maxAmount ?? null
+  } catch {}
 }
 
-// Computed
-const ended = computed(() =>
-  auction.value.endAt && new Date(auction.value.endAt) <= now.value
-)
-
-// Did at least one bid happen?
-const hasBids = computed(() => {
-  if (bids.value.length > 0) return true
-  if (auction.value.highestBidderId) return true
-  return (auction.value.highestBid || 0) > 0
-})
-
-// What should we *show* as the current?
-const displayCurrentBid = computed(() => {
-  // If there are bids, prefer live currentBid (from socket), fallback to auction.highestBid
-  if (hasBids.value) return currentBid.value || auction.value.highestBid || 0
-  // Otherwise show the starting price
-  return auction.value.initialBet || 0
-})
-
-// Increment schedule (only matters after the opening bid)
-const bidIncrement = computed(() => {
-  const v = hasBids.value ? (displayCurrentBid.value) : 0
-  if (!hasBids.value) return 0
-  if (v < 1000) return 10
-  if (v < 10000) return 100
-  return 1000
-})
-
-// Amount that will be submitted to the server
-const nextBidAmount = computed(() => {
-  return hasBids.value
-    ? (displayCurrentBid.value + bidIncrement.value)
-    : (auction.value.initialBet || 0)
-})
-
-const topBidderFromHistory = computed(() => {
-  if (!bids.value.length) return null
-  return bids.value.reduce((max, b) => b.amount > max.amount ? b : max, bids.value[0]).user
-})
-
-const displayWinner = computed(() =>
-  auction.value.winnerUsername || topBidderFromHistory.value
-)
-
-const isTopBidder = computed(() =>
-  user.value?.username && topBidderFromHistory.value === user.value.username
-)
-
-const canBid = computed(() =>
-  !ended.value &&
-  !isTopBidder.value &&
-  userPoints.value >= nextBidAmount.value
-)
-
-// Actions
 async function placeBid() {
   if (!canBid.value) return
   try {
@@ -239,13 +322,38 @@ async function placeBid() {
       method: 'POST',
       body: { amount: nextBidAmount.value }
     })
-    showToast(hasBids.value ? `Bid +${bidIncrement.value} placed!` : 'Opening bid placed!', 'success')
+    showToast(!hasBids.value ? `Bid ${nextBidAmount.value} placed!` : `Bid +${bidIncrement.value} placed!`, 'success')
   } catch (err) {
-    showToast(err?.data?.message || 'Bid failed.')
+    showToast(err.data?.message || 'Bid failed.')
   }
 }
 
-// Lifecycle & sockets
+// Auto-bid API
+async function saveAutoBid() {
+  try {
+    await $fetch(`/api/auction/${auctionId}/autobid`, {
+      method: 'POST',
+      body: { maxAmount: Number(autoBidInput.value) }
+    })
+    myAutoBid.value = { maxAmount: Number(autoBidInput.value), isActive: true }
+    showToast('Max Auto Bid saved.', 'success')
+  } catch (err) {
+    showToast(err.data?.message || 'Failed to save Max Auto Bid.')
+  }
+}
+
+async function disableAutoBid() {
+  try {
+    await $fetch(`/api/auction/${auctionId}/autobid`, { method: 'DELETE' })
+    myAutoBid.value = null
+    autoBidInput.value = null
+    showToast('Max Auto Bid disabled.', 'success')
+  } catch (err) {
+    showToast(err.data?.message || 'Failed to disable Max Auto Bid.')
+  }
+}
+
+// --- Lifecycle ---
 onMounted(async () => {
   await loadAuction()
   loading.value = false
@@ -256,10 +364,17 @@ onMounted(async () => {
   })
 
   socket.on('new-bid', payload => {
-    if (payload.auctionId.toString() !== auctionId) return
-    // Add to history + update the “current”
+    // Only handle for this auction
+    if (String(payload.auctionId) !== String(auctionId)) return
+
+    // Update local state/history
     bids.value.unshift({ user: payload.user, amount: payload.amount })
-    currentBid.value = payload.amount
+
+    // Update live price and top bidder
+    auction.value.highestBid = payload.amount
+    currentTopBidder.value   = payload.user
+
+    // Update end time if extended
     if (payload.endAt) {
       auction.value.endAt = payload.endAt
     }
@@ -267,7 +382,9 @@ onMounted(async () => {
 
   socket.on('auction-ended', ({ winnerUsername, winningBid }) => {
     auction.value.winnerUsername = winnerUsername || auction.value.winnerUsername
-    currentBid.value = winningBid ?? currentBid.value
+    if (Number.isFinite(winningBid)) {
+      auction.value.highestBid = winningBid
+    }
   })
 
   socket.connect()
@@ -279,3 +396,7 @@ onUnmounted(() => {
   socket.disconnect()
 })
 </script>
+
+<style scoped>
+/* Basic styling */
+</style>
