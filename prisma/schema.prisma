@@ -125,6 +125,7 @@ model User {
   auctionsAsHighestBid  Auction[]   @relation("HighestBidder")
   auctionsAsWinner      Auction[]   @relation("AuctionWinner")
   bids                  Bid[]
+  autoBids   AuctionAutoBid[]
   auctionsCreated  Auction[]   @relation("AuctionsCreated")
   clashGamesAsPlayer1 ClashGame[] @relation("ClashGamePlayer1")
   clashGamesAsPlayer2 ClashGame[] @relation("ClashGamePlayer2")
@@ -455,6 +456,7 @@ model Auction {
   winner           User?          @relation("AuctionWinner",    fields: [winnerId],        references: [id])
 
   bids             Bid[]          // one-to-many on Bid
+  autoBids   AuctionAutoBid[]
   @@index([userCtoonId, status])
 }
 
@@ -625,4 +627,20 @@ model StarterSetItem {
   @@unique([setId, ctoonId])           // don't allow the same cToon twice in one set
   @@index([setId, position])
   @@index([ctoonId])
+}
+
+model AuctionAutoBid {
+  id         String   @id @default(uuid())
+  auctionId  String
+  userId     String
+  maxAmount  Int
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  auction Auction @relation(fields: [auctionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([auctionId, userId])  // one max per user per auction
+  @@index([auctionId, createdAt]) // FIFO tie-breaks
 }
