@@ -205,7 +205,7 @@ let timer
 const config = useRuntimeConfig()
 const socket = io(
   import.meta.env.PROD
-    ? undefined
+    ? window.location.origin
     : `http://localhost:${config.public.socketPort}`
 )
 

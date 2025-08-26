@@ -232,6 +232,7 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
     }
 
     socket.on('connect', () => {
+      console.log('[autoBid] broadcasting', steps.length, 'steps')
       for (const s of steps) {
         const endAtIso = s.extendedEndAt
           ? (typeof s.extendedEndAt === 'string'
