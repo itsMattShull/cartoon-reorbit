@@ -366,7 +366,16 @@ onMounted(async () => {
     console.log('connected', socket.id)
   })
 
-  socket.on('disconnect', (r) => console.log('disconnected', r))
+  socket.on('connect', () => console.log('[SOCKET] connected', socket.id))
+  socket.on('disconnect', (reason) => console.log('[SOCKET] disconnected', reason))
+  socket.on('connect_error', (err) => console.error('[SOCKET] connect_error', err?.message || err))
+
+  // Manager-level events:
+  socket.io.on('reconnect_attempt', (n) => console.log('[SOCKET] reconnect_attempt', n))
+  socket.io.on('reconnect_error', (err) => console.error('[SOCKET] reconnect_error', err?.message || err))
+  socket.io.on('reconnect_failed', () => console.error('[SOCKET] reconnect_failed'))
+  socket.io.on('open', () => console.log('[SOCKET] transport open'))
+  socket.io.on('close', (reason) => console.log('[SOCKET] transport close', reason))
 
   socket.on('new-bid', payload => {
     console.log('Socket new-bid', payload)
