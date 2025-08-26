@@ -51,8 +51,13 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   let auc = await tx.auction.findUnique({
     where: { id: auctionId },
     select: {
-      id: true, status: true, endAt: true,
-      highestBid: true, highestBidderId: true
+      id: true,
+      status: true,
+      endAt: true,
+      highestBid: true,
+      highestBidderId: true,
+      // 👇 needed so first auto-bid equals starting price (not increment from 0)
+      initialBet: true, // If your column is named initialBid/initialPrice, rename accordingly
     }
   })
   if (!auc) return { finalAuction: null, steps: [] }
@@ -60,8 +65,12 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   if (new Date(auc.endAt) <= new Date()) return { finalAuction: auc, steps: [] } // already ended
 
   const steps = []
-  let price  = auc.highestBid
-  let leader = auc.highestBidderId
+
+  // 'price' is the last accepted bid amount (0 if none yet)
+  let price  = auc.highestBid || 0
+  let leader = auc.highestBidderId || null
+
+  const startPrice = Math.max(0, auc.initialBet || 0)
 
   // Pull all active autobids + current points up-front
   const auto = await tx.auctionAutoBid.findMany({
@@ -98,12 +107,21 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     // Stop if the auction has actually reached/passed end time during this loop
     if (new Date(auc.endAt) <= new Date()) break
 
-    const inc  = incrementFor(price)
+    // Use the displayed price to choose increment scale
+    const incBase = Math.max(price, startPrice)
+    const inc     = incrementFor(incBase)
+
+    // ⬅️ KEY CHANGE:
+    // If there is no accepted bid yet (leader == null and price == 0),
+    // the minimum challenger bid is the starting price (initialBet),
+    // otherwise it's the usual price + increment.
+    const minChallengerBid = leader ? (price + inc) : startPrice
+
     const list = capsAt(price, leader)
 
-    // Eligible challengers (not the current leader) who can place >= price+inc
+    // Eligible challengers (not the current leader) who can place at least minChallengerBid
     const challengers = list
-      .filter(x => x.userId !== leader && x.cap >= price + inc)
+      .filter(x => x.userId !== leader && x.cap >= minChallengerBid)
       .sort((a, b) => (b.cap - a.cap) || (a.createdAt - b.createdAt))
 
     if (!challengers.length) break
@@ -112,7 +130,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     const leaderRec = list.find(x => x.userId === leader)
     const leadCap   = leaderRec?.cap ?? 0
 
-    const needOverPrice = price + inc
+    // ⬅️ KEY CHANGE:
+    // Need to beat "price + inc" only after at least one accepted bid exists.
+    const needOverPrice = leader ? (price + inc) : startPrice
     const needOverLead  = leadCap + incrementFor(leadCap)
     const challengerBid = Math.min(ch.cap, Math.max(needOverPrice, needOverLead))
 
@@ -143,13 +163,11 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
         }
       })
       if (didExtend) auc.endAt = newEndAt
-    // Leader stays in front; auto-raise just enough to beat the challenger
     } else {
-      // price === challengerBid right now
-      const inc2 = incrementFor(price)
+      // Leader stays in front; auto-raise just enough to beat the challenger
+      const inc2 = incrementFor(Math.max(price, startPrice))
       const leaderBid = Math.min(leadCap, price + inc2)
 
-      // Only write a step if leader actually increases the amount
       if (leader && leaderBid > price) {
         await tx.bid.create({
           data: { auctionId, userId: leader, amount: leaderBid }
@@ -166,7 +184,6 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
         auc.endAt = newEndAt
       }
 
-      // Persist auction
       await tx.auction.update({
         where: { id: auctionId },
         data: {
@@ -177,7 +194,6 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
       })
     }
 
-    // Tag the *last* step we just executed with the extension (so UI can update end time)
     if (extendedEndAt) {
       steps[steps.length - 1].extendedEndAt = extendedEndAt
     }
@@ -186,7 +202,11 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   // Read back final (still inside tx)
   auc = await tx.auction.findUnique({
     where: { id: auctionId },
-    select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true }
+    select: {
+      id: true, status: true, endAt: true,
+      highestBid: true, highestBidderId: true,
+      initialBet: true
+    }
   })
 
   return { finalAuction: auc, steps }
@@ -207,7 +227,6 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   if (!steps?.length) return
   console.log(`[autoBid] broadcasting ${steps.length} steps for auction ${auctionId}`)
 
-  // Look up usernames for payloads
   const uids = Array.from(new Set(steps.map(s => s.userId)))
   const users = await prisma.user.findMany({
     where: { id: { in: uids } },
@@ -215,19 +234,15 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   })
   const nameOf = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
-  // Socket connection (same pattern as API routes)
   const url = useRuntimeConfig().socketOrigin
-
   console.log('[autoBid] connecting socket to', url || '(prod default)')
 
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      // Let it fallback to polling if your proxy/CDN blocks the upgrade sometimes:
       transports: ['websocket', 'polling']
     })
     let done = false
-
     const finish = () => {
       if (done) return
       done = true
@@ -244,7 +259,6 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
               : new Date(s.extendedEndAt).toISOString())
           : undefined
 
-        // IMPORTANT: always include auctionId so clients filter correctly
         socket.emit('new-bid', {
           auctionId: String(auctionId),
           user: nameOf[s.userId] || 'Someone',
@@ -252,37 +266,20 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
           ...(endAtIso ? { endAt: endAtIso } : {})
         })
       }
-      // small delay to ensure messages flush before disconnect
       setTimeout(finish, 10)
     })
 
-
     socket.on('disconnect', (reason) => console.log('[SOCKET] disconnected', reason))
     socket.on('connect_error', (err) => console.error('[SOCKET] connect_error', err?.message || err))
-
-    // Manager-level events:
     socket.io.on('reconnect_attempt', (n) => console.log('[SOCKET] reconnect_attempt', n))
     socket.io.on('reconnect_error', (err) => console.error('[SOCKET] reconnect_error', err?.message || err))
     socket.io.on('reconnect_failed', () => console.error('[SOCKET] reconnect_failed'))
     socket.io.on('open', () => console.log('[SOCKET] transport open'))
     socket.io.on('close', (reason) => console.log('[SOCKET] transport close', reason))
-    // Safety: if connection can’t be established (e.g., dev server not running),
-    // don’t hang the API route.
     setTimeout(finish, 1500)
   })
 }
 
-/**
- * Convenience helper: run the proxy auto-bids **inside a tx** and,
- * after commit, broadcast the steps so every client in the auction room updates.
- *
- * Use this if you want a one-call version from API routes.
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} auctionId
- * @param {{ antiSnipeMs?: number }} [opts]
- * @returns {Promise<{ finalAuction: any, steps: Array<{userId: string, amount: number, extendedEndAt?: Date}> }>}
- */
 export async function applyProxyAutoBidsAndBroadcast(prisma, auctionId, opts = {}) {
   let result = { finalAuction: null, steps: [] }
   await prisma.$transaction(async (tx) => {

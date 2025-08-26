@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   // --- Load auction & basic guards ---
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
-    select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true }
+    select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true, initialBet: true }
   })
   if (!auc || auc.status !== 'ACTIVE') {
     throw createError({ statusCode: 400, statusMessage: 'Auction not active' })
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     const fresh = await tx.auction.findUnique({
       where: { id: auctionId },
-      select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true }
+      select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true, initialBet: true }
     })
     if (!fresh || fresh.status !== 'ACTIVE') return
     if (new Date(fresh.endAt) <= new Date()) return
