@@ -14,7 +14,6 @@ async function main() {
     console.error('User "CartoonReOrbitOfficial" not found.');
     process.exit(1);
   }
-  console.log(`Found CartoonReOrbitOfficial userId: ${user.id}`);
 
   // 2) Find all auctions they won
   const auctions = await prisma.auction.findMany({
@@ -25,25 +24,17 @@ async function main() {
     }
   });
 
-  console.log(`Found ${auctions.length} auctions won by CartoonReOrbitOfficial.`);
-
   // 3) Filter invalid ones
   const invalidAuctions = auctions.filter(auction => {
     const winningBid = auction.bids.sort((a, b) => b.amount - a.amount)[0];
     return winningBid && !allowedAmounts.includes(winningBid.amount);
   });
 
-  console.log(`Found ${invalidAuctions.length} invalid auctions.`);
-
   // 4) Process fixes + delete auction & its bids
   await prisma.$transaction(async (tx) => {
     for (const auction of invalidAuctions) {
       const winningBid = auction.bids.sort((a, b) => b.amount - a.amount)[0];
       if (!winningBid) continue;
-
-      console.log(
-        `Fixing auction ${auction.id} | Winning bid: ${winningBid.amount} | Creator: ${auction.creator.username}`
-      );
 
       // 4.1 Update UserCtoon owner (revert to creator)
       await tx.userCtoon.update({

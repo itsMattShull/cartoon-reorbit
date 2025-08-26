@@ -127,7 +127,6 @@ export default defineEventHandler(async (event) => {
 
     // dev visibility
     // eslint-disable-next-line no-console
-    console.log(`[codes.post] reward[${i}] -> backgrounds:`, backgroundCreates.length)
 
     return {
       points: points ?? 0,

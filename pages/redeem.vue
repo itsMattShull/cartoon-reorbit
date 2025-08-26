@@ -118,7 +118,6 @@ async function submit() {
       body: JSON.stringify({ code: code.value.trim() })
     })
     const payload = await res.json()
-    console.log('Redeem response:', payload)
     if (!res.ok) {
       error.value = payload.message || 'Invalid or expired code.'
       return

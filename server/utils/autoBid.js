@@ -225,7 +225,6 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
  */
 export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   if (!steps?.length) return
-  console.log(`[autoBid] broadcasting ${steps.length} steps for auction ${auctionId}`)
 
   const uids = Array.from(new Set(steps.map(s => s.userId)))
   const users = await prisma.user.findMany({
@@ -235,7 +234,6 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   const nameOf = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
   const url = useRuntimeConfig().socketOrigin
-  console.log('[autoBid] connecting socket to', url || '(prod default)')
 
   await new Promise((resolve) => {
     const socket = createSocket(url, {
@@ -251,7 +249,6 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
     }
 
     socket.on('connect', () => {
-      console.log('[autoBid] broadcasting', steps.length, 'steps')
       for (const s of steps) {
         const endAtIso = s.extendedEndAt
           ? (typeof s.extendedEndAt === 'string'
@@ -268,14 +265,7 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
       }
       setTimeout(finish, 10)
     })
-
-    socket.on('disconnect', (reason) => console.log('[SOCKET] disconnected', reason))
-    socket.on('connect_error', (err) => console.error('[SOCKET] connect_error', err?.message || err))
-    socket.io.on('reconnect_attempt', (n) => console.log('[SOCKET] reconnect_attempt', n))
-    socket.io.on('reconnect_error', (err) => console.error('[SOCKET] reconnect_error', err?.message || err))
-    socket.io.on('reconnect_failed', () => console.error('[SOCKET] reconnect_failed'))
-    socket.io.on('open', () => console.log('[SOCKET] transport open'))
-    socket.io.on('close', (reason) => console.log('[SOCKET] transport close', reason))
+    
     setTimeout(finish, 1500)
   })
 }
