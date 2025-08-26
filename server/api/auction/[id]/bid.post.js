@@ -110,10 +110,7 @@ export default defineEventHandler(async (event) => {
   })
 
   // 5) Emit socket events (flush before disconnect + ISO endAt)
-  const config = useRuntimeConfig()
-  const url = process.env.NODE_ENV === 'production'
-    ? undefined
-    : `http://localhost:${config.public.socketPort}`
+  const url = useRuntimeConfig().socketOrigin
 
   const idsForNames = Array.from(new Set(autoSteps.map(s => s.userId)))
   const users = idsForNames.length
@@ -122,7 +119,11 @@ export default defineEventHandler(async (event) => {
   const nameById = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
   await new Promise((resolve) => {
-    const socket = createSocket(url, { transports: ['websocket'] })
+    const socket = createSocket(url, {
+      path: useRuntimeConfig().socketPath,
+      // Let it fallback to polling if your proxy/CDN blocks the upgrade sometimes:
+      transports: ['websocket', 'polling']
+    })
     let finished = false
     const finish = () => {
       if (finished) return

@@ -205,6 +205,7 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
  */
 export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   if (!steps?.length) return
+  console.log(`[autoBid] broadcasting ${steps.length} steps for auction ${auctionId}`)
 
   // Look up usernames for payloads
   const uids = Array.from(new Set(steps.map(s => s.userId)))
@@ -215,15 +216,16 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   const nameOf = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
   // Socket connection (same pattern as API routes)
-  const config = useRuntimeConfig()
-  const url = process.env.NODE_ENV === 'production'
-    ? undefined
-    : `http://localhost:${config.public.socketPort}`
+  const url = useRuntimeConfig().socketOrigin
 
   console.log('[autoBid] connecting socket to', url || '(prod default)')
 
   await new Promise((resolve) => {
-    const socket = createSocket(url, { transports: ['websocket'] })
+    const socket = createSocket(url, {
+      path: useRuntimeConfig().socketPath,
+      // Let it fallback to polling if your proxy/CDN blocks the upgrade sometimes:
+      transports: ['websocket', 'polling']
+    })
     let done = false
 
     const finish = () => {
