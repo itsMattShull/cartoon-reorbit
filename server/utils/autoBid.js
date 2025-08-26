@@ -220,6 +220,8 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
     ? undefined
     : `http://localhost:${config.public.socketPort}`
 
+  console.log('[autoBid] connecting socket to', url || '(prod default)')
+
   await new Promise((resolve) => {
     const socket = createSocket(url, { transports: ['websocket'] })
     let done = false
@@ -252,6 +254,16 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
       setTimeout(finish, 10)
     })
 
+
+    socket.on('disconnect', (reason) => console.log('[SOCKET] disconnected', reason))
+    socket.on('connect_error', (err) => console.error('[SOCKET] connect_error', err?.message || err))
+
+    // Manager-level events:
+    socket.io.on('reconnect_attempt', (n) => console.log('[SOCKET] reconnect_attempt', n))
+    socket.io.on('reconnect_error', (err) => console.error('[SOCKET] reconnect_error', err?.message || err))
+    socket.io.on('reconnect_failed', () => console.error('[SOCKET] reconnect_failed'))
+    socket.io.on('open', () => console.log('[SOCKET] transport open'))
+    socket.io.on('close', (reason) => console.log('[SOCKET] transport close', reason))
     // Safety: if connection can’t be established (e.g., dev server not running),
     // don’t hang the API route.
     setTimeout(finish, 1500)
