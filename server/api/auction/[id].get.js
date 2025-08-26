@@ -27,12 +27,12 @@ export default defineEventHandler(async (event) => {
   const auction = await prisma.auction.findUnique({
     where: { id },
     include: {
-      userCtoon: {
-        include: { ctoon: true }
-      },
-      winner:    { select: { username: true } }
+      userCtoon: { include: { ctoon: true } },
+      winner:    { select: { username: true } },
+      highestBidder: { select: { username: true } } // ← add
     }
   })
+
   if (!auction) {
     throw createError({ statusCode: 404, statusMessage: 'Auction not found' })
   }
@@ -62,11 +62,13 @@ export default defineEventHandler(async (event) => {
     endAt:      auction.endAt.toISOString(),
     initialBet: auction.initialBet,
     status:     auction.status,
-    currentBid,
-    bids: bids.map((b) => ({
-      user:   b.user.username,
-      amount: b.amount
-    })),
+
+    // canonical current price/leader from Auction table
+    highestBid: auction.highestBid,
+    highestBidderUsername: auction.highestBidder?.username || null,
+
+    // keep history for the sidebar
+    bids: bids.map(b => ({ user: b.user.username, amount: b.amount })),
     winnerUsername: auction.winner?.username || null
   }
 })

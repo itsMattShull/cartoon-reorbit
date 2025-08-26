@@ -216,10 +216,7 @@ const ended = computed(() =>
 )
 
 // Do we have any bids yet?
-const hasBids = computed(() => {
-  const hb = auction.value?.highestBid ?? 0
-  return hb > 0 || (bids.value?.length ?? 0) > 0
-})
+const hasBids = computed(() => (auction.value?.highestBid ?? 0) > 0)
 
 // Price to show as "current": highestBid if present, else initialBet
 const displayedBid = computed(() => {
@@ -299,21 +296,25 @@ async function loadAuction() {
   const data = await $fetch(`/api/auction/${auctionId}`)
   const pts  = await $fetch('/api/user/points')
 
-  auction.value       = data
-  bids.value          = data.bids || []
-  userPoints.value    = pts.points
-  currentTopBidder.value = data.topBidderUsername || (bids.value[0]?.user ?? null)
+  auction.value = data
+  // 👇 Ensure the computed price uses the correct source on first render
+  auction.value.highestBid = data.highestBid ?? data.currentBid ?? 0
 
-  // fetch last 3 sales
+  bids.value        = data.bids || []
+  userPoints.value  = pts.points
+
+  // Prefer API-provided current leader if available
+  currentTopBidder.value = data.highestBidderUsername || (bids.value[0]?.user ?? null)
+
   recentSales.value = await $fetch(`/api/auction/${auctionId}/getRecentAuctions`)
 
-  // Load my current auto-bid (ignore if endpoint not present)
   try {
     const ab = await $fetch(`/api/auction/${auctionId}/autobid`)
     myAutoBid.value = ab || null
     autoBidInput.value = ab?.maxAmount ?? null
   } catch {}
 }
+
 
 async function placeBid() {
   if (!canBid.value) return
@@ -364,19 +365,17 @@ onMounted(async () => {
   })
 
   socket.on('new-bid', payload => {
-    // Only handle for this auction
     if (String(payload.auctionId) !== String(auctionId)) return
 
-    // Update local state/history
     bids.value.unshift({ user: payload.user, amount: payload.amount })
-
-    // Update live price and top bidder
     auction.value.highestBid = payload.amount
     currentTopBidder.value   = payload.user
 
-    // Update end time if extended
     if (payload.endAt) {
-      auction.value.endAt = payload.endAt
+      const d = new Date(payload.endAt)
+      if (!Number.isNaN(d.getTime())) {
+        auction.value.endAt = d.toISOString()
+      }
     }
   })
 

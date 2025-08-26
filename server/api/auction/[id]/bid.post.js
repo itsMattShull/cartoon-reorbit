@@ -5,8 +5,7 @@ import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 
-const SNIPE_WINDOW_MS = 60_000   // extend only if bid occurs with ≤ 60s left
-const SNIPE_EXTEND_MS = 30_000   // extend by +30s FROM CURRENT endAt
+const ANTI_SNIPE_MS = 60_000
 
 export default defineEventHandler(async (event) => {
   // 1) Auth
@@ -29,7 +28,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid bid amount' })
   }
 
-  // 3) Quick read (non-final)
+  // 3) Quick read
   const pre = await db.auction.findUnique({
     where: { id: auctionId },
     select: {
@@ -44,9 +43,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Auction already ended' })
   }
 
-  let finalEndAt   = new Date(pre.endAt)
   let finalAuction = pre
   let autoSteps    = []
+  let finalEndAt   = new Date(pre.endAt)
+  let manualExtended = false
 
   // 4) Transaction
   await db.$transaction(async (tx) => {
@@ -61,75 +61,60 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Auction not active' })
     }
 
-    const now    = new Date()
+    const now  = new Date()
     const preEnd = new Date(fresh.endAt)
     if (preEnd <= now) throw createError({ statusCode: 400, statusMessage: 'Auction already ended' })
 
-    // If you're already on top, you can't bid again
     if (fresh.highestBidderId && fresh.highestBidderId === userId) {
       throw createError({ statusCode: 400, statusMessage: 'You are already the highest bidder' })
     }
 
-    // REQUIRED amount:
-    // - If no bids yet, first bid must be exactly initialBet
-    // - Otherwise, exactly highestBid + incrementFor(highestBid)
     const noBidsYet   = !fresh.highestBidderId || (fresh.highestBid || 0) === 0
     const requiredBid = noBidsYet
       ? fresh.initialBet
       : (fresh.highestBid + incrementFor(fresh.highestBid))
 
     if (manualAmount !== requiredBid) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: `Next bid must be exactly ${requiredBid}`
-      })
+      throw createError({ statusCode: 400, statusMessage: `Next bid must be exactly ${requiredBid}` })
     }
 
-    // Ensure user has enough points
     const up = await tx.userPoints.findUnique({ where: { userId } })
     if (!up || up.points < manualAmount) {
       throw createError({ statusCode: 400, statusMessage: 'Insufficient points to place this bid' })
     }
 
-    // Create manual bid
-    await tx.bid.create({
-      data: { auctionId, userId, amount: manualAmount }
-    })
-
-    // Update current leader/price from this manual step
+    await tx.bid.create({ data: { auctionId, userId, amount: manualAmount } })
     await tx.auction.update({
       where: { id: auctionId },
-      data: {
-        highestBid: manualAmount,
-        highestBidderId: userId
-      }
+      data: { highestBid: manualAmount, highestBidderId: userId }
     })
 
-    // Run proxy auto-bids to settle true final price/leader
-    const res = await applyProxyAutoBids(tx, auctionId)
-    autoSteps = res.steps || []
+    const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
+    autoSteps    = res.steps || []
     finalAuction = res.finalAuction || (await tx.auction.findUnique({ where: { id: auctionId } }))
 
-    // Anti-snipe: extend only if this bid (manual + any auto) occurs ≤60s before end.
-    const withinWindow = (preEnd.getTime() - Date.now()) <= SNIPE_WINDOW_MS
-    if (withinWindow) {
-      finalEndAt = new Date(preEnd.getTime() + SNIPE_EXTEND_MS)
-      await tx.auction.update({
-        where: { id: auctionId },
-        data: { endAt: finalEndAt }
-      })
+    if (!autoSteps.length) {
+      const msLeft = preEnd.getTime() - Date.now()
+      if (msLeft <= ANTI_SNIPE_MS) {
+        const extended = new Date(Date.now() + ANTI_SNIPE_MS)
+        await tx.auction.update({ where: { id: auctionId }, data: { endAt: extended } })
+        finalAuction = { ...finalAuction, endAt: extended }
+        finalEndAt = extended
+        manualExtended = true
+      } else {
+        finalEndAt = preEnd
+      }
     } else {
-      finalEndAt = preEnd
+      finalEndAt = new Date(finalAuction.endAt)
     }
   })
 
-  // 5) Emit socket events
+  // 5) Emit socket events (flush before disconnect + ISO endAt)
   const config = useRuntimeConfig()
   const url = process.env.NODE_ENV === 'production'
     ? undefined
     : `http://localhost:${config.public.socketPort}`
 
-  // Preload names for auto steps
   const idsForNames = Array.from(new Set(autoSteps.map(s => s.userId)))
   const users = idsForNames.length
     ? await db.user.findMany({ where: { id: { in: idsForNames } }, select: { id: true, username: true } })
@@ -138,30 +123,37 @@ export default defineEventHandler(async (event) => {
 
   await new Promise((resolve) => {
     const socket = createSocket(url, { transports: ['websocket'] })
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      try { socket.disconnect() } catch {}
+      resolve()
+    }
+
     socket.on('connect', async () => {
-      const hasAuto = autoSteps.length > 0
-      // Manual step
       socket.emit('new-bid', {
         auctionId,
         user: me.username || 'Someone',
         amount: manualAmount,
-        ...(hasAuto ? {} : { endAt: finalEndAt })
+        ...(manualExtended ? { endAt: new Date(finalEndAt).toISOString() } : {})
       })
-      // Auto steps (only last carries endAt)
-      for (let i = 0; i < autoSteps.length; i++) {
-        const s = autoSteps[i]
-        const isLast = i === autoSteps.length - 1
+
+      for (const s of autoSteps) {
         socket.emit('new-bid', {
           auctionId,
           user: nameById[s.userId] || 'Someone',
           amount: s.amount,
-          ...(isLast ? { endAt: finalEndAt } : {})
+          ...(s.extendedEndAt ? { endAt: new Date(s.extendedEndAt).toISOString() } : {})
         })
       }
-      socket.disconnect()
-      resolve()
+
+      // let packets flush before disconnecting
+      setTimeout(finish, 25)
     })
-    setTimeout(() => resolve(), 1500)
+
+    socket.on('connect_error', finish)
+    setTimeout(finish, 1500) // fail-safe
   })
 
   return {

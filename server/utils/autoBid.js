@@ -2,6 +2,12 @@
 import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 
+/**
+ * Public constant so API routes can use the same window everywhere.
+ * The util extends to NOW + ANTI_SNIPE_MS when within the window.
+ */
+export const ANTI_SNIPE_MS = 60_000
+
 export function incrementFor(v) {
   if (v < 1000) return 10
   if (v < 10000) return 100
@@ -9,14 +15,14 @@ export function incrementFor(v) {
 }
 
 /**
- * Simple anti-snipe: if <= antiSnipeMs remains, extend to now + antiSnipeMs.
- * Returns a Date (possibly the same endAt if no extension was needed).
+ * If <= antiSnipeMs remains, extend to now + antiSnipeMs.
+ * Returns a Date (possibly unchanged).
  */
-function maybeExtend(endAt, antiSnipeMs = 2 * 60 * 1000) {
-  const now = new Date()
-  const msLeft = new Date(endAt).getTime() - now.getTime()
+function maybeExtend(endAt, antiSnipeMs = ANTI_SNIPE_MS) {
+  const now = Date.now()
+  const msLeft = new Date(endAt).getTime() - now
   if (msLeft <= antiSnipeMs) {
-    return new Date(now.getTime() + antiSnipeMs)
+    return new Date(now + antiSnipeMs)
   }
   return endAt
 }
@@ -27,7 +33,11 @@ function maybeExtend(endAt, antiSnipeMs = 2 * 60 * 1000) {
  * - Only auto-bids from users who CURRENTLY have enough points.
  * - Multiple auto-bidders: highest effective cap first; tie -> earliest createdAt.
  * - Writes Bid rows for both the challenger and the leader’s auto-raise (for history).
- * - Anti-snipe time extension mirrors bid.post.js.
+ * - Anti-snipe time extension: extends to now + antiSnipeMs when within the window.
+ *
+ * IMPORTANT: This function **does not** broadcast — it must be called
+ * inside a transaction by the API and then the caller should invoke
+ * `broadcastAutoBidSteps(...)` **after the transaction commits**.
  *
  * @param {import('@prisma/client').PrismaClient} tx  Transactional Prisma client
  * @param {string} auctionId
@@ -35,7 +45,7 @@ function maybeExtend(endAt, antiSnipeMs = 2 * 60 * 1000) {
  * @returns {Promise<{ finalAuction: any, steps: Array<{userId: string, amount: number, extendedEndAt?: Date}> }>}
  */
 export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
-  const antiSnipeMs = opts.antiSnipeMs ?? 2 * 60 * 1000
+  const antiSnipeMs = opts.antiSnipeMs ?? ANTI_SNIPE_MS
 
   // Load auction fresh inside the transaction
   let auc = await tx.auction.findUnique({
@@ -98,9 +108,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
 
     if (!challengers.length) break
 
-    const ch      = challengers[0]
+    const ch        = challengers[0]
     const leaderRec = list.find(x => x.userId === leader)
-    const leadCap = leaderRec?.cap ?? 0
+    const leadCap   = leaderRec?.cap ?? 0
 
     const needOverPrice = price + inc
     const needOverLead  = leadCap + incrementFor(leadCap)
@@ -133,17 +143,28 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
         }
       })
       if (didExtend) auc.endAt = newEndAt
+    // Leader stays in front; auto-raise just enough to beat the challenger
     } else {
-      // Leader stays in front; mirror leader's auto-raise as a Bid row
-      if (leader) {
-        await tx.bid.create({ data: { auctionId, userId: leader, amount: price } })
-        steps.push({ userId: leader, amount: price })
+      // price === challengerBid right now
+      const inc2 = incrementFor(price)
+      const leaderBid = Math.min(leadCap, price + inc2)
+
+      // Only write a step if leader actually increases the amount
+      if (leader && leaderBid > price) {
+        await tx.bid.create({
+          data: { auctionId, userId: leader, amount: leaderBid }
+        })
+        steps.push({ userId: leader, amount: leaderBid })
+        price = leaderBid
       }
 
       // Anti-snipe check/extend
       const newEndAt = maybeExtend(auc.endAt, antiSnipeMs)
       const didExtend = newEndAt.getTime() !== new Date(auc.endAt).getTime()
-      if (didExtend) extendedEndAt = newEndAt
+      if (didExtend) {
+        steps[steps.length - 1].extendedEndAt = newEndAt
+        auc.endAt = newEndAt
+      }
 
       // Persist auction
       await tx.auction.update({
@@ -154,10 +175,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
           ...(didExtend ? { endAt: newEndAt } : {})
         }
       })
-      if (didExtend) auc.endAt = newEndAt
     }
 
-    // tag the *last* step we just executed with the extension (so UI can update end time)
+    // Tag the *last* step we just executed with the extension (so UI can update end time)
     if (extendedEndAt) {
       steps[steps.length - 1].extendedEndAt = extendedEndAt
     }
@@ -176,6 +196,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
  * Broadcast auto-bid steps over Socket.IO so the UI updates live.
  * Call this **after** the transaction that ran applyProxyAutoBids has committed.
  *
+ * NOTE: We emit exactly one "new-bid" per written Bid step and attach `endAt`
+ * ONLY on the step that actually extended time (if any).
+ *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} auctionId
  * @param {Array<{userId: string, amount: number, extendedEndAt?: Date}>} steps
@@ -191,32 +214,67 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   })
   const nameOf = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
-  // Socket connection (same pattern as bid.post.js)
+  // Socket connection (same pattern as API routes)
   const config = useRuntimeConfig()
   const url = process.env.NODE_ENV === 'production'
     ? undefined
     : `http://localhost:${config.public.socketPort}`
 
-  const socket = createSocket(url, { transports: ['websocket'] })
+  await new Promise((resolve) => {
+    const socket = createSocket(url, { transports: ['websocket'] })
+    let done = false
 
-  await new Promise(resolve => {
+    const finish = () => {
+      if (done) return
+      done = true
+      try { socket.disconnect() } catch {}
+      resolve()
+    }
+
     socket.on('connect', () => {
-      // Emit each step in order.
       for (const s of steps) {
+        const endAtIso = s.extendedEndAt
+          ? (typeof s.extendedEndAt === 'string'
+              ? s.extendedEndAt
+              : new Date(s.extendedEndAt).toISOString())
+          : undefined
+
+        // IMPORTANT: always include auctionId so clients filter correctly
         socket.emit('new-bid', {
-          auctionId,
+          auctionId: String(auctionId),
           user: nameOf[s.userId] || 'Someone',
           amount: s.amount,
-          // Only include endAt when a step extended the time; the client will update it.
-          ...(s.extendedEndAt ? { endAt: s.extendedEndAt } : {})
+          ...(endAtIso ? { endAt: endAtIso } : {})
         })
       }
-      // give the events a tick to flush
-      setTimeout(() => {
-        socket.disconnect()
-        resolve()
-      }, 10)
+      // small delay to ensure messages flush before disconnect
+      setTimeout(finish, 10)
     })
-    socket.connect()
+
+    // Safety: if connection can’t be established (e.g., dev server not running),
+    // don’t hang the API route.
+    setTimeout(finish, 1500)
   })
+}
+
+/**
+ * Convenience helper: run the proxy auto-bids **inside a tx** and,
+ * after commit, broadcast the steps so every client in the auction room updates.
+ *
+ * Use this if you want a one-call version from API routes.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} auctionId
+ * @param {{ antiSnipeMs?: number }} [opts]
+ * @returns {Promise<{ finalAuction: any, steps: Array<{userId: string, amount: number, extendedEndAt?: Date}> }>}
+ */
+export async function applyProxyAutoBidsAndBroadcast(prisma, auctionId, opts = {}) {
+  let result = { finalAuction: null, steps: [] }
+  await prisma.$transaction(async (tx) => {
+    result = await applyProxyAutoBids(tx, auctionId, opts)
+  })
+  if (result.steps?.length) {
+    await broadcastAutoBidSteps(prisma, auctionId, result.steps)
+  }
+  return result
 }
