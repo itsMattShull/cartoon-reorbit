@@ -206,8 +206,7 @@ const config = useRuntimeConfig()
 const socket = io(
   import.meta.env.PROD
     ? undefined
-    : `http://localhost:${config.public.socketPort}`,
-  { autoConnect: false }
+    : `http://localhost:${config.public.socketPort}`
 )
 
 // --- Computed ---
@@ -365,6 +364,7 @@ onMounted(async () => {
   })
 
   socket.on('new-bid', payload => {
+    console.log('Socket new-bid', payload)
     if (String(payload.auctionId) !== String(auctionId)) return
 
     bids.value.unshift({ user: payload.user, amount: payload.amount })
