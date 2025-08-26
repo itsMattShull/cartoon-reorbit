@@ -203,11 +203,7 @@ let timer
 
 // --- Socket.IO client ---
 const config = useRuntimeConfig()
-const socket = io(
-  import.meta.env.PROD
-    ? window.location.origin
-    : `http://localhost:${config.public.socketPort}`
-)
+let socket
 
 // --- Computed ---
 const ended = computed(() =>
@@ -358,6 +354,17 @@ onMounted(async () => {
   await loadAuction()
   loading.value = false
   timer = setInterval(() => { now.value = new Date() }, 1000)
+
+  const path = import.meta.env.PROD
+      ? undefined
+      : `http://localhost:${config.public.socketPort}`
+
+  socket = io(path, {
+    autoConnect: false,
+    withCredentials: true,
+    reconnectionAttempts: 5,
+    transports: ['websocket', 'polling']
+  })
 
   console.log('Connecting socket...')
 
