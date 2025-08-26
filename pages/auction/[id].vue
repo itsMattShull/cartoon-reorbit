@@ -359,6 +359,8 @@ onMounted(async () => {
   loading.value = false
   timer = setInterval(() => { now.value = new Date() }, 1000)
 
+  console.log('Connecting socket...')
+
   socket.on('connect', () => {
     socket.emit('join-auction', { auctionId })
     console.log('connected', socket.id)
