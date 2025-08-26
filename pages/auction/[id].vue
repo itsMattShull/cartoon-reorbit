@@ -361,7 +361,10 @@ onMounted(async () => {
 
   socket.on('connect', () => {
     socket.emit('join-auction', { auctionId })
+    console.log('connected', socket.id)
   })
+
+  socket.on('disconnect', (r) => console.log('disconnected', r))
 
   socket.on('new-bid', payload => {
     console.log('Socket new-bid', payload)
