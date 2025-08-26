@@ -340,6 +340,9 @@ const RARITY_PATTERNS = [
   { key: 'Uncommon',   re: /un[\s_]*common/i },
   { key: 'Common',     re: /common/i },
   { key: 'Rare',       re: /rare/i },
+  { key: 'Prize Only', re: /prize[\s_]*only/i },
+  { key: 'Code Only',  re: /code[\s_]*only/i },
+  { key: 'Auction Only', re: /auction[\s_]*only/i }
 ]
 
 const rarityOptions = [
@@ -388,7 +391,7 @@ function profileFromName(basename) {
   working = working.replace(/_pic/ig, '')
 
   // Remove all underscores
-  working = working.replace(/_/g, '')
+  working = working.replace(/_/g, ' ')
 
   // Collapse extra spaces and trim
   working = working.replace(/\s{2,}/g, ' ').trim()
@@ -410,28 +413,28 @@ function updateDefaults(f) {
 
   switch (f.rarity) {
     case 'Common':
-      f.totalQuantity   = 100
-      f.initialQuantity = 100
+      f.totalQuantity   = 120
+      f.initialQuantity = 120
       f.perUserLimit    = 20
       break
     case 'Uncommon':
-      f.totalQuantity   = 75
-      f.initialQuantity = 75
+      f.totalQuantity   = 90
+      f.initialQuantity = 90
       f.perUserLimit    = 10
       break
     case 'Rare':
-      f.totalQuantity   = 50
-      f.initialQuantity = 50
+      f.totalQuantity   = 60
+      f.initialQuantity = 60
       f.perUserLimit    = 3
       break
     case 'Very Rare':
-      f.totalQuantity   = 35
-      f.initialQuantity = 35
+      f.totalQuantity   = 42
+      f.initialQuantity = 42
       f.perUserLimit    = 2
       break
     case 'Crazy Rare':
-      f.totalQuantity   = 25
-      f.initialQuantity = 25
+      f.totalQuantity   = 30
+      f.initialQuantity = 30
       f.perUserLimit    = 1
       break
     default:

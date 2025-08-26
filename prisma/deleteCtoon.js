@@ -71,12 +71,12 @@ async function main() {
   try {
     // Find all cToons whose set is "Zoids" (case-insensitive)
     const toDelete = await prisma.ctoon.findMany({
-      where: { set: { equals: 'Zoids', mode: 'insensitive' } },
+      where: { set: { equals: 'Zoids Originals', mode: 'insensitive' } },
       select: { id: true, name: true, set: true }
     })
 
     if (toDelete.length === 0) {
-      console.log('No cToons found with set = "Zoids".')
+      console.log('No cToons found with set = "Zoids Originals".')
       return
     }
 
