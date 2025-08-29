@@ -63,7 +63,7 @@
         </thead>
         <tbody>
           <tr
-            v-for="log in filteredLogs"
+            v-for="log in logs"
             :key="log.id"
             class="border-t"
           >
@@ -93,13 +93,17 @@
               </button>
             </td>
           </tr>
+          <!-- show while fetching more -->
+          <tr v-if="isLoading && !isInitialLoad">
+            <td class="px-4 py-3 text-center text-gray-500" colspan="7">Loading more…</td>
+          </tr>
         </tbody>
       </table>
     </div>
 
     <!-- Mobile cards -->
     <div class="md:hidden grid grid-cols-1 gap-4">
-      <div v-for="log in filteredLogs" :key="log.id" class="border rounded p-4 shadow">
+      <div v-for="log in logs" :key="log.id" class="border rounded p-4 shadow">
         <div class="text-sm text-gray-500 mb-2">{{ formatTs(log.createdAt) }}</div>
         <div class="mb-1"><span class="font-medium">User:</span> {{ log.user?.username || 'Unknown' }}</div>
         <div class="mb-1 flex items-center gap-2">
@@ -116,6 +120,15 @@
         <div class="mb-2"><span class="font-medium">UserCtoonId:</span> <span class="font-mono">{{ shorten(log.userCtoonId) }}</span></div>
         <button class="bg-blue-500 text-white px-3 py-1 rounded" @click="openModal(log)">View</button>
       </div>
+      <div v-if="isLoading && !isInitialLoad" class="text-center text-gray-500">Loading more…</div>
+    </div>
+
+    <!-- Bottom sentinel -->
+    <div ref="loadMoreEl" class="h-10"></div>
+
+    <!-- Empty state -->
+    <div v-if="!logs.length && !isLoading" class="text-center text-gray-500 mt-10">
+      No logs match the current filters.
     </div>
 
     <!-- Details modal -->
@@ -155,27 +168,25 @@
     </div>
 
     <!-- Empty state -->
-    <div v-if="!filteredLogs.length" class="text-center text-gray-500 mt-10">
+    <div v-if="!logs.length" class="text-center text-gray-500 mt-10">
       No logs match the current filters.
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useAsyncData } from '#app'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({
-  middleware: ['auth', 'admin'],
-  layout: 'default'
-})
+definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
 
-// Load logs
-const { data: logsData } = await useAsyncData('ctoonOwnerLogs', () =>
-  $fetch('/api/admin/ctoonOwnerLogs') // implement server route to return logs with user + ctoon populated
-)
-const logs = ref((logsData.value || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
+// ── State ─────────────────────────────────────────────────────────────
+const logs = ref([])
+const isLoading = ref(false)
+const isInitialLoad = ref(true)
+const hasMore = ref(true)
+const page = ref(1)
+const LIMIT = 100
 
 // Filters
 const selectedUser = ref('')
@@ -183,28 +194,17 @@ const selectedCtoon = ref('')
 const mintFilter = ref(null)
 const idSearch = ref('')
 
-// Options
+// Options (from currently-loaded page set)
 const users = computed(() => {
   const set = new Set()
-  logs.value.forEach(l => { if (l.user?.username) set.add(l.user.username) })
+  logs.value.forEach(l => l.user?.username && set.add(l.user.username))
   return Array.from(set).sort()
 })
 const ctoonNames = computed(() => {
   const set = new Set()
-  logs.value.forEach(l => { if (l.ctoon?.name) set.add(l.ctoon.name) })
+  logs.value.forEach(l => l.ctoon?.name && set.add(l.ctoon.name))
   return Array.from(set).sort()
 })
-
-// Derived
-const filteredLogs = computed(() =>
-  logs.value.filter(l => {
-    if (selectedUser.value && l.user?.username !== selectedUser.value) return false
-    if (selectedCtoon.value && l.ctoon?.name !== selectedCtoon.value) return false
-    if (mintFilter.value && Number(l.mintNumber) !== Number(mintFilter.value)) return false
-    if (idSearch.value && !(l.userCtoonId || '').toLowerCase().includes(idSearch.value.toLowerCase())) return false
-    return true
-  })
-)
 
 // Modal
 const showModal = ref(false)
@@ -213,22 +213,74 @@ function openModal(log) { selected.value = log; showModal.value = true }
 function closeModal() { showModal.value = false }
 
 // Helpers
-function shorten(id) {
-  if (!id) return ''
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id
+function shorten(id) { return !id ? '' : (id.length > 12 ? `${id.slice(0,6)}…${id.slice(-4)}` : id) }
+function formatTs(ts) { try { return new Date(ts).toLocaleString() } catch { return String(ts || '') } }
+function img(p) { return !p ? '' : (p.startsWith('http') ? p : p) }
+async function copy(text) { if (text) try { await navigator.clipboard.writeText(text) } catch {} }
+
+// ── Fetching ──────────────────────────────────────────────────────────
+async function fetchPage({ reset = false } = {}) {
+  if (isLoading.value) return
+  if (reset) {
+    logs.value = []
+    page.value = 1
+    hasMore.value = true
+    isInitialLoad.value = true
+  }
+  if (!hasMore.value) return
+
+  isLoading.value = true
+  try {
+    const params = {
+      limit: LIMIT,
+      page: page.value,
+      ...(selectedUser.value && { username: selectedUser.value }),
+      ...(selectedCtoon.value && { ctoonName: selectedCtoon.value }),
+      ...(mintFilter.value && { mintNumber: Number(mintFilter.value) }),
+      ...(idSearch.value && { userCtoonId: idSearch.value })
+    }
+    const batch = await $fetch('/api/admin/ctoonOwnerLogs', { params })
+
+    if (Array.isArray(batch) && batch.length) {
+      logs.value.push(...batch)
+      page.value += 1
+      hasMore.value = batch.length === LIMIT
+    } else {
+      hasMore.value = false
+    }
+  } finally {
+    isLoading.value = false
+    isInitialLoad.value = false
+  }
 }
-function formatTs(ts) {
-  if (!ts) return ''
-  try { return new Date(ts).toLocaleString() } catch { return String(ts) }
-}
-function img(p) {
-  if (!p) return ''
-  return p.startsWith('http') ? p : p
-}
-async function copy(text) {
-  if (!text) return
-  try { await navigator.clipboard.writeText(text) } catch {}
-}
+
+// Reset and refetch when filters change (debounced)
+let t = null
+watch([selectedUser, selectedCtoon, mintFilter, idSearch], () => {
+  clearTimeout(t)
+  t = setTimeout(() => fetchPage({ reset: true }), 300)
+})
+
+// ── Infinite scroll sentinel ──────────────────────────────────────────
+const loadMoreEl = ref(null)
+let observer = null
+
+onMounted(async () => {
+  await fetchPage({ reset: true })
+  observer = new IntersectionObserver(entries => {
+    const entry = entries[0]
+    if (entry?.isIntersecting && hasMore.value && !isLoading.value) {
+      // tell user we’re loading more via the UI rows/cards above
+      fetchPage()
+    }
+  }, { root: null, rootMargin: '300px', threshold: 0 })
+  if (loadMoreEl.value) observer.observe(loadMoreEl.value)
+})
+
+onBeforeUnmount(() => {
+  if (observer && loadMoreEl.value) observer.unobserve(loadMoreEl.value)
+  observer = null
+})
 </script>
 
 <style scoped>
