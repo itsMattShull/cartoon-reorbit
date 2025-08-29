@@ -140,7 +140,7 @@ export default defineEventHandler(async (event) => {
       && config.grandPrizeCtoonId
       && remaining > 0
   ) {
-    const existing = await prisma.userCtoon.findFirst({
+    const existing = await prisma.ctoonOwnerLog.findFirst({
       where: { userId, ctoonId: config.grandPrizeCtoonId }
     })
     if (!existing) {

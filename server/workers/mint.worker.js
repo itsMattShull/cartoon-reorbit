@@ -55,7 +55,6 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     const isFirstEdition =
       ctoon.initialQuantity === null || mintNumber <= ctoon.initialQuantity
 
-    // Perform the minting transaction
     if (!isSpecial) {
       await prisma.$transaction(async (tx) => {
         // 1) Deduct points and capture new total
@@ -66,23 +65,42 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
         // 2) Log with updated total
         await tx.pointsLog.create({
           data: {
-            userId:    userId,
-            points:    ctoon.price,
-            total:     updated.points,
-            method:    'Bought cToon',
+            userId,
+            points: ctoon.price,
+            total: updated.points,
+            method: 'Bought cToon',
             direction: 'decrease'
           }
         })
-        // 3) Create the UserCtoon record
-        await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition }
+        // 3) Create the UserCtoon
+        const uc = await tx.userCtoon.create({
+          data: { userId, ctoonId, mintNumber, isFirstEdition },
+          select: { id: true, mintNumber: true }
+        })
+        // 4) Create ownership log
+        await tx.ctoonOwnerLog.create({
+          data: {
+            userId,
+            ctoonId,
+            userCtoonId: uc.id,
+            mintNumber: uc.mintNumber
+          }
         })
       })
     } else {
       // Special mints bypass cost
       await prisma.$transaction(async (tx) => {
-        await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition }
+        const uc = await tx.userCtoon.create({
+          data: { userId, ctoonId, mintNumber, isFirstEdition },
+          select: { id: true, mintNumber: true }
+        })
+        await tx.ctoonOwnerLog.create({
+          data: {
+            userId,
+            ctoonId,
+            userCtoonId: uc.id,
+            mintNumber: uc.mintNumber
+          }
         })
       })
     }

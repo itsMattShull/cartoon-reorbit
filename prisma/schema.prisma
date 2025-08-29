@@ -52,6 +52,7 @@ model Ctoon {
   wheelSpinLogs   WheelSpinLog[]  @relation("WheelSpinLogToCtoon")
   winWheelOptions WinWheelOption[]
   starterSetItems StarterSetItem[]
+  ownerLogs       CtoonOwnerLog[]
 }
 
 model UserCtoon {
@@ -71,6 +72,7 @@ model UserCtoon {
   tradeCtoons   TradeCtoon[]
   tradeOfferCtoons TradeOfferCtoon[]
   auctions          Auction[]
+  ownerLogs         CtoonOwnerLog[]
 }
 
 model UserPoints {
@@ -134,6 +136,7 @@ model User {
   wheelSpinLogs   WheelSpinLog[]   @relation("WheelSpinLogToUser")
   backgroundsCreated Background[]   @relation("BackgroundCreatedBy")
   ownedBackgrounds   UserBackground[] @relation("User_UserBackgrounds")
+  ownerLogs          CtoonOwnerLog[]
 }
 
 model UserIP {
@@ -643,4 +646,21 @@ model AuctionAutoBid {
 
   @@unique([auctionId, userId])  // one max per user per auction
   @@index([auctionId, createdAt]) // FIFO tie-breaks
+}
+
+model CtoonOwnerLog {
+  id           String    @id @default(uuid())
+  userId       String?
+  ctoonId      String?
+  userCtoonId  String?
+  mintNumber   Int?      // snapshot at the time of ownership
+  createdAt    DateTime  @default(now())
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ctoon       Ctoon?      @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
+  userCtoon   UserCtoon?  @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
+
+  @@index([userCtoonId, createdAt])
+  @@index([ctoonId, createdAt])
+  @@index([userId, createdAt])
 }

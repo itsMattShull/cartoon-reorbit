@@ -97,10 +97,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 6) All good → transfer cToons, deduct points, log totals, & accept
+  // 6) Transfer cToons, move points, log, accept
   await prisma.$transaction(async (tx) => {
     if (offer.pointsOffered > 0) {
-      // deduct from initiator and capture new total
       const initiatorPoints = await tx.userPoints.update({
         where: { userId: offer.initiatorId },
         data:  { points: { decrement: offer.pointsOffered } }
@@ -115,7 +114,6 @@ export default defineEventHandler(async (event) => {
         }
       })
 
-      // credit to recipient and capture new total
       const recipientPoints = await tx.userPoints.update({
         where: { userId: offer.recipientId },
         data:  { points: { increment: offer.pointsOffered } }
@@ -131,18 +129,27 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // transfer each cToon to its new owner
+    // transfer each cToon to its new owner and log ownership
     for (const tc of offer.ctoons) {
       const newOwner = tc.role === 'OFFERED'
         ? offer.recipientId
         : offer.initiatorId
-      await tx.userCtoon.update({
+
+      const updatedUC = await tx.userCtoon.update({
         where: { id: tc.userCtoonId },
         data:  { userId: newOwner }
       })
+
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId:      newOwner,
+          ctoonId:     updatedUC.ctoonId,
+          userCtoonId: updatedUC.id,
+          mintNumber:  updatedUC.mintNumber
+        }
+      })
     }
 
-    // mark offer accepted
     await tx.tradeOffer.update({
       where: { id: offerId },
       data:  { status: 'ACCEPTED' }
@@ -150,7 +157,7 @@ export default defineEventHandler(async (event) => {
   })
 
   try {
-    // 7) Notify the initiator via Discord DM (unchanged)…
+    // 7) Notify initiator via Discord DM
     if (initiator?.discordId && process.env.BOT_TOKEN) {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'
@@ -188,7 +195,7 @@ export default defineEventHandler(async (event) => {
         }
       )
     }
-  } catch (err) {
+  } catch {
     // ignore DM failures
   }
 

@@ -1310,78 +1310,82 @@ io.on('connection', socket => {
     if (!roomData) return
     roomData.finalized[user] = true
 
-    // If both traders have finalized, execute the swap:
     const a = roomData.traderA, b = roomData.traderB
-    if (roomData.finalized[a] && roomData.finalized[b]) {
-      // 1) Resolve IDs
-      const recA = await db.user.findUnique({ where: { username: a }, select:{id:true} })
-      const recB = await db.user.findUnique({ where: { username: b }, select:{id:true} })
-      if (!recA || !recB) return
-      const aId = recA.id, bId = recB.id
+    if (!(roomData.finalized[a] && roomData.finalized[b])) return
 
-      const offersA = roomData.offers[a]||[]
-      const offersB = roomData.offers[b]||[]
-      const ops = []
+    const recA = await db.user.findUnique({ where: { username: a }, select:{id:true} })
+    const recB = await db.user.findUnique({ where: { username: b }, select:{id:true} })
+    if (!recA || !recB) return
+    const aId = recA.id, bId = recB.id
 
-      for (const c of offersA) {
-        ops.push(db.userCtoon.update({ where:{id:c.id}, data:{ userId: bId } }))
-      }
-      for (const c of offersB) {
-        ops.push(db.userCtoon.update({ where:{id:c.id}, data:{ userId: aId } }))
-      }
+    const offersA = roomData.offers[a] || []
+    const offersB = roomData.offers[b] || []
 
-      Promise.all(ops)
-        .then(async () => {
-          // CZone cleanup omitted for brevity (keep yours)
-          try {
-            // Trader A’s zone
-            const aZone = await db.cZone.findUnique({ where: { userId: aId } });
-            if (aZone && Array.isArray(aZone.layoutData)) {
-              const filtered = aZone.layoutData.filter(id => !offersA.some(ct => ct.id === id));
-              await db.cZone.update({
-                where: { userId: aId },
-                data: { layoutData: filtered }
-              });
-            }
-          } catch (err) {
-            console.error('Failed updating CZone for Trader A:', err);
-          }
-          try {
-            // Trader B’s zone
-            const bZone = await db.cZone.findUnique({ where: { userId: bId } });
-            if (bZone && Array.isArray(bZone.layoutData)) {
-              const filtered = bZone.layoutData.filter(id => !offersB.some(ct => ct.id === id));
-              await db.cZone.update({
-                where: { userId: bId },
-                data: { layoutData: filtered }
-              });
-            }
-          } catch (err) {
-            console.error('Failed updating CZone for Trader B:', err);
-          }
-          // Reset state
-          roomData.offers = {}
-          roomData.confirmed = {}
-          roomData.finalized = {}
+    try {
+      // swap + ownership logs
+      await db.$transaction(async (tx) => {
+        const logs = []
 
-          // Notify cleared
-          const traderAUser = await db.user.findUnique({ where:{id:aId}, select:{username:true,avatar:true} })
-          const traderBUser = await db.user.findUnique({ where:{id:bId}, select:{username:true,avatar:true} })
-          io.to(room).emit('trade-room-update', {
-            traderA: traderAUser,
-            traderB: traderBUser,
-            spectators: roomData.spectators.size,
-            offers: roomData.offers,
-            confirmed: roomData.confirmed
+        for (const c of offersA) {
+          const uc = await tx.userCtoon.update({
+            where:  { id: c.id },
+            data:   { userId: bId },
+            select: { id: true, ctoonId: true, mintNumber: true }
           })
-          io.to(room).emit('trade-complete', { message: 'Trade completed successfully.' })
-        })
-        .catch(err => {
-          console.error('Trade execution failed:', err)
-          io.to(room).emit('trade-error', { message: 'Trade failed. Please try again.' })
-        })
+          logs.push({ userId: bId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
+        }
+
+        for (const c of offersB) {
+          const uc = await tx.userCtoon.update({
+            where:  { id: c.id },
+            data:   { userId: aId },
+            select: { id: true, ctoonId: true, mintNumber: true }
+          })
+          logs.push({ userId: aId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
+        }
+
+        if (logs.length) await tx.ctoonOwnerLog.createMany({ data: logs })
+      })
+
+      // CZone cleanup
+      try {
+        const aZone = await db.cZone.findUnique({ where: { userId: aId } })
+        if (aZone && Array.isArray(aZone.layoutData)) {
+          const filtered = aZone.layoutData.filter(id => !offersA.some(ct => ct.id === id))
+          await db.cZone.update({ where: { userId: aId }, data: { layoutData: filtered } })
+        }
+      } catch (e) { console.error('CZone A update failed:', e) }
+
+      try {
+        const bZone = await db.cZone.findUnique({ where: { userId: bId } })
+        if (bZone && Array.isArray(bZone.layoutData)) {
+          const filtered = bZone.layoutData.filter(id => !offersB.some(ct => ct.id === id))
+          await db.cZone.update({ where: { userId: bId }, data: { layoutData: filtered } })
+        }
+      } catch (e) { console.error('CZone B update failed:', e) }
+
+      // reset state and notify
+      roomData.offers = {}
+      roomData.confirmed = {}
+      roomData.finalized = {}
+
+      const traderAUser = await db.user.findUnique({ where:{id:aId}, select:{username:true,avatar:true} })
+      const traderBUser = await db.user.findUnique({ where:{id:bId}, select:{username:true,avatar:true} })
+
+      io.to(room).emit('trade-room-update', {
+        traderA: traderAUser,
+        traderB: traderBUser,
+        spectators: roomData.spectators.size,
+        offers: roomData.offers,
+        confirmed: roomData.confirmed
+      })
+      io.to(room).emit('trade-complete', { message: 'Trade completed successfully.' })
+    } catch (err) {
+      console.error('Trade execution failed:', err)
+      io.to(room).emit('trade-error', { message: 'Trade failed. Please try again.' })
     }
   })
+
 
   socket.on('trade-chat', ({ room, user, message }) => {
     io.to(room).emit('trade-chat', { user, message })
@@ -1712,9 +1716,18 @@ setInterval(async () => {
       })
 
       // unlock the cToon
-      await tx.userCtoon.update({
+      const uc = await tx.userCtoon.update({
         where: { id: userCtoonId },
-        data:  { isTradeable: true }
+        data:  { userId: winningBid.userId, isTradeable: true },
+        select:{ id: true, ctoonId: true, mintNumber: true }
+      })
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId:      winningBid.userId,
+          ctoonId:     uc.ctoonId,
+          userCtoonId: uc.id,
+          mintNumber:  uc.mintNumber
+        }
       })
 
       // 4) if we have a real winner, do the point transfers + cToon transfer
