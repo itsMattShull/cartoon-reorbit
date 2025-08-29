@@ -46,6 +46,11 @@ import Nav from '@/components/Nav.vue'
 import LeaderboardCard from '@/components/LeaderboardCard.vue'
 import { ref, onMounted, watch } from 'vue'
 
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
+
 const timeframe = ref('1m')
 const mode = ref('all') // keep mode selector working (all/pve/pvp)
 const loading = ref(true)

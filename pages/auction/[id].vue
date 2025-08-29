@@ -179,6 +179,8 @@ import { useRuntimeConfig } from '#imports'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
+definePageMeta({ middleware: ['auth'], layout: 'default' })
+
 // --- Setup & state ---
 const route       = useRoute()
 const auctionId   = route.params.id
