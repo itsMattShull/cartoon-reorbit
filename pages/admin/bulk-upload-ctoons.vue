@@ -307,6 +307,8 @@ import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 
+definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+
 const router = useRouter()
 const step = ref(1)
 const imageFiles = ref([])
