@@ -1710,66 +1710,53 @@ setInterval(async () => {
           winnerId: winningBid?.userId || null,
           highestBidderId: winningBid?.userId || null,
           winnerAt: now,
-          // if we found a valid winningBid, update highestBid to match it
           ...(winningBid && { highestBid: winningBid.amount })
         }
       })
 
-      // unlock the cToon
-      const uc = await tx.userCtoon.update({
-        where: { id: userCtoonId },
-        data:  { userId: winningBid.userId, isTradeable: true },
-        select:{ id: true, ctoonId: true, mintNumber: true }
-      })
-      await tx.ctoonOwnerLog.create({
-        data: {
-          userId:      winningBid.userId,
-          ctoonId:     uc.ctoonId,
-          userCtoonId: uc.id,
-          mintNumber:  uc.mintNumber
-        }
-      })
-
-      // 4) if we have a real winner, do the point transfers + cToon transfer
       if (winningBid) {
-        // debit the winner
-        const loserPts = await tx.userPoints.update({
-          where: { userId: winningBid.userId },
-          data: { points: { decrement: winningBid.amount } }
+        // transfer cToon to winner + log ownership
+        const uc = await tx.userCtoon.update({
+          where:  { id: userCtoonId },
+          data:   { userId: winningBid.userId, isTradeable: true },
+          select: { id: true, ctoonId: true, mintNumber: true }
         })
-        await tx.pointsLog.create({
+        await tx.ctoonOwnerLog.create({
           data: {
-            userId:   winningBid.userId,
-            points:   winningBid.amount,
-            total:    loserPts.points,
-            method:   'Auction',
-            direction:'decrease'
+            userId:      winningBid.userId,
+            ctoonId:     uc.ctoonId,
+            userCtoonId: uc.id,
+            mintNumber:  uc.mintNumber
           }
         })
 
-        // credit the creator
+        // debit winner
+        const loserPts = await tx.userPoints.update({
+          where: { userId: winningBid.userId },
+          data:  { points: { decrement: winningBid.amount } }
+        })
+        await tx.pointsLog.create({
+          data: { userId: winningBid.userId, points: winningBid.amount, total: loserPts.points, method: 'Auction', direction: 'decrease' }
+        })
+
+        // credit creator
         const creatorPts = await tx.userPoints.upsert({
           where:  { userId: creatorId },
           create: { userId: creatorId, points: winningBid.amount },
           update: { points: { increment: winningBid.amount } }
         })
         await tx.pointsLog.create({
-          data: {
-            userId:   creatorId,
-            points:   winningBid.amount,
-            total:    creatorPts.points,
-            method:   'Auction',
-            direction:'increase'
-          }
+          data: { userId: creatorId, points: winningBid.amount, total: creatorPts.points, method: 'Auction', direction: 'increase' }
         })
-
-        // transfer the cToon
+      } else {
+        // no winner → just unlock, keep current owner
         await tx.userCtoon.update({
           where: { id: userCtoonId },
-          data:  { userId: winningBid.userId, isTradeable: true }
+          data:  { isTradeable: true }
         })
       }
     })
+
 
     // 5) notify clients of the final outcome
     io.to(`auction_${id}`).emit('auction-ended', {
