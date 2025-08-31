@@ -118,6 +118,12 @@
 
         <!-- ── G-toon-specific fields (shown only if checked) ── -->
         <div v-if="isGtoon" class="border p-4 rounded bg-indigo-50 space-y-4">
+          <!-- G-toon Type (free text, optional) -->
+          <div>
+            <label class="block mb-1 font-medium">Type (gToon)</label>
+            <input v-model="gtoonType" type="text" class="w-full border rounded p-2" placeholder="e.g. Beast, Robot, Support" />
+            <p class="text-sm text-gray-500">Optional. Leave blank if none.</p>
+          </div>
           <!-- Cost -->
           <div>
             <label class="block mb-1 font-medium">Cost <span class="text-xs text-gray-500">(1 – 6)</span></label>
@@ -228,6 +234,7 @@ const cost        = ref(1)
 const power       = ref(1)
 const abilityKey  = ref('')
 const abilityParam = ref(null)
+const gtoonType = ref('') 
 
 const abilityKeyOptions = abilityMeta
 
@@ -348,6 +355,7 @@ async function submitForm() {
   formData.append('price', price.value)
   formData.append('isGtoon',      isGtoon.value)
   if (isGtoon.value) {
+    formData.append('gtoonType', gtoonType.value ?? '')
     formData.append('cost',       cost.value)
     formData.append('power',      power.value)
     formData.append('abilityKey', abilityKey.value)

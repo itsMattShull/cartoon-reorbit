@@ -22,5 +22,6 @@
   {
     "key": "helping_hands",
     "label": "Helping Hands: +1 power to all cards in this lane"
-  }
+  },
+  { "key": "heroine_plus", "label": "Heroine Plus: +4 to other 'Female Hero' allies in this lane" }
 ]

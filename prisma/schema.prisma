@@ -37,6 +37,7 @@ model Ctoon {
 
   // gToon fields
   isGtoon         Boolean         @default(false)
+  gtoonType       String?
   cost            Int?      @default(1)
   power           Int?      @default(1)
   abilityKey      String?

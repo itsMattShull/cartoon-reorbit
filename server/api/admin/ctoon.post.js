@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
 
     /* NEW G-toon fields */
-    isGtoon, cost, power, abilityKey, abilityData
+    isGtoon, cost, power, abilityKey, abilityData, gtoonType
   } = fields
 
   if (!name?.trim())   throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
@@ -131,6 +131,7 @@ export default defineEventHandler(async (event) => {
 
       /* NEW columns */
       isGtoon:    isGtoonBool,
+      gtoonType:  isGtoonBool ? (gtoonType?.toString().trim() || null) : null,
       cost:       isGtoonBool ? costInt : null,
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,

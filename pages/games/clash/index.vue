@@ -164,6 +164,7 @@ function startMatch() {
         : null,
       cost: c.cost ?? 1,
       power: c.power ?? 1,
+      gtoonType: c.gtoonType || null,
       abilityKey: c.abilityKey || null,
       abilityData: c.abilityData || null
     }

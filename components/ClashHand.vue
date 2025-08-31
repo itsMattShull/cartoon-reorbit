@@ -64,9 +64,16 @@ const emit = defineEmits(['select','info'])
 const abilityLine = computed(() => {
   const c = props.selected
   if (!c) return 'No card selected'
-  if (!c.abilityKey) return 'No ability'
-  const key = String(c.abilityKey)
-  return ABILITY_TEXTS[key] || `Ability: ${key.replace(/_/g, ' ')}`
+  const parts = []
+  if (c.abilityKey) {
+    const key = String(c.abilityKey)
+    parts.push(ABILITY_TEXTS[key] || `Ability: ${key.replace(/_/g, ' ')}`)
+  } else {
+    parts.push('No ability')
+  }
+  const t = typeof c.gtoonType === 'string' ? c.gtoonType.trim() : ''
+  if (t) parts.push(`Type: ${t}`)
+  return parts.join(' • ')
 })
 </script>
 

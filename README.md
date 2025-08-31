@@ -83,12 +83,15 @@ REDIS_PASSWORD=           # if you set one in your redis.conf
 
 IN VSCODE
 open new terminal
-run npm install
-run npx prisma migrate dev
-run node .\prisma\drops\addFirstDrop.js
-run npm run dev
+run `npm install`
+run `npx prisma migrate dev`
+run `npx prisma generate`
+run `node .\prisma\drops\addFirstDrop.js`
+run `npm run dev`
 open a 2nd terminal in vs code
-run node server/socket-server.js
+run `node server/socket-server.js`
+open a 3rd terminal in vs code
+run `node server/workers/mint.worker.js`
 
 In a browser, navigate to the discord bot link svaed earlier
 Add to server: Your new discrod server

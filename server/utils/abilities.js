@@ -300,5 +300,42 @@ export const abilityRegistry = {
     }
   },
 
+  heroine_plus: {
+  onReveal({ game, side, laneIndex, card }) {
+    const lane = game.state.lanes[laneIndex]
+    if (!lane) return
+
+    // debug: show the played card and every card’s gtoonType in this lane
+    ;['player','ai'].forEach(who => {
+      lane[who].forEach(c => {
+        // console.log(`[HeroinePlus] lane=${lane.name} side=${who} card=${c.name} type=${JSON.stringify(c.gtoonType)}`)
+      })
+    })
+
+    const maxTriggers = lane.abilityKey === 'DOUBLE_ABILITIES' ? 2 : 1
+    card._heroinePlusCount = card._heroinePlusCount || 0
+    if (card._heroinePlusCount >= maxTriggers) return
+
+    const isFemaleHero = t =>
+      typeof t === 'string' && t.trim().toLowerCase() === 'female hero'
+
+    const allies = lane[side].filter(
+      c => c.id !== card.id && isFemaleHero(c.gtoonType)
+    )
+
+    allies.forEach(c => {
+      // console.log(`[HeroinePlus] buff +4 -> ${c.name} (type=${JSON.stringify(c.gtoonType)})`)
+      c.power += 4
+    })
+
+    card._heroinePlusCount += 1
+    if (allies.length) {
+      game.log.push(
+        `${card.name} activates Heroine Plus: +4 to Female Hero allies in ${lane.name}`
+      )
+    }
+  }
+}
+
   // Note: Tom, The Great Gazoo, Jerry & Buttercup have no abilities in the sheet → no entry needed.
 }

@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     quantity, initialQuantity, inCmart, set, characters,
 
     /* NEW G-toon fields */
-    isGtoon, cost, power, abilityKey, abilityData
+    isGtoon, cost, power, abilityKey, abilityData, gtoonType
   } = body
 
   /* ── 3. Validate core fields (quick) ────────────────────── */
@@ -86,6 +86,7 @@ export default defineEventHandler(async (event) => {
 
       /* G-toon columns */
       isGtoon:    isGtoonBool,
+      gtoonType:  isGtoonBool ? (gtoonType?.toString().trim() || null) : null,
       cost:       isGtoonBool ? costInt : null,
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,

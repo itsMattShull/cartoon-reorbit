@@ -896,6 +896,7 @@ io.on('connection', socket => {
       cost: c.cost ?? 1,
       power: c.power ?? 1,
       abilityKey: c.abilityKey || null,
+      gtoonType: c.gtoonType || null,
       abilityData: c.abilityData || null
     }))
 
@@ -971,6 +972,7 @@ io.on('connection', socket => {
           cost: c.cost ?? 1,
           power: c.power ?? 1,
           abilityKey: c.abilityKey || null,
+          gtoonType: c.gtoonType || null,
           abilityData: c.abilityData || null
         }
       })
