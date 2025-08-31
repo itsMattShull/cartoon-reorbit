@@ -211,8 +211,7 @@
         <!-- My Collection -->
         <div v-if="activeTab === 'MyCollection'">
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- loading skeletons -->
-            <template v-if="visibleUser === 0 && isLoadingUserCtoons">
+            <template v-if="isLoadingUserCtoons && pagedUser.length === 0">
               <div
                 v-for="n in 6"
                 :key="n"
@@ -225,16 +224,14 @@
               </div>
             </template>
 
-            <!-- user cToon cards -->
             <template v-else>
               <div
-                v-for="uc in visibleAndFilteredUser"
+                v-for="uc in pagedUser"
                 :key="uc.id"
                 class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
               >
                 <h2 class="text-xl font-semibold mb-2">{{ uc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <!--<img loading="lazy" :src="uc.assetPath" class="max-w-full h-auto" />-->
                   <ProgressiveImage
                     :src="uc.assetPath"
                     alt=""
@@ -266,12 +263,31 @@
               </div>
             </template>
           </div>
+
+          <!-- Pager -->
+          <div class="mt-6 flex items-center justify-center gap-4">
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageUser === 1"
+              @click="pageUser--"
+            >
+              Previous Page
+            </button>
+            <span class="text-sm">Page {{ pageUser }} of {{ totalPagesUser }}</span>
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageUser === totalPagesUser"
+              @click="pageUser++"
+            >
+              Next Page
+            </button>
+          </div>
         </div>
 
         <!-- My Wishlist -->
         <div v-if="activeTab === 'MyWishlist'">
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <template v-if="isLoadingWishlist">
+            <template v-if="isLoadingWishlist && pagedWishlist.length === 0">
               <div
                 v-for="n in 6"
                 :key="n"
@@ -285,7 +301,7 @@
             </template>
             <template v-else>
               <div
-                v-for="wc in filteredAndSortedWishlistCtoons"
+                v-for="wc in pagedWishlist"
                 :key="wc.id"
                 class="relative bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
               >
@@ -304,7 +320,6 @@
                 </span>
                 <h2 class="text-xl font-semibold mb-2 mt-6">{{ wc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <!-- <img loading="lazy" :src="wc.assetPath" class="max-w-full h-auto" /> -->
                   <ProgressiveImage
                     :src="wc.assetPath"
                     alt=""
@@ -323,12 +338,31 @@
               </div>
             </template>
           </div>
+
+          <!-- Pager -->
+          <div class="mt-6 flex items-center justify-center gap-4">
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageWishlist === 1"
+              @click="pageWishlist--"
+            >
+              Previous Page
+            </button>
+            <span class="text-sm">Page {{ pageWishlist }} of {{ totalPagesWishlist }}</span>
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageWishlist === totalPagesWishlist"
+              @click="pageWishlist++"
+            >
+              Next Page
+            </button>
+          </div>
         </div>
 
         <!-- All Sets -->
         <div v-if="activeTab === 'AllSets'">
           <div
-            v-for="setName in setsWithItems"
+            v-for="setName in pageSetsWithItems"
             :key="setName"
             class="mb-8"
           >
@@ -341,7 +375,7 @@
               </p>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <template v-if="visibleAll === 0 && isLoadingAllCtoons">
+              <template v-if="isLoadingAllCtoons && pagedAll.length === 0">
                 <div
                   v-for="n in 6"
                   :key="n"
@@ -350,9 +384,8 @@
               </template>
               <template v-else>
                 <div
-                  v-for="c in visibleAndFilteredAll"
+                  v-for="c in itemsInSetSorted(setName)"
                   :key="c.id"
-                  v-show="c.set === setName"
                   class="relative bg-white rounded-lg shadow p-4 flex flex-col h-full"
                 >
                   <span
@@ -369,12 +402,6 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <!-- <img
-                      loading="lazy"
-                      :src="c.assetPath"
-                      class="max-h-48 object-contain"
-                      alt=""
-                    /> -->
                     <ProgressiveImage
                       :src="c.assetPath"
                       alt=""
@@ -401,12 +428,31 @@
               </template>
             </div>
           </div>
+
+          <!-- Pager -->
+          <div class="mt-6 flex items-center justify-center gap-4">
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageAll === 1"
+              @click="pageAll--"
+            >
+              Previous Page
+            </button>
+            <span class="text-sm">Page {{ pageAll }} of {{ totalPagesAll }}</span>
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageAll === totalPagesAll"
+              @click="pageAll++"
+            >
+              Next Page
+            </button>
+          </div>
         </div>
 
         <!-- All Series -->
         <div v-if="activeTab === 'AllSeries'">
           <div
-            v-for="seriesName in seriesWithItems"
+            v-for="seriesName in pageSeriesWithItems"
             :key="seriesName"
             class="mb-8"
           >
@@ -419,7 +465,7 @@
               </p>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <template v-if="visibleAll === 0 && isLoadingAllCtoons">
+              <template v-if="isLoadingAllCtoons && pagedAll.length === 0">
                 <div
                   v-for="n in 6"
                   :key="n"
@@ -428,9 +474,8 @@
               </template>
               <template v-else>
                 <div
-                  v-for="c in visibleAndFilteredAll"
+                  v-for="c in itemsInSeriesSorted(seriesName)"
                   :key="c.id"
-                  v-show="c.series === seriesName"
                   class="relative bg-white rounded-lg shadow p-4 flex flex-col h-full"
                 >
                   <span
@@ -447,12 +492,6 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <!-- <img
-                      loading="lazy"
-                      :src="c.assetPath"
-                      class="max-h-48 object-contain"
-                      alt=""
-                    /> -->
                     <ProgressiveImage
                       :src="c.assetPath"
                       alt=""
@@ -478,6 +517,25 @@
                 </div>
               </template>
             </div>
+          </div>
+
+          <!-- Pager -->
+          <div class="mt-6 flex items-center justify-center gap-4">
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageAll === 1"
+              @click="pageAll--"
+            >
+              Previous Page
+            </button>
+            <span class="text-sm">Page {{ pageAll }} of {{ totalPagesAll }}</span>
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageAll === totalPagesAll"
+              @click="pageAll++"
+            >
+              Next Page
+            </button>
           </div>
         </div>
       </div>
@@ -523,11 +581,10 @@
       </ul>
     </div>
   </transition>
-
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -548,24 +605,27 @@ const selectedSets   = ref([])
 const selectedSeries = ref([])
 const selectedRarities = ref([])
 const selectedOwned  = ref('all')
-const sortBy         = ref('releaseDateDesc')
+const sortBy         = ref('name') // default: Name A→Z, then Mint #
 
 const filterMeta       = ref({ sets: [], series: [], rarities: [] })
 
 const allCtoons        = ref([])
 const isLoadingAllCtoons = ref(false)
-const visibleAll       = ref(0)
 
 const userCtoons       = ref([])
 const isLoadingUserCtoons = ref(false)
-const visibleUser      = ref(0)
 
 const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
 
-const TAKE = 5000
+// Pagination
+const PAGE_SIZE   = 18
+const pageUser    = ref(1)
+const pageAll     = ref(1)
+const pageWishlist= ref(1)
 
+// Owners panel
 const ownersPanelVisible   = ref(false)
 const ownersList           = ref([])
 const ownersLoading        = ref(false)
@@ -581,7 +641,6 @@ async function openOwners(ctoon) {
   ownersPanelVisible.value = true
   try {
     const res = await $fetch(`/api/collections/owners?cToonId=${ctoon.id}`)
-    // expect res = [{ userId, username, mintNumber }, …]
     ownersList.value = res
   } catch (err) {
     console.error('Failed to load owners', err)
@@ -597,7 +656,7 @@ function closeOwners() {
   currentOwnersCtoon.value = null
 }
 
-// ─── COMPUTED: All cToons ──────────────────────────────────────────────────────
+// ─── COMPUTED: All cToons ─────────────────────────────────────────────────────
 const filteredAllCtoons = computed(() => {
   return allCtoons.value.filter(c => {
     const nm = c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
@@ -612,9 +671,35 @@ const filteredAllCtoons = computed(() => {
     return nm && sm && se && r && o
   })
 })
-const visibleAndFilteredAll = computed(() =>
-  filteredAllCtoons.value.slice(0, visibleAll.value)
+const totalPagesAll = computed(() =>
+  Math.max(1, Math.ceil(filteredAllCtoons.value.length / PAGE_SIZE))
 )
+const pagedAll = computed(() => {
+  const start = (pageAll.value - 1) * PAGE_SIZE
+  return filteredAllCtoons.value.slice(start, start + PAGE_SIZE)
+})
+
+// Sets/Series present on the current page only
+const pageSetsWithItems = computed(() =>
+  Array.from(new Set(pagedAll.value.map(c => c.set))).filter(Boolean)
+)
+const pageSeriesWithItems = computed(() =>
+  Array.from(new Set(pagedAll.value.map(c => c.series))).filter(Boolean)
+)
+
+// ─── SORTED GROUP HELPERS FOR ALL TABS ────────────────────────────────────────
+function itemsInSetSorted(setName) {
+  return pagedAll.value
+    .filter(x => x.set === setName)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+function itemsInSeriesSorted(seriesName) {
+  return pagedAll.value
+    .filter(x => x.series === seriesName)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
 
 // ─── COMPUTED: My Collection ──────────────────────────────────────────────────
 const filteredUserCtoons = computed(() =>
@@ -626,41 +711,8 @@ const filteredUserCtoons = computed(() =>
     return nm && sm && se && r
   })
 )
-const filteredAndSortedUser = computed(() =>
-  filteredUserCtoons.value
-    .sort((a, b) => {
-      switch (sortBy.value) {
-        case 'releaseDateAsc':   return new Date(a.releaseDate) - new Date(b.releaseDate)
-        case 'releaseDateDesc':  return new Date(b.releaseDate) - new Date(a.releaseDate)
-        case 'priceAsc':         return a.price - b.price
-        case 'priceDesc':        return b.price - a.price
-        case 'rarity':           return a.rarity.localeCompare(b.rarity)
-        case 'series':           return a.series.localeCompare(b.series)
-        case 'set':              return a.set.localeCompare(b.set)
-        case 'name': {
-          const cmp = a.name.localeCompare(b.name)
-          return cmp || ((a.mintNumber ?? 0) - (b.mintNumber ?? 0))
-        }
-        default: return 0
-      }
-    })
-    .slice(0, visibleUser.value)
-)
-
-const visibleAndFilteredUser = filteredAndSortedUser
-
-// ─── COMPUTED: Wishlist ────────────────────────────────────────────────────────
-const filteredWishlistCtoons = computed(() =>
-  wishlistCtoons.value.filter(wc => {
-    const nm = wc.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const sm = !selectedSets.value.length || selectedSets.value.includes(wc.set)
-    const se = !selectedSeries.value.length || selectedSeries.value.includes(wc.series)
-    const r  = !selectedRarities.value.length || selectedRarities.value.includes(wc.rarity)
-    return nm && sm && se && r
-  })
-)
-const filteredAndSortedWishlistCtoons = computed(() =>
-  filteredWishlistCtoons.value.sort((a, b) => {
+const sortedUserAll = computed(() =>
+  filteredUserCtoons.value.slice().sort((a, b) => {
     switch (sortBy.value) {
       case 'releaseDateAsc':   return new Date(a.releaseDate) - new Date(b.releaseDate)
       case 'releaseDateDesc':  return new Date(b.releaseDate) - new Date(a.releaseDate)
@@ -677,58 +729,51 @@ const filteredAndSortedWishlistCtoons = computed(() =>
     }
   })
 )
+const totalPagesUser = computed(() =>
+  Math.max(1, Math.ceil(sortedUserAll.value.length / PAGE_SIZE))
+)
+const pagedUser = computed(() => {
+  const start = (pageUser.value - 1) * PAGE_SIZE
+  return sortedUserAll.value.slice(start, start + PAGE_SIZE)
+})
 
-// ─── TAB SWITCH & DATA LOADERS ─────────────────────────────────────────────────
-function switchTab(tab) {
-  activeTab.value = tab
-
-  if (tab === 'MyCollection') {
-    // only MyCollection
-    if (!userCtoons.value.length) loadUser()
-    else visibleUser.value = TAKE
-
-  } else if (tab === 'MyWishlist') {
-    // only MyWishlist
-    if (!wishlistCtoons.value.length && !isLoadingWishlist.value) {
-      loadWishlist()
+// ─── COMPUTED: Wishlist ───────────────────────────────────────────────────────
+const filteredWishlistCtoons = computed(() =>
+  wishlistCtoons.value.filter(wc => {
+    const nm = wc.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+    const sm = !selectedSets.value.length || selectedSets.value.includes(wc.set)
+    const se = !selectedSeries.value.length || selectedSeries.value.includes(wc.series)
+    const r  = !selectedRarities.value.length || selectedRarities.value.includes(wc.rarity)
+    return nm && sm && se && r
+  })
+)
+const filteredAndSortedWishlistCtoons = computed(() =>
+  filteredWishlistCtoons.value.slice().sort((a, b) => {
+    switch (sortBy.value) {
+      case 'releaseDateAsc':   return new Date(a.releaseDate) - new Date(b.releaseDate)
+      case 'releaseDateDesc':  return new Date(b.releaseDate) - new Date(a.releaseDate)
+      case 'priceAsc':         return a.price - b.price
+      case 'priceDesc':        return b.price - a.price
+      case 'rarity':           return a.rarity.localeCompare(b.rarity)
+      case 'series':           return a.series.localeCompare(b.series)
+      case 'set':              return a.set.localeCompare(b.set)
+      case 'name': {
+        const cmp = a.name.localeCompare(b.name)
+        return cmp || ((a.mintNumber ?? 0) - (b.mintNumber ?? 0))
+      }
+      default: return 0
     }
+  })
+)
+const totalPagesWishlist = computed(() =>
+  Math.max(1, Math.ceil(filteredAndSortedWishlistCtoons.value.length / PAGE_SIZE))
+)
+const pagedWishlist = computed(() => {
+  const start = (pageWishlist.value - 1) * PAGE_SIZE
+  return filteredAndSortedWishlistCtoons.value.slice(start, start + PAGE_SIZE)
+})
 
-  } else if (tab === 'AllSets' || tab === 'AllSeries') {
-    // only AllSets/AllSeries
-    if (!allCtoons.value.length) loadAll()
-    else visibleAll.value = TAKE
-  }
-}
-function loadMoreUser() {
-  loadUser()
-}
-
-async function loadAll() {
-  isLoadingAllCtoons.value = true
-  allCtoons.value = await $fetch('/api/collections/all')
-  visibleAll.value = TAKE
-  isLoadingAllCtoons.value = false
-}
-async function loadUser() {
-  isLoadingUserCtoons.value = true
-  userCtoons.value = await $fetch('/api/collections')
-  visibleUser.value = TAKE
-  isLoadingUserCtoons.value = false
-}
-async function loadWishlist() {
-  // don’t do anything if we’ve already got them or are in the middle of loading
-  if (isLoadingWishlist.value || hasLoadedWishlist.value) return
-
-  isLoadingWishlist.value = true
-  try {
-    wishlistCtoons.value = await $fetch('/api/wishlist')
-    hasLoadedWishlist.value = true
-  } finally {
-    isLoadingWishlist.value = false
-  }
-}
-
-// ─── HELPERS: ownership stats ─────────────────────────────────────────────────
+// ─── HELPERS: ownership stats ────────────────────────────────────────────────
 function totalCountBySet(setName) {
   return allCtoons.value.filter(c => c.set === setName).length
 }
@@ -750,44 +795,68 @@ function percentageOwnedBySeries(seriesName) {
   return t ? Math.round((ownedCountBySeries(seriesName) / t) * 100) : 0
 }
 
-// only show sets that have at least one cToon under them
-const setsWithItems = computed(() =>
-  filterMeta.value.sets.filter(setName =>
-    filteredAllCtoons.value.some(c => c.set === setName)
-  )
-)
+// ─── TAB SWITCH & DATA LOADERS ────────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab.value = tab
 
-// only show series that have at least one cToon under them
-const seriesWithItems = computed(() =>
-  filterMeta.value.series.filter(seriesName =>
-    filteredAllCtoons.value.some(c => c.series === seriesName)
-  )
-)
+  if (tab === 'MyCollection') {
+    if (!userCtoons.value.length) loadUser()
+    pageUser.value = 1
+  } else if (tab === 'MyWishlist') {
+    if (!wishlistCtoons.value.length && !isLoadingWishlist.value) loadWishlist()
+    pageWishlist.value = 1
+  } else if (tab === 'AllSets' || tab === 'AllSeries') {
+    if (!allCtoons.value.length) loadAll()
+    pageAll.value = 1
+  }
+}
+function loadMoreUser() {
+  loadUser()
+}
 
-// ─── MOUNT & INFINITE SCROLL ─────────────────────────────────────────────────
+async function loadAll() {
+  isLoadingAllCtoons.value = true
+  try {
+    allCtoons.value = await $fetch('/api/collections/all')
+  } finally {
+    isLoadingAllCtoons.value = false
+  }
+}
+async function loadUser() {
+  isLoadingUserCtoons.value = true
+  try {
+    userCtoons.value = await $fetch('/api/collections')
+  } finally {
+    isLoadingUserCtoons.value = false
+  }
+}
+async function loadWishlist() {
+  if (isLoadingWishlist.value || hasLoadedWishlist.value) return
+  isLoadingWishlist.value = true
+  try {
+    wishlistCtoons.value = await $fetch('/api/wishlist')
+    hasLoadedWishlist.value = true
+  } finally {
+    isLoadingWishlist.value = false
+  }
+}
+
+// Reset page when filters or sort change
+watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned], () => {
+  if (activeTab.value === 'MyCollection') pageUser.value = 1
+  if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
+  if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
+})
+watch(sortBy, () => {
+  if (activeTab.value === 'MyCollection') pageUser.value = 1
+  if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
+})
+
+// ─── MOUNT ────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await fetchSelf()
   filterMeta.value = await $fetch('/api/collections/meta')
   loadUser()
-
-  const onScroll = () => {
-    const atBottom = window.innerHeight + window.scrollY + 100 >= document.body.offsetHeight
-    if (!atBottom) return
-
-    // All Sets / All Series
-    if ((activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') &&
-        visibleAll.value < filteredAllCtoons.value.length) {
-      visibleAll.value += TAKE
-    }
-    // My Collection (now compares against raw userCtoons)
-    if (activeTab.value === 'MyCollection' &&
-        visibleUser.value < userCtoons.value.length) {
-      visibleUser.value += TAKE
-    }
-  }
-
-  window.addEventListener('scroll', onScroll)
-  onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 })
 </script>
 

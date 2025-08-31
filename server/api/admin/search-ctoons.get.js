@@ -3,7 +3,7 @@ import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1) Auth: admin only
+  // Auth: admin only
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -15,20 +15,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Input
-  const { q = '' } = getQuery(event)
-  const query = String(q).trim()
-  if (query.length < 3) {
-    // keep it strict; front-end enforces this too
-    return []
+  // Inputs
+  const { q = '', set = '', series = '' } = getQuery(event)
+  const query  = String(q).trim()
+  const bySet  = String(set).trim()
+  const bySer  = String(series).trim()
+
+  // Require either q>=3 or at least one filter
+  if (query.length < 3 && !bySet && !bySer) return []
+
+  // Build where
+  const where = {
+    AND: [
+      query.length >= 3 ? { name: { contains: query, mode: 'insensitive' } } : {},
+      bySet ?   { set:    { equals: bySet } }   : {},
+      bySer ?   { series: { equals: bySer } }   : {}
+    ]
   }
 
-  // 3) Find ALL matches by name (case-insensitive)
+  // Base rows
   const ctoons = await prisma.ctoon.findMany({
-    where: {
-      name: { contains: query, mode: 'insensitive' }
-    },
-    orderBy: { name: 'asc' },
+    where,
+    orderBy: [{ name: 'asc' }],
     select: {
       id: true,
       name: true,
@@ -41,10 +49,9 @@ export default defineEventHandler(async (event) => {
       inCmart: true
     }
   })
-
   if (!ctoons.length) return []
 
-  // 4) Highest mint for these ids
+  // Highest mint per ctoon
   const ids = ctoons.map(c => c.id)
   const mintGroups = await prisma.userCtoon.groupBy({
     by: ['ctoonId'],
@@ -54,6 +61,5 @@ export default defineEventHandler(async (event) => {
   const mintMap = {}
   for (const g of mintGroups) mintMap[g.ctoonId] = g._max.mintNumber || 0
 
-  // 5) Merge + return
   return ctoons.map(c => ({ ...c, highestMint: mintMap[c.id] || 0 }))
 })

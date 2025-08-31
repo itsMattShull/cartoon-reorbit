@@ -35,7 +35,7 @@
           class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="">All Sets</option>
-          <option v-for="set in uniqueSets" :key="set" :value="set">
+          <option v-for="set in setsOptions" :key="set" :value="set">
             {{ set }}
           </option>
         </select>
@@ -44,7 +44,7 @@
           class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="">All Series</option>
-          <option v-for="series in uniqueSeries" :key="series" :value="series">
+          <option v-for="series in seriesOptions" :key="series" :value="series">
             {{ series }}
           </option>
         </select>
@@ -157,17 +157,33 @@
         </div>
       </div>
 
-      <!-- infinite scroll sentinel -->
-      <div v-if="!isSearching" ref="sentinel" class="h-2"></div>
-
+      <!-- SEARCH STATES -->
       <div v-if="isSearching && searching" class="text-center py-4">Searching…</div>
-      <div v-if="isSearching && !searching && sourceCtoons.length===0" class="text-center py-4 text-gray-500">
-        No matches for "{{ searchTerm }}"
+      <div v-if="isSearching && !searching && displayedCtoons.length===0" class="text-center py-4 text-gray-500">
+        No matches.
       </div>
 
-      <div v-if="!isSearching && loading" class="text-center py-4">Loading more…</div>
-      <div v-if="!isSearching && finished" class="text-center py-4 text-gray-500">No more cToons.</div>
-
+      <!-- PAGINATION (browse only) -->
+      <div v-if="!isSearching" class="mt-6 flex items-center justify-between">
+        <button
+          class="px-4 py-2 border rounded disabled:opacity-50"
+          @click="prevPage"
+          :disabled="currentPage===1 || loading"
+        >
+          Previous
+        </button>
+        <div class="text-sm text-gray-600">
+          Page {{ currentPage }}
+          <span v-if="loading" class="ml-2">Loading…</span>
+        </div>
+        <button
+          class="px-4 py-2 border rounded disabled:opacity-50"
+          @click="nextPage"
+          :disabled="!hasNextPage || loading"
+        >
+          Next
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -178,118 +194,104 @@ definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
 import { ref, onMounted, computed, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
-const take = 50
-const skip = ref(0)
-const rawCtoons = ref([])          // paged browse data
-const loading   = ref(false)
-const finished  = ref(false)
-const sentinel  = ref(null)
-const io        = ref(null)        // IntersectionObserver
+/* Meta options from API */
+const setsOptions   = ref([])
+const seriesOptions = ref([])
 
-// SEARCH STATE
+async function loadMeta() {
+  const res = await fetch('/api/collections/meta', { credentials: 'include' })
+  if (!res.ok) return
+  const meta = await res.json()
+  setsOptions.value = (meta.sets || []).filter(s => s && String(s).trim().length > 0)
+  seriesOptions.value = (meta.series || []).filter(s => s && String(s).trim().length > 0)
+}
+
+/* Paging */
+const pageSize     = 50
+const currentPage  = ref(1)
+const hasNextPage  = ref(false)
+const loading      = ref(false)
+const rawCtoons    = ref([])
+
+/* Search + filters */
 const searchTerm     = ref('')
+const selectedSet    = ref('')
+const selectedSeries = ref('')
 const isSearching    = ref(false)
 const searching      = ref(false)
 const searchResults  = ref([])
-let   searchTimer    = null        // debounce
-let   lastSearchKey  = 0           // race-guard
+let   searchTimer    = null
+let   lastSearchKey  = 0
 
-// FILTERS
-const selectedSet    = ref('')
-const selectedSeries = ref('')
-
-// single source for derived UI: browse vs search
+/* Source list */
 const sourceCtoons = computed(() => isSearching.value ? searchResults.value : rawCtoons.value)
 
-// unique options come from *current* source
-const uniqueSets = computed(() =>
-  Array.from(new Set(sourceCtoons.value.map(c=>c.set).filter(Boolean))).sort()
-)
-const uniqueSeries = computed(() =>
-  Array.from(new Set(sourceCtoons.value.map(c=>c.series).filter(Boolean))).sort()
-)
-
-// filtered list (keep local name filter so it still works for <3 chars)
+/* Displayed list */
 const displayedCtoons = computed(() => {
+  if (isSearching.value) return sourceCtoons.value
   const q = (searchTerm.value || '').toLowerCase()
-  return sourceCtoons.value.filter(c => {
-    const matchesName   = !q || c.name.toLowerCase().includes(q)
-    const matchesSet    = !selectedSet.value || c.set === selectedSet.value
-    const matchesSeries = !selectedSeries.value || c.series === selectedSeries.value
-    return matchesName && matchesSet && matchesSeries
-  })
+  return sourceCtoons.value.filter(c => !q || c.name.toLowerCase().includes(q))
 })
 
-async function loadNext() {
-  if (loading.value || finished.value || isSearching.value) return
+/* Browse paging */
+async function loadPage(n = 1) {
   loading.value = true
-  const res = await fetch(`/api/admin/all-ctoons?skip=${skip.value}&take=${take}`, { credentials: 'include' })
-  if (!res.ok) { loading.value=false; return }
+  const skip = (n - 1) * pageSize
+  const take = pageSize + 1
+  const res = await fetch(`/api/admin/all-ctoons?skip=${skip}&take=${take}`, { credentials: 'include' })
+  if (!res.ok) { loading.value = false; return }
   const page = await res.json()
-  if (page.length < take) finished.value = true
-  rawCtoons.value.push(...page)
-  skip.value += take
+  hasNextPage.value = page.length > pageSize
+  rawCtoons.value = hasNextPage.value ? page.slice(0, pageSize) : page
+  currentPage.value = n
   loading.value = false
 }
+function nextPage() { if (hasNextPage.value && !loading.value) loadPage(currentPage.value + 1) }
+function prevPage() { if (currentPage.value > 1 && !loading.value) loadPage(currentPage.value - 1) }
 
-async function runSearch(q) {
-  // race guard
+/* Search */
+async function runSearch({ q, set, series }) {
   const key = ++lastSearchKey
   searching.value = true
   try {
-    const res = await fetch(`/api/admin/search-ctoons?q=${encodeURIComponent(q)}`, { credentials: 'include' })
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (set) params.set('set', set)
+    if (series) params.set('series', series)
+    const res = await fetch(`/api/admin/search-ctoons?${params.toString()}`, { credentials: 'include' })
     if (!res.ok) throw new Error('Search failed')
     const data = await res.json()
-    // only apply if this is the latest search
     if (key === lastSearchKey) searchResults.value = data
-  } catch (e) {
+  } catch {
     if (key === lastSearchKey) searchResults.value = []
-    // optional: console.error(e)
   } finally {
     if (key === lastSearchKey) searching.value = false
   }
 }
+function enterSearchMode() { isSearching.value = true }
+function exitSearchMode() { isSearching.value = false; searchResults.value = []; searching.value = false }
 
-function enterSearchMode() {
-  if (isSearching.value) return
-  isSearching.value = true
-  // pause infinite scroll
-  if (io.value && sentinel.value) io.value.unobserve(sentinel.value)
-}
-
-function exitSearchMode() {
-  if (!isSearching.value) return
-  isSearching.value = false
-  searchResults.value = []
-  searching.value = false
-  // resume infinite scroll
-  if (io.value && sentinel.value) io.value.observe(sentinel.value)
-}
-
-// debounce searchTerm: ≥3 chars => server search, otherwise exit search
-watch(searchTerm, (val) => {
+/* React to name + filters */
+watch([searchTerm, selectedSet, selectedSeries], ([nameQ, setVal, seriesVal]) => {
   clearTimeout(searchTimer)
-  const q = (val || '').trim()
-  if (q.length >= 3) {
-    searchTimer = setTimeout(() => {
-      enterSearchMode()
-      runSearch(q)
-    }, 300)
+  const q = String(nameQ || '').trim()
+  const filtersActive = !!(setVal || seriesVal)
+
+  if (q.length >= 3 || filtersActive) {
+    enterSearchMode()
+    if (q.length >= 3) {
+      searchTimer = setTimeout(() => runSearch({ q, set: setVal, series: seriesVal }), 300)
+    } else {
+      runSearch({ q: '', set: setVal, series: seriesVal })
+    }
   } else {
-    // if user cleared or <3, snap back to scroll mode
     exitSearchMode()
   }
 })
 
 onMounted(() => {
-  loadNext()
-  io.value = new IntersectionObserver(
-    entries => {
-      if (entries[0].isIntersecting && !isSearching.value) loadNext()
-    },
-    { rootMargin: '200px' }
-  )
-  if (sentinel.value) io.value.observe(sentinel.value)
+  loadMeta()
+  loadPage(1)
 })
 </script>
 
