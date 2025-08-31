@@ -31,12 +31,12 @@ export default defineEventHandler(async (event) => {
     createInitialBid = false
   } = await readBody(event)
 
-  if (!userCtoonId || !initialBet ||
+  if (!userCtoonId || initialBet == null ||
       durationDays === undefined || durationMinutes === undefined) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
-  // 3. Ownership check + fetch rarity (and details we’ll reuse later)
+  // 3. Ownership check + fetch rarity
   const userCtoonRec = await prisma.userCtoon.findUnique({
     where: { id: userCtoonId },
     select: {
@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
   }
 
-  // Helper: map rarity -> expected insta bid
+  // Helper: map rarity -> insta-bid floor (must match client)
   const rarityToExpectedBid = (rarityRaw) => {
     const r = (rarityRaw || '').trim().toLowerCase()
     switch (r) {
@@ -57,11 +57,23 @@ export default defineEventHandler(async (event) => {
       case 'uncommon': return 50
       case 'rare': return 100
       case 'very rare': return 187
-      default: return 312
+      case 'crazy rare': return 312
+      case 'code only': return 50
+      case 'prize only': return 50
+      case 'auction only': return 50
+      default: return 50
     }
   }
 
   const expectedInitialBet = rarityToExpectedBid(userCtoonRec.ctoon?.rarity)
+
+  // Enforce minimum initial bet
+  if (Number(initialBet) < expectedInitialBet) {
+    throw createError({
+      statusCode: 422,
+      statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for rarity "${userCtoonRec.ctoon?.rarity ?? 'N/A'}"`
+    })
+  }
 
   // 4. Active auction check
   const existing = await prisma.auction.findFirst({
@@ -81,21 +93,16 @@ export default defineEventHandler(async (event) => {
   const auction = await prisma.auction.create({
     data: {
       userCtoonId,
-      initialBet,
+      initialBet: Number(initialBet),
       duration: durationDays,
       endAt: endAtUtc,
       ...(userId ? { creatorId: userId } : {})
     }
   })
 
-  // 7. Optionally create initial bid — but only if the amount matches rarity mapping
+  // 7. Optionally create initial bid — only if amount matches rarity mapping
   if (createInitialBid) {
-    if (initialBet !== expectedInitialBet) {
-      // console.log(
-      //   `Skipping initial bid: expected ${expectedInitialBet} for rarity "${userCtoonRec.ctoon?.rarity}", got ${initialBet}`
-      // )
-    } else {
-      // find the special user to place the initial bid
+    if (Number(initialBet) === expectedInitialBet) {
       const initialBidder = await prisma.user.findUnique({
         where: { username: 'CartoonReOrbitOfficial' }
       })
@@ -104,13 +111,13 @@ export default defineEventHandler(async (event) => {
           data: {
             auctionId: auction.id,
             userId: initialBidder.id,
-            amount: initialBet
+            amount: expectedInitialBet
           }
         })
         await prisma.auction.update({
           where: { id: auction.id },
           data: {
-            highestBid: initialBet,
+            highestBid: expectedInitialBet,
             highestBidderId: initialBidder.id
           }
         })
@@ -131,13 +138,11 @@ export default defineEventHandler(async (event) => {
       const botToken   = process.env.BOT_TOKEN
       const channelId  = '1401244687163068528'
 
-      // get base URL
       const baseUrl = config.public.baseUrl ||
         (process.env.NODE_ENV === 'production'
           ? 'https://www.cartoonreorbit.com'
           : `http://localhost:${config.public.socketPort || 3000}`)
 
-      // reuse details we already fetched
       const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
       const mintNumber = userCtoonRec.mintNumber
       const durationText = durationMinutes > 0

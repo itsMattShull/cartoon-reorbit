@@ -20,12 +20,13 @@
           <input
             type="number"
             v-model.number="initialBet"
-            :min="1"
+            :min="minInitialBet"
+            step="1"
             class="w-full p-2 border rounded"
           />
         </div>
-        <p v-if="initialBet < 1" class="text-sm text-red-500 mt-1">
-          Initial bet must be at least 1 pt.
+        <p v-if="initialBet < minInitialBet" class="text-sm text-red-500 mt-1">
+          Initial bet must be at least {{ minInitialBet }} pts.
         </p>
         <div>
           <p class="block mb-1 font-medium">Duration</p>
@@ -61,7 +62,7 @@
           <button @click="closeModal" class="btn-secondary">Cancel</button>
           <button
             @click="sendToAuction"
-            :disabled="sending || initialBet < 1"
+            :disabled="sending || initialBet < minInitialBet"
             class="btn-primary"
           >
             {{ sending ? 'Sending...' : 'Send to Auction' }}
@@ -98,14 +99,20 @@ const disabled = computed(() =>
 )
 
 const instaBidValue = computed(() => {
-  switch (props.userCtoon.rarity.toLowerCase()) {
+  switch ((props.userCtoon.rarity || '').toLowerCase()) {
     case 'common': return 25
     case 'uncommon': return 50
     case 'rare': return 100
     case 'very rare': return 187
-    default: return 312
+    case 'crazy rare': return 312
+    case 'code only': return 50
+    case 'prize only': return 50
+    case 'auction only': return 50
+    default: return 50
   }
 })
+
+const minInitialBet = computed(() => Math.max(1, instaBidValue.value))
 
 function showToast(message, type = 'error') {
   toastMessage.value = message
@@ -114,7 +121,8 @@ function showToast(message, type = 'error') {
 }
 
 function openModal() {
-  initialBet.value = props.userCtoon.price
+  // Enforce floor on open
+  initialBet.value = Math.max(props.userCtoon.price || 0, minInitialBet.value)
   timeframe.value = 1
   quick3m.value   = false
   showModal.value = true
@@ -125,8 +133,8 @@ function closeModal() {
 }
 
 async function sendToAuction() {
-  if (initialBet.value < 1) {
-    showToast('Initial bet must be at least 1 pt.', 'error')
+  if (initialBet.value < minInitialBet.value) {
+    showToast(`Initial bet must be at least ${minInitialBet.value} pts.`, 'error')
     return
   }
   sending.value = true
