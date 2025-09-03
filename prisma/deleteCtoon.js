@@ -54,7 +54,7 @@ async function main() {
   try {
     // 0. Find all cToons whose name starts with "Do not use - "
     const toDelete = await prisma.ctoon.findMany({
-      where: { name: { startsWith: 'Do Not Use - ' } },
+      where: { name: { startsWith: 'Do not use -' } },
       select: { id: true, name: true }
     })
 
