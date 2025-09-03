@@ -233,13 +233,14 @@ export const abilityRegistry = {
   ppg_allies_boost: {
     onReveal({ game, side, laneIndex, card }) {
       const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const patterns = [
+        /buttercup/i,
+        /blossom/i,
+        /ms\.?\s*keane/i,
+        /professor\s+utonium/i
+      ]
       const targets = lane[side].filter(c =>
-        c !== card && (
-          nameIs(c, 'Buttercup') ||
-          nameIs(c, 'Blossom') ||
-          nameIs(c, 'Ms. Keane') ||
-          nameIs(c, 'Professor Utonium')
-        )
+        c !== card && patterns.some(rx => rx.test(c.name || ''))
       )
       targets.forEach(t => { t.power += 2 })
       if (targets.length) game.log.push(`${card.name}: +2 to ${targets.length} PPG ally/ies in ${lane.name}`)

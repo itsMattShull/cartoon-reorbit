@@ -28,5 +28,23 @@
     "name": "Townsville",
     "desc": "All 1-cost cToons here gain +1 power.",
     "effect": "CHEAP_BUFF"
+  },
+  {
+    "id": "acme_canyon",
+    "name": "ACME Canyon",
+    "desc": "If both players play a card this turn here, those cards get +3 power.",
+    "effect": "ACME_CANYON"
+  },
+  {
+    "id": "star_labs",
+    "name": "S.T.A.R. Labs",
+    "desc": "When one of your cards with an ability reveals here, give another random ally here +2 power.",
+    "effect": "STAR_LABS"
+  },
+  {
+    "id": "jump_city",
+    "name": "Jump City",
+    "desc": "If you play exactly two cards here this turn, both gain +2 power.",
+    "effect": "JUMP_CITY"
   }
 ]
