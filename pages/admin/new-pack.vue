@@ -349,11 +349,11 @@ const grouped = computed(() => {
 
 // rarity × cToon.inCmart → static default weight map
 const defaultWeightConfigs = {
-  Common:      { true:  12,   false: 20   },
-  Uncommon:    { true:   7.5, false: 35   },
+  Common:      { true:  18,   false: 28   },
+  Uncommon:    { true:   14, false: 44   },
   Rare:        { true:  18,   false: 45   },
-  'Very Rare': { true:  12.5, false: 75   },
-  'Crazy Rare':{ true:  10,   false: 90   }
+  'Very Rare': { true:  13, false: 74   },
+  'Crazy Rare':{ true:  20,   false: 80   }
 }
 
 /** return a map of id → default weight for this rarity */
