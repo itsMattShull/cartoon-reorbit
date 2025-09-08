@@ -34,18 +34,14 @@
     >
       <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-8">
         <div class="grid lg:grid-cols-2 gap-8">
-          <div class="rounded-3xl border border-white/10 bg-white/5 py-2 px-6 shadow-2xl backdrop-blur">
+          <div class="relative">
             <img
               src="/images/welcome.png"
               alt="Cartoon ReOrbit Welcome Image"
               class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
               @click="login"
             />
-
             <div class="my-2">
-              <p class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs tracking-wide text-white/90">
-                Fan-made. Free to play. Not affiliated with Cartoon Network.
-              </p>
               <h1 class="mt-4 text-4xl sm:text-5xl font-extrabold leading-tight text-white">
                 Collect cToons. Build cZones. Trade and play in real time.
               </h1>
