@@ -36,7 +36,7 @@
         <div class="grid lg:grid-cols-2 gap-8">
           <div class="relative">
             <img
-              src="/images/welcome.png"
+              src="/images/welcome1.png"
               alt="Cartoon ReOrbit Welcome Image"
               class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
               @click="login"
@@ -60,7 +60,7 @@
           <div class="relative">
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
               <img
-                src="/images/poster08172025.png"
+                src="/images/newposter08172025.png"
                 alt="Cartoon ReOrbit WinWheel Preview"
                 class="rounded-2xl" style="width:100%; cursor: pointer;"
                 @click="login"
