@@ -32,7 +32,7 @@
   linear-gradient(180deg, var(--reorbit-cyan) -50%, transparent 100%) top/100% 20px no-repeat,
   linear-gradient(180deg, var(--reorbit-blue), var(--reorbit-navy))"
     >
-      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24 sm:py-28">
+      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-8">
         <div class="grid lg:grid-cols-2 gap-8">
           <div class="rounded-3xl border border-white/10 bg-white/5 py-2 px-6 shadow-2xl backdrop-blur">
             <img
@@ -78,41 +78,6 @@
               style="background: radial-gradient(circle, var(--reorbit-cyan), transparent 30%);"
             />
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Value props -->
-    <section id="features" class="py-20 bg-white">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <h2 class="text-3xl font-bold text-slate-900">Everything you need to orbit</h2>
-        <p class="mt-2 text-slate-600 max-w-2xl">Own cToons, build cZones, and engage the community with safe trading and transparent auctions.</p>
-
-        <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Collect cToons</h3>
-            <p class="mt-2 text-slate-600">Open packs, redeem codes, and complete sets for bonuses.</p>
-          </article>
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Build cZones</h3>
-            <p class="mt-2 text-slate-600">Arrange themed boards. Share and join cZone contests for rewards.</p>
-          </article>
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Player trades</h3>
-            <p class="mt-2 text-slate-600">Propose offers using cToons and points to gather your collection.</p>
-          </article>
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Live auctions</h3>
-            <p class="mt-2 text-slate-600">Auto-bidding points and instant buy-backs. Real-time timers with anti-sniping.</p>
-          </article>
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Mini-games</h3>
-            <p class="mt-2 text-slate-600">Play for points, cToons, and rare rewards. Daily challenges included.</p>
-          </article>
-          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
-            <h3 class="text-xl font-semibold">Secure accounts</h3>
-            <p class="mt-2 text-slate-600">Sign in with Discord. Protects identities and simplifies onboarding.</p>
-          </article>
         </div>
       </div>
     </section>
