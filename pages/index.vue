@@ -1,64 +1,366 @@
 <template>
-    <div class="min-h-screen bg-gradient-to-br from-cyan-200 to-purple-200 flex items-center justify-center p-6">
-      <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-        <h1 class="text-3xl font-orbit mb-4">Welcome to Cartoon ReOrbit</h1>
-        <p class="mb-6 text-gray-600">Collect, trade, and show off your cToons just like back in the day.</p>
-  
-        <button
-          @click="login"
-          class="w-full flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-semibold px-5 py-3 rounded-lg transition">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-6 h-6 fill-white"
-            viewBox="0 0 245 240"
-            >
-            <path d="M104.4 104.5c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.2 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z"/>
-            <path d="M189.5 20h-134C42 20 30 32 30 46v148c0 14 12 26 25.5 26h114.3l-5.4-18.7 13 12 12.3 11.3 21.8 19V46c0-14-12-26-25.5-26zm-37 141s-3.5-4.2-6.4-7.9c12.7-3.6 17.5-11.6 17.5-11.6-4 2.6-7.8 4.4-11.2 5.6-4.9 2.1-9.6 3.4-14.2 4.2-9.4 1.8-18 1.3-25.3-.1-5.6-1.1-10.4-2.6-14.4-4.2-2.2-.9-4.6-2-7.1-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.6 7.6 16.7 11.4c-2.9 3.7-6.5 8-6.5 8-21.6-.7-29.8-14.9-29.8-14.9 0-31.5 14-57 14-57 14-10.4 27.2-10.1 27.2-10.1l1 1.2c-17.5 5.1-25.6 13-25.6 13s2.1-1.1 5.6-2.7c10.2-4.5 18.3-5.8 21.6-6.1.5-.1.9-.1 1.4-.1 5-1 10.6-1.2 16.5-0.1 7.7 1.1 15.9 3.9 24.3 9.6 0 0-7.7-7.3-24.3-12.3l1.4-1.6s13.2-.3 27.2 10.1c0 0 14 25.5 14 57 0 0-8.2 14.2-29.8 14.9z"/>
-          </svg>
+  <main class="bg-white text-slate-900">
+    <!-- Top nav -->
+    <header class="sticky top-0 z-40 backdrop-blur border-b border-[var(--reorbit-border)]" style="background: var(--reorbit-navy)">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <NuxtLink to="/" class="flex items-center gap-3">
+          <img src="/images/logo-reorbit.png" alt="Cartoon ReOrbit logo" class="h-20 w-auto" />
+          <span class="sr-only">Cartoon ReOrbit</span>
+        </NuxtLink>
 
-          Sign in with Discord
-        </button>
-        <p class="mt-6">
-          By logging in you agree with our <a style="text-decoration: underline;" href="/privacy">privacy policy</a>.
+        <div class="flex items-center gap-3">
+          <button
+            @click="login"
+            class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
+                   bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+            aria-label="Sign in with Discord"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245 240" class="h-4 w-4 fill-[var(--reorbit-deep)]" aria-hidden="true">
+              <path d="M104.4 104.5c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.2 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z"/>
+              <path d="M189.5 20h-134C42 20 30 32 30 46v148c0 14 12 26 25.5 26h114.3l-5.4-18.7 13 12 12.3 11.3 21.8 19V46c0-14-12-26-25.5-26zm-37 141s-3.5-4.2-6.4-7.9c12.7-3.6 17.5-11.6 17.5-11.6-4 2.6-7.8 4.4-11.2 5.6-4.9 2.1-9.6 3.4-14.2 4.2-9.4 1.8-18 1.3-25.3-.1-5.6-1.1-10.4-2.6-14.4-4.2-2.2-.9-4.6-2-7.1-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.6 7.6 16.7 11.4c-2.9 3.7-6.5 8-6.5 8-21.6-.7-29.8-14.9-29.8-14.9 0-31.5 14-57 14-57 14-10.4 27.2-10.1 27.2-10.1l1 1.2c-17.5 5.1-25.6 13-25.6 13s2.1-1.1 5.6-2.7c10.2-4.5 18.3-5.8 21.6-6.1.5-.1.9-.1 1.4-.1 5-1 10.6-1.2 16.5-0.1 7.7 1.1 15.9 3.9 24.3 9.6 0 0-7.7-7.3-24.3-12.3l1.4-1.6s13.2-.3 27.2 10.1c0 0 14 25.5 14 57 0 0-8.2 14.2-29.8 14.9z"/>
+            </svg>
+            Play now
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section
+      class="relative overflow-hidden"
+      style="background:
+  linear-gradient(180deg, var(--reorbit-cyan) -50%, transparent 100%) top/100% 20px no-repeat,
+  linear-gradient(180deg, var(--reorbit-blue), var(--reorbit-navy))"
+    >
+      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24 sm:py-28">
+        <div class="grid lg:grid-cols-2 gap-8">
+          <div class="rounded-3xl border border-white/10 bg-white/5 py-2 px-6 shadow-2xl backdrop-blur">
+            <img
+              src="/images/welcome.png"
+              alt="Cartoon ReOrbit Welcome Image"
+              class="rounded-2xl" style="width:100%; cursor: pointer;"
+              @click="login"
+            />
+
+            <div class="my-14">
+              <p class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs tracking-wide text-white/90">
+                Fan-made. Free to play. Not affiliated with Cartoon Network.
+              </p>
+              <h1 class="mt-4 text-4xl sm:text-5xl font-extrabold leading-tight text-white">
+                Collect cToons. Build cZones. Trade and play in real time.
+              </h1>
+              <p class="mt-4 text-lg text-white/80 max-w-xl">
+                Cartoon ReOrbit is a modern remake of the early-2000s Cartoon Orbit experience. Own digital cards (cToons), design themed boards (cZones), and compete through trades, auctions, and mini-games like gToons Clash.
+              </p>
+            </div>
+
+            <div class="relative">
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
+                <img src="/images/ZoidsWinball.png" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+              </div>
+            </div>
+          </div>
+
+          <div class="relative">
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
+              <img
+                src="/images/poster08172025.png"
+                alt="Cartoon ReOrbit WinWheel Preview"
+                class="rounded-2xl" style="width:100%; cursor: pointer;"
+                @click="login"
+              />
+            </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2">
+              <img src="/images/ZoidsWinball.png" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+            </div>
+            <div
+              class="pointer-events-none absolute -right-10 -bottom-10 h-56 w-56 rounded-full blur-2xl"
+              style="background: radial-gradient(circle, var(--reorbit-cyan), transparent 30%);"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Value props -->
+    <section id="features" class="py-20 bg-white">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h2 class="text-3xl font-bold text-slate-900">Everything you need to orbit</h2>
+        <p class="mt-2 text-slate-600 max-w-2xl">Own cToons, build cZones, and engage the community with safe trading and transparent auctions.</p>
+
+        <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Collect cToons</h3>
+            <p class="mt-2 text-slate-600">Open packs, redeem codes, and complete sets for bonuses.</p>
+          </article>
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Build cZones</h3>
+            <p class="mt-2 text-slate-600">Arrange themed boards. Share and join cZone contests for rewards.</p>
+          </article>
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Player trades</h3>
+            <p class="mt-2 text-slate-600">Propose offers using cToons and points to gather your collection.</p>
+          </article>
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Live auctions</h3>
+            <p class="mt-2 text-slate-600">Auto-bidding points and instant buy-backs. Real-time timers with anti-sniping.</p>
+          </article>
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Mini-games</h3>
+            <p class="mt-2 text-slate-600">Play for points, cToons, and rare rewards. Daily challenges included.</p>
+          </article>
+          <article class="rounded-2xl border border-[var(--reorbit-border)] p-6">
+            <h3 class="text-xl font-semibold">Secure accounts</h3>
+            <p class="mt-2 text-slate-600">Sign in with Discord. Protects identities and simplifies onboarding.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how" class="py-20 bg-[var(--reorbit-tint)]">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h2 class="text-3xl font-bold text-slate-900">Start in minutes</h2>
+        <ol class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <p class="text-sm font-semibold text-slate-700">1. Sign in</p>
+            <p class="mt-1 text-slate-600">Use Discord to create your free account.</p>
+          </li>
+          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <p class="text-sm font-semibold text-slate-700">2. Gather cToons</p>
+            <p class="mt-1 text-slate-600">Claim your starter cToons, buy from the cMart, and open packs.</p>
+          </li>
+          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <p class="text-sm font-semibold text-slate-700">3. Build a cZone</p>
+            <p class="mt-1 text-slate-600">Place cards, unlock bonuses, and share.</p>
+          </li>
+          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <p class="text-sm font-semibold text-slate-700">4. Trade and play</p>
+            <p class="mt-1 text-slate-600">Complete sets through trades, auctions, and games.</p>
+          </li>
+        </ol>
+        <div class="mt-8">
+          <img @click="login" src="/images/notmember_top.gif" alt="Not a member yet? Join free today!" style="cursor: pointer; margin-bottom: -80px" />
+        </div>
+      </div>
+    </section>
+
+    <!-- Community / callout -->
+    <section class="py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 grid lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 rounded-3xl p-8 border border-[var(--reorbit-border)] bg-gradient-to-br from-[var(--reorbit-cyan-transparent)] to-white">
+          <h3 class="text-2xl font-bold text-slate-900">Built by fans for fans</h3>
+          <p class="mt-2 text-slate-600">
+            Free to play. Community-driven. This project is not affiliated with, endorsed by, or sponsored by Cartoon Network or Warner Bros. Discovery.
+          </p>
+        </div>
+        <div class="rounded-3xl p-8 border border-[var(--reorbit-border)] bg-white">
+          <h3 class="text-2xl font-bold text-slate-900">Ready to orbit?</h3>
+          <p class="mt-2 text-slate-600">Join and start collecting today.</p>
+          <button
+            @click="login"
+            class="mt-4 w-full inline-flex items-center justify-center rounded-2xl px-6 py-3 font-semibold text-[var(--reorbit-deep)]
+                   bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+          >
+            Play free
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="py-20 bg-[var(--reorbit-tint)]">
+      <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <h2 class="text-3xl font-bold text-slate-900">FAQ</h2>
+        <div class="mt-6 space-y-4">
+          <details class="group rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <summary class="cursor-pointer font-semibold text-slate-800">Is this official?</summary>
+            <p class="mt-2 text-slate-600">No. It is a fan project with original code and assets and no affiliation with Cartoon Network.</p>
+          </details>
+          <details class="group rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <summary class="cursor-pointer font-semibold text-slate-800">Is it free?</summary>
+            <p class="mt-2 text-slate-600">Yes. Core gameplay is free.</p>
+          </details>
+          <details class="group rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+            <summary class="cursor-pointer font-semibold text-slate-800">How do trades and auctions stay fair?</summary>
+            <p class="mt-2 text-slate-600">Trades use server validation and audit logs. Auctions include clear timers and anti-sniping rules.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-[var(--reorbit-border)]">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 text-sm text-slate-600">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p>© {{ new Date().getFullYear() }} Cartoon ReOrbit</p>
+          <nav class="flex items-center gap-6">
+            <NuxtLink to="/privacy" class="hover:text-[var(--reorbit-blue)]">Privacy</NuxtLink>
+          </nav>
+        </div>
+        <p class="mt-4 text-xs text-slate-500">
+          Cartoon ReOrbit is a fan-made remake of Cartoon Orbit. All trademarks belong to their respective owners.
         </p>
       </div>
-    </div>
-  </template>
-  
-  <script setup>
-  const { login } = useAuth()
+    </footer>
+  </main>
+</template>
 
-  defineNuxtRouteMiddleware('auth', async () => {
+<script setup>
+const { login } = useAuth()
+
+defineNuxtRouteMiddleware('auth', async () => {
+  const { user, fetchSelf } = useAuth()
+  await fetchSelf()
+  if (user.value && !user.value.needsSetup) return navigateTo('/dashboard')
+  if (user.value?.needsSetup) return navigateTo('/setup-username')
+})
+
+definePageMeta({
+  layout: 'home',
+  middleware: async () => {
     const { user, fetchSelf } = useAuth()
-    await fetchSelf()
-    if (user.value && !user.value.needsSetup) {
+    try { await fetchSelf() } catch {}
+    if (user.value) {
+      if (user.value.needsSetup) return navigateTo('/setup-username')
       return navigateTo('/dashboard')
     }
-    if (user.value?.needsSetup) {
-      return navigateTo('/setup-username')
-    }
-  })
+  }
+})
 
-  definePageMeta({
-    layout: 'default',
-    middleware: async () => {
-      const { user, fetchSelf } = useAuth()
-      try {
-        await fetchSelf()
-      } catch {
-        // fetchSelf will throw on 401; ignore so unauthenticated users stay on index page
-      }
+/* SEO */
+const url = useRequestURL()
+const siteName = 'Cartoon ReOrbit'
+const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
+const description = 'Collect cToons, build cZones, and trade through live auctions and mini-games. Free, community-driven remake of Cartoon Orbit. Not affiliated with Cartoon Network.'
+const ogImage = '/og/reorbit-home.png'
 
-      if (user.value) {
-        if (user.value.needsSetup) {
-          return navigateTo('/setup-username')
+useSeoMeta({
+  title,
+  description,
+  ogTitle: title,
+  ogDescription: description,
+  ogType: 'website',
+  ogUrl: url.href,
+  ogImage,
+  twitterCard: 'summary_large_image',
+  twitterTitle: title,
+  twitterDescription: description,
+  twitterImage: ogImage,
+  themeColor: '#002C62',
+  robots: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
+  author: 'Cartoon ReOrbit Team',
+  generator: 'Nuxt 3',
+  keywords: 'Cartoon Orbit remake, Cartoon ReOrbit: cToons, cZones, Cartoon Network fan project, trading, auctions, gToons, and more mini games'
+})
+
+useHead({
+  htmlAttrs: { lang: 'en' },
+  link: [
+    { rel: 'canonical', href: url.href },
+
+    // Apple touch icons
+    { rel: 'apple-touch-icon', sizes: '57x57', href: '/images/apple-icon-57x57.png' },
+    { rel: 'apple-touch-icon', sizes: '60x60', href: '/images/apple-icon-60x60.png' },
+    { rel: 'apple-touch-icon', sizes: '72x72', href: '/images/apple-icon-72x72.png' },
+    { rel: 'apple-touch-icon', sizes: '76x76', href: '/images/apple-icon-76x76.png' },
+    { rel: 'apple-touch-icon', sizes: '114x114', href: '/images/apple-icon-114x114.png' },
+    { rel: 'apple-touch-icon', sizes: '120x120', href: '/images/apple-icon-120x120.png' },
+    { rel: 'apple-touch-icon', sizes: '144x144', href: '/images/apple-icon-144x144.png' },
+    { rel: 'apple-touch-icon', sizes: '152x152', href: '/images/apple-icon-152x152.png' },
+    { rel: 'apple-touch-icon', sizes: '180x180', href: '/images/apple-icon-180x180.png' },
+
+    // PNG favicons
+    { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/images/android-icon-192x192.png' },
+    { rel: 'icon', type: 'image/png', sizes: '32x32',  href: '/images/favicon-32x32.png' },
+    { rel: 'icon', type: 'image/png', sizes: '96x96',  href: '/images/favicon-96x96.png' },
+    { rel: 'icon', type: 'image/png', sizes: '16x16',  href: '/images/favicon-16x16.png' },
+
+    // Web App Manifest
+    { rel: 'manifest', href: '/images/manifest.json' },
+  ],
+  meta: [
+    { name: 'application-name', content: siteName },
+    { name: 'apple-mobile-web-app-title', content: siteName },
+    { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+    { name: 'format-detection', content: 'telephone=no' },
+
+    // Microsoft tiles + theme color
+    { name: 'msapplication-TileColor', content: '#ffffff' },
+    { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
+    { name: 'theme-color', content: '#ffffff' },
+  ],
+  script: [
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: siteName,
+        url: url.origin,
+        logo: `${url.origin}/logo-reorbit.png`
+      })
+    },
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: siteName,
+        url: url.origin,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: `${url.origin}/search?q={query}`,
+          'query-input': 'required name=query'
         }
-        return navigateTo('/dashboard')
-      }
+      })
+    },
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: [
+          {
+            '@type': 'Question',
+            name: 'Is Cartoon ReOrbit official?',
+            acceptedAnswer: { '@type': 'Answer', text: 'No. It is a fan project with original code and assets and is not affiliated with Cartoon Network.' }
+          },
+          {
+            '@type': 'Question',
+            name: 'Is it free to play?',
+            acceptedAnswer: { '@type': 'Answer', text: 'Yes. Core gameplay is free.' }
+          },
+          {
+            '@type': 'Question',
+            name: 'How are trades and auctions secured?',
+            acceptedAnswer: { '@type': 'Answer', text: 'Trades use server validation and audit logs. Auctions run with transparent timers and anti-sniping rules.' }
+          }
+        ]
+      })
     }
-  })
-  </script>
-  
-  <style scoped>
-  /* Optional: add styles or leave empty */
-  </style>
+  ]
+})
+</script>
+
+<style>
+:root{
+  /* brand from uploaded logo */
+  --reorbit-deep: #010A36;   /* deepest navy */
+  --reorbit-navy: #002C62;   /* primary brand */
+  --reorbit-blue: #2D5294;   /* link/hover */
+  --reorbit-cyan: #0FDDD6;   /* glow accent */
+  --reorbit-aqua: #16ECE9;   /* secondary glow */
+  --reorbit-teal: #19E6AC;   /* accent */
+  --reorbit-green: #51F68E;  /* CTA base (unused in gradients below) */
+  --reorbit-green-2: #70F873;/* CTA end */
+  --reorbit-lime: #AFFA2D;   /* CTA start */
+  --reorbit-lime-2: #B3FB57; /* optional */
+  --reorbit-purple: #9647CF; /* hero accent */
+
+  /* derived */
+  --reorbit-border: rgba(150,71,207,0.55);      /* from --reorbit-blue */
+  --reorbit-tint: rgba(0,44,98,0.035);         /* subtle section bg */
+  --reorbit-cyan-transparent: rgba(15,221,214,0.12);
+}
+</style>
