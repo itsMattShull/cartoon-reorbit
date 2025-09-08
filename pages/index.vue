@@ -38,11 +38,11 @@
             <img
               src="/images/welcome.png"
               alt="Cartoon ReOrbit Welcome Image"
-              class="rounded-2xl" style="width:100%; cursor: pointer;"
+              class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
               @click="login"
             />
 
-            <div class="my-14">
+            <div class="my-2">
               <p class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs tracking-wide text-white/90">
                 Fan-made. Free to play. Not affiliated with Cartoon Network.
               </p>
