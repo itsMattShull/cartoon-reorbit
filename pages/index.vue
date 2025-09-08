@@ -42,7 +42,7 @@
               @click="login"
             />
             <div class="my-2">
-              <h1 class="mt-4 text-4xl sm:text-5xl font-extrabold leading-tight text-white">
+              <h1 class="mt-4 text-3xl sm:text-4xl font-extrabold leading-tight text-white" style="font-family: 'Comic Sans MS', cursive, sans-serif;">
                 Collect cToons. Build cZones. Trade and play in real time.
               </h1>
               <p class="mt-4 text-lg text-white/80 max-w-xl">
