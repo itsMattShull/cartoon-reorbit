@@ -41,7 +41,7 @@
               class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
               @click="login"
             />
-            <div class="my-2">
+            <div class="my-8">
               <h1 class="mt-4 text-3xl sm:text-4xl font-extrabold leading-tight text-white" style="font-family: 'Comic Sans MS', cursive, sans-serif;">
                 Collect cToons. Build cZones. Trade and play in real time.
               </h1>
@@ -52,7 +52,7 @@
 
             <div class="relative">
               <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-                <img src="/images/ZoidsWinball.png" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+                <img src="/images/gtoonsbanner.png" alt="Cartoon ReOrbit gToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
               </div>
             </div>
           </div>
