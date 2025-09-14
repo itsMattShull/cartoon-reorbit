@@ -194,7 +194,7 @@ const url = useRequestURL()
 const siteName = 'Cartoon ReOrbit'
 const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
 const description = 'Collect cToons, build cZones, and trade through live auctions and mini-games. Free, community-driven remake of Cartoon Orbit. Not affiliated with Cartoon Network.'
-const ogImage = '/og/reorbit-home.png'
+const ogImage = '/logo-reorbit.png'
 
 useSeoMeta({
   title,
