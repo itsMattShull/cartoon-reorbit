@@ -139,6 +139,7 @@ const links = computed(() => {
       { label: 'Manage Codes', to: '/admin/codes' },
       { label: 'Manage Packs', to: '/admin/packs' },
       { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },

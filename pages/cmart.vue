@@ -9,7 +9,7 @@
     <div class="mb-6 flex items-center border-b border-gray-300">
       <div class="flex">
         <button
-          v-for="tab in ['cToons', 'Packs']"
+          v-for="tab in tabs"
           :key="tab"
           @click="activeTab = tab"
           class="px-4 py-2 -mb-px text-sm font-medium border-b-2"
@@ -246,6 +246,56 @@
       </div>
     </div>
 
+    <!-- ─── HOLIDAY EVENT TAB ───────────────────── -->
+    <div v-if="activeHoliday && activeTab === activeHoliday.name" class="w-full">
+      <div v-if="holidayShopItems.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          v-for="ctoon in holidayShopItems"
+          :key="ctoon.id"
+          class="relative bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
+        >
+          <span
+            v-if="ctoon.owned"
+            class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+          >Owned</span>
+          <span
+            v-else
+            class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+          >Un-owned</span>
+
+          <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
+          <div class="flex-grow flex items-center justify-center w-full mb-4">
+            <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+          </div>
+          <div class="mt-auto text-sm text-center">
+            <p>
+              <span class="capitalize">{{ ctoon.series }}</span> •
+              <span class="capitalize">{{ ctoon.rarity }}</span> •
+              <span class="capitalize">{{ ctoon.set }}</span>
+            </p>
+            <p>
+              Minted: {{ ctoon.minted }} /
+              {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+            </p>
+          </div>
+          <div class="mt-6 flex w-full space-x-2">
+            <button
+              @click="buyCtoon(ctoon)"
+              :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+              class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
+            >
+              <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+              <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
+              <span v-else>Buy for {{ ctoon.price }} Pts</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="text-gray-500">
+        No Holiday Items available to mint right now.
+      </div>
+    </div>
+
     <!-- ─── PACKS TAB ─────────────────────────────── -->
     <div v-if="activeTab === 'Packs'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
@@ -420,8 +470,30 @@ const originalOwnedSet = computed(() =>
   new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
 )
 
-// ────────── Tabs ───────────────────────────────
+// ────────── Holiday Event Tab ──────────────────
+const activeHoliday = ref(null)
+const tabs = computed(() => {
+  const base = ['cToons', 'Packs']
+  if (activeHoliday.value?.name) base.push(activeHoliday.value.name)
+  return base
+})
 const activeTab = ref('cToons')
+const holidayIdSet = computed(() =>
+  new Set((activeHoliday.value?.items || []).map(i => i.ctoonId))
+)
+
+// ────────── Shop Data ──────────────────────────
+const ctoons = ref([])
+const packs  = ref([])
+
+// Holiday list built from cMart list (by id) + only still mintable
+const holidayShopItems = computed(() => {
+  const list = activeHoliday.value?.shopCtoons || []
+  const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+  return list
+    .filter(c => c.quantity === null || c.minted < c.quantity) // still mintable
+    .map(c => ({ ...c, owned: ownedIds.has(c.id) }))
+})
 
 // ────────── Toast Helper ───────────────────────
 const toastMessage = ref('')
@@ -433,10 +505,6 @@ function showToast(msg, type = 'error') {
     toastMessage.value = ''
   }, 5000)
 }
-
-// ────────── Shop Data ──────────────────────────
-const ctoons = ref([])
-const packs  = ref([])
 
 // ────────── FILTER / SORT STATE ───────────────
 const searchQuery      = ref('')
@@ -558,7 +626,7 @@ const packContents = ref([])
 const groupedByRarity = computed(() => {
   if (!packDetails.value || !packDetails.value.ctoonOptions) return {}
   return packDetails.value.ctoonOptions.reduce((acc, o) => {
-    ;(acc[o.rarity] = acc[o.rarity] || []).push(o)
+    ;(acc[o.rarity] = (acc[o.rarity] || [])).push(o)
     return acc
   }, {})
 })
@@ -605,6 +673,13 @@ onMounted(async () => {
   } catch (err) {
     console.error(err)
     showToast('Failed to load packs')
+  }
+
+  // LOAD ACTIVE HOLIDAY EVENT (optional)
+  try {
+    activeHoliday.value = await $fetch('/api/holiday/active', { credentials: 'include' })
+  } catch (_) {
+    activeHoliday.value = null
   }
 })
 
@@ -677,7 +752,7 @@ async function buyPack(pack) {
       glowStage.value = 'expand'
     }, 2000)
 
-    // 2) Reveal contents after 4s
+    // 2) Reveal contents after 3s
     setTimeout(async () => {
       try {
         packContents.value = await $fetch('/api/cmart/open-pack', {
@@ -708,7 +783,7 @@ async function buyPack(pack) {
 
 async function refreshPacks () {
   try {
-    packs.value = await $fetch('/api/cmart/packs')      // <— same endpoint you use onMounted
+    packs.value = await $fetch('/api/cmart/packs')
   } catch (err) {
     console.error('Failed to refresh packs', err)
     showToast('Could not refresh packs')

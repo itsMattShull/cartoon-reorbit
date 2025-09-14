@@ -54,6 +54,10 @@ model Ctoon {
   winWheelOptions WinWheelOption[]
   starterSetItems StarterSetItem[]
   ownerLogs       CtoonOwnerLog[]
+  holidayItems     HolidayEventItem[]
+  holidayPoolRows  HolidayEventPool[]
+  redeemedAsItem   HolidayRedemption[] @relation("HolidayItemDefinition")
+  redeemedAsResult HolidayRedemption[] @relation("HolidayResultDefinition")
 }
 
 model UserCtoon {
@@ -66,6 +70,7 @@ model UserCtoon {
   mintNumber     Int?
   userPurchased  Boolean   @default(true)
   createdAt      DateTime  @default(now())
+  burnedAt       DateTime?
 
   user   User   @relation(fields: [userId], references: [id])
   ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
@@ -74,6 +79,7 @@ model UserCtoon {
   tradeOfferCtoons TradeOfferCtoon[]
   auctions          Auction[]
   ownerLogs         CtoonOwnerLog[]
+  holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
 }
 
 model UserPoints {
@@ -138,6 +144,7 @@ model User {
   backgroundsCreated Background[]   @relation("BackgroundCreatedBy")
   ownedBackgrounds   UserBackground[] @relation("User_UserBackgrounds")
   ownerLogs          CtoonOwnerLog[]
+  holidayRedemptions HolidayRedemption[]
 }
 
 model UserIP {
@@ -664,4 +671,72 @@ model CtoonOwnerLog {
   @@index([userCtoonId, createdAt])
   @@index([ctoonId, createdAt])
   @@index([userId, createdAt])
+}
+
+// ── Holiday feature ─────────────────────────────────────────────
+
+model HolidayEvent {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  startsAt      DateTime
+  endsAt        DateTime
+  minRevealAt   DateTime?            // earliest date a redeemed item can reveal into its pool result
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // relations
+  items         HolidayEventItem[]
+  poolEntries   HolidayEventPool[]
+  redemptions   HolidayRedemption[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@index([startsAt, endsAt])
+}
+
+model HolidayEventItem {
+  id        String @id @default(uuid())
+  eventId   String
+  ctoonId   String
+
+  event     HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ctoon     Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, ctoonId])  // a cToon listed once per event
+  @@index([ctoonId])
+}
+
+model HolidayEventPool {
+  id                   String @id @default(uuid())
+  eventId              String
+  ctoonId              String
+  probabilityPercent   Int    @default(0) // admin sets; “split evenly” is UI logic
+
+  event     HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ctoon     Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, ctoonId])  // one chance row per cToon per event
+  @@index([eventId])
+  @@index([ctoonId])
+}
+
+model HolidayRedemption {
+  id                String   @id @default(uuid())
+  eventId           String
+  userId            String
+  itemCtoonId       String
+  sourceUserCtoonId String?  @unique
+  resultCtoonId     String
+  redeemedAt        DateTime @default(now())
+
+  event           HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  itemCtoon       Ctoon        @relation("HolidayItemDefinition", fields: [itemCtoonId], references: [id], onDelete: Restrict)
+  resultCtoon     Ctoon        @relation("HolidayResultDefinition", fields: [resultCtoonId], references: [id], onDelete: Restrict)
+  sourceUserCtoon UserCtoon?   @relation("HolidaySourceUserCtoon", fields: [sourceUserCtoonId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, redeemedAt])
+  @@index([userId, redeemedAt])
+  @@index([itemCtoonId])
+  @@index([resultCtoonId])
 }

@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     select: {
       id: true,
       name: true,
+      set: true,
       rarity: true,
       assetPath: true,
       quantity: true,         // total supply (null = unlimited)

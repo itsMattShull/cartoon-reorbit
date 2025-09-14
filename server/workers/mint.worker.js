@@ -16,6 +16,33 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
 
+    // ───────────────────────── Holiday window guard ─────────────────────────
+    // If this cToon is a Holiday Item in ANY event, only allow mint while an
+    // associated event is active (isActive && startsAt <= now < endsAt).
+    const now = new Date()
+
+    // Is this cToon used as a Holiday Item anywhere?
+    const holidayLinkCount = await prisma.holidayEventItem.count({
+      where: { ctoonId }
+    })
+
+    if (holidayLinkCount > 0) {
+      // Is there an active event (right now) that includes this cToon?
+      const activeEvent = await prisma.holidayEvent.findFirst({
+        where: {
+          isActive: true,
+          startsAt: { lte: now },
+          endsAt:   { gt:  now },
+          items: { some: { ctoonId } }
+        },
+        select: { id: true }
+      })
+
+      if (!activeEvent) {
+        throw new Error('This Holiday Item can only be minted while its event is active.')
+      }
+    }
+
     // Count how many have been minted and existing user purchases
     const totalMinted = await prisma.userCtoon.count({ where: { ctoonId } })
     const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
