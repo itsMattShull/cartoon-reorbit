@@ -741,6 +741,12 @@ function selectInitiatorCtoon(ct) {
   else selectedInitiatorCtoons.value.push(ct)
 }
 
+function goToOfferTrade() {
+  const uname = String(route.params.username || '').trim()
+  if (!uname) return
+  router.push(`/create-trade/${encodeURIComponent(uname)}`)
+}
+
 // ——— Zones state ———
 const zones = ref([
   { background: '', toons: [] },
