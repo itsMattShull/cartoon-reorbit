@@ -1,5 +1,5 @@
 // /api/admin/holiday-events/[id].put.js
-// Update a HolidayEvent (basic fields, items, pool entries).
+// Update a HolidayEvent (basic fields, items, pool entries) and normalize related cToons.
 
 import { defineEventHandler, readBody, createError, getRouterParam } from 'h3'
 import { prisma } from '@/server/prisma'
@@ -119,6 +119,14 @@ export default defineEventHandler(async (event) => {
         data: normPool.map(p => ({ eventId: id, ctoonId: p.ctoonId, probabilityPercent: p.probabilityPercent }))
       })
 
+      // Normalize Ctoon records for Holiday Items + Pool entries
+      if (allIds.length) {
+        await tx.ctoon.updateMany({
+          where: { id: { in: allIds } },
+          data: { quantity: null, initialQuantity: null, inCmart: false }
+        })
+      }
+
       return tx.holidayEvent.findUnique({
         where: { id },
         include: {
@@ -133,7 +141,6 @@ export default defineEventHandler(async (event) => {
   } catch (err) {
     if (err?.statusCode) throw err
     if (err?.code === 'P2002') {
-      // unique constraint (event name)
       throw createError({ statusCode: 409, statusMessage: 'Event name already exists' })
     }
     console.error('[PUT /api/admin/holiday-events/:id]', err)

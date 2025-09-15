@@ -1,5 +1,5 @@
 // /api/admin/holiday-events.post.js
-// Create a HolidayEvent with items and pool entries.
+// Create a HolidayEvent with items and pool entries, and normalize related cToons.
 
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
@@ -120,6 +120,13 @@ export default defineEventHandler(async (event) => {
         }))
       })
 
+      // ── Normalize Ctoon records for Holiday Items + Pool entries ──
+      // Set quantity=null, initialQuantity=null, and remove from cMart.
+      await tx.ctoon.updateMany({
+        where: { id: { in: allIds } },
+        data: { quantity: null, initialQuantity: null, inCmart: false }
+      })
+
       // return full event
       return tx.holidayEvent.findUnique({
         where: { id: ev.id },
@@ -135,7 +142,6 @@ export default defineEventHandler(async (event) => {
     event.node.res.statusCode = 201
     return created
   } catch (err) {
-    // Unique name constraint
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'Event name already exists' })
     }
