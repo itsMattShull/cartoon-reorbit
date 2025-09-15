@@ -1,5 +1,4 @@
 // File: server/api/collection/[username].get.js
-
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 
@@ -14,12 +13,9 @@ export default defineEventHandler(async (event) => {
       ctoons: {
         where: {
           isTradeable: true,
-          // If filter=gtoon, only include ctoons marked as gToons
           ...(filter === 'gtoon' ? { ctoon: { isGtoon: true } } : {})
         },
-        include: {
-          ctoon: true
-        }
+        include: { ctoon: true }
       }
     }
   })
@@ -27,6 +23,15 @@ export default defineEventHandler(async (event) => {
   if (!userWithCtoons) {
     throw createError({ statusCode: 404, statusMessage: 'User not found' })
   }
+
+  const ids = userWithCtoons.ctoons.map(uc => uc.ctoonId)
+  const holidayRows = ids.length
+    ? await prisma.holidayEventItem.findMany({
+        where: { ctoonId: { in: ids } },
+        select: { ctoonId: true }
+      })
+    : []
+  const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
 
   return userWithCtoons.ctoons.map(uc => ({
     id: uc.id,
@@ -37,6 +42,7 @@ export default defineEventHandler(async (event) => {
     rarity: uc.ctoon.rarity,
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
-    isFirstEdition: uc.isFirstEdition
+    isFirstEdition: uc.isFirstEdition,
+    isHolidayItem: holidaySet.has(uc.ctoonId)
   }))
 })

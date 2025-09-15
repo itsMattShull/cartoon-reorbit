@@ -247,7 +247,7 @@
                   </p>
                 </div>
                 <div class="mt-auto text-sm text-center">
-                  <p>Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
+                  <p v-if="!uc.isHolidayItem">Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
                   <p v-if="uc.isFirstEdition" class="text-indigo-600 font-semibold">
                     First Edition
                   </p>
@@ -570,7 +570,7 @@
           :key="owner.userId + '-' + owner.mintNumber"
           class="flex justify-between max-w-[250px] mx-auto"
         >
-          <span class="text-sm text-gray-600">Mint #{{ owner.mintNumber }}</span>
+          <span v-if="!owner.isHolidayItem" class="text-sm text-gray-600">Mint #{{ owner.mintNumber }}</span>
           <NuxtLink
             :to="`/czone/${owner.username}`"
             class="text-indigo-600 hover:underline"

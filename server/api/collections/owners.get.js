@@ -11,9 +11,7 @@ export default defineEventHandler(async (event) => {
   } catch {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
-  if (!me?.id) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
+  if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
   // 2) Validate query
   const { cToonId } = getQuery(event)
@@ -21,25 +19,31 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing cToonId query parameter' })
   }
 
-  // 3) Fetch all owners of this cToon, sorted by mintNumber
   try {
-    const owners = await prisma.userCtoon.findMany({
-      where: { ctoonId: cToonId },
-      select: {
-        userId:     true,
-        mintNumber: true,
-        user: {
-          select: { username: true }
-        }
-      },
-      orderBy: { mintNumber: 'asc' }
-    })
+    // 3) Fetch owners and holiday flag
+    const [owners, holidayRow] = await Promise.all([
+      prisma.userCtoon.findMany({
+        where: { ctoonId: String(cToonId) },
+        select: {
+          userId: true,
+          mintNumber: true,
+          user: { select: { username: true } }
+        },
+        orderBy: { mintNumber: 'asc' }
+      }),
+      prisma.holidayEventItem.findFirst({
+        where: { ctoonId: String(cToonId) },
+        select: { id: true }
+      })
+    ])
+    const isHolidayItem = !!holidayRow
 
     // 4) Flatten and return
     return owners.map(o => ({
       userId:     o.userId,
       username:   o.user.username,
-      mintNumber: o.mintNumber
+      mintNumber: o.mintNumber,
+      isHolidayItem
     }))
   } catch (err) {
     console.error('Error fetching owners:', err)

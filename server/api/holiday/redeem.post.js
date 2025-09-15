@@ -57,12 +57,12 @@ function replaceBurnedInZones(zones, burnedUserCtoonId, reward) {
       const itemUserCtoonId = item?.userCtoonId || item?.id
       if (itemUserCtoonId === burnedUserCtoonId) {
         replaced = true
-        // Keep layout props (x,y,width,height,rotation, etc.) and overwrite identity/metadata
+        // Keep layout props and overwrite identity/metadata
         return {
           ...item,
-          id: reward.userCtoonId,            // primary key used by editor/frontend
-          userCtoonId: reward.userCtoonId,   // explicit for clarity
-          ctoonId: reward.id,                // base cToon id
+          id: reward.userCtoonId,
+          userCtoonId: reward.userCtoonId,
+          ctoonId: reward.id,
           name: reward.name,
           series: reward.series,
           rarity: reward.rarity,
@@ -109,6 +109,31 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 409, statusMessage: 'This cToon is already opened/burned' })
     }
 
+    // ── Guards: block if in pending trade offer or active auction ──────────
+    const [pendingOffer, activeAuction] = await Promise.all([
+      prisma.tradeOffer.findFirst({
+        where: {
+          status: 'PENDING',
+          ctoons: { some: { userCtoonId } } // any role (OFFERED or REQUESTED)
+        },
+        select: { id: true }
+      }),
+      prisma.auction.findFirst({
+        where: { userCtoonId, status: 'ACTIVE' },
+        select: { id: true }
+      })
+    ])
+
+    if (pendingOffer || activeAuction) {
+      const reasons = []
+      if (pendingOffer) reasons.push('a pending trade offer')
+      if (activeAuction) reasons.push('an active auction')
+      throw createError({
+        statusCode: 409,
+        statusMessage: `Cannot open this cToon while it is part of ${reasons.join(' and ')}.`
+      })
+    }
+
     // Find latest HolidayEvent that includes this item cToon
     const eventRec = await prisma.holidayEvent.findFirst({
       where: { items: { some: { ctoonId: source.ctoonId } } },
@@ -122,7 +147,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'This cToon is not a Holiday Item' })
     }
 
-    // Enforce minRevealAt ONLY (event may be inactive; reveal allowed if now >= minRevealAt)
+    // Enforce minRevealAt ONLY
     const now = new Date()
     if (eventRec.minRevealAt && now < new Date(eventRec.minRevealAt)) {
       throw createError({ statusCode: 403, statusMessage: 'Too early to open this cToon' })
@@ -156,8 +181,8 @@ export default defineEventHandler(async (event) => {
     const job = await mintQueue.add('mintCtoon', {
       userId,
       ctoonId: resultCtoonId,
-      isSpecial: true,                 // bypass cost & per-user limits
-      bypassHolidayWindowCheck: true   // worker should skip holiday active-window guard
+      isSpecial: true,
+      bypassHolidayWindowCheck: true
     })
 
     // Wait for worker to finish
@@ -183,7 +208,7 @@ export default defineEventHandler(async (event) => {
       where: { userId, ctoonId: resultCtoonId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true,                // userCtoon ID (instance)
+        id: true,
         mintNumber: true,
         isFirstEdition: true,
         ctoon: {
@@ -212,7 +237,7 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // Update the user's cZone layout to replace the burned item with the newly minted reward.
+    // Update the user's cZone layout
     try {
       const czoneRow = await prisma.cZone.findFirst({ where: { userId } })
       if (czoneRow) {
@@ -259,20 +284,17 @@ export default defineEventHandler(async (event) => {
         }
       }
     } catch (e) {
-      // Non-fatal: layout update failing should not block redemption.
-      // console.error('Failed to update cZone layout after redeem:', e)
+      // Non-fatal
     }
 
-    // Permanently remove the source UserCtoon now that mint/layout are done.
-    // If a FK prevents delete (e.g., active trade/auction), keep it locked.
+    // Try to delete the source UserCtoon
     try {
       await prisma.userCtoon.delete({ where: { id: userCtoonId } })
     } catch (e) {
-      // Optional: log warning
-      // console.warn('Delete UserCtoon failed; leaving as burned/locked', e)
+      // Leave as burned/locked
     }
 
-    // Response to client
+    // Response
     return {
       success: true,
       message: 'cToon opened!',

@@ -53,7 +53,9 @@
       <div class="mb-6 space-y-2">
         <p><strong>Series:</strong> {{ auction.ctoon.series }}</p>
         <p><strong>Rarity:</strong> {{ auction.ctoon.rarity }}</p>
-        <p><strong>Mint #:</strong> {{ auction.ctoon.mintNumber ?? 'N/A' }}</p>
+        <p v-if="!auction.isHolidayItem">
+          <strong>Mint #:</strong> {{ auction.ctoon.mintNumber ?? 'N/A' }}
+        </p>
         <p><strong>Current Highest Bid:</strong> {{ displayedBid }} pts</p>
         <p v-if="hasBids && currentTopBidder">
           <strong>Top Bidder:</strong> {{ currentTopBidder }}

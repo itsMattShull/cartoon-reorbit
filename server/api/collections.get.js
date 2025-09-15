@@ -1,61 +1,48 @@
 // server/api/collections.get.js
-
-import {
-  defineEventHandler,
-  getRequestHeader,
-  createError
-} from 'h3'
-
+import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1. Authenticate user
+  // auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
-  try {
-    me = await $fetch('/api/auth/me', { headers: { cookie } })
-  } catch {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
-  const userId = me?.id
-  if (!userId) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
+  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) }
+  catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
+  if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
-  try {
-    // 2. Fetch all UserCtoons for user, including nested Ctoon and active auctions
-    const userCtoons = await prisma.userCtoon.findMany({
-      where: { userId },
-      include: {
-        ctoon: true,
-        auctions: {
-          where: { status: 'ACTIVE' }
-        }
-      },
-      orderBy: { createdAt: 'asc' }
-    })
+  // fetch user cToons (keep fields your UI uses)
+  const userCtoons = await prisma.userCtoon.findMany({
+    where: { userId: me.id, isTradeable: true },
+    include: {
+      ctoon: true,
+      auctions: { where: { status: 'ACTIVE' }, select: { id: true } }
+    }
+  })
 
-    // 3. Map → shape response
-    return userCtoons.map((uc) => ({
-      id:              uc.id,
-      userId:          uc.userId,
-      name:            uc.ctoon.name,
-      set:             uc.ctoon.set,
-      series:          uc.ctoon.series,
-      type:            uc.ctoon.type,
-      rarity:          uc.ctoon.rarity,
-      assetPath:       uc.ctoon.assetPath,
-      releaseDate:     uc.ctoon.releaseDate,
-      price:           uc.ctoon.price,
-      initialQuantity: uc.ctoon.initialQuantity,
-      quantity:        uc.ctoon.quantity,
-      characters:      uc.ctoon.characters,
-      mintNumber:      uc.mintNumber,
-      isFirstEdition:  uc.isFirstEdition,
-      auctions:        uc.auctions || []
-    }))
-  } catch (err) {
-    console.error('Error fetching user collections:', err)
-    return []
-  }
+  // holiday flag for all involved ctoonIds
+  const ids = userCtoons.map(uc => uc.ctoonId)
+  const holidayRows = ids.length
+    ? await prisma.holidayEventItem.findMany({
+        where: { ctoonId: { in: ids } },
+        select: { ctoonId: true }
+      })
+    : []
+  const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
+
+  // shape response
+  return userCtoons.map(uc => ({
+    id: uc.id,
+    userId: uc.userId,
+    ctoonId: uc.ctoonId,
+    assetPath: uc.ctoon.assetPath,
+    name: uc.ctoon.name,
+    series: uc.ctoon.series,
+    rarity: uc.ctoon.rarity,
+    set: uc.ctoon.set,
+    mintNumber: uc.mintNumber,
+    quantity: uc.ctoon.quantity,
+    isFirstEdition: uc.isFirstEdition,
+    auctions: uc.auctions,                 // you reference uc.auctions.length
+    isHolidayItem: holidaySet.has(uc.ctoonId)
+  }))
 })

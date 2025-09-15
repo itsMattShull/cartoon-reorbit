@@ -340,7 +340,7 @@
           <strong>Rarity:</strong>
           <span class="capitalize">{{ selectedCtoon.rarity }}</span>
         </p>
-        <p>
+        <p v-if="!selectedIsHolidayItem">
           <strong>Mint #:</strong>
           <span v-if="selectedCtoon.quantity === null">
             {{ selectedCtoon.mintNumber }} of Unlimited
