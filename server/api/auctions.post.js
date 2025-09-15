@@ -41,6 +41,7 @@ export default defineEventHandler(async (event) => {
     where: { id: userCtoonId },
     select: {
       userId: true,
+      ctoonId: true, // needed to check Holiday flag
       mintNumber: true,
       ctoon: { select: { rarity: true, name: true, assetPath: true } }
     }
@@ -131,6 +132,12 @@ export default defineEventHandler(async (event) => {
     data: { isTradeable: false }
   })
 
+  // 8.5 Holiday flag for Discord message
+  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
+    where: { ctoonId: userCtoonRec.ctoonId },
+    select: { id: true }
+  }))
+
   // 9. Send Discord notification (best effort)
   ;(async () => {
     try {
@@ -144,7 +151,7 @@ export default defineEventHandler(async (event) => {
           : `http://localhost:${config.public.socketPort || 3000}`)
 
       const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
-      const mintNumber = userCtoonRec.mintNumber
+      const mintNumber   = userCtoonRec.mintNumber
       const durationText = durationMinutes > 0
         ? `${durationMinutes} minute(s)`
         : `${durationDays} day(s)`
@@ -155,12 +162,19 @@ export default defineEventHandler(async (event) => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
+      const lines = [
+        `**Rarity:** ${rarity ?? 'N/A'}`,
+        ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
+        `**Starting Bid:** ${initialBet} pts`,
+        `**Duration:** ${durationText}`
+      ]
+
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
         embeds: [{
           title: name ?? 'cToon',
           url: auctionLink,
-          description: `**Rarity:** ${rarity ?? 'N/A'}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
+          description: lines.join('\n'),
           ...(imageUrl ? { image: { url: imageUrl } } : {})
         }]
       }
