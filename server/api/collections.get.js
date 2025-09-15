@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   // fetch user cToons (keep fields your UI uses)
   const userCtoons = await prisma.userCtoon.findMany({
-    where: { userId: me.id, isTradeable: true },
+    where: { userId: me.id },
     include: {
       ctoon: true,
       auctions: { where: { status: 'ACTIVE' }, select: { id: true } }
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,
-    auctions: uc.auctions,                 // you reference uc.auctions.length
+    auctions: uc.auctions || [],
     isHolidayItem: holidaySet.has(uc.ctoonId)
   }))
 })
