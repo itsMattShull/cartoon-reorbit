@@ -1783,9 +1783,21 @@ setInterval(async () => {
     include: {
       userCtoon:     { include: { ctoon: true } },
       creator:       true,
-      highestBidder: true     // ← include highestBidder
+      highestBidder: true
     }
   })
+
+  // prefetch holiday flags for all involved ctoonIds
+  const ctoonIds = Array.from(
+    new Set(soonAuctions.map(a => a.userCtoon.ctoonId))
+  )
+  const holidayRows = ctoonIds.length
+    ? await db.holidayEventItem.findMany({
+        where: { ctoonId: { in: ctoonIds } },
+        select: { ctoonId: true }
+      })
+    : []
+  const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
 
   for (const auc of soonAuctions) {
     try {
@@ -1799,6 +1811,7 @@ setInterval(async () => {
       // cToon details
       const { name, rarity, assetPath } = auc.userCtoon.ctoon
       const mintNumber = auc.userCtoon.mintNumber
+      const isHolidayItem = holidaySet.has(auc.userCtoon.ctoonId)
 
       // determine bid display: use initialBet if no bids
       const hasBidder       = Boolean(auc.highestBidder)
@@ -1815,6 +1828,16 @@ setInterval(async () => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
+      // embed fields, omit Mint # for Holiday items
+      const fields = [
+        { name: 'Rarity',       value: rarity ?? 'N/A',                 inline: true },
+        ...(!isHolidayItem ? [{ name: 'Mint #', value: `${mintNumber ?? 'N/A'}`, inline: true }] : []),
+        { name: 'Highest Bid',  value: `${displayedBid}`,               inline: true },
+        { name: 'Top Bidder',   value: topBidderTag,                    inline: true },
+        { name: 'Ends In',      value: `<t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>`, inline: false },
+        { name: 'View Auction', value: `[Click here](${auctionLink})`,  inline: false }
+      ]
+
       // payload with embed + image + bid info
       const payload = {
         content: `⏰ **Auction ending within 5 minutes!** ⏰`,
@@ -1822,14 +1845,7 @@ setInterval(async () => {
           {
             title: name,
             url: auctionLink,
-            fields: [
-              { name: 'Rarity',       value: rarity,                           inline: true },
-              { name: 'Mint #',       value: `${mintNumber ?? 'N/A'}`,       inline: true },
-              { name: 'Highest Bid',  value: `${displayedBid}`,               inline: true },
-              { name: 'Top Bidder',   value: topBidderTag,                    inline: true },
-              { name: 'Ends In',      value: `<t:${Math.floor(new Date(auc.endAt).getTime()/1000)}:R>`, inline: false },
-              { name: 'View Auction', value: `[Click here](${auctionLink})`,   inline: false }
-            ],
+            fields,
             ...(imageUrl ? { image: { url: imageUrl } } : {})
           }
         ]
@@ -1866,6 +1882,7 @@ setInterval(async () => {
     }
   }
 }, 60 * 1000)
+
 
 httpServer.listen(PORT, () => {
   console.log('Socket server listening on port 3001')
