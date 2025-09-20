@@ -417,12 +417,12 @@ function updateDefaults(f) {
     case 'Common':
       f.totalQuantity   = 90
       f.initialQuantity = 90
-      f.perUserLimit    = 20
+      f.perUserLimit    = 7
       break
     case 'Uncommon':
       f.totalQuantity   = 75
       f.initialQuantity = 75
-      f.perUserLimit    = 10
+      f.perUserLimit    = 5
       break
     case 'Rare':
       f.totalQuantity   = 60

@@ -285,13 +285,13 @@ watch(rarity, val => {
     case 'Common':
       initialQuantity.value = 90
       totalQuantity.value = 90
-      perUserLimit.value = 20
+      perUserLimit.value = 7
       inCmart.value = true
       break
     case 'Uncommon':
       initialQuantity.value = 75
       totalQuantity.value = 75
-      perUserLimit.value = 10
+      perUserLimit.value = 5
       inCmart.value = true
       break
     case 'Rare':

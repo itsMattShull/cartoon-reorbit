@@ -119,6 +119,57 @@
       <!-- 2️⃣  SEARCH / ADD CTOONS ---------------------------------------- -->
       <section class="space-y-4">
         <h2 class="text-xl font-semibold">Add cToons</h2>
+
+        <!-- NEW: Add by Set -->
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1 set-autocomplete">
+            <input
+              id="set-name-input"
+              ref="setInput"
+              v-model="setSearch"
+              type="text"
+              placeholder="Type a Set name…"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+              @focus="onSetFocus"
+              @keydown.down.prevent="setHighlightNext"
+              @keydown.up.prevent="setHighlightPrev"
+              @keydown.enter.prevent="addSetViaKeyboard"
+            />
+            <!-- dropdown -->
+            <ul
+              v-if="setSuggestionsOpen && setSuggestions.length"
+              class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg divide-y"
+            >
+              <li
+                v-for="(s, idx) in setSuggestions"
+                :key="s"
+                @mousedown.prevent="selectSetSuggestion(s)"
+                :class="[
+                  'flex items-center gap-3 px-3 py-2 cursor-pointer',
+                  idx === setHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50'
+                ]"
+              >
+                <div class="flex-1 truncate">
+                  <p class="truncate font-medium">{{ s }}</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <button
+            type="button"
+            @click="addSetToSelection"
+            class="rounded-md px-4 py-2 font-semibold bg-blue-700 text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-blue-700"
+            :title="'Add all Common/Uncommon/Rare/Very Rare from the Set'"
+          >
+            Add Set
+          </button>
+        </div>
+        <p class="text-xs text-gray-500">
+          Only Common, Uncommon, Rare, and Very Rare are added from the Set.
+        </p>
+
+        <!-- Existing single cToon autocomplete -->
         <p class="text-xs text-gray-500">
           Leave the box empty then press <kbd>↓</kbd> / <kbd>↑</kbd> to browse all cToons.
           Already-selected cToons are hidden.
@@ -313,10 +364,10 @@ function onFile(e) {
 const rarities = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
 const countsByRarity = reactive({
   Common:      { count: 4, probabilityPercent: 100 },
-  Uncommon:    { count: 2, probabilityPercent:   100 },
-  Rare:        { count: 1, probabilityPercent:   100 },
-  'Very Rare': { count: 1, probabilityPercent:   25 },
-  'Crazy Rare':{ count: 1, probabilityPercent:   10 }
+  Uncommon:    { count: 2, probabilityPercent: 100 },
+  Rare:        { count: 1, probabilityPercent: 100 },
+  'Very Rare': { count: 1, probabilityPercent: 25 },
+  'Crazy Rare':{ count: 1, probabilityPercent: 10 }
 })
 const rarityConfigs = computed(() =>
   Object.entries(countsByRarity)
@@ -349,11 +400,11 @@ const grouped = computed(() => {
 
 // rarity × cToon.inCmart → static default weight map
 const defaultWeightConfigs = {
-  Common:      { true:  18,   false: 28   },
-  Uncommon:    { true:   14, false: 44   },
-  Rare:        { true:  18,   false: 45   },
-  'Very Rare': { true:  13, false: 74   },
-  'Crazy Rare':{ true:  20,   false: 80   }
+  Common:      { true: 18,  false: 28 },
+  Uncommon:    { true: 14,  false: 44 },
+  Rare:        { true: 18,  false: 45 },
+  'Very Rare': { true: 13,  false: 74 },
+  'Crazy Rare':{ true: 20,  false: 80 }
 }
 
 /** return a map of id → default weight for this rarity */
@@ -373,7 +424,7 @@ function sumWeights(rarity) {
     .reduce((sum,id) => sum + (weights.value[id]||0), 0)
 }
 
-// 5️⃣ Autocomplete & selection
+// 5️⃣ Autocomplete & selection (single cToon)
 const suggestionsOpen = ref(false)
 const highlighted     = ref(-1)
 const suggestions = computed(() => {
@@ -417,13 +468,77 @@ function toggleSelect(cto) {
 function onManualWeight(rarity, id) {
   weights.value[id] = Math.min(99, Math.max(1, Number(weights.value[id] || 0)))
 }
+
+// 6️⃣ NEW: Set picker + bulk add by Set
+const sets                 = ref([])
+const setSearch            = ref('')
+const setInput             = ref(null)
+const setSuggestionsOpen   = ref(false)
+const setHighlighted       = ref(-1)
+const allowedSetRarities   = new Set(['Common','Uncommon','Rare','Very Rare'])
+
+const setSuggestions = computed(() => {
+  const term = setSearch.value.trim().toLowerCase()
+  if (term.length < 3) return []
+  const list = sets.value.filter(s => s && s.toLowerCase().includes(term))
+  return list.slice(0, 50)
+})
+function onSetFocus() { setSuggestionsOpen.value = true }
+watch(setSearch, () => { setSuggestionsOpen.value = setSearch.value.trim().length >= 3 })
+
+function setHighlightNext() {
+  if (!setSuggestions.value.length) return
+  setHighlighted.value = (setHighlighted.value + 1) % setSuggestions.value.length
+}
+function setHighlightPrev() {
+  if (!setSuggestions.value.length) return
+  setHighlighted.value =
+    (setHighlighted.value - 1 + setSuggestions.value.length) % setSuggestions.value.length
+}
+function selectSetSuggestion(s) {
+  setSearch.value = s
+  addSetToSelection()
+}
+function addSetViaKeyboard() {
+  if (setHighlighted.value >= 0) {
+    selectSetSuggestion(setSuggestions.value[setHighlighted.value])
+  } else {
+    addSetToSelection()
+  }
+}
+function addSetToSelection() {
+  const raw = setSearch.value.trim()
+  if (!raw) return
+  const canonical =
+    sets.value.find(s => s && s.toLowerCase() === raw.toLowerCase()) || raw
+
+  const addables = ctoons.value.filter(c =>
+    c.set === canonical &&
+    allowedSetRarities.has(c.rarity) &&
+    !selectedIds.value.includes(c.id)
+  )
+
+  if (!addables.length) {
+    alert('No eligible cToons found in that Set.')
+    return
+  }
+
+  addables.forEach(c => selectedIds.value.push(c.id))
+
+  setSuggestionsOpen.value = false
+  setHighlighted.value = -1
+  setInput.value?.blur()
+}
+
+// Close dropdowns on outside click
 if (process.client) {
   window.addEventListener('click', e => {
     if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
+    if (!e.target.closest('.set-autocomplete')) setSuggestionsOpen.value = false
   })
 }
 
-// 6️⃣ Validation
+// 7️⃣ Validation
 const countsValid = computed(() =>
   Object.entries(grouped.value).every(([r,ids]) =>
     !ids.length ||
@@ -444,7 +559,7 @@ const submitTooltip = computed(() => {
   return ''
 })
 
-// 7️⃣ Fetch data
+// 8️⃣ Fetch data
 onMounted(async () => {
   try {
     const data = await $fetch('/api/admin/ctoon-pool')
@@ -453,9 +568,18 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to load cToons', err)
   }
+
+  try {
+    const setNames = await $fetch('/api/admin/sets')
+    sets.value = (setNames || []).filter(Boolean).sort((a,b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    )
+  } catch (err) {
+    console.error('Failed to load Sets', err)
+  }
 })
 
-// watch for bulk changes
+// watch for bulk changes → apply default weights per rarity
 watch(selectedIds, () => {
   Object.keys(grouped.value).forEach(r => {
     const norm = assignDefaultWeights(r)
@@ -463,7 +587,7 @@ watch(selectedIds, () => {
   })
 })
 
-// 8️⃣ Submit
+// 9️⃣ Submit
 const router = useRouter()
 async function submit() {
   if (!allValid.value || !countsValid.value || !imageFile.value) return
@@ -490,7 +614,8 @@ async function submit() {
 
 <style scoped>
 /* dropdown above modals */
-.cto-autocomplete ul {
+.cto-autocomplete ul,
+.set-autocomplete ul {
   z-index: 60;
 }
 .weight-badge {
