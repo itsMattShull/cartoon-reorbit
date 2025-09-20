@@ -667,10 +667,10 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
-// watch(ownerIsBooster, (isBooster) => {
-//   if (typeof document === 'undefined') return
-//   document.body.classList.toggle('booster-bg', !!isBooster)
-// }, { immediate: true })
+watch(ownerIsBooster, (isBooster) => {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('booster-bg', !!isBooster)
+}, { immediate: true })
 
 function displayToast(message, type = 'success') {
   toastMessage.value = message
@@ -1148,7 +1148,7 @@ onBeforeUnmount(() => {
     socket.emit('leave-zone', { zone: username.value })
   }
   window.removeEventListener('resize', recalcScale)
-  // document.body.classList.remove('booster-bg')
+  document.body.classList.remove('booster-bg')
 })
 
 // Watch for route changes when navigating to a different cZone
