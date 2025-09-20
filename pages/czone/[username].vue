@@ -1,6 +1,6 @@
 <template>
-  <div v-if="ownerIsBooster" class="main"></div>
   <Nav />
+  <div v-if="ownerIsBooster" class="main"></div>
 
   <!-- Mobile Layout Only -->
   <div
@@ -8,7 +8,7 @@
     class="lg:hidden pt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
   >
     <!-- Owner Section -->
-    <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4" :class="{ booster: ownerIsBooster }">
+    <div class="czone-booster relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4" :class="{ booster: ownerIsBooster }">
       <div
         class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
       >
@@ -667,10 +667,10 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
-watch(ownerIsBooster, (isBooster) => {
-  if (typeof document === 'undefined') return
-  document.body.classList.toggle('booster-bg', !!isBooster)
-}, { immediate: true })
+// watch(ownerIsBooster, (isBooster) => {
+//   if (typeof document === 'undefined') return
+//   document.body.classList.toggle('booster-bg', !!isBooster)
+// }, { immediate: true })
 
 function displayToast(message, type = 'success') {
   toastMessage.value = message
@@ -1148,7 +1148,7 @@ onBeforeUnmount(() => {
     socket.emit('leave-zone', { zone: username.value })
   }
   window.removeEventListener('resize', recalcScale)
-  document.body.classList.remove('booster-bg')
+  // document.body.classList.remove('booster-bg')
 })
 
 // Watch for route changes when navigating to a different cZone
@@ -1198,7 +1198,7 @@ watch(
 )
 </script>
 
-<style scoped>
+<style>
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
@@ -1235,39 +1235,39 @@ watch(
   }
 
   /* Utility overrides */
-  .booster-bg .bg-white           { background-color: #1a1a1a !important; }
-  .booster-bg .rounded-xl         { background-color: #1a1a1a !important; }
-  .booster-bg .shadow-md          { box-shadow: none !important; }
-  .booster-bg .border-gray-300    { border-color: #444 !important; }
-  .booster-bg .border-blue-500    { border-color: #555 !important; }
-  .booster-bg .text-black         { color: #ccc !important; }
-  .booster-bg .text-gray-600      { color: #aaa !important; }
-  .booster-bg .bg-gray-200        { background-color: #2a2a2a !important; }
-  .booster-bg .bg-gray-300        { background-color: #333 !important; }
-  .booster-bg .bg-indigo-100      { background-color: #222 !important; }
-  .booster-bg .bg-indigo-500,
-  .booster-bg .bg-indigo-600      { background-color: #333 !important; }
+  .czone-booster.booster-bg .bg-white           { background-color: #1a1a1a !important; }
+  .czone-booster.booster-bg .rounded-xl         { background-color: #1a1a1a !important; }
+  .czone-booster.booster-bg .shadow-md          { box-shadow: none !important; }
+  .czone-booster.booster-bg .border-gray-300    { border-color: #444 !important; }
+  .czone-booster.booster-bg .border-blue-500    { border-color: #555 !important; }
+  .czone-booster.booster-bg .text-black         { color: #ccc !important; }
+  .czone-booster.booster-bg .text-gray-600      { color: #aaa !important; }
+  .czone-booster.booster-bg .bg-gray-200        { background-color: #2a2a2a !important; }
+  .czone-booster.booster-bg .bg-gray-300        { background-color: #333 !important; }
+  .czone-booster.booster-bg .bg-indigo-100      { background-color: #222 !important; }
+  .czone-booster.booster-bg .bg-indigo-500,
+  .czone-booster.booster-bg .bg-indigo-600      { background-color: #333 !important; }
   /* Owner’s username (was text-blue-700) */
-  body.booster-bg .text-blue-700 {
+  .czone-booster.booster-bg .text-blue-700 {
     color: #ffffff !important;
   }
 
   /* “My Points” badge (was text-indigo-800) */
-  body.booster-bg .text-indigo-800 {
+  .czone-booster.booster-bg .text-indigo-800 {
     color: #ffffff !important;
   }
 
   /* Form controls */
-  .booster-bg button,
-  .booster-bg input,
-  .booster-bg select {
+  .czone-booster.booster-bg button,
+  .czone-booster.booster-bg input,
+  .czone-booster.booster-bg select {
     background-color: #2a2a2a !important;
     color: #eee !important;
     border-color: #555 !important;
   }
 
   /* Animated golden glow on booster elements */
-  .booster {
+  .czone-booster .booster {
     position: relative;
     z-index: 1;
     border: 2px solid #ffd700 !important;

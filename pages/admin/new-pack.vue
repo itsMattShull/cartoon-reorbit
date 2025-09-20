@@ -509,6 +509,7 @@ function addSetViaKeyboard() {
 function addSetToSelection() {
   const raw = setSearch.value.trim()
   if (!raw) return
+
   const canonical =
     sets.value.find(s => s && s.toLowerCase() === raw.toLowerCase()) || raw
 
@@ -523,12 +524,21 @@ function addSetToSelection() {
     return
   }
 
+  // add ids
   addables.forEach(c => selectedIds.value.push(c.id))
+
+  // assign weights just like single add
+  const affected = new Set(addables.map(c => c.rarity))
+  for (const r of affected) {
+    const norm = assignDefaultWeights(r)
+    Object.entries(norm).forEach(([iid, val]) => { weights.value[iid] = val })
+  }
 
   setSuggestionsOpen.value = false
   setHighlighted.value = -1
   setInput.value?.blur()
 }
+
 
 // Close dropdowns on outside click
 if (process.client) {
