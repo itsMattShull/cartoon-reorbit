@@ -1,9 +1,13 @@
 <template>
   <!-- Top bar -->
-  <header class="fixed top-0 left-0 w-full h-16 backdrop-blur border-b border-[color:var(--reorbit-border)] flex items-center px-4 z-50" style="background: var(--reorbit-navy)">
+  <header
+    id="nav-root"
+    class="fixed top-0 left-0 w-full h-16 backdrop-blur border-b border-[color:var(--reorbit-border)] flex items-center px-4 z-50"
+    style="background: var(--reorbit-navy)"
+  >
     <button
       @click="isOpen = true"
-      class="relative text-[var(--reorbit-deep)] focus:outline-none"
+      class="relative focus:outline-none"
       aria-label="Open navigation"
     >
       <span
@@ -32,6 +36,7 @@
   <transition name="slide">
     <aside
       v-if="isOpen"
+      id="nav-drawer"
       class="fixed top-0 left-0 h-full w-72 bg-white text-slate-900 z-50 flex flex-col shadow-xl border-r border-[color:var(--reorbit-border)]"
     >
       <!-- brand strip -->
@@ -168,4 +173,36 @@ const links = computed(() => {
 /* fade */
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 .fade-enter-active, .fade-leave-active { transition: opacity .25s ease }
+
+/* harden Nav against page-level overrides */
+#nav-root {
+  background: var(--reorbit-navy) !important;
+  color: #ffffff !important;
+  border-color: var(--reorbit-border) !important;
+}
+#nav-root svg { stroke: #ffffff !important; }
+
+/* drawer shell stays light even in dark boosters */
+#nav-drawer {
+  background: #ffffff !important;
+  color: #0f172a !important; /* slate-900 */
+  border-color: var(--reorbit-border) !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1) !important;
+}
+
+/* badges keep intended colors */
+#nav-drawer .bg-\[var\(--reorbit-purple\)\] {
+  background: var(--reorbit-purple) !important;
+  color: #ffffff !important;
+}
+#nav-drawer .bg-\[var\(--reorbit-cyan\)\] {
+  background: var(--reorbit-cyan) !important;
+  color: var(--reorbit-deep) !important;
+}
+
+/* links and buttons respect drawer color scheme */
+#nav-drawer a,
+#nav-drawer button {
+  color: inherit !important;
+}
 </style>
