@@ -593,9 +593,9 @@ onMounted(async () => {
 watch(selectedIds, () => {
   Object.keys(grouped.value).forEach(r => {
     const norm = assignDefaultWeights(r)
-    Object.entries(norm).forEach(([iid,val]) => weights.value[iid] = val)
+    Object.entries(norm).forEach(([iid,val]) => { weights.value[iid] = val })
   })
-})
+}, { flush: 'post' })
 
 // 9️⃣ Submit
 const router = useRouter()
