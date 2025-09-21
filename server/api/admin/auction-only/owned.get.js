@@ -2,7 +2,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
-const OWNER_USERNAME = 'QuirkyStormMercenary'
+const OWNER_USERNAME = 'CartoonReOrbitOfficial'
 const LIMIT = 25
 
 export default defineEventHandler(async (event) => {

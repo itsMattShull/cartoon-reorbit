@@ -4,7 +4,7 @@ import { prisma } from '@/server/prisma'
 import { mintQueue } from '../../../utils/queues'   // path: server/api/admin/auction-only/ → ../../../utils/queues
 import { QueueEvents } from 'bullmq'
 
-const OWNER_USERNAME = 'QuirkyStormMercenary'
+const OWNER_USERNAME = 'CartoonReOrbitOfficial'
 const redisConnection = {
   host: process.env.REDIS_HOST,
   port: Number(process.env.REDIS_PORT),
