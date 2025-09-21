@@ -80,6 +80,7 @@ model UserCtoon {
   auctions          Auction[]
   ownerLogs         CtoonOwnerLog[]
   holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
+  auctionOnlyListings  AuctionOnly[]
 }
 
 model UserPoints {
@@ -145,6 +146,7 @@ model User {
   ownedBackgrounds   UserBackground[] @relation("User_UserBackgrounds")
   ownerLogs          CtoonOwnerLog[]
   holidayRedemptions HolidayRedemption[]
+  auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
 }
 
 model UserIP {
@@ -739,4 +741,22 @@ model HolidayRedemption {
   @@index([userId, redeemedAt])
   @@index([itemCtoonId])
   @@index([resultCtoonId])
+}
+
+model AuctionOnly {
+  id String @id @default(uuid())
+  userCtoonId String
+  pricePoints Int
+  startsAt DateTime // stored in UTC
+  endsAt DateTime // stored in UTC
+  isStarted    Boolean   @default(false)
+  createdAt DateTime @default(now())
+  createdById String?
+
+  // relations
+  userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
+  createdBy User? @relation("AuctionOnlyCreatedBy", fields: [createdById], references: [id])
+
+  @@index([startsAt])
+  @@index([endsAt])
 }

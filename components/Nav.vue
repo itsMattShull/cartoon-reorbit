@@ -37,7 +37,7 @@
     <aside
       v-if="isOpen"
       id="nav-drawer"
-      class="fixed top-0 left-0 h-full w-72 bg-white text-slate-900 z-50 flex flex-col shadow-xl border-r border-[color:var(--reorbit-border)]"
+      class="fixed inset-y-0 left-0 w-72 bg-white text-slate-900 z-50 flex flex-col shadow-xl border-r border-[color:var(--reorbit-border)] overflow-y-auto"
     >
       <!-- brand strip -->
       <div class="h-16 px-5 flex items-center gap-3 border-b border-[color:var(--reorbit-border)]">
@@ -146,6 +146,7 @@ const links = computed(() => {
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
+      { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
@@ -180,6 +181,7 @@ const links = computed(() => {
   color: #ffffff !important;
   border-color: var(--reorbit-border) !important;
 }
+
 #nav-root svg { stroke: #ffffff !important; }
 
 /* drawer shell stays light even in dark boosters */
@@ -188,6 +190,10 @@ const links = computed(() => {
   color: #0f172a !important; /* slate-900 */
   border-color: var(--reorbit-border) !important;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1) !important;
+  height: 100vh;   /* fallback */
+  height: 100svh;  /* small viewport unit */
+  height: 100dvh;  /* dynamic viewport unit */
+  padding-bottom: env(safe-area-inset-bottom); /* notch safe area */
 }
 
 /* badges keep intended colors */
