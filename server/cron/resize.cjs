@@ -69,18 +69,13 @@ async function powerOn(id) {
 
 async function resizeCpuRamOnly(id, sizeSlug) {
   try {
-    console.log(`[DO resize scheduler] Resizing droplet ${id} to ${sizeSlug}`);
     await ensureOff(id);
-    console.log(`[DO resize scheduler] Droplet ${id} is off`);
     const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'resize', size: sizeSlug });
-    console.log(`[DO resize scheduler] Resize started to ${sizeSlug}, action ${action.id}`);
     await waitAction(action.id, 'resize');
-    console.log(`[DO resize scheduler] Resize to ${sizeSlug} completed`);
     await powerOn(id);
-    console.log(`[DO resize scheduler] Droplet ${id} powered on`);
     return sizeSlug; // for success reporting
   } catch (err) {
-    console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
+    // console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
   }
 }
 
@@ -94,17 +89,13 @@ async function notifyDiscord(userId, content) {
       body: JSON.stringify({ recipient_id: userId })
     }).then(r => r.json());
 
-    console.log(`[DO resize scheduler] Notifying Discord user ${userId}: ${content}`);
-
     await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
-
-    console.log(`[DO resize scheduler] Notified Discord user ${userId}`);
   } catch(e) {
-    console.log(`[DO resize scheduler] Failed to notify Discord user ${userId}: ${e?.message || e}`);
+    // console.log(`[DO resize scheduler] Failed to notify Discord user ${userId}: ${e?.message || e}`);
   }
 }
 
@@ -118,12 +109,10 @@ async function onError(label, err) {
 function schedule(label, cronExpr, job) {
   cron.schedule(cronExpr, async () => {
     const start = new Date().toISOString();
-    console.log(`[${start}] Start: ${label}`);
     try {
       const size = await job();
       const done = new Date().toISOString();
       const ok = `[DO resize scheduler] ${label} completed at ${done}. Droplet ${DROPLET_ID} now on ${size}.`;
-      console.log(`[${done}] Done: ${label}`);
       await notifyDiscord(DISCORD_USER_ID, `✅ ${ok}`);
     } catch (err) {
       await onError(label, err);
@@ -139,7 +128,3 @@ schedule('Tue 00:00 downsize', '0 0 * * 2', () => resizeCpuRamOnly(DROPLET_ID, D
 schedule('Tue 08:00 upsize', '0 8 * * 2', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
 // Tue 12:00 downsize
 schedule('Tue 12:00 downsize', '0 12 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
-
-console.log(`Scheduler running. TZ=${TZ}`);
-
-resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG)

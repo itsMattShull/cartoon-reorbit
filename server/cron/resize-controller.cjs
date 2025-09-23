@@ -70,20 +70,18 @@ async function powerOn(id) {
 async function turnOff(id) {
   try {
     await ensureOff(id);
-    console.log(`[DO resize scheduler] Droplet ${id} is off`);
     return id; // for success reporting
   } catch (err) {
-    console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
+    // console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
   }
 }
 
 async function turnOn(id) {
   try {
     await powerOn(id);
-    console.log(`[DO resize scheduler] Droplet ${id} powered on`);
     return id; // for success reporting
   } catch (err) {
-    console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
+    // console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
   }
 }
 
@@ -96,18 +94,13 @@ async function notifyDiscord(userId, content) {
       headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipient_id: userId })
     }).then(r => r.json());
-
-    console.log(`[DO resize scheduler] Notifying Discord user ${userId}: ${content}`);
-
     await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
-
-    console.log(`[DO resize scheduler] Notified Discord user ${userId}`);
   } catch(e) {
-    console.log(`[DO resize scheduler] Failed to notify Discord user ${userId}: ${e?.message || e}`);
+    // console.log(`[DO resize scheduler] Failed to notify Discord user ${userId}: ${e?.message || e}`);
   }
 }
 
@@ -121,12 +114,10 @@ async function onError(label, err) {
 function schedule(label, cronExpr, job) {
   cron.schedule(cronExpr, async () => {
     const start = new Date().toISOString();
-    console.log(`[${start}] Start: ${label}`);
     try {
       const size = await job();
       const done = new Date().toISOString();
       const ok = `[DO resize scheduler] ${label} completed at ${done}. Droplet ${DROPLET_CONTROLLER_ID} now turned on/off controller.`;
-      console.log(`[${done}] Done: ${label}`);
       await notifyDiscord(DISCORD_USER_ID, `✅ ${ok}`);
     } catch (err) {
       await onError(label, err);
@@ -151,7 +142,3 @@ schedule('Tue 08:30 turnOff', '30 8 * * 2', () => turnOff(DROPLET_CONTROLLER_ID)
 schedule('Tue 11:30 turnOn', '30 11 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 12:30 turnOff
 schedule('Tue 12:30 turnOff', '30 12 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
-
-console.log(`Scheduler running. TZ=${TZ}`);
-
-resizeCpuRamOnly(DROPLET_CONTROLLER_ID, UPSIZE_SLUG)
