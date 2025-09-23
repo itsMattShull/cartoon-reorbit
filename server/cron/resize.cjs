@@ -81,13 +81,13 @@ async function notifyDiscord(userId, content) {
   try {
     const channel = await fetch('https://discord.com/api/v10/users/@me/channels', {
       method: 'POST',
-      headers: { 'Authorization': `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipient_id: userId })
     }).then(r => r.json());
 
     await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
       method: 'POST',
-      headers: { 'Authorization': `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
   } catch {}
