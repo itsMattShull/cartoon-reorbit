@@ -137,7 +137,7 @@ schedule('Tue 00:30 turnOff', '30 0 * * 2', () => turnOff(DROPLET_CONTROLLER_ID)
 // Tue 07:30 turnOn
 schedule('Tue 07:30 turnOn', '30 7 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 08:30 turnOff
-schedule('Tue 08:30 turnOff', '30 8 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
+schedule('Tue 08:30 turnOff', '50 8 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
 // Tue 11:30 turnOn
 schedule('Tue 11:30 turnOn', '30 11 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 12:30 turnOff
