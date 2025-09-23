@@ -68,11 +68,20 @@ async function powerOn(id) {
 }
 
 async function resizeCpuRamOnly(id, sizeSlug) {
-  await ensureOff(id);
-  const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'resize', size: sizeSlug });
-  await waitAction(action.id, 'resize');
-  await powerOn(id);
-  return sizeSlug; // for success reporting
+  try {
+    console.log(`[DO resize scheduler] Resizing droplet ${id} to ${sizeSlug}`);
+    await ensureOff(id);
+    console.log(`[DO resize scheduler] Droplet ${id} is off`);
+    const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'resize', size: sizeSlug });
+    console.log(`[DO resize scheduler] Resize started to ${sizeSlug}, action ${action.id}`);
+    await waitAction(action.id, 'resize');
+    console.log(`[DO resize scheduler] Resize to ${sizeSlug} completed`);
+    await powerOn(id);
+    console.log(`[DO resize scheduler] Droplet ${id} powered on`);
+    return sizeSlug; // for success reporting
+  } catch (err) {
+    console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
+  }
 }
 
 // ---------- notifications ----------
@@ -85,12 +94,18 @@ async function notifyDiscord(userId, content) {
       body: JSON.stringify({ recipient_id: userId })
     }).then(r => r.json());
 
+    console.log(`[DO resize scheduler] Notifying Discord user ${userId}: ${content}`);
+
     await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
-  } catch {}
+
+    console.log(`[DO resize scheduler] Notified Discord user ${userId}`);
+  } catch(e) {
+    console.log(`[DO resize scheduler] Failed to notify Discord user ${userId}: ${e?.message || e}`);
+  }
 }
 
 async function onError(label, err) {
@@ -126,3 +141,5 @@ schedule('Tue 08:00 upsize', '0 8 * * 2', () => resizeCpuRamOnly(DROPLET_ID, UPS
 schedule('Tue 12:00 downsize', '0 12 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
 
 console.log(`Scheduler running. TZ=${TZ}`);
+
+resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG)
