@@ -63,8 +63,7 @@ export default defineEventHandler(async (event) => {
   //    cToons where quantity IS NOT NULL and max(mintNumber) < quantity
   const stockCandidates = await prisma.ctoon.findMany({
     where: {
-      name: { contains: term, mode: 'insensitive' },
-      quantity: { not: null }
+      name: { contains: term, mode: 'insensitive' }
     },
     select: { id: true, name: true, rarity: true, assetPath: true, quantity: true },
     take: LIMIT * 2
