@@ -181,7 +181,8 @@ async function startDueAuctions() {
               userCtoonId: fresh.userCtoonId,
               initialBet,
               duration: durationDays,
-              endAt: new Date(fresh.endsAt)
+              endAt: new Date(fresh.endsAt),
+              creatorId: row.userCtoon?.creatorId,
             },
             select: { id: true }
           })

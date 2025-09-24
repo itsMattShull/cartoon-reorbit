@@ -95,8 +95,7 @@ export default defineEventHandler(async (event) => {
       pricePoints,
       startsAt: normStarts,
       endsAt,
-      createdById: me.id ?? null,
-      creatorId: owner.id
+      createdById: me.id ?? null
     },
     select: { id: true }
   })
