@@ -1769,7 +1769,7 @@ setInterval(async () => {
       })
     } 
   } catch (err) {
-    console.log('Error closing auctions:', err)
+    console.error(`Auction closing failed for ${id}:`, err)
   }
 }, 60 * 1000)
 
