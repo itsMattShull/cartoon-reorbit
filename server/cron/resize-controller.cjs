@@ -117,7 +117,7 @@ function schedule(label, cronExpr, job) {
     try {
       const size = await job();
       const done = new Date().toISOString();
-      const ok = `[DO resize scheduler] ${label} completed at ${done}. Droplet ${DROPLET_CONTROLLER_ID} now turned on/off controller.`;
+      const ok = `[DO resize scheduler] ${label} completed at ${done}.`;
       await notifyDiscord(DISCORD_USER_ID, `✅ ${ok}`);
     } catch (err) {
       await onError(label, err);
@@ -126,19 +126,19 @@ function schedule(label, cronExpr, job) {
 }
 
 // Mon 19:30 turnOn
-schedule('Mon 19:30 turnOn', '30 19 * * 1', () => turnOn(DROPLET_CONTROLLER_ID));
+schedule('Mon 19:30 turnOn controller', '30 19 * * 1', () => turnOn(DROPLET_CONTROLLER_ID));
 // Mon 20:30 turnOff
-schedule('Mon 20:30 turnOff', '30 20 * * 1', () => turnOff(DROPLET_CONTROLLER_ID));
+schedule('Mon 20:30 turnOff controller', '30 20 * * 1', () => turnOff(DROPLET_CONTROLLER_ID));
 // Mon 23:30 turnOn
-schedule('Mon 23:30 turnOn', '30 23 * * 1', () => turnOn(DROPLET_CONTROLLER_ID));
+schedule('Mon 23:30 turnOn controller', '30 23 * * 1', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 00:30 turnOff
-schedule('Tue 00:30 turnOff', '30 0 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
+schedule('Tue 00:30 turnOff controller', '30 0 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
 
 // Tue 07:30 turnOn
-schedule('Tue 07:30 turnOn', '30 7 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
+schedule('Tue 07:30 turnOn controller', '30 7 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 08:30 turnOff
-schedule('Tue 08:30 turnOff', '50 8 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
+schedule('Tue 08:30 turnOff controller', '30 8 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
 // Tue 11:30 turnOn
-schedule('Tue 11:30 turnOn', '30 11 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
+schedule('Tue 11:30 turnOn controller', '30 11 * * 2', () => turnOn(DROPLET_CONTROLLER_ID));
 // Tue 12:30 turnOff
-schedule('Tue 12:30 turnOff', '30 12 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));
+schedule('Tue 12:30 turnOff controller', '30 12 * * 2', () => turnOff(DROPLET_CONTROLLER_ID));

@@ -1676,95 +1676,99 @@ io.on('connection', socket => {
 //    Runs every 60s (adjust as desired).
 // in your socket‐server.js (or wherever you close auctions):
 setInterval(async () => {
-  const now = new Date()
-  // find all auctions that have just expired
-  const toClose = await db.auction.findMany({
-    where: { status: 'ACTIVE', endAt: { lte: now } }
-  })
-
-  for (const auc of toClose) {
-    const { id, creatorId, userCtoonId } = auc
-
-    // 1) fetch *all* bids for this auction, descending
-    const allBids = await db.bid.findMany({
-      where: { auctionId: id },
-      orderBy: { amount: 'desc' }
+  try {
+    const now = new Date()
+    // find all auctions that have just expired
+    const toClose = await db.auction.findMany({
+      where: { status: 'ACTIVE', endAt: { lte: now } }
     })
 
-    // 2) pick the first bid whose bidder still has ≥ that many points
-    let winningBid = null
-    for (const b of allBids) {
-      const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
-      const pts     = ptsRec?.points ?? 0
-      if (pts >= b.amount) {
-        winningBid = b
-        break
-      }
-    }
+    for (const auc of toClose) {
+      const { id, creatorId, userCtoonId } = auc
 
-    // 3) Now wrap the final update & any transfers in a transaction
-    await db.$transaction(async tx => {
-      // close the auction record
-      await tx.auction.update({
-        where: { id },
-        data: {
-          status:   'CLOSED',
-          winnerId: winningBid?.userId || null,
-          highestBidderId: winningBid?.userId || null,
-          winnerAt: now,
-          ...(winningBid && { highestBid: winningBid.amount })
-        }
+      // 1) fetch *all* bids for this auction, descending
+      const allBids = await db.bid.findMany({
+        where: { auctionId: id },
+        orderBy: { amount: 'desc' }
       })
 
-      if (winningBid) {
-        // transfer cToon to winner + log ownership
-        const uc = await tx.userCtoon.update({
-          where:  { id: userCtoonId },
-          data:   { userId: winningBid.userId, isTradeable: true },
-          select: { id: true, ctoonId: true, mintNumber: true }
-        })
-        await tx.ctoonOwnerLog.create({
+      // 2) pick the first bid whose bidder still has ≥ that many points
+      let winningBid = null
+      for (const b of allBids) {
+        const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
+        const pts     = ptsRec?.points ?? 0
+        if (pts >= b.amount) {
+          winningBid = b
+          break
+        }
+      }
+
+      // 3) Now wrap the final update & any transfers in a transaction
+      await db.$transaction(async tx => {
+        // close the auction record
+        await tx.auction.update({
+          where: { id },
           data: {
-            userId:      winningBid.userId,
-            ctoonId:     uc.ctoonId,
-            userCtoonId: uc.id,
-            mintNumber:  uc.mintNumber
+            status:   'CLOSED',
+            winnerId: winningBid?.userId || null,
+            highestBidderId: winningBid?.userId || null,
+            winnerAt: now,
+            ...(winningBid && { highestBid: winningBid.amount })
           }
         })
 
-        // debit winner
-        const loserPts = await tx.userPoints.update({
-          where: { userId: winningBid.userId },
-          data:  { points: { decrement: winningBid.amount } }
-        })
-        await tx.pointsLog.create({
-          data: { userId: winningBid.userId, points: winningBid.amount, total: loserPts.points, method: 'Auction', direction: 'decrease' }
-        })
+        if (winningBid) {
+          // transfer cToon to winner + log ownership
+          const uc = await tx.userCtoon.update({
+            where:  { id: userCtoonId },
+            data:   { userId: winningBid.userId, isTradeable: true },
+            select: { id: true, ctoonId: true, mintNumber: true }
+          })
+          await tx.ctoonOwnerLog.create({
+            data: {
+              userId:      winningBid.userId,
+              ctoonId:     uc.ctoonId,
+              userCtoonId: uc.id,
+              mintNumber:  uc.mintNumber
+            }
+          })
 
-        // credit creator
-        const creatorPts = await tx.userPoints.upsert({
-          where:  { userId: creatorId },
-          create: { userId: creatorId, points: winningBid.amount },
-          update: { points: { increment: winningBid.amount } }
-        })
-        await tx.pointsLog.create({
-          data: { userId: creatorId, points: winningBid.amount, total: creatorPts.points, method: 'Auction', direction: 'increase' }
-        })
-      } else {
-        // no winner → just unlock, keep current owner
-        await tx.userCtoon.update({
-          where: { id: userCtoonId },
-          data:  { isTradeable: true }
-        })
-      }
-    })
+          // debit winner
+          const loserPts = await tx.userPoints.update({
+            where: { userId: winningBid.userId },
+            data:  { points: { decrement: winningBid.amount } }
+          })
+          await tx.pointsLog.create({
+            data: { userId: winningBid.userId, points: winningBid.amount, total: loserPts.points, method: 'Auction', direction: 'decrease' }
+          })
+
+          // credit creator
+          const creatorPts = await tx.userPoints.upsert({
+            where:  { userId: creatorId },
+            create: { userId: creatorId, points: winningBid.amount },
+            update: { points: { increment: winningBid.amount } }
+          })
+          await tx.pointsLog.create({
+            data: { userId: creatorId, points: winningBid.amount, total: creatorPts.points, method: 'Auction', direction: 'increase' }
+          })
+        } else {
+          // no winner → just unlock, keep current owner
+          await tx.userCtoon.update({
+            where: { id: userCtoonId },
+            data:  { isTradeable: true }
+          })
+        }
+      })
 
 
-    // 5) notify clients of the final outcome
-    io.to(`auction_${id}`).emit('auction-ended', {
-      winnerId:   winningBid?.userId ?? null,
-      winningBid: winningBid?.amount ?? 0
-    })
+      // 5) notify clients of the final outcome
+      io.to(`auction_${id}`).emit('auction-ended', {
+        winnerId:   winningBid?.userId ?? null,
+        winningBid: winningBid?.amount ?? 0
+      })
+    } 
+  } catch (err) {
+    console.log('Error closing auctions:', err)
   }
 }, 60 * 1000)
 
