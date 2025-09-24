@@ -1677,6 +1677,7 @@ io.on('connection', socket => {
 // in your socket‐server.js (or wherever you close auctions):
 setInterval(async () => {
   try {
+    console.log('Checking for auctions to close…')
     const now = new Date()
     // find all auctions that have just expired
     const toClose = await db.auction.findMany({
