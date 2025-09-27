@@ -60,7 +60,7 @@
           <div class="relative">
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
               <img
-                src="/images/2poster08172025.png"
+                src="/images/posterOct25.png"
                 alt="Cartoon ReOrbit WinWheel Preview"
                 class="rounded-2xl" style="width:100%; cursor: pointer;"
                 @click="login"

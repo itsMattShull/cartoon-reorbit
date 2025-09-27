@@ -77,7 +77,7 @@
           <!-- Promo -->
           <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full lg:w-1/2 overflow-hidden bg-white/95 backdrop-blur-sm">
             <nuxt-link to="/games/winwheel">
-              <img src="/images/poster08172025.png" alt="Fantastic Four Poster" class="w-full h-full object-cover">
+              <img src="/images/posterOct25.png" alt="Fantastic Four Poster" class="w-full h-full object-cover">
             </nuxt-link>
           </div>
         </div>
