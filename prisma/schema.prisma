@@ -58,6 +58,7 @@ model Ctoon {
   holidayPoolRows  HolidayEventPool[]
   redeemedAsItem   HolidayRedemption[] @relation("HolidayItemDefinition")
   redeemedAsResult HolidayRedemption[] @relation("HolidayResultDefinition")
+  rewardPoolRows  RewardCtoonPool[] @relation("RewardPoolToCtoon")
 }
 
 model UserCtoon {
@@ -201,11 +202,26 @@ model ClaimCodeReward {
   id       String            @id @default(uuid())
   codeId   String
   points   Int?
+  pooledUniqueCount Int?
 
+  poolCtoons        RewardCtoonPool[]
   code     ClaimCode         @relation(fields: [codeId], references: [id])
   ctoons   RewardCtoon[]
   packs    RewardPack[]
   backgrounds RewardBackground[]
+}
+
+model RewardCtoonPool {
+  id       String  @id @default(uuid())
+  rewardId String
+  ctoonId  String
+  weight   Int     @default(1)
+
+  reward   ClaimCodeReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  ctoon    Ctoon           @relation("RewardPoolToCtoon", fields: [ctoonId], references: [id])
+
+  @@unique([rewardId, ctoonId])
+  @@index([ctoonId])
 }
 
 model RewardCtoon {

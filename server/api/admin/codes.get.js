@@ -1,12 +1,9 @@
 // server/api/admin/codes.get.js
-
-
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
-
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1. Admin check via your /api/auth/me endpoint
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -18,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2. Fetch all codes with maxClaims, expiration, and full reward definitions
+  // 2) Fetch codes with fixed, pooled, and background rewards
   const codes = await prisma.claimCode.findMany({
     where: { showInFrontend: true },
     orderBy: { createdAt: 'desc' },
@@ -27,23 +24,42 @@ export default defineEventHandler(async (event) => {
       maxClaims: true,
       expiresAt: true,
       prerequisites: {
-        select: { ctoonId: true, ctoon: { select: { id: true, name: true } } }
+        select: {
+          ctoonId: true,
+          ctoon: { select: { id: true, name: true } }
+        }
       },
       rewards: {
         select: {
           points: true,
-          ctoons: { select: { ctoonId: true, quantity: true } },
+          // fixed cToons (legacy)
+          ctoons: {
+            select: {
+              ctoonId: true,
+              quantity: true,
+              ctoon: { select: { id: true, name: true } }
+            }
+          },
+          // pooled cToons (new)
+          pooledUniqueCount: true,
+          poolCtoons: {
+            select: {
+              ctoonId: true,
+              weight: true,
+              ctoon: { select: { id: true, name: true } }
+            }
+          },
+          // background rewards
           backgrounds: {
             select: {
               backgroundId: true,
-              background: { select: { label: true, imagePath: true, id: true } }
+              background: { select: { id: true, label: true, imagePath: true } }
             }
           }
         }
       }
     }
   })
-
 
   return codes
 })

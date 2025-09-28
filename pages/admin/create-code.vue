@@ -103,6 +103,45 @@
           />
         </div>
 
+        <!-- Pooled cToon Rewards -->
+        <div class="space-y-2">
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" v-model="pooledEnabled" />
+            <span class="font-medium">Use pooled cToon rewards</span>
+          </label>
+
+          <div v-if="pooledEnabled" class="rounded border p-3 space-y-3">
+            <div>
+              <label class="block font-medium mb-1">Number to give out (unique)</label>
+              <input v-model.number="poolUniqueCount" type="number" min="1" class="w-32 border rounded p-2" />
+            </div>
+
+            <div>
+              <label class="block font-medium mb-1">Pool cToons</label>
+              <div v-for="(row, idx) in poolItems" :key="'pool-'+idx" class="flex items-center gap-2 mb-2">
+                <datalist :id="`pool-ctoons-${idx}`">
+                  <option v-for="ct in filteredCtoons(row.ctoonName)" :key="ct.id" :value="ct.name" />
+                </datalist>
+
+                <input v-model="row.ctoonName" :list="`pool-ctoons-${idx}`" class="flex-1 border rounded p-2" placeholder="Type 3+ characters" />
+
+                <!-- NEW: preview -->
+                <img
+                  v-if="findCtoon(row.ctoonName)?.assetPath"
+                  :src="findCtoon(row.ctoonName).assetPath"
+                  class="w-8 h-8 object-cover rounded"
+                  alt="cToon preview"
+                />
+
+                <input v-model.number="row.weight" type="number" min="1" class="w-20 border rounded p-2" title="Weight" />
+                <button type="button" @click="removePoolItem(idx)" class="text-red-600 hover:underline">Remove</button>
+              </div>
+              <button type="button" @click="addPoolItem" class="text-blue-600 hover:underline text-sm">+ Add pool cToon</button>
+              <p class="text-sm text-gray-500">Users receive <strong>unique</strong> picks from this pool.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- cToon Rewards -->
         <div>
           <label class="block font-medium mb-1">cToon Rewards</label>
@@ -218,6 +257,13 @@ const ctoonRewards = ref([
 ])
 const error = ref('')
 const bgOptions = ref([])
+
+const pooledEnabled   = ref(false)
+const poolUniqueCount = ref(1)
+const poolItems       = ref([{ ctoonName: '', weight: 1 }])
+
+function addPoolItem() { poolItems.value.push({ ctoonName: '', weight: 1 }) }
+function removePoolItem(i) { poolItems.value.splice(i, 1) }
 
 // at the top, alongside your other refs
 const prereqCtoons = ref([{ ctoonName: '' }])
@@ -352,18 +398,40 @@ async function submitForm() {
   }
 
   // build payload
+  // build either fixed cToons or pooled
+  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload }
+
+  if (pooledEnabled.value) {
+    const validPool = []
+    for (const r of poolItems.value) {
+      const name = (r.ctoonName || '').trim()
+      if (!name) continue
+      const match = ctoonOptions.value.find(ct => ct.name === name)
+      if (!match) { error.value = `Unrecognized cToon in pool: “${name}”`; return }
+      validPool.push({ ctoonId: match.id, weight: Number(r.weight) || 1 })
+    }
+    if (validPool.length === 0) { error.value = 'Add at least one cToon to the pool.'; return }
+    if (poolUniqueCount.value < 1) { error.value = 'Number to give out must be at least 1.'; return }
+    if (poolUniqueCount.value > validPool.length) { error.value = 'Number to give out cannot exceed pool size.'; return }
+    rewardBlock.pool = { uniqueCount: poolUniqueCount.value, items: validPool }
+  } else {
+    const validCtoons = []
+    for (const r of ctoonRewards.value) {
+      const name = (r.ctoonName||'').trim()
+      if (!name || r.quantity < 1) continue
+      const found = ctoonOptions.value.find(ct => ct.name === name)
+      if (!found) { error.value = `Unrecognized cToon: “${name}”`; return }
+      validCtoons.push({ ctoonId: found.id, quantity: r.quantity })
+    }
+    rewardBlock.ctoons = validCtoons
+  }
+
   const payload = {
     code: code.value.trim(),
     maxClaims: maxClaims.value,
     prerequisites: validPrereqs,
     expiresAt: expiresIso,
-    rewards: [
-      {
-        points: points.value,
-        ctoons: validCtoons,
-        backgrounds: backgroundsPayload
-      }
-    ]
+    rewards: [rewardBlock]
   }
 
   try {
