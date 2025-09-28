@@ -158,7 +158,7 @@
                         rel="noopener"
                         class="block w-full text-center text-[var(--reorbit-deep)] bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] transition-colors text-sm font-medium py-2 rounded-md hover:brightness-95"
                       >
-                        Start Chatting
+                        Start Chatting 
                       </a>
                     </div>
 
