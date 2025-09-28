@@ -147,6 +147,7 @@ const links = computed(() => {
       { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
       { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
+      { label: 'Manage Dev', to: '/admin/manage-dev' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
