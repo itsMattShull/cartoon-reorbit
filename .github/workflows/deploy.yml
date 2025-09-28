@@ -1,18 +1,41 @@
-- name: Deploy via appleboy/ssh-action
-  uses: appleboy/ssh-action@v1.2.0
-  with:
-    host: ${{ secrets.SSH_HOST }}
-    username: ${{ secrets.SSH_USER }}
-    port: ${{ secrets.SSH_PORT }}
-    key: ${{ secrets.SSH_PRIVATE_KEY }}
-    script: |
-      cd /var/www/cartoon-reorbit
-      git pull origin master
-      npx prisma migrate deploy
-      npx prisma generate
-      npm install
-      npm run build
-      pm2 restart 2
-      pm2 restart 5
-      pm2 restart 3
-      pm2 restart 6
+# .github/workflows/deploy.yml
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]   # change if needed
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add droplet to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Run remote deploy commands over SSH
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          # start agent and add key
+          ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+          ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"
+
+          # run your commands on the server
+          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
+            cd /var/www/cartoon-reorbit && \
+            git pull origin master && \
+            npx prisma migrate deploy && \
+            npx prisma generate && \
+            npm install && \
+            npm run build && \
+            pm2 restart 2 && \
+            pm2 restart 5 && \
+            pm2 restart 3 && \
+            pm2 restart 6
+          "'
