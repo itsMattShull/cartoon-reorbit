@@ -37,8 +37,8 @@ export default defineEventHandler(async (event) => {
   const rewardDefs = await prisma.claimCodeReward.findMany({
     where: { codeId: claimCode.id },
     include: {
-      ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true } } } },
-      poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true } } } }, // NEW
+      ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, rarity: true, set: true } } } },
+      poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, rarity: true, set: true } } } },
       backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } }
     }
   })
@@ -51,7 +51,10 @@ export default defineEventHandler(async (event) => {
       ctoonId: rc.ctoon.id,
       name: rc.ctoon.name,
       quantity: rc.quantity,
-      initialQuantity: rc.ctoon.initialQuantity ?? 0
+      initialQuantity: rc.ctoon.initialQuantity ?? 0,
+      assetPath: rc.ctoon.assetPath,
+      rarity: rc.ctoon.rarity,
+      set: rc.ctoon.set
     }))
   )
 
@@ -66,10 +69,13 @@ export default defineEventHandler(async (event) => {
         const j = i + Math.floor(Math.random() * (pool.length - i))
         ;[pool[i], pool[j]] = [pool[j], pool[i]]
         ctoonAwards.push({
-          ctoonId: pool[i].ctoon.id,
-          name: pool[i].ctoon.name,
-          quantity: 1,
-          initialQuantity: pool[i].ctoon.initialQuantity ?? 0
+          ctoonId:        pool[i].ctoon.id,
+          name:           pool[i].ctoon.name,
+          quantity:       1,
+          initialQuantity:pool[i].ctoon.initialQuantity ?? 0,
+          assetPath:      pool[i].ctoon.assetPath,
+          rarity:         pool[i].ctoon.rarity,
+          set:            pool[i].ctoon.set
         })
       }
     }
@@ -118,7 +124,10 @@ export default defineEventHandler(async (event) => {
       counts[ctoonId]++
       const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
       await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
-      mintedRecords.push({ ctoonId, name, mintNumber, isFirstEdition })
+      mintedRecords.push({
+        ctoonId, name, mintNumber, isFirstEdition,
+        assetPath: award.assetPath, rarity: award.rarity, set: award.set
+      })
     }
   }
 

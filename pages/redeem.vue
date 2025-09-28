@@ -38,41 +38,59 @@
 
         <p v-if="error" class="mt-2 text-red-600">{{ error }}</p>
 
-        <div
-          v-if="success"
-          class="mt-4 p-4 bg-green-100 border border-green-300 rounded"
-        >
-          <p class="font-medium text-green-800">🎉 Success! You’ve been awarded:</p>
-          <ul class="mt-2 list-disc list-inside space-y-1">
-            <li v-if="rewards.points">
-              {{ rewards.points.toLocaleString() }} points
-            </li>
-            <li
+        <!-- Success -->
+        <div v-if="success" class="mt-6">
+          <p class="font-medium text-green-800 mb-3">🎉 Success! You’ve been awarded:</p>
+
+          <div v-if="rewards.points" class="mb-4 bg-green-100 border border-green-300 rounded p-3">
+            {{ rewards.points.toLocaleString() }} points
+          </div>
+
+          <!-- cToon cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div
               v-for="item in rewards.ctoons"
-              :key="item.id + '-' + item.mintNumber"
-              class="flex items-center space-x-2"
+              :key="item.ctoonId + '-' + item.mintNumber"
+              class="relative bg-white rounded-lg shadow p-4 flex flex-col items-center"
             >
-              <span class="font-medium">{{ item.quantity }}×</span>
-              <span>{{ item.name }}
-                <small class="text-gray-500">
-                  (#{{ item.mintNumber }}{{ item.isFirstEdition ? ' • 1st Ed' : '' }})
-                </small>
+              <span
+                class="absolute top-2 right-2 bg-indigo-600 text-white text-[10px] font-semibold px-2 py-0.5 rounded"
+              >
+                {{ item.quantity || 1 }}×
               </span>
-            </li>
-            <li
-              v-for="bg in rewards.backgrounds"
-              :key="bg.id"
-              class="flex items-center gap-2"
-            >
-              <img
-                v-if="bg.imagePath"
-                :src="bg.imagePath"
-                class="w-12 h-8 object-cover rounded border"
-                alt="Background"
-              />
-              <span>Background unlocked: <strong>{{ bg.label || 'Untitled' }}</strong></span>
-            </li>
-          </ul>
+
+              <h2 class="text-base font-semibold mb-2 mt-4 text-center break-words">
+                {{ item.name }}
+              </h2>
+
+              <div class="flex-grow flex items-center justify-center w-full mb-3">
+                <img :src="item.assetPath" class="max-w-full h-28 object-contain" />
+              </div>
+
+              <div class="mt-auto text-xs text-center text-gray-700">
+                <p class="capitalize">
+                  {{ item.rarity || '—' }}<span v-if="item.set"> • {{ item.set }}</span>
+                </p>
+                <p class="text-gray-500">
+                  Mint #{{ item.mintNumber }}<span v-if="item.isFirstEdition"> • 1st Ed</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Background unlocks -->
+          <div v-if="rewards.backgrounds?.length" class="mt-6">
+            <h3 class="font-medium mb-2">Backgrounds</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div v-for="bg in rewards.backgrounds" :key="bg.id" class="flex items-center gap-3 bg-white rounded-lg shadow p-3">
+                <img v-if="bg.imagePath" :src="bg.imagePath" class="w-16 h-10 object-cover rounded border" />
+                <div class="text-sm">
+                  <div class="font-semibold">{{ bg.label || 'Untitled' }}</div>
+                  <div class="text-gray-500">Unlocked</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <ClientOnly>
           <div v-html="rawHTML"></div>
