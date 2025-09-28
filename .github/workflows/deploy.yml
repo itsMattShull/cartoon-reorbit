@@ -3,7 +3,7 @@ name: Deploy
 
 on:
   push:
-    branches: [ master ]   # change if needed
+    branches: [ master ]
 
 concurrency:
   group: deploy-production
@@ -18,24 +18,39 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Prepare askpass script
+        run: |
+          echo '#!/usr/bin/env bash' > "$GITHUB_WORKSPACE/askpass.sh"
+          echo 'echo "$SSH_PASSPHRASE"' >> "$GITHUB_WORKSPACE/askpass.sh"
+          chmod +x "$GITHUB_WORKSPACE/askpass.sh"
+
+      - name: Add key to agent using SSH_ASKPASS
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
+          SSH_ASKPASS: $GITHUB_WORKSPACE/askpass.sh
+          DISPLAY: :0
+        run: |
+          ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+          ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"
+          ssh-add -l
+
       - name: Run remote deploy commands over SSH
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
-          # start agent and add key
-          ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
-          ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY }}"
-
-          # run your commands on the server
-          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
-            cd /var/www/cartoon-reorbit && \
-            git pull origin master && \
-            npx prisma migrate deploy && \
-            npx prisma generate && \
-            npm install && \
-            npm run build && \
-            pm2 restart 2 && \
-            pm2 restart 5 && \
-            pm2 restart 3 && \
-            pm2 restart 6
-          "'
+          # Use askpass for ssh too, in case it re-prompts
+          SSH_ASKPASS=$GITHUB_WORKSPACE/askpass.sh DISPLAY=:0 \
+          ssh -o BatchMode=no -o IdentitiesOnly=yes -p "${{ secrets.SSH_PORT }}" \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
+              cd /var/www/cartoon-reorbit && \
+              git pull origin master && \
+              npx prisma migrate deploy && \
+              npx prisma generate && \
+              npm install && \
+              npm run build && \
+              pm2 restart 2 && \
+              pm2 restart 5 && \
+              pm2 restart 3 && \
+              pm2 restart 6
+            "'
