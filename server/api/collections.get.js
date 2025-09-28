@@ -37,6 +37,8 @@ export default defineEventHandler(async (event) => {
     assetPath: uc.ctoon.assetPath,
     name: uc.ctoon.name,
     series: uc.ctoon.series,
+    releaseDate: uc.ctoon.releaseDate,
+    price: uc.ctoon.price,
     rarity: uc.ctoon.rarity,
     set: uc.ctoon.set,
     mintNumber: uc.mintNumber,

@@ -631,6 +631,39 @@ const ownersList           = ref([])
 const ownersLoading        = ref(false)
 const currentOwnersCtoon   = ref(null)
 
+// collections.vue <script setup> — add helpers near top of sort code
+function sortCmp(a, b, { useMintTie = false } = {}) {
+  const getTimeAsc  = v => v ? new Date(v).getTime() : Number.MAX_SAFE_INTEGER
+  const getTimeDesc = v => v ? new Date(v).getTime() : -Number.MAX_SAFE_INTEGER
+  const numAsc  = (x,y) => (x ?? Number.POSITIVE_INFINITY) - (y ?? Number.POSITIVE_INFINITY)
+  const numDesc = (x,y) => (y ?? Number.NEGATIVE_INFINITY) - (x ?? Number.NEGATIVE_INFINITY)
+
+  switch (sortBy.value) {
+    case 'releaseDateAsc':  return getTimeAsc(a.releaseDate)  - getTimeAsc(b.releaseDate)
+    case 'releaseDateDesc': return getTimeDesc(b.releaseDate) - getTimeDesc(a.releaseDate)
+    case 'priceAsc':        return numAsc(a.price, b.price)
+    case 'priceDesc':       return numDesc(a.price, b.price)
+    case 'rarity': {
+      const cmp = (a.rarity || '').localeCompare(b.rarity || '')
+      return cmp || (a.name || '').localeCompare(b.name || '')
+    }
+    case 'series': {
+      const cmp = (a.series || '').localeCompare(b.series || '')
+      return cmp || (a.name || '').localeCompare(b.name || '')
+    }
+    case 'set': {
+      const cmp = (a.set || '').localeCompare(b.set || '')
+      return cmp || (a.name || '').localeCompare(b.name || '')
+    }
+    case 'name':
+    default: {
+      const cmp = (a.name || '').localeCompare(b.name || '')
+      if (!cmp && useMintTie) return (a.mintNumber ?? 0) - (b.mintNumber ?? 0)
+      return cmp
+    }
+  }
+}
+
 const sortedOwners = computed(() =>
   ownersList.value.slice().sort((a, b) => a.mintNumber - b.mintNumber)
 )
@@ -671,12 +704,15 @@ const filteredAllCtoons = computed(() => {
     return nm && sm && se && r && o
   })
 })
+const sortedAll = computed(() =>
+  filteredAllCtoons.value.slice().sort((a, b) => sortCmp(a, b))
+)
 const totalPagesAll = computed(() =>
-  Math.max(1, Math.ceil(filteredAllCtoons.value.length / PAGE_SIZE))
+  Math.max(1, Math.ceil(sortedAll.value.length / PAGE_SIZE))
 )
 const pagedAll = computed(() => {
   const start = (pageAll.value - 1) * PAGE_SIZE
-  return filteredAllCtoons.value.slice(start, start + PAGE_SIZE)
+  return sortedAll.value.slice(start, start + PAGE_SIZE)
 })
 
 // Sets/Series present on the current page only
@@ -689,16 +725,10 @@ const pageSeriesWithItems = computed(() =>
 
 // ─── SORTED GROUP HELPERS FOR ALL TABS ────────────────────────────────────────
 function itemsInSetSorted(setName) {
-  return pagedAll.value
-    .filter(x => x.set === setName)
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return pagedAll.value.filter(x => x.set === setName).slice().sort((a,b) => sortCmp(a,b))
 }
 function itemsInSeriesSorted(seriesName) {
-  return pagedAll.value
-    .filter(x => x.series === seriesName)
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return pagedAll.value.filter(x => x.series === seriesName).slice().sort((a,b) => sortCmp(a,b))
 }
 
 // ─── COMPUTED: My Collection ──────────────────────────────────────────────────
@@ -712,22 +742,7 @@ const filteredUserCtoons = computed(() =>
   })
 )
 const sortedUserAll = computed(() =>
-  filteredUserCtoons.value.slice().sort((a, b) => {
-    switch (sortBy.value) {
-      case 'releaseDateAsc':   return new Date(a.releaseDate) - new Date(b.releaseDate)
-      case 'releaseDateDesc':  return new Date(b.releaseDate) - new Date(a.releaseDate)
-      case 'priceAsc':         return a.price - b.price
-      case 'priceDesc':        return b.price - a.price
-      case 'rarity':           return a.rarity.localeCompare(b.rarity)
-      case 'series':           return a.series.localeCompare(b.series)
-      case 'set':              return a.set.localeCompare(b.set)
-      case 'name': {
-        const cmp = a.name.localeCompare(b.name)
-        return cmp || ((a.mintNumber ?? 0) - (b.mintNumber ?? 0))
-      }
-      default: return 0
-    }
-  })
+  filteredUserCtoons.value.slice().sort((a, b) => sortCmp(a, b, { useMintTie: true }))
 )
 const totalPagesUser = computed(() =>
   Math.max(1, Math.ceil(sortedUserAll.value.length / PAGE_SIZE))
@@ -748,22 +763,7 @@ const filteredWishlistCtoons = computed(() =>
   })
 )
 const filteredAndSortedWishlistCtoons = computed(() =>
-  filteredWishlistCtoons.value.slice().sort((a, b) => {
-    switch (sortBy.value) {
-      case 'releaseDateAsc':   return new Date(a.releaseDate) - new Date(b.releaseDate)
-      case 'releaseDateDesc':  return new Date(b.releaseDate) - new Date(a.releaseDate)
-      case 'priceAsc':         return a.price - b.price
-      case 'priceDesc':        return b.price - a.price
-      case 'rarity':           return a.rarity.localeCompare(b.rarity)
-      case 'series':           return a.series.localeCompare(b.series)
-      case 'set':              return a.set.localeCompare(b.set)
-      case 'name': {
-        const cmp = a.name.localeCompare(b.name)
-        return cmp || ((a.mintNumber ?? 0) - (b.mintNumber ?? 0))
-      }
-      default: return 0
-    }
-  })
+  filteredWishlistCtoons.value.slice().sort((a, b) => sortCmp(a, b))
 )
 const totalPagesWishlist = computed(() =>
   Math.max(1, Math.ceil(filteredAndSortedWishlistCtoons.value.length / PAGE_SIZE))
@@ -850,6 +850,7 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
 watch(sortBy, () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
+  if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
 })
 
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
