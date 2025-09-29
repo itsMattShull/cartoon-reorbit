@@ -25,14 +25,23 @@ jobs:
           ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
               -i ~/.ssh/deploy_key -p "${{ secrets.SSH_PORT }}" \
               "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
-                cd /var/www/cartoon-reorbit && \
-                git pull origin master && \
-                npx prisma migrate deploy && \
-                npx prisma generate && \
-                npm install && \
-                npm run build && \
-                pm2 restart 2 && \
-                pm2 restart 5 && \
-                pm2 restart 3 && \
-                pm2 restart 6
+                set -euo pipefail
+
+                # ensure Node, npm, npx, pm2 on PATH (nvm + common locations)
+                export NVM_DIR=\"\$HOME/.nvm\"
+                [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+                [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\"
+                if command -v nvm >/dev/null 2>&1; then nvm use --lts >/dev/null; fi
+                export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:/usr/local/bin:\$PATH\"
+
+                cd /var/www/cartoon-reorbit
+                git pull origin master
+
+                npm ci
+                npx prisma migrate deploy
+                npx prisma generate
+                npm run build
+
+                # restart multiple pm2 processes
+                pm2 restart 2 5 3 6
               "'
