@@ -25,14 +25,17 @@ jobs:
           ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
               -i ~/.ssh/deploy_key -p "${{ secrets.SSH_PORT }}" \
               "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
-                set -euo pipefail
+                set -eo pipefail
 
-                # ensure Node, npm, npx, pm2 on PATH (nvm + common locations)
+                # make Node/npm/npx/pm2 available
                 export NVM_DIR=\"\$HOME/.nvm\"
-                [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
-                [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\"
-                if command -v nvm >/dev/null 2>&1; then nvm use --lts >/dev/null; fi
-                export PATH=\"\$HOME/.npm-global/bin:\$HOME/.local/bin:/usr/local/bin:\$PATH\"
+                if [ -s \"\$NVM_DIR/nvm.sh\" ]; then
+                  # nvm is incompatible with set -u; do NOT enable -u
+                  . \"\$NVM_DIR/nvm.sh\"
+                  nvm use --lts >/dev/null 2>&1 || true
+                fi
+                [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
+                command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
                 cd /var/www/cartoon-reorbit
                 git pull origin master
@@ -42,6 +45,5 @@ jobs:
                 npx prisma generate
                 npm run build
 
-                # restart multiple pm2 processes
                 pm2 restart 2 5 3 6
               "'
