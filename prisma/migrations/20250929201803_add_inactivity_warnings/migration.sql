@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "warning180" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "warning210" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "warning240" BOOLEAN NOT NULL DEFAULT false;

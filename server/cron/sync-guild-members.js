@@ -8,6 +8,219 @@ const BOT_TOKEN   = process.env.BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
 const DISCORD_API = 'https://discord.com/api/v10'
 
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+async function discordDm(discordUserId, content) {
+  if (!BOT_TOKEN) return false
+  try {
+    // 1) create or get DM channel
+    const ch = await fetch(`${DISCORD_API}/users/@me/channels`, {
+      method: 'POST',
+      headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: discordUserId })
+    })
+    if (ch.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await ch.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      return discordDm(discordUserId, content)
+    }
+    if (!ch.ok) return false
+    const { id: channelId } = await ch.json()
+
+    // 2) send message
+    const msg = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    })
+    if (msg.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await msg.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      return discordDm(discordUserId, content)
+    }
+    return msg.ok
+  } catch {
+    return false
+  }
+}
+
+async function recomputeLastActivity() {
+  // Note: PostgreSQL quoted identifiers must match your table/column names.
+  const sql = `
+  UPDATE "User" u SET "lastActivity" = GREATEST(
+    COALESCE(u."lastLogin", TIMESTAMP 'epoch'),
+    COALESCE( (SELECT MAX(l."createdAt") FROM "LoginLog" l WHERE l."userId" = u."id"),   TIMESTAMP 'epoch'),
+    COALESCE( (SELECT MAX(p."createdAt") FROM "PointsLog" p WHERE p."userId" = u."id"),  TIMESTAMP 'epoch'),
+    COALESCE( (SELECT MAX(g."createdAt") FROM "GamePointLog" g WHERE g."userId" = u."id"), TIMESTAMP 'epoch'),
+    COALESCE( (SELECT MAX(v."createdAt") FROM "Visit" v WHERE v."userId" = u."id"),      TIMESTAMP 'epoch'),
+    COALESCE( (SELECT MAX(w."createdAt") FROM "WheelSpinLog" w WHERE w."userId" = u."id"), TIMESTAMP 'epoch'),
+    COALESCE(u."createdAt", TIMESTAMP 'epoch')
+  )
+  WHERE TRUE;`
+  try { await prisma.$executeRawUnsafe(sql) } catch {}
+}
+
+async function sendInactivityWarnings() {
+  const d180 = daysAgo(180)
+  const d210 = daysAgo(210)
+  const d240 = daysAgo(240)
+
+  // 180-day warnings
+  const users180 = await prisma.user.findMany({
+    where: {
+      active: true,
+      warning180: false,
+      lastActivity: { lte: d180 },
+    },
+    select: { id: true, discordId: true }
+  })
+  for (const u of users180) {
+    const ok = u.discordId ? await discordDm(
+      u.discordId,
+      `You have been inactive for 6 months. If you are inactive for 9 months, your account will be disabled and all cToons auctioned and points removed.`
+    ) : false
+    if (ok) {
+      await prisma.user.update({ where: { id: u.id }, data: { warning180: true } })
+    }
+  }
+
+  // 210-day warnings
+  const users210 = await prisma.user.findMany({
+    where: {
+      active: true,
+      warning210: false,
+      lastActivity: { lte: d210 },
+    },
+    select: { id: true, discordId: true }
+  })
+  for (const u of users210) {
+    const ok = u.discordId ? await discordDm(
+      u.discordId,
+      `You have been inactive for 7 months. At 9 months of inactivity your account will be disabled and your cToons will be auctioned with points removed.`
+    ) : false
+    if (ok) {
+      await prisma.user.update({ where: { id: u.id }, data: { warning210: true } })
+    }
+  }
+
+  // 240-day warnings
+  const users240 = await prisma.user.findMany({
+    where: {
+      active: true,
+      warning240: false,
+      lastActivity: { lte: d240 },
+    },
+    select: { id: true, discordId: true }
+  })
+  for (const u of users240) {
+    const ok = u.discordId ? await discordDm(
+      u.discordId,
+      `You have been inactive for 8 months. At 9 months of inactivity your account will be disabled and your cToons will be auctioned with points removed.`
+    ) : false
+    if (ok) {
+      await prisma.user.update({ where: { id: u.id }, data: { warning240: true } })
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3) enforce at 270 days, 02:20
+// Zero points, schedule auctions for all UserCtoons, disable account.
+async function enforceDormantAccounts() {
+  const cutoff = daysAgo(270)
+
+  // fetch batch to avoid huge transactions
+  const batch = await prisma.user.findMany({
+    where: {
+      active: true,
+      lastActivity: { lte: cutoff },
+    },
+    select: { id: true, discordId: true }
+  })
+
+  for (const u of batch) {
+    // DM best-effort
+    if (u.discordId) {
+      await discordDm(
+        u.discordId,
+        `Your account has been inactive for 9 months. Your account is now disabled, your points have been removed, and your cToons are being prepared for auction.`
+      )
+    }
+
+    // transactional enforcement per user
+    await prisma.$transaction(async (tx) => {
+      // 3.1 zero points
+      const up = await tx.userPoints.findUnique({ where: { userId: u.id } })
+      if (up?.points && up.points !== 0) {
+        await tx.pointsLog.create({
+          data: {
+            userId: u.id,
+            direction: 'decrease',
+            points: up.points,
+            total: 0,
+            method: 'inactive_270d'
+          }
+        })
+        await tx.userPoints.update({
+          where: { userId: u.id },
+          data: { points: 0, updatedAt: new Date() }
+        })
+      }
+
+      // 3.2 move all UserCtoons to AuctionOnly (skip ones already auctioned/listed)
+      const userCtoons = await tx.userCtoon.findMany({
+        where: { userId: u.id, burnedAt: null },
+        select: { id: true, ctoon: { select: { rarity: true } } }
+      })
+      const now = new Date()
+      const endsAt = addDays(now, 3)
+      const rarityFloor = (r) => {
+        const s = (r || '').trim().toLowerCase()
+        if (s === 'common') return 25
+        if (s === 'uncommon') return 50
+        if (s === 'rare') return 100
+        if (s === 'very rare') return 187
+        if (s === 'crazy rare') return 312
+        return 50
+      }
+
+      for (const uc of userCtoons) {
+        // ensure not already active auction
+        const hasActive = await tx.auction.findFirst({
+          where: { userCtoonId: uc.id, status: 'ACTIVE' },
+          select: { id: true }
+        })
+        const hasPending = await tx.auctionOnly.findFirst({
+          where: { userCtoonId: uc.id, isStarted: false },
+          select: { id: true }
+        })
+        if (hasActive || hasPending) continue
+
+        await tx.auctionOnly.create({
+          data: {
+            userCtoonId: uc.id,
+            pricePoints: rarityFloor(uc.ctoon?.rarity),
+            startsAt: now,
+            endsAt,
+            isStarted: false,
+          }
+        })
+
+        // lock tradeability to avoid private transfers
+        await tx.userCtoon.update({
+          where: { id: uc.id },
+          data: { isTradeable: false }
+        })
+      }
+
+      // 3.3 disable account
+      await tx.user.update({ where: { id: u.id }, data: { active: false } })
+    })
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Existing: guild sync
 async function syncGuildMembers() {
@@ -116,6 +329,7 @@ async function syncGuildMembers() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Runs at HH:01 via cron.schedule('1 * * * *', startDueAuctions)
+
 async function startDueAuctions() {
   const rarityFloor = (r) => {
     const s = (r || '').trim().toLowerCase()
@@ -273,4 +487,18 @@ await syncGuildMembers()
 cron.schedule('0 0 * * *', syncGuildMembers)  // daily midnight
 
 await startDueAuctions()
+// start AuctionOnly auctions
 cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
+
+await recomputeLastActivity()
+cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily
+
+await sendInactivityWarnings()
+cron.schedule('0 3 * * *', sendInactivityWarnings)    // 03:00 daily
+
+await enforceDormantAccounts()
+cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
+
+// update log in logic to not let inactive users log in
+// update cZone page to only show active users
+// allow creation of a new account with existing discordId if old one is inactive

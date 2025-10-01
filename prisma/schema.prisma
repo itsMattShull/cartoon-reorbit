@@ -107,11 +107,16 @@ model User {
   roles            String[]         @default([])
   isAdmin          Boolean          @default(false)
   inGuild          Boolean          @default(true)
+  active           Boolean          @default(true)
   createdAt        DateTime         @default(now())
   lastLogin        DateTime?
+  lastActivity     DateTime?
   discordCreatedAt DateTime?
   isBooster       Boolean   @default(false)
   boosterSince    DateTime? 
+  warning180       Boolean  @default(false)
+  warning210       Boolean  @default(false)
+  warning240       Boolean  @default(false)
 
   cZones           CZone[]
   clashDecks       ClashDeck[]
@@ -148,6 +153,8 @@ model User {
   ownerLogs          CtoonOwnerLog[]
   holidayRedemptions HolidayRedemption[]
   auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
+
+  @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
 model UserIP {
