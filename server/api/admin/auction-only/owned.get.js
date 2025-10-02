@@ -1,8 +1,10 @@
 // server/api/admin/auction-only/owned.get.js
+import dotenv from 'dotenv'
+dotenv.config()
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-
-const OWNER_USERNAME = 'CartoonReOrbitOfficial'
+console.log('owned.get.js - process.env.OFFICIAL_USERNAME:', process.env.OFFICIAL_USERNAME)
+const OWNER_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 const LIMIT = 25
 
 export default defineEventHandler(async (event) => {
