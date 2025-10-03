@@ -54,6 +54,16 @@ export default defineEventHandler(async (event) => {
   const discordUser = await $fetch('https://discord.com/api/users/@me', { headers: authHeader })
   const discordCreatedAt = parseDiscordSnowflake(discordUser.id)
 
+  // 🚫 If any row for this discordId is banned, refuse login/creation
+  const bannedRow = await prisma.user.findFirst({
+    where: { discordId: discordUser.id, banned: true },
+    select: { id: true }
+  })
+  if (bannedRow) {
+    // no session cookie, just bounce with a banner
+    return sendRedirect(event, '/join-discord?banned=1')
+  }
+
   // 3) Best-effort auto-join to guild
   try {
     await $fetch(`https://discord.com/api/guilds/${guildId}/members/${discordUser.id}`, {

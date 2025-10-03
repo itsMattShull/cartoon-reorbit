@@ -269,7 +269,7 @@ export default defineEventHandler(async (event) => {
     try {
       const { count } = await prisma.user.updateMany({
         where: { id: { in: sourceIds }, active: true },
-        data:  { active: false }
+        data:  { active: false, banned: true } 
       })
       deactivatedCount = count
     } catch (e) {

@@ -29,6 +29,12 @@ export const useAuth = () => {
         user.value = data.value
       } catch (err) {
         user.value = null
+        // If banned, kick to /join-discord with notice
+        const status = err?.data?.statusCode || err?.statusCode
+        const msg = err?.data?.statusMessage || err?.message || ''
+        if (status === 403 && /banned/i.test(msg || '')) {
+          if (process.client) window.location.replace('/join-discord?banned=1')
+        }
       }
     }
   

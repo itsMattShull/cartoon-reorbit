@@ -39,6 +39,8 @@ export default defineEventHandler(async (event) => {
       username: true,
       email: true,
       roles: true,
+      banned: true,
+      active: true,
       isAdmin: true,
       inGuild: true,
       points: true,
@@ -46,6 +48,10 @@ export default defineEventHandler(async (event) => {
       isBooster: true
     }
   })
+
+  if (user.banned) {
+    throw createError({ statusCode: 403, statusMessage: 'Banned' })
+  }
 
   if (!user) {
     throw createError({ statusCode: 404, statusMessage: 'User not found' })
