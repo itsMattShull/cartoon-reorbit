@@ -55,16 +55,15 @@
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <button
+                    v-if="alias.isKnown && otherKnownAliasesInGroup(group.aliases, alias.username).length"
                     class="px-2 py-1 text-xs border rounded hover:bg-gray-100"
-                    @click="openCheatSummary(alias.username, otherAliasesInGroup(group.aliases, alias.username))"
-                    :disabled="otherAliasesInGroup(group.aliases, alias.username).length === 0"
+                    @click="openCheatSummary(alias.username, otherKnownAliasesInGroup(group.aliases, alias.username))"
                     title="Run check-cheating with this user as Target and the others as Sources"
                   >
                     Cheat Check
                   </button>
                 </div>
               </li>
-
             </ul>
           </div>
         </div>
@@ -103,14 +102,14 @@
             <p><strong>IP Address:</strong> {{ log.ip }}</p>
             <p v-if="isSuspicious(log.ip)" class="mt-2 text-sm">
               <strong>Other Usernames:</strong>
-              {{ otherUsernames(log.ip, log.user.username).join(', ') }}
+              {{ otherKnownUsernames(log.ip, log.user.username).join(', ') }}
             </p>
 
             <div class="mt-3">
               <button
                 class="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-                @click="openCheatSummary(log.user.username, otherUsernames(log.ip, log.user.username))"
-                :disabled="otherUsernames(log.ip, log.user.username).length === 0"
+                @click="openCheatSummary(log.user.username, otherKnownUsernames(log.ip, log.user.username))"
+                :disabled="!isKnown(log.user.username) || otherKnownUsernames(log.ip, log.user.username).length === 0"
               >
                 Cheat Check
               </button>
@@ -147,15 +146,15 @@
                 <td class="p-2 border-b">{{ log.ip }}</td>
                 <td class="p-2 border-b">
                   <span v-if="isSuspicious(log.ip)">
-                    {{ otherUsernames(log.ip, log.user.username).join(', ') }}
+                    {{ otherKnownUsernames(log.ip, log.user.username).join(', ') }}
                   </span>
                   <span v-else>—</span>
                 </td>
                 <td class="p-2 border-b">
                   <button
                     class="px-2 py-1 border rounded hover:bg-gray-100"
-                    @click="openCheatSummary(log.user.username, otherUsernames(log.ip, log.user.username))"
-                    :disabled="otherUsernames(log.ip, log.user.username).length === 0"
+                    @click="openCheatSummary(log.user.username, otherKnownUsernames(log.ip, log.user.username))"
+                    :disabled="!isKnown(log.user.username) || otherKnownUsernames(log.ip, log.user.username).length === 0"
                   >
                     Cheat Check
                   </button>
@@ -254,9 +253,10 @@ const duplicateGroups = ref([])
 const activeTab       = ref('Duplicates')
 const searchTerm      = ref('')
 
-// points lookup
-const usersLoaded   = ref(false)
-const pointsByName  = ref(new Map())
+// known users + points
+const usersLoaded     = ref(false)
+const pointsByName    = ref(new Map())
+const knownUsernames  = ref(new Set())
 
 async function ensureUsersLoaded () {
   if (usersLoaded.value) return
@@ -264,12 +264,19 @@ async function ensureUsersLoaded () {
   if (!res.ok) return
   const users = await res.json()
   const map = new Map()
+  const set = new Set()
   for (const u of users || []) {
-    if (u?.username) map.set(u.username, Number(u.points || 0))
+    if (u?.username) {
+      set.add(u.username)
+      map.set(u.username, Number(u.points || 0))
+    }
   }
-  pointsByName.value = map
-  usersLoaded.value = true
+  knownUsernames.value = set
+  pointsByName.value   = map
+  usersLoaded.value    = true
 }
+
+const isKnown = (name) => knownUsernames.value.has(name)
 
 // Cheat summary modal state
 const showCheatModal  = ref(false)
@@ -281,22 +288,24 @@ const previewSources  = ref([])
 
 // ---- Fetchers ----
 async function fetchDuplicateGroups() {
-  // load points first so we can enrich + sort
   await ensureUsersLoaded()
 
   const res = await fetch('/api/admin/duplicate-users', { credentials: 'include' })
   if (!res.ok) return
   const { groups } = await res.json()
 
-  // attach points and sort aliases by points desc, then lastLogin desc
+  // attach points + isKnown, sort by points desc then lastLogin desc
   duplicateGroups.value = (groups || []).map(g => {
-    const aliases = (g.aliases || []).map(a => ({
-      ...a,
-      points: pointsByName.value.get(a.username) ?? 0
-    })).sort((a, b) => {
-      if ((b.points ?? 0) !== (a.points ?? 0)) return (b.points ?? 0) - (a.points ?? 0)
-      return new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime()
-    })
+    const aliases = (g.aliases || [])
+      .map(a => ({
+        ...a,
+        isKnown: isKnown(a.username),
+        points: pointsByName.value.get(a.username) ?? 0
+      }))
+      .sort((a, b) => {
+        if ((b.points ?? 0) !== (a.points ?? 0)) return (b.points ?? 0) - (a.points ?? 0)
+        return new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime()
+      })
     return { ...g, aliases }
   })
 }
@@ -328,16 +337,22 @@ function isSuspicious(ip) {
     .map(l => l.user.username || '__null__')
   return new Set(users).size > 1
 }
-function otherUsernames(ip, current) {
-  const users = logs.value
-    .filter(l => l.ip === ip && !l.user.isAdmin)
-    .map(l => l.user.username || '__null__')
-  return Array.from(new Set(users)).filter(u => u !== (current || '__null__'))
+
+// Known-only helpers
+function otherKnownUsernames(ip, current) {
+  const uniq = new Set(
+    logs.value
+      .filter(l => l.ip === ip && !l.user.isAdmin)
+      .map(l => l.user.username || '__null__')
+  )
+  uniq.delete(current || '__null__')
+  return Array.from(uniq).filter(u => isKnown(u))
 }
-function otherAliasesInGroup(aliases, currentName) {
-  return aliases
+
+function otherKnownAliasesInGroup(aliases, currentName) {
+  return (aliases || [])
+    .filter(a => a.username && a.username !== currentName && a.isKnown)
     .map(a => a.username)
-    .filter(u => u && u !== currentName)
 }
 
 // ---- Date formatting ----
@@ -351,21 +366,25 @@ function formatDate(input, withTime = false) {
 
 // ---- Cheat summary actions ----
 async function openCheatSummary(target, sources) {
-  previewTarget.value  = target || ''
-  previewSources.value = Array.isArray(sources) ? sources : []
+  // normalize & enforce known-only
+  const t = target || ''
+  const s = Array.isArray(sources) ? sources.filter(isKnown) : []
+
+  previewTarget.value  = t
+  previewSources.value = s
   previewLoading.value = true
   previewError.value   = ''
   preview.value        = null
   showCheatModal.value = true
 
-  if (!previewTarget.value) {
+  if (!t || !isKnown(t)) {
     previewLoading.value = false
-    previewError.value = 'Missing target username.'
+    previewError.value = 'Target username is unknown.'
     return
   }
-  if (!previewSources.value.length) {
+  if (!s.length) {
     previewLoading.value = false
-    previewError.value = 'Need at least one source username from the same IP.'
+    previewError.value = 'Need at least one known source username from the same IP.'
     return
   }
 
@@ -374,10 +393,7 @@ async function openCheatSummary(target, sources) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        target: previewTarget.value,
-        sources: previewSources.value
-      })
+      body: JSON.stringify({ target: t, sources: s })
     })
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
