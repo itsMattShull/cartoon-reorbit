@@ -86,6 +86,32 @@ export default defineEventHandler(async (event) => {
   })
   const auctionPoints = auctionAgg._sum.highestBid || 0
 
+  const targetItems = seedIds.length
+    ? await prisma.userCtoon.findMany({
+        where: { id: { in: seedIds }, userId: targetId, burnedAt: null },
+        select: {
+          id: true,
+          mintNumber: true,
+          userId: true,
+          user: { select: { username: true } },
+          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+    : []
+
+  const sourceItems = await prisma.userCtoon.findMany({
+    where: { userId: { in: sourceIds }, burnedAt: null },
+    select: {
+      id: true,
+      mintNumber: true,
+      userId: true,
+      user: { select: { username: true } },
+      ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+    },
+    orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }]
+  })
+
   // trade value received for these seeds via accepted TradeOffers
   const initiated = await prisma.tradeOffer.findMany({
     where: {
@@ -146,6 +172,13 @@ export default defineEventHandler(async (event) => {
     currentOwnedCount,
     auctionPoints,
     tradeValue,
-    bySource
+    bySource,
+    // NEW: preview payload for UI modal
+    preview: {
+      deactivationUsernames: sources,
+      pointsToRemove: auctionPoints,
+      targetItems,
+      sourceItems
+    }
   }
 })

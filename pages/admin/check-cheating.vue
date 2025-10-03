@@ -48,19 +48,81 @@
 
           <button
             class="mt-4 px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
-            :disabled="enforcing"
-            @click="openEnforce()"
+            :disabled="!result || enforcing"
+            @click="openPreview()"
           >
             Auction cToons and Remove Points
           </button>
+        </div>
+
+        <!-- NEW: Review + Confirm Modal -->
+        <div v-if="showPreview" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-5 max-h-[90vh] overflow-auto">
+            <h3 class="text-lg font-semibold">Review Removal</h3>
+
+            <div class="mt-3">
+              <p class="text-sm"><strong>Deactivate accounts:</strong>
+                <span v-if="result?.preview?.deactivationUsernames?.length">
+                  {{ result.preview.deactivationUsernames.join(', ') }}
+                </span>
+                <span v-else>—</span>
+              </p>
+              <p class="text-sm mt-1"><strong>Points to remove from {{ result?.target }}:</strong> {{ result?.preview?.pointsToRemove ?? 0 }}</p>
+            </div>
+
+            <div class="mt-4">
+              <h4 class="font-medium">cToons to transfer and auction</h4>
+              <p class="text-xs text-gray-500 mb-2">Includes target’s relevant items and all source-owned items.</p>
+
+              <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div
+                  v-for="it in allPreviewItems"
+                  :key="it.id"
+                  class="border rounded p-2 bg-gray-50"
+                >
+                  <div class="aspect-square bg-white border rounded mb-2 flex items-center justify-center overflow-hidden">
+                    <img
+                      v-if="it.ctoon?.assetPath"
+                      :src="imgUrl(it.ctoon.assetPath)"
+                      :alt="it.ctoon?.name || 'cToon'"
+                      class="object-contain w-full h-full"
+                    />
+                    <div v-else class="text-xs text-gray-400">No image</div>
+                  </div>
+                  <div class="text-sm font-medium truncate">{{ it.ctoon?.name || 'cToon' }}</div>
+                  <div class="text-xs text-gray-600">Rarity: {{ it.ctoon?.rarity || '—' }}</div>
+                  <div class="text-xs">Owner: <span class="font-mono">{{ it.user?.username || '—' }}</span></div>
+                  <div class="text-xs">Mint #: <span class="font-mono">{{ it.mintNumber ?? '—' }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="enforceError" class="text-red-600 text-sm mt-3">{{ enforceError }}</div>
+            <div v-if="enforceResult" class="text-sm mt-3">
+              <div class="p-2 rounded bg-green-50 border">
+                Done. Transferred: {{ enforceResult.transferredCount }} • Target auctions: {{ enforceResult.auctionsCreated }} • Source transfers: {{ enforceResult.sourceTransferredCount }} • Source auctions: {{ enforceResult.sourceAuctionsCreated }} • Points removed: {{ enforceResult.pointsRemoved }}
+              </div>
+            </div>
+
+            <div class="mt-5 flex justify-end gap-2">
+              <button class="px-4 py-2 border rounded" @click="closePreview" :disabled="enforcing">Cancel</button>
+              <button
+                class="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
+                :disabled="enforcing"
+                @click="enforce()"
+              >
+                {{ enforcing ? 'Processing…' : 'Confirm Remove' }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="p-4 border rounded bg-white">
           <h2 class="font-semibold mb-2">By source</h2>
           <div v-if="result.bySource && Object.keys(result.bySource).length" class="space-y-2 text-sm">
             <div v-for="(row, name) in result.bySource" :key="name" class="flex justify-between bg-gray-50 p-2 rounded">
-              <span class="font-medium">{{ name }}</span>
-              <span>{{ row.seedCount }} seeds • {{ row.currentOwnedCount }} owned • {{ row.auctionPoints }} pts • {{ row.tradeValue }} value</span>
+              <div class="font-medium">{{ name }}</div>
+              <span>{{ row.seedCount }} cToons<br>{{ row.currentOwnedCount }} of those cToons are currently owned by {{ result.target }}<br>Auction Points: {{ row.auctionPoints }} pts received<br>Trade Value: {{ row.tradeValue }} points in trade value received</span>
             </div>
           </div>
           <div v-else class="text-sm text-gray-500">No breakdown.</div>
@@ -132,6 +194,33 @@ const showModal = ref(false)
 const enforcing = ref(false)
 const enforceResult = ref(null)
 const enforceError = ref('')
+const showPreview = ref(false)
+
+// merge preview items for display
+const allPreviewItems = computed(() => {
+  const p = result.value?.preview
+  if (!p) return []
+  return [...(p.targetItems || []), ...(p.sourceItems || [])]
+})
+
+function imgUrl(path) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const base =
+    (import.meta.env.PUBLIC_BASE_URL) ||
+    (import.meta.env.PROD ? 'https://www.cartoonreorbit.com' : `http://localhost:${import.meta.env.VITE_SOCKET_PORT || 3000}`)
+  return `${base}${path}`
+}
+
+function openPreview() {
+  enforceResult.value = null
+  enforceError.value = ''
+  showPreview.value = true
+}
+function closePreview() {
+  if (enforcing.value) return
+  showPreview.value = false
+}
 
 function addSource() {
   const v = sourceInput.value.trim()

@@ -11,6 +11,19 @@ function rarityPrice(r) {
   return 50
 }
 
+async function createAuctionFor(tx, userCtoonId, initialBet, endAt, creatorId) {
+  return tx.auction.create({
+    data: {
+      userCtoonId,
+      initialBet,
+      duration: 3,
+      endAt,
+      creatorId
+    },
+    select: { id: true }
+  })
+}
+
 export default defineEventHandler(async (event) => {
   // admin auth
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -45,84 +58,76 @@ export default defineEventHandler(async (event) => {
   })
   const everIds = everRows.map(r => r.userCtoonId)
   if (!everIds.length) {
-    return { transferredCount: 0, auctionsCreated: 0, pointsRemoved: 0, note: 'Target has no history.' }
+    // still enforce sources
+    // continue; do not early-return so sources get handled
   }
 
-  // earliest owner per userCtoon
-  const logs = await prisma.ctoonOwnerLog.findMany({
-    where: { userCtoonId: { in: everIds } },
-    select: { userCtoonId: true, userId: true, createdAt: true },
-    orderBy: [{ userCtoonId: 'asc' }, { createdAt: 'asc' }]
-  })
-  const firstOwnerById = new Map()
-  for (const row of logs) {
-    if (!firstOwnerById.has(row.userCtoonId) && row.userId) firstOwnerById.set(row.userCtoonId, row.userId)
-  }
-
-  // seedIds = originated at any source
-  const seedIds = []
-  for (const [uctId, ownerId] of firstOwnerById.entries()) {
-    if (sourceIds.includes(ownerId)) seedIds.push(uctId)
-  }
-  if (!seedIds.length) {
-    return { transferredCount: 0, auctionsCreated: 0, pointsRemoved: 0, note: 'No relevant seed items.' }
+  // earliest owner per userCtoon (for target-derived seeds)
+  let seedIds = []
+  if (everIds.length) {
+    const logs = await prisma.ctoonOwnerLog.findMany({
+      where: { userCtoonId: { in: everIds } },
+      select: { userCtoonId: true, userId: true, createdAt: true },
+      orderBy: [{ userCtoonId: 'asc' }, { createdAt: 'asc' }]
+    })
+    const firstOwnerById = new Map()
+    for (const row of logs) {
+      if (!firstOwnerById.has(row.userCtoonId) && row.userId) firstOwnerById.set(row.userCtoonId, row.userId)
+    }
+    for (const [uctId, ownerId] of firstOwnerById.entries()) {
+      if (sourceIds.includes(ownerId)) seedIds.push(uctId)
+    }
   }
 
   // only those currently owned by target can be transferred
-  const currentSeeds = await prisma.userCtoon.findMany({
-    where: { id: { in: seedIds }, userId: targetId, burnedAt: null },
-    select: {
-      id: true,
-      userId: true,
-      ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } },
-      mintNumber: true
-    }
-  })
-  const idsToTransfer = currentSeeds.map(r => r.id)
+  const currentSeeds = seedIds.length
+    ? await prisma.userCtoon.findMany({
+        where: { id: { in: seedIds }, userId: targetId, burnedAt: null },
+        select: {
+          id: true,
+          userId: true,
+          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } },
+          mintNumber: true
+        }
+      })
+    : []
 
-  // compute auction points gained previously for all seeds, then deduct
-  const agg = await prisma.auction.aggregate({
-    where: { userCtoonId: { in: seedIds }, status: 'CLOSED', creatorId: targetId, winnerId: { not: null } },
-    _sum: { highestBid: true }
-  })
-  const pointsToRemove = Math.max(0, agg._sum.highestBid || 0)
+  // compute points to remove from target
+  let pointsToRemove = 0
+  if (seedIds.length) {
+    const agg = await prisma.auction.aggregate({
+      where: { userCtoonId: { in: seedIds }, status: 'CLOSED', creatorId: targetId, winnerId: { not: null } },
+      _sum: { highestBid: true }
+    })
+    pointsToRemove = Math.max(0, agg._sum.highestBid || 0)
+  }
 
   let auctionsCreated = 0
   let transferredCount = 0
+  let sourceAuctionsCreated = 0
+  let sourceTransferredCount = 0
+
   const now = new Date()
   const endAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
 
-  // transfer + create auctions atomically per item
+  // transfer + create auctions for target-held seed items
   for (const row of currentSeeds) {
     try {
       const created = await prisma.$transaction(async (tx) => {
-        // confirm not already under active auction
         const active = await tx.auction.findFirst({
           where: { userCtoonId: row.id, status: 'ACTIVE' },
           select: { id: true }
         })
         if (active) return null
 
-        // transfer ownership to official
         await tx.userCtoon.update({
           where: { id: row.id },
           data: { userId: officialId, isTradeable: false }
         })
 
-        // create auction directly
         const initialBet = rarityPrice(row.ctoon?.rarity)
-        const a = await tx.auction.create({
-          data: {
-            userCtoonId: row.id,
-            initialBet,
-            duration: 3,
-            endAt,
-            creatorId: officialId
-          },
-          select: { id: true }
-        })
+        const a = await createAuctionFor(tx, row.id, initialBet, endAt, officialId)
 
-        // owner log for transfer
         await tx.ctoonOwnerLog.create({
           data: { userId: officialId, userCtoonId: row.id, ctoonId: row.ctoon?.id ?? null, mintNumber: row.mintNumber ?? null }
         })
@@ -133,11 +138,10 @@ export default defineEventHandler(async (event) => {
       auctionsCreated++
       transferredCount++
 
-      // best-effort Discord post
+      // best-effort Discord
       try {
-        const botToken  = process.env.BOT_TOKEN
         const channelId = process.env.AUCTION_CHANNEL_ID || '1401244687163068528'
-        const baseUrl   =
+        const baseUrl =
           process.env.PUBLIC_BASE_URL ||
           (process.env.NODE_ENV === 'production'
             ? 'https://www.cartoonreorbit.com'
@@ -148,7 +152,7 @@ export default defineEventHandler(async (event) => {
           : null
         const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
         const payload = {
-          content: `A new auction is now live!`,
+          content: `A cheating enforcement auction is now live.`,
           embeds: [{
             title: row.ctoon?.name || 'cToon',
             url: auctionLink,
@@ -170,7 +174,7 @@ export default defineEventHandler(async (event) => {
     } catch {}
   }
 
-  // remove points from target (if any)
+  // remove points from target
   let pointsRemoved = 0
   if (pointsToRemove > 0) {
     try {
@@ -194,11 +198,101 @@ export default defineEventHandler(async (event) => {
     } catch {}
   }
 
+  // ENFORCE SOURCES: transfer all their CURRENT cToons and auction them
+  if (sourceIds.length) {
+    // fetch all current UserCtoons for sources
+    // omit burned and skip ones already under ACTIVE auction
+    const sourceItems = await prisma.userCtoon.findMany({
+      where: {
+        userId: { in: sourceIds },
+        burnedAt: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } },
+        mintNumber: true
+      }
+    })
+
+    for (const row of sourceItems) {
+      try {
+        const created = await prisma.$transaction(async (tx) => {
+          const active = await tx.auction.findFirst({
+            where: { userCtoonId: row.id, status: 'ACTIVE' },
+            select: { id: true }
+          })
+          if (active) return null
+
+          await tx.userCtoon.update({
+            where: { id: row.id },
+            data: { userId: officialId, isTradeable: false }
+          })
+
+          const initialBet = rarityPrice(row.ctoon?.rarity)
+          const a = await createAuctionFor(tx, row.id, initialBet, endAt, officialId)
+
+          await tx.ctoonOwnerLog.create({
+            data: { userId: officialId, userCtoonId: row.id, ctoonId: row.ctoon?.id ?? null, mintNumber: row.mintNumber ?? null }
+          })
+
+          return { auctionId: a.id, initialBet }
+        })
+        if (!created) continue
+        sourceAuctionsCreated++
+        sourceTransferredCount++
+
+        // best-effort Discord
+        try {
+          const channelId = process.env.AUCTION_CHANNEL_ID || '1401244687163068528'
+          const baseUrl =
+            process.env.PUBLIC_BASE_URL ||
+            (process.env.NODE_ENV === 'production'
+              ? 'https://www.cartoonreorbit.com'
+              : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
+          const auctionLink = `${baseUrl}/auction/${created.auctionId}`
+          const rawImageUrl = row.ctoon?.assetPath
+            ? (row.ctoon.assetPath.startsWith('http') ? row.ctoon.assetPath : `${baseUrl}${row.ctoon.assetPath}`)
+            : null
+          const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
+          const payload = {
+            content: `A source enforcement auction is now live.`,
+            embeds: [{
+              title: row.ctoon?.name || 'cToon',
+              url: auctionLink,
+              description: [
+                `**Rarity:** ${row.ctoon?.rarity ?? 'N/A'}`,
+                `**Mint #:** ${row.mintNumber ?? 'N/A'}`,
+                `**Starting Bid:** ${created.initialBet} pts`,
+                `**Duration:** 3 day(s)`
+              ].join('\n'),
+              ...(imageUrl ? { image: { url: imageUrl } } : {})
+            }]
+          }
+          await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+            method: 'POST',
+            headers: { 'Authorization': `${process.env.BOT_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+        } catch {}
+      } catch {}
+    }
+
+    // Deactivate all source users
+    const { count: deactivatedCount } = await prisma.user.updateMany({
+      where: { id: { in: sourceIds }, active: true },
+      data:  { active: false }
+    })
+  }
+
   return {
     target,
     sources,
-    transferredCount,
-    auctionsCreated,
-    pointsRemoved
+    deactivatedSources: deactivatedCount,
+    transferredCount,           // target-held seed items moved
+    auctionsCreated,            // target-held seed auctions
+    pointsRemoved,
+    sourceTransferredCount,     // total items moved from all sources
+    sourceAuctionsCreated       // auctions created from all sources
   }
 })
