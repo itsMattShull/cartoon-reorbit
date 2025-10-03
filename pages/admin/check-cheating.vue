@@ -2,7 +2,7 @@
   <div class="p-6 space-y-6">
     <Nav />
 
-    <div class="max-w-3xl mx-auto mt-16">
+    <div class="max-w-3xl mx-auto" style="margin-top: 50px;">
       <h1 class="text-2xl font-bold mb-4">Check Cheating</h1>
 
       <form @submit.prevent="runCheck" class="space-y-4 bg-white border rounded p-4">
@@ -10,6 +10,7 @@
         <div class="relative">
           <label class="block text-sm font-medium mb-1">Target username</label>
           <input
+            ref="targetInputEl"
             v-model.trim="target"
             class="w-full border rounded px-3 py-2"
             placeholder="e.g. LegendaryWarriorGuru"
@@ -113,62 +114,139 @@
         <!-- Review + Confirm Modal -->
         <div v-if="showPreview" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-5 max-h-[90vh] overflow-auto">
-            <h3 class="text-lg font-semibold">Review Removal</h3>
+            <!-- BEFORE processing: review -->
+            <template v-if="!hasOutcome">
+              <h3 class="text-lg font-semibold">Review Removal</h3>
 
-            <div class="mt-3">
-              <p class="text-sm"><strong>Deactivate accounts:</strong>
-                <span v-if="result?.preview?.deactivationUsernames?.length">
-                  {{ result.preview.deactivationUsernames.join(', ') }}
-                </span>
-                <span v-else>—</span>
-              </p>
-              <p class="text-sm mt-1"><strong>Points to remove from {{ result?.target }}:</strong> {{ result?.preview?.pointsToRemove ?? 0 }}</p>
-            </div>
+              <div class="mt-3">
+                <p class="text-sm"><strong>Deactivate accounts:</strong>
+                  <span v-if="result?.preview?.deactivationUsernames?.length">
+                    {{ result.preview.deactivationUsernames.join(', ') }}
+                  </span>
+                  <span v-else>—</span>
+                </p>
+                <p class="text-sm mt-1">
+                  <strong>Points to remove from {{ result?.target }}:</strong>
+                  {{ result?.preview?.pointsToRemove ?? 0 }}
+                </p>
+              </div>
 
-            <div class="mt-4">
-              <h4 class="font-medium">cToons to transfer and auction</h4>
-              <p class="text-xs text-gray-500 mb-2">Includes target’s relevant items and all source-owned items.</p>
+              <div class="mt-4">
+                <h4 class="font-medium">cToons to transfer and auction</h4>
+                <p class="text-xs text-gray-500 mb-2">Includes target’s relevant items and all source-owned items.</p>
 
-              <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div
-                  v-for="it in allPreviewItems"
-                  :key="it.id"
-                  class="border rounded p-2 bg-gray-50"
-                >
-                  <div class="aspect-square bg-white border rounded mb-2 flex items-center justify-center overflow-hidden">
-                    <img
-                      v-if="it.ctoon?.assetPath"
-                      :src="imgUrl(it.ctoon.assetPath)"
-                      :alt="it.ctoon?.name || 'cToon'"
-                      class="object-contain w-full h-full"
-                    />
-                    <div v-else class="text-xs text-gray-400">No image</div>
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div
+                    v-for="it in allPreviewItems"
+                    :key="it.id"
+                    class="border rounded p-2 bg-gray-50"
+                  >
+                    <div class="aspect-square bg-white border rounded mb-2 flex items-center justify-center overflow-hidden">
+                      <img
+                        v-if="it.ctoon?.assetPath"
+                        :src="imgUrl(it.ctoon.assetPath)"
+                        :alt="it.ctoon?.name || 'cToon'"
+                        class="object-contain w-full h-full"
+                      />
+                      <div v-else class="text-xs text-gray-400">No image</div>
+                    </div>
+                    <div class="text-sm font-medium truncate">{{ it.ctoon?.name || 'cToon' }}</div>
+                    <div class="text-xs text-gray-600">Rarity: {{ it.ctoon?.rarity || '—' }}</div>
+                    <div class="text-xs">Owner: <span class="font-mono">{{ it.user?.username || '—' }}</span></div>
+                    <div class="text-xs">Mint #: <span class="font-mono">{{ it.mintNumber ?? '—' }}</span></div>
                   </div>
-                  <div class="text-sm font-medium truncate">{{ it.ctoon?.name || 'cToon' }}</div>
-                  <div class="text-xs text-gray-600">Rarity: {{ it.ctoon?.rarity || '—' }}</div>
-                  <div class="text-xs">Owner: <span class="font-mono">{{ it.user?.username || '—' }}</span></div>
-                  <div class="text-xs">Mint #: <span class="font-mono">{{ it.mintNumber ?? '—' }}</span></div>
                 </div>
               </div>
-            </div>
 
-            <div v-if="enforceError" class="text-red-600 text-sm mt-3">{{ enforceError }}</div>
-            <div v-if="enforceResult" class="text-sm mt-3">
-              <div class="p-2 rounded bg-green-50 border">
-                Done. Transferred: {{ enforceResult.transferredCount }} • Target auctions: {{ enforceResult.auctionsCreated }} • Source transfers: {{ enforceResult.sourceTransferredCount }} • Source auctions: {{ enforceResult.sourceAuctionsCreated }} • Points removed: {{ enforceResult.pointsRemoved }}
+              <div v-if="enforceError" class="text-red-600 text-sm mt-3">{{ enforceError }}</div>
+
+              <div class="mt-5 flex justify-end gap-2">
+                <button class="px-4 py-2 border rounded" @click="closePreview" :disabled="enforcing">Cancel</button>
+                <button
+                  class="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
+                  :disabled="enforcing"
+                  @click="enforce()"
+                >
+                  {{ enforcing ? 'Processing…' : 'Confirm Remove' }}
+                </button>
               </div>
-            </div>
+            </template>
 
-            <div class="mt-5 flex justify-end gap-2">
-              <button class="px-4 py-2 border rounded" @click="closePreview" :disabled="enforcing">Cancel</button>
-              <button
-                class="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50"
-                :disabled="enforcing"
-                @click="enforce()"
-              >
-                {{ enforcing ? 'Processing…' : 'Confirm Remove' }}
-              </button>
-            </div>
+            <!-- AFTER processing: results (success or with errors) -->
+            <template v-else>
+              <h3 class="text-lg font-semibold">Removal Results</h3>
+
+              <!-- Transport-level error -->
+              <div v-if="enforceError" class="mt-3 p-3 border rounded bg-red-50 text-red-700">
+                {{ enforceError }}
+              </div>
+
+              <!-- Summary -->
+              <div v-else class="mt-3 p-3 border rounded bg-green-50 text-green-800">
+                <p class="font-medium mb-1">
+                  {{ hasAnyErrors ? 'Completed with issues' : 'Completed successfully' }}
+                </p>
+                <div class="grid sm:grid-cols-2 gap-x-6 text-sm">
+                  <div>Transferred (target seeds): <strong>{{ enforceResult?.transferredCount ?? 0 }}</strong></div>
+                  <div>Auctions (target seeds): <strong>{{ enforceResult?.auctionsCreated ?? 0 }}</strong></div>
+                  <div>Transferred (sources): <strong>{{ enforceResult?.sourceTransferredCount ?? 0 }}</strong></div>
+                  <div>Auctions (sources): <strong>{{ enforceResult?.sourceAuctionsCreated ?? 0 }}</strong></div>
+                  <div>Points removed: <strong>{{ enforceResult?.pointsRemoved ?? 0 }}</strong></div>
+                  <div>Sources deactivated: <strong>{{ enforceResult?.deactivatedSources ?? 0 }}</strong></div>
+                </div>
+              </div>
+
+              <!-- Detailed errors -->
+              <div v-if="hasAnyErrors" class="mt-4 space-y-4">
+                <div v-if="(enforceResult?.errors?.target?.length || 0) > 0">
+                  <h4 class="font-medium">Issues while processing target items</h4>
+                  <div class="overflow-auto border rounded">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-100">
+                        <tr>
+                          <th class="px-2 py-1 text-left">UserCtoonId</th>
+                          <th class="px-2 py-1 text-left">Phase</th>
+                          <th class="px-2 py-1 text-left">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(e,i) in enforceResult.errors.target" :key="'t'+i" class="border-t">
+                          <td class="px-2 py-1 font-mono">{{ e.userCtoonId || '—' }}</td>
+                          <td class="px-2 py-1">{{ e.phase }}</td>
+                          <td class="px-2 py-1">{{ e.message }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div v-if="(enforceResult?.errors?.sources?.length || 0) > 0">
+                  <h4 class="font-medium">Issues while processing source items</h4>
+                  <div class="overflow-auto border rounded">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-gray-100">
+                        <tr>
+                          <th class="px-2 py-1 text-left">UserCtoonId</th>
+                          <th class="px-2 py-1 text-left">Phase</th>
+                          <th class="px-2 py-1 text-left">Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(e,i) in enforceResult.errors.sources" :key="'s'+i" class="border-t">
+                          <td class="px-2 py-1 font-mono">{{ e.userCtoonId || '—' }}</td>
+                          <td class="px-2 py-1">{{ e.phase }}</td>
+                          <td class="px-2 py-1">{{ e.message }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-5 flex justify-end">
+                <button class="px-4 py-2 border rounded" @click="closePreview" :disabled="enforcing">Close</button>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -177,7 +255,10 @@
           <div v-if="result.bySource && Object.keys(result.bySource).length" class="space-y-2 text-sm">
             <div v-for="(row, name) in result.bySource" :key="name" class="flex flex-col justify-between bg-gray-50 p-2 rounded">
               <div class="font-medium">{{ name }}</div>
-              <span>{{ row.seedCount }} cToons<br>{{ row.currentOwnedCount }} of those cToons are currently owned by {{ result.target }}<br>Auction Points: {{ row.auctionPoints }} pts received<br>Trade Value: {{ row.tradeValue }} points in trade value received</span>
+              <span>{{ row.seedCount }} cToons
+                <br><br>{{ row.currentOwnedCount }} of those cToons are currently owned by {{ result.target }}
+                <br><br>Auction Points: {{ row.auctionPoints }} pts received
+                <br><br>Trade Value: {{ row.tradeValue }} points in trade value received</span>
             </div>
           </div>
           <div v-else class="text-sm text-gray-500">No breakdown.</div>
@@ -230,7 +311,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
@@ -251,43 +332,51 @@ const enforceResult = ref(null)
 const enforceError = ref('')
 const showPreview = ref(false)
 
+// outcome flags for the preview modal
+const hasOutcome = computed(() => !!enforceError.value || !!enforceResult.value)
+const hasAnyErrors = computed(() => {
+  const r = enforceResult.value
+  const t = r?.errors?.target?.length || 0
+  const s = r?.errors?.sources?.length || 0
+  return (t + s) > 0
+})
+
 // --- Username suggestions state ---
 const usersLoaded = ref(false)
-const allUsers = ref([]) // [{id, username, ...}]
+const allUsers = ref([])
 const targetFocused = ref(false)
 const sourceFocused = ref(false)
 const targetSuggestions = ref([])
 const sourceSuggestions = ref([])
+const targetInputEl = ref(null)
 
 // fetch all users once, on demand
 async function ensureUsersLoaded() {
   if (usersLoaded.value) return
   const res = await fetch('/api/admin/users', { credentials: 'include' })
   if (!res.ok) return
-  allUsers.value = (await res.json())?.filter(u => u?.username) || []
+  const raw = await res.json()
+  allUsers.value = (raw || []).filter(u => u?.username && u?.active === true)
   usersLoaded.value = true
 }
 
-// normalize
-const norm = s => (s || '').toLowerCase()
-
 // recompute suggestions after 3+ chars
 watch(target, async (v) => {
-  const q = norm(v)
+  const q = (v || '').toLowerCase()
   if (q.length < 3) { targetSuggestions.value = []; return }
   await ensureUsersLoaded()
   targetSuggestions.value = allUsers.value
-    .filter(u => norm(u.username).includes(q))
+    .filter(u => u.active === true && u.username.toLowerCase().includes(q))
     .slice(0, 10)
 })
-
 watch(sourceInput, async (v) => {
-  const q = norm(v)
+  const q = (v || '').toLowerCase()
   if (q.length < 3) { sourceSuggestions.value = []; return }
   await ensureUsersLoaded()
   sourceSuggestions.value = allUsers.value
     .filter(u =>
-      norm(u.username).includes(q) &&
+      u.active === true &&
+      u.username.toLowerCase().includes(q) &&
       u.username !== target.value &&
       !sources.value.includes(u.username)
     )
@@ -297,8 +386,9 @@ watch(sourceInput, async (v) => {
 function selectTarget(name) {
   target.value = name
   targetSuggestions.value = []
+  targetFocused.value = false
+  nextTick(() => { try { targetInputEl.value?.blur() } catch {} })
 }
-
 function addSourceFromSuggestion(name) {
   if (!sources.value.includes(name)) sources.value.push(name)
   sourceInput.value = ''
