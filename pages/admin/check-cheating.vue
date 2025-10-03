@@ -6,17 +6,72 @@
       <h1 class="text-2xl font-bold mb-4">Check Cheating</h1>
 
       <form @submit.prevent="runCheck" class="space-y-4 bg-white border rounded p-4">
-        <div>
+        <!-- Target -->
+        <div class="relative">
           <label class="block text-sm font-medium mb-1">Target username</label>
-          <input v-model.trim="target" class="w-full border rounded px-3 py-2" placeholder="e.g. LegendaryWarriorGuru" required />
+          <input
+            v-model.trim="target"
+            class="w-full border rounded px-3 py-2"
+            placeholder="e.g. LegendaryWarriorGuru"
+            required
+            @focus="targetFocused = true"
+            @blur="() => setTimeout(() => targetFocused = false, 100)"
+          />
+          <!-- Target suggestions -->
+          <div
+            v-if="targetFocused && targetSuggestions.length"
+            class="absolute z-10 mt-1 w-full bg-white border rounded shadow"
+          >
+            <button
+              v-for="u in targetSuggestions"
+              :key="u.id"
+              type="button"
+              class="w-full text-left px-3 py-2 hover:bg-gray-50"
+              @click="selectTarget(u.username)"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-medium">{{ u.username }}</span>
+                <span class="text-xs text-gray-500">{{ u.points }} pts • {{ u.totalCtoons }} cToons</span>
+              </div>
+              <div class="text-xs text-gray-500">{{ u.discordTag }}</div>
+            </button>
+          </div>
         </div>
 
-        <div>
+        <!-- Sources -->
+        <div class="relative">
           <label class="block text-sm font-medium mb-1">Source usernames</label>
           <div class="flex gap-2">
-            <input v-model.trim="sourceInput" class="flex-1 border rounded px-3 py-2" placeholder="Type a username and press Add" @keydown.enter.prevent="addSource" />
+            <div class="relative flex-1">
+              <input
+                v-model.trim="sourceInput"
+                class="w-full border rounded px-3 py-2"
+                placeholder="Type a username and press Add"
+                @keydown.enter.prevent="addSource"
+                @focus="sourceFocused = true"
+                @blur="() => setTimeout(() => sourceFocused = false, 100)"
+              />
+              <!-- Source suggestions -->
+              <div
+                v-if="sourceFocused && sourceSuggestions.length"
+                class="absolute z-10 mt-1 w-full bg-white border rounded shadow"
+              >
+                <button
+                  v-for="u in sourceSuggestions"
+                  :key="u.id"
+                  type="button"
+                  class="w-full text-left px-3 py-2 hover:bg-gray-50"
+                  @click="addSourceFromSuggestion(u.username)"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="font-medium">{{ u.username }}</span>
+                    <span class="text-xs text-gray-500">{{ u.points }} pts • {{ u.totalCtoons }} cToons</span>
+                  </div>
+                  <div class="text-xs text-gray-500">{{ u.discordTag }}</div>
+                </button>
+              </div>
+            </div>
             <button type="button" class="px-3 py-2 border rounded" @click="addSource">Add</button>
-            <button type="button" class="px-3 py-2 border rounded" @click="addMany">Add CSV</button>
           </div>
           <div class="mt-2 flex flex-wrap gap-2">
             <span v-for="(s,i) in sources" :key="s" class="inline-flex items-center gap-2 bg-gray-100 px-2 py-1 rounded">
@@ -55,7 +110,7 @@
           </button>
         </div>
 
-        <!-- NEW: Review + Confirm Modal -->
+        <!-- Review + Confirm Modal -->
         <div v-if="showPreview" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-5 max-h-[90vh] overflow-auto">
             <h3 class="text-lg font-semibold">Review Removal</h3>
@@ -135,7 +190,7 @@
       </div>
     </div>
 
-    <!-- Modal -->
+    <!-- Legacy modal kept (unused if using preview) -->
     <div v-if="showModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-xl p-5">
         <h3 class="text-lg font-semibold mb-2">Confirm Enforcement</h3>
@@ -175,7 +230,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
@@ -195,6 +250,60 @@ const enforcing = ref(false)
 const enforceResult = ref(null)
 const enforceError = ref('')
 const showPreview = ref(false)
+
+// --- Username suggestions state ---
+const usersLoaded = ref(false)
+const allUsers = ref([]) // [{id, username, ...}]
+const targetFocused = ref(false)
+const sourceFocused = ref(false)
+const targetSuggestions = ref([])
+const sourceSuggestions = ref([])
+
+// fetch all users once, on demand
+async function ensureUsersLoaded() {
+  if (usersLoaded.value) return
+  const res = await fetch('/api/admin/users', { credentials: 'include' })
+  if (!res.ok) return
+  allUsers.value = (await res.json())?.filter(u => u?.username) || []
+  usersLoaded.value = true
+}
+
+// normalize
+const norm = s => (s || '').toLowerCase()
+
+// recompute suggestions after 3+ chars
+watch(target, async (v) => {
+  const q = norm(v)
+  if (q.length < 3) { targetSuggestions.value = []; return }
+  await ensureUsersLoaded()
+  targetSuggestions.value = allUsers.value
+    .filter(u => norm(u.username).includes(q))
+    .slice(0, 10)
+})
+
+watch(sourceInput, async (v) => {
+  const q = norm(v)
+  if (q.length < 3) { sourceSuggestions.value = []; return }
+  await ensureUsersLoaded()
+  sourceSuggestions.value = allUsers.value
+    .filter(u =>
+      norm(u.username).includes(q) &&
+      u.username !== target.value &&
+      !sources.value.includes(u.username)
+    )
+    .slice(0, 10)
+})
+
+function selectTarget(name) {
+  target.value = name
+  targetSuggestions.value = []
+}
+
+function addSourceFromSuggestion(name) {
+  if (!sources.value.includes(name)) sources.value.push(name)
+  sourceInput.value = ''
+  sourceSuggestions.value = []
+}
 
 // merge preview items for display
 const allPreviewItems = computed(() => {
@@ -286,7 +395,6 @@ async function enforce() {
     }
     const j = await res.json()
     enforceResult.value = j
-    // refresh summary
     await runCheck()
   } catch (e) {
     enforceError.value = e.message
