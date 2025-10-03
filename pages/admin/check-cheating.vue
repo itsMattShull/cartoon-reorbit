@@ -175,7 +175,7 @@
         <div class="p-4 border rounded bg-white">
           <h2 class="font-semibold mb-2">By source</h2>
           <div v-if="result.bySource && Object.keys(result.bySource).length" class="space-y-2 text-sm">
-            <div v-for="(row, name) in result.bySource" :key="name" class="flex justify-between bg-gray-50 p-2 rounded">
+            <div v-for="(row, name) in result.bySource" :key="name" class="flex flex-col justify-between bg-gray-50 p-2 rounded">
               <div class="font-medium">{{ name }}</div>
               <span>{{ row.seedCount }} cToons<br>{{ row.currentOwnedCount }} of those cToons are currently owned by {{ result.target }}<br>Auction Points: {{ row.auctionPoints }} pts received<br>Trade Value: {{ row.tradeValue }} points in trade value received</span>
             </div>
