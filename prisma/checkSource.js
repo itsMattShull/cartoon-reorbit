@@ -2,7 +2,7 @@
 // Usage: node scripts/reportLWGFromSources.js
 // Assumes ESM and prisma export at @/server/prisma (same as your example)
 
-import { prisma } from '@/server/prisma'
+import { prisma } from '../server/prisma.js'
 
 const USERNAMES = {
   target: 'LegendaryWarriorGuru',
