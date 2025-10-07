@@ -12,6 +12,18 @@
           <img :src="assetPath" alt="cToon" class="h-32" />
         </div>
 
+        <!-- Upload New Image -->
+        <div>
+          <label class="block mb-1 font-medium">Upload New Image (PNG or GIF)</label>
+          <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="w-full" />
+          <p class="text-sm text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
+          <p v-if="err.image" class="text-red-600 text-sm mt-1">{{ err.image }}</p>
+          <div v-if="newImagePreview" class="mt-2">
+            <label class="block mb-1 font-medium">Preview</label>
+            <img :src="newImagePreview" class="h-32" />
+          </div>
+        </div>
+
         <!-- Type (read-only) -->
         <div>
           <label class="block mb-1 font-medium">Type</label>
@@ -181,6 +193,10 @@ const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
 
+/* new image refs */
+const newImageFile = ref(null)
+const newImagePreview = ref('')
+
 /* G-toon refs */
 const isGtoon = ref(false)
 const cost = ref(0); const power = ref(0)
@@ -195,7 +211,7 @@ const selectedAbility = computed(() =>
 )
 
 /* validation errors */
-const err = reactive({ cost:'', power:'' })
+const err = reactive({ cost:'', power:'', image:'' })
 
 /* series + rarity lists */
 const seriesOptions = ref([])
@@ -259,15 +275,66 @@ watch(rarity, v => {
   price.value = map[v]||0
 })
 
+function handleNewFile(e){
+  err.image = ''
+  const file = e.target.files?.[0]
+  if (!file){ newImageFile.value = null; newImagePreview.value = ''; return }
+  if (!['image/png','image/gif'].includes(file.type)){
+    err.image = 'Only PNG or GIF files allowed.'
+    return
+  }
+  newImageFile.value = file
+  type.value = file.type // reflect pending change
+  const reader = new FileReader()
+  reader.onload = () => { newImagePreview.value = reader.result }
+  reader.readAsDataURL(file)
+}
+
 /* submit */
 async function submitForm(){
   err.cost=''; err.power=''
   if (isGtoon.value) {
-    if (cost.value<0||cost.value>6)   err.cost='Cost 0-6'
+    if (cost.value<0||cost.value>6)    err.cost='Cost 0-6'
     if (power.value<0||power.value>12) err.power='Power 0-12'
     if (err.cost || err.power) return
   }
 
+  // If a new image is selected, send multipart; else JSON.
+  if (newImageFile.value){
+    const fd = new FormData()
+    fd.append('image', newImageFile.value)
+    fd.append('name', name.value.trim())
+    fd.append('series', series.value.trim())
+    fd.append('rarity', rarity.value)
+    fd.append('price', String(price.value))
+    fd.append('releaseDate', localToUtcIso(releaseDate.value))
+    fd.append('perUserLimit', perUserLimit.value ?? '')
+    fd.append('quantity', quantity.value ?? '')
+    fd.append('initialQuantity', initialQuantity.value ?? '')
+    fd.append('inCmart', inCmart.value)
+    fd.append('set', setField.value)
+    fd.append('characters', JSON.stringify(characters.value.split(',').map(s=>s.trim()).filter(Boolean)))
+    fd.append('isGtoon', isGtoon.value)
+    fd.append('gtoonType', gtoonType.value || '')
+    fd.append('cost', String(cost.value))
+    fd.append('power', String(power.value))
+    fd.append('abilityKey', abilityKey.value || '')
+    if (abilityKey.value){
+      fd.append('abilityData', JSON.stringify({ value: abilityParam.value }))
+    }
+
+    const res = await fetch(`/api/admin/ctoon/${id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      body: fd
+    })
+    if (!res.ok) return displayToast('Update failed')
+    displayToast('Updated','success')
+    router.push('/admin/ctoons')
+    return
+  }
+
+  // JSON path (no image change)
   const body = {
     name:            name.value.trim(),
     series:          series.value.trim(),
@@ -286,7 +353,7 @@ async function submitForm(){
     isGtoon:         isGtoon.value,
     gtoonType:       gtoonType.value || null,
     cost:            cost.value,
-    power:          power.value,
+    power:           power.value,
     abilityKey:      abilityKey.value || null,
     abilityData:     abilityKey.value
                       ? JSON.stringify({ value: abilityParam.value })
