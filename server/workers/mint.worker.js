@@ -113,6 +113,12 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
             mintNumber: uc.mintNumber
           }
         })
+
+        // Increment aggregate count on the Ctoon
+        await tx.ctoon.update({
+          where: { id: ctoonId },
+          data: { totalMinted: { increment: 1 } },
+        })
       })
     } else {
       // Special mints bypass cost
@@ -128,6 +134,12 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
             userCtoonId: uc.id,
             mintNumber: uc.mintNumber
           }
+        })
+        
+        // Increment aggregate count on the Ctoon
+        await tx.ctoon.update({
+          where: { id: ctoonId },
+          data: { totalMinted: { increment: 1 } },
         })
       })
     }

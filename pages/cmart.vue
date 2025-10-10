@@ -659,7 +659,7 @@ onMounted(async () => {
       quantity:    c.quantity,
       owners:      c.owners,
       characters:  c.characters,
-      minted:      (c.owners || []).length,
+      minted:      c.totalMinted ?? 0,
       owned:       ownedIds.has(c.id)
     }))
   } catch (err) {

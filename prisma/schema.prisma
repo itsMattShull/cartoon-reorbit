@@ -34,6 +34,7 @@ model Ctoon {
   createdAt       DateTime        @default(now())
   set             String?
   characters      String[]
+  totalMinted  Int     @default(0)
 
   // gToon fields
   isGtoon         Boolean         @default(false)

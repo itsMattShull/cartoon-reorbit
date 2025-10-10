@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       price: true,
       quantity: true,      // null = unlimited
       inCmart: true,
-      _count: { select: { owners: true } } // minted so far
+      totalMinted: true // minted so far
     },
     orderBy: { name: 'asc' }
   })
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     assetPath: c.assetPath,
     price: c.price,
     quantity: c.quantity,
-    minted: c._count.owners,
+    minted: c.totalMinted ?? 0,
     inCmart: c.inCmart
   }))
 

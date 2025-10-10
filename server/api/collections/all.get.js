@@ -18,38 +18,32 @@ export default defineEventHandler(async (event) => {
       orderBy: { releaseDate: 'desc' },
       select: {
         id: true, name: true, assetPath: true, releaseDate: true,
-        set: true, series: true, rarity: true, price: true
+        set: true, series: true, rarity: true, price: true,
+        totalMinted: true, // ← use aggregate stored on Ctoon
       }
     })
     if (ctoons.length === 0) return []
 
     const ids = ctoons.map(c => c.id)
 
-    const [owned, maxMintRecords, holidayRows] = await Promise.all([
+    const [owned, holidayRows] = await Promise.all([
       prisma.userCtoon.findMany({
         where: { userId, ctoonId: { in: ids } },
         select: { ctoonId: true }
       }),
-      prisma.userCtoon.groupBy({
-        by: ['ctoonId'],
-        where: { ctoonId: { in: ids } },
-        _max: { mintNumber: true }
-      }),
-      // Flag as Holiday Item if it appears in ANY HolidayEventItem
       prisma.holidayEventItem.findMany({
         where: { ctoonId: { in: ids } },
         select: { ctoonId: true }
       })
     ])
 
-    const ownedSet    = new Set(owned.map(o => o.ctoonId))
-    const holidaySet  = new Set(holidayRows.map(h => h.ctoonId))
-    const maxMintMap  = new Map(maxMintRecords.map(r => [r.ctoonId, r._max.mintNumber ?? 0]))
+    const ownedSet   = new Set(owned.map(o => o.ctoonId))
+    const holidaySet = new Set(holidayRows.map(h => h.ctoonId))
 
     return ctoons.map(c => ({
       ...c,
       isOwned:       ownedSet.has(c.id),
-      highestMint:   maxMintMap.get(c.id) || 0,
+      highestMint:   c.totalMinted ?? 0,
       isHolidayItem: holidaySet.has(c.id)
     }))
   } catch (err) {

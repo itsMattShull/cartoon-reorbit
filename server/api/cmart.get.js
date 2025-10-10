@@ -7,9 +7,6 @@ export default defineEventHandler(async (event) => {
         lte: new Date()
       }
     },
-    include: {
-      owners: true
-    },
     orderBy: {
       releaseDate: 'desc'
     }
