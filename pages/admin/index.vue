@@ -440,7 +440,8 @@ const netOptions = {
   maintainAspectRatio: false,
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
-    y: { title: { display: true, text: 'Points' }, beginAtZero: true, stacked: true }
+    yLeft: { title: { display: true, text: 'Net Points' }, beginAtZero: true, stacked: false },
+    yRight:{ position: 'right', title: { display: true, text: 'Earned / Spent' }, beginAtZero: true, stacked: true, grid: { drawOnChartArea: false } }
   },
   plugins: {
     legend: {
@@ -456,7 +457,7 @@ const netOptions = {
     },
     annotation: {
       annotations: {
-        zero: { type: 'line', yMin: 0, yMax: 0, scaleID: 'y', borderColor: 'green', borderWidth: 2, label: { enabled: true, content: 'Zero' } }
+        zero: { type: 'line', yMin: 0, yMax: 0, scaleID: 'yLeft', borderColor: 'green', borderWidth: 2, label: { enabled: true, content: 'Zero' } }
       }
     }
   }
@@ -915,18 +916,19 @@ onMounted(async () => {
     data: {
       labels: [],
       datasets: [
-        { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'y', stack: 'points',
-          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-        { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'y', stack: 'points',
-          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-        { type: 'line', label: 'Net',    data: [], borderColor: colors.netLine, backgroundColor: colors.netLine, borderWidth: 2, fill: false,
+        { type: 'line', label: 'Net',    data: [], borderColor: colors.netLine, backgroundColor: colors.netLine, borderWidth: 2, fill: false, yAxisID: 'yLeft',
           datalabels: { anchor: 'end', align: 'top' } },
-        { type: 'line', label: '7-period MA (Net)', data: [], borderColor: colors.maLine, backgroundColor: colors.maLine, borderWidth: 2, fill: false, borderDash: [5,5],
-          datalabels: { anchor: 'start', align: 'bottom' } }
+        { type: 'line', label: '7-period MA (Net)', data: [], borderColor: colors.maLine, backgroundColor: colors.maLine, borderWidth: 2, fill: false, borderDash: [5,5], yAxisID: 'yLeft',
+          datalabels: { anchor: 'start', align: 'bottom' } },
+        { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'yRight', stack: 'points',
+          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+        { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'yRight', stack: 'points',
+          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } }
       ]
     },
     options: netOptions
   })
+
 
   // apply initial grouping
   applyTimeUnit()
