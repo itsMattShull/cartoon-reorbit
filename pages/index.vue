@@ -36,7 +36,7 @@
         <div class="grid lg:grid-cols-2 gap-8">
           <div class="relative">
             <img
-              src="/images/welcome2.png"
+              :src="topLeftSrc"
               alt="Cartoon ReOrbit Welcome Image"
               class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
               @click="login"
@@ -52,7 +52,7 @@
 
             <div class="relative">
               <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-                <img src="/images/gtoonsbanner.png" alt="Cartoon ReOrbit gToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+                <img :src="bottomLeftSrc" alt="Cartoon ReOrbit gToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
               </div>
             </div>
           </div>
@@ -60,14 +60,14 @@
           <div class="relative">
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
               <img
-                src="/images/posterOct25.png"
+                :src="topRightSrc"
                 alt="Cartoon ReOrbit WinWheel Preview"
                 class="rounded-2xl" style="width:100%; cursor: pointer;"
                 @click="login"
               />
             </div>
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2">
-              <img src="/images/ZoidsWinball.png" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+              <img :src="bottomRightSrc" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
             </div>
             <div
               class="pointer-events-none absolute -right-10 -bottom-10 h-56 w-56 rounded-full blur-2xl"
@@ -168,6 +168,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+
 const { login } = useAuth()
 
 defineNuxtRouteMiddleware('auth', async () => {
@@ -188,6 +191,15 @@ definePageMeta({
     }
   }
 })
+
+// fetch homepage image paths (non-admin)
+const { data: hp } = await useAsyncData('homepage-public', () => $fetch('/api/homepage'))
+
+// fallbacks map exactly as requested
+const topLeftSrc     = computed(() => hp.value?.topLeftImagePath     || '/images/welcome2.png')
+const bottomLeftSrc  = computed(() => hp.value?.bottomLeftImagePath  || '/images/gtoonsbanner.png')
+const topRightSrc    = computed(() => hp.value?.topRightImagePath    || '/images/posterOct25.png')
+const bottomRightSrc = computed(() => hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png')
 
 /* SEO */
 const url = useRequestURL()
@@ -282,21 +294,9 @@ useHead({
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
         mainEntity: [
-          {
-            '@type': 'Question',
-            name: 'Is Cartoon ReOrbit official?',
-            acceptedAnswer: { '@type': 'Answer', text: 'No. It is a fan project with original code and assets and is not affiliated with Cartoon Network.' }
-          },
-          {
-            '@type': 'Question',
-            name: 'Is it free to play?',
-            acceptedAnswer: { '@type': 'Answer', text: 'Yes. Core gameplay is free.' }
-          },
-          {
-            '@type': 'Question',
-            name: 'How are trades and auctions secured?',
-            acceptedAnswer: { '@type': 'Answer', text: 'Trades use server validation and audit logs. Auctions run with transparent timers and anti-sniping rules.' }
-          }
+          { '@type': 'Question', name: 'Is Cartoon ReOrbit official?', acceptedAnswer: { '@type': 'Answer', text: 'No. It is a fan project with original code and assets and is not affiliated with Cartoon Network.' } },
+          { '@type': 'Question', name: 'Is it free to play?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. Core gameplay is free.' } },
+          { '@type': 'Question', name: 'How are trades and auctions secured?', acceptedAnswer: { '@type': 'Answer', text: 'Trades use server validation and audit logs. Auctions run with transparent timers and anti-sniping rules.' } }
         ]
       })
     }
@@ -306,22 +306,19 @@ useHead({
 
 <style>
 :root{
-  /* brand from uploaded logo */
-  --reorbit-deep: #010A36;   /* deepest navy */
-  --reorbit-navy: #002C62;   /* primary brand */
-  --reorbit-blue: #2D5294;   /* link/hover */
-  --reorbit-cyan: #0FDDD6;   /* glow accent */
-  --reorbit-aqua: #16ECE9;   /* secondary glow */
-  --reorbit-teal: #19E6AC;   /* accent */
-  --reorbit-green: #51F68E;  /* CTA base (unused in gradients below) */
-  --reorbit-green-2: #70F873;/* CTA end */
-  --reorbit-lime: #AFFA2D;   /* CTA start */
-  --reorbit-lime-2: #B3FB57; /* optional */
-  --reorbit-purple: #9647CF; /* hero accent */
-
-  /* derived */
-  --reorbit-border: rgba(150,71,207,0.55);      /* from --reorbit-blue */
-  --reorbit-tint: rgba(0,44,98,0.035);         /* subtle section bg */
+  --reorbit-deep: #010A36;
+  --reorbit-navy: #002C62;
+  --reorbit-blue: #2D5294;
+  --reorbit-cyan: #0FDDD6;
+  --reorbit-aqua: #16ECE9;
+  --reorbit-teal: #19E6AC;
+  --reorbit-green: #51F68E;
+  --reorbit-green-2: #70F873;
+  --reorbit-lime: #AFFA2D;
+  --reorbit-lime-2: #B3FB57;
+  --reorbit-purple: #9647CF;
+  --reorbit-border: rgba(150,71,207,0.55);
+  --reorbit-tint: rgba(0,44,98,0.035);
   --reorbit-cyan-transparent: rgba(15,221,214,0.12);
 }
 </style>

@@ -786,3 +786,14 @@ model AuctionOnly {
   @@index([startsAt])
   @@index([endsAt])
 }
+
+model HomepageConfig {
+  id                  String   @id
+  topLeftImagePath     String?
+  bottomLeftImagePath  String?
+  topRightImagePath    String?
+  bottomRightImagePath String?
+  showcaseImagePath  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}

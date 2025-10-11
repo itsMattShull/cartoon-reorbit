@@ -77,7 +77,7 @@
           <!-- Promo -->
           <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full lg:w-1/2 overflow-hidden bg-white/95 backdrop-blur-sm">
             <nuxt-link to="/games/winwheel">
-              <img src="/images/posterOct25.png" alt="Fantastic Four Poster" class="w-full h-full object-cover">
+              <img :src="showcaseSrc" alt="Showcase Poster Image" class="w-full h-full object-cover">
             </nuxt-link>
           </div>
         </div>
@@ -215,6 +215,16 @@ import { DateTime } from 'luxon'
 import * as Sentry from '@sentry/nuxt'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
+
+/* pull public homepage config */
+const { data: hp } = await useAsyncData('homepage-public', () =>
+  $fetch('/api/homepage') // note: /api/homepage, not /api/hompage
+)
+
+/* bind with fallback to the old poster */
+const showcaseSrc = computed(
+  () => hp.value?.showcaseImagePath || '/images/posterOct25.png'
+)
 
 const loading = ref(true)
 const { user, fetchSelf } = useAuth()
