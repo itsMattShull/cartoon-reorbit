@@ -37,7 +37,7 @@
       <div class="absolute -bottom-24 w-full overflow-hidden h-[70%]">
         <img
           ref="wheel"
-          src="/images/wheel.svg"
+          :src="wheelSrc"
           class="w-full h-auto"
           :style="{
             transform: `rotate(${rotation}deg)`,
@@ -45,6 +45,7 @@
               ? 'transform 4s cubic-bezier(0.33, 1, 0.68, 1)'
               : 'none'
           }"
+          alt="Win Wheel"
         />
         <!-- Pointer Overlay at top-center -->
         <div
@@ -153,19 +154,36 @@ const showResultModal  = ref(false)
 const showHelpModal    = ref(false)
 const spinResult       = ref({ type: '', amount: 0, ctoon: null })
 let countdownTimer     = null
-const maxDailySpins = ref(0)
-const pointsWon     = ref(0)
+const maxDailySpins    = ref(0)
+const pointsWon        = ref(0)
+
+// new: wheel image path from config
+const winWheelImagePath = ref('')
+
+// computed img src with fallback
+const wheelSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
 
 // fetch status
 async function fetchStatus() {
-  const { spinsLeft: sl, nextReset: nr, spinCost: cost, maxDailySpins: maxSpins, pointsWon: pts } =
-    await $fetch('/api/game/winwheel/status')
-  spinsLeft.value       = sl
-  nextReset.value       = new Date(nr)
-  spinCost.value        = cost
-  maxDailySpins.value   = maxSpins
-  pointsWon.value       = pts
+  const res = await $fetch('/api/game/winwheel/status')
+  const {
+    spinsLeft: sl,
+    nextReset: nr,
+    spinCost: cost,
+    maxDailySpins: maxSpins,
+    pointsWon: pts,
+    winWheelImagePath: wheelPath // may be undefined on older API
+  } = res
+
+  spinsLeft.value        = sl
+  nextReset.value        = new Date(nr)
+  spinCost.value         = cost
+  maxDailySpins.value    = maxSpins
+  pointsWon.value        = pts
+  winWheelImagePath.value = wheelPath || ''  // keep empty to trigger fallback
   updateCountdown()
+
+  console.log('winWheelImagePath.value:', winWheelImagePath.value)
 }
 
 function updateCountdown() {
@@ -193,8 +211,8 @@ onBeforeUnmount(() => {
   clearInterval(countdownTimer)
 })
 
-const userPoints      = computed(() => user.value?.points || 0)
-const canSpin         = computed(() =>
+const userPoints = computed(() => user.value?.points || 0)
+const canSpin = computed(() =>
   spinCost.value !== null &&
   !isSpinning.value &&
   userPoints.value >= spinCost.value &&

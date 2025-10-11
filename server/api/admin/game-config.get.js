@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 3) Build dynamic include based on gameName
+  // 3) Dynamic include
   const includeOptions = {}
   if (gameName === 'Winball') {
     includeOptions.grandPrizeCtoon = {
@@ -46,23 +46,21 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // 4) Try to load existing config
+    // 4) Load existing config
     let config = await db.gameConfig.findUnique({
       where: { gameName },
       include: includeOptions
     })
 
-    // 5) If none, create defaults per‐game
+    // 5) Create defaults if missing
     if (!config) {
       if (gameName === 'Winball') {
         config = await db.gameConfig.create({
           data: {
             gameName,
-            leftCupPoints:     0,
-            rightCupPoints:    0,
-            goldCupPoints:     0,
-            // Winball shares daily limits via GlobalGameConfig,
-            // so we only set the game‐specific fields here
+            leftCupPoints: 0,
+            rightCupPoints: 0,
+            goldCupPoints: 0,
             grandPrizeCtoonId: null
           },
           include: includeOptions
@@ -71,17 +69,17 @@ export default defineEventHandler(async (event) => {
         config = await db.gameConfig.create({
           data: {
             gameName,
-            pointsPerWin:     0
+            pointsPerWin: 0
           }
-          // no includeOptions for Clash
         })
       } else if (gameName === 'Winwheel') {
         config = await db.gameConfig.create({
           data: {
             gameName,
-            spinCost:      100,
-            pointsWon:     250,
-            maxDailySpins: 2
+            spinCost: 100,
+            pointsWon: 250,
+            maxDailySpins: 2,
+            winWheelImagePath: null // ensure field exists in response
           },
           include: includeOptions
         })
@@ -93,6 +91,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Scalars (incl. winWheelImagePath) are returned by default.
     return config
   } catch (err) {
     console.error('Failed to fetch or create GameConfig:', err)

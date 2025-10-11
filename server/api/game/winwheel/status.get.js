@@ -8,19 +8,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
-  // — Load Winwheel config to get spinCost, maxDailySpins, and pointsWon —
+  // Load Winwheel config, now including optional image path
   const config = await prisma.gameConfig.findUnique({
     where: { gameName: 'Winwheel' },
     select: {
       spinCost: true,
       maxDailySpins: true,
-      pointsWon: true
+      pointsWon: true,
+      winWheelImagePath: true
     }
   })
   if (!config) {
     throw createError({ statusCode: 500, statusMessage: 'Winwheel config not found' })
   }
-  const { spinCost, maxDailySpins, pointsWon } = config
+  const { spinCost, maxDailySpins, pointsWon, winWheelImagePath } = config
 
   const now = new Date()
   // compute Chicago‐local 8 AM in UTC
@@ -47,10 +48,11 @@ export default defineEventHandler(async (event) => {
   const nextReset = new Date(resetUtcMs + 24 * 60 * 60 * 1000)
 
   return {
-    spinsLeft:     Math.max(0, maxDailySpins - spinsToday),
-    nextReset:     nextReset.toISOString(),
+    spinsLeft: Math.max(0, maxDailySpins - spinsToday),
+    nextReset: nextReset.toISOString(),
     spinCost,
     maxDailySpins,
-    pointsWon
+    pointsWon,
+    winWheelImagePath: winWheelImagePath || null
   }
 })

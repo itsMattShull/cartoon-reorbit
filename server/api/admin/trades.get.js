@@ -2,7 +2,7 @@ import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // ── 1. Admin check via your auth endpoint ────────────────────────────────
+  // 1) Admin check
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // Fetch all trade offers with related users and ctoon details
+  // 2) Fetch offers
   const offers = await prisma.tradeOffer.findMany({
     orderBy: { createdAt: 'desc' },
     include: {
@@ -25,12 +25,7 @@ export default defineEventHandler(async (event) => {
           userCtoon: {
             include: {
               ctoon: {
-                select: {
-                  id: true,
-                  name: true,
-                  rarity: true,
-                  assetPath: true
-                }
+                select: { id: true, name: true, rarity: true, assetPath: true }
               }
             }
           }
@@ -39,14 +34,13 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // Map offers to the shape expected by the frontend
+  // 3) Shape for frontend
   return offers.map(o => {
-    const ctoonsOffered = o.ctoons
-      .filter(x => x.role === 'OFFERED')
-      .map(x => x.userCtoon.ctoon)
-    const ctoonsRequested = o.ctoons
-      .filter(x => x.role === 'REQUESTED')
-      .map(x => x.userCtoon.ctoon)
+    const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => x.userCtoon.ctoon)
+    const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon)
+
+    // Decision timestamp is when status left PENDING. We use updatedAt.
+    const decisionAt = o.status !== 'PENDING' ? o.updatedAt : null
 
     return {
       id: o.id,
@@ -55,7 +49,9 @@ export default defineEventHandler(async (event) => {
       pointsOffered: o.pointsOffered,
       ctoonsOffered,
       ctoonsRequested,
-      status: o.status
+      status: o.status,
+      createdAt: o.createdAt,      // ISO UTC
+      decisionAt                   // ISO UTC or null
     }
   })
 })

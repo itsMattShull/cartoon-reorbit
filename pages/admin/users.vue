@@ -93,13 +93,15 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useAsyncData } from '#app'
+import { useAsyncData, useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
 
+const headers = process.server ? useRequestHeaders(['cookie']) : undefined
+
 const { data: raw, error } = await useAsyncData('admin-users', () =>
-  $fetch('/api/admin/users')
+  $fetch('/api/admin/users', { headers })
 )
 if (error.value) throw error.value
 
