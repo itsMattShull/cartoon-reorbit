@@ -1,3 +1,4 @@
+// server/api/admin/homepage/index.post.js
 import {
   defineEventHandler,
   readMultipartFormData,
@@ -20,25 +21,33 @@ const publicAssetPath = (filename) =>
   process.env.NODE_ENV === 'production' ? `/images/homepage/${filename}` : `/homepage/${filename}`
 
 export default defineEventHandler(async (event) => {
+  // auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
 
+  // parse multipart
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'No form data' })
 
-  const text = {}, files = {}
+  const text = {}
+  const files = {}
   for (const p of parts) {
     if (p.filename) files[p.name] = p
     else text[p.name] = Buffer.isBuffer(p.data) ? p.data.toString('utf-8') : String(p.data ?? '')
   }
 
-  let topLeftPath     = (text.topLeftPath     || '').trim()
-  let bottomLeftPath  = (text.bottomLeftPath  || '').trim()
-  let topRightPath    = (text.topRightPath    || '').trim()
-  let bottomRightPath = (text.bottomRightPath || '').trim()
-  let showcasePath    = (text.showcasePath    || '').trim()
+  // get current values first so missing fields are NOT overwritten
+  const current = await db.homepageConfig.findUnique({ where: { id: 'homepage' } }) ?? {
+    id: 'homepage',
+    topLeftImagePath:     null,
+    bottomLeftImagePath:  null,
+    topRightImagePath:    null,
+    bottomRightImagePath: null,
+    showcaseImagePath:    null
+  }
 
+  // fs prep
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'homepage')
     : join(baseDir, 'public', 'homepage')
@@ -57,42 +66,45 @@ export default defineEventHandler(async (event) => {
     return publicAssetPath(filename)
   }
 
-  const savedTopLeft     = await saveIfPresent('topLeft')
-  const savedBottomLeft  = await saveIfPresent('bottomLeft')
-  const savedTopRight    = await saveIfPresent('topRight')
-  const savedBottomRight = await saveIfPresent('bottomRight')
-  const savedShowcase    = await saveIfPresent('showcase')
+  const saved = {
+    topLeft:     await saveIfPresent('topLeft'),
+    bottomLeft:  await saveIfPresent('bottomLeft'),
+    topRight:    await saveIfPresent('topRight'),
+    bottomRight: await saveIfPresent('bottomRight'),
+    showcase:    await saveIfPresent('showcase')
+  }
 
-  topLeftPath     = savedTopLeft     ?? (topLeftPath     || null)
-  bottomLeftPath  = savedBottomLeft  ?? (bottomLeftPath  || null)
-  topRightPath    = savedTopRight    ?? (topRightPath    || null)
-  bottomRightPath = savedBottomRight ?? (bottomRightPath || null)
-  showcasePath    = savedShowcase    ?? (showcasePath    || null)
+  // helper: update one slot without touching others unless provided
+  const has = (k) => Object.prototype.hasOwnProperty.call(text, k)
+  const norm = (v) => (v ?? '').toString().trim()
 
-  if (('topLeftPath'     in text) && text.topLeftPath     === '' && !files.topLeft)     topLeftPath = null
-  if (('bottomLeftPath'  in text) && text.bottomLeftPath  === '' && !files.bottomLeft)  bottomLeftPath = null
-  if (('topRightPath'    in text) && text.topRightPath    === '' && !files.topRight)    topRightPath = null
-  if (('bottomRightPath' in text) && text.bottomRightPath === '' && !files.bottomRight) bottomRightPath = null
-  if (('showcasePath'    in text) && text.showcasePath    === '' && !files.showcase)    showcasePath = null
+  function resolveSlot(slotKey, fileKey, textKey, currentValue) {
+    // 1) new upload wins
+    if (saved[fileKey] != null) return saved[fileKey]
+    // 2) explicit field present in form
+    if (has(textKey)) {
+      const val = norm(text[textKey])
+      // empty string = clear
+      if (val === '') return null
+      // non-empty string = keep provided path (usually echoes current)
+      return val
+    }
+    // 3) field absent = leave unchanged
+    return currentValue
+  }
+
+  const next = {
+    topLeftImagePath:     resolveSlot('topLeftImagePath',     'topLeft',     'topLeftPath',     current.topLeftImagePath),
+    bottomLeftImagePath:  resolveSlot('bottomLeftImagePath',  'bottomLeft',  'bottomLeftPath',  current.bottomLeftImagePath),
+    topRightImagePath:    resolveSlot('topRightImagePath',    'topRight',    'topRightPath',    current.topRightImagePath),
+    bottomRightImagePath: resolveSlot('bottomRightImagePath', 'bottomRight', 'bottomRightPath', current.bottomRightImagePath),
+    showcaseImagePath:    resolveSlot('showcaseImagePath',    'showcase',    'showcasePath',    current.showcaseImagePath)
+  }
 
   const cfg = await db.homepageConfig.upsert({
     where: { id: 'homepage' },
-    create: {
-      id: 'homepage',
-      topLeftImagePath:     topLeftPath,
-      bottomLeftImagePath:  bottomLeftPath,
-      topRightImagePath:    topRightPath,
-      bottomRightImagePath: bottomRightPath,
-      showcaseImagePath:    showcasePath
-    },
-    update: {
-      topLeftImagePath:     topLeftPath,
-      bottomLeftImagePath:  bottomLeftPath,
-      topRightImagePath:    topRightPath,
-      bottomRightImagePath: bottomRightPath,
-      showcaseImagePath:    showcasePath,
-      updatedAt: new Date()
-    }
+    create: { id: 'homepage', ...next },
+    update: { ...next, updatedAt: new Date() }
   })
 
   return {
