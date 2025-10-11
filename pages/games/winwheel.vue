@@ -25,12 +25,21 @@
         <div class="mt-2 text-lg font-semibold text-gray-800">
           Your Points: {{ userPoints }}
         </div>
-        <p
-          class="mt-1 text-sm text-gray-500 underline cursor-pointer"
-          @click="showHelpModal = true"
-        >
-          How does it work?
-        </p>
+
+        <div class="mt-1 text-sm flex flex-col items-center justify-center gap-4">
+          <p
+            class="text-gray-500 underline cursor-pointer"
+            @click="showHelpModal = true"
+          >
+            How does it work?
+          </p>
+          <p
+            class="text-indigo-700 underline cursor-pointer"
+            @click="showExclusiveModal = true"
+          >
+            View Exclusive cToons
+          </p>
+        </div>
       </div>
 
       <!-- Wheel Container: only top half visible -->
@@ -58,71 +67,115 @@
       <!-- Result Modal -->
       <div
         v-if="showResultModal"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        class="fixed inset-0 bg-black/60 z-50 p-4 flex items-center justify-center"
       >
-        <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full text-center">
-          <h2 class="text-2xl font-bold mb-4">
-            <template v-if="spinResult.type === 'nothing'">
-              You got nothing 😢
-            </template>
-            <template v-else-if="spinResult.type === 'points'">
-              <span v-if="spinResult.amount < spinCost">
-                Small Prize: +{{ spinResult.amount }} pts! 🎉
-              </span>
-              <span v-else>
-                You won {{ spinResult.amount }} pts! 🏆
-              </span>
-            </template>
-            <template v-else>
-              You won a cToon! 🎉
-            </template>
-          </h2>
-
-          <div v-if="spinResult.ctoon" class="mb-4">
-            <img
-              :src="spinResult.ctoon.assetPath"
-              :alt="spinResult.ctoon.name"
-              class="w-24 h-24 mx-auto mb-2"
-            />
-            <p class="font-semibold">{{ spinResult.ctoon.name }}</p>
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-sm flex flex-col overflow-hidden max-h-[90svh] sm:max-h-[80vh]">
+          <!-- Header -->
+          <div class="shrink-0 p-6 border-b">
+            <h2 class="text-2xl font-bold">
+              <template v-if="spinResult.type === 'nothing'">You got nothing 😢</template>
+              <template v-else-if="spinResult.type === 'points'">
+                <span v-if="spinResult.amount < spinCost">Small Prize: +{{ spinResult.amount }} pts! 🎉</span>
+                <span v-else>You won {{ spinResult.amount }} pts! 🏆</span>
+              </template>
+              <template v-else>You won a cToon! 🎉</template>
+            </h2>
           </div>
 
-          <button
-            class="mt-6 px-4 py-2 bg-indigo-600 text-white rounded"
-            @click="closeModal"
-          >
-            Close
-          </button>
+          <!-- Scrollable body -->
+          <div class="flex-1 overflow-y-auto p-6">
+            <div v-if="spinResult.ctoon" class="text-center">
+              <img :src="spinResult.ctoon.assetPath" :alt="spinResult.ctoon.name" class="w-24 h-24 mx-auto mb-2" />
+              <p class="font-semibold">{{ spinResult.ctoon.name }}</p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="shrink-0 p-4 border-t text-right">
+            <button class="px-4 py-2 bg-indigo-600 text-white rounded" @click="closeModal">Close</button>
+          </div>
         </div>
       </div>
 
       <!-- Help Modal -->
       <div
         v-if="showHelpModal"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        class="fixed inset-0 bg-black/60 z-50 p-4 flex items-center justify-center"
       >
-        <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-left">
-          <h2 class="text-xl font-bold mb-4">How the Win Wheel Works</h2>
-          <ul class="list-disc list-inside space-y-2 text-sm text-gray-700">
-            <li>Each spin costs <strong>{{ spinCost }} points</strong>.</li>
-            <li>You can spin up to <strong>{{ maxDailySpins }} times</strong> per day (resets at 8&nbsp;AM CST).</li>
-            <li>Possible outcomes:
-              <ul class="list-circle list-inside ml-4">
-                <li><strong>Nothing</strong>: no reward.</li>
-                <li><strong>Points</strong>: win {{ pointsWon }} points back.</li>
-                <li><strong>Least Desirable cToon</strong>: we pick a common cToon with the fewest mints.</li>
-                <li><strong>Exclusive cToon</strong>: a random exclusive cToon</li>
-              </ul>
-            </li>
-          </ul>
-          <button
-            class="mt-6 px-4 py-2 bg-indigo-600 text-white rounded"
-            @click="showHelpModal = false"
-          >
-            Got it!
-          </button>
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-md flex flex-col overflow-hidden max-h-[90svh] sm:max-h-[80vh]">
+          <!-- Header -->
+          <div class="shrink-0 p-6 border-b">
+            <h2 class="text-xl font-bold">How the Win Wheel Works</h2>
+          </div>
+
+          <!-- Scrollable body -->
+          <div class="flex-1 overflow-y-auto p-6">
+            <ul class="list-disc list-inside space-y-2 text-sm text-gray-700">
+              <li>Each spin costs <strong>{{ spinCost }} points</strong>.</li>
+              <li>You can spin up to <strong>{{ maxDailySpins }} times</strong> per day (resets at 8&nbsp;AM CST).</li>
+              <li>Possible outcomes:
+                <ul class="list-circle list-inside ml-4">
+                  <li><strong>Nothing</strong>: no reward.</li>
+                  <li><strong>Points</strong>: win {{ pointsWon }} points back.</li>
+                  <li><strong>Least Desirable cToon</strong>: we pick a common cToon with the fewest mints.</li>
+                  <li><strong>Exclusive cToon</strong>: a random exclusive cToon</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Footer -->
+          <div class="shrink-0 p-4 border-t text-right">
+            <button class="px-4 py-2 bg-indigo-600 text-white rounded" @click="showHelpModal = false">Got it!</button>
+          </div>
         </div>
       </div>
+
+      <!-- Exclusive Pool Modal -->
+      <div
+        v-if="showExclusiveModal"
+        class="fixed inset-0 bg-black/60 z-50 p-4 flex items-center justify-center"
+      >
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-3xl flex flex-col overflow-hidden max-h-[90svh] sm:max-h-[80vh]">
+          <!-- Header -->
+          <div class="shrink-0 p-4 border-b flex items-center justify-between">
+            <h2 class="text-xl font-bold">Exclusive cToons</h2>
+            <button class="text-gray-600 hover:text-gray-900" @click="showExclusiveModal = false">✕</button>
+          </div>
+
+          <!-- Scrollable body -->
+          <div class="flex-1 overflow-y-auto p-4">
+            <div v-if="exclusivePool.length === 0" class="text-sm text-gray-600">
+              No exclusive cToons configured.
+            </div>
+
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div
+                v-for="item in exclusivePool"
+                :key="item.id"
+                class="relative border rounded-lg p-3 shadow-sm"
+              >
+                <!-- Badge -->
+                <span
+                  class="absolute top-2 right-2 text-xs px-2 py-1 rounded-full"
+                  :class="item.owned ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'"
+                >
+                  {{ item.owned ? 'Owned' : 'Unowned' }}
+                </span>
+
+                <img :src="item.assetPath" :alt="item.name" class="w-full h-40 object-contain mb-2" />
+                <div class="text-sm font-semibold text-gray-800 text-center">{{ item.name }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="shrink-0 p-4 border-t text-right">
+            <button class="px-4 py-2 bg-indigo-600 text-white rounded" @click="showExclusiveModal = false">Close</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
@@ -139,7 +192,7 @@ definePageMeta({
 
 const sliceCount   = 6
 const sliceAngle   = 360 / sliceCount
-const startOffset  = -90  // slice 0 starts at top (-90°)
+const startOffset  = -90
 
 const { user, fetchSelf } = useAuth()
 
@@ -152,13 +205,17 @@ const rotation         = ref(0)
 const isSpinning       = ref(false)
 const showResultModal  = ref(false)
 const showHelpModal    = ref(false)
+const showExclusiveModal = ref(false)
 const spinResult       = ref({ type: '', amount: 0, ctoon: null })
 let countdownTimer     = null
 const maxDailySpins    = ref(0)
 const pointsWon        = ref(0)
 
-// new: wheel image path from config
+// wheel image path
 const winWheelImagePath = ref('')
+
+// exclusive pool
+const exclusivePool = ref([])
 
 // computed img src with fallback
 const wheelSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
@@ -172,34 +229,28 @@ async function fetchStatus() {
     spinCost: cost,
     maxDailySpins: maxSpins,
     pointsWon: pts,
-    winWheelImagePath: wheelPath // may be undefined on older API
+    winWheelImagePath: wheelPath,
+    exclusivePool: pool
   } = res
 
-  spinsLeft.value        = sl
-  nextReset.value        = new Date(nr)
-  spinCost.value         = cost
-  maxDailySpins.value    = maxSpins
-  pointsWon.value        = pts
-  winWheelImagePath.value = wheelPath || ''  // keep empty to trigger fallback
+  spinsLeft.value         = sl
+  nextReset.value         = new Date(nr)
+  spinCost.value          = cost
+  maxDailySpins.value     = maxSpins
+  pointsWon.value         = pts
+  winWheelImagePath.value = wheelPath || ''
+  exclusivePool.value     = Array.isArray(pool) ? pool : []
   updateCountdown()
-
-  console.log('winWheelImagePath.value:', winWheelImagePath.value)
 }
 
 function updateCountdown() {
-  if (!nextReset.value) {
-    countdown.value = ''
-    return
-  }
+  if (!nextReset.value) { countdown.value = ''; return }
   const diff = nextReset.value.getTime() - Date.now()
-  if (diff <= 0) {
-    countdown.value = ''
-    return
-  }
+  if (diff <= 0) { countdown.value = ''; return }
   const h = Math.floor(diff / 3600000)
   const m = Math.floor((diff % 3600000) / 60000)
   const s = Math.floor((diff % 60000) / 1000)
-  countdown.value = [h,m,s].map(n => String(n).padStart(2,'0')).join(':')
+  countdown.value = [h, m, s].map(n => String(n).padStart(2,'0')).join(':')
 }
 
 onMounted(async () => {
