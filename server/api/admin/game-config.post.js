@@ -113,7 +113,7 @@ export default defineEventHandler(async (event) => {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
       } else if (gameName === 'Winwheel') {
-        console.log('Upserting Winwheel config with image path:', winWheelImagePath)
+        console.log('Upserting Winwheel config with image path:', winWheelImagePath) 
         createData = {
           ...createData,
           spinCost,
