@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Params: timeframe → exact window sizes; groupBy (default daily)
+  // 2) Params
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
   const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
 
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   const weeks = TF_WEEKS[timeframe] ?? 13
 
   if (groupBy === 'weekly') {
-    // Exact N weeks ending this week
+    // Weekly: ratio = spend/earn; MA ratio = MA(spend)/MA(earn)
     const weekly = await prisma.$queryRawUnsafe(`
       WITH
         bounds AS (
@@ -36,49 +36,61 @@ export default defineEventHandler(async (event) => {
         week_series AS (
           SELECT generate_series((SELECT start_wk FROM bounds),
                                  (SELECT end_wk   FROM bounds),
-                                 '1 week') AS period
+                                 '1 week')::date AS period
         ),
-        raw_agg AS (
+        agg AS (
           SELECT
             date_trunc('week', "createdAt")::date AS period,
-            COALESCE(
-              SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
-              / NULLIF(SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END), 0),
-              0
-            ) AS ratio
+            SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::float AS spend,
+            SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::float AS earn
           FROM "PointsLog"
           WHERE "createdAt" >= (SELECT start_wk FROM bounds)
             AND "createdAt" <  (SELECT end_wk   FROM bounds) + INTERVAL '1 week'
           GROUP BY 1
+        ),
+        joined AS (
+          SELECT ws.period,
+                 COALESCE(a.spend,0) AS spend,
+                 COALESCE(a.earn,0)  AS earn
+          FROM week_series ws
+          LEFT JOIN agg a ON a.period = ws.period
+        ),
+        calc AS (
+          SELECT
+            period,
+            spend,
+            earn,
+            CASE WHEN earn = 0 THEN NULL ELSE spend/earn END AS ratio,
+            AVG(spend) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma_spend,
+            AVG(earn)  OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma_earn
+          FROM joined
         )
       SELECT
-        ws.period,
-        ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
-        ROUND((
-          AVG(COALESCE(ra.ratio, 0))
-            OVER (ORDER BY ws.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
-        )::numeric, 3) AS moving_avg_7period
-      FROM week_series ws
-      LEFT JOIN raw_agg ra ON ra.period = ws.period
-      ORDER BY ws.period;
+        period,
+        spend,
+        earn,
+        ROUND(ratio::numeric, 3) AS spend_earn_ratio,
+        CASE
+          WHEN ma_earn = 0 THEN NULL
+          ELSE ROUND((ma_spend / ma_earn)::numeric, 3)
+        END AS ratio_ma7
+      FROM calc
+      ORDER BY period;
     `)
 
     const series = weekly.map(r => ({
-      period:         r.period,
-      spendEarnRatio: Number(r.spend_earn_ratio),
-      // keep key name for UI: 7-week MA here
-      movingAvg7Day:  Number(r.moving_avg_7period)
+      period: r.period,
+      spend: Number(r.spend),
+      earn:  Number(r.earn),
+      spendEarnRatio: r.spend_earn_ratio === null ? null : Number(r.spend_earn_ratio),
+      // keep frontend compatibility
+      movingAvg7Day: r.ratio_ma7 === null ? null : Number(r.ratio_ma7)
     }))
 
-    return {
-      timeframe,
-      days,   // expose both for UI convenience
-      weeks,  // exact weeks for timeframe
-      series  // length === weeks
-    }
+    return { timeframe, days, weeks, series }
   }
 
-  // ---- Daily series (exact N days) + 7-day moving average ----
+  // Daily: ratio = spend/earn; MA ratio = MA(spend)/MA(earn)
   const daily = await prisma.$queryRawUnsafe(`
     WITH
       bounds AS (
@@ -88,40 +100,58 @@ export default defineEventHandler(async (event) => {
       day_series AS (
         SELECT generate_series((SELECT start_day FROM bounds),
                                (SELECT end_day   FROM bounds),
-                               '1 day') AS period
+                               '1 day')::date AS period
       ),
-      raw_agg AS (
+      agg AS (
         SELECT
           date_trunc('day', "createdAt")::date AS period,
-          COALESCE(
-            SUM(CASE WHEN "direction"='decrease' THEN points ELSE 0 END)::float
-            / NULLIF(SUM(CASE WHEN "direction"='increase' THEN points ELSE 0 END), 0),
-            0
-          ) AS ratio
+          SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::float AS spend,
+          SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::float AS earn
         FROM "PointsLog"
         WHERE "createdAt" >= (SELECT start_day FROM bounds)
           AND "createdAt" <  (SELECT end_day   FROM bounds) + INTERVAL '1 day'
         GROUP BY 1
+      ),
+      joined AS (
+        SELECT ds.period,
+               COALESCE(a.spend,0) AS spend,
+               COALESCE(a.earn,0)  AS earn
+        FROM day_series ds
+        LEFT JOIN agg a ON a.period = ds.period
+      ),
+      calc AS (
+        SELECT
+          period,
+          spend,
+          earn,
+          CASE WHEN earn = 0 THEN NULL ELSE spend/earn END AS ratio,
+          AVG(spend) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma_spend,
+          AVG(earn)  OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS ma_earn
+        FROM joined
       )
     SELECT
-      ds.period,
-      ROUND(COALESCE(ra.ratio, 0)::numeric, 3) AS spend_earn_ratio,
-      ROUND((
-        AVG(COALESCE(ra.ratio, 0))
-          OVER (ORDER BY ds.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
-      )::numeric, 3) AS moving_avg_7day
-    FROM day_series ds
-    LEFT JOIN raw_agg ra ON ra.period = ds.period
-    ORDER BY ds.period;
+      period,
+      spend,
+      earn,
+      ROUND(ratio::numeric, 3) AS spend_earn_ratio,
+      CASE
+        WHEN ma_earn = 0 THEN NULL
+        ELSE ROUND((ma_spend / ma_earn)::numeric, 3)
+      END AS ratio_ma7
+    FROM calc
+    ORDER BY period;
   `)
 
   return {
     timeframe,
-    days,   // exact days for timeframe
+    days,
     daily: daily.map(r => ({
-      period:         r.period,
-      spendEarnRatio: Number(r.spend_earn_ratio),
-      movingAvg7Day:  Number(r.moving_avg_7day)
+      period: r.period,
+      spend: Number(r.spend),
+      earn:  Number(r.earn),
+      spendEarnRatio: r.spend_earn_ratio === null ? null : Number(r.spend_earn_ratio),
+      // keep frontend compatibility
+      movingAvg7Day: r.ratio_ma7 === null ? null : Number(r.ratio_ma7)
     }))
   }
 })

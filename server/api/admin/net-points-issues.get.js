@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse params → timeframe → exact window sizes; grouping (default daily)
+  // 2) Params
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
   const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
 
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   const weeks = TF_WEEKS[timeframe] ?? 13
 
   if (groupBy === 'weekly') {
-    // Exact N weeks ending this week (no off-by-one from week truncation)
+    // 3) Weekly series: earned, spent, net, 7-week MA(net)
     const weekly = await prisma.$queryRawUnsafe(`
       WITH
         bounds AS (
@@ -36,49 +36,50 @@ export default defineEventHandler(async (event) => {
         week_series AS (
           SELECT generate_series((SELECT start_wk FROM bounds),
                                  (SELECT end_wk   FROM bounds),
-                                 '1 week') AS period
+                                 '1 week')::date AS period
         ),
-        weekly_agg AS (
+        agg AS (
           SELECT
             date_trunc('week', "createdAt")::date AS period,
-            SUM(
-              CASE WHEN "direction" = 'increase' THEN "points"
-                   ELSE -"points"
-              END
-            )::int AS net_points
+            SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::int AS earned,
+            SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::int AS spent
           FROM "PointsLog"
           WHERE "createdAt" >= (SELECT start_wk FROM bounds)
             AND "createdAt" <  (SELECT end_wk   FROM bounds) + INTERVAL '1 week'
           GROUP BY 1
+        ),
+        joined AS (
+          SELECT ws.period,
+                 COALESCE(a.earned,0) AS earned,
+                 COALESCE(a.spent,0)  AS spent
+          FROM week_series ws
+          LEFT JOIN agg a ON a.period = ws.period
         )
       SELECT
-        ws.period,
-        COALESCE(wa.net_points, 0) AS net_points,
-        ROUND((
-          AVG(COALESCE(wa.net_points, 0))
-            OVER (ORDER BY ws.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
-        )::numeric, 2) AS moving_avg_7period
-      FROM week_series ws
-      LEFT JOIN weekly_agg wa ON wa.period = ws.period
-      ORDER BY ws.period;
+        period,
+        earned,
+        spent,
+        (earned - spent) AS net,
+        ROUND(AVG(earned - spent) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)::numeric, 2) AS net_ma7
+      FROM joined
+      ORDER BY period;
     `)
 
     const series = weekly.map(r => ({
-      period:        r.period,
-      netPoints:     Number(r.net_points),
-      // keep frontend key; represents 7-week MA here
-      movingAvg7Day: Number(r.moving_avg_7period)
+      period: r.period,
+      earned: Number(r.earned),
+      spent:  Number(r.spent),
+      net:    Number(r.net),
+      net_ma7: Number(r.net_ma7),
+      // compatibility with existing frontend
+      netPoints: Number(r.net),
+      movingAvg7Day: Number(r.net_ma7)
     }))
 
-    return {
-      timeframe,
-      days,         // also expose days for consistency if the UI needs it
-      weeks,        // exact weeks for the timeframe
-      series        // length === weeks
-    }
+    return { timeframe, weeks, series }
   }
 
-  // ---- Daily series (exact N days) + 7-day moving average ----
+  // 4) Daily series: earned, spent, net, 7-day MA(net)
   const daily = await prisma.$queryRawUnsafe(`
     WITH
       bounds AS (
@@ -88,40 +89,47 @@ export default defineEventHandler(async (event) => {
       day_series AS (
         SELECT generate_series((SELECT start_day FROM bounds),
                                (SELECT end_day   FROM bounds),
-                               '1 day') AS period
+                               '1 day')::date AS period
       ),
-      daily_agg AS (
+      agg AS (
         SELECT
           date_trunc('day', "createdAt")::date AS period,
-          SUM(
-            CASE WHEN "direction" = 'increase' THEN "points"
-                 ELSE -"points"
-            END
-          )::int AS net_points
+          SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::int AS earned,
+          SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::int AS spent
         FROM "PointsLog"
         WHERE "createdAt" >= (SELECT start_day FROM bounds)
           AND "createdAt" <  (SELECT end_day   FROM bounds) + INTERVAL '1 day'
         GROUP BY 1
+      ),
+      joined AS (
+        SELECT ds.period,
+               COALESCE(a.earned,0) AS earned,
+               COALESCE(a.spent,0)  AS spent
+        FROM day_series ds
+        LEFT JOIN agg a ON a.period = ds.period
       )
     SELECT
-      ds.period,
-      COALESCE(da.net_points, 0) AS net_points,
-      ROUND((
-        AVG(COALESCE(da.net_points, 0))
-          OVER (ORDER BY ds.period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
-      )::numeric, 2) AS moving_avg_7day
-    FROM day_series ds
-    LEFT JOIN daily_agg da ON da.period = ds.period
-    ORDER BY ds.period;
+      period,
+      earned,
+      spent,
+      (earned - spent) AS net,
+      ROUND(AVG(earned - spent) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)::numeric, 2) AS net_ma7
+    FROM joined
+    ORDER BY period;
   `)
 
   return {
     timeframe,
-    days,     // exact days for the timeframe
+    days,
     daily: daily.map(r => ({
-      period:        r.period,
-      netPoints:     Number(r.net_points),
-      movingAvg7Day: Number(r.moving_avg_7day)
+      period: r.period,
+      earned: Number(r.earned),
+      spent:  Number(r.spent),
+      net:    Number(r.net),
+      net_ma7: Number(r.net_ma7),
+      // compatibility with existing frontend
+      netPoints: Number(r.net),
+      movingAvg7Day: Number(r.net_ma7)
     }))
   }
 })

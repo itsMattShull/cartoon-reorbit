@@ -248,13 +248,12 @@ const groupOptions = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' }
 ]
-// default to weekly as requested
 const groupBy = ref('weekly')
 
-// derived labels/units for charts & headings
+// derived labels/units
 const groupUnit = computed(() => groupBy.value === 'weekly' ? 'week' : 'day')
-const groupUnitLabel = computed(() => groupBy.value === 'weekly' ? 'Week' : 'Day') // axis title, singular
-const groupLabel = computed(() => groupBy.value === 'weekly' ? 'Weekly' : 'Daily') // for headings
+const groupUnitLabel = computed(() => groupBy.value === 'weekly' ? 'Week' : 'Day')
+const groupLabel = computed(() => groupBy.value === 'weekly' ? 'Weekly' : 'Daily')
 const windowUnitPlural = computed(() => groupBy.value === 'weekly' ? 'weeks' : 'days')
 
 // Active Discord meta
@@ -271,8 +270,10 @@ const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
+const ratioCanvas   = ref(null)
+const turnoverCanvas= ref(null)
 
-// window counts (respecting daily/weekly)
+// window counts
 const netWindowCount      = ref(0)
 const ratioWindowCount    = ref(0)
 const turnoverWindowCount = ref(0)
@@ -282,8 +283,7 @@ const clashFinished    = ref(0)
 const clashPctFinished = ref(0)
 
 // rarity turnover state/badges
-const turnoverCanvas      = ref(null)
-const turnoverStatus      = ref('good')   // 'good' | 'caution' | 'danger'
+const turnoverStatus      = ref('good')
 const turnoverSuggestions = ref([])
 
 const turnoverBadgeClass = computed(() => ({
@@ -310,31 +310,28 @@ const healthyRanges = {
 const netStatus      = ref('good')
 const netSuggestions = ref([])
 
-const badgeClass = computed(() => {
-  switch (netStatus.value) {
-    case 'good':   return 'bg-green-100 text-green-800'
-    case 'caution':return 'bg-yellow-100 text-yellow-800'
-    case 'danger': return 'bg-red-100   text-red-800'
-  }
-})
-const badgeText = computed(() => {
-  switch (netStatus.value) {
-    case 'good':   return 'Healthy'
-    case 'caution':return 'Caution'
-    case 'danger': return 'Danger'
-  }
-})
+const badgeClass = computed(() => ({
+  good:    'bg-green-100 text-green-800',
+  caution: 'bg-yellow-100 text-yellow-800',
+  danger:  'bg-red-100 text-red-800'
+}[netStatus.value]))
+
+const badgeText = computed(() => ({
+  good:    'Healthy',
+  caution: 'Caution',
+  danger:  'Danger'
+}[netStatus.value]))
 
 // ratio badges
-const ratioCanvas     = ref(null)
-const ratioStatus     = ref('good')
-const ratioSuggestions= ref([])
+const ratioStatus      = ref('good')
+const ratioSuggestions = ref([])
 
 const ratioBadgeClass = computed(() => ({
   good:    'bg-green-100 text-green-800',
   caution: 'bg-yellow-100 text-yellow-800',
   danger:  'bg-red-100 text-red-800'
 })[ratioStatus.value])
+
 const ratioBadgeText = computed(() => ({
   good:    'Healthy',
   caution: 'Caution',
@@ -343,7 +340,8 @@ const ratioBadgeText = computed(() => ({
 
 // Chart instances
 let cumChart, pctChart, uniqueChart,
-    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart, netChart, ratioChart, turnoverChart
+    codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
+    netChart, ratioChart, turnoverChart
 
 // --- color palette ---
 const colors = {
@@ -353,7 +351,11 @@ const colors = {
   tradesBar: '#D946EF',
   clashBar:  '#8B5CF6',
   packBar:   '#3B82F6', // Blue
-  histBar:   '#F59E0B'  // Amber
+  histBar:   '#F59E0B', // Amber
+  earnedBar: '#22C55E', // Green
+  spentBar:  '#EF4444', // Red
+  netLine:   '#111827', // Slate-900
+  maLine:    '#FACC15'  // Yellow
 }
 colors.turnover = {
   Common:    '#9CA3AF',
@@ -363,7 +365,7 @@ colors.turnover = {
   'Crazy Rare':'#EF4444'
 }
 
-// --- chart options (base; x.time.unit will be adjusted dynamically) ---
+// --- chart options (base) ---
 const commonLineOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -385,26 +387,18 @@ const pctOptions = {
 const ratioOptions = {
   responsive: true,
   maintainAspectRatio: false,
+  spanGaps: false,
   scales: {
-    x: {
-      type: 'time',
-      time: { unit: 'day', tooltipFormat: 'PP' },
-      title: { display: true, text: 'Day' }
-    },
-    y: {
-      title: { display: true, text: 'Spend / Earn Ratio' },
-      min: 0
-    }
+    x: { type: 'time', time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
+    y: { title: { display: true, text: 'Spend / Earn Ratio' }, min: 0 }
   },
   plugins: {
     legend: { display: false },
     annotation: {
       annotations: {
-        green:      { type: 'line', yMin: 1,    yMax: 1,    scaleID: 'y', borderColor: 'green',  borderWidth: 2, label: { enabled: true, content: '1.0' } },
-        yellowLow:  { type: 'line', yMin: 0.9,  yMax: 0.9,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '0.9' } },
-        yellowHigh: { type: 'line', yMin: 1.1,  yMax: 1.1,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '1.1' } },
-        redLow:     { type: 'line', yMin: 0.75, yMax: 0.75, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '0.75' } },
-        redHigh:    { type: 'line', yMin: 1.25, yMax: 1.25, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '1.25' } }
+        bandLow:  { type: 'line', yMin: 0.9, yMax: 0.9, scaleID: 'y', borderColor: 'rgba(0,0,0,0.25)', borderWidth: 1, label:{enabled:true, content:'0.9'} },
+        bandHigh: { type: 'line', yMin: 1.1, yMax: 1.1, scaleID: 'y', borderColor: 'rgba(0,0,0,0.25)', borderWidth: 1, label:{enabled:true, content:'1.1'} },
+        oneLine:  { type: 'line', yMin: 1.0, yMax: 1.0, scaleID: 'y', borderColor: 'green', borderWidth: 2, label:{enabled:true, content:'1.0'} }
       }
     }
   }
@@ -445,13 +439,8 @@ const netOptions = {
   responsive: true,
   maintainAspectRatio: false,
   scales: {
-    x: {
-      type: 'time',
-      offset: true,
-      time: { unit: 'day', tooltipFormat: 'PP' },
-      title: { display: true, text: 'Day' }
-    },
-    y: { title: { display: true, text: 'Net Points Issued' }, beginAtZero: false }
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { display: true, text: 'Day' } },
+    y: { title: { display: true, text: 'Points' }, beginAtZero: true, stacked: true }
   },
   plugins: {
     legend: {
@@ -467,11 +456,7 @@ const netOptions = {
     },
     annotation: {
       annotations: {
-        greenLine:    { type: 'line', yMin: 0,    yMax: 0,    scaleID: 'y', borderColor: 'green',  borderWidth: 2, label: { enabled: true, content: 'Zero' } },
-        yellowLine:   { type: 'line', yMin: 500,  yMax: 500,  scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '+500' } },
-        yellowLineNeg:{ type: 'line', yMin: -500, yMax: -500, scaleID: 'y', borderColor: 'orange', borderWidth: 1, label: { enabled: true, content: '-500' } },
-        redLine:      { type: 'line', yMin: 1000, yMax: 1000, scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '+1000' } },
-        redLineNeg:   { type: 'line', yMin: -1000,yMax: -1000,scaleID: 'y', borderColor: 'red',    borderWidth: 1, label: { enabled: true, content: '-1000' } }
+        zero: { type: 'line', yMin: 0, yMax: 0, scaleID: 'y', borderColor: 'green', borderWidth: 2, label: { enabled: true, content: 'Zero' } }
       }
     }
   }
@@ -482,13 +467,8 @@ const clashOptions = {
   responsive: true,
   maintainAspectRatio: false,
   scales: {
-    x: {
-      type: 'time',
-      offset: true,
-      time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } },
-      title: { display: true, text: 'Day' },
-      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 }
-    },
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { display: true, text: 'Day' },
+      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
     y:  { title: { display: true, text: 'Games Played' }, beginAtZero: true },
     y1: { position: 'right', title: { display: true, text: '% Finished' }, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' }, min: 0, max: 100 }
   },
@@ -522,7 +502,7 @@ const cumOptions = {
   }
 }
 
-// shared bar options (codes/ctoons/packs/trades)
+// shared bar options
 const barOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -531,49 +511,35 @@ const barOptions = {
     datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
   },
   scales: {
-    x: {
-      type: 'time',
-      offset: true,
-      time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } },
-      title: { display: true, text: 'Day' },
-      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 }
-    },
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { display: true, text: 'Day' },
+      ticks: { source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
     y: { title: { display: true, text: 'Count' }, beginAtZero: true }
   }
 }
 
-// histogram (not time-based)
+// histogram
 const histOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-  scales: {
-    x: { title: { display: true, text: 'Points Range' } },
-    y: { title: { display: true, text: 'Users' }, beginAtZero: true }
-  }
+  scales: { x: { title: { display: true, text: 'Points Range' } }, y: { title: { display: true, text: 'Users' }, beginAtZero: true } }
 }
 
 // --- helpers ---
 const dateOf = (d) => new Date(d.period || d.day || d.week || d.date)
 
-// Apply selected day/week to all time-based charts without recreating them
 function applyTimeUnit () {
   const unit  = groupUnit.value
   const label = groupUnitLabel.value
-
   const set = (chart) => {
-    if (!chart || !chart.options?.scales?.x) return
+    if (!chart?.options?.scales?.x) return
     chart.options.scales.x.time.unit = unit
-    if (chart.options.scales.x.title) {
-      chart.options.scales.x.title.text = label
-    }
-    // ensure displayFormats has the unit
+    if (chart.options.scales.x.title) chart.options.scales.x.title.text = label
     const df = chart.options.scales.x.time.displayFormats || {}
     df[unit] = df[unit] || (unit === 'day' ? 'MMM d' : 'MMM d')
     chart.options.scales.x.time.displayFormats = df
     chart.update('none')
   }
-
   ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(set)
 }
 
@@ -606,66 +572,62 @@ async function fetchData() {
   }]
   tradesChart.update()
 
-  // Net Points Issued
+  // Net Points Issued (earned/spent bars + net lines)
   res = await fetch(`/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const np = await res.json()
-  // support either .days or .weeks coming from API
   netWindowCount.value = groupBy.value === 'weekly'
     ? TF_WEEKS[selectedTimeframe.value]
     : TF_DAYS[selectedTimeframe.value]
 
-  netChart.data.labels           = (np.daily || np.series || []).map(d => dateOf(d))
-  netChart.data.datasets[0].data = (np.daily || np.series || []).map(d => d.netPoints)
-  netChart.data.datasets[1].data = (np.daily || np.series || []).map(d => d.movingAvg7Day ?? d.movingAvg)
+  const netSeries = (np.daily || np.series || [])
+  netChart.data.labels               = netSeries.map(d => dateOf(d))
+  netChart.data.datasets[0].data     = netSeries.map(d => d.earned ?? 0)      // Earned bar
+  netChart.data.datasets[1].data     = netSeries.map(d => (d.spent ?? 0))     // Spent bar
+  netChart.data.datasets[2].data     = netSeries.map(d => d.net ?? d.netPoints ?? 0) // Net line
+  netChart.data.datasets[3].data     = netSeries.map(d => d.net_ma7 ?? d.movingAvg7Day ?? 0) // MA line
   netChart.update()
 
-  // **Compute health status off the 7-day moving average of the latest period**
-  const last = (np.daily || np.series || [])[((np.daily || np.series || []).length - 1)] || null
-  const avg7 = last ? (last.movingAvg7Day ?? last.movingAvg ?? 0) : 0
-
+  // Health badge off 7-period MA of net
+  const last = netSeries[netSeries.length - 1] || null
+  const avg7 = last ? (last.net_ma7 ?? last.movingAvg7Day ?? 0) : 0
   const healthyThreshold = 500
   const cautionThreshold = 1000
-
   if (Math.abs(avg7) <= healthyThreshold) {
     netStatus.value = 'good'
     netSuggestions.value = []
   } else if (Math.abs(avg7) <= cautionThreshold) {
     netStatus.value = 'caution'
-    if (avg7 > healthyThreshold) {
-      netSuggestions.value = [
-        `Your 7-period avg is **${avg7}**, above the healthy target (near 0 ±${healthyThreshold}). To pull it back toward 0:`,
-        '• Increase point sinks (raise auction fees or pack prices)',
-        '• Launch limited-time, high-cost cosmetics to burn points',
-        '• Add small periodic point-burn challenges or raffles'
-      ]
-    } else {
-      netSuggestions.value = [
-        `Your 7-period avg is **${avg7}**, below the healthy target (near 0 ±${healthyThreshold}). To boost it up toward 0:`,
-        '• Introduce earn-focused events (bonus quests, referral rewards)',
-        '• Temporarily lower pack prices or auction fees to spur spending',
-        '• Run double-points days or time-limited earn bonuses'
-      ]
-    }
+    netSuggestions.value = avg7 > 0
+      ? [
+          `7-period net avg ${avg7}. Reduce supply:`,
+          'Increase point sinks',
+          'Offer high-cost cosmetics',
+          'Run point-burn events'
+        ]
+      : [
+          `7-period net avg ${avg7}. Boost supply:`,
+          'Earn-focused events',
+          'Lower pack prices or fees',
+          'Time-limited bonuses'
+        ]
   } else {
     netStatus.value = 'danger'
-    if (avg7 > cautionThreshold) {
-      netSuggestions.value = [
-        `Your 7-period avg is **${avg7}**, well above the danger threshold (>±${cautionThreshold}). Immediately remove points by:`,
-        '• Introducing premium limited-edition items with steep point costs',
-        '• Significantly raising auction fees or new sink mechanics',
-        '• Running high-visibility, large-scale point-burn events'
-      ]
-    } else {
-      netSuggestions.value = [
-        `Your 7-period avg is **${avg7}**, far below the danger threshold (<−${cautionThreshold}). Immediately inject points by:`,
-        '• Granting large event-based point bonuses (double or triple points)',
-        '• Temporarily removing or reducing all point sinks',
-        '• Offering generous referral or activity rewards'
-      ]
-    }
+    netSuggestions.value = avg7 > 0
+      ? [
+          `7-period net avg ${avg7}. Immediate burn:`,
+          'Premium limited items',
+          'Raise auction fees',
+          'Large point-burn events'
+        ]
+      : [
+          `7-period net avg ${avg7}. Immediate injection:`,
+          'Double/triple points',
+          'Pause major sinks',
+          'Generous referral rewards'
+        ]
   }
 
-  // 2) % first purchase
+  // % first purchase
   res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   data = await res.json()
   pctChart.data.labels   = data.map(d => dateOf(d))
@@ -678,7 +640,7 @@ async function fetchData() {
   }]
   pctChart.update()
 
-  // 3) unique logins
+  // unique logins
   res = await fetch(`/api/admin/unique-logins?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   data = await res.json()
   uniqueChart.data.labels   = data.map(d => dateOf(d))
@@ -691,7 +653,7 @@ async function fetchData() {
   }]
   uniqueChart.update()
 
-  // 4) active Discord
+  // active Discord
   res = await fetch('/api/admin/active-discord', { credentials: 'include' })
   const ad = await res.json()
   activeDiscord.value = {
@@ -700,7 +662,7 @@ async function fetchData() {
     total: ad.total
   }
 
-  // 5) clash stats
+  // Clash stats
   res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const cs = await res.json()
   const total    = cs.reduce((s, d) => s + (d.count || 0), 0)
@@ -737,60 +699,62 @@ async function fetchData() {
   ]
   clashChart.update()
 
-  // spend/earn ratio
+  // Spend / Earn Ratio (ratio and MA(spend)/MA(earn))
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const sr = await res.json()
   ratioWindowCount.value = groupBy.value === 'weekly'
     ? TF_WEEKS[selectedTimeframe.value]
     : TF_DAYS[selectedTimeframe.value]
-  ratioChart.data.labels           = (sr.daily || sr.series || []).map(d => dateOf(d))
-  ratioChart.data.datasets[0].data = (sr.daily || sr.series || []).map(d => d.spendEarnRatio)
-  ratioChart.data.datasets[1].data = (sr.daily || sr.series || []).map(d => d.movingAvg7Day ?? d.movingAvg)
+
+  const ratioSeries = (sr.daily || sr.series || [])
+  ratioChart.data.labels           = ratioSeries.map(d => dateOf(d))
+  ratioChart.data.datasets[0].data = ratioSeries.map(d => d.spendEarnRatio)              // per-period ratio
+  ratioChart.data.datasets[1].data = ratioSeries.map(d => d.movingAvg7Day ?? null)       // MA ratio
   ratioChart.update()
 
-  const lastEntry = (sr.daily || sr.series || [])[((sr.daily || sr.series || []).length - 1)] || { movingAvg7Day: 0, movingAvg: 0 }
-  const avg7forRatio = lastEntry.movingAvg7Day ?? lastEntry.movingAvg ?? 0
+  const lastEntry = ratioSeries[ratioSeries.length - 1] || {}
+  const avg7forRatio = lastEntry.movingAvg7Day ?? null
 
-  if (avg7forRatio >= 0.9 && avg7forRatio <= 1.1) {
+  if (avg7forRatio != null && avg7forRatio >= 0.9 && avg7forRatio <= 1.1) {
     ratioStatus.value      = 'good'
     ratioSuggestions.value = []
-  } else if (avg7forRatio >= 0.75 && avg7forRatio <= 1.25) {
+  } else if (avg7forRatio != null && avg7forRatio >= 0.75 && avg7forRatio <= 1.25) {
     ratioStatus.value = 'caution'
-    if (avg7forRatio < 0.9) {
+    if (avg7forRatio < 1.0) {
       ratioSuggestions.value = [
-        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, just below the healthy band (0.9–1.1). To pull it up toward 1.0:`,
-        '• Run earn-focused events (bonus quests, referral rewards)',
-        '• Temporarily lower pack prices or auction fees to drive more spending',
-        '• Offer short-lived double-points days'
+        `7-period ratio ${avg7forRatio.toFixed(3)} below 1.0. Increase spending or reduce sinks:`,
+        'Bonus quests and referrals',
+        'Temporary fee reductions',
+        'Short double-points windows'
       ]
     } else {
       ratioSuggestions.value = [
-        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, just above the healthy band (0.9–1.1). To bring it down toward 1.0:`,
-        '• Introduce small time-boxed point sinks (new cosmetics or auction fees)',
-        '• Run burn-and-earn events that balance give/take',
-        '• Add low-cost point-burn challenges'
+        `7-period ratio ${avg7forRatio.toFixed(3)} above 1.0. Add sinks:`,
+        'Time-boxed cosmetics',
+        'Burn-and-earn events',
+        'Low-cost burn challenges'
       ]
     }
   } else {
     ratioStatus.value = 'danger'
-    if (avg7forRatio < 0.75) {
+    if (avg7forRatio == null || avg7forRatio < 0.75) {
       ratioSuggestions.value = [
-        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, far below healthy. Urgently boost earning:`,
-        '• Add large event-based point bonuses (double/triple points)',
-        '• Temporarily pause major point sinks (auctions, high-cost packs)',
-        '• Launch generous referral or activity rewards'
+        `Ratio very low${avg7forRatio==null ? '' : ` (${avg7forRatio.toFixed(3)})`}. Boost earning now:`,
+        'Large event bonuses',
+        'Pause major sinks',
+        'Generous referrals'
       ]
     } else {
       ratioSuggestions.value = [
-        `Your 7-period avg is ${avg7forRatio.toFixed(3)}, far above healthy. Immediately remove points by:`,
-        '• Introducing premium limited-edition items with steep point costs',
-        '• Significantly raising auction fees or new sink mechanics',
-        '• Running large-scale point-burn events'
+        `Ratio very high (${avg7forRatio.toFixed(3)}). Remove points quickly:`,
+        'Premium limited items',
+        'Raise auction fees',
+        'Large burn events'
       ]
     }
   }
 
-  // 5) codes redeemed
+  // codes redeemed
   res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let cr = await res.json()
   codesChart.data.labels   = cr.map(d => dateOf(d))
@@ -802,7 +766,7 @@ async function fetchData() {
   }]
   codesChart.update()
 
-  // 6) cToons purchased
+  // cToons purchased
   res = await fetch(`/api/admin/purchases?method=ctoon&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let pd = await res.json()
   if (pd.ctoonPurchases) pd = pd.ctoonPurchases
@@ -815,7 +779,7 @@ async function fetchData() {
   }]
   ctoonChart.update()
 
-  // 7) packs purchased
+  // packs purchased
   res = await fetch(`/api/admin/purchases?method=pack&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   let pp = await res.json()
   if (pp.packPurchases) pp = pp.packPurchases
@@ -828,7 +792,7 @@ async function fetchData() {
   }]
   packChart.update()
 
-  // 8) points distribution (not grouped)
+  // points distribution
   res = await fetch('/api/admin/points-distribution', { credentials: 'include' })
   const hd = await res.json()
   ptsHistChart.data.labels   = hd.map(b => b.label)
@@ -840,7 +804,7 @@ async function fetchData() {
   }]
   ptsHistChart.update()
 
-  // 9) rarity turnover (window label respects group)
+  // rarity turnover
   res = await fetch(`/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const turnrate = await res.json()
   turnoverWindowCount.value = turnrate.days ?? turnrate.weeks ?? 0
@@ -851,30 +815,28 @@ async function fetchData() {
   turnoverChart.data.datasets[0].borderColor     = turnrate.data.map(d => colors.turnover[d.rarity])
   turnoverChart.update()
 
-  // compute overall health
-  const avg = turnrate.data.reduce((sum,d) => sum + d.turnoverRate, 0) / Math.max(1, turnrate.data.length)
-  const healthyT = 0.05   // 5%
-  const cautionT = 0.02   // 2%
+  // turnover health
+  const avg = turnrate.data.reduce((s,d) => s + d.turnoverRate, 0) / Math.max(1, turnrate.data.length)
+  const healthyT = 0.05
+  const cautionT = 0.02
   if (avg >= healthyT) {
     turnoverStatus.value = 'good'
     turnoverSuggestions.value = []
   } else if (avg >= cautionT) {
     turnoverStatus.value = 'caution'
     turnoverSuggestions.value = [
-      `Your average turnover is ${(avg*100).toFixed(1)}%, slightly below target (≥${healthyT*100}%). To boost trading:`,
-      '• Run gToons Clash quests rewarding bonus points for trading Rare & Very Rare cToons',
-      '• Add Winball challenges that drop Uncommon cToons on win to spur secondary trades',
-      '• Offer a small point-fee discount or coupon (via daily login bonus) for Crazy Rare trades',
-      '• Promote visiting czones with “trade boost” rewards to unlock lower auction fees'
+      `Avg turnover ${(avg*100).toFixed(1)}% < 5%. Boost trading:`,
+      'Quests that reward Rare/V.Rare trading',
+      'Winball drops to spur swaps',
+      'Fee coupons for Crazy Rare trades'
     ]
   } else {
     turnoverStatus.value = 'danger'
     turnoverSuggestions.value = [
-      `Turnover is very low at ${(avg*100).toFixed(1)}% (<${cautionT*100}%). Immediate actions:`,
-      '• Launch limited-edition auctions for Rare & Very Rare cToons with small bid fees',
-      '• Run a 24-hr triple-points event on any trade in gToons and Winball',
-      '• Temporarily waive all point sinks on trades to encourage Crazy Rare swaps',
-      '• Add a one-time “czone marathon” reward granting Rare cToons for visiting zones'
+      `Turnover ${(avg*100).toFixed(1)}% < 2%. Immediate actions:`,
+      'Limited-edition auctions with bid fees',
+      '24h triple-points on any trade',
+      'Temporarily waive trade sinks'
     ]
   }
 }
@@ -900,7 +862,7 @@ onMounted(async () => {
       labels: [],
       datasets: [
         { label: 'Per-period ratio', data: [], borderColor: '#6366F1', borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top' } },
-        { label: '7-period moving avg', data: [], borderColor: '#FACC15', borderWidth: 2, borderDash: [5, 5], fill: false, datalabels: { anchor: 'start', align: 'bottom' } }
+        { label: '7-period MA ratio', data: [], borderColor: colors.maLine, borderWidth: 2, borderDash: [5, 5], fill: false, datalabels: { anchor: 'start', align: 'bottom' } }
       ]
     },
     options: {
@@ -922,7 +884,7 @@ onMounted(async () => {
     }
   })
 
-  // turnover chart (not time-based)
+  // turnover chart
   turnoverChart = new Chart(turnoverCanvas.value.getContext('2d'), {
     type: 'bar',
     data: { labels: [], datasets: [{
@@ -948,43 +910,46 @@ onMounted(async () => {
     plugins: [ ChartDataLabels ]
   })
 
-  // net chart
+  // net chart (earned/spent stacked bars + net lines)
   netChart = new Chart(netCanvas.value.getContext('2d'), {
-    type: 'line',
     data: {
       labels: [],
       datasets: [
-        { label: 'Per-period net points', data: [], borderColor: colors.line, backgroundColor: colors.line, borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top' } },
-        { label: '7-period moving avg',  data: [], borderColor: '#FACC15', backgroundColor: '#FACC15', borderWidth: 2, fill: false, borderDash: [5,5], datalabels: { anchor: 'start', align: 'bottom' } }
+        { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'y', stack: 'points',
+          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+        { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'y', stack: 'points',
+          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+        { type: 'line', label: 'Net',    data: [], borderColor: colors.netLine, backgroundColor: colors.netLine, borderWidth: 2, fill: false,
+          datalabels: { anchor: 'end', align: 'top' } },
+        { type: 'line', label: '7-period MA (Net)', data: [], borderColor: colors.maLine, backgroundColor: colors.maLine, borderWidth: 2, fill: false, borderDash: [5,5],
+          datalabels: { anchor: 'start', align: 'bottom' } }
       ]
     },
     options: netOptions
   })
 
-  // apply the initial Weekly grouping to all time axes
+  // apply initial grouping
   applyTimeUnit()
 
-  // fetch all
+  // fetch
   await nextTick()
   await fetchData()
 })
 
-// re-fetch whenever timeframe or grouping changes
+// re-fetch on changes
 watch([selectedTimeframe, groupBy], async () => {
   if (!netChart) return
   applyTimeUnit()
-
-  // clear series for proper axis redraw before refill
   ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(ch => {
     if (!ch) return
     ch.data.labels = []
     ch.data.datasets.forEach(ds => (ds.data = []))
     ch.update('none')
   })
-
   await fetchData()
 })
 </script>
+
 
 <style scoped>
 .chart-container {
