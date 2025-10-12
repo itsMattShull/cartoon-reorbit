@@ -48,6 +48,7 @@
   <transition name="fade">
     <div v-if="isOpen" @click="close" class="fixed inset-0 bg-[var(--reorbit-deep)]/50 z-40"></div>
   </transition>
+  
 
   <!-- sidebar -->
   <transition name="slide">
