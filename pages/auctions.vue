@@ -2,7 +2,7 @@
 <template>
   <Nav />
 
-  <div class="pt-16 px-4 py-6 max-w-7xl mx-auto">
+  <div class="mt-20 md:pt-10 px-4 py-6 max-w-7xl mx-auto">
     <h1 class="text-3xl font-bold mb-6">Auctions</h1>
 
     <!-- Tabs -->

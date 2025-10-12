@@ -3,7 +3,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-16">
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
       <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-semibold">Points Log</h1>
       </div>

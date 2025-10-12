@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <Nav />
-    <div class="relative min-h-screen flex items-center justify-center bg-gray-50 p-4 mt-16">
+    <div class="relative min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <!-- Balloons -->
       <div v-if="showBalloons" class="balloons-container">
         <span

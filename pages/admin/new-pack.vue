@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16">
+  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16 md:mt-20">
     <!-- 🡐 Back & Title -->
     <div class="flex items-center gap-4">
       <NuxtLink

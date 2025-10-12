@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="min-h-screen bg-gray-100 p-6 mt-12">
+  <div class="min-h-screen bg-gray-100 p-6 mt-16 md:mt-20">
     <h1 class="text-3xl font-bold mb-6">Admin: Game Configuration</h1>
 
     <div class="bg-white rounded-lg shadow-md max-w-2xl mx-auto">

@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-xl mx-auto bg-white rounded-lg shadow p-6 mt-16">
+    <div class="max-w-xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
       <h1 class="text-2xl font-semibold mb-4">Manage Dev Instance</h1>
 
       <div class="flex items-center justify-between mb-4">

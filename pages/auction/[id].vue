@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="pt-16 px-4 py-6 max-w-3xl mx-auto">
+  <div class="pt-16 px-4 py-6 max-w-3xl mx-auto mt-16 md:mt-20">
     <!-- Skeleton when loading -->
     <template v-if="loading">
       <div class="animate-pulse space-y-4">

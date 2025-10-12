@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="pt-20 px-4 max-w-7xl mx-auto mt-6">
+  <div class="pt-20 px-4 max-w-7xl mx-auto mt-16 md:mt-20">
     <!-- Title -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Create Trade</h1>

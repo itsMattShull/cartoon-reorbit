@@ -7,7 +7,7 @@
     :type="toast.type"
   />
 
-  <section class="pt-20 flex flex-col md:flex-row max-w-6xl mx-auto">
+  <section class="mt-20 pt-10 flex flex-col md:flex-row max-w-6xl mx-auto">
     <!-- Mobile: dropdown to pick or create deck -->
     <div class="md:hidden mb-4 px-4">
       <label for="mobile-decks" class="block text-sm font-medium text-gray-700 mb-1">

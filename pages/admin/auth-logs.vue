@@ -3,7 +3,7 @@
     <Nav />
 
     <div>
-      <h1 class="text-2xl font-bold mb-4 mt-16">Auth Logs</h1>
+      <h1 class="text-2xl font-bold mb-4 mt-16 md:mt-20">Auth Logs</h1>
 
       <!-- Tabs -->
       <div class="flex space-x-4 border-b border-gray-300 mb-6">

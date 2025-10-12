@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="mt-16 max-w-7xl mx-auto px-4 py-6">
+  <div class="mt-16 md:mt-20 max-w-7xl mx-auto px-4 py-6">
     <!-- Controls -->
     <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
       <div class="flex items-center gap-2 w-full md:w-auto">

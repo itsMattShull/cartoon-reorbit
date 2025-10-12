@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <Nav />
-    <section class="pt-20 max-w-5xl mx-auto px-4 space-y-6">
+    <section class="mt-20 max-w-5xl mx-auto px-4 space-y-6">
       <div class="flex flex-col sm:flex-row sm:items-center gap-3">
         <h1 class="text-2xl font-bold">gToons Clash Leaderboards</h1>
 

@@ -5,7 +5,7 @@
   <!-- Mobile Layout Only -->
   <div
     v-if="!loading"
-    class="lg:hidden pt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
+    class="lg:hidden mt-20 md:mt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
   >
     <!-- Owner Section -->
     <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4" :class="{ booster: ownerIsBooster }">
@@ -127,7 +127,7 @@
   <!-- Desktop Layout -->
   <div
     v-if="!loading"
-    class="hidden lg:flex pt-20 px-4 py-6 max-w-6xl mx-auto flex gap-6"
+    class="hidden lg:flex mt-20 md:mt-20 pt-10 px-4 py-6 max-w-6xl mx-auto flex gap-6"
   >
     <!-- Left Column: Chat and Visitors -->
     <div class="w-1/3 bg-white rounded-xl shadow-md p-4 flex flex-col">

@@ -2,20 +2,46 @@
   <!-- Top bar -->
   <header
     id="nav-root"
-    class="fixed top-0 left-0 w-full h-16 backdrop-blur border-b border-[color:var(--reorbit-border)] flex items-center px-4 z-50"
+    class="fixed top-0 left-0 w-full backdrop-blur border-b border-[color:var(--reorbit-border)] z-50"
     style="background: var(--reorbit-navy)"
   >
-    <button @click="isOpen = true" class="relative focus:outline-none" aria-label="Open navigation">
-      <span v-if="pendingCount > 0 && !isOnTradeOffersPage" class="absolute -top-1 -left-1 h-7 w-7 rounded-full bg-[var(--reorbit-lime)]/70 opacity-75 animate-ping"/>
-      <svg class="w-7 h-7 relative" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="6"  x2="21" y2="6"  /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
-    </button>
+    <div class="mx-auto w-full max-w-[1200px] flex items-center px-4 lg:px-0 lg:pl-10 py-6 md:py-8 relative">
+      <button @click="isOpen = true" class="relative focus:outline-none" aria-label="Open navigation">
+        <span v-if="pendingCount > 0 && !isOnTradeOffersPage" class="absolute -top-1 -left-1 h-7 w-7 rounded-full bg-[var(--reorbit-lime)]/70 opacity-75 animate-ping"/>
+        <svg
+          class="w-7 h-7"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <!-- increased spacing: y=4,12,20 -->
+          <line x1="3" y1="4"  x2="21" y2="4"  />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="20" x2="21" y2="20" />
+        </svg>
+      </button>
 
-    <NuxtLink to="/" class="flex items-center gap-3 ml-3">
-      <img src="/images/logo-reorbit.png" alt="Cartoon ReOrbit logo" class="h-20 w-auto" />
-      <span class="sr-only">Cartoon ReOrbit</span>
-    </NuxtLink>
+      <!-- logo: right on small, centered on md+ -->
+      <NuxtLink
+        to="/"
+        class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
+      >
+        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[400px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+        <span class="sr-only">Cartoon ReOrbit</span>
+      </NuxtLink>
+
+      <div
+        class="hidden md:block ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
+              bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+        aria-label="Sign in with Discord"
+      >
+        Points: {{ user?.points ?? 0 }}
+      </div>
+    </div>
   </header>
 
   <!-- overlay -->
@@ -32,7 +58,7 @@
     >
       <!-- brand -->
       <div class="h-16 px-5 flex items-center gap-3 border-b border-[color:var(--reorbit-border)]">
-        <img src="/images/logo-reorbit.png" alt="Cartoon ReOrbit" class="h-8 w-auto" />
+        <img src='/images/logo-reorbit.png' alt="Cartoon ReOrbit" class="h-8 w-auto" />
         <span class="text-sm text-[var(--reorbit-blue)] font-semibold">Cartoon ReOrbit</span>
         <button @click="close" class="ml-auto text-slate-500 hover:text-[var(--reorbit-blue)]" aria-label="Close nav">✕</button>
       </div>
@@ -109,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { useRoute } from 'vue-router'
 
@@ -117,7 +143,6 @@ const isOpen = ref(false)
 const close  = () => { isOpen.value = false }
 
 const { logout, user, fetchSelf } = useAuth()
-// ensure user is populated before first render
 await fetchSelf().catch(() => {})
 
 const handleLogout = async () => { await logout(); close() }
@@ -175,6 +200,7 @@ const adminGroups = [
       { label: 'Analytics', to: '/admin' },
       { label: 'Manage Users', to: '/admin/users' },
       { label: 'Manage Homepage', to: '/admin/manage-homepage' },
+      { label: 'Manage Ads', to: '/admin/manage-ads' },
       { label: 'Manage Dev', to: '/admin/manage-dev' }
     ]
   },
@@ -225,6 +251,162 @@ function filteredAdmin(group) {
   const term = q.value.toLowerCase()
   return group.items.filter(i => i.label.toLowerCase().includes(term))
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Ad image rotation for logo
+   - Pull from /api/ads
+   - GIF: rotate after one loop duration
+   - PNG/JPG/JPEG/WEBP/SVG: rotate every 8s
+   ──────────────────────────────────────────────────────────── */
+const currentAdSrc = ref('')
+let adOrder = []
+let adIdx = 0
+let timer = null
+const gifDurCache = new Map() // url -> ms
+const abortCtrl = new AbortController()
+
+function shuffle(arr) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function nextAd() {
+  if (!adOrder.length) return
+  adIdx = (adIdx + 1) % adOrder.length
+  currentAdSrc.value = adOrder[adIdx]
+  scheduleNext()
+}
+
+function extOf(url) {
+  try {
+    const u = new URL(url, window.location.origin)
+    const pathname = u.pathname.toLowerCase()
+    const m = pathname.match(/\.(gif|png|jpe?g|webp|svg)$/i)
+    return m ? m[1] : ''
+  } catch {
+    const m = (url || '').toLowerCase().match(/\.(gif|png|jpe?g|webp|svg)(?:\?|#|$)/i)
+    return m ? m[1] : ''
+  }
+}
+
+// Minimal GIF duration parser (sum frame delays once)
+async function getGifDurationMs(url) {
+  if (gifDurCache.has(url)) return gifDurCache.get(url)
+  const res = await fetch(url, { signal: abortCtrl.signal })
+  const buf = await res.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  // header check
+  if (bytes.length < 6 || (String.fromCharCode(...bytes.slice(0,3)) !== 'GIF')) {
+    gifDurCache.set(url, 6000) // fallback 6s
+    return 6000
+  }
+  let i = 6 + 7 // skip header + logical screen descriptor
+  // skip global color table if present
+  const gctFlag = (bytes[10] & 0x80) !== 0
+  if (gctFlag) {
+    const gctSize = 3 * (2 ** ((bytes[10] & 0x07) + 1))
+    i += gctSize
+  }
+  let totalHundredths = 0
+  let lastDelay = 0
+  while (i < bytes.length) {
+    const b = bytes[i++]
+    if (b === 0x3B) break // trailer
+    if (b === 0x21) { // extension
+      const label = bytes[i++]
+      if (label === 0xF9) { // Graphic Control Extension
+        const blockSize = bytes[i++] // should be 4
+        if (blockSize === 4) {
+          const packed = bytes[i]     // not used
+          const delayLo = bytes[i+1]
+          const delayHi = bytes[i+2]
+          lastDelay = (delayHi << 8) | delayLo // hundredths
+          i += 4 // skip rest of GCE (delay, trans idx)
+        } else {
+          i += blockSize
+        }
+        i++ // block terminator 0x00
+      } else {
+        // skip sub-blocks
+        let size = bytes[i++]
+        while (size && i < bytes.length) {
+          i += size
+          size = bytes[i++]
+        }
+      }
+    } else if (b === 0x2C) { // Image Descriptor
+      // consume descriptor (9 bytes)
+      i += 9
+      // local color table?
+      const packed = bytes[i-1]
+      if ((packed & 0x80) !== 0) {
+        const lctSize = 3 * (2 ** ((packed & 0x07) + 1))
+        i += lctSize
+      }
+      // LZW min code size
+      i++
+      // image data sub-blocks
+      let size = bytes[i++]
+      while (size && i < bytes.length) {
+        i += size
+        size = bytes[i++]
+      }
+      // add delay for this frame; browsers treat 0 as 10 (100ms) commonly
+      const d = Math.max(lastDelay, 1) // at least 1 hundredth
+      totalHundredths += d
+      lastDelay = 0
+    } else {
+      // unknown block, stop to be safe
+      break
+    }
+  }
+  const ms = Math.max(totalHundredths * 10, 500) // min 0.5s safety
+  gifDurCache.set(url, ms)
+  return ms
+}
+
+async function scheduleNext() {
+  clearTimeout(timer)
+  const src = currentAdSrc.value
+  if (!src) return
+  const extension = extOf(src)
+  try {
+    if (extension === 'gif') {
+      const ms = await getGifDurationMs(src)
+      timer = setTimeout(nextAd, ms)
+    } else {
+      timer = setTimeout(nextAd, 8000)
+    }
+  } catch {
+    // fallback
+    timer = setTimeout(nextAd, 8000)
+  }
+}
+
+async function initAds() {
+  try {
+    const res = await $fetch('/api/ads', { params: { take: 100 } })
+    const items = Array.isArray(res?.items) ? res.items : []
+    const urls = items.map(i => i.imagePath).filter(Boolean)
+    if (!urls.length) return
+    adOrder = shuffle(urls)
+    adIdx = Math.floor(Math.random() * adOrder.length)
+    currentAdSrc.value = adOrder[adIdx]
+    scheduleNext()
+  } catch {
+    // ignore, keep default logo
+  }
+}
+
+onMounted(() => { initAds() })
+onBeforeUnmount(() => {
+  clearTimeout(timer)
+  abortCtrl.abort()
+})
 </script>
 
 <style scoped>

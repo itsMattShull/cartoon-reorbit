@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="p-6 space-y-8 mt-16 max-w-6xl mx-auto">
+  <div class="p-6 space-y-8 mt-16 md:mt-20 max-w-6xl mx-auto">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <h1 class="text-2xl font-semibold tracking-tight">Backgrounds</h1>

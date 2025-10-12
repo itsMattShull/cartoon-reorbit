@@ -30,7 +30,7 @@
   </div>
 
   <!-- No-game guard -->
-  <div v-if="!game" class="pt-20 text-center">
+  <div v-if="!game" class="mt-20 text-center">
     <p class="text-gray-600">
       No active match.
       <NuxtLink to="/games/clash" class="text-indigo-600 underline">
@@ -42,7 +42,7 @@
   <!-- Main board -->
   <section
     v-else
-    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
+    class="mt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Desktop header (hidden on mobile) -->
     <h2 class="hidden md:block text-xl font-bold text-center mb-2">

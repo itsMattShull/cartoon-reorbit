@@ -10,7 +10,7 @@
       :type="t.type"
     />
 
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
       <h1 class="text-2xl font-semibold mb-4">Bulk Upload cToons</h1>
 
       <!-- STEP 1: Image Upload -->

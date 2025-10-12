@@ -3,7 +3,7 @@
     <Nav />
 
     <!-- Active Discord % Card -->
-    <div class="px-6 py-4 mt-16">
+    <div class="px-6 py-4 mt-16 md:mt-20">
       <div class="inline-block bg-white shadow rounded p-4 mb-6">
         <h2 class="text-lg font-semibold">Active in Discord</h2>
         <p class="text-2xl font-bold">

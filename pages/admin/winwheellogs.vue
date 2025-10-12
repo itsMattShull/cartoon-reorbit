@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50">
     <Nav />
 
-    <div class="px-6 mt-16">
+    <div class="px-6 mt-16 md:mt-20">
       <h1 class="text-2xl font-bold mb-4">Win Wheel Logs</h1>
 
       <!-- Date range filter -->

@@ -2,7 +2,7 @@
   <Nav />
 
   <!-- Mobile Buttons -->
-  <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 px-4">
+  <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 md:pt-10 px-4">
     <button
       class="bg-blue-600 text-white px-4 py-2 rounded"
       @click="openPanel('ctoones')"

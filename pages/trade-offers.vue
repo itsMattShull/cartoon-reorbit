@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="max-w-6xl mx-auto py-6 px-4">
+  <div class="max-w-6xl mx-auto py-6 px-4 mt-16 md:pt-10">
     <h1 class="text-2xl font-bold mb-4">Trade Offers</h1>
 
     <!-- Tabs -->

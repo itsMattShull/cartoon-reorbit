@@ -3,7 +3,7 @@
     <Nav />
 
     <div>
-      <h1 class="text-2xl font-bold mb-4 mt-16">gToons Clash Logs</h1>
+      <h1 class="text-2xl font-bold mb-4 mt-16 md:mt-20">gToons Clash Logs</h1>
 
       <!-- Search -->
       <div class="mb-4">

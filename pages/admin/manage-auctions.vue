@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 p-6 mt-16">
+  <div class="min-h-screen bg-gray-50 p-6 mt-16 md:mt-20">
     <Nav />
 
     <div class="max-w-5xl mx-auto mt-6">

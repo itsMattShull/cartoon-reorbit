@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="flex flex-col lg:flex-row h-screen mt-14">
+  <div class="flex flex-col lg:flex-row h-screen mt-20">
     <!-- Left Column: Traders, Spectators, and Chat -->
     <div class="w-full lg:w-1/3 bg-gray-900 text-white p-4 md:overflow-y-auto md:h-screen">
       <div class="mb-4">

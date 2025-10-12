@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="p-4 mt-16">
+  <div class="p-4 mt-16 md:mt-20">
     <!-- Filters -->
     <div class="mb-4 flex flex-wrap items-center gap-4">
       <!-- Creator Autocomplete -->

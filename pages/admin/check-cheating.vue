@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-6 space-y-6 mt-16 md:mt-20">
     <Nav />
 
     <div class="max-w-3xl mx-auto" style="margin-top: 50px;">

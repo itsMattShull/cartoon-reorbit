@@ -9,7 +9,7 @@
 
     <!-- Navy page background with subtle brand glows -->
     <div
-      class="pt-20 min-h-screen p-6 text-white"
+      class="mt-16 md:mt-20 md:pt-6 min-h-screen p-6 text-white"
     >
       <template v-if="loading">
         <div class="flex flex-col lg:flex-row gap-6 max-w-4xl mx-auto">

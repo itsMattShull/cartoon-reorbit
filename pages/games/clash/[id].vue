@@ -1,7 +1,7 @@
 <template>
   <Nav />
   <!-- Pregame: deck select + ready -->
-  <div v-if="!game" class="pt-20">
+  <div v-if="!game" class="mt-20">
     <div class="max-w-3xl mx-auto bg-white border rounded p-4">
       <h2 class="text-xl font-bold mb-3">gToons Clash – Pregame</h2>
       <div class="grid md:grid-cols-2 gap-4">
@@ -40,7 +40,7 @@
   </div>
   <section
     v-else
-    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
+    class="mt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Mobile header -->
     <div

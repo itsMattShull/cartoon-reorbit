@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="p-4 mt-16">
+  <div class="p-4 mt-16 md:mt-20">
     <!-- Filter Dropdowns -->
     <div class="mb-4 flex flex-wrap items-center space-x-4">
       <!-- User Filter -->

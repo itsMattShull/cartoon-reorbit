@@ -5,7 +5,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
         <h1 class="text-2xl font-semibold">Starter Sets</h1>
         <!-- Create new set -->

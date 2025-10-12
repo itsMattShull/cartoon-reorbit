@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="min-h-screen bg-gray-100 p-6 mt-12">
+  <div class="min-h-screen bg-gray-100 p-6 mt-16 md:mt-20">
     <h1 class="text-3xl font-bold mb-6">Admin: Homepage & Showcase</h1>
 
     <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">

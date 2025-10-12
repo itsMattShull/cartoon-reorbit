@@ -2,17 +2,23 @@
   <main class="bg-white text-slate-900">
     <!-- Top nav -->
     <header class="sticky top-0 z-40 backdrop-blur border-b border-[var(--reorbit-border)]" style="background: var(--reorbit-navy)">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <NuxtLink to="/" class="flex items-center gap-3">
-          <img src="/images/logo-reorbit.png" alt="Cartoon ReOrbit logo" class="h-20 w-auto" />
+      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 md:py-8 flex items-center justify-between">
+        <!-- logo: left on small, centered on md+ -->
+        <NuxtLink
+          to="/"
+          class="absolute inset-y-0 left-4 flex items-center gap-3
+                md:left-1/2 md:-translate-x-1/2"
+        >
+          <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[400px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
           <span class="sr-only">Cartoon ReOrbit</span>
         </NuxtLink>
 
-        <div class="flex items-center gap-3">
+        <!-- right controls -->
+        <div class="ml-auto flex items-center gap-3">
           <button
             @click="login"
             class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
-                   bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+                  bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
             aria-label="Sign in with Discord"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245 240" class="h-4 w-4 fill-[var(--reorbit-deep)]" aria-hidden="true">
@@ -168,7 +174,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 
 const { login } = useAuth()
@@ -192,16 +198,121 @@ definePageMeta({
   }
 })
 
-// fetch homepage image paths (non-admin)
+/* ── Homepage images (existing) ─────────────────────────────── */
 const { data: hp } = await useAsyncData('homepage-public', () => $fetch('/api/homepage'))
 
-// fallbacks map exactly as requested
 const topLeftSrc     = computed(() => hp.value?.topLeftImagePath     || '/images/welcome2.png')
 const bottomLeftSrc  = computed(() => hp.value?.bottomLeftImagePath  || '/images/gtoonsbanner.png')
 const topRightSrc    = computed(() => hp.value?.topRightImagePath    || '/images/posterOct25.png')
 const bottomRightSrc = computed(() => hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png')
 
-/* SEO */
+/* ── Ad logo rotation (new) ───────────────────────────────────
+   - Uses /api/ads to get image list
+   - GIF: advance after one loop
+   - PNG/JPG/JPEG/WEBP/SVG: advance every 8s
+*/
+const currentAdSrc = ref('')
+let adList = []
+let idx = 0
+let timer = null
+const gifDurCache = new Map()
+const abortCtrl = new AbortController()
+
+function shuffle(a) {
+  const x = a.slice()
+  for (let i = x.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[x[i], x[j]] = [x[j], x[i]]
+  }
+  return x
+}
+function ext(url) {
+  const m = (url || '').toLowerCase().match(/\.(gif|png|jpe?g|webp|svg)(?:\?|#|$)/)
+  return m ? m[1] : ''
+}
+function nextAd() {
+  if (!adList.length) return
+  idx = (idx + 1) % adList.length
+  currentAdSrc.value = adList[idx]
+  scheduleNext()
+}
+async function gifDurationMs(url) {
+  if (gifDurCache.has(url)) return gifDurCache.get(url)
+  const res = await fetch(url, { signal: abortCtrl.signal })
+  const buf = await res.arrayBuffer()
+  const b = new Uint8Array(buf)
+  if (b.length < 6 || String.fromCharCode(...b.slice(0, 3)) !== 'GIF') {
+    gifDurCache.set(url, 6000); return 6000
+  }
+  // parse header + logical screen descriptor
+  let i = 13
+  if ((b[10] & 0x80) !== 0) i += 3 * (2 ** ((b[10] & 0x07) + 1)) // global color table
+  let total = 0, delay = 0
+  while (i < b.length) {
+    const v = b[i++]
+    if (v === 0x3B) break // trailer
+    if (v === 0x21) { // extension
+      const label = b[i++]
+      if (label === 0xF9) { // GCE
+        const size = b[i++]
+        if (size === 4) {
+          delay = (b[i+2] << 8) | b[i+1] // hundredths
+          i += 4
+        } else {
+          i += size
+        }
+        i++ // terminator
+      } else { // skip sub-blocks
+        let s = b[i++]
+        while (s && i < b.length) { i += s; s = b[i++] }
+      }
+    } else if (v === 0x2C) { // image descriptor
+      i += 9
+      const packed = b[i-1]
+      if ((packed & 0x80) !== 0) i += 3 * (2 ** ((packed & 0x07) + 1)) // local color table
+      i++ // LZW min code size
+      let s = b[i++]
+      while (s && i < b.length) { i += s; s = b[i++] } // image data blocks
+      total += Math.max(delay, 1) // at least 1 hundredth
+      delay = 0
+    } else {
+      break
+    }
+  }
+  const ms = Math.max(total * 10, 500)
+  gifDurCache.set(url, ms)
+  return ms
+}
+async function scheduleNext() {
+  clearTimeout(timer)
+  const src = currentAdSrc.value
+  if (!src) return
+  try {
+    if (ext(src) === 'gif') {
+      const ms = await gifDurationMs(src)
+      timer = setTimeout(nextAd, ms)
+    } else {
+      timer = setTimeout(nextAd, 8000)
+    }
+  } catch {
+    timer = setTimeout(nextAd, 8000)
+  }
+}
+async function initAds() {
+  try {
+    const res = await $fetch('/api/ads', { params: { take: 100 } })
+    const urls = (res?.items || []).map(i => i.imagePath).filter(Boolean)
+    if (!urls.length) return
+    adList = shuffle(urls)
+    idx = Math.floor(Math.random() * adList.length)
+    currentAdSrc.value = adList[idx]
+    scheduleNext()
+  } catch {}
+}
+onMounted(initAds)
+onBeforeUnmount(() => { clearTimeout(timer); abortCtrl.abort() })
+
+/* ── SEO (existing) ─────────────────────────────────────────── */
 const url = useRequestURL()
 const siteName = 'Cartoon ReOrbit'
 const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
@@ -231,8 +342,6 @@ useHead({
   htmlAttrs: { lang: 'en' },
   link: [
     { rel: 'canonical', href: url.href },
-
-    // Apple touch icons
     { rel: 'apple-touch-icon', sizes: '57x57', href: '/images/apple-icon-57x57.png' },
     { rel: 'apple-touch-icon', sizes: '60x60', href: '/images/apple-icon-60x60.png' },
     { rel: 'apple-touch-icon', sizes: '72x72', href: '/images/apple-icon-72x72.png' },
@@ -242,14 +351,10 @@ useHead({
     { rel: 'apple-touch-icon', sizes: '144x144', href: '/images/apple-icon-144x144.png' },
     { rel: 'apple-touch-icon', sizes: '152x152', href: '/images/apple-icon-152x152.png' },
     { rel: 'apple-touch-icon', sizes: '180x180', href: '/images/apple-icon-180x180.png' },
-
-    // PNG favicons
     { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/images/android-icon-192x192.png' },
     { rel: 'icon', type: 'image/png', sizes: '32x32',  href: '/images/favicon-32x32.png' },
     { rel: 'icon', type: 'image/png', sizes: '96x96',  href: '/images/favicon-96x96.png' },
     { rel: 'icon', type: 'image/png', sizes: '16x16',  href: '/images/favicon-16x16.png' },
-
-    // Web App Manifest
     { rel: 'manifest', href: '/images/manifest.json' },
   ],
   meta: [
@@ -257,8 +362,6 @@ useHead({
     { name: 'apple-mobile-web-app-title', content: siteName },
     { name: 'viewport', content: 'width=device-width, initial-scale=1' },
     { name: 'format-detection', content: 'telephone=no' },
-
-    // Microsoft tiles + theme color
     { name: 'msapplication-TileColor', content: '#ffffff' },
     { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
     { name: 'theme-color', content: '#ffffff' },

@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
       <h1 class="text-2xl font-semibold mb-4">Add New cToon</h1>
       <form @submit.prevent="submitForm" class="space-y-4">
         <!-- Image Upload -->
