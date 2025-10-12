@@ -30,7 +30,7 @@
         to="/"
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
       >
-        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[400px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
         <span class="sr-only">Cartoon ReOrbit</span>
       </NuxtLink>
 
