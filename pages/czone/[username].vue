@@ -407,12 +407,22 @@
         </div>
         <div v-else class="grid grid-cols-2 gap-4">
           <div
-            v-for="c in wishlistCtoons"
-            :key="c.id"
-            class="flex flex-col items-center"
+            v-for="item in wishlistCtoons"
+            :key="item.ctoon.id"
+            class="flex flex-col items-center border rounded p-2"
           >
-            <img :src="c.assetPath" class="w-20 h-20 object-contain mb-2" />
-            <p class="text-sm text-center">{{ c.name }}</p>
+            <img :src="item.ctoon.assetPath" class="w-20 h-20 object-contain mb-2" />
+            <p class="text-sm text-center">{{ item.ctoon.name }}</p>
+            <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
+
+            <button
+              class="mt-2 w-full px-3 py-1 rounded text-white text-sm"
+              :class="item.hasEnough ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
+              :disabled="!item.hasEnough || isProcessingWishlistTrade"
+              @click="onClickWishlistTrade(item)"
+            >
+              Trade for {{ item.offeredPoints }} points
+            </button>
           </div>
         </div>
       </div>
@@ -699,6 +709,36 @@ function openCollection() {
 function closeCollection() {
   collectionModalVisible.value = false
   tradeStep.value              = 1
+}
+
+const isProcessingWishlistTrade = ref(false)
+
+async function onClickWishlistTrade(item) {
+  if (!item?.hasEnough || isProcessingWishlistTrade.value) return
+  isProcessingWishlistTrade.value = true
+
+  try {
+    // optimistic remove from UI
+    const prev = [...wishlistCtoons.value]
+    wishlistCtoons.value = prev.filter(w => w.id !== item.id)
+
+    await $fetch(`/api/wishlist/accept/${item.id}`, {
+      method: 'POST',
+      body: { wishlistItemId: item.id }
+    })
+
+    displayToast('Trade completed.', 'success', 4000)
+
+    // refresh viewer points and the wishlist from server
+    await fetchSelf()
+    await loadUserWishlist()
+  } catch (err) {
+    displayToast(err?.data?.message || 'Failed to complete trade.', 'error', 5000)
+    // ensure UI is in sync with server on failure
+    await loadUserWishlist()
+  } finally {
+    isProcessingWishlistTrade.value = false
+  }
 }
 
 // —— Select/deselect target’s cToon ——

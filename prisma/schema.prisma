@@ -422,10 +422,11 @@ model GlobalGameConfig {
 }
 
 model WishlistItem {
-  id        String   @id @default(uuid())
-  userId    String
-  ctoonId   String
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  ctoonId       String
+  offeredPoints Int      @default(0)   // NEW
+  createdAt     DateTime @default(now())
 
   user   User   @relation(fields: [userId], references: [id])
   ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
