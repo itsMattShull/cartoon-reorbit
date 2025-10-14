@@ -34,115 +34,22 @@ export default defineEventHandler(async (event) => {
   const endDate = new Date(format(today, 'yyyy-MM-dd')) // strip time
   const endExclusive = addDays(endDate, 1) // [startDate, endExclusive)
 
-  // Fetch activity within window [startDate, endExclusive)
-  const [
-    loginLogs, gamePointLogs, pointsLogs, visits, userPacks, bids, wheelSpins,
-    claims, ownerLogs, clashGames, auctionsCreated, auctionOnlyCreated,
-    friends, wishlistItems, tradeOffersCreated, autoBids, backgroundsCreated, adImagesCreated,
-  ] = await Promise.all([
-    prisma.loginLog.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.gamePointLog.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.pointsLog.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.visit.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.userPack.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.bid.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.wheelSpinLog.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.claim.findMany({
-      where: { claimedAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, claimedAt: true }, orderBy: { claimedAt: 'asc' }
-    }),
-    prisma.ctoonOwnerLog.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.clashGame.findMany({
-      where: { startedAt: { gte: startDate, lt: endExclusive } },
-      select: { player1UserId: true, player2UserId: true, startedAt: true },
-      orderBy: { startedAt: 'asc' }
-    }),
-    prisma.auction.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { creatorId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.auctionOnly.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { createdById: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.friend.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.wishlistItem.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.tradeOffer.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { initiatorId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.auctionAutoBid.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { userId: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.background.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { createdById: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-    prisma.adImage.findMany({
-      where: { createdAt: { gte: startDate, lt: endExclusive } },
-      select: { createdById: true, createdAt: true }, orderBy: { createdAt: 'asc' }
-    }),
-  ])
-
-  // Normalize to { userId, createdAt }
-  const entries = []
-
-  ;[
-    loginLogs, gamePointLogs, pointsLogs, visits, userPacks,
-    bids, wheelSpins, ownerLogs, friends, wishlistItems, autoBids
-  ].forEach(list => {
-    for (const r of list) if (r.userId) entries.push({ userId: r.userId, createdAt: r.createdAt })
+  // Fetch ONLY points logs in window
+  const pointsLogs = await prisma.pointsLog.findMany({
+    where: { createdAt: { gte: startDate, lt: endExclusive } },
+    select: { userId: true, createdAt: true },
+    orderBy: { createdAt: 'asc' }
   })
-  for (const r of claims) if (r.userId) entries.push({ userId: r.userId, createdAt: r.claimedAt })
-  for (const g of clashGames) {
-    if (g.player1UserId) entries.push({ userId: g.player1UserId, createdAt: g.startedAt })
-    if (g.player2UserId) entries.push({ userId: g.player2UserId, createdAt: g.startedAt })
-  }
-  for (const a of auctionsCreated) if (a.creatorId) entries.push({ userId: a.creatorId, createdAt: a.createdAt })
-  for (const a of auctionOnlyCreated) if (a.createdById) entries.push({ userId: a.createdById, createdAt: a.createdAt })
-  for (const b of backgroundsCreated) if (b.createdById) entries.push({ userId: b.createdById, createdAt: b.createdAt })
-  for (const a of adImagesCreated) if (a.createdById) entries.push({ userId: a.createdById, createdAt: a.createdAt })
-  for (const t of tradeOffersCreated) if (t.initiatorId) entries.push({ userId: t.initiatorId, createdAt: t.createdAt })
 
-  // Per-period unique users with at least one activity
+  // Per-period unique users with at least one pointsLog
   if (groupBy === 'weekly') {
     const weekMap = new Map() // weekStart -> Set<userId>
-    for (const e of entries) {
-      const wkStart = startOfWeek(e.createdAt, { weekStartsOn: WEEK_STARTS_ON })
+    for (const r of pointsLogs) {
+      if (!r.userId) continue
+      const wkStart = startOfWeek(r.createdAt, { weekStartsOn: WEEK_STARTS_ON })
       const key = format(wkStart, 'yyyy-MM-dd')
       if (!weekMap.has(key)) weekMap.set(key, new Set())
-      weekMap.get(key).add(e.userId)
+      weekMap.get(key).add(r.userId)
     }
 
     const result = []
@@ -157,10 +64,11 @@ export default defineEventHandler(async (event) => {
     return result
   } else {
     const dayMap = new Map() // yyyy-MM-dd -> Set<userId>
-    for (const e of entries) {
-      const day = format(e.createdAt, 'yyyy-MM-dd')
+    for (const r of pointsLogs) {
+      if (!r.userId) continue
+      const day = format(r.createdAt, 'yyyy-MM-dd')
       if (!dayMap.has(day)) dayMap.set(day, new Set())
-      dayMap.get(day).add(e.userId)
+      dayMap.get(day).add(r.userId)
     }
 
     const result = []
