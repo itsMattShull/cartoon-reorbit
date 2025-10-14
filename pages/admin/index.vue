@@ -431,9 +431,14 @@ const uniqueOptions = {
       time: { unit: 'day', tooltipFormat: 'PP' },
       title: { display: true, text: 'Day' }
     },
-    y: { title: { display: true, text: 'Unique Logons' } }
+    y: {
+      title: { display: true, text: 'Unique Logons' },
+      min: 0               // <-- forces axis to start at 0
+      // or: beginAtZero: true
+    }
   }
 }
+
 
 const netOptions = {
   responsive: true,
