@@ -1684,6 +1684,8 @@ setInterval(async () => {
       where: { status: 'ACTIVE', endAt: { lte: now } }
     })
 
+    console.log(`Found ${toClose.length} auctions to close.`)
+
     for (const auc of toClose) {
       const { id, creatorId, userCtoonId } = auc
 
@@ -1769,6 +1771,7 @@ setInterval(async () => {
       })
     } 
   } catch (err) {
+    console.log('Error during auction closing check:', err)
     console.error(`Auction closing failed for ${id}:`, err)
   }
 }, 60 * 1000)
