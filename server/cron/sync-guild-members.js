@@ -62,6 +62,15 @@ async function recomputeLastActivity() {
   try { await prisma.$executeRawUnsafe(sql) } catch {}
 }
 
+const MS_PER_DAY = 86_400_000
+function daysAgo(n) {
+  const now = Date.now()
+  return new Date(now - n * MS_PER_DAY)
+}
+function addDays(date, n) {
+  return new Date(date.getTime() + n * MS_PER_DAY)
+}
+
 async function sendInactivityWarnings() {
   const d180 = daysAgo(180)
   const d210 = daysAgo(210)
