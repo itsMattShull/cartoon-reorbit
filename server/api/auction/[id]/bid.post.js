@@ -33,7 +33,8 @@ export default defineEventHandler(async (event) => {
     where: { id: auctionId },
     select: {
       id: true, status: true, endAt: true,
-      highestBid: true, highestBidderId: true, initialBet: true
+      highestBid: true, highestBidderId: true, initialBet: true,
+      creatorId: true
     }
   })
   if (!pre || pre.status !== 'ACTIVE') {
@@ -41,6 +42,9 @@ export default defineEventHandler(async (event) => {
   }
   if (new Date(pre.endAt) <= new Date()) {
     throw createError({ statusCode: 400, statusMessage: 'Auction already ended' })
+  }
+  if (pre.creatorId && pre.creatorId === userId) {
+    throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
   }
 
   let finalAuction = pre
@@ -54,11 +58,17 @@ export default defineEventHandler(async (event) => {
       where: { id: auctionId },
       select: {
         id: true, status: true, endAt: true,
-        highestBid: true, highestBidderId: true, initialBet: true
+        highestBid: true, highestBidderId: true, initialBet: true,
+        creatorId: true
       }
     })
     if (!fresh || fresh.status !== 'ACTIVE') {
       throw createError({ statusCode: 400, statusMessage: 'Auction not active' })
+    }
+
+    // enforce inside the txn to avoid race conditions
+    if (fresh.creatorId && fresh.creatorId === userId) {
+      throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
     }
 
     const now  = new Date()
@@ -109,7 +119,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 5) Emit socket events (flush before disconnect + ISO endAt)
+  // 5) Emit socket events
   const url = useRuntimeConfig().socketOrigin
 
   const idsForNames = Array.from(new Set(autoSteps.map(s => s.userId)))
@@ -121,7 +131,6 @@ export default defineEventHandler(async (event) => {
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      // Let it fallback to polling if your proxy/CDN blocks the upgrade sometimes:
       transports: ['websocket', 'polling']
     })
     let finished = false
@@ -149,12 +158,11 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // let packets flush before disconnecting
       setTimeout(finish, 25)
     })
 
     socket.on('connect_error', finish)
-    setTimeout(finish, 1500) // fail-safe
+    setTimeout(finish, 1500)
   })
 
   return {
