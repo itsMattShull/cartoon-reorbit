@@ -367,6 +367,8 @@ async function startDueAuctions() {
       }
     })
 
+    console.log(`[startDueAuctions] found ${due.length} due auctions at ${now.toISOString()}`)
+
     for (const row of due) {
       try {
         // Transaction: double-check state, create auction, lock tradeability, mark started
@@ -483,10 +485,16 @@ async function startDueAuctions() {
               body: JSON.stringify(payload)
             }
           )
-        } catch {}
-      } catch {}
+        } catch(e1) {
+          console.log('[startDueAuctions] discord notification error', e1)
+        }
+      } catch(e2) {
+        console.log('[startDueAuctions] per-auction error', e2)
+      }
     }
-  } catch {}
+  } catch(e3) {
+    console.log('[startDueAuctions] outer error', e3)
+  }
 }
 
 
