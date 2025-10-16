@@ -32,13 +32,20 @@ export default defineEventHandler(async (event) => {
   // --- Load auction & basic guards ---
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
-    select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true, initialBet: true }
+    select: {
+      id: true, status: true, endAt: true,
+      highestBid: true, highestBidderId: true, initialBet: true,
+      creatorId: true
+    }
   })
   if (!auc || auc.status !== 'ACTIVE') {
     throw createError({ statusCode: 400, statusMessage: 'Auction not active' })
   }
   if (new Date(auc.endAt) <= new Date()) {
     throw createError({ statusCode: 400, statusMessage: 'Auction already ended' })
+  }
+  if (auc.creatorId && auc.creatorId === userId) {
+    throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
   }
 
   // --- Upsert user's auto-bid ---
@@ -55,10 +62,19 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     const fresh = await tx.auction.findUnique({
       where: { id: auctionId },
-      select: { id: true, status: true, endAt: true, highestBid: true, highestBidderId: true, initialBet: true }
+      select: {
+        id: true, status: true, endAt: true,
+        highestBid: true, highestBidderId: true, initialBet: true,
+        creatorId: true
+      }
     })
     if (!fresh || fresh.status !== 'ACTIVE') return
     if (new Date(fresh.endAt) <= new Date()) return
+
+    // enforce again inside txn to avoid races
+    if (fresh.creatorId && fresh.creatorId === userId) {
+      throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
+    }
 
     const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
     steps = res.steps || []
@@ -85,13 +101,11 @@ export default defineEventHandler(async (event) => {
   const nameById = Object.fromEntries(users.map(u => [u.id, u.username || 'Someone']))
 
   // --- Emit socket events (flush before disconnect) ---
-  const config = useRuntimeConfig()
   const url = useRuntimeConfig().socketOrigin
 
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      // Let it fallback to polling if your proxy/CDN blocks the upgrade sometimes:
       transports: ['websocket', 'polling']
     })
     let finished = false
@@ -111,12 +125,11 @@ export default defineEventHandler(async (event) => {
           ...(s.extendedEndAt ? { endAt: new Date(s.extendedEndAt).toISOString() } : {})
         })
       }
-      // give packets a tick to flush before disconnecting
       setTimeout(finish, 25)
     })
 
     socket.on('connect_error', finish)
-    setTimeout(finish, 1500) // fail-safe
+    setTimeout(finish, 1500)
   })
 
   return {
