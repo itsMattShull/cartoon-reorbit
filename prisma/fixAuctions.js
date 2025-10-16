@@ -1,60 +1,76 @@
-// server/scripts/close-auctions.js
-import { prisma } from '../server/prisma.js';
+// server/scripts/fixAuctions.js
+import { prisma } from '../server/prisma.js'
+
+const COMMIT = process.argv.includes('--commit')
 
 async function main() {
-  const now = new Date();
-  const auctionIds = [
-    '799f4c48-a08d-4acc-88c3-a635935def96',
-    '4e65989a-ec19-4fef-a7dc-0101cf7c5115',
-    '47384702-497b-4447-ba69-dcafff189894',
-    'f01a70ff-e023-4395-83ac-1925ccf83799'
-  ];
+  console.log(`[fixAuctions] start. commit=${COMMIT}`)
 
-  await prisma.$transaction(async (tx) => {
-    for (const id of auctionIds) {
-      // fetch the auction and its bids
-      const auction = await tx.auction.findUnique({
-        where: { id },
-        include: { bids: true }
-      });
-
-      if (!auction) {
-        console.log(`No auction found with ID ${id}`);
-        continue;
-      }
-
-      // determine the highest bid, if any
-      const winningBid = auction.bids
-        .sort((a, b) => b.amount - a.amount)[0];
-
-      // close the auction
-      await tx.auction.update({
-        where: { id },
-        data: {
-          status: 'CLOSED',
-          winnerId: winningBid?.userId || null,
-          highestBidderId: winningBid?.userId || null,
-          winnerAt: now,
-          ...(winningBid && { highestBid: winningBid.amount })
-        }
-      });
-
-      // mark the associated UserCtoon as tradeable
-      await tx.userCtoon.update({
-        where: { id: auction.userCtoonId },
-        data: { isTradeable: true }
-      });
-
-      console.log(`Closed auction ${id} and set UserCtoon ${auction.userCtoonId} as tradeable.`);
+  // 1) fetch candidate auctions and filter where winnerId === creatorId
+  const candidates = await prisma.auction.findMany({
+    where: {
+      status: 'CLOSED',
+      creatorId: { not: null },
+      winnerId:  { not: null },
+    },
+    select: {
+      id: true,
+      creatorId: true,
+      winnerId: true,
+      userCtoonId: true,
+      highestBid: true,
+      winnerAt: true,
+      bids: { select: { id: true, amount: true, userId: true }, orderBy: { amount: 'desc' } }
     }
-  });
+  })
 
-  console.log('✅ All specified auctions closed and tradeable flags updated.');
+  const bad = candidates.filter(a => a.creatorId === a.winnerId)
+
+  if (!bad.length) {
+    console.log('[fixAuctions] no offending auctions found.')
+    return
+  }
+
+  console.log(`[fixAuctions] offending auctions: ${bad.length}`)
+  for (const a of bad) {
+    console.log(`  - ${a.id} | userCtoon=${a.userCtoonId} | winner=creator=${a.winnerId} | bids=${a.bids.length} | highestBid=${a.highestBid ?? 0}`)
+  }
+
+  if (!COMMIT) {
+    console.log('[fixAuctions] dry-run complete. Use --commit to apply.')
+    return
+  }
+
+  // 2) delete deps + auction in per-auction transactions
+  for (const a of bad) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // unlock the asset to be safe
+        await tx.userCtoon.update({
+          where: { id: a.userCtoonId },
+          data:  { isTradeable: true }
+        })
+
+        // children first
+        await tx.bid.deleteMany({ where: { auctionId: a.id } })
+        await tx.auctionAutoBid.deleteMany({ where: { auctionId: a.id } })
+
+        // finally the auction
+        await tx.auction.delete({ where: { id: a.id } })
+      })
+
+      console.log(`[fixAuctions] deleted auction ${a.id} and dependencies.`)
+    } catch (err) {
+      console.error(`[fixAuctions] FAILED for ${a.id}:`, err?.message || err)
+    }
+  }
+
+  console.log('[fixAuctions] done.')
 }
 
 main()
   .catch((err) => {
-    console.error(err);
-    process.exit(1);
+    console.error('[fixAuctions] fatal:', err)
+    process.exit(1)
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => prisma.$disconnect())
