@@ -1677,17 +1677,24 @@ io.on('connection', socket => {
 // in your socket‐server.js (or wherever you close auctions):
 setInterval(async () => {
   try {
-    console.log('Checking for auctions to close…')
     const now = new Date()
     // find all auctions that have just expired
     const toClose = await db.auction.findMany({
       where: { status: 'ACTIVE', endAt: { lte: now } }
     })
 
-    console.log(`Found ${toClose.length} auctions to close.`)
-
     for (const auc of toClose) {
       const { id, creatorId, userCtoonId } = auc
+
+      // resolve seller: creatorId or OFFICIAL_USERNAME
+      let resolvedCreatorId = creatorId
+      if (!resolvedCreatorId && process.env.OFFICIAL_USERNAME) {
+        const official = await db.user.findUnique({
+          where: { username: process.env.OFFICIAL_USERNAME },
+          select: { id: true }
+        })
+        resolvedCreatorId = official?.id || null
+      }
 
       // 1) fetch *all* bids for this auction, descending
       const allBids = await db.bid.findMany({
@@ -1699,20 +1706,16 @@ setInterval(async () => {
       let winningBid = null
       for (const b of allBids) {
         const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
-        const pts     = ptsRec?.points ?? 0
-        if (pts >= b.amount) {
-          winningBid = b
-          break
-        }
+        const pts    = ptsRec?.points ?? 0
+        if (pts >= b.amount) { winningBid = b; break }
       }
 
-      // 3) Now wrap the final update & any transfers in a transaction
+      // 3) transaction
       await db.$transaction(async tx => {
-        // close the auction record
         await tx.auction.update({
           where: { id },
           data: {
-            status:   'CLOSED',
+            status: 'CLOSED',
             winnerId: winningBid?.userId || null,
             highestBidderId: winningBid?.userId || null,
             winnerAt: now,
@@ -1742,18 +1745,32 @@ setInterval(async () => {
             data:  { points: { decrement: winningBid.amount } }
           })
           await tx.pointsLog.create({
-            data: { userId: winningBid.userId, points: winningBid.amount, total: loserPts.points, method: 'Auction', direction: 'decrease' }
+            data: {
+              userId: winningBid.userId,
+              points: winningBid.amount,
+              total:  loserPts.points,
+              method: 'Auction',
+              direction: 'decrease'
+            }
           })
 
-          // credit creator
-          const creatorPts = await tx.userPoints.upsert({
-            where:  { userId: creatorId },
-            create: { userId: creatorId, points: winningBid.amount },
-            update: { points: { increment: winningBid.amount } }
-          })
-          await tx.pointsLog.create({
-            data: { userId: creatorId, points: winningBid.amount, total: creatorPts.points, method: 'Auction', direction: 'increase' }
-          })
+          // credit seller (creator or OFFICIAL_USERNAME), if resolved
+          if (resolvedCreatorId) {
+            const creatorPts = await tx.userPoints.upsert({
+              where:  { userId: resolvedCreatorId },
+              create: { userId: resolvedCreatorId, points: winningBid.amount },
+              update: { points: { increment: winningBid.amount } }
+            })
+            await tx.pointsLog.create({
+              data: {
+                userId: resolvedCreatorId,
+                points: winningBid.amount,
+                total:  creatorPts.points,
+                method: 'Auction',
+                direction: 'increase'
+              }
+            })
+          }
         } else {
           // no winner → just unlock, keep current owner
           await tx.userCtoon.update({
@@ -1763,15 +1780,14 @@ setInterval(async () => {
         }
       })
 
-
-      // 5) notify clients of the final outcome
+      // 5) notify clients
       io.to(`auction_${id}`).emit('auction-ended', {
         winnerId:   winningBid?.userId ?? null,
         winningBid: winningBid?.amount ?? 0
       })
-    } 
+    }
+
   } catch (err) {
-    console.log('Error during auction closing check:', err)
     console.error(`Auction closing failed for ${id}:`, err)
   }
 }, 60 * 1000)
