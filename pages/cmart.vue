@@ -641,7 +641,7 @@ function resetSequence() {
 
 // ────────── ON MOUNT: FETCH DATA ──────────────
 onMounted(async () => {
-  await fetchSelf()
+  await fetchSelf({ force: true })
 
   // LOAD cToons
   try {
@@ -697,7 +697,7 @@ async function buyCtoon(ctoon) {
     ctoon.minted++
     ctoon.owned = true
     showToast('Purchase successful', 'success')
-    // await fetchSelf()
+    // await fetchSelf({ force: true })
   } catch (err) {
     Sentry.captureException(err)
     const msg =
@@ -708,7 +708,7 @@ async function buyCtoon(ctoon) {
     showToast(msg, 'error')
   } finally {
     buyingCtoons.value.delete(ctoon.id)
-    await fetchSelf()
+    await fetchSelf({ force: true })
   }
 }
 
@@ -735,7 +735,7 @@ async function buyPack(pack) {
       method: 'POST',
       body: { packId: pack.id }
     })
-    // await fetchSelf()
+    // await fetchSelf({ force: true })
     // user.value.points -= pack.price
 
     // Show overlay with pack image
@@ -779,7 +779,7 @@ async function buyPack(pack) {
     showToast('Failed to buy pack')
   } finally {
     buyingPacks.value.delete(pack.id)
-    await fetchSelf()
+    await fetchSelf({ force: true })
   }
 }
 

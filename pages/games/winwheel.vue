@@ -254,7 +254,7 @@ function updateCountdown() {
 }
 
 onMounted(async () => {
-  await fetchSelf()
+  await fetchSelf({ force: true })
   await fetchStatus()
   countdownTimer = setInterval(updateCountdown, 1000)
 })
@@ -290,7 +290,7 @@ async function spinWheel() {
     rotation.value  = fullTurns*360 - wedgeMid
 
     setTimeout(async () => {
-      await fetchSelf()
+      await fetchSelf({ force: true })
       await fetchStatus()
       showResultModal.value = true
     }, 4000)

@@ -179,23 +179,8 @@ import { useAuth } from '@/composables/useAuth'
 
 const { login } = useAuth()
 
-defineNuxtRouteMiddleware('auth', async () => {
-  const { user, fetchSelf } = useAuth()
-  await fetchSelf()
-  if (user.value && !user.value.needsSetup) return navigateTo('/dashboard')
-  if (user.value?.needsSetup) return navigateTo('/setup-username')
-})
-
 definePageMeta({
-  layout: 'home',
-  middleware: async () => {
-    const { user, fetchSelf } = useAuth()
-    try { await fetchSelf() } catch {}
-    if (user.value) {
-      if (user.value.needsSetup) return navigateTo('/setup-username')
-      return navigateTo('/dashboard')
-    }
-  }
+  layout: 'home'
 })
 
 /* ── Homepage images (existing) ─────────────────────────────── */

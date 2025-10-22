@@ -625,7 +625,7 @@ bumperXs.forEach((bx) => {
               alert("You hit the gutter.")
               resetBall()
             }
-            await fetchSelf()
+            await fetchSelf({ force: true })
           } catch (err) {
             console.error('Error verifying ball:', err)
           }
@@ -793,7 +793,7 @@ bumperXs.forEach((bx) => {
               alert(`You won ${result.pointsAwarded} points!`)
               resetBall()
             }
-            await fetchSelf()
+            await fetchSelf({ force: true })
           }
           else if (result.result === 'gutter') {
             // play the sound

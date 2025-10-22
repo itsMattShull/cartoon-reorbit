@@ -1,21 +1,32 @@
-export default defineNuxtRouteMiddleware(async (to, from) => {
+// middleware/auth.js
+export default defineNuxtRouteMiddleware(async (to) => {
   const { user, fetchSelf } = useAuth()
 
-  if (!user.value) {
-    await fetchSelf()
+  // Smart behavior on the public home
+  if (to.path === '/') {
+    try { await fetchSelf() } catch {}
+    if (user.value?.needsSetup) return navigateTo('/setup-username')
+    if (user.value) return navigateTo('/dashboard')
+    return
   }
 
-  // if still no user, redirect to root
+  // Only guard protected pages
+  const needsAuth =
+    to.meta?.requiresAuth ||
+    to.path.startsWith('/dashboard')
+
+  if (!needsAuth) return
+
   if (!user.value) {
-    return navigateTo('/')
+    try { await fetchSelf() } catch {}
   }
 
-  // if user needs setup, go to setup page
+  if (!user.value) return navigateTo('/')
+
   if (user.value.needsSetup && to.path !== '/setup-username') {
     return navigateTo('/setup-username')
   }
 
-  // if user is missing roles or not in the guild, send them to join discord
   if (!user.value.inGuild && to.path !== '/join-discord') {
     return navigateTo('/join-discord')
   }
