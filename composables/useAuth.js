@@ -19,8 +19,7 @@ export const useAuth = () => {
   const fetchSelf = async () => {
     try {
       const me = await $fetch('/api/auth/me', {
-        credentials: 'include',
-        headers: { 'cache-control': 'no-store' }
+        credentials: 'include'
       })
       user.value = me
     } catch (err) {
