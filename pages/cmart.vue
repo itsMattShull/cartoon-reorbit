@@ -463,7 +463,7 @@ const buyingCtoons = ref(new Set())
 const buyingPacks  = ref(new Set())
 
 // ────────── Auth & User ────────────────────────
-const { user, fetchSelf } = useAuth()
+const { setPoints, user, fetchSelf } = useAuth()
 
 // Track what they owned _before_ opening this pack
 const originalOwnedSet = computed(() =>
@@ -694,10 +694,10 @@ async function buyCtoon(ctoon) {
       method: 'POST',
       body: { ctoonId: ctoon.id }
     })
-    await fetchSelf()
     ctoon.minted++
     ctoon.owned = true
     showToast('Purchase successful', 'success')
+    // await fetchSelf()
   } catch (err) {
     Sentry.captureException(err)
     const msg =
@@ -708,6 +708,7 @@ async function buyCtoon(ctoon) {
     showToast(msg, 'error')
   } finally {
     buyingCtoons.value.delete(ctoon.id)
+    await fetchSelf()
   }
 }
 
@@ -734,8 +735,8 @@ async function buyPack(pack) {
       method: 'POST',
       body: { packId: pack.id }
     })
-    await fetchSelf()
-    user.value.points -= pack.price
+    // await fetchSelf()
+    // user.value.points -= pack.price
 
     // Show overlay with pack image
     if (!overlayVisible.value) {
@@ -778,6 +779,7 @@ async function buyPack(pack) {
     showToast('Failed to buy pack')
   } finally {
     buyingPacks.value.delete(pack.id)
+    await fetchSelf()
   }
 }
 

@@ -1,7 +1,7 @@
 <template>
   <Nav />
-  <div class="game-container">
-    <button class="reset-btn mt-16 md:mt-20" @click="resetBall">Reset Ball</button>
+  <div class="game-container" style="margin-top:20px;">
+    <button class="reset-btn mt-20" @click="resetBall">Reset Ball</button>
     <canvas ref="canvas" class="game-canvas"></canvas>
   </div>
 </template>
@@ -25,6 +25,9 @@ import { ref, onMounted } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import * as CANNON from 'cannon-es'
+import { useAuth } from '~/composables/useAuth'
+
+const { fetchSelf } = useAuth()
 
 const COLORS = {
   board:          0xF0E6FF,  // light lavender
@@ -607,8 +610,10 @@ bumperXs.forEach((bx) => {
                   `Congratulations! You won ${result.pointsAwarded} points ` +
                   `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
                 )
+                resetBall()
               } else {
                 alert(`You won ${result.pointsAwarded} points!`)
+                resetBall()
               }
             }
             else if (result.result === 'gutter') {
@@ -618,7 +623,9 @@ bumperXs.forEach((bx) => {
                 // user gesture might be needed on some browsers; fallback silently
               })
               alert("You hit the gutter.")
+              resetBall()
             }
+            await fetchSelf()
           } catch (err) {
             console.error('Error verifying ball:', err)
           }
@@ -781,9 +788,12 @@ bumperXs.forEach((bx) => {
                 `Congratulations! You won ${result.pointsAwarded} points ` +
                 `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
               )
+              resetBall()
             } else {
               alert(`You won ${result.pointsAwarded} points!`)
+              resetBall()
             }
+            await fetchSelf()
           }
           else if (result.result === 'gutter') {
             // play the sound
@@ -792,6 +802,7 @@ bumperXs.forEach((bx) => {
               // user gesture might be needed on some browsers; fallback silently
             })
             alert("You hit the gutter.")
+            resetBall()
           }
           else {
           }
