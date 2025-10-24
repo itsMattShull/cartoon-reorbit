@@ -300,7 +300,7 @@ function updateCountdown() {
 const showModal = ref(false)
 
 onMounted(async () => {
-  await fetchSelf()
+  await fetchSelf({ force: true })
   if (user.value?.needsSetup) { router.push('/setup-username'); return }
 
   updateCountdown()

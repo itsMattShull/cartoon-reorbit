@@ -730,7 +730,7 @@ async function onClickWishlistTrade(item) {
     displayToast('Trade completed.', 'success', 4000)
 
     // refresh viewer points and the wishlist from server
-    await fetchSelf()
+    await fetchSelf({ force: true })
     await loadUserWishlist()
   } catch (err) {
     displayToast(err?.data?.message || 'Failed to complete trade.', 'error', 5000)
@@ -1120,7 +1120,7 @@ onMounted(async () => {
   recalcScale()
   window.addEventListener('resize', recalcScale)
 
-  await fetchSelf()
+  await fetchSelf({ force: true })
 
   // Load active Holiday event (if any)
   try {
@@ -1156,7 +1156,7 @@ onMounted(async () => {
         method: 'POST',
         body: { zoneOwnerId: res.ownerId }
       })
-      await fetchSelf()
+      await fetchSelf({ force: true })
     }
   } catch (err) {
     console.error('Failed to fetch cZone:', err)
