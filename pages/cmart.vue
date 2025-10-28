@@ -203,14 +203,14 @@
               <!-- left: wishlist -->
               <AddToWishlist
                 :ctoon-id="ctoon.id"
-                class="flex-1 text-xs"
+                class="text-xs"
               />
 
               <!-- right: buy -->
               <button
                 v-if="!isReleased(ctoon)"
                 disabled
-                class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
+                class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
                 :aria-label="`Releases in ${formatCountdown(ctoon.releaseDate)}`"
                 title="Not yet released"
               >
@@ -497,14 +497,21 @@ function isReleased(ctoon) {
 
 function formatCountdown(dateLike) {
   const ms = new Date(dateLike).getTime() - nowTs.value
-  if (ms <= 0) return '00d 00h 00m 00s'
+  if (ms <= 0) return '0s'
+
   const totalSec = Math.floor(ms / 1000)
-  const days = Math.floor(totalSec / 86400)
-  const hours = Math.floor((totalSec % 86400) / 3600)
-  const mins = Math.floor((totalSec % 3600) / 60)
-  const secs = totalSec % 60
-  const pad = n => String(n).padStart(2, '0')
-  return `${pad(days)}d ${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`
+  const d = Math.floor(totalSec / 86400)
+  const h = Math.floor((totalSec % 86400) / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+
+  const parts = []
+  if (d) parts.push(`${d}d`)
+  if (h) parts.push(`${h}h`)
+  if (m) parts.push(`${m}m`)
+  parts.push(`${s}s`) // always show seconds
+
+  return parts.join(' ')
 }
 
 // ────────── Shop Data ──────────────────────────
