@@ -25,6 +25,26 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Missing ctoonId' })
     }
 
+    // Fetch cToon for release check (and basic availability)
+    const ctoon = await prisma.ctoon.findUnique({
+      where: { id: ctoonId },
+      select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true }
+    })
+    if (!ctoon || !ctoon.inCmart) {
+      throw createError({ statusCode: 404, statusMessage: 'cToon not for sale, get hacked noob.' })
+    }
+
+    // Block if not yet released
+    const now = new Date()
+    if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
+      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet, get hacked noob.' })
+    }
+
+    // Optional: sold-out fast check before queueing
+    if (ctoon.quantity !== null && ctoon.totalMinted >= ctoon.quantity) {
+      throw createError({ statusCode: 410, statusMessage: 'cToon already sold out :-(' })
+    }
+
     // — (all your existing pre‐checks: fetch ctoon, sold-out, wallet, per-user limit, etc.)
 
     // — Enqueue the mint job

@@ -208,19 +208,24 @@
 
               <!-- right: buy -->
               <button
+                v-if="!isReleased(ctoon)"
+                disabled
+                class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
+                :aria-label="`Releases in ${formatCountdown(ctoon.releaseDate)}`"
+                title="Not yet released"
+              >
+                Releases in {{ formatCountdown(ctoon.releaseDate) }}
+              </button>
+
+              <button
+                v-else
                 @click="buyCtoon(ctoon)"
                 :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
                 class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
               >
-                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">
-                  Sold Out
-                </span>
-                <span v-else-if="buyingCtoons.has(ctoon.id)">
-                  Purchasing…
-                </span>
-                <span v-else>
-                  Buy for {{ ctoon.price }} Pts
-                </span>
+                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+                <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
+                <span v-else>Buy for {{ ctoon.price }} Pts</span>
               </button>
             </div>
           </div>
@@ -451,7 +456,7 @@ definePageMeta({
 })
 
 // ────────── Imports ─────────────────────────────
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -481,6 +486,26 @@ const activeTab = ref('cToons')
 const holidayIdSet = computed(() =>
   new Set((activeHoliday.value?.items || []).map(i => i.ctoonId))
 )
+
+const nowTs = ref(Date.now())
+let _tick = null
+
+function isReleased(ctoon) {
+  if (!ctoon.releaseDate) return true
+  return new Date(ctoon.releaseDate).getTime() <= nowTs.value
+}
+
+function formatCountdown(dateLike) {
+  const ms = new Date(dateLike).getTime() - nowTs.value
+  if (ms <= 0) return '00d 00h 00m 00s'
+  const totalSec = Math.floor(ms / 1000)
+  const days = Math.floor(totalSec / 86400)
+  const hours = Math.floor((totalSec % 86400) / 3600)
+  const mins = Math.floor((totalSec % 3600) / 60)
+  const secs = totalSec % 60
+  const pad = n => String(n).padStart(2, '0')
+  return `${pad(days)}d ${pad(hours)}h ${pad(mins)}m ${pad(secs)}s`
+}
 
 // ────────── Shop Data ──────────────────────────
 const ctoons = ref([])
@@ -681,6 +706,12 @@ onMounted(async () => {
   } catch (_) {
     activeHoliday.value = null
   }
+
+  _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
+})
+
+onUnmounted(() => {
+  if (_tick) clearInterval(_tick)
 })
 
 // ────────── BUY SINGLE cToon ────────────────────
