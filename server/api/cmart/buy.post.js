@@ -30,12 +30,25 @@ export default defineEventHandler(async (event) => {
       where: { id: ctoonId },
       select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true }
     })
-    if (!ctoon || !ctoon.inCmart) {
+
+    // Allow if in cMart OR part of an active holiday event
+    const now = new Date()
+    const activeHolidayItem = await prisma.holidayEventItem.findFirst({
+      where: {
+        ctoonId,
+        event: {
+          isActive: true,
+          startsAt: { lte: now },
+          endsAt:   { gte: now }
+        }
+      }
+    })
+
+    if (!ctoon || (!ctoon.inCmart && !activeHolidayItem)) {
       throw createError({ statusCode: 404, statusMessage: 'cToon not for sale, get hacked noob.' })
     }
 
     // Block if not yet released
-    const now = new Date()
     if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
       throw createError({ statusCode: 403, statusMessage: 'cToon not released yet, get hacked noob.' })
     }
