@@ -46,6 +46,8 @@
         <!-- Winball -->
         <section v-if="activeTab === 'Winball'" role="tabpanel" aria-label="Winball Settings">
           <h2 class="text-2xl font-semibold mb-4">Winball Settings</h2>
+
+          <!-- Points -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div>
               <label class="block text-sm font-medium text-gray-700">Left Cup Points</label>
@@ -61,45 +63,142 @@
             </div>
           </div>
 
-          <div class="mb-6 relative">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
-            <input
-              type="text"
-              v-model="searchTerm"
-              @focus="showDropdown = true"
-              @input="onSearchInput"
-              :placeholder="grandPrizeCtoon ? grandPrizeCtoon.name : 'Type a cToon name…'"
-              class="input"
-            />
-            <ul
-              v-if="showDropdown && filteredMatches.length"
-              class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
-            >
-              <li
-                v-for="c in filteredMatches"
-                :key="c.id"
-                @mousedown.prevent="selectCtoon(c)"
-                class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+          <!-- Grand Prize selection + preview (moved above schedule) -->
+          <div class="mb-8">
+            <div class="mb-3 relative">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+              <input
+                type="text"
+                v-model="searchTerm"
+                @focus="showDropdown = true"
+                @input="onSearchInput"
+                :placeholder="grandPrizeCtoon ? grandPrizeCtoon.name : 'Type a cToon name…'"
+                class="input"
+              />
+              <ul
+                v-if="showDropdown && filteredMatches.length"
+                class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
               >
-                <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
-                <div>
-                  <p class="text-sm font-medium">{{ c.name }}</p>
-                  <p class="text-xs text-gray-500 capitalize">{{ c.rarity }}</p>
-                </div>
-              </li>
-            </ul>
-            <button
-              v-if="grandPrizeCtoon"
-              @click="clearSelection"
-              class="absolute top-0 right-0 mt-2 mr-2 text-gray-500 hover:text-gray-700"
-            >✕</button>
+                <li
+                  v-for="c in filteredMatches"
+                  :key="c.id"
+                  @mousedown.prevent="selectCtoon(c)"
+                  class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                >
+                  <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
+                  <div>
+                    <p class="text-sm font-medium">{{ c.name }}</p>
+                    <p class="text-xs text-gray-500 capitalize">{{ c.rarity }}</p>
+                  </div>
+                </li>
+              </ul>
+              <button
+                v-if="grandPrizeCtoon"
+                @click="clearSelection"
+                class="absolute top-0 right-0 mt-2 mr-2 text-gray-500 hover:text-gray-700"
+              >✕</button>
+            </div>
+
+            <div v-if="grandPrizeCtoon" class="mt-4 flex items-center space-x-4">
+              <img :src="grandPrizeCtoon.assetPath" alt="Grand Prize Preview" class="w-16 h-16 rounded border" />
+              <div>
+                <p class="font-medium">{{ grandPrizeCtoon.name }}</p>
+                <p class="text-sm text-gray-600 capitalize">{{ grandPrizeCtoon.rarity }}</p>
+              </div>
+            </div>
           </div>
 
-          <div v-if="grandPrizeCtoon" class="mt-4 flex items-center space-x-4">
-            <img :src="grandPrizeCtoon.assetPath" alt="Grand Prize Preview" class="w-16 h-16 rounded border" />
-            <div>
-              <p class="font-medium">{{ grandPrizeCtoon.name }}</p>
-              <p class="text-sm text-gray-600 capitalize">{{ grandPrizeCtoon.rarity }}</p>
+          <!-- Schedule UI -->
+          <p class="text-sm text-gray-600 mb-2">
+            All dates and times are interpreted as <strong>Central Time (US)</strong>. Default time is 8:00 PM.
+          </p>
+
+          <div class="mb-4">
+            <button @click="openAddModal" class="px-3 py-2 rounded bg-indigo-600 text-white">Add schedule</button>
+          </div>
+
+          <div class="border rounded mb-6">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="text-left p-2">Start (Central)</th>
+                  <th class="text-left p-2">cToon</th>
+                  <th class="p-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in schedules" :key="row.id" class="border-t">
+                  <td class="p-2 whitespace-nowrap">{{ row.startsAtLocal }}</td>
+                  <td class="p-2">
+                    <div class="flex items-center gap-2">
+                      <img :src="row.ctoon.assetPath" class="w-8 h-8 rounded border object-cover" alt="" />
+                      <div>
+                        <div class="font-medium">{{ row.ctoon.name }}</div>
+                        <div class="text-xs text-gray-500 capitalize">{{ row.ctoon.rarity }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="p-2 text-right">
+                    <button @click="removeSchedule(row)" class="px-2 py-1 rounded border">Remove</button>
+                  </td>
+                </tr>
+                <tr v-if="!schedules.length">
+                  <td colspan="3" class="p-3 text-gray-500">No scheduled grand prizes.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Add modal (unchanged) -->
+          <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div class="bg-white rounded-lg w-full max-w-md p-4">
+              <h3 class="text-lg font-semibold mb-3">Schedule Grand Prize</h3>
+              <!-- selector -->
+              <div class="mb-4 relative">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+                <input
+                  type="text"
+                  v-model="modalSearch"
+                  @focus="modalShowDropdown = true"
+                  @input="onModalSearchInput"
+                  :placeholder="modalSelectedCtoon ? modalSelectedCtoon.name : 'Type a cToon name…'"
+                  class="input"
+                />
+                <ul
+                  v-if="modalShowDropdown && modalFiltered.length"
+                  class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                >
+                  <li
+                    v-for="c in modalFiltered"
+                    :key="c.id"
+                    @mousedown.prevent="selectModalCtoon(c)"
+                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                  >
+                    <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
+                    <div>
+                      <p class="text-sm font-medium">{{ c.name }}</p>
+                      <p class="text-xs text-gray-500 capitalize">{{ c.rarity }}</p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+              <!-- date/time -->
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Date (Central)</label>
+                  <input type="date" v-model="modalDate" class="input" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Time (Central)</label>
+                  <input type="time" v-model="modalTime" class="input" />
+                </div>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button @click="closeAddModal" class="px-3 py-2 rounded border">Cancel</button>
+                <button @click="createSchedule" :disabled="savingSchedule || !modalSelectedCtoon || !modalDate || !modalTime" class="px-3 py-2 rounded bg-indigo-600 text-white">
+                  {{ savingSchedule ? 'Saving…' : 'Add' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -108,6 +207,7 @@
             <span v-else>Saving…</span>
           </button>
         </section>
+
 
         <!-- gToon Clash -->
         <section v-if="activeTab === 'Clash'" role="tabpanel" aria-label="gToon Clash Settings">
@@ -280,6 +380,98 @@ const toastClass   = computed(() => [
     ? 'bg-red-100 text-red-700'
     : 'bg-green-100 text-green-700'
 ])
+
+const schedules = ref([])
+
+async function loadSchedules() {
+  const res = await $fetch('/api/admin/winball-grand-prize')
+  schedules.value = res.items || []
+}
+
+// modal state
+const showAddModal = ref(false)
+const savingSchedule = ref(false)
+const modalSelectedCtoon = ref(null)
+const modalSearch = ref('')
+const modalShowDropdown = ref(false)
+const modalDate = ref('')
+const modalTime = ref('20:00') // default 8 PM Central
+
+const modalFiltered = computed(() => {
+  const t = modalSearch.value.trim().toLowerCase()
+  if (!t) return []
+  return allCtoons.value
+    .filter(c => c.name.toLowerCase().includes(t))
+    .slice(0, 8)
+})
+function onModalSearchInput() { modalShowDropdown.value = !!modalSearch.value.trim() }
+function selectModalCtoon(c) {
+  modalSelectedCtoon.value = c
+  modalSearch.value = c.name
+  modalShowDropdown.value = false
+}
+
+function openAddModal() {
+  modalSelectedCtoon.value = null
+  modalSearch.value = ''
+  modalShowDropdown.value = false
+  // default date = today
+  const today = new Date()
+  const y = today.getFullYear()
+  const m = String(today.getMonth() + 1).padStart(2, '0')
+  const d = String(today.getDate()).padStart(2, '0')
+  modalDate.value = `${y}-${m}-${d}`
+  modalTime.value = '20:00'
+  showAddModal.value = true
+}
+function closeAddModal() { showAddModal.value = false }
+
+async function createSchedule() {
+  if (!modalSelectedCtoon.value || !modalDate.value || !modalTime.value) return
+  savingSchedule.value = true
+  toastMessage.value = ''
+  try {
+    // send local Central datetime as "YYYY-MM-DD HH:mm" string
+    const startsAtLocal = `${modalDate.value} ${modalTime.value}`
+    const res = await $fetch('/api/admin/winball-grand-prize', {
+      method: 'POST',
+      body: {
+        ctoonId: modalSelectedCtoon.value.id,
+        startsAtLocal
+      }
+    })
+    schedules.value.unshift({
+      id: res.item.id,
+      ctoon: res.item.ctoon,
+      // the GET formats startsAtLocal for display; call loadSchedules to normalize
+    })
+    await loadSchedules()
+    toastMessage.value = 'Grand prize schedule added'
+    toastType.value = 'success'
+    showAddModal.value = false
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Failed to add schedule'
+    toastType.value = 'error'
+  } finally {
+    savingSchedule.value = false
+  }
+}
+
+async function removeSchedule(row) {
+  if (!row?.id) return
+  toastMessage.value = ''
+  try {
+    await $fetch(`/api/admin/winball-grand-prize/${row.id}`, { method: 'DELETE' })
+    schedules.value = schedules.value.filter(r => r.id !== row.id)
+    toastMessage.value = 'Schedule removed'
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Failed to remove schedule'
+    toastType.value = 'error'
+  }
+}
 
 // ── Autocomplete ─────────────────────────────
 const filteredMatches = computed(() => {
@@ -490,6 +682,7 @@ async function saveClashConfig() {
 onMounted(async () => {
   await loadSettings()
   await loadWinWheelConfig()
+  await loadSchedules()
 })
 </script>
 

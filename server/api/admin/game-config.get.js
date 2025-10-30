@@ -55,6 +55,13 @@ export default defineEventHandler(async (event) => {
     // 5) Create defaults if missing
     if (!config) {
       if (gameName === 'Winball') {
+        const schedules = await db.winballGrandPrizeSchedule.findMany({
+          orderBy: { startsAt: 'desc' },
+          take: 200,
+          include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } }
+        })
+        config.schedules = schedules
+        
         config = await db.gameConfig.create({
           data: {
             gameName,

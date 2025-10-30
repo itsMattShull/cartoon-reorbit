@@ -492,6 +492,54 @@ async function startDueAuctions() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Winball: set current grand prize from schedule (runs hourly)
+async function updateWinballGrandPrizeFromSchedule() {
+  try {
+    const now = new Date()
+
+    // 1) Latest schedule row that is active as of "now"
+    const sched = await prisma.winballGrandPrizeSchedule.findFirst({
+      where: { startsAt: { lte: now } },
+      orderBy: { startsAt: 'desc' },
+      select: { id: true, ctoonId: true }
+    })
+    if (!sched) return
+
+    // 2) Load or create Winball config
+    let cfg = await prisma.gameConfig.findUnique({
+      where: { gameName: 'Winball' },
+      select: { id: true, grandPrizeCtoonId: true }
+    })
+
+    if (!cfg) {
+      // create minimal config if missing
+      await prisma.gameConfig.create({
+        data: {
+          gameName: 'Winball',
+          leftCupPoints: 0,
+          rightCupPoints: 0,
+          goldCupPoints: 0,
+          grandPrizeCtoonId: sched.ctoonId
+        }
+      })
+      return
+    }
+
+    // 3) Update only if changed
+    if (cfg.grandPrizeCtoonId !== sched.ctoonId) {
+      await prisma.gameConfig.update({
+        where: { id: cfg.id },
+        data: {
+          grandPrizeCtoonId: sched.ctoonId,
+          updatedAt: new Date()
+        }
+      })
+    }
+  } catch (e) {
+    // swallow in cron context
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kickoffs
@@ -507,6 +555,9 @@ cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily
 
 await sendInactivityWarnings()
 cron.schedule('0 3 * * *', sendInactivityWarnings)    // 03:00 daily
+
+await updateWinballGrandPrizeFromSchedule()
+cron.schedule('0 * * * *', updateWinballGrandPrizeFromSchedule)  // hourly at minute 0
 
 await enforceDormantAccounts()
 cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily

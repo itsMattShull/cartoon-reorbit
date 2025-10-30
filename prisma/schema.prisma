@@ -60,6 +60,7 @@ model Ctoon {
   redeemedAsItem   HolidayRedemption[] @relation("HolidayItemDefinition")
   redeemedAsResult HolidayRedemption[] @relation("HolidayResultDefinition")
   rewardPoolRows  RewardCtoonPool[] @relation("RewardPoolToCtoon")
+  winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
 }
 
 model UserCtoon {
@@ -156,6 +157,7 @@ model User {
   holidayRedemptions HolidayRedemption[]
   auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
   adImagesCreated    AdImage[]      @relation("AdImagesCreatedBy")
+  winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -811,4 +813,19 @@ model AdImage {
   createdBy   User?    @relation("AdImagesCreatedBy", fields: [createdById], references: [id])
 
   @@index([createdAt])
+}
+
+model WinballGrandPrizeSchedule {
+  id           String   @id @default(uuid())
+  ctoonId      String
+  startsAt     DateTime           // stored in UTC
+  createdAt    DateTime @default(now())
+  createdById  String?
+
+  // name relations so they don't collide with existing ones
+  ctoon        Ctoon   @relation("WinballGrandPrizeCtoon", fields: [ctoonId], references: [id])
+  createdBy    User?   @relation("WinballGrandPrizeCreatedBy", fields: [createdById], references: [id])
+
+  @@index([startsAt])
+  @@index([ctoonId, startsAt])
 }
