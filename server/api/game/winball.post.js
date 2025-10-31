@@ -136,6 +136,9 @@ export default defineEventHandler(async (event) => {
 
   // 8) if gold cup, enqueue grand prize mint
   let grandPrizeCtoonName = null
+  let grandPrizeCtoonImagePath = null
+  let grandPrizeCtoonId = null
+
   if (award.pocket === 'halfCircle2'
       && config.grandPrizeCtoonId
       && remaining > 0
@@ -146,9 +149,10 @@ export default defineEventHandler(async (event) => {
     if (!existing) {
       const gp = await prisma.ctoon.findUnique({ where: { id: config.grandPrizeCtoonId } })
       if (gp) {
-        // enqueue mint job instead of direct DB write
         await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id, isSpecial: true })
         grandPrizeCtoonName = gp.name
+        grandPrizeCtoonImagePath = gp.assetPath   // <-- add
+        grandPrizeCtoonId = gp.id                 // <-- add
       }
     }
   }
@@ -159,6 +163,8 @@ export default defineEventHandler(async (event) => {
     tick:   award.tick,
     pointsAwarded:        toGive,
     pointsRemainingToday: remaining - toGive,
-    grandPrizeCtoon:      grandPrizeCtoonName
+    grandPrizeCtoon:      grandPrizeCtoonName,
+    grandPrizeCtoonImage: grandPrizeCtoonImagePath,  // <-- add
+    grandPrizeCtoonId                                     // <-- add
   }
 })

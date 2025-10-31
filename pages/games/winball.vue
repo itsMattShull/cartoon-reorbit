@@ -3,6 +3,21 @@
   <div class="game-container" style="margin-top:20px;">
     <button class="reset-btn mt-20" @click="resetBall">Reset Ball</button>
     <canvas ref="canvas" class="game-canvas"></canvas>
+
+    <!-- Result Modal -->
+    <div v-if="modal.open" class="modal-overlay" @click.self="closeModal">
+      <div class="modal">
+        <h2 class="modal-title">{{ modal.title }}</h2>
+        <p class="modal-msg">{{ modal.message }}</p>
+        <img
+          v-if="modal.imageUrl"
+          :src="modal.imageUrl"
+          alt="Won cToon"
+          class="modal-img"
+        />
+        <button class="modal-btn" @click="closeModal">OK</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -28,6 +43,18 @@ import * as CANNON from 'cannon-es'
 import { useAuth } from '~/composables/useAuth'
 
 const { fetchSelf } = useAuth()
+
+const modal = ref({ open: false, title: '', message: '', imageUrl: '' })
+
+function showModal({ title, message, imageUrl }) {
+  modal.value = { open: true, title, message, imageUrl: imageUrl || '' }
+}
+
+async function closeModal() {
+  modal.value.open = false
+  resetBall()
+  await fetchSelf({ force: true }) // keep points reactive
+}
 
 const COLORS = {
   board:          0xF0E6FF,  // light lavender
@@ -606,13 +633,17 @@ bumperXs.forEach((bx) => {
               })
 
               if (result.grandPrizeCtoon) {
-                alert(
-                  `Congratulations! You won ${result.pointsAwarded} points ` +
-                  `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
-                )
+                showModal({
+                  title: 'Winner',
+                  message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
+                  imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
+                })
                 resetBall()
               } else {
-                alert(`You won ${result.pointsAwarded} points!`)
+                showModal({
+                  title: 'Winner',
+                  message: `You won ${result.pointsAwarded} points.`
+                })
                 resetBall()
               }
             }
@@ -622,7 +653,7 @@ bumperXs.forEach((bx) => {
               loseSound.play().catch(() => {
                 // user gesture might be needed on some browsers; fallback silently
               })
-              alert("You hit the gutter.")
+              showModal({ title: 'Gutter', message: 'You hit the gutter.' })
               resetBall()
             }
             await fetchSelf({ force: true })
@@ -788,9 +819,17 @@ bumperXs.forEach((bx) => {
                 `Congratulations! You won ${result.pointsAwarded} points ` +
                 `and a grand prize cToon: "${result.grandPrizeCtoon}"!`
               )
+              showModal({
+                title: 'Winner',
+                message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
+                imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
+              })
               resetBall()
             } else {
-              alert(`You won ${result.pointsAwarded} points!`)
+              showModal({
+                title: 'Winner',
+                message: `You won ${result.pointsAwarded} points.`
+              })
               resetBall()
             }
             await fetchSelf({ force: true })
@@ -801,7 +840,7 @@ bumperXs.forEach((bx) => {
             loseSound.play().catch(() => {
               // user gesture might be needed on some browsers; fallback silently
             })
-            alert("You hit the gutter.")
+            showModal({ title: 'Gutter', message: 'You hit the gutter.' })
             resetBall()
           }
           else {
@@ -956,4 +995,32 @@ bumperXs.forEach((bx) => {
 .reset-btn:hover {
   background: #eee;
 }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+}
+.modal {
+  background: #111; color: #fff; border-radius: 10px;
+  padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  text-align: center;
+
+  display: grid;
+  justify-items: center;
+
+  width: fit-content;       /* shrink-wrap to content */
+  max-width: 92vw;          /* prevent overflow on small screens */
+}
+
+/* image won’t upscale; it caps modal width */
+.modal-img {
+  display: block;
+  height: auto;
+  max-width: 92vw;          /* same cap as modal */
+}
+.modal-title { font: 600 20px/1.2 system-ui; margin: 0 0 8px; }
+.modal-msg { font: 400 16px/1.5 system-ui; margin: 0 0 12px; }
+.modal-btn { padding: 8px 14px; border: 0; border-radius: 6px; background: #fff; color: #000; cursor: pointer; }
+.modal-btn:hover { background: #e6e6e6; }
 </style>
