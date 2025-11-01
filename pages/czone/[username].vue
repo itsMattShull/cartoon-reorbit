@@ -22,27 +22,38 @@
       <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
     </div>
 
-    <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
-    <div
-          v-if="hasOtherZones"
-          class="flex justify-center items-center gap-4 mt-2"
-        >
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToPrevious"
-            :disabled="!hasPrevious"
-          >
-            ← Zone {{ currentZoneIndex + 1 }}
-          </button>
-          <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToNext"
-            :disabled="!hasNext"
-          >
-            Zone {{ currentZoneIndex + 1 }} →
-          </button>
-        </div>
+    <!-- Top toolbar (mobile, stacked) -->
+    <div class="flex flex-col gap-2 mx-4 mt-2">
+      <!-- Row 1: user cZone navigation -->
+      <div class="flex gap-2 justify-center">
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToPreviousUser">
+          Previous cZone
+        </button>
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToRandomUser">
+          Random cZone
+        </button>
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToNextUser">
+          Next cZone
+        </button>
+      </div>
+
+      <!-- Row 2: zone number arrows -->
+      <div v-if="hasOtherZones" class="flex items-center justify-center gap-2 mt-2 sm:mt-0">
+        <button
+          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+          @click="goToPrevious"
+          :disabled="!hasPrevious"
+          aria-label="Previous Zone"
+        >←</button>
+        <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
+        <button
+          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+          @click="goToNext"
+          :disabled="!hasNext"
+          aria-label="Next Zone"
+        >→</button>
+      </div>
+    </div>
 
     <!-- CZone Canvas (mobile) -->
     <div class="flex" :class="{ booster: ownerIsBooster }">
@@ -77,24 +88,6 @@
     <!-- Navigation and Points -->
     <div class="flex justify-between items-center text-sm flex-wrap gap-4 mb-6 mx-4">
       <div class="flex gap-2 flex-wrap">
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToPreviousUser"
-        >
-          Previous cZone
-        </button>
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToRandomUser"
-        >
-          Random cZone
-        </button>
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToNextUser"
-        >
-          Next cZone
-        </button>
         <button
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openWishlist"
@@ -189,25 +182,37 @@
     <div class="min-w-[800px] bg-white rounded-xl shadow-md">
       <div :class="{ booster: ownerIsBooster }">
       <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
-        <div
-          v-if="hasOtherZones"
-          class="flex justify-center items-center gap-4 mt-2 mb-4"
-        >
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToPrevious"
-            :disabled="!hasPrevious"
-          >
-            ← Zone {{ currentZoneIndex + 1 }}
-          </button>
-          <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToNext"
-            :disabled="!hasNext"
-          >
-            Zone {{ currentZoneIndex + 1 }} →
-          </button>
+        <!-- Top toolbar (desktop) -->
+        <div class="flex items-center justify-between px-4 mt-2 mb-2">
+          <!-- Left: user cZone navigation -->
+          <div class="flex gap-2">
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToPreviousUser">
+              Previous cZone
+            </button>
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToRandomUser">
+              Random cZone
+            </button>
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToNextUser">
+              Next cZone
+            </button>
+          </div>
+
+          <!-- Right: zone index arrows -->
+          <div v-if="hasOtherZones" class="flex items-center gap-2">
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+              @click="goToPrevious"
+              :disabled="!hasPrevious"
+              aria-label="Previous Zone"
+            >←</button>
+            <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+              @click="goToNext"
+              :disabled="!hasNext"
+              aria-label="Next Zone"
+            >→</button>
+          </div>
         </div>
         <div class="flex justify-center overflow-hidden mb-4">
           <div
@@ -237,26 +242,6 @@
           <!-- Left side: two vertical groups -->
           <div class="flex flex-col gap-6">
             <!-- Group 1: zone nav buttons -->
-            <div class="flex gap-2">
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToPreviousUser"
-              >
-                Previous cZone
-              </button>
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToRandomUser"
-              >
-                Random cZone
-              </button>
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToNextUser"
-              >
-                Next cZone
-              </button>
-            </div>
 
             <!-- Group 2: wishlist / collection / edit -->
             <div class="flex gap-2">
