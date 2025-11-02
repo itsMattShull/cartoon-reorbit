@@ -30,27 +30,34 @@ export default defineEventHandler(async (event) => {
     const option = interaction.data.options?.find(o => o.name === 'user')
     const userId = option?.value
     const resolvedUser = interaction.data.resolved?.users?.[userId]
+    const resolvedMember = interaction.data.resolved?.members?.[userId]  // has .nick in guilds
+
     if (!resolvedUser) {
-      return {
-        type: 4,
-        data: { content: 'User not found.', flags: 64 } // ephemeral
-      }
+      return { type: 4, data: { content: 'User not found.', flags: 64 } }
     }
 
-    // Use the user’s username (Discord handle). Lowercase for URL safety.
-    const handle = String(resolvedUser.username || '').trim().toLowerCase()
+    // 1) pick display in order: guild nickname → global display name → username
+    let display =
+      resolvedMember?.nick ||
+      resolvedUser.global_name ||
+      resolvedUser.username || ''
 
-    // Basic guard for unexpected characters
-    const safeHandle = handle.replace(/[^a-z0-9._-]/g, '')
+    // 2) make URL-safe: strip diacritics, lowercase, allow [a-z0-9._-], turn spaces to -
+    display = display
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove accents
+      .trim().toLowerCase()
+      .replace(/\s+/g, '-')                              // spaces → dashes
+      .replace(/[^a-z0-9._-]/g, '')                      // drop other chars
 
-    const link = `https://www.cartoonreorbit.com/czone/${safeHandle}`
+    if (!display) {
+      return { type: 4, data: { content: 'Name is empty after sanitizing.', flags: 64 } }
+    }
+
+    const link = `https://www.cartoonreorbit.com/czone/${display}`
 
     return {
-      type: 4, // CHANNEL_MESSAGE_WITH_SOURCE
-      data: {
-        content: link,
-        flags: 64 // ephemeral reply so you don’t spam channels
-      }
+      type: 4,
+      data: { content: link, flags: 64 }
     }
   }
 
