@@ -10,7 +10,7 @@ export default defineEventHandler(async () => {
   }
 
   const url = `https://discord.com/api/v10/applications/${APP_ID}/guilds/${GUILD_ID}/commands`
-
+ 
   const cmd = {
     name: 'czone',
     description: 'Get a cZone link for a Discord user',
