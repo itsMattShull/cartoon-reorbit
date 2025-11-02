@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
     // 2) make URL-safe: strip diacritics, lowercase, allow [a-z0-9._-], turn spaces to -
     display = display
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove accents
-      .trim().toLowerCase()
+      .trim()
       .replace(/\s+/g, '-')                              // spaces → dashes
       .replace(/[^a-z0-9._-]/g, '')                      // drop other chars
 
