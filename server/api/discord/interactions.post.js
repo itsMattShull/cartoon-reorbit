@@ -44,10 +44,10 @@ export default defineEventHandler(async (event) => {
 
     // 2) make URL-safe: strip diacritics, lowercase, allow [a-z0-9._-], turn spaces to -
     display = display
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove accents
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
       .trim()
-      .replace(/\s+/g, '-')                              // spaces → dashes
-      .replace(/[^a-z0-9._-]/g, '')                      // drop other chars
+      .replace(/\s+/g, '-')                             // spaces → dashes
+      .replace(/[^A-Za-z0-9._-]/g, '')                  // allow case-preserving set
 
     if (!display) {
       return { type: 4, data: { content: 'Name is empty after sanitizing.', flags: 64 } }
