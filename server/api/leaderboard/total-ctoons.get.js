@@ -12,7 +12,6 @@ export default defineEventHandler(async () => {
     JOIN "UserCtoon" uc ON uc."userId" = u."id"
     WHERE u."active" = true
       AND COALESCE(u."banned", false) = false
-      AND COALESCE(u."isAdmin", false) = false
       AND u."id" <> ${EXCLUDE_USER_ID}
       AND uc."burnedAt" IS NULL
     GROUP BY u."id", u."username"

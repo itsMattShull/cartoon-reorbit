@@ -6,19 +6,15 @@ function toAbsoluteUrl(event, path) {
   if (!path) return null
   if (/^https?:\/\//i.test(path)) return path
 
-  const origin = getRequestURL(event).origin
-  let base = origin
+  const url = getRequestURL(event)
+  const isLocal =
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.hostname === '::1'
 
-  try {
-    const u = new URL(origin)
-    const isLocal =
-      u.hostname === 'localhost' ||
-      u.hostname === '127.0.0.1' ||
-      u.hostname === '::1'
-    base = isLocal ? `${u.protocol}//localhost:3000` : origin
-  } catch {
-    base = 'http://localhost:3000'
-  }
+  const base = isLocal
+    ? 'http://localhost:3000'
+    : (useRuntimeConfig(event)?.public?.cdnBase || url.origin)
 
   return `${base}${path.startsWith('/') ? '' : '/'}${path}`
 }
