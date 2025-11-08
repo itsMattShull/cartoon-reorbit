@@ -148,6 +148,43 @@
           </div>
         </div>
 
+        <!-- leaderboards -->
+        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
+          <div class="w-full lg:w-1/2">
+            <!-- Unique cToon Count Leaderboard -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
+              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
+              <div class="w-full p-6 text-slate-900">
+                <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Unique cToon Count Leaderboard</h2>
+                <ul class="w-full">
+                  <li v-for="(entry, i) in uniqueCtoonLb" :key="entry.username"
+                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                    <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-full lg:w-1/2">
+            <!-- Total cToon Count Leaderboard -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
+              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
+              <div class="w-full p-6 text-slate-900">
+                <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Total cToon Count Leaderboard</h2>
+                <ul class="w-full">
+                  <li v-for="(entry, i) in totalCtoonLb" :key="entry.username"
+                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                    <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Leaderboard + Discord -->
         <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
           <div class="w-full lg:w-1/2">
@@ -314,6 +351,22 @@ const fetchCToons = async () => {
   }
 }
 
+const uniqueCtoonLb = ref([])
+const totalCtoonLb  = ref([])
+
+async function fetchLeaderboards() {
+  try {
+    const [uRes, tRes] = await Promise.all([
+      fetch('/api/leaderboard/unique-ctoons', { credentials: 'include' }),
+      fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' })
+    ])
+    if (uRes.ok) uniqueCtoonLb.value = await uRes.json()
+    if (tRes.ok) totalCtoonLb.value  = await tRes.json()
+  } catch (err) {
+    console.error('Leaderboard fetch error:', err)
+  }
+}
+
 const resetCountdown = ref('--:--:--')
 let countdownInterval = null
 function computeNextReset() {
@@ -352,7 +405,7 @@ onMounted(async () => {
 
   updateCountdown()
   countdownInterval = setInterval(updateCountdown, 1000)
-
+  await fetchLeaderboards()
   getDiscordWidget()
   await fetchCToons()
 
