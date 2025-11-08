@@ -11,10 +11,10 @@ function toAbsoluteUrl(event, path) {
 
   if (reqUrl.origin.includes('localhost')) {
     base = 'http://localhost:3000'
-  } else if (process.env.NODE_ENV === 'production') {
-    base = 'https://www.cartoonreorbit.com'
-  } else {
+  } else if (reqUrl.origin.includes('dev.')) {
     base = 'https://dev.cartoonreorbit.com'
+  } else {
+    base = 'https://www.cartoonreorbit.com'
   }
 
   return `${base}${path.startsWith('/') ? '' : '/'}${path}`
