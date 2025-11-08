@@ -31,12 +31,12 @@
 
       <template v-else>
         <!-- Top row -->
-        <div class="flex flex-col lg:flex-row gap-6 max-w-4xl mx-auto">
+        <div class="flex flex-col lg:flex-row gap-2 max-w-4xl mx-auto">
           <!-- Profile + counters -->
           <div class="w-full lg:w-1/2">
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
               <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
-              <div class="flex items-center gap-6 w-full p-6 text-slate-900">
+              <div class="flex items-center gap-6 w-full px-6 py-3 text-slate-900">
                 <img
                   :src="`/avatars/${user?.avatar || 'default.png'}`"
                   alt="User Avatar"
@@ -55,9 +55,21 @@
                   </p>
                 </div>
               </div>
+              <div class="flex-col items-center gap-6 w-full px-6 text-slate-900">
+                <p class="text-xl">
+                  Daily Points Reset:
+                  <span class="font-semibold text-[var(--reorbit-blue)]">{{ resetCountdown }}</span>
+                </p>
+                <p
+                  class="text-[var(--reorbit-blue)]/90 cursor-pointer hover:text-[var(--reorbit-purple)] mt-2 mb-2 underline"
+                  @click="showModal = true"
+                >
+                  How do I earn more points?
+                </p>
+              </div>
             </div>
 
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] mt-6 bg-white/95 backdrop-blur-sm">
+            <!-- <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] mt-2 bg-white/95 backdrop-blur-sm">
               <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
               <div class="p-6 text-slate-900">
                 <p class="text-xl">
@@ -70,6 +82,29 @@
                 >
                   How do I earn more points?
                 </p>
+              </div>
+            </div> -->
+
+            <!-- Winball prize preview -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] mt-2 bg-white/95 backdrop-blur-sm">
+             <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
+              <div class="p-2">
+                <nuxt-link to="/games/winball" class="block relative rounded-xl overflow-hidden">
+                  <!-- background image -->
+                  <img
+                    :src="winballBgSrc"
+                    alt="Winball promo"
+                    class="w-full h-auto rounded-xl"
+                  />
+                  <!-- centered prize overlay -->
+                  <img
+                    v-if="winballPrizeUrl"
+                    :src="winballPrizeUrl"
+                    alt="Current Winball prize"
+                    class="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                          max-w-[60%] max-h-[60%] object-contain rounded-lg"
+                  />
+                </nuxt-link>
               </div>
             </div>
           </div>
@@ -298,6 +333,18 @@ function updateCountdown() {
 }
 
 const showModal = ref(false)
+
+/* ── Winball prize (public) ─────────────────────────────────── */
+const { data: prizeData } = await useAsyncData('winball-prize', () =>
+  $fetch('/api/winball-prize')
+)
+const winballPrizeUrl = computed(() => prizeData.value?.prize?.ctoon?.imageUrl || '')
+
+/* background image behind overlay (fallback to poster) */
+const winballBgSrc = computed(() =>
+  hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png'
+)
+
 
 onMounted(async () => {
   await fetchSelf({ force: true })
