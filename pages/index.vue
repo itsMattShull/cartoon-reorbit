@@ -72,8 +72,23 @@
                 @click="login"
               />
             </div>
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2">
-              <img :src="bottomRightSrc" alt="Cartoon ReOrbit cToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+            <!-- bottom-right card -->
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2 relative">
+              <img
+                :src="bottomRightSrc"
+                alt="Cartoon ReOrbit cToons preview"
+                class="rounded-2xl w-full cursor-pointer"
+                @click="login"
+              />
+
+              <!-- centered prize overlay -->
+              <img
+                v-if="winballPrizeUrl"
+                :src="winballPrizeUrl"
+                alt="Current Winball prize"
+                class="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                      max-w-[60%] max-h-[60%] object-contain rounded-xl"
+              />
             </div>
             <div
               class="pointer-events-none absolute -right-10 -bottom-10 h-56 w-56 rounded-full blur-2xl"
@@ -390,6 +405,14 @@ useHead({
     }
   ]
 })
+
+const { data: prizeData } = await useAsyncData('winball-prize', () =>
+  $fetch('/api/winball-prize')
+)
+
+const winballPrizeUrl = computed(() =>
+  prizeData.value?.prize?.ctoon?.imageUrl || ''
+)
 </script>
 
 <style>
