@@ -7,15 +7,15 @@ function toAbsoluteUrl(event, path) {
   if (/^https?:\/\//i.test(path)) return path
 
   const reqUrl = getRequestURL(event)
-  let base
+  let base = 'https://www.cartoonreorbit.com'
 
-  if (reqUrl.origin.includes('localhost')) {
-    base = 'http://localhost:3000'
-  } else if (reqUrl.origin.includes('dev.')) {
-    base = 'https://dev.cartoonreorbit.com'
-  } else {
-    base = 'https://www.cartoonreorbit.com'
-  }
+  // if (reqUrl.origin.includes('localhost')) {
+  //   base = 'http://localhost:3000'
+  // } else if (reqUrl.origin.includes('dev.')) {
+  //   base = 'https://dev.cartoonreorbit.com'
+  // } else {
+  //   base = 'https://www.cartoonreorbit.com'
+  // }
 
   return `${base}${path.startsWith('/') ? '' : '/'}${path}`
 }
