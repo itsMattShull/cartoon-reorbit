@@ -303,7 +303,8 @@ async function loadAuction() {
   userPoints.value  = pts.points
 
   // Prefer API-provided current leader if available
-  currentTopBidder.value = data.highestBidderUsername || (bids.value[0]?.user ?? null)
+  const histTop = topBidderFromHistory.value
+  currentTopBidder.value = histTop ?? data.highestBidderUsername ?? null
 
   recentSales.value = await $fetch(`/api/auction/${auctionId}/getRecentAuctions`)
 
