@@ -93,11 +93,18 @@
           :name-suggestions="nameSuggestionsOther"
           :set-options="setOptionsOther"
           :series-options="seriesOptionsOther"
+          :rarity-options="rarityOptionsOther"
           :owned-filter="filters.other.owned"
+          :set-value="filters.other.set"
+          :series-value="filters.other.series"
+          :rarity-value="filters.other.rarity"
+          :duplicates-filter="filters.other.duplicates"
           @update:name-query="v => (filters.other.nameQuery = v)"
           @update:owned-filter="v => (filters.other.owned = v)"
           @update:set-filter="v => (filters.other.set = v)"
           @update:series-filter="v => (filters.other.series = v)"
+          @update:rarity-filter="v => (filters.other.rarity = v)"
+          @update:duplicates-filter="v => (filters.other.duplicates = v)"
           @request-name-suggest="onOtherNameSuggest"
         />
 
@@ -165,11 +172,18 @@
           :name-suggestions="nameSuggestionsSelf"
           :set-options="setOptionsSelf"
           :series-options="seriesOptionsSelf"
+          :rarity-options="rarityOptionsSelf"
           :owned-filter="filters.self.owned"
+          :set-value="filters.self.set"
+          :series-value="filters.self.series"
+          :rarity-value="filters.self.rarity"
+          :duplicates-filter="filters.self.duplicates"
           @update:name-query="v => (filters.self.nameQuery = v)"
           @update:owned-filter="v => (filters.self.owned = v)"
           @update:set-filter="v => (filters.self.set = v)"
           @update:series-filter="v => (filters.self.series = v)"
+          @update:rarity-filter="v => (filters.self.rarity = v)"
+          @update:duplicates-filter="v => (filters.self.duplicates = v)"
           @request-name-suggest="onSelfNameSuggest"
         />
 
@@ -250,6 +264,38 @@ const userSuggestRef = ref(null)
 
 let userSearchTimer
 const userSearchCache = new Map() // simple in-memory cache by query string
+
+// add rarity to both sides
+const filters = reactive({
+  other: { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' },
+  self:  { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
+})
+
+// compute which ctoonIds are duplicates for each list
+const dupIdsOther = computed(() => {
+  const m = new Map()
+  for (const c of otherCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
+  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
+})
+const dupIdsSelf = computed(() => {
+  const m = new Map()
+  for (const c of selfCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
+  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
+})
+
+// helper to build rarity option list
+const PRIORITY_RARITIES = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
+function buildRarityOptions(list) {
+  const all = Array.from(new Set(
+    list.map(c => (c.rarity ?? '').toString().trim()).filter(Boolean)
+  ))
+  const inPriority = PRIORITY_RARITIES.filter(r => all.includes(r))
+  const extras = all.filter(r => !PRIORITY_RARITIES.includes(r)).sort()
+  return ['All', ...inPriority, ...extras]
+}
+
+const rarityOptionsOther = computed(() => buildRarityOptions(otherCtoons.value))
+const rarityOptionsSelf  = computed(() => buildRarityOptions(selfCtoons.value))
 
 async function initFromRoute() {
   const param = route.params.username
@@ -385,8 +431,8 @@ async function clearTarget(focusInput = false) {
   pointsToOffer.value = 0
   otherCtoons.value = []
   selfCtoons.value = []
-  filters.other = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
-  filters.self  = { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
+  filters.other = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
+  filters.self  = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
 
   if (focusInput) {
     await nextTick()
@@ -459,18 +505,24 @@ function toggleInitiatorCtoon(c) {
   else selectedInitiatorCtoons.value.push(c)
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
-// Filters (both sides): name (w/ 3+ char suggestion), set, series, owned/unowned
-// ────────────────────────────────────────────────────────────────────────────────
-const filters = reactive({
-  other: { nameQuery: '', set: 'All', series: 'All', owned: 'all' },
-  self:  { nameQuery: '', set: 'All', series: 'All', owned: 'all' }
-})
+const setOptionsOther = computed(() => [
+  'All',
+  ...uniqueTruthies(otherCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet))
+])
+const setOptionsSelf = computed(() => [
+  'All',
+  ...uniqueTruthies(selfCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet))
+])
 
-const setOptionsOther = computed(() => ['All', ...uniqueTruthies(otherCtoons.value.map(c => c.set))])
-const seriesOptionsOther = computed(() => ['All', ...uniqueTruthies(otherCtoons.value.map(c => c.series))])
-const setOptionsSelf = computed(() => ['All', ...uniqueTruthies(selfCtoons.value.map(c => c.set))])
-const seriesOptionsSelf = computed(() => ['All', ...uniqueTruthies(selfCtoons.value.map(c => c.series))])
+const seriesOptionsOther = computed(() => [
+  'All',
+  ...uniqueTruthies(otherCtoons.value.map(c => c.series ?? c.seriesName))
+])
+const seriesOptionsSelf = computed(() => [
+  'All',
+  ...uniqueTruthies(selfCtoons.value.map(c => c.series ?? c.seriesName))
+])
+
 
 function uniqueTruthies(arr) { return [...new Set(arr.filter(Boolean))] }
 
@@ -493,19 +545,14 @@ function buildNameSuggestions(q, list) {
     .slice(0, 8)
 }
 
-const filteredOther = computed(() => applyFilters(otherCtoons.value, filters.other, {
-  ownedPredicate: (c) => selfOwnedIds.value.has(c.ctoonId) // Owned (by viewer)
-}))
-const filteredSelf = computed(() => applyFilters(selfCtoons.value, filters.self, {
-  ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId) // Owned (by target user)
-}))
-
 function applyFilters(items, f, ctx) {
   const nameQ = f.nameQuery?.toLowerCase().trim()
   return items.filter(c => {
     if (nameQ && !c.name?.toLowerCase().includes(nameQ)) return false
     if (f.set && f.set !== 'All' && c.set !== f.set) return false
     if (f.series && f.series !== 'All' && c.series !== f.series) return false
+    if (f.rarity && f.rarity !== 'All' && c.rarity !== f.rarity) return false
+    if (f.duplicates === 'dups' && !ctx.dupIds.has(c.ctoonId)) return false
 
     const isOwned = ctx.ownedPredicate(c)
     if (f.owned === 'owned' && !isOwned) return false
@@ -517,6 +564,15 @@ function applyFilters(items, f, ctx) {
     return aOwned === bOwned ? 0 : (aOwned ? 1 : -1)
   })
 }
+
+const filteredOther = computed(() => applyFilters(otherCtoons.value, filters.other, {
+  ownedPredicate: (c) => selfOwnedIds.value.has(c.ctoonId),
+  dupIds: dupIdsOther.value
+}))
+const filteredSelf = computed(() => applyFilters(selfCtoons.value, filters.self, {
+  ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId),
+  dupIds: dupIdsSelf.value
+}))
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Offer

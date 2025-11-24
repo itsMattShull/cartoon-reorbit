@@ -53,6 +53,31 @@
       </select>
     </div>
 
+    <!-- Rarity toggle -->
+    <div>
+      <label class="block text-xs font-medium mb-1">Rarity</label>
+      <select
+        class="border rounded px-3 py-2"
+        :value="rarityValue"
+        @change="$emit('update:rarity-filter', $event.target.value)"
+      >
+        <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
+      </select>
+    </div>
+
+    <!-- Duplicates -->
+    <div>
+      <label class="block text-xs font-medium mb-1">Duplicates</label>
+      <select
+        class="border rounded px-3 py-2"
+        :value="duplicatesFilter"
+        @change="$emit('update:duplicates-filter', $event.target.value)"
+      >
+        <option value="all">All</option>
+        <option value="dups">Only Duplicates</option>
+      </select>
+    </div>
+
     <!-- Owned toggle -->
     <div>
       <label class="block text-xs font-medium mb-1">
@@ -75,28 +100,26 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps({
-  // 'other' | 'self'
   context: { type: String, required: true },
-
-  // name input + suggestions
   nameQuery: { type: String, default: '' },
   nameSuggestions: { type: Array, default: () => [] },
-
-  // dropdown options
   setOptions: { type: Array, default: () => ['All'] },
   seriesOptions: { type: Array, default: () => ['All'] },
-
-  // current filter values
+  rarityOptions: { type: Array, default: () => ['All'] },
   ownedFilter: { type: String, default: 'all' },
   setValue: { type: String, default: 'All' },
-  seriesValue: { type: String, default: 'All' }
+  seriesValue: { type: String, default: 'All' },
+  rarityValue: { type: String, default: 'All' },
+  duplicatesFilter: { type: String, default: 'all' }
 })
 
 const emit = defineEmits([
   'update:name-query',
   'update:set-filter',
   'update:series-filter',
+  'update:rarity-filter',
   'update:owned-filter',
+  'update:duplicates-filter',
   'request-name-suggest'
 ])
 
