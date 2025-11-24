@@ -7,6 +7,7 @@ import { useRuntimeConfig } from '#imports'
  * The util extends to NOW + ANTI_SNIPE_MS when within the window.
  */
 export const ANTI_SNIPE_MS = 60_000
+const outbids = []  // userIds who lost the lead
 
 export function incrementFor(v) {
   if (v < 1000) return 10
@@ -146,6 +147,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
 
     if (challengerBid > leadCap) {
       // Challenger becomes new leader
+      if (leader) {
+        outbids.push(leader) // previous leader was just outbid
+      }
       leader = ch.userId
 
       // Anti-snipe check/extend
@@ -209,7 +213,7 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     }
   })
 
-  return { finalAuction: auc, steps }
+  return { finalAuction: auc, steps, outbids }
 }
 
 /**
@@ -271,7 +275,7 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
 }
 
 export async function applyProxyAutoBidsAndBroadcast(prisma, auctionId, opts = {}) {
-  let result = { finalAuction: null, steps: [] }
+  let result = { finalAuction: null, steps: [], outbids: [] }
   await prisma.$transaction(async (tx) => {
     result = await applyProxyAutoBids(tx, auctionId, opts)
   })

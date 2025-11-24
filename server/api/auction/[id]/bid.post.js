@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
   const auctionId = String(id)
   const body = await readBody(event)
   const manualAmount = Math.floor(Number(body?.amount))
+  let outbidUserIds = []   // collect previous leaders (if any)
   if (!Number.isFinite(manualAmount) || manualAmount <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid bid amount' })
   }
@@ -79,6 +80,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'You are already the highest bidder' })
     }
 
+    const prevLeaderId = fresh.highestBidderId || null
     const noBidsYet   = !fresh.highestBidderId || (fresh.highestBid || 0) === 0
     const requiredBid = noBidsYet
       ? fresh.initialBet
@@ -102,6 +104,12 @@ export default defineEventHandler(async (event) => {
     const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
     autoSteps    = res.steps || []
     finalAuction = res.finalAuction || (await tx.auction.findUnique({ where: { id: auctionId } }))
+    if (prevLeaderId && finalAuction?.highestBidderId && prevLeaderId !== finalAuction.highestBidderId) {
+      outbidUserIds.push(prevLeaderId)
+    }
+    if (Array.isArray(res.outbids) && res.outbids.length) {
+      outbidUserIds.push(...res.outbids)
+    }
 
     if (!autoSteps.length) {
       const msLeft = preEnd.getTime() - Date.now()
@@ -164,6 +172,13 @@ export default defineEventHandler(async (event) => {
     socket.on('connect_error', finish)
     setTimeout(finish, 1500)
   })
+
+  // 6) Notify prior leaders (unique) via Discord DM, non-blocking
+  try {
+    const { notifyOutbidByUserId } = await import('@/server/utils/discord')
+    const unique = Array.from(new Set(outbidUserIds.filter(Boolean)))
+    await Promise.all(unique.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+  } catch { /* ignore failures */ }
 
   return {
     ok: true,

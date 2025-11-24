@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
   // --- Run proxy auto-bids ---
   let steps = []
   let finalAuction = auc
+  let outbidUserIds = []
 
   await db.$transaction(async (tx) => {
     const fresh = await tx.auction.findUnique({
@@ -114,6 +115,9 @@ export default defineEventHandler(async (event) => {
     const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
     steps = res.steps || []
     finalAuction = res.finalAuction || fresh
+    if (Array.isArray(res.outbids) && res.outbids.length) {
+      outbidUserIds.push(...res.outbids)
+    }
   })
 
   if (!steps.length) {
@@ -166,6 +170,13 @@ export default defineEventHandler(async (event) => {
     socket.on('connect_error', finish)
     setTimeout(finish, 1500)
   })
+
+  // Notify outbid users (unique) post-commit
+  try {
+    const { notifyOutbidByUserId } = await import('@/server/utils/discord')
+    const unique = Array.from(new Set(outbidUserIds.filter(Boolean)))
+    await Promise.all(unique.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+  } catch { /* ignore failures */ }
 
   return {
     ok: true,
