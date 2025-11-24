@@ -51,7 +51,10 @@
                   </NuxtLink>
                   <p class="text-slate-800">{{ user?.points }} Points</p>
                   <p class="text-slate-800">
-                    {{ user?.ctoons ? new Set(user.ctoons.map(c => c.ctoonId)).size : 0 }} cToons Collected
+                    {{ user?.ctoons ? new Set(user.ctoons.map(c => c.ctoonId)).size : 0 }} unique cToons Collected
+                  </p>
+                  <p class="text-slate-800">
+                    {{ user?.ctoons ? user.ctoons.length : 0 }} total cToons Collected
                   </p>
                 </div>
               </div>
