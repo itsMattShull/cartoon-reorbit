@@ -24,40 +24,45 @@ export default defineEventHandler(async (event) => {
   // — PING
   if (interaction.type === 1) return { type: 1 }
 
-  // — Slash command
-  if (interaction.type === 2 && interaction.data?.name === 'czone') {
-    // USER option is required
-    const option = interaction.data.options?.find(o => o.name === 'user')
-    const userId = option?.value
-    const resolvedUser = interaction.data.resolved?.users?.[userId]
-    const resolvedMember = interaction.data.resolved?.members?.[userId]  // has .nick in guilds
+  // — Slash commands
+  if (interaction.type === 2) {
+    const cmd = interaction.data?.name
+    if (cmd === 'czone' || cmd === 'trade') {
+      // USER option is required
+      const option = interaction.data.options?.find(o => o.name === 'user')
+      const userId = option?.value
+      const resolvedUser   = interaction.data.resolved?.users?.[userId]
+      const resolvedMember = interaction.data.resolved?.members?.[userId]  // has .nick in guilds
 
-    if (!resolvedUser) {
-      return { type: 4, data: { content: 'User not found.', flags: 64 } }
-    }
+      if (!resolvedUser) {
+        return { type: 4, data: { content: 'User not found.', flags: 64 } }
+      }
 
-    // 1) pick display in order: guild nickname → global display name → username
-    let display =
-      resolvedMember?.nick ||
-      resolvedUser.global_name ||
-      resolvedUser.username || ''
+      // 1) pick display in order: guild nickname → global display name → username
+      let display =
+        resolvedMember?.nick ||
+        resolvedUser.global_name ||
+        resolvedUser.username || ''
 
-    // 2) make URL-safe: strip diacritics, lowercase, allow [a-z0-9._-], turn spaces to -
-    display = display
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
-      .trim()
-      .replace(/\s+/g, '-')                             // spaces → dashes
-      .replace(/[^A-Za-z0-9._-]/g, '')                  // allow case-preserving set
+      // 2) sanitize: strip diacritics, preserve case, allow [A-Za-z0-9._-], spaces → '-'
+      display = display
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^A-Za-z0-9._-]/g, '')
 
-    if (!display) {
-      return { type: 4, data: { content: 'Name is empty after sanitizing.', flags: 64 } }
-    }
+      if (!display) {
+        return { type: 4, data: { content: 'Name is empty after sanitizing.', flags: 64 } }
+      }
 
-    const link = `https://www.cartoonreorbit.com/czone/${display}`
+      const base =
+        cmd === 'czone'
+          ? 'https://www.cartoonreorbit.com/czone/'
+          : 'https://www.cartoonreorbit.com/create-trade/'
 
-    return {
-      type: 4,
-      data: { content: link, flags: 64 }
+      const link = `${base}${display}`
+
+      return { type: 4, data: { content: link, flags: 64 } }
     }
   }
 

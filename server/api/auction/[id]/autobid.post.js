@@ -48,6 +48,24 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
   }
 
+  // --- Prevent duplicate max auto-bids (other users) for this auction ---
+  // We only consider active auto-bids. Allow same user to re-set same amount.
+  const conflict = await db.auctionAutoBid.findFirst({
+    where: {
+      auctionId,
+      maxAmount: maxCap,
+      isActive: true,
+      NOT: { userId }
+    },
+    select: { id: true }
+  })
+  if (conflict) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Another player already has this max auto-bid for this auction'
+    })
+  }
+
   // --- Upsert user's auto-bid ---
   await db.auctionAutoBid.upsert({
     where: { auctionId_userId: { auctionId, userId } },
@@ -71,9 +89,26 @@ export default defineEventHandler(async (event) => {
     if (!fresh || fresh.status !== 'ACTIVE') return
     if (new Date(fresh.endAt) <= new Date()) return
 
-    // enforce again inside txn to avoid races
+    // Re-enforce creator guard inside txn
     if (fresh.creatorId && fresh.creatorId === userId) {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
+    }
+
+    // Re-check duplicate constraint inside txn to avoid races
+    const dup = await tx.auctionAutoBid.findFirst({
+      where: {
+        auctionId,
+        maxAmount: maxCap,
+        isActive: true,
+        NOT: { userId }
+      },
+      select: { id: true }
+    })
+    if (dup) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'Another player already has this max auto-bid for this auction'
+      })
     }
 
     const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
