@@ -318,6 +318,7 @@
 
             <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
             <p class="text-sm text-gray-600 mb-1">Created: {{ formatDate(auction.createdAt) }}</p>
+            <p v-if="!isEnded(auction.endAt)" class="text-sm text-red-600 mb-1">Ending in: {{ formatRemaining(auction.endAt) }}</p>
             <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
             <p class="text-sm text-gray-600 mb-1">
               Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}

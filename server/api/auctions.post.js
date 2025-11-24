@@ -8,6 +8,17 @@ import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 
+function formatDuration(days, minutes) {
+  if (minutes > 0) {
+    if (minutes % 60 === 0) {
+      const hours = minutes / 60
+      return `${hours} hour${hours === 1 ? '' : 's'}`
+    }
+    return `${minutes} minute(s)`
+  }
+  return `${days} day(s)`
+}
+
 export default defineEventHandler(async (event) => {
   // 1. Authenticate
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -152,9 +163,7 @@ export default defineEventHandler(async (event) => {
 
       const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
       const mintNumber   = userCtoonRec.mintNumber
-      const durationText = durationMinutes > 0
-        ? `${durationMinutes} minute(s)`
-        : `${durationDays} day(s)`
+      const durationText = formatDuration(durationDays, durationMinutes)
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
       const rawImageUrl = assetPath

@@ -28,14 +28,35 @@
         <p v-if="initialBet < minInitialBet" class="text-sm text-red-500 mt-1">
           Initial bet must be at least {{ minInitialBet }} pts.
         </p>
+        <!-- Duration -->
         <div>
           <p class="block mb-1 font-medium">Duration</p>
-          <label class="inline-flex items-center mr-4">
-            <input type="checkbox" v-model="quick3m" class="form-checkbox" />
-            <span class="ml-2">Quick: 3 minutes</span>
-          </label>
-          <div v-if="!quick3m">
-            <label class="block mb-1">Days: <span class="font-semibold">{{ timeframe }} day(s)</span></label>
+
+          <!-- Presets -->
+          <div class="flex flex-wrap gap-4 mb-2">
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="3m" v-model="durationPreset" />
+              <span class="ml-2">Quick: 3 minutes</span>
+            </label>
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="4h" v-model="durationPreset" />
+              <span class="ml-2">4 hours</span>
+            </label>
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="12h" v-model="durationPreset" />
+              <span class="ml-2">12 hours</span>
+            </label>
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="days" v-model="durationPreset" />
+              <span class="ml-2">Custom days</span>
+            </label>
+          </div>
+
+          <!-- Days slider only when "days" is selected -->
+          <div v-if="durationPreset === 'days'">
+            <label class="block mb-1">
+              Days: <span class="font-semibold">{{ timeframe }} day(s)</span>
+            </label>
             <input
               type="range"
               v-model.number="timeframe"
@@ -90,7 +111,7 @@ const timeframe    = ref(1)     // days
 const quick3m      = ref(false) // 3-minute flag
 const sending      = ref(false)
 const auctionSent  = ref(false)
-
+const durationPreset = ref('days') // '3m' | '4h' | '12h' | 'days'
 const toastMessage = ref('')
 const toastType    = ref('error')
 
@@ -121,10 +142,9 @@ function showToast(message, type = 'error') {
 }
 
 function openModal() {
-  // Enforce floor on open
   initialBet.value = Math.max(props.userCtoon.price || 0, minInitialBet.value)
   timeframe.value = 1
-  quick3m.value   = false
+  durationPreset.value = 'days' // default to days
   showModal.value = true
 }
 
@@ -137,6 +157,19 @@ async function sendToAuction() {
     showToast(`Initial bet must be at least ${minInitialBet.value} pts.`, 'error')
     return
   }
+
+  // Map preset -> payload fields
+  let durationDays = 0
+  let durationMinutes = 0
+  switch (durationPreset.value) {
+    case '3m':  durationMinutes = 3;        break
+    case '4h':  durationMinutes = 4 * 60;   break
+    case '12h': durationMinutes = 12 * 60;  break
+    case 'days':
+    default:
+      durationDays = timeframe.value
+  }
+
   sending.value = true
   try {
     const { auction } = await $fetch('/api/auctions', {
@@ -144,8 +177,8 @@ async function sendToAuction() {
       body: {
         userCtoonId:     props.userCtoon.id,
         initialBet:      initialBet.value,
-        durationDays:    quick3m.value ? 0 : timeframe.value,
-        durationMinutes: quick3m.value ? 3 : 0,
+        durationDays,
+        durationMinutes,
         createInitialBid: false
       }
     })
@@ -164,12 +197,10 @@ async function instaBid() {
   if (sending.value || disabled.value) return
   sending.value = true
   try {
-    // Set initial bid and duration
     initialBet.value = instaBidValue.value
-    quick3m.value = false
+    durationPreset.value = 'days'
     timeframe.value = 1
 
-    // Create auction with server-side initial bid
     const { auction } = await $fetch('/api/auctions', {
       method: 'POST',
       body: {
@@ -180,7 +211,6 @@ async function instaBid() {
         createInitialBid: true
       }
     })
-
     showToast('Auction created with initial bid!', 'success')
     auctionSent.value = true
     emit('auctionCreated', props.userCtoon.id)
