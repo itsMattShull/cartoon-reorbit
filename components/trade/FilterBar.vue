@@ -33,7 +33,7 @@
     <div>
       <label class="block text-xs font-medium mb-1">Set</label>
       <select
-        class="border rounded px-3 py-2"
+        class="border rounded px-3 py-2 max-w-[152px]"
         :value="setValue"
         @change="$emit('update:set-filter', $event.target.value)"
       >
@@ -45,7 +45,7 @@
     <div>
       <label class="block text-xs font-medium mb-1">Series</label>
       <select
-        class="border rounded px-3 py-2"
+        class="border rounded px-3 py-2 max-w-[152px]"
         :value="seriesValue"
         @change="$emit('update:series-filter', $event.target.value)"
       >
@@ -57,7 +57,7 @@
     <div>
       <label class="block text-xs font-medium mb-1">Rarity</label>
       <select
-        class="border rounded px-3 py-2"
+        class="border rounded px-3 py-2 max-w-[152px]"
         :value="rarityValue"
         @change="$emit('update:rarity-filter', $event.target.value)"
       >
@@ -69,7 +69,7 @@
     <div>
       <label class="block text-xs font-medium mb-1">Duplicates</label>
       <select
-        class="border rounded px-3 py-2"
+        class="border rounded px-3 py-2 max-w-[152px]"
         :value="duplicatesFilter"
         @change="$emit('update:duplicates-filter', $event.target.value)"
       >
@@ -84,7 +84,7 @@
         {{ context === 'other' ? 'Owned (by you)' : 'Owned by User' }}
       </label>
       <select
-        class="border rounded px-3 py-2"
+        class="border rounded px-3 py-2 max-w-[152px]"
         :value="ownedFilter"
         @change="$emit('update:owned-filter', $event.target.value)"
       >
