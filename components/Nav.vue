@@ -183,7 +183,8 @@ const mainLinks = [
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
-  { label: 'gToons Clash', to: '/games/clash/rooms' }
+  { label: 'gToons Clash', to: '/games/clash/rooms' },
+  { label: 'Settings', to: '/settings' }
 ]
 
 const filteredMain = computed(() =>

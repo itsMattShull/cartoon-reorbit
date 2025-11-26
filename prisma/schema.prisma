@@ -107,6 +107,7 @@ model User {
   refreshToken     String?
   tokenExpiresAt   DateTime?
   roles            String[]         @default([])
+  allowAuctionNotifications Boolean  @default(true)
   isAdmin          Boolean          @default(false)
   inGuild          Boolean          @default(true)
   active           Boolean          @default(true)
