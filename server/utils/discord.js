@@ -55,6 +55,21 @@ export async function sendDiscordDMByDiscordId(discordId, content) {
 export async function notifyOutbidByUserId(prisma, userId, auctionId) {
   if (!userId) return
   try {
+
+    // Skip if user is the current leader
+    const aucHead = await prisma.auction.findUnique({
+      where: { id: String(auctionId) },
+      select: { highestBidderId: true }
+    })
+    if (aucHead?.highestBidderId === userId) return
+
+    // Skip if user never bid on this auction
+    const hasBid = await prisma.bid.findFirst({
+      where: { auctionId: String(auctionId), userId },
+      select: { id: true }
+    })
+    if (!hasBid) return
+
     // 1) Who to DM
     const u = await prisma.user.findUnique({
       where: { id: userId },

@@ -176,8 +176,25 @@ export default defineEventHandler(async (event) => {
   // 6) Notify prior leaders (unique) via Discord DM, non-blocking
   try {
     const { notifyOutbidByUserId } = await import('@/server/utils/discord')
+    // Remove current leader
+    const final = await db.auction.findUnique({
+      where: { id: auctionId },
+      select: { highestBidderId: true }
+    })
     const unique = Array.from(new Set(outbidUserIds.filter(Boolean)))
-    await Promise.all(unique.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+      .filter(uid => uid !== final?.highestBidderId)
+
+    if (unique.length) {
+      // Keep only users who actually have a Bid on this auction
+      const bidders = await db.bid.findMany({
+        where: { auctionId, userId: { in: unique } },
+        select: { userId: true }
+      })
+      const eligible = Array.from(new Set(bidders.map(b => b.userId)))
+      if (eligible.length) {
+        await Promise.all(eligible.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+      }
+    }
   } catch { /* ignore failures */ }
 
   return {
