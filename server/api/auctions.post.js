@@ -154,7 +154,48 @@ export default defineEventHandler(async (event) => {
     try {
       const config     = useRuntimeConfig()
       const botToken   = process.env.BOT_TOKEN
-      const channelId  = '1401244687163068528'
+      const guildId  = process.env.DISCORD_GUILD_ID
+
+      if (!botToken || !guildId) {
+        console.error('Missing BOT_TOKEN or DISCORD_GUILD_ID env vars.')
+        return
+      }
+
+      // Ensure proper Discord auth header
+      const authHeader =
+        botToken.startsWith('Bot ') ? botToken : `${botToken}`
+
+      // 1) Look up the "cmart-alerts" channel by name
+      const channelsRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/channels`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: authHeader,
+          },
+        }
+      )
+
+      if (!channelsRes.ok) {
+        console.error(
+          'Failed to fetch guild channels:',
+          channelsRes.status,
+          channelsRes.statusText
+        )
+        return
+      }
+
+      const channels = await channelsRes.json()
+      const targetChannel = channels.find(
+        (ch) => ch.type === 0 && ch.name === 'cmart-alerts' // type 0 = text channel
+      )
+
+      if (!targetChannel) {
+        console.error('No channel named "cmart-alerts" found in the guild.')
+        return
+      }
+
+      const channelId = targetChannel.id
 
       const baseUrl = config.public.baseUrl ||
         (process.env.NODE_ENV === 'production'

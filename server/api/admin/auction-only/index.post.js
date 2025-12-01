@@ -25,8 +25,9 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
   const body = await readBody(event)
-  const { userCtoonId: ucIdIn, ctoonId: ctoonIdIn, pricePoints, startsAtUtc, durationDays } = body || {}
+  const { userCtoonId: ucIdIn, ctoonId: ctoonIdIn, pricePoints, startsAtUtc, durationDays, isFeatured } = body || {}
 
+  const isFeaturedFlag = !!isFeatured
   if (!Number.isInteger(pricePoints) || pricePoints < 0) throw createError({ statusCode: 400, statusMessage: 'Invalid pricePoints' })
   if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 5) throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–5' })
   if (!startsAtUtc) throw createError({ statusCode: 400, statusMessage: 'startsAtUtc required' })
@@ -97,6 +98,7 @@ export default defineEventHandler(async (event) => {
       pricePoints,
       startsAt: normStarts,
       endsAt,
+      isFeatured: isFeaturedFlag,
       createdById: me.id ?? null
     },
     select: { id: true }

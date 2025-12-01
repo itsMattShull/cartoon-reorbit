@@ -10,6 +10,97 @@ const DISCORD_API = 'https://discord.com/api/v10'
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
+  try {
+    const botToken = process.env.BOT_TOKEN
+    const guildId  = process.env.DISCORD_GUILD_ID
+
+    if (!botToken || !guildId) {
+      console.error('Missing BOT_TOKEN or DISCORD_GUILD_ID env vars.')
+      return
+    }
+
+    const authHeader =
+      botToken.startsWith('Bot ') ? botToken : `Bot ${botToken}`
+
+    // 1) Look up the "cmart-alerts" channel by name
+    const channelsRes = await fetch(
+      `${DISCORD_API}/guilds/${guildId}/channels`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: authHeader,
+        },
+      }
+    )
+
+    if (!channelsRes.ok) {
+      console.error(
+        'Failed to fetch guild channels:',
+        channelsRes.status,
+        channelsRes.statusText
+      )
+      return
+    }
+
+    const channels = await channelsRes.json()
+    const targetChannel = channels.find(
+      (ch) => ch.type === 0 && ch.name === 'cmart-alerts' // type 0 = text channel
+    )
+
+    if (!targetChannel) {
+      console.error('No channel named "cmart-alerts" found in the guild.')
+      return
+    }
+
+    const channelId = targetChannel.id
+
+    const baseUrl =
+      process.env.PUBLIC_BASE_URL ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://www.cartoonreorbit.com'
+        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
+
+    const { name, rarity, assetPath } = result.ctoon || {}
+    const auctionLink = `${baseUrl}/auction/${result.auctionId}`
+    const rawImageUrl = assetPath
+      ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`)
+      : null
+    const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
+
+    const lines = [
+      `**Rarity:** ${rarity ?? 'N/A'}`,
+      ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
+      `**Starting Bid:** ${result.initialBet} pts`,
+      `**Duration:** ${result.durationDays} day(s)`
+    ]
+
+    const payload = {
+      content: `A scheduled auction is now live.`,
+      embeds: [{
+        title: name ?? 'cToon',
+        url: auctionLink,
+        description: lines.join('\n'),
+        ...(imageUrl ? { image: { url: imageUrl } } : {})
+      }]
+    }
+
+    await fetch(
+      `${DISCORD_API}/channels/${channelId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }
+    )
+  } catch (e1) {
+    // swallow in cron context
+  }
+}
+
 async function discordDm(discordUserId, content) {
   if (!BOT_TOKEN) return false
   try {
@@ -337,8 +428,6 @@ async function syncGuildMembers() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Runs at HH:01 via cron.schedule('1 * * * *', startDueAuctions)
-
 async function startDueAuctions() {
   const rarityFloor = (r) => {
     const s = (r || '').trim().toLowerCase()
@@ -439,52 +528,7 @@ async function startDueAuctions() {
         }))
 
         // Discord notification (best effort)
-        try {
-          const botToken  = process.env.BOT_TOKEN
-          const channelId = process.env.AUCTION_CHANNEL_ID || '1401244687163068528'
-          const baseUrl   =
-            process.env.PUBLIC_BASE_URL ||
-            (process.env.NODE_ENV === 'production'
-              ? 'https://www.cartoonreorbit.com'
-              : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
-
-          const { name, rarity, assetPath } = result.ctoon || {}
-          const auctionLink = `${baseUrl}/auction/${result.auctionId}`
-          const rawImageUrl = assetPath
-            ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`)
-            : null
-          const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
-
-          const lines = [
-            `**Rarity:** ${rarity ?? 'N/A'}`,
-            ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
-            `**Starting Bid:** ${result.initialBet} pts`,
-            `**Duration:** ${result.durationDays} day(s)`
-          ]
-
-          const payload = {
-            content: `A scheduled auction is now live.`,
-            embeds: [{
-              title: name ?? 'cToon',
-              url: auctionLink,
-              description: lines.join('\n'),
-              ...(imageUrl ? { image: { url: imageUrl } } : {})
-            }]
-          }
-
-          await fetch(
-            `https://discord.com/api/v10/channels/${channelId}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `${botToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(payload)
-            }
-          )
-        } catch(e1) {
-        }
+        await sendAuctionDiscordAnnouncement(result, isHolidayItem)
       } catch(e2) {
       }
     }
@@ -541,6 +585,94 @@ async function updateWinballGrandPrizeFromSchedule() {
   }
 }
 
+async function createDailyFeaturedAuction() {
+  const username = process.env.OFFICIAL_USERNAME
+  if (!username) return
+
+  const officialUser = await prisma.user.findUnique({
+    where: { username },
+    select: { id: true }
+  })
+  if (!officialUser) return
+
+  const candidates = await prisma.userCtoon.findMany({
+    where: {
+      userId: officialUser.id,
+      burnedAt: null,
+      ctoon: {
+        rarity: { not: "Crazy Rare" }
+      }
+    },
+    include: {
+      ctoon: {
+        select: { id: true, name: true, rarity: true, assetPath: true }
+      }
+    }
+  })
+
+  if (!candidates.length) return
+
+  const rarityFloor = (r) => {
+    const s = (r || "").trim().toLowerCase()
+    if (s === "common") return 25
+    if (s === "uncommon") return 50
+    if (s === "rare") return 100
+    if (s === "very rare") return 187
+    if (s === "crazy rare") return 312
+    return 50
+  }
+
+  const idx = Math.floor(Math.random() * candidates.length)
+  const chosen = candidates[idx]
+  const now = new Date()
+  const durationDays = 1
+  const endAt = new Date(now.getTime() + durationDays * 86_400_000)
+  const initialBet = rarityFloor(chosen.ctoon?.rarity)
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.auction.findFirst({
+      where: { userCtoonId: chosen.id, status: "ACTIVE" },
+      select: { id: true }
+    })
+    if (existing) return null
+
+    const created = await tx.auction.create({
+      data: {
+        userCtoonId: chosen.id,
+        initialBet,
+        duration: durationDays,
+        endAt,
+        creatorId: officialUser.id,
+        isFeatured: true
+      },
+      select: { id: true }
+    })
+
+    await tx.userCtoon.update({
+      where: { id: chosen.id },
+      data: { isTradeable: false }
+    })
+
+    return {
+      auctionId: created.id,
+      initialBet,
+      durationDays,
+      ctoon: chosen.ctoon,
+      mintNumber: chosen.mintNumber,
+      ctoonId: chosen.ctoonId
+    }
+  })
+
+  if (!result) return
+
+  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
+    where: { ctoonId: result.ctoonId },
+    select: { id: true }
+  }))
+
+  await sendAuctionDiscordAnnouncement(result, isHolidayItem)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Kickoffs
 await syncGuildMembers()
@@ -562,6 +694,5 @@ cron.schedule('0 * * * *', updateWinballGrandPrizeFromSchedule)  // hourly at mi
 await enforceDormantAccounts()
 cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
 
-// update log in logic to not let inactive users log in
-// update cZone page to only show active users
-// allow creation of a new account with existing discordId if old one is inactive
+// create daily featured auction at 08:00
+cron.schedule("0 8 * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })

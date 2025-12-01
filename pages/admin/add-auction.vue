@@ -81,6 +81,19 @@
           </div>
         </div>
 
+        <!-- Is Featured checkbox -->
+        <div class="flex items-center gap-2">
+          <input
+            id="isFeatured"
+            v-model="isFeatured"
+            type="checkbox"
+            class="h-4 w-4 border-gray-300 rounded"
+          />
+          <label for="isFeatured" class="text-sm font-medium text-gray-700">
+            Is Featured
+          </label>
+        </div>
+
         <div class="pt-4 border-t">
           <button
             type="submit"
@@ -112,6 +125,7 @@ const price = ref(0)
 const startDate = ref('') // YYYY-MM-DD
 const startHour = ref('') // 'HH:00'
 const durationDays = ref(1)
+const isFeatured = ref(false)
 const error = ref('')
 const saving = ref(false)
 let searchTimer
@@ -215,6 +229,7 @@ async function submitForm() {
     ctoonId: selected.value.ctoonId,
     pricePoints: Number(price.value || 0),
     durationDays: Number(durationDays.value || 1),
+    isFeatured: Boolean(isFeatured.value),
     startsAtUtc
   }
 

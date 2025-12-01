@@ -6,6 +6,7 @@ import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 
 const ANTI_SNIPE_MS = 60_000
+const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
 
 export default defineEventHandler(async (event) => {
   // 1) Auth
@@ -70,6 +71,28 @@ export default defineEventHandler(async (event) => {
     // enforce inside the txn to avoid race conditions
     if (fresh.creatorId && fresh.creatorId === userId) {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
+    }
+
+    // Featured-auction eligibility: user must not have owned >1 of this cToon in last 30 days
+    if (fresh.isFeatured && fresh.userCtoon?.ctoonId) {
+      const cutoff = new Date(Date.now() - THIRTY_DAYS_MS)
+
+      const recentOwnerships = await tx.ctoonOwnerLog.findMany({
+        where: {
+          userId,
+          ctoonId: fresh.userCtoon.ctoonId,
+          createdAt: { gte: cutoff },
+        },
+        select: { userCtoonId: true },
+        distinct: ['userCtoonId'],
+      })
+
+      if (recentOwnerships.length > 1) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: 'You are not eligible to bid on this featured auction',
+        })
+      }
     }
 
     const now  = new Date()

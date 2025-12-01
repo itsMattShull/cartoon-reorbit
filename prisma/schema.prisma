@@ -493,6 +493,7 @@ model Auction {
   winnerId         String?        
   winnerAt         DateTime?
   endingSoonNotified Boolean @default(false)
+  isFeatured          Boolean        @default(false)
 
   userCtoon        UserCtoon      @relation(fields: [userCtoonId],    references: [id])
   creator          User?           @relation("AuctionsCreated", fields: [creatorId],    references: [id])
