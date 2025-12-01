@@ -1,207 +1,332 @@
-// server/scripts/nuke.js
-// Wipes ONLY the specified user’s data, but TRANSFERS their UserCtoons
-// to the username "CartoonReOrbitOfficial".
-// Usage: node server/scripts/nuke.js <username>
-// Default username: "MysticNinjaWizard"
+// server/scripts/delete-user-MellowChargerPioneer.js
+// Usage:
+//   DATABASE_URL="postgres://..." node server/scripts/delete-user-MellowChargerPioneer.js
+//
+// What it does:
+//  - Finds the user by username ("MellowChargerPioneer")
+//  - Deletes / nulls out almost everything that references that user
+//  - Finally deletes the User row
 
 import { prisma } from '../server/prisma.js'
 
-async function nukeUserByUsername(username = 'MysticNinjaWizard') {
-  const log = (m) => console.log(m)
-  const del = async (label, fn) => {
-    const res = await fn()
-    log(`• ${label}: deleted ${res.count}`)
-    return res.count
+const TARGET_USERNAME = 'MellowChargerPioneer'
+
+async function main() {
+  const user = await prisma.user.findUnique({
+    where: { username: TARGET_USERNAME },
+  })
+
+  if (!user) {
+    console.log(`No user found with username "${TARGET_USERNAME}". Nothing to do.`)
+    return
   }
-  const upd = async (label, fn) => {
-    const res = await fn()
-    log(`• ${label}: updated ${res.count}`)
-    return res.count
+
+  const userId = user.id
+  console.log(`🔍 Found user "${TARGET_USERNAME}" (${userId})`)
+
+  // Preload IDs that are referenced in many places
+  const userCtoons = await prisma.userCtoon.findMany({
+    where: { userId },
+    select: { id: true },
+  })
+  const userCtoonIds = userCtoons.map((u) => u.id)
+
+  const decks = await prisma.clashDeck.findMany({
+    where: { userId },
+    select: { id: true },
+  })
+  const deckIds = decks.map((d) => d.id)
+
+  const auctions = await prisma.auction.findMany({
+    where: {
+      OR: [
+        { creatorId: userId },
+        { highestBidderId: userId },
+        { winnerId: userId },
+        { userCtoon: { userId } },
+      ],
+    },
+    select: { id: true },
+  })
+  const auctionIds = auctions.map((a) => a.id)
+
+  const tradeRooms = await prisma.tradeRoom.findMany({
+    where: {
+      OR: [{ traderAId: userId }, { traderBId: userId }],
+    },
+    select: { id: true },
+  })
+  const tradeRoomIds = tradeRooms.map((r) => r.id)
+
+  const trades = await prisma.trade.findMany({
+    where: { userId },
+    select: { id: true, roomId: true },
+  })
+  const tradeIds = trades.map((t) => t.id)
+
+  const tradeOffers = await prisma.tradeOffer.findMany({
+    where: {
+      OR: [{ initiatorId: userId }, { recipientId: userId }],
+    },
+    select: { id: true },
+  })
+  const tradeOfferIds = tradeOffers.map((t) => t.id)
+
+  console.log(
+    `Preloaded: ${userCtoonIds.length} userCtoons, ` +
+      `${deckIds.length} decks, ${auctionIds.length} auctions, ` +
+      `${tradeRoomIds.length} tradeRooms, ${tradeIds.length} trades, ` +
+      `${tradeOfferIds.length} tradeOffers`
+  )
+
+  // --- Auctions / bidding related ------------------------------------
+
+  let result
+
+  result = await prisma.auctionAutoBid.deleteMany({
+    where: {
+      OR: [
+        { userId },
+        auctionIds.length ? { auctionId: { in: auctionIds } } : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} AuctionAutoBid rows`)
+
+  result = await prisma.bid.deleteMany({
+    where: {
+      OR: [
+        { userId },
+        auctionIds.length ? { auctionId: { in: auctionIds } } : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} Bid rows`)
+
+  result = await prisma.auctionOnly.deleteMany({
+    where: {
+      OR: [
+        { createdById: userId },
+        userCtoonIds.length ? { userCtoonId: { in: userCtoonIds } } : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} AuctionOnly rows`)
+
+  if (auctionIds.length) {
+    result = await prisma.auction.deleteMany({
+      where: { id: { in: auctionIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} Auction rows`)
   }
 
-  try {
-    log(`🔎 Looking up user "${username}"…`)
-    const user = await prisma.user.findUnique({ where: { username } })
-    if (!user) {
-      log('⚠️  No such user. Nothing to do.')
-      return
-    }
-    const userId = user.id
-    log(`👤 Found user id=${userId}`)
+  // --- Trade offers + trades + rooms ---------------------------------
 
-    // Ensure destination (official) owner exists
-    const officialUsername = 'CartoonReOrbitOfficial'
-    const official = await prisma.user.findUnique({ where: { username: officialUsername } })
-    if (!official) {
-      throw new Error(
-        `Destination user "${officialUsername}" not found. Create this account first or change the username in the script.`
-      )
-    }
-    const officialId = official.id
-    log(`🏷  Will transfer UserCtoons to "${officialUsername}" (id=${officialId})`)
-
-    // Collect UserCtoon ids BEFORE any transfer (used to clean dependent rows)
-    const userCtoons = await prisma.userCtoon.findMany({
-      where: { userId },
-      select: { id: true }
+  if (tradeOfferIds.length) {
+    result = await prisma.tradeOfferCtoon.deleteMany({
+      where: { tradeOfferId: { in: tradeOfferIds } },
     })
-    const userCtoonIds = userCtoons.map(x => x.id)
+    console.log(`🗑 Deleted ${result.count} TradeOfferCtoon rows`)
 
-    // Auctions for user’s ctoons (compute before transfer)
-    const auctionsForMyCtoons = await prisma.auction.findMany({
-      where: { userCtoon: { userId } },
-      select: { id: true }
+    result = await prisma.tradeOffer.deleteMany({
+      where: { id: { in: tradeOfferIds } },
     })
-    const myAuctionIds = auctionsForMyCtoons.map(a => a.id)
-
-    log('🧹 Cleaning auctions / bids / trades that involve the user or their items…')
-
-    // --- Auctions & bids (remove these FIRST so nothing remains tied to the old owner) ---
-    await del('Bids (placed by user)', () =>
-      prisma.bid.deleteMany({ where: { userId } })
-    )
-    await del('Bids (on auctions for user’s ctoons)', () =>
-      prisma.bid.deleteMany({ where: { auctionId: { in: myAuctionIds } } })
-    )
-    await del('Auctions (for user’s ctoons)', () =>
-      prisma.auction.deleteMany({ where: { id: { in: myAuctionIds } } })
-    )
-    await del('Auctions (created by user)', () =>
-      prisma.auction.deleteMany({ where: { creatorId: userId } })
-    )
-    await upd('Auctions (clear highestBidderId=user)', () =>
-      prisma.auction.updateMany({ where: { highestBidderId: userId }, data: { highestBidderId: null } })
-    )
-    await upd('Auctions (clear winnerId=user)', () =>
-      prisma.auction.updateMany({ where: { winnerId: userId }, data: { winnerId: null } })
-    )
-
-    // --- Trade offers ---
-    await del('TradeOfferCtoon (rows for user’s UserCtoons)', () =>
-      prisma.tradeOfferCtoon.deleteMany({ where: { userCtoonId: { in: userCtoonIds } } })
-    )
-    await del('TradeOfferCtoon (rows in offers user is part of)', () =>
-      prisma.tradeOfferCtoon.deleteMany({
-        where: { tradeOffer: { OR: [{ initiatorId: userId }, { recipientId: userId }] } }
-      })
-    )
-    await del('TradeOffer (initiated/received by user)', () =>
-      prisma.tradeOffer.deleteMany({ where: { OR: [{ initiatorId: userId }, { recipientId: userId }] } })
-    )
-
-    // --- Trades & rooms ---
-    await del('TradeCtoon (for user’s UserCtoons)', () =>
-      prisma.tradeCtoon.deleteMany({ where: { userCtoonId: { in: userCtoonIds } } })
-    )
-    await del('TradeCtoon (in trades created by user)', () =>
-      prisma.tradeCtoon.deleteMany({ where: { trade: { userId } } })
-    )
-    await del('Trade (created by user)', () =>
-      prisma.trade.deleteMany({ where: { userId } })
-    )
-    await del('TradeSpectator (user)', () =>
-      prisma.tradeSpectator.deleteMany({ where: { userId } })
-    )
-    await upd('TradeRoom (clear traderAId=user)', () =>
-      prisma.tradeRoom.updateMany({ where: { traderAId: userId }, data: { traderAId: null } })
-    )
-    await upd('TradeRoom (clear traderBId=user)', () =>
-      prisma.tradeRoom.updateMany({ where: { traderBId: userId }, data: { traderBId: null } })
-    )
-
-    // --- Clash / decks / games ---
-    await del('ClashDeckCard (in user’s decks)', () =>
-      prisma.clashDeckCard.deleteMany({ where: { deck: { userId } } })
-    )
-    await del('ClashDeck (user’s)', () =>
-      prisma.clashDeck.deleteMany({ where: { userId } })
-    )
-    await del('ClashGame (involving user)', () =>
-      prisma.clashGame.deleteMany({
-        where: {
-          OR: [
-            { player1UserId: userId },
-            { player2UserId: userId },
-            { winnerUserId: userId },
-            { whoLeftUserId: userId }
-          ]
-        }
-      })
-    )
-
-    // --- Claims / rewards (user-specific only) ---
-    await del('Claim (user)', () =>
-      prisma.claim.deleteMany({ where: { userId } })
-    )
-
-    // --- Inventory / ownership (non-cToon) ---
-    await del('UserPack (user)', () =>
-      prisma.userPack.deleteMany({ where: { userId } })
-    )
-    await del('WishlistItem (user)', () =>
-      prisma.wishlistItem.deleteMany({ where: { userId } })
-    )
-    await del('UserBackground (user)', () =>
-      prisma.userBackground.deleteMany({ where: { userId } })
-    )
-    await upd('Background (clear createdById=user)', () =>
-      prisma.background.updateMany({ where: { createdById: userId }, data: { createdById: null } })
-    )
-
-    // --- Social / logs / misc ---
-    await del('Friend (rows where user is user)', () =>
-      prisma.friend.deleteMany({ where: { userId } })
-    )
-    await del('Friend (rows where user is friend)', () =>
-      prisma.friend.deleteMany({ where: { friendId: userId } })
-    )
-    await del('Visit (by user or to user zone)', () =>
-      prisma.visit.deleteMany({ where: { OR: [{ userId }, { zoneOwnerId: userId }] } })
-    )
-    await del('LoginLog (user)', () =>
-      prisma.loginLog.deleteMany({ where: { userId } })
-    )
-    await del('GamePointLog (user)', () =>
-      prisma.gamePointLog.deleteMany({ where: { userId } })
-    )
-    await del('PointsLog (user)', () =>
-      prisma.pointsLog.deleteMany({ where: { userId } })
-    )
-    await del('WheelSpinLog (user)', () =>
-      prisma.wheelSpinLog.deleteMany({ where: { userId } })
-    )
-    await del('UserIP (user)', () =>
-      prisma.userIP.deleteMany({ where: { userId } })
-    )
-    await del('CZone (user)', () =>
-      prisma.cZone.deleteMany({ where: { userId } })
-    )
-
-    // --- TRANSFER: UserCtoon ownership to official account ---------------
-    // Optional: also clear inCzone on transferred items so they don’t appear in the official user’s zone.
-    const transferred = await prisma.userCtoon.updateMany({
-      where: { userId },
-      data: { userId: officialId, inCzone: false } // keep other flags/mints intact
-    })
-    log(`✅ Transferred ${transferred.count} UserCtoon(s) to "${officialUsername}"`)
-
-    // --- Remove remaining user-scoped records & the account --------------
-    await del('UserPoints (user)', () =>
-      prisma.userPoints.deleteMany({ where: { userId } })
-    )
-    await del('User (account)', () =>
-      prisma.user.deleteMany({ where: { id: userId } })
-    )
-
-    console.log('🏁 Finished nuking user and transferring their cToons.')
-  } catch (err) {
-    console.error('❌ Error during user nuke:', err)
-    process.exitCode = 1
-  } finally {
-    await prisma.$disconnect()
+    console.log(`🗑 Deleted ${result.count} TradeOffer rows`)
   }
+
+  result = await prisma.tradeCtoon.deleteMany({
+    where: {
+      OR: [
+        userCtoonIds.length ? { userCtoonId: { in: userCtoonIds } } : undefined,
+        tradeIds.length ? { tradeId: { in: tradeIds } } : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} TradeCtoon rows`)
+
+  result = await prisma.tradeSpectator.deleteMany({
+    where: {
+      OR: [
+        { userId },
+        tradeRoomIds.length ? { roomId: { in: tradeRoomIds } } : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} TradeSpectator rows`)
+
+  if (tradeIds.length) {
+    result = await prisma.trade.deleteMany({
+      where: { id: { in: tradeIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} Trade rows`)
+  }
+
+  if (tradeRoomIds.length) {
+    result = await prisma.tradeRoom.deleteMany({
+      where: { id: { in: tradeRoomIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} TradeRoom rows`)
+  }
+
+  // --- Clash decks & games -------------------------------------------
+
+  if (deckIds.length) {
+    result = await prisma.clashDeckCard.deleteMany({
+      where: { deckId: { in: deckIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} ClashDeckCard rows`)
+
+    result = await prisma.clashDeck.deleteMany({
+      where: { id: { in: deckIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} ClashDeck rows`)
+  }
+
+  result = await prisma.clashGame.deleteMany({
+    where: {
+      OR: [
+        { player1UserId: userId },
+        { player2UserId: userId },
+        { whoLeftUserId: userId },
+        { winnerUserId: userId },
+      ],
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} ClashGame rows`)
+
+  // --- Wishlist, packs, points, logs, visits -------------------------
+
+  result = await prisma.wishlistItem.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} WishlistItem rows`)
+
+  result = await prisma.userPack.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} UserPack rows`)
+
+  result = await prisma.userPoints.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} UserPoints rows`)
+
+  result = await prisma.gamePointLog.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} GamePointLog rows`)
+
+  result = await prisma.pointsLog.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} PointsLog rows`)
+
+  result = await prisma.loginLog.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} LoginLog rows`)
+
+  result = await prisma.visit.deleteMany({
+    where: {
+      OR: [{ userId }, { zoneOwnerId: userId }],
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} Visit rows`)
+
+  result = await prisma.userIP.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} UserIP rows`)
+
+  // --- Friends -------------------------------------------------------
+
+  result = await prisma.friend.deleteMany({
+    where: {
+      OR: [{ userId }, { friendId: userId }],
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} Friend rows`)
+
+  // --- Wheel, holiday, ownership logs --------------------------------
+
+  result = await prisma.wheelSpinLog.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} WheelSpinLog rows`)
+
+  result = await prisma.holidayRedemption.deleteMany({
+    where: {
+      OR: [
+        { userId },
+        userCtoonIds.length
+          ? { sourceUserCtoonId: { in: userCtoonIds } }
+          : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} HolidayRedemption rows`)
+
+  result = await prisma.ctoonOwnerLog.deleteMany({
+    where: {
+      OR: [
+        { userId },
+        userCtoonIds.length
+          ? { userCtoonId: { in: userCtoonIds } }
+          : undefined,
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} CtoonOwnerLog rows`)
+
+  // --- Backgrounds / images / schedules (null out creator) -----------
+
+  result = await prisma.userBackground.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} UserBackground rows`)
+
+  result = await prisma.background.updateMany({
+    where: { createdById: userId },
+    data: { createdById: null },
+  })
+  console.log(`🧹 Nullified createdById on ${result.count} Background rows`)
+
+  result = await prisma.adImage.updateMany({
+    where: { createdById: userId },
+    data: { createdById: null },
+  })
+  console.log(`🧹 Nullified createdById on ${result.count} AdImage rows`)
+
+  result = await prisma.winballGrandPrizeSchedule.updateMany({
+    where: { createdById: userId },
+    data: { createdById: null },
+  })
+  console.log(
+    `🧹 Nullified createdById on ${result.count} WinballGrandPrizeSchedule rows`
+  )
+
+  // --- CZone / UserCtoon ---------------------------------------------
+
+  result = await prisma.cZone.deleteMany({ where: { userId } })
+  console.log(`🗑 Deleted ${result.count} CZone rows`)
+
+  if (userCtoonIds.length) {
+    result = await prisma.userCtoon.deleteMany({
+      where: { id: { in: userCtoonIds } },
+    })
+    console.log(`🗑 Deleted ${result.count} UserCtoon rows`)
+  }
+
+  // --- Auctions that might still reference user (fallback) -----------
+
+  result = await prisma.auction.deleteMany({
+    where: {
+      OR: [
+        { creatorId: userId },
+        { highestBidderId: userId },
+        { winnerId: userId },
+      ],
+    },
+  })
+  if (result.count) {
+    console.log(
+      `⚠️ Fallback: deleted ${result.count} additional Auction rows still pointing at user`
+    )
+  }
+
+  // --- Finally: delete the User itself -------------------------------
+
+  await prisma.user.delete({ where: { id: userId } })
+  console.log(`✅ Deleted user "${TARGET_USERNAME}" and related data.`)
 }
 
-// Allow overriding username from CLI: `node server/scripts/nuke.js SomeUser`
-const argUser = process.argv[2]
-nukeUserByUsername(argUser || 'MysticNinjaWizard')
+main()
+  .catch((err) => {
+    console.error('❌ Error while deleting user and related data:', err)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
