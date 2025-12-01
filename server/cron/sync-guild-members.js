@@ -698,4 +698,4 @@ await enforceDormantAccounts()
 cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
 
 // create daily featured auction at 08:00
-cron.schedule("0 17 * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
+cron.schedule("0 8 * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
