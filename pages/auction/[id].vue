@@ -62,6 +62,20 @@
         </p>
       </div>
 
+      <!-- Featured auction notice -->
+      <div
+        v-if="auction.isFeatured"
+        class="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <div class="font-semibold mb-1">
+          ⭐ Featured Auction
+        </div>
+        <p>
+          This is a featured auction. You’ll only be allowed to bid if you
+          haven’t owned more than one copy of this cToon in the last 30 days.
+        </p>
+      </div>
+
       <!-- Bid + Auto-bid Section -->
       <div v-if="!ended" class="mb-8 space-y-6">
         <!-- Manual Bid -->
