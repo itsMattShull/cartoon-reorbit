@@ -28,12 +28,18 @@ export const useAuth = () => {
         if (opts.force) {
           const me = await $fetch('/api/auth/me', {
             credentials: 'include',
-            headers: { 'cache-control': 'no-store' } // bypass any proxy/browser cache
+            headers: {
+              ...(process.server ? useRequestHeaders(['cookie']) : {}),
+              'cache-control': 'no-store' // bypass any proxy/browser cache
+            }
           })
           user.value = me
           return me
         }
-        const { data } = await useFetch('/api/auth/me', { credentials: 'include' })
+        const { data } = await useFetch('/api/auth/me', {
+          credentials: 'include',
+          headers: process.server ? useRequestHeaders(['cookie']) : undefined
+        })
         user.value = data.value
       } catch (err) {
         user.value = null
