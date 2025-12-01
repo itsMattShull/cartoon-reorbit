@@ -73,10 +73,12 @@ export async function notifyOutbidByUserId(prisma, userId, auctionId) {
     // 1) Who to DM
     const u = await prisma.user.findUnique({
       where: { id: userId },
-      select: { discordId: true, allowAuctionNotifications: true }
+      select: { discordId: true, allowAuctionNotifications: true, username: true }
     })
     if (!u?.discordId) return
     if (!u.allowAuctionNotifications) return
+    // Skip system/official account
+    if (u.username === 'CartoonReOrbitOfficial') return
 
     // 2) Load auction + cToon details
     const auc = await prisma.auction.findUnique({
