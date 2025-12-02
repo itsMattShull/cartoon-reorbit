@@ -81,7 +81,7 @@
               <template v-else>You won a cToon! 🎉</template>
             </h2>
           </div>
-
+ 
           <!-- Scrollable body -->
           <div class="flex-1 overflow-y-auto p-6">
             <template v-if="spinResult.type === 'nothing'">
