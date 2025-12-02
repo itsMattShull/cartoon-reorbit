@@ -27,7 +27,10 @@ export default defineEventHandler(async (event) => {
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 }
     },
-    orderBy: { endAt: 'asc' }
+    orderBy: [
+      { isFeatured: 'desc' }, // featured first
+      { endAt: 'asc' }        // then soonest-ending
+    ]
   })
 
   if (auctions.length === 0) return []
@@ -40,7 +43,6 @@ export default defineEventHandler(async (event) => {
       where: { userId, ctoonId: { in: ctoonIds } },
       select: { ctoonId: true }
     }),
-    // Treat as Holiday Item if the cToon appears in ANY HolidayEventItem
     prisma.holidayEventItem.findMany({
       where: { ctoonId: { in: ctoonIds } },
       select: { ctoonId: true }
@@ -52,16 +54,16 @@ export default defineEventHandler(async (event) => {
 
   // 4) Shape for client
   return auctions.map(a => ({
-    id:          a.id,
-    isFeatured: a.isFeatured,
-    name:        a.userCtoon.ctoon.name,
-    series:      a.userCtoon.ctoon.series,
-    rarity:      a.userCtoon.ctoon.rarity,
-    mintNumber:  a.userCtoon.mintNumber,
-    assetPath:   a.userCtoon.ctoon.assetPath,
-    endAt:       a.endAt.toISOString(),
-    highestBid:  a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
-    isOwned:     ownedSet.has(a.userCtoon.ctoonId),
+    id:           a.id,
+    isFeatured:   a.isFeatured,
+    name:         a.userCtoon.ctoon.name,
+    series:       a.userCtoon.ctoon.series,
+    rarity:       a.userCtoon.ctoon.rarity,
+    mintNumber:   a.userCtoon.mintNumber,
+    assetPath:    a.userCtoon.ctoon.assetPath,
+    endAt:        a.endAt.toISOString(),
+    highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
+    isOwned:      ownedSet.has(a.userCtoon.ctoonId),
     isHolidayItem: holidaySet.has(a.userCtoon.ctoonId)
   }))
 })
