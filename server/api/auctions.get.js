@@ -53,6 +53,7 @@ export default defineEventHandler(async (event) => {
   // 4) Shape for client
   return auctions.map(a => ({
     id:          a.id,
+    isFeatured: a.isFeatured,
     name:        a.userCtoon.ctoon.name,
     series:      a.userCtoon.ctoon.series,
     rarity:      a.userCtoon.ctoon.rarity,

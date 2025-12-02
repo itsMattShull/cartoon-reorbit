@@ -784,6 +784,7 @@ model AuctionOnly {
   isStarted    Boolean   @default(false)
   createdAt DateTime @default(now())
   createdById String?
+  isFeatured   Boolean  @default(false)
 
   // relations
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])

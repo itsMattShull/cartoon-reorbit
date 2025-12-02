@@ -83,9 +83,20 @@ export default defineEventHandler(async (event) => {
     const fresh = await tx.auction.findUnique({
       where: { id: auctionId },
       select: {
-        id: true, status: true, endAt: true,
-        highestBid: true, highestBidderId: true, initialBet: true,
-        creatorId: true
+        id: true,
+        status: true,
+        endAt: true,
+        highestBid: true,
+        highestBidderId: true,
+        initialBet: true,
+        creatorId: true,
+        isFeatured: true,
+        userCtoon: {
+          select: {
+            ctoonId: true,
+            // mintNumber: true, // add this if you ever need it
+          }
+        }
       }
     })
     if (!fresh || fresh.status !== 'ACTIVE') return

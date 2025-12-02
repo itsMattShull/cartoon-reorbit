@@ -84,6 +84,9 @@
 
           <!-- Scrollable body -->
           <div class="flex-1 overflow-y-auto p-6">
+            <template v-if="spinResult.type === 'nothing'">
+              <img src="/images/nothing1225.gif" alt="Nothing" class="max-w-full h-auto mx-auto mb-4" />
+            </template>
             <div v-if="spinResult.ctoon" class="text-center">
               <img :src="spinResult.ctoon.assetPath" :alt="spinResult.ctoon.name" class="w-24 h-24 mx-auto mb-2" />
               <p class="font-semibold">{{ spinResult.ctoon.name }}</p>

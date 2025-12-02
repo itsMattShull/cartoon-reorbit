@@ -468,7 +468,8 @@ async function startDueAuctions() {
               userCtoonId: true,
               pricePoints: true,
               startsAt: true,
-              endsAt: true
+              endsAt: true,
+              isFeatured: true
             }
           })
           if (!fresh || fresh.isStarted) return null
@@ -495,6 +496,7 @@ async function startDueAuctions() {
               duration: durationDays,
               endAt: new Date(fresh.endsAt),
               creatorId: row.userCtoon?.creatorId,
+              isFeatured: fresh.isFeatured,        // ← carry flag onto Auction
             },
             select: { id: true }
           })
@@ -515,7 +517,8 @@ async function startDueAuctions() {
             durationDays,
             ctoon: row.userCtoon.ctoon,
             mintNumber: row.userCtoon.mintNumber,
-            ctoonId: row.userCtoon.ctoon.id
+            ctoonId: row.userCtoon.ctoon.id,
+            isFeatured: fresh.isFeatured,        // optional, if you ever need it downstream
           }
         })
 
@@ -529,10 +532,10 @@ async function startDueAuctions() {
 
         // Discord notification (best effort)
         await sendAuctionDiscordAnnouncement(result, isHolidayItem)
-      } catch(e2) {
+      } catch (e2) {
       }
     }
-  } catch(e3) {
+  } catch (e3) {
   }
 }
 
