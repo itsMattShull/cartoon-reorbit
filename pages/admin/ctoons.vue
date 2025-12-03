@@ -32,7 +32,7 @@
         />
         <select
           v-model="selectedSet"
-          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 max-w-[350px]"
         >
           <option value="">All Sets</option>
           <option v-for="set in setsOptions" :key="set" :value="set">
@@ -41,7 +41,7 @@
         </select>
         <select
           v-model="selectedSeries"
-          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 max-w-[350px]"
         >
           <option value="">All Series</option>
           <option v-for="series in seriesOptions" :key="series" :value="series">
@@ -191,7 +191,7 @@
 <script setup>
 definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
 
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 /* Meta options from API */
@@ -246,8 +246,29 @@ async function loadPage(n = 1) {
   currentPage.value = n
   loading.value = false
 }
-function nextPage() { if (hasNextPage.value && !loading.value) loadPage(currentPage.value + 1) }
-function prevPage() { if (currentPage.value > 1 && !loading.value) loadPage(currentPage.value - 1) }
+function scrollToTop() {
+  if (typeof window === 'undefined') return
+  nextTick().then(() => {
+    requestAnimationFrame(() => {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }) } catch { window.scrollTo(0, 0) }
+      window.dispatchEvent(new Event('scroll'))
+    })
+  })
+}
+async function nextPage() {
+  if (hasNextPage.value && !loading.value) {
+    await loadPage(currentPage.value + 1)
+    await nextTick()
+    scrollToTop()
+  }
+}
+async function prevPage() {
+  if (currentPage.value > 1 && !loading.value) {
+    await loadPage(currentPage.value - 1)
+    await nextTick()
+    scrollToTop()
+  }
+}
 
 /* Search */
 async function runSearch({ q, set, series }) {

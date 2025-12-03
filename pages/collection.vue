@@ -269,7 +269,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageUser === 1"
-              @click="pageUser--"
+              @click="prevUserPage()"
             >
               Previous Page
             </button>
@@ -277,7 +277,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageUser === totalPagesUser"
-              @click="pageUser++"
+              @click="nextUserPage()"
             >
               Next Page
             </button>
@@ -344,7 +344,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageWishlist === 1"
-              @click="pageWishlist--"
+              @click="prevWishlistPage()"
             >
               Previous Page
             </button>
@@ -352,7 +352,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageWishlist === totalPagesWishlist"
-              @click="pageWishlist++"
+              @click="nextWishlistPage()"
             >
               Next Page
             </button>
@@ -434,7 +434,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === 1"
-              @click="pageAll--"
+              @click="prevAllPage()"
             >
               Previous Page
             </button>
@@ -442,7 +442,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === totalPagesAll"
-              @click="pageAll++"
+              @click="nextAllPage()"
             >
               Next Page
             </button>
@@ -524,7 +524,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === 1"
-              @click="pageAll--"
+              @click="prevAllPage()"
             >
               Previous Page
             </button>
@@ -532,7 +532,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === totalPagesAll"
-              @click="pageAll++"
+              @click="nextAllPage()"
             >
               Next Page
             </button>
@@ -584,7 +584,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -859,6 +859,36 @@ onMounted(async () => {
   filterMeta.value = await $fetch('/api/collections/meta')
   loadUser()
 })
+
+// Scroll helpers for pagination
+function scrollToTop () {
+  if (typeof window === 'undefined') return
+  // Wait for DOM update, then scroll immediately and fire a scroll event
+  nextTick().then(() => {
+    requestAnimationFrame(() => {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }) } catch { window.scrollTo(0, 0) }
+      window.dispatchEvent(new Event('scroll'))
+    })
+  })
+}
+function prevUserPage () {
+  if (pageUser.value > 1) { pageUser.value--; scrollToTop() }
+}
+function nextUserPage () {
+  if (pageUser.value < totalPagesUser.value) { pageUser.value++; scrollToTop() }
+}
+function prevWishlistPage () {
+  if (pageWishlist.value > 1) { pageWishlist.value--; scrollToTop() }
+}
+function nextWishlistPage () {
+  if (pageWishlist.value < totalPagesWishlist.value) { pageWishlist.value++; scrollToTop() }
+}
+function prevAllPage () {
+  if (pageAll.value > 1) { pageAll.value--; scrollToTop() }
+}
+function nextAllPage () {
+  if (pageAll.value < totalPagesAll.value) { pageAll.value++; scrollToTop() }
+}
 </script>
 
 <style scoped>

@@ -370,14 +370,14 @@
           <!-- PAGINATION -->
           <div class="mt-8 flex justify-center gap-4">
             <button
-              @click="currentPage--"
+              @click="prevPage()"
               :disabled="currentPage === 1"
               class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
             >
               Previous
             </button>
             <button
-              @click="currentPage++"
+              @click="nextPage()"
               :disabled="(currentPage * itemsPerPage) >= filteredAndSortedCtoons.length"
               class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
             >
@@ -593,7 +593,7 @@ definePageMeta({
 })
 
 // ────────── Imports ─────────────────────────────
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -783,6 +783,29 @@ watch(
     currentPage.value = 1
   }
 )
+
+// Pagination helpers: scroll to top on page change
+function scrollToTop () {
+  if (typeof window === 'undefined') return
+  nextTick().then(() => {
+    requestAnimationFrame(() => {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }) } catch { window.scrollTo(0, 0) }
+      window.dispatchEvent(new Event('scroll'))
+    })
+  })
+}
+function prevPage () {
+  if (currentPage.value > 1) {
+    currentPage.value--
+    scrollToTop()
+  }
+}
+function nextPage () {
+  if ((currentPage.value * itemsPerPage) < filteredAndSortedCtoons.value.length) {
+    currentPage.value++
+    scrollToTop()
+  }
+}
 
 // ────────── Overlay / Glow State ───────────────
 const overlayVisible  = ref(false)
