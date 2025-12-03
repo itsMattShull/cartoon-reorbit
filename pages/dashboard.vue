@@ -11,22 +11,154 @@
     <div
       class="mt-16 md:mt-20 md:pt-6 min-h-screen p-6 text-white"
     >
-      <template v-if="loading">
-        <div class="flex flex-col lg:flex-row gap-6 max-w-4xl mx-auto">
-          <div class="bg-white/90 rounded-xl shadow-md p-6 w-full lg:w-1/2 animate-pulse border border-[var(--reorbit-border)]">
-            <div class="flex items-center gap-6 w-full">
-              <div class="w-24 h-24 rounded-full bg-[var(--reorbit-tint)]"></div>
-              <div class="flex-1 space-y-4 py-1">
-                <div class="h-6 bg-[var(--reorbit-tint)] rounded w-3/4"></div>
+            <template v-if="loading">
+        <!-- Top row skeleton -->
+        <div class="flex flex-col lg:flex-row gap-2 max-w-4xl mx-auto">
+          <!-- Profile + counters + Winball (left column) -->
+          <div class="w-full lg:w-1/2">
+            <!-- Profile card skeleton -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="flex items-center gap-6 w-full px-6 py-3">
+                <div class="w-24 h-24 rounded-full bg-[var(--reorbit-tint)]"></div>
+                <div class="flex-1 space-y-3">
+                  <div class="h-6 bg-[var(--reorbit-tint)] rounded w-3/4"></div>
+                  <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/2"></div>
+                  <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/3"></div>
+                  <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                </div>
+              </div>
+              <div class="px-6 pb-4 space-y-2">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
                 <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/2"></div>
-                <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/3"></div>
+              </div>
+            </div>
+
+            <!-- Winball prize preview skeleton -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] mt-2 bg-white/90 backdrop-blur-sm animate-pulse">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="p-2">
+                <div class="w-full aspect-[16/9] bg-[var(--reorbit-tint)] rounded-xl"></div>
               </div>
             </div>
           </div>
-          <div class="bg-white/90 rounded-xl shadow-md p-6 w-full lg:w-1/2 animate-pulse border border-[var(--reorbit-border)]">
-            <div class="h-24 bg-[var(--reorbit-tint)] rounded"></div>
+
+          <!-- Promo (right column) -->
+          <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full lg:w-1/2 overflow-hidden bg-white/90 backdrop-blur-sm animate-pulse">
+            <div class="w-full h-full min-h-[220px] bg-[var(--reorbit-tint)]"></div>
           </div>
         </div>
+
+        <!-- Releases skeleton -->
+        <div class="flex flex-col md:flex-row max-w-4xl mx-auto mt-6">
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/90 backdrop-blur-sm animate-pulse">
+            <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+            <div class="p-6">
+              <div class="h-6 bg-[var(--reorbit-tint)] rounded w-1/3 mb-4"></div>
+              <div class="relative overflow-x-hidden">
+                <div class="flex items-stretch space-x-8 pl-8 py-2">
+                  <div
+                    v-for="i in 3"
+                    :key="i"
+                    class="flex-none rounded-lg shadow border border-[var(--reorbit-border)] p-4 flex flex-col justify-end bg-white/90"
+                  >
+                    <div class="h-24 w-24 mx-auto bg-[var(--reorbit-tint)] rounded-md mb-2"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Unique + Total cToon leaderboards skeleton -->
+        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
+          <div class="w-full lg:w-1/2">
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="w-full lg:w-1/2">
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Points leaderboard + Discord skeleton -->
+        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
+          <!-- Points leaderboard -->
+          <div class="w-full lg:w-1/2">
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Discord card -->
+          <div class="w-full lg:w-1/2">
+            <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/90 backdrop-blur-sm overflow-hidden animate-pulse">
+              <div class="bg-[#5865F2] px-4 py-3 flex items-center gap-2">
+                <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
+                <div class="h-4 w-32 bg-[var(--reorbit-tint)] rounded"></div>
+                <div class="ml-auto h-3 w-16 bg-[var(--reorbit-tint)] rounded"></div>
+              </div>
+
+              <div class="p-6">
+                <div class="h-9 w-full bg-[var(--reorbit-tint)] rounded mb-4"></div>
+                <div class="space-y-2 max-h-[144px] overflow-hidden">
+                  <div
+                    v-for="i in 4"
+                    :key="i"
+                    class="flex items-center gap-2"
+                  >
+                    <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
+                    <div class="h-4 w-1/2 bg-[var(--reorbit-tint)] rounded"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </template>
 
       <template v-else>
