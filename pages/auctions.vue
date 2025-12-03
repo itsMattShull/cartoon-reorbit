@@ -73,7 +73,7 @@
               id="search"
               type="text"
               v-model="searchQuery"
-              placeholder="Type a name…"
+              placeholder="Type a name or character…"
               class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -142,6 +142,19 @@
                 <span class="ml-2">Un-owned Only</span>
               </label>
             </div>
+          </div>
+
+          <!-- Filter by Featured -->
+          <div class="mb-4">
+            <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                v-model="featuredOnly"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Featured Only</span>
+            </label>
           </div>
 
           <!-- Sort Select -->
@@ -366,11 +379,79 @@ const selectedRarities = ref([])
 const selectedOwned = ref('all')
 const sortBy = ref('endAsc')
 const showFilters = ref(false)
+const featuredOnly = ref(false)
+
+// Route + URL query sync
+const route  = useRoute()
+const router = useRouter()
+
+function normalizeListParam(v) {
+  if (Array.isArray(v)) return v.filter(Boolean)
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function updateUrlQueryFromFilters() {
+  const newQuery = { ...route.query }
+
+  const q = String(searchQuery.value || '').trim()
+  if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSeries.value.length) newQuery.series = selectedSeries.value
+  else delete newQuery.series
+
+  if (selectedRarities.value.length) newQuery.rarity = selectedRarities.value
+  else delete newQuery.rarity
+
+  if (selectedOwned.value && selectedOwned.value !== 'all') newQuery.owned = selectedOwned.value
+  else delete newQuery.owned
+
+  if (featuredOnly.value) newQuery.featured = '1'
+  else delete newQuery.featured
+
+  if (sortBy.value && sortBy.value !== 'endAsc') newQuery.sort = sortBy.value
+  else delete newQuery.sort
+
+  if (activeTab.value && activeTab.value !== 'current') newQuery.tab = activeTab.value
+  else delete newQuery.tab
+
+  const current = JSON.stringify(route.query)
+  const next    = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
 
 onMounted(() => {
   timer = setInterval(() => {
     now.value = new Date()
   }, 1000)
+
+  // Initialize from URL query
+  const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const seriesParam = route.query.series
+  const rarityParam = route.query.rarity
+  const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+  const tabParam    = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const featuredParam = typeof route.query.featured === 'string' ? route.query.featured : ''
+
+  if (qParam.trim()) searchQuery.value = qParam.trim()
+  const initSeries   = normalizeListParam(seriesParam)
+  const initRarities = normalizeListParam(rarityParam)
+  if (initSeries.length)   selectedSeries.value = initSeries
+  if (initRarities.length) selectedRarities.value = initRarities
+  if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
+
+  const validSorts = ['endAsc','nameAsc','nameDesc','mintAsc','mintDesc','rarity']
+  if (validSorts.includes(sortParam)) sortBy.value = sortParam
+
+  const validTabs = ['current','mybids','mine']
+  if (validTabs.includes(tabParam)) activeTab.value = tabParam
+
+  if (['1','true','yes'].includes(featuredParam.toLowerCase())) featuredOnly.value = true
+
+  // Normalize URL based on initialized values
+  updateUrlQueryFromFilters()
+
   loadAuctions()
 })
 
@@ -420,7 +501,14 @@ watch(activeTab, newTab => {
   if (newTab === 'mybids' && myBids.value.length === 0) {
     loadMyBids()
   }
+  updateUrlQueryFromFilters()
 })
+
+// Keep URL in sync when filters change
+watch([searchQuery, selectedSeries, selectedRarities, selectedOwned, featuredOnly], () => {
+  updateUrlQueryFromFilters()
+}, { deep: true })
+watch(sortBy, () => { updateUrlQueryFromFilters() })
 
 function isEnded(endAt) {
   return new Date(endAt) <= now.value
@@ -449,10 +537,18 @@ const uniqueRarities = computed(() => {
 })
 
 const filteredAuctions = computed(() => {
+  const term = (searchQuery.value || '').toLowerCase().trim()
   return auctions.value
-    .filter(a => a.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+    .filter(a => {
+      if (!term) return true
+      const nameMatch = (a.name || '').toLowerCase().includes(term)
+      const chars = Array.isArray(a.characters) ? a.characters : []
+      const charMatch = chars.some(ch => (ch || '').toLowerCase().includes(term))
+      return nameMatch || charMatch
+    })
     .filter(a => !selectedSeries.value.length || selectedSeries.value.includes(a.series))
     .filter(a => !selectedRarities.value.length || selectedRarities.value.includes(a.rarity))
+    .filter(a => !featuredOnly.value || !!a.isFeatured)
     .filter(a => {
       if (selectedOwned.value === 'owned')   return a.isOwned
       if (selectedOwned.value === 'unowned') return !a.isOwned

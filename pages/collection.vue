@@ -631,6 +631,42 @@ const ownersList           = ref([])
 const ownersLoading        = ref(false)
 const currentOwnersCtoon   = ref(null)
 
+// ─── ROUTE QUERY SYNC ─────────────────────────────────────────────────────────
+const route  = useRoute()
+const router = useRouter()
+
+function normalizeListParam(v) {
+  if (Array.isArray(v)) return v.filter(Boolean)
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function updateUrlQueryFromFilters() {
+  const newQuery = { ...route.query }
+
+  const q = String(searchQuery.value || '').trim()
+  if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
+
+  if (selectedSeries.value.length) newQuery.series = selectedSeries.value
+  else delete newQuery.series
+
+  if (selectedRarities.value.length) newQuery.rarity = selectedRarities.value
+  else delete newQuery.rarity
+
+  if (selectedOwned.value && selectedOwned.value !== 'all') newQuery.owned = selectedOwned.value
+  else delete newQuery.owned
+
+  if (sortBy.value && sortBy.value !== 'name') newQuery.sort = sortBy.value
+  else delete newQuery.sort
+
+  const current = JSON.stringify(route.query)
+  const next    = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
 // collections.vue <script setup> — add helpers near top of sort code
 function sortCmp(a, b, { useMintTie = false } = {}) {
   const getTimeAsc  = v => v ? new Date(v).getTime() : Number.MAX_SAFE_INTEGER
@@ -846,17 +882,45 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
-})
+  updateUrlQueryFromFilters()
+}, { deep: true })
 watch(sortBy, () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
+  updateUrlQueryFromFilters()
 })
 
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await fetchSelf()
   filterMeta.value = await $fetch('/api/collections/meta')
+
+  // Initialize from URL query (supports repeated params or comma-separated)
+  const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set ?? route.query.sets
+  const seriesParam = route.query.series
+  const rarityParam = route.query.rarity
+  const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+
+  if (qParam.trim()) searchQuery.value = qParam.trim()
+
+  const initSets     = normalizeListParam(setParam)
+  const initSeries   = normalizeListParam(seriesParam)
+  const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
+  if (initSeries.length)   selectedSeries.value = initSeries
+  if (initRarities.length) selectedRarities.value = initRarities
+
+  if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
+
+  const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','rarity','series','set','name']
+  if (validSorts.includes(sortParam)) sortBy.value = sortParam
+
+  // Normalize URL now to reflect initialized values
+  updateUrlQueryFromFilters()
+
   loadUser()
 })
 

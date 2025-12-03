@@ -65,7 +65,37 @@
               <th class="px-4 py-2 text-right">Edit</th>
             </tr>
           </thead>
-          <tbody>
+          <!-- Skeleton rows while loading or searching -->
+          <tbody v-if="loading || (isSearching && searching)">
+            <tr v-for="n in 8" :key="`skeleton-desktop-${n}`" class="border-b">
+              <td class="px-4 py-2">
+                <div class="h-16 w-24 bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2">
+                <div class="h-4 w-40 bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2">
+                <div class="h-4 w-56 bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2">
+                <div class="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <div class="h-4 w-14 ml-auto bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <div class="h-4 w-16 ml-auto bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2 text-center">
+                <div class="h-4 w-10 mx-auto bg-gray-200 rounded animate-pulse"></div>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <div class="h-4 w-10 ml-auto bg-gray-200 rounded animate-pulse"></div>
+              </td>
+            </tr>
+          </tbody>
+          <!-- Data rows -->
+          <tbody v-else>
             <tr
               v-for="c in displayedCtoons"
               :key="c.id"
@@ -114,51 +144,73 @@
 
       <!-- CARD VIEW (mobile) -->
       <div class="space-y-4 block sm:hidden">
-        <div
-          v-for="c in displayedCtoons"
-          :key="c.id"
-          class="bg-gray-100 rounded-lg p-4 flex flex-col"
-        >
-          <div class="flex items-start space-x-4">
-            <img
-              loading="lazy"
-              :src="c.assetPath"
-              :alt="c.name"
-              class="max-w-[80px] w-auto flex-shrink-0 object-contain rounded"
-            />
-            <div class="flex-1 space-y-1">
-              <h2 class="text-lg font-semibold">{{ c.name }}</h2>
-              <p class="text-sm text-gray-600">
-                {{
-                  new Date(c.releaseDate).toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    timeZone: 'America/Chicago'
-                  })
-                }}
-              </p>
-              <p class="text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
-              <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
-              <p class="text-sm"><strong>Quantity:</strong> {{ c.quantity == null ? 'Unlimited' : c.quantity }}</p>
-              <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
-              <p class="text-sm"><strong>Set:</strong> {{ c.set }}</p>
-              <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
-            </div>
-          </div>
-          <NuxtLink
-            :to="`/admin/editCtoon/${c.id}`"
-            class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium self-end"
+        <!-- Skeleton cards while loading or searching -->
+        <template v-if="loading || (isSearching && searching)">
+          <div
+            v-for="n in 6"
+            :key="`skeleton-mobile-${n}`"
+            class="bg-gray-100 rounded-lg p-4 flex flex-col animate-pulse"
           >
-            Edit
-          </NuxtLink>
-        </div>
+            <div class="flex items-start space-x-4">
+              <div class="w-[80px] h-[80px] bg-gray-200 rounded"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-5 w-2/3 bg-gray-200 rounded"></div>
+                <div class="h-4 w-1/2 bg-gray-200 rounded"></div>
+                <div class="h-4 w-1/3 bg-gray-200 rounded"></div>
+                <div class="h-4 w-1/4 bg-gray-200 rounded"></div>
+                <div class="h-4 w-1/3 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+            <div class="mt-4 h-8 w-24 bg-gray-200 rounded self-end"></div>
+          </div>
+        </template>
+        <!-- Data cards -->
+        <template v-else>
+          <div
+            v-for="c in displayedCtoons"
+            :key="c.id"
+            class="bg-gray-100 rounded-lg p-4 flex flex-col"
+          >
+            <div class="flex items-start space-x-4">
+              <img
+                loading="lazy"
+                :src="c.assetPath"
+                :alt="c.name"
+                class="max-w-[80px] w-auto flex-shrink-0 object-contain rounded"
+              />
+              <div class="flex-1 space-y-1">
+                <h2 class="text-lg font-semibold">{{ c.name }}</h2>
+                <p class="text-sm text-gray-600">
+                  {{
+                    new Date(c.releaseDate).toLocaleString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'America/Chicago'
+                    })
+                  }}
+                </p>
+                <p class="text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
+                <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
+                <p class="text-sm"><strong>Quantity:</strong> {{ c.quantity == null ? 'Unlimited' : c.quantity }}</p>
+                <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
+                <p class="text-sm"><strong>Set:</strong> {{ c.set }}</p>
+                <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
+              </div>
+            </div>
+            <NuxtLink
+              :to="`/admin/editCtoon/${c.id}`"
+              class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium self-end"
+            >
+              Edit
+            </NuxtLink>
+          </div>
+        </template>
       </div>
 
       <!-- SEARCH STATES -->
-      <div v-if="isSearching && searching" class="text-center py-4">Searching…</div>
       <div v-if="isSearching && !searching && displayedCtoons.length===0" class="text-center py-4 text-gray-500">
         No matches.
       </div>
@@ -197,6 +249,23 @@ import Nav from '~/components/Nav.vue'
 /* Meta options from API */
 const setsOptions   = ref([])
 const seriesOptions = ref([])
+
+/* Route helpers */
+const route = useRoute()
+const router = useRouter()
+
+function updateUrlQuery(q, set, series) {
+  const newQuery = { ...route.query }
+  const qTrim = String(q || '').trim()
+  if (qTrim) newQuery.q = qTrim; else delete newQuery.q
+  if (set) newQuery.set = set; else delete newQuery.set
+  if (series) newQuery.series = series; else delete newQuery.series
+
+  // Avoid unnecessary navigations
+  const current = JSON.stringify(route.query)
+  const next = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
 
 async function loadMeta() {
   const res = await fetch('/api/collections/meta', { credentials: 'include' })
@@ -308,10 +377,20 @@ watch([searchTerm, selectedSet, selectedSeries], ([nameQ, setVal, seriesVal]) =>
   } else {
     exitSearchMode()
   }
+
+  // Sync URL query params to reflect current filters/search
+  updateUrlQuery(q, setVal, seriesVal)
 })
 
 onMounted(() => {
   loadMeta()
+  // Initialize fields from URL query
+  const q = String(route.query.q || '')
+  const set = String(route.query.set || '')
+  const series = String(route.query.series || '')
+  if (q) searchTerm.value = q
+  if (set) selectedSet.value = set
+  if (series) selectedSeries.value = series
   loadPage(1)
 })
 </script>
