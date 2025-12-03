@@ -35,6 +35,12 @@
         </button>
       </div>
       <div v-if="tab === 'ctoones'" class="mb-4">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search name or characters"
+          class="mb-2 w-full border rounded px-2 py-1"
+        />
         <select v-model="seriesFilter" class="mb-2 w-full border rounded px-2 py-1">
           <option value="">All Series</option>
           <option v-for="s in uniqueSeries" :key="s">{{ s }}</option>
@@ -43,18 +49,18 @@
           <option value="">All Rarities</option>
           <option v-for="r in uniqueRarities" :key="r">{{ r }}</option>
         </select>
-        <div class="mb-4 flex flex-wrap gap-2 overflow-y-auto h-[500px]">
+        <div class="mt-2 mb-4 flex flex-wrap items-start content-start gap-x-2 gap-y-1 overflow-y-auto h-[500px]">
           <div
             v-for="element in filteredCtoons"
             :key="element.id"
-            class="cursor-move flex items-start justify-center min-h-[6rem] w-[48%]"
+            class="cursor-move flex items-start justify-center w-[48%]"
             draggable="true"
             @dragstart="onDragStart(element, $event)"
           >
             <img
               :src="element.assetPath"
               :alt="element.name"
-              class="object-contain"
+              class="block max-w-full h-auto object-contain"
             />
           </div>
         </div>
@@ -169,6 +175,12 @@
           </button>
         </div>
         <div v-if="panelType === 'ctoones'" class="flex flex-col gap-2">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search name or characters"
+            class="mb-2 border rounded px-2 py-1"
+          />
           <select v-model="seriesFilter" class="mb-2 border rounded px-2 py-1">
             <option value="">All Series</option>
             <option v-for="s in uniqueSeries" :key="s">{{ s }}</option>
@@ -177,17 +189,17 @@
             <option value="">All Rarities</option>
             <option v-for="r in uniqueRarities" :key="r">{{ r }}</option>
           </select>
-          <div class="flex flex-wrap gap-2 max-h-[400px] overflow-y-auto">
+          <div class="flex flex-wrap items-start content-start gap-x-2 gap-y-1 max-h-[400px] overflow-y-auto">
             <div
               v-for="ctoon in filteredCtoons"
               :key="ctoon.id"
-              class="cursor-pointer flex items-center justify-center min-h-[6rem] w-[48%] border rounded p-1"
+              class="cursor-pointer flex items-center justify-center w-[48%] border rounded p-1"
               @click="selectCtoon(ctoon)"
             >
               <img
                 :src="ctoon.assetPath"
                 :alt="ctoon.name"
-                class="max-w-none object-contain"
+                class="block max-w-full h-auto object-contain"
               />
             </div>
           </div>
@@ -251,6 +263,7 @@ const { user } = useAuth()
 const tab = ref('ctoones')
 const seriesFilter = ref('')
 const rarityFilter = ref('')
+const searchQuery = ref('')
 
 // Instead of a single layout/background, store three zones
 const zones = ref([
@@ -314,14 +327,19 @@ const placedIds = computed(() =>
 )
 
 // Only show those cToons that the user hasn’t placed anywhere yet
-const filteredCtoons = computed(() =>
-  ctoons.value.filter(
-    (c) =>
-      (!seriesFilter.value || c.series === seriesFilter.value) &&
-      (!rarityFilter.value || c.rarity === rarityFilter.value) &&
-      !placedIds.value.has(c.id)
-  )
-)
+const filteredCtoons = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return ctoons.value.filter((c) => {
+    const matchesSeries = !seriesFilter.value || c.series === seriesFilter.value
+    const matchesRarity = !rarityFilter.value || c.rarity === rarityFilter.value
+    const matchesSearch =
+      !q ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (Array.isArray(c.characters) && c.characters.some((ch) => ch && ch.toLowerCase().includes(q)))
+    const notPlaced = !placedIds.value.has(c.id)
+    return matchesSeries && matchesRarity && matchesSearch && notPlaced
+  })
+})
 
 // ——— Zone paging ———
 function nextZone() {
@@ -392,6 +410,9 @@ async function onDrop(e) {
     id: draggingItem.value.id,
     name: draggingItem.value.name,
     assetPath: draggingItem.value.assetPath,
+    series: draggingItem.value.series,
+    rarity: draggingItem.value.rarity,
+    characters: Array.isArray(draggingItem.value.characters) ? draggingItem.value.characters : [],
     x,
     y,
     width: img.naturalWidth,
@@ -494,6 +515,7 @@ async function removeItem(idx) {
       assetPath: removed.assetPath,
       series: removed.series,
       rarity: removed.rarity,
+      characters: Array.isArray(removed.characters) ? removed.characters : [],
     })
   }
 }
@@ -553,6 +575,9 @@ async function selectCtoon(ctoon) {
     id: ctoon.id,
     name: ctoon.name,
     assetPath: ctoon.assetPath,
+    series: ctoon.series,
+    rarity: ctoon.rarity,
+    characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     x,
     y,
     width: img.naturalWidth,
@@ -661,4 +686,3 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 </style>
-
