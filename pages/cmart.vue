@@ -501,19 +501,42 @@
             <div
               v-for="(list, rarity) in groupedByRarity"
               :key="rarity"
-              class="mb-4 w-full"
+              class="mb-6 w-full"
             >
-              <h3 class="font-medium mb-1">{{ rarity }}</h3>
-              <ul class="text-sm pl-4 space-y-0.5">
-                <li
+              <h3 class="font-medium">{{ rarity }}</h3>
+              <p class="text-xs text-gray-600 mb-2">
+                Receive {{ rarityCountMap[rarity] || 0 }} cToon(s)
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div
                   v-for="item in list"
                   :key="item.ctoonId"
-                  class="flex justify-between"
+                  class="relative bg-white rounded-lg shadow p-3 flex flex-col items-center"
                 >
-                  <span>{{ item.name }}</span>
-                  <span class="text-gray-600">{{ item.weight }} %</span>
-                </li>
-              </ul>
+                  <!-- Owned / Un-owned badge -->
+                  <span
+                    v-if="originalOwnedSet.has(item.ctoonId)"
+                    class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                  >
+                    Owned
+                  </span>
+                  <span
+                    v-else
+                    class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+                  >
+                    Un-owned
+                  </span>
+
+                  <!-- cToon image -->
+                  <div class="w-full flex items-center justify-center mb-2 mt-6">
+                    <img :src="item.assetPath" class="max-w-full h-24 object-contain" />
+                  </div>
+
+                  <!-- cToon name -->
+                  <p class="text-sm font-medium text-center">{{ item.name }}</p>
+                  <p class="text-xs text-gray-600 text-center">{{ item.weight }}% chance</p>
+                </div>
+              </div>
             </div>
             <button
               class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
@@ -866,6 +889,16 @@ const groupedByRarity = computed(() => {
     ;(acc[o.rarity] = (acc[o.rarity] || [])).push(o)
     return acc
   }, {})
+})
+
+const rarityCountMap = computed(() => {
+  const map = {}
+  const details = packDetails.value
+  if (!details || !Array.isArray(details.rarityConfigs)) return map
+  for (const rc of details.rarityConfigs) {
+    map[rc.rarity] = rc.count
+  }
+  return map
 })
 
 function resetSequence() {
