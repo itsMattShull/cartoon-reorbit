@@ -183,7 +183,7 @@
               id="search"
               type="text"
               v-model="searchQuery"
-              placeholder="Type a name…"
+              placeholder="Type a name or character…"
               class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -687,6 +687,42 @@ const sortBy           = ref('releaseDateDesc')
 const currentPage      = ref(1)
 const itemsPerPage     = 50
 
+// ────────── ROUTE QUERY SYNC ───────────────
+const route  = useRoute()
+const router = useRouter()
+
+function normalizeListParam(v) {
+  if (Array.isArray(v)) return v.filter(Boolean)
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function updateUrlQueryFromFilters() {
+  const newQuery = { ...route.query }
+
+  const q = String(searchQuery.value || '').trim()
+  if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
+
+  if (selectedSeries.value.length) newQuery.series = selectedSeries.value
+  else delete newQuery.series
+
+  if (selectedRarities.value.length) newQuery.rarity = selectedRarities.value
+  else delete newQuery.rarity
+
+  if (ownedFilter.value && ownedFilter.value !== 'all') newQuery.owned = ownedFilter.value
+  else delete newQuery.owned
+
+  if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
+  else delete newQuery.sort
+
+  const current = JSON.stringify(route.query)
+  const next    = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
 // ────────── DERIVE UNIQUE FILTER OPTIONS ──────
 const uniqueSets = computed(() => {
   const sets = new Set()
@@ -715,8 +751,13 @@ const uniqueRarities = computed(() => {
 // ────────── FILTERED LIST ──────────────────────
 const filteredCtoons = computed(() => {
   return ctoons.value.filter(c => {
-    // 1) Search by name (case-insensitive)
-    const nameMatch = c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+    // 1) Search by name OR characters (case-insensitive)
+    const term = (searchQuery.value || '').toLowerCase().trim()
+    const nameMatch = term ? (c.name || '').toLowerCase().includes(term) : true
+    const charMatch = term
+      ? (Array.isArray(c.characters) && c.characters.some(ch => (ch || '').toLowerCase().includes(term)))
+      : true
+    const nameOrCharMatch = nameMatch || charMatch
 
     // 2) Filter by Set
     const setMatch = selectedSets.value.length === 0
@@ -741,7 +782,7 @@ const filteredCtoons = computed(() => {
       ownedMatch = !c.owned
     }
 
-    return nameMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
+    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
   })
 })
 
@@ -781,7 +822,9 @@ watch(
   [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, sortBy],
   () => {
     currentPage.value = 1
-  }
+    updateUrlQueryFromFilters()
+  },
+  { deep: true }
 )
 
 // Pagination helpers: scroll to top on page change
@@ -837,6 +880,26 @@ function resetSequence() {
 onMounted(async () => {
   await fetchSelf({ force: true })
 
+  // Initialize filters from URL query
+  const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set
+  const seriesParam = route.query.series
+  const rarityParam = route.query.rarity
+  const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+
+  if (qParam.trim()) searchQuery.value = qParam.trim()
+  const initSets     = normalizeListParam(setParam)
+  const initSeries   = normalizeListParam(seriesParam)
+  const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
+  if (initSeries.length)   selectedSeries.value = initSeries
+  if (initRarities.length) selectedRarities.value = initRarities
+  if (['all','owned','unowned'].includes(ownedParam)) ownedFilter.value = ownedParam
+
+  const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','series']
+  if (validSorts.includes(sortParam)) sortBy.value = sortParam
+
   // LOAD cToons
   try {
     const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
@@ -879,6 +942,9 @@ onMounted(async () => {
   _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
 
   loading.value = false
+
+  // Normalize URL to reflect any initialized values without adding history entries
+  updateUrlQueryFromFilters()
 })
 
 onUnmounted(() => {
