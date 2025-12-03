@@ -183,7 +183,7 @@
               id="search"
               type="text"
               v-model="searchQuery"
-              placeholder="Type a name…"
+              placeholder="Type a name or character…"
               class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -370,14 +370,14 @@
           <!-- PAGINATION -->
           <div class="mt-8 flex justify-center gap-4">
             <button
-              @click="currentPage--"
+              @click="prevPage()"
               :disabled="currentPage === 1"
               class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
             >
               Previous
             </button>
             <button
-              @click="currentPage++"
+              @click="nextPage()"
               :disabled="(currentPage * itemsPerPage) >= filteredAndSortedCtoons.length"
               class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
             >
@@ -395,7 +395,41 @@
             :key="ctoon.id"
             class="relative bg.white rounded-lg shadow p-4 flex flex-col items-center h-full"
           >
-            <!-- ... existing holiday card content ... -->
+            <span
+              v-if="ctoon.owned"
+              class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+            >Owned</span>
+            <span
+              v-else
+              class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+            >Un-owned</span>
+
+            <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
+            <div class="flex-grow flex items-center justify-center w-full mb-4">
+              <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+            </div>
+            <div class="mt-auto text-sm text-center">
+              <p>
+                <span class="capitalize">{{ ctoon.series }}</span> •
+                <span class="capitalize">{{ ctoon.rarity }}</span> •
+                <span class="capitalize">{{ ctoon.set }}</span>
+              </p>
+              <p>
+                Minted: {{ ctoon.minted }} /
+                {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+              </p>
+            </div>
+            <div class="mt-6 flex w-full space-x-2">
+              <button
+                @click="buyCtoon(ctoon)"
+                :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
+              >
+                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+                <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
+                <span v-else>Buy for {{ ctoon.price }} Pts</span>
+              </button>
+            </div>
           </div>
         </div>
         <div v-else class="text-gray-500">
@@ -405,7 +439,41 @@
 
       <!-- ─── PACKS TAB ─────────────────────────────── -->
       <div v-if="activeTab === 'Packs'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- ... existing packs content ... -->
+        <div
+          v-for="pack in packs"
+          :key="pack.id"
+          class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
+          @click="openPackModal(pack)"
+        >
+          <h2 class="text-xl font-semibold mb-2 text-center break-words">
+            {{ pack.name }}
+          </h2>
+          <div class="flex-grow flex items-center justify-center w-full mb-4">
+            <img :src="pack.imagePath" class="max-w-full h-auto" />
+          </div>
+          <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
+            <li
+              v-for="r in pack.rarityConfigs"
+              :key="r.rarity"
+              class="mt-2"
+            >
+              <strong>{{ r.rarity }}:</strong>
+              {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
+            </li>
+          </ul>
+          <button
+            @click.stop="buyPack(pack)"
+            :disabled="buyingPacks.has(pack.id)"
+            class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+          >
+          <span v-if="buyingPacks.has(pack.id)">
+            Purchasing…
+          </span>
+          <span v-else>
+            Buy Pack for {{ pack.price }} Pts
+          </span>
+          </button>
+        </div>
       </div>
 
       <!-- PACK OVERLAY & MODAL -->
@@ -414,7 +482,123 @@
         v-if="overlayVisible"
         class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/70 overflow-y-auto p-4"
       >
-        <!-- existing modal -->
+        <div
+          class="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 flex flex-col items-center"
+        >
+          <button
+            v-if="openingStep === 'preview' || revealComplete"
+            class="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            @click="closeOverlay"
+          >
+            ✕
+          </button>
+
+          <!-- PREVIEW MODE -->
+          <template v-if="openingStep === 'preview'">
+            <h2 class="text-2xl font-semibold mb-6 text-center">
+              {{ packDetails?.name }}
+            </h2>
+            <div
+              v-for="(list, rarity) in groupedByRarity"
+              :key="rarity"
+              class="mb-6 w-full"
+            >
+              <h3 class="font-medium">{{ rarity }}</h3>
+              <p class="text-xs text-gray-600 mb-2">
+                {{ (rarityProbMap[rarity] !== undefined ? rarityProbMap[rarity] : 0) }}% chance to receive
+                {{ rarityCountMap[rarity] || 0 }} cToon(s)
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div
+                  v-for="item in list"
+                  :key="item.ctoonId"
+                  class="relative bg-white rounded-lg shadow p-3 flex flex-col items-center"
+                >
+                  <!-- Owned / Un-owned badge -->
+                  <span
+                    v-if="originalOwnedSet.has(item.ctoonId)"
+                    class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                  >
+                    Owned
+                  </span>
+                  <span
+                    v-else
+                    class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+                  >
+                    Un-owned
+                  </span>
+
+                  <!-- cToon image -->
+                  <div class="w-full flex items-center justify-center mb-2 mt-6">
+                    <img :src="item.assetPath" class="max-w-full h-24 object-contain" />
+                  </div>
+
+                  <!-- cToon name -->
+                  <p class="text-sm font-medium text-center">{{ item.name }}</p>
+                  <p class="text-xs text-gray-600 text-center">{{ item.weight }}% chance</p>
+                </div>
+              </div>
+            </div>
+            <button
+              class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
+              @click.stop="buyPack(packDetails)"
+            >
+              Buy Pack for {{ packDetails?.price }} Pts
+            </button>
+          </template>
+
+          <!-- PACK IMAGE BEFORE GLOW -->
+          <img
+            v-if="openingStep === 'pack'"
+            :src="packDetails?.imagePath"
+            class="max-w-full max-h-[70vh] object-contain"
+          />
+
+          <!-- REVEAL MODE -->
+          <div
+            v-if="openingStep === 'reveal'"
+            class="grid grid-cols-2 sm:grid-cols-3 gap-6"
+          >
+            <div
+              v-for="item in packContents"
+              :key="item.id"
+              class="relative flex flex-col items-center p-4 border rounded-lg bg-white"
+              :class="{ 'card-glow': !item.inCmart }"
+            >
+              <!-- New! badge -->
+              <span
+                v-if="!originalOwnedSet.has(item.id)"
+                class="absolute top-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full"
+              >
+                New!
+              </span>
+
+              <!-- Image -->
+              <img
+                :src="item.assetPath"
+                class="w-24 h-24 object-contain mb-2 mt-8"
+              />
+
+              <!-- Name -->
+              <p class="font-semibold text-sm text-center">{{ item.name }}</p>
+
+              <!-- Rarity -->
+              <p class="text-xs text-gray-600 capitalize">{{ item.rarity }}</p>
+
+              <!-- Mint # -->
+              <p class="text-xs text-gray-500">Mint #{{ item.mintNumber }}</p>
+            </div>
+          </div>
+
+          <!-- CLOSE BUTTON AFTER REVEAL -->
+          <button
+            v-if="revealComplete"
+            class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
+            @click="closeOverlay"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       <div v-if="showGlow" :class="['glow', glowStage]" />
@@ -433,7 +617,7 @@ definePageMeta({
 })
 
 // ────────── Imports ─────────────────────────────
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -527,6 +711,42 @@ const sortBy           = ref('releaseDateDesc')
 const currentPage      = ref(1)
 const itemsPerPage     = 50
 
+// ────────── ROUTE QUERY SYNC ───────────────
+const route  = useRoute()
+const router = useRouter()
+
+function normalizeListParam(v) {
+  if (Array.isArray(v)) return v.filter(Boolean)
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function updateUrlQueryFromFilters() {
+  const newQuery = { ...route.query }
+
+  const q = String(searchQuery.value || '').trim()
+  if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
+
+  if (selectedSeries.value.length) newQuery.series = selectedSeries.value
+  else delete newQuery.series
+
+  if (selectedRarities.value.length) newQuery.rarity = selectedRarities.value
+  else delete newQuery.rarity
+
+  if (ownedFilter.value && ownedFilter.value !== 'all') newQuery.owned = ownedFilter.value
+  else delete newQuery.owned
+
+  if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
+  else delete newQuery.sort
+
+  const current = JSON.stringify(route.query)
+  const next    = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
 // ────────── DERIVE UNIQUE FILTER OPTIONS ──────
 const uniqueSets = computed(() => {
   const sets = new Set()
@@ -555,8 +775,13 @@ const uniqueRarities = computed(() => {
 // ────────── FILTERED LIST ──────────────────────
 const filteredCtoons = computed(() => {
   return ctoons.value.filter(c => {
-    // 1) Search by name (case-insensitive)
-    const nameMatch = c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+    // 1) Search by name OR characters (case-insensitive)
+    const term = (searchQuery.value || '').toLowerCase().trim()
+    const nameMatch = term ? (c.name || '').toLowerCase().includes(term) : true
+    const charMatch = term
+      ? (Array.isArray(c.characters) && c.characters.some(ch => (ch || '').toLowerCase().includes(term)))
+      : true
+    const nameOrCharMatch = nameMatch || charMatch
 
     // 2) Filter by Set
     const setMatch = selectedSets.value.length === 0
@@ -581,7 +806,7 @@ const filteredCtoons = computed(() => {
       ownedMatch = !c.owned
     }
 
-    return nameMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
+    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
   })
 })
 
@@ -621,8 +846,33 @@ watch(
   [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, sortBy],
   () => {
     currentPage.value = 1
-  }
+    updateUrlQueryFromFilters()
+  },
+  { deep: true }
 )
+
+// Pagination helpers: scroll to top on page change
+function scrollToTop () {
+  if (typeof window === 'undefined') return
+  nextTick().then(() => {
+    requestAnimationFrame(() => {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }) } catch { window.scrollTo(0, 0) }
+      window.dispatchEvent(new Event('scroll'))
+    })
+  })
+}
+function prevPage () {
+  if (currentPage.value > 1) {
+    currentPage.value--
+    scrollToTop()
+  }
+}
+function nextPage () {
+  if ((currentPage.value * itemsPerPage) < filteredAndSortedCtoons.value.length) {
+    currentPage.value++
+    scrollToTop()
+  }
+}
 
 // ────────── Overlay / Glow State ───────────────
 const overlayVisible  = ref(false)
@@ -642,6 +892,26 @@ const groupedByRarity = computed(() => {
   }, {})
 })
 
+const rarityCountMap = computed(() => {
+  const map = {}
+  const details = packDetails.value
+  if (!details || !Array.isArray(details.rarityConfigs)) return map
+  for (const rc of details.rarityConfigs) {
+    map[rc.rarity] = rc.count
+  }
+  return map
+})
+
+const rarityProbMap = computed(() => {
+  const map = {}
+  const details = packDetails.value
+  if (!details || !Array.isArray(details.rarityConfigs)) return map
+  for (const rc of details.rarityConfigs) {
+    map[rc.rarity] = rc.probabilityPercent
+  }
+  return map
+})
+
 function resetSequence() {
   openingStep.value    = 'preview'
   glowStage.value      = 'hidden'
@@ -653,6 +923,26 @@ function resetSequence() {
 // ────────── ON MOUNT: FETCH DATA ──────────────
 onMounted(async () => {
   await fetchSelf({ force: true })
+
+  // Initialize filters from URL query
+  const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set
+  const seriesParam = route.query.series
+  const rarityParam = route.query.rarity
+  const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+
+  if (qParam.trim()) searchQuery.value = qParam.trim()
+  const initSets     = normalizeListParam(setParam)
+  const initSeries   = normalizeListParam(seriesParam)
+  const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
+  if (initSeries.length)   selectedSeries.value = initSeries
+  if (initRarities.length) selectedRarities.value = initRarities
+  if (['all','owned','unowned'].includes(ownedParam)) ownedFilter.value = ownedParam
+
+  const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','series']
+  if (validSorts.includes(sortParam)) sortBy.value = sortParam
 
   // LOAD cToons
   try {
@@ -696,6 +986,9 @@ onMounted(async () => {
   _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
 
   loading.value = false
+
+  // Normalize URL to reflect any initialized values without adding history entries
+  updateUrlQueryFromFilters()
 })
 
 onUnmounted(() => {

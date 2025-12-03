@@ -28,7 +28,8 @@ export default defineEventHandler(async (event) => {
     set: uc.ctoon.set,
     isFirstEdition: uc.isFirstEdition,
     releaseDate: uc.ctoon.releaseDate,
-    assetPath: uc.ctoon.assetPath
+    assetPath: uc.ctoon.assetPath,
+    characters: Array.isArray(uc.ctoon.characters) ? uc.ctoon.characters : []
   }))
 
   // 2) List all background filenames

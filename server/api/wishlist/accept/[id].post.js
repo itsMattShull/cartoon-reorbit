@@ -102,6 +102,15 @@ export default defineEventHandler(async (event) => {
       data: { userId: initiatorId, ctoonId: transferred.ctoonId, userCtoonId: transferred.id, mintNumber: transferred.mintNumber }
     })
 
+    // record the traded cToon on the offer as REQUESTED (initiator requested it)
+    await tx.tradeOfferCtoon.create({
+      data: {
+        tradeOfferId: offer.id,
+        userCtoonId: transferred.id,
+        role: 'REQUESTED'
+      }
+    })
+
     // remove wishlist item
     await tx.wishlistItem.delete({ where: { id: wishlistItemId } })
 

@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
           rarity: true,
           releaseDate: true,
           quantity: true, // total supply (or null for unlimited)
+          characters: true,
         },
       },
     },
@@ -68,6 +69,7 @@ export default defineEventHandler(async (event) => {
         releaseDate: uc.ctoon.releaseDate,
         quantity: uc.ctoon.quantity,
         isFirstEdition: uc.isFirstEdition,
+        characters: uc.ctoon.characters,
       },
     ])
   )
@@ -119,6 +121,7 @@ export default defineEventHandler(async (event) => {
         releaseDate: rest.releaseDate,
         quantity: rest.quantity,
         isFirstEdition: rest.isFirstEdition,
+        characters: rest.characters,
       })
     }
 

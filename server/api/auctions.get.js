@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
         select: {
           ctoonId: true,
           mintNumber: true,
-          ctoon: { select: { name: true, series: true, rarity: true, assetPath: true } }
+          ctoon: { select: { name: true, series: true, rarity: true, assetPath: true, characters: true } }
         }
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 }
@@ -52,13 +52,21 @@ export default defineEventHandler(async (event) => {
   const ownedSet = new Set(owned.map(u => u.ctoonId))
   const holidaySet = new Set(holidayItems.map(h => h.ctoonId))
 
-  // 4) Shape for client
-  return auctions.map(a => ({
+  // 4) Ensure featured items are first (defensive in case DB ordering changes)
+  const ordered = auctions.slice().sort((a, b) => {
+    const fb = (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0)
+    if (fb !== 0) return fb
+    return new Date(a.endAt) - new Date(b.endAt)
+  })
+
+  // 5) Shape for client
+  return ordered.map(a => ({
     id:           a.id,
     isFeatured:   a.isFeatured,
     name:         a.userCtoon.ctoon.name,
     series:       a.userCtoon.ctoon.series,
     rarity:       a.userCtoon.ctoon.rarity,
+    characters:   a.userCtoon.ctoon.characters || [],
     mintNumber:   a.userCtoon.mintNumber,
     assetPath:    a.userCtoon.ctoon.assetPath,
     endAt:        a.endAt.toISOString(),

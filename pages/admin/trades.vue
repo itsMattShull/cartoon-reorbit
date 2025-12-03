@@ -2,7 +2,7 @@
   <Nav />
   <div class="p-4 mt-16 md:mt-20">
     <!-- Filter Dropdowns -->
-    <div class="mb-4 flex flex-wrap items-center space-x-4">
+    <div class="mt-8 mb-4 flex flex-wrap items-center space-x-4">
       <!-- User Filter -->
       <div class="flex items-center">
         <label for="userFilter" class="mr-2 font-medium">User:</label>
@@ -129,13 +129,13 @@
     </div>
 
     <!-- Trade Details Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-auto">
-      <div class="bg-white rounded shadow-lg w-full max-w-2xl relative max-h-[80vh]">
-        <div class="sticky top-0 z-20 bg-white flex justify-between items-center p-4 border-b">
+    <div v-if="showModal" class="fixed mt-16 inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-auto">
+      <div class="bg-white rounded shadow-lg w-full max-w-2xl relative max-h-[80vh] flex flex-col">
+        <div class="sticky top-0 z-20 bg-white flex justify-between items-center p-4 border-b shrink-0">
           <h2 class="text-xl font-semibold">Trade Details</h2>
           <button @click="closeModal" class="text-gray-500 hover:text-gray-800">×</button>
         </div>
-        <div class="p-6 overflow-y-auto" style="max-height: calc(80vh - 64px);">
+        <div class="p-6 overflow-y-auto flex-1 min-h-0">
           <div class="mb-4 text-sm text-gray-700 space-y-1">
             <div><span class="font-medium">Created (CST):</span> {{ formatCST(selectedTrade.createdAt) }}</div>
             <div>

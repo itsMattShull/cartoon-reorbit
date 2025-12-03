@@ -14,7 +14,22 @@
     <!-- Modal content -->
     <div class="relative bg-white p-6 rounded-lg shadow-lg z-10 w-full max-w-lg">
       <h3 class="text-lg font-semibold mb-4">Send {{ userCtoon.name }} to Auction</h3>
-      <div class="space-y-4">
+      <div class="space-y-6">
+        <!-- Recent Auctions (last 3 closed for this cToon) -->
+        <div v-if="recentAuctions.length" class="mt-2">
+          <h4 class="text-md font-semibold mb-2">Recent Auctions</h4>
+          <ul class="space-y-1">
+            <li
+              v-for="(ra, idx) in recentAuctions"
+              :key="idx"
+              class="text-sm text-gray-700 flex items-center justify-between"
+            >
+              <span>{{ formatDate(ra.endedAt) }}</span>
+              <span class="font-medium">{{ ra.soldFor }} pts</span>
+            </li>
+          </ul>
+        </div>
+        
         <div>
           <label class="block mb-1 font-medium">Initial Bet</label>
           <input
@@ -28,6 +43,7 @@
         <p v-if="initialBet < minInitialBet" class="text-sm text-red-500 mt-1">
           Initial bet must be at least {{ minInitialBet }} pts.
         </p>
+
         <!-- Duration -->
         <div>
           <p class="block mb-1 font-medium">Duration</p>
@@ -114,6 +130,7 @@ const auctionSent  = ref(false)
 const durationPreset = ref('days') // '3m' | '4h' | '12h' | 'days'
 const toastMessage = ref('')
 const toastType    = ref('error')
+const recentAuctions = ref([])
 
 const disabled = computed(() =>
   !props.isOwner || props.hasActiveAuction || auctionSent.value
@@ -146,6 +163,8 @@ function openModal() {
   timeframe.value = 1
   durationPreset.value = 'days' // default to days
   showModal.value = true
+  // Load recent auctions for this cToon (last 3 closed)
+  loadRecentAuctions()
 }
 
 function closeModal() {
@@ -219,6 +238,24 @@ async function instaBid() {
     showToast(error.data?.message || 'Failed to create auction.', 'error')
   } finally {
     sending.value = false
+  }
+}
+
+async function loadRecentAuctions() {
+  try {
+    const res = await $fetch(`/api/ctoon/${props.userCtoon.ctoonId}/getRecentAuctions`)
+    recentAuctions.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    recentAuctions.value = []
+  }
+}
+
+function formatDate(d) {
+  try {
+    const dt = new Date(d)
+    return dt.toLocaleDateString()
+  } catch {
+    return ''
   }
 }
 </script>

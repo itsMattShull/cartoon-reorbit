@@ -269,7 +269,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageUser === 1"
-              @click="pageUser--"
+              @click="prevUserPage()"
             >
               Previous Page
             </button>
@@ -277,7 +277,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageUser === totalPagesUser"
-              @click="pageUser++"
+              @click="nextUserPage()"
             >
               Next Page
             </button>
@@ -344,7 +344,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageWishlist === 1"
-              @click="pageWishlist--"
+              @click="prevWishlistPage()"
             >
               Previous Page
             </button>
@@ -352,7 +352,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageWishlist === totalPagesWishlist"
-              @click="pageWishlist++"
+              @click="nextWishlistPage()"
             >
               Next Page
             </button>
@@ -434,7 +434,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === 1"
-              @click="pageAll--"
+              @click="prevAllPage()"
             >
               Previous Page
             </button>
@@ -442,7 +442,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === totalPagesAll"
-              @click="pageAll++"
+              @click="nextAllPage()"
             >
               Next Page
             </button>
@@ -524,7 +524,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === 1"
-              @click="pageAll--"
+              @click="prevAllPage()"
             >
               Previous Page
             </button>
@@ -532,7 +532,7 @@
             <button
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageAll === totalPagesAll"
-              @click="pageAll++"
+              @click="nextAllPage()"
             >
               Next Page
             </button>
@@ -584,7 +584,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
@@ -630,6 +630,42 @@ const ownersPanelVisible   = ref(false)
 const ownersList           = ref([])
 const ownersLoading        = ref(false)
 const currentOwnersCtoon   = ref(null)
+
+// ─── ROUTE QUERY SYNC ─────────────────────────────────────────────────────────
+const route  = useRoute()
+const router = useRouter()
+
+function normalizeListParam(v) {
+  if (Array.isArray(v)) return v.filter(Boolean)
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function updateUrlQueryFromFilters() {
+  const newQuery = { ...route.query }
+
+  const q = String(searchQuery.value || '').trim()
+  if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
+
+  if (selectedSeries.value.length) newQuery.series = selectedSeries.value
+  else delete newQuery.series
+
+  if (selectedRarities.value.length) newQuery.rarity = selectedRarities.value
+  else delete newQuery.rarity
+
+  if (selectedOwned.value && selectedOwned.value !== 'all') newQuery.owned = selectedOwned.value
+  else delete newQuery.owned
+
+  if (sortBy.value && sortBy.value !== 'name') newQuery.sort = sortBy.value
+  else delete newQuery.sort
+
+  const current = JSON.stringify(route.query)
+  const next    = JSON.stringify(newQuery)
+  if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
 
 // collections.vue <script setup> — add helpers near top of sort code
 function sortCmp(a, b, { useMintTie = false } = {}) {
@@ -846,19 +882,77 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
-})
+  updateUrlQueryFromFilters()
+}, { deep: true })
 watch(sortBy, () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
+  updateUrlQueryFromFilters()
 })
 
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await fetchSelf()
   filterMeta.value = await $fetch('/api/collections/meta')
+
+  // Initialize from URL query (supports repeated params or comma-separated)
+  const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set ?? route.query.sets
+  const seriesParam = route.query.series
+  const rarityParam = route.query.rarity
+  const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+
+  if (qParam.trim()) searchQuery.value = qParam.trim()
+
+  const initSets     = normalizeListParam(setParam)
+  const initSeries   = normalizeListParam(seriesParam)
+  const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
+  if (initSeries.length)   selectedSeries.value = initSeries
+  if (initRarities.length) selectedRarities.value = initRarities
+
+  if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
+
+  const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','rarity','series','set','name']
+  if (validSorts.includes(sortParam)) sortBy.value = sortParam
+
+  // Normalize URL now to reflect initialized values
+  updateUrlQueryFromFilters()
+
   loadUser()
 })
+
+// Scroll helpers for pagination
+function scrollToTop () {
+  if (typeof window === 'undefined') return
+  // Wait for DOM update, then scroll immediately and fire a scroll event
+  nextTick().then(() => {
+    requestAnimationFrame(() => {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }) } catch { window.scrollTo(0, 0) }
+      window.dispatchEvent(new Event('scroll'))
+    })
+  })
+}
+function prevUserPage () {
+  if (pageUser.value > 1) { pageUser.value--; scrollToTop() }
+}
+function nextUserPage () {
+  if (pageUser.value < totalPagesUser.value) { pageUser.value++; scrollToTop() }
+}
+function prevWishlistPage () {
+  if (pageWishlist.value > 1) { pageWishlist.value--; scrollToTop() }
+}
+function nextWishlistPage () {
+  if (pageWishlist.value < totalPagesWishlist.value) { pageWishlist.value++; scrollToTop() }
+}
+function prevAllPage () {
+  if (pageAll.value > 1) { pageAll.value--; scrollToTop() }
+}
+function nextAllPage () {
+  if (pageAll.value < totalPagesAll.value) { pageAll.value++; scrollToTop() }
+}
 </script>
 
 <style scoped>

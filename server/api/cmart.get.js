@@ -9,7 +9,20 @@ export default defineEventHandler(async () => {
       inCmart: true,
       releaseDate: { lte: twoWeeksAhead }
     },
-    orderBy: { releaseDate: 'desc' }
+    orderBy: { releaseDate: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      set: true,
+      series: true,
+      rarity: true,
+      assetPath: true,
+      price: true,
+      releaseDate: true,
+      quantity: true,
+      totalMinted: true,
+      characters: true,
+    }
   })
 
   return ctoons
