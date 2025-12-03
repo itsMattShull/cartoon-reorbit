@@ -696,7 +696,9 @@ import Nav from '@/components/Nav.vue'
 
 definePageMeta({
   middleware: 'auth',
-  layout: 'default'
+  layout: 'default',
+  // Force a fresh instance per username to avoid stale content flicker
+  key: route => route.params.username
 })
 
 function bgUrl(v) {
@@ -1040,32 +1042,47 @@ function sendMessage() {
 
 // ——— Per‐user cZone navigation (Previous/Next/Random viewer) ———
 async function goToPreviousUser() {
+  // Pre-toggle skeleton to avoid showing stale content
+  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/previous`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
+    } else {
+      loading.value = false
     }
   } catch (err) {
+    loading.value = false
     console.error('Failed to fetch previous user:', err)
   }
 }
 async function goToNextUser() {
+  // Pre-toggle skeleton to avoid showing stale content
+  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/next`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
+    } else {
+      loading.value = false
     }
   } catch (err) {
+    loading.value = false
     console.error('Failed to fetch next user:', err)
   }
 }
 async function goToRandomUser() {
+  // Pre-toggle skeleton to avoid showing stale content
+  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/random`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
+    } else {
+      loading.value = false
     }
   } catch (err) {
+    loading.value = false
     console.error('Failed to fetch random user:', err)
   }
 }
@@ -1298,51 +1315,8 @@ onBeforeUnmount(() => {
   document.body.classList.remove('booster-bg')
 })
 
-// Watch for route changes when navigating to a different cZone
-watch(
-  () => route.params.username,
-  async (newUsername, oldUsername) => {
-    if (socket && oldUsername) {
-      socket.emit('leave-zone', { zone: oldUsername })
-    }
-    username.value = newUsername
-    loading.value = true
-
-    try {
-      const res = await $fetch(`/api/czone/${newUsername}`)
-      ownerName.value = res.ownerName
-      ownerAvatar.value = res.avatar || '/avatars/default.png'
-      ownerId.value = res.ownerId
-
-      if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
-        zones.value = res.cZone.zones.map(z => ({
-          background: typeof z.background === 'string' ? z.background : '',
-          toons: Array.isArray(z.toons) ? z.toons : []
-        }))
-      } else {
-        zones.value = [
-          { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
-          { background: '', toons: [] },
-          { background: '', toons: [] }
-        ]
-      }
-
-      if (socket && socket.connected) {
-        await nextTick()
-        socket.emit('join-zone', { zone: newUsername })
-      }
-    } catch (err) {
-      console.error('Failed to fetch cZone on route change:', err)
-      zones.value = [
-        { background: '', toons: [] },
-        { background: '', toons: [] },
-        { background: '', toons: [] }
-      ]
-    } finally {
-      loading.value = false
-    }
-  }
-)
+// With definePageMeta key forcing remount per username, the route-change
+// watcher is no longer needed. onMounted/onBeforeUnmount handle lifecycle.
 </script>
 
 <style>
@@ -1460,4 +1434,3 @@ watch(
     }
 }
 </style>
-
