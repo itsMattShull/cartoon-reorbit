@@ -431,6 +431,9 @@ definePageMeta({
   layout: 'default'
 })
 
+// ——— Loading indicator ———
+const loading = ref(true)
+
 function bgUrl(v) {
   if (!v) return ''
   const s = String(v)
@@ -479,9 +482,6 @@ const route = useRoute()
 const router = useRouter()
 const username = ref(route.params.username)
 const { user, fetchSelf } = useAuth()
-
-// ——— Loading indicator ———
-const loading = ref(true)
 
 // ——— Owner & chat state ———
 const ownerName = ref(username.value)
