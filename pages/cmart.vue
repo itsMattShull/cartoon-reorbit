@@ -395,7 +395,41 @@
             :key="ctoon.id"
             class="relative bg.white rounded-lg shadow p-4 flex flex-col items-center h-full"
           >
-            <!-- ... existing holiday card content ... -->
+            <span
+              v-if="ctoon.owned"
+              class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+            >Owned</span>
+            <span
+              v-else
+              class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+            >Un-owned</span>
+
+            <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
+            <div class="flex-grow flex items-center justify-center w-full mb-4">
+              <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+            </div>
+            <div class="mt-auto text-sm text-center">
+              <p>
+                <span class="capitalize">{{ ctoon.series }}</span> •
+                <span class="capitalize">{{ ctoon.rarity }}</span> •
+                <span class="capitalize">{{ ctoon.set }}</span>
+              </p>
+              <p>
+                Minted: {{ ctoon.minted }} /
+                {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+              </p>
+            </div>
+            <div class="mt-6 flex w-full space-x-2">
+              <button
+                @click="buyCtoon(ctoon)"
+                :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
+              >
+                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+                <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
+                <span v-else>Buy for {{ ctoon.price }} Pts</span>
+              </button>
+            </div>
           </div>
         </div>
         <div v-else class="text-gray-500">
@@ -405,7 +439,41 @@
 
       <!-- ─── PACKS TAB ─────────────────────────────── -->
       <div v-if="activeTab === 'Packs'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- ... existing packs content ... -->
+        <div
+          v-for="pack in packs"
+          :key="pack.id"
+          class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
+          @click="openPackModal(pack)"
+        >
+          <h2 class="text-xl font-semibold mb-2 text-center break-words">
+            {{ pack.name }}
+          </h2>
+          <div class="flex-grow flex items-center justify-center w-full mb-4">
+            <img :src="pack.imagePath" class="max-w-full h-auto" />
+          </div>
+          <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
+            <li
+              v-for="r in pack.rarityConfigs"
+              :key="r.rarity"
+              class="mt-2"
+            >
+              <strong>{{ r.rarity }}:</strong>
+              {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
+            </li>
+          </ul>
+          <button
+            @click.stop="buyPack(pack)"
+            :disabled="buyingPacks.has(pack.id)"
+            class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+          >
+          <span v-if="buyingPacks.has(pack.id)">
+            Purchasing…
+          </span>
+          <span v-else>
+            Buy Pack for {{ pack.price }} Pts
+          </span>
+          </button>
+        </div>
       </div>
 
       <!-- PACK OVERLAY & MODAL -->
@@ -414,7 +482,99 @@
         v-if="overlayVisible"
         class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/70 overflow-y-auto p-4"
       >
-        <!-- existing modal -->
+        <div
+          class="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 flex flex-col items-center"
+        >
+          <button
+            v-if="openingStep === 'preview' || revealComplete"
+            class="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            @click="closeOverlay"
+          >
+            ✕
+          </button>
+
+          <!-- PREVIEW MODE -->
+          <template v-if="openingStep === 'preview'">
+            <h2 class="text-2xl font-semibold mb-6 text-center">
+              {{ packDetails?.name }}
+            </h2>
+            <div
+              v-for="(list, rarity) in groupedByRarity"
+              :key="rarity"
+              class="mb-4 w-full"
+            >
+              <h3 class="font-medium mb-1">{{ rarity }}</h3>
+              <ul class="text-sm pl-4 space-y-0.5">
+                <li
+                  v-for="item in list"
+                  :key="item.ctoonId"
+                  class="flex justify-between"
+                >
+                  <span>{{ item.name }}</span>
+                  <span class="text-gray-600">{{ item.weight }} %</span>
+                </li>
+              </ul>
+            </div>
+            <button
+              class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
+              @click.stop="buyPack(packDetails)"
+            >
+              Buy Pack for {{ packDetails?.price }} Pts
+            </button>
+          </template>
+
+          <!-- PACK IMAGE BEFORE GLOW -->
+          <img
+            v-if="openingStep === 'pack'"
+            :src="packDetails?.imagePath"
+            class="max-w-full max-h-[70vh] object-contain"
+          />
+
+          <!-- REVEAL MODE -->
+          <div
+            v-if="openingStep === 'reveal'"
+            class="grid grid-cols-2 sm:grid-cols-3 gap-6"
+          >
+            <div
+              v-for="item in packContents"
+              :key="item.id"
+              class="relative flex flex-col items-center p-4 border rounded-lg bg-white"
+              :class="{ 'card-glow': !item.inCmart }"
+            >
+              <!-- New! badge -->
+              <span
+                v-if="!originalOwnedSet.has(item.id)"
+                class="absolute top-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full"
+              >
+                New!
+              </span>
+
+              <!-- Image -->
+              <img
+                :src="item.assetPath"
+                class="w-24 h-24 object-contain mb-2 mt-8"
+              />
+
+              <!-- Name -->
+              <p class="font-semibold text-sm text-center">{{ item.name }}</p>
+
+              <!-- Rarity -->
+              <p class="text-xs text-gray-600 capitalize">{{ item.rarity }}</p>
+
+              <!-- Mint # -->
+              <p class="text-xs text-gray-500">Mint #{{ item.mintNumber }}</p>
+            </div>
+          </div>
+
+          <!-- CLOSE BUTTON AFTER REVEAL -->
+          <button
+            v-if="revealComplete"
+            class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
+            @click="closeOverlay"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       <div v-if="showGlow" :class="['glow', glowStage]" />
