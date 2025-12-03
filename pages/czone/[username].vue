@@ -414,7 +414,275 @@
     </div>
   </div>
 
-  <!-- (Rest of your template: Sidebar, Modals, Toast, etc.) -->
+  <!-- Overlay for Sidebar -->
+  <transition name="fade">
+    <div
+      v-if="showSidebar"
+      class="fixed inset-0 bg-black bg-opacity-50 z-40"
+      @click="showSidebar = false"
+    ></div>
+  </transition>
+
+  <!-- Sidebar with cToon Details -->
+  <transition name="slide-panel">
+    <div
+      v-if="showSidebar"
+      class="fixed top-0 right-0 h-screen w-80 bg-white shadow-lg border-l p-4 overflow-y-auto z-50"
+    >
+      <button
+        class="absolute top-2 right-2 text-gray-500 hover:text-black"
+        @click="showSidebar = false"
+      >
+        ✖
+      </button>
+      <div v-if="selectedCtoon">
+        <img
+          :src="selectedCtoon.assetPath"
+          class="max-w-full mb-4 mx-auto"
+          :alt="selectedCtoon.name"
+        />
+        <h3 class="text-xl font-bold mb-2">{{ selectedCtoon.name }}</h3>
+        <p><strong>Series:</strong> {{ selectedCtoon.series }}</p>
+        <p v-if="selectedCtoon.set"><strong>Set:</strong> {{ selectedCtoon.set }}</p>
+        <p>
+          <strong>Rarity:</strong>
+          <span class="capitalize">{{ selectedCtoon.rarity }}</span>
+        </p>
+        <p v-if="!selectedIsHolidayItem">
+          <strong>Mint #:</strong>
+          <span v-if="selectedCtoon.quantity === null">
+            {{ selectedCtoon.mintNumber }} of Unlimited
+          </span>
+          <span
+            v-else-if="
+              selectedCtoon.mintNumber !== null &&
+              selectedCtoon.quantity !== null
+            "
+          >
+            {{ selectedCtoon.mintNumber }} of {{ selectedCtoon.quantity }}
+          </span>
+          <span v-else>Unknown</span>
+        </p>
+        <p>
+          <strong>Edition:</strong>
+          {{ selectedCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+        </p>
+        <p v-if="selectedCtoon.releaseDate">
+          <strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}
+        </p>
+        <div class="mt-4">
+          <AddToWishlist :ctoon-id="selectedCtoon.ctoonId" />
+        </div>
+
+        <!-- ───── Holiday Reveal CTA (owner-only) ───── -->
+        <div v-if="canSeeHolidayReveal" class="mt-4">
+          <button
+            v-if="canOpenNow"
+            @click="openHolidayCtoon()"
+            :disabled="openingHoliday"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
+          >
+            {{ openingHoliday ? 'Opening…' : 'Open cToon' }}
+          </button>
+
+          <div v-else class="text-xs text-gray-600 text-center">
+            Reveal available in:
+            <span class="font-semibold">{{ revealCountdown }}</span>
+          </div>
+        </div>
+        <!-- ─────────────────────────────────────────── -->
+      </div>
+    </div>
+  </transition>
+  <!-- Wishlist modal -->
+  <transition name="fade">
+    <div
+      v-if="wishlistModalVisible"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeWishlist"
+        >✕</button>
+        <h2 class="text-xl font-semibold mb-4">🎁 {{ ownerName }}’s Wishlist</h2>
+
+        <div v-if="isLoadingWishlist" class="text-center py-10">
+          Loading…
+        </div>
+        <div v-else-if="wishlistCtoons.length === 0" class="text-center py-10">
+          No cToons on their wishlist.
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+          <div
+            v-for="item in wishlistCtoons"
+            :key="item.ctoon.id"
+            class="flex flex-col items-center border rounded p-2"
+          >
+            <img :src="item.ctoon.assetPath" class="w-20 h-20 object-contain mb-2" />
+            <p class="text-sm text-center">{{ item.ctoon.name }}</p>
+            <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
+
+            <button
+              class="mt-2 w-full px-3 py-1 rounded text-white text-sm"
+              :class="item.hasEnough ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
+              :disabled="!item.hasEnough || isProcessingWishlistTrade"
+              @click="onClickWishlistTrade(item)"
+            >
+              Trade for {{ item.offeredPoints }} points
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+  <!-- Collection & Trade Modal -->
+  <transition name="fade">
+    <div
+      v-if="collectionModalVisible"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 p-4"
+    >
+      <div
+        class="relative bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 flex flex-col max-h-[80vh]"
+      >
+        <!-- Close button -->
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeCollection"
+        >
+          ✕
+        </button>
+
+        <!-- Header -->
+        <h2 class="text-xl font-semibold mb-4">
+          {{ tradeStep === 1 ? `${ownerName}’s Collection` : 'Your Collection' }}
+        </h2>
+
+        <!-- ─── Scrollable content ─── -->
+        <div class="flex-1 overflow-y-auto">
+          <!-- STEP 1: Select target’s cToons -->
+          <div v-if="tradeStep === 1">
+            <div v-if="isLoadingCollection" class="text-center py-10">Loading…</div>
+            <div v-else-if="collectionCtoons.length === 0" class="text-center py-10">
+              No cToons in their collection.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div
+                v-for="c in sortedCollectionCtoons"
+                :key="c.id"
+                @click="selectTargetCtoon(c)"
+                class="relative flex flex-col items-center p-2 cursor-pointer border rounded hover:shadow"
+                :class="selectedTargetCtoons.includes(c) ? 'border-indigo-500 bg-indigo-50' : ''"
+              >
+                <span
+                  class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                  :class="selfOwnedIds.has(c.ctoonId)
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-gray-200 text-gray-600'"
+                >
+                  {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
+                </span>
+
+                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-2 mt-8" />
+                <p class="text-sm text-center">{{ c.name }}</p>
+                <p class="text-xs text-gray-600">{{ c.rarity }}</p>
+                <p class="text-xs text-gray-600">
+                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                </p>
+                <p class="text-xs text-gray-600">
+                  {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                </p>
+              </div>
+            </div>
+            <div v-if="tradeStep === 1"
+              class="absolute bottom-0 left-0 right-0 border-t bg-white px-6 py-4 text-right"
+            >
+              <button
+                :disabled="!selectedTargetCtoons.length"
+                @click="startTrade"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                Create Trade
+              </button>
+            </div>
+          </div>
+
+          <!-- STEP 2: Select your cToons + points -->
+          <div v-else>
+            <div v-if="isLoadingSelfCollection" class="text-center py-10">Loading…</div>
+            <div v-else-if="selfCtoons.length === 0" class="text-center py-10">
+              You have no cToons to trade.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div
+                v-for="c in sortedSelfCtoons"
+                :key="c.id"
+                @click="selectInitiatorCtoon(c)"
+                :class="[
+                  'relative flex flex-col items-center p-2 cursor-pointer border rounded',
+                  selectedInitiatorCtoons.includes(c)
+                    ? 'border-green-500 bg-green-100'
+                    : ''
+                ]"
+              >
+                <span
+                  class="absolute top-1 right-1 px-2 py-0.5 text-xs font-semibold rounded-full"
+                  :class="targetOwnedIds.has(c.ctoonId)
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-gray-200 text-gray-600'"
+                >
+                  {{ targetOwnedIds.has(c.ctoonId) ? 'Owned by Owner' : 'Unowned by Owner' }}
+                </span>
+
+                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
+                <p class="text-sm text-center">{{ c.name }}</p>
+                <p class="text-xs text-gray-600">{{ c.rarity }}</p>
+                <p class="text-xs text-gray-600">
+                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                </p>
+                <p class="text-xs text-gray-600">
+                  {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── Fixed footer (only on Step 2) ─── -->
+        <div
+          v-if="tradeStep === 2"
+          class="mt-4 pt-4 border-t flex items-center justify-between bg-white"
+        >
+          <div>
+            Points to Offer
+            <input
+              type="number"
+              v-model.number="pointsToOffer"
+              :max="user?.points || 0"
+              min="0"
+              @input="pointsToOffer = Math.max(0, pointsToOffer)"
+              placeholder="Points"
+              class="border px-2 py-1 rounded w-24"
+            />
+          </div>
+          <button
+            :disabled="pointsToOffer < 0 || (selectedInitiatorCtoons.length === 0 && pointsToOffer === 0)"
+            @click="sendOffer"
+            class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-50"
+          >
+            Send Offer
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Toast -->
+  <Toast
+    v-if="showToast"
+    :message="toastMessage"
+    :type="toastType"
+  />
 </template>
 
 <script setup>
@@ -428,12 +696,8 @@ import Nav from '@/components/Nav.vue'
 
 definePageMeta({
   middleware: 'auth',
-  layout: 'default',
-  key: (route) => route.params.username
+  layout: 'default'
 })
-
-// ——— Loading indicator ———
-const loading = ref(true)
 
 function bgUrl(v) {
   if (!v) return ''
@@ -483,6 +747,9 @@ const route = useRoute()
 const router = useRouter()
 const username = ref(route.params.username)
 const { user, fetchSelf } = useAuth()
+
+// ——— Loading indicator ———
+const loading = ref(true)
 
 // ——— Owner & chat state ———
 const ownerName = ref(username.value)
@@ -774,42 +1041,32 @@ function sendMessage() {
 // ——— Per‐user cZone navigation (Previous/Next/Random viewer) ———
 async function goToPreviousUser() {
   try {
-    // Pre-show loader to avoid any flash during navigation
-    loading.value = true
-    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/previous`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch previous user:', err)
-    loading.value = false
   }
 }
 async function goToNextUser() {
   try {
-    loading.value = true
-    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/next`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch next user:', err)
-    loading.value = false
   }
 }
 async function goToRandomUser() {
   try {
-    loading.value = true
-    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/random`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch random user:', err)
-    loading.value = false
   }
 }
 
@@ -1048,30 +1305,12 @@ watch(
     if (socket && oldUsername) {
       socket.emit('leave-zone', { zone: oldUsername })
     }
-
-    // Show loader first and let it paint
-    loading.value = true
-    await nextTick()
-
-    // Reset fast-updating state to avoid a flash of next content
-    ownerName.value = ''
-    ownerAvatar.value = '/avatars/default.png'
-    ownerId.value = null
-    ownerIsBooster.value = false
-    zones.value = [
-      { background: '', toons: [] },
-      { background: '', toons: [] },
-      { background: '', toons: [] }
-    ]
-    currentZoneIndex.value = 0
-
-    // Switch to the new username and fetch
     username.value = newUsername
+    loading.value = true
 
     try {
       const res = await $fetch(`/api/czone/${newUsername}`)
       ownerName.value = res.ownerName
-      ownerIsBooster.value = res.isBooster
       ownerAvatar.value = res.avatar || '/avatars/default.png'
       ownerId.value = res.ownerId
 
@@ -1102,8 +1341,7 @@ watch(
     } finally {
       loading.value = false
     }
-  },
-  { flush: 'sync' }
+  }
 )
 </script>
 
@@ -1222,3 +1460,4 @@ watch(
     }
 }
 </style>
+
