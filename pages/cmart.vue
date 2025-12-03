@@ -505,7 +505,8 @@
             >
               <h3 class="font-medium">{{ rarity }}</h3>
               <p class="text-xs text-gray-600 mb-2">
-                Receive {{ rarityCountMap[rarity] || 0 }} cToon(s)
+                {{ (rarityProbMap[rarity] !== undefined ? rarityProbMap[rarity] : 0) }}% chance to receive
+                {{ rarityCountMap[rarity] || 0 }} cToon(s)
               </p>
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div
@@ -897,6 +898,16 @@ const rarityCountMap = computed(() => {
   if (!details || !Array.isArray(details.rarityConfigs)) return map
   for (const rc of details.rarityConfigs) {
     map[rc.rarity] = rc.count
+  }
+  return map
+})
+
+const rarityProbMap = computed(() => {
+  const map = {}
+  const details = packDetails.value
+  if (!details || !Array.isArray(details.rarityConfigs)) return map
+  for (const rc of details.rarityConfigs) {
+    map[rc.rarity] = rc.probabilityPercent
   }
   return map
 })
