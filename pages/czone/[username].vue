@@ -697,8 +697,8 @@ import Nav from '@/components/Nav.vue'
 definePageMeta({
   middleware: 'auth',
   layout: 'default',
-  // Force a fresh instance per username to avoid stale content flicker
-  key: route => route.params.username
+  // Force a fresh instance per path to avoid reuse/flicker (stable, encoded)
+  key: route => route.path
 })
 
 function bgUrl(v) {
@@ -1042,47 +1042,32 @@ function sendMessage() {
 
 // ——— Per‐user cZone navigation (Previous/Next/Random viewer) ———
 async function goToPreviousUser() {
-  // Pre-toggle skeleton to avoid showing stale content
-  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/previous`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
-    } else {
-      loading.value = false
     }
   } catch (err) {
-    loading.value = false
     console.error('Failed to fetch previous user:', err)
   }
 }
 async function goToNextUser() {
-  // Pre-toggle skeleton to avoid showing stale content
-  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/next`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
-    } else {
-      loading.value = false
     }
   } catch (err) {
-    loading.value = false
     console.error('Failed to fetch next user:', err)
   }
 }
 async function goToRandomUser() {
-  // Pre-toggle skeleton to avoid showing stale content
-  loading.value = true
   try {
     const res = await $fetch(`/api/czone/${username.value}/random`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
-    } else {
-      loading.value = false
     }
   } catch (err) {
-    loading.value = false
     console.error('Failed to fetch random user:', err)
   }
 }
