@@ -2,6 +2,13 @@
   <div class="flex flex-col h-screen">
     <Nav />
 
+    <!-- Jingle audio -->
+    <audio
+      ref="spinAudio"
+      src="/images/jingle.mp3"
+      preload="auto"
+    ></audio>
+
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col items-center overflow-hidden relative">
       <!-- Controls: Spin Button & Points -->
@@ -199,6 +206,9 @@ const startOffset  = -90
 
 const { user, fetchSelf } = useAuth()
 
+// audio ref for jingle
+const spinAudio = ref(null)
+
 // reactive state
 const spinCost         = ref(null)
 const spinsLeft        = ref(0)
@@ -275,6 +285,21 @@ const canSpin = computed(() =>
 
 async function spinWheel() {
   if (!canSpin.value) return
+
+  // play jingle
+  try {
+    if (spinAudio.value) {
+      spinAudio.value.currentTime = 0
+      const playPromise = spinAudio.value.play()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch(err => {
+          console.warn('Spin audio play prevented by browser:', err)
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('Unable to play spin audio', e)
+  }
 
   // optimistic
   user.value.points -= spinCost.value
