@@ -1037,12 +1037,30 @@ watch(
     if (socket && oldUsername) {
       socket.emit('leave-zone', { zone: oldUsername })
     }
-    username.value = newUsername
+
+    // Show loader first and let it paint
     loading.value = true
+    await nextTick()
+
+    // Reset fast-updating state to avoid a flash of next content
+    ownerName.value = ''
+    ownerAvatar.value = '/avatars/default.png'
+    ownerId.value = null
+    ownerIsBooster.value = false
+    zones.value = [
+      { background: '', toons: [] },
+      { background: '', toons: [] },
+      { background: '', toons: [] }
+    ]
+    currentZoneIndex.value = 0
+
+    // Switch to the new username and fetch
+    username.value = newUsername
 
     try {
       const res = await $fetch(`/api/czone/${newUsername}`)
       ownerName.value = res.ownerName
+      ownerIsBooster.value = res.isBooster
       ownerAvatar.value = res.avatar || '/avatars/default.png'
       ownerId.value = res.ownerId
 
@@ -1192,4 +1210,3 @@ watch(
     }
 }
 </style>
-
