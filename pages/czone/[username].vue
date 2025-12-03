@@ -428,7 +428,8 @@ import Nav from '@/components/Nav.vue'
 
 definePageMeta({
   middleware: 'auth',
-  layout: 'default'
+  layout: 'default',
+  key: (route) => route.params.username
 })
 
 // ——— Loading indicator ———
@@ -773,32 +774,42 @@ function sendMessage() {
 // ——— Per‐user cZone navigation (Previous/Next/Random viewer) ———
 async function goToPreviousUser() {
   try {
+    // Pre-show loader to avoid any flash during navigation
+    loading.value = true
+    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/previous`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch previous user:', err)
+    loading.value = false
   }
 }
 async function goToNextUser() {
   try {
+    loading.value = true
+    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/next`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch next user:', err)
+    loading.value = false
   }
 }
 async function goToRandomUser() {
   try {
+    loading.value = true
+    await nextTick()
     const res = await $fetch(`/api/czone/${username.value}/random`)
     if (res?.username) {
       router.push(`/czone/${res.username}`)
     }
   } catch (err) {
     console.error('Failed to fetch random user:', err)
+    loading.value = false
   }
 }
 
@@ -1091,7 +1102,8 @@ watch(
     } finally {
       loading.value = false
     }
-  }
+  },
+  { flush: 'sync' }
 )
 </script>
 
