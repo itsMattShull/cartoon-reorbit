@@ -84,10 +84,26 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
     }
 
-    // Featured-auction eligibility: user must not have owned >1 of this cToon in last 30 days
+    // Featured-auction eligibility: block if user currently owns >=2 of this cToon
+    // OR has owned >=2 in the last 30 days (distinct userCtoonIds in owner logs)
     if (fresh.isFeatured && fresh.userCtoon?.ctoonId) {
-      const cutoff = new Date(Date.now() - THIRTY_DAYS_MS)
+      // 1) Current ownership count (unburned)
+      const currentOwned = await tx.userCtoon.count({
+        where: {
+          userId,
+          ctoonId: fresh.userCtoon.ctoonId,
+          burnedAt: null,
+        }
+      })
+      if (currentOwned >= 2) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: 'You are not eligible to bid on this featured auction',
+        })
+      }
 
+      // 2) Ownership in last 30 days (distinct items)
+      const cutoff = new Date(Date.now() - THIRTY_DAYS_MS)
       const recentOwnerships = await tx.ctoonOwnerLog.findMany({
         where: {
           userId,
@@ -97,8 +113,7 @@ export default defineEventHandler(async (event) => {
         select: { userCtoonId: true },
         distinct: ['userCtoonId'],
       })
-
-      if (recentOwnerships.length > 1) {
+      if (recentOwnerships.length >= 2) {
         throw createError({
           statusCode: 403,
           statusMessage: 'You are not eligible to bid on this featured auction',
