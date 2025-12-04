@@ -79,13 +79,8 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 8) Sort: active first, ending soonest; then ended, earliest end first
-  items.sort((a, b) => {
-    const aEnded = new Date(a.endAt) <= now
-    const bEnded = new Date(b.endAt) <= now
-    if (aEnded !== bEnded) return aEnded ? 1 : -1
-    return new Date(a.endAt) - new Date(b.endAt)
-  })
+  // 8) Sort: endAt descending (newest endAt first)
+  items.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
 
   return items
 })
