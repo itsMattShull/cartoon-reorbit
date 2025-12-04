@@ -214,6 +214,8 @@
           </div>
         </div>
       </template>
+        <!-- Scavenger Hunt Modal (only after result shown and then closed) -->
+        <ScavengerHuntModal v-if="hasShownResult && !showResultModal && scavenger.isOpen && scavenger.sessionId" />
     </div>
   </div>
 </template>
@@ -222,6 +224,8 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
 import { useAuth } from '@/composables/useAuth'
+import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
+import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 definePageMeta({
   middleware: 'auth',
@@ -253,6 +257,10 @@ const spinResult       = ref({ type: '', amount: 0, ctoon: null })
 let countdownTimer     = null
 const maxDailySpins    = ref(0)
 const pointsWon        = ref(0)
+const hasShownResult   = ref(false)
+
+// scavenger
+const scavenger = useScavengerHunt()
 
 // wheel image path
 const winWheelImagePath = ref('')
@@ -297,6 +305,8 @@ function updateCountdown() {
 }
 
 onMounted(async () => {
+  // Clear any stale scavenger state on page entry
+  scavenger.reset()
   await fetchSelf({ force: true })
   try {
     await fetchStatus()
@@ -320,6 +330,9 @@ const canSpin = computed(() =>
 
 async function spinWheel() {
   if (!canSpin.value) return
+
+  // New spin: ensure we wait for this round's result modal first
+  hasShownResult.value = false
 
   // play jingle
   try {
@@ -347,6 +360,9 @@ async function spinWheel() {
     )
     spinResult.value = { type: result, amount: points||0, ctoon: ctoon||null }
 
+    // Consider Scavenger Hunt, but open after this modal closes
+    await scavenger.maybeTrigger('winwheel_spin', { open: false })
+
     // animate
     const fullTurns = 5
     const wedgeMid  = startOffset + sliceAngle/2 + sliceIndex*sliceAngle
@@ -355,6 +371,7 @@ async function spinWheel() {
     setTimeout(async () => {
       await fetchSelf({ force: true })
       await fetchStatus()
+      hasShownResult.value = true
       showResultModal.value = true
     }, 4000)
   } catch (err) {
@@ -371,6 +388,8 @@ function closeModal() {
   showResultModal.value = false
   rotation.value       = 0
   isSpinning.value     = false
+  // If a scavenger session is pending, open it now
+  scavenger.openIfPending()
 }
 </script>
 
