@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
         },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { endAt: 'desc' },
   })
 
   // 3. Return endAt so frontend can show “In Progress” vs “Ended”
