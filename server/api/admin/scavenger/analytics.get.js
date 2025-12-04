@@ -45,23 +45,32 @@ export default defineEventHandler(async (event) => {
   // Outcomes from completed sessions
   const sessions = await db.scavengerSession.findMany({
     where: { createdAt: { gte: from, lte: to }, status: 'COMPLETED' },
-    select: { resultType: true, pointsAwarded: true }
+    select: { resultType: true, pointsAwarded: true, triggerSource: true }
   })
   const outcomes = { NOTHING: 0, POINTS: 0, EXCLUSIVE_CTOON: 0 }
   let pointsAwardedTotal = 0
+  const completionsByTrigger = new Map()
   for (const s of sessions) {
     outcomes[s.resultType || 'NOTHING'] = (outcomes[s.resultType || 'NOTHING'] || 0) + 1
     if (s.pointsAwarded) pointsAwardedTotal += s.pointsAwarded
+    const trig = s.triggerSource || 'unknown'
+    completionsByTrigger.set(trig, (completionsByTrigger.get(trig) || 0) + 1)
   }
   const pointsAwardedAvg = sessions.length ? Math.round(pointsAwardedTotal / sessions.length) : 0
 
   // Triggers breakdown
   const triggerMap = new Map()
   for (const l of logs) {
-    const row = triggerMap.get(l.triggerSource) || { trigger: l.triggerSource, attempts: 0, starts: 0 }
+    const row = triggerMap.get(l.triggerSource) || { trigger: l.triggerSource, attempts: 0, starts: 0, completions: 0 }
     row.attempts += 1
     if (l.started) row.starts += 1
     triggerMap.set(l.triggerSource, row)
+  }
+  // attach completions to each trigger row
+  for (const [trig, count] of completionsByTrigger.entries()) {
+    const row = triggerMap.get(trig) || { trigger: trig, attempts: 0, starts: 0, completions: 0 }
+    row.completions = count
+    triggerMap.set(trig, row)
   }
   const triggers = Array.from(triggerMap.values()).sort((a,b) => b.attempts - a.attempts)
 
@@ -71,4 +80,3 @@ export default defineEventHandler(async (event) => {
     outcomes, pointsAwardedTotal, pointsAwardedAvg, triggers
   }
 })
-
