@@ -174,6 +174,19 @@
           </div>
         </div>
 
+        <!-- Duplicates Only (applies to My Collection) -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Duplicates</p>
+          <label class="flex items-center text-sm">
+            <input
+              type="checkbox"
+              v-model="duplicatesOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">Show duplicates only</span>
+          </label>
+        </div>
+
         <!-- Sort -->
         <div class="mt-6">
           <label for="sort" class="block text-sm font-medium text-gray-700 mb-1">
@@ -606,6 +619,7 @@ const selectedSeries = ref([])
 const selectedRarities = ref([])
 const selectedOwned  = ref('all')
 const sortBy         = ref('name') // default: Name A→Z, then Mint #
+const duplicatesOnly = ref(false)  // My Collection: only show duplicate holdings
 
 const filterMeta       = ref({ sets: [], series: [], rarities: [] })
 
@@ -661,6 +675,9 @@ function updateUrlQueryFromFilters() {
 
   if (sortBy.value && sortBy.value !== 'name') newQuery.sort = sortBy.value
   else delete newQuery.sort
+
+  // My Collection: duplicates-only toggle
+  if (duplicatesOnly.value) newQuery.dupes = '1'; else delete newQuery.dupes
 
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
@@ -861,7 +878,8 @@ async function loadAll() {
 async function loadUser() {
   isLoadingUserCtoons.value = true
   try {
-    userCtoons.value = await $fetch('/api/collections')
+    const qs = duplicatesOnly.value ? '?duplicatesOnly=1' : ''
+    userCtoons.value = await $fetch(`/api/collections${qs}`)
   } finally {
     isLoadingUserCtoons.value = false
   }
@@ -891,6 +909,17 @@ watch(sortBy, () => {
   updateUrlQueryFromFilters()
 })
 
+// Reload user items when duplicates-only changes
+watch(duplicatesOnly, () => {
+  if (activeTab.value === 'MyCollection') {
+    pageUser.value = 1
+    updateUrlQueryFromFilters()
+    loadUser()
+  } else {
+    updateUrlQueryFromFilters()
+  }
+})
+
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await fetchSelf()
@@ -903,6 +932,7 @@ onMounted(async () => {
   const rarityParam = route.query.rarity
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
+  const dupesParam  = typeof route.query.dupes === 'string' ? route.query.dupes : ''
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
 
@@ -917,6 +947,10 @@ onMounted(async () => {
 
   const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','rarity','series','set','name']
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
+
+  if (['1', 'true'].includes(dupesParam.toLowerCase ? dupesParam.toLowerCase() : dupesParam)) {
+    duplicatesOnly.value = true
+  }
 
   // Normalize URL now to reflect initialized values
   updateUrlQueryFromFilters()
