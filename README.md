@@ -3,8 +3,9 @@ This is the codebase for [https://www.cartoonreorbit.com](https://www.cartoonreo
 
 ### Instructions for running locally
 
-#### 1) Install VS Code
+#### 1) Install the Basics
 - Download: https://code.visualstudio.com
+- Install git on your computer
 
 ---
 
@@ -22,10 +23,19 @@ This is the codebase for [https://www.cartoonreorbit.com](https://www.cartoonreo
       # or
       psql -U postgres -c "CREATE DATABASE orbitdb;"
       ```
-    - Windows (PowerShell):
-      ```powershell
-      psql -U postgres -c "CREATE DATABASE orbitdb;"
-      ```
+    - Windows (Powershell):
+      - Restart Powershell
+      - Add psql path to environment variables: 
+        - Settings
+        - Edit the system environment variables
+        - Environment Variables
+        - Edit existing path variable
+        - Click New
+        - Paste in directory PostgreSQL is installed in
+      - Then run these commands:
+        ```powershell
+        psql -U postgres -c "CREATE DATABASE orbitdb;"
+        ```
 
 ---
 
@@ -53,11 +63,20 @@ This is the codebase for [https://www.cartoonreorbit.com](https://www.cartoonreo
   node -v
   ```
 - Windows (PowerShell):
-  ```powershell
-  nvm install 23.10.0
-  nvm use 23.10.0
-  node -v
-  ```
+  - First use `nvm root` to get the path
+  - Add nvm path to environment variables: 
+    - Settings
+    - Edit the system environment variables
+    - Environment Variables
+    - Edit existing path variable
+    - Click New
+    - Paste in directory NVM is installed in
+  - Then run these commands:
+    ```powershell
+    nvm install 23.10.0
+    nvm use 23.10.0
+    node -v
+    ```
 
 ---
 
@@ -67,6 +86,7 @@ This is the codebase for [https://www.cartoonreorbit.com](https://www.cartoonreo
   git clone https://github.com/<your-github-username>/cartoon-reorbit.git
   cd cartoon-reorbit
   ```
+  use `touch text.txt`, then do `git add .` and `git commit -m 'test file'` and `git push origin master` to see if the changes to your repo stick in Github.
 
 ---
 
@@ -140,7 +160,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 #### 8) Create a Sentry account (optional but recommended)
 - Go to https://sentry.io → Get Started → create an account.
 - Choose Nuxt during setup, then Skip onboarding.
-- In Sentry, search for “DSN” → Client Keys → copy the DSN.
+- In Sentry, go to Settings > Account Details, and in the top right search for “DSN” → Client Keys → copy the DSN.
 - Paste into `.env`:
   ```env
   SENTRY_DSN=<your-sentry-dsn>
@@ -154,7 +174,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
   - Linux (Debian/Ubuntu): `sudo apt-get install redis-server && sudo service redis-server start`
   - Windows (PowerShell): recommended options
     - Use WSL2 (Ubuntu) and install Redis inside WSL: `sudo apt-get install redis-server`
-    - or run via Docker Desktop: `docker run -p 6379:6379 redis:7-alpine`
+    - or run via Docker Desktop, after starting Docker: `docker run -d --name redis -p 6379:6379 redis`
 - These packages are already in `package.json`, so a separate install isn’t required:
   - `bullmq`, `ioredis`
 - Ensure these values exist in `.env` (defaults shown):
@@ -162,12 +182,14 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
   REDIS_HOST=127.0.0.1
   REDIS_PORT=6379
   REDIS_PASSWORD=           # set only if you configured one
+  MINT_QUEUE_KEY=mintQueue
   ```
 
 ---
 
 #### 10) Install dependencies and initialize the database
-- In VS Code, open a terminal in the project root, then run:
+- If using Windows, first open Powershell (run as admin) and type in `Set-ExecutionPolicy RemoteSigned`
+- Now open VS Code, open a terminal in the project root, then run:
   ```bash
   npm install
   npx prisma migrate dev
