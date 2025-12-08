@@ -8,6 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -138,6 +139,15 @@ export default defineEventHandler(async (event) => {
       abilityData: isGtoonBool ? abilityDataObj : null
     }
   })
+  try {
+    await logAdminChange(prisma, {
+      userId: me.id,
+      area: `Ctoon:${newCtoon.id}`,
+      key: 'create',
+      prevValue: null,
+      newValue: { id: newCtoon.id, name: newCtoon.name, series: newCtoon.series, rarity: newCtoon.rarity }
+    })
+  } catch {}
 
   return { ctoon: newCtoon }
 })

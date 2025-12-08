@@ -6,6 +6,7 @@ import {
   createError
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
@@ -90,6 +91,10 @@ export default defineEventHandler(async (event) => {
 
   // 3) Upsert
   try {
+    const before = await db.gameConfig.findUnique({
+      where: { gameName },
+      include: { exclusiveCtoons: true }
+    })
     const result = await db.$transaction(async tx => {
       let createData = { gameName }
       let updateData = { updatedAt: new Date() }
@@ -151,6 +156,48 @@ export default defineEventHandler(async (event) => {
           })
         }
       }
+
+      // Log changes within the transaction (best-effort)
+      try {
+        const area = `GameConfig:${gameName}`
+        if (gameName === 'Winball') {
+          const changes = [
+            ['leftCupPoints', before?.leftCupPoints, leftCupPoints],
+            ['rightCupPoints', before?.rightCupPoints, rightCupPoints],
+            ['goldCupPoints', before?.goldCupPoints, goldCupPoints],
+            ['grandPrizeCtoonId', before?.grandPrizeCtoonId || null, grandPrizeCtoonId || null]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
+          }
+        } else if (gameName === 'Clash') {
+          if (before?.pointsPerWin !== pointsPerWin) {
+            await logAdminChange(tx, { userId: me.id, area, key: 'pointsPerWin', prevValue: before?.pointsPerWin, newValue: pointsPerWin })
+          }
+        } else if (gameName === 'Winwheel') {
+          const changes = [
+            ['spinCost', before?.spinCost, spinCost],
+            ['pointsWon', before?.pointsWon, pointsWon],
+            ['maxDailySpins', before?.maxDailySpins, maxDailySpins],
+            ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
+          }
+          // pool change
+          const beforeIds = (before?.exclusiveCtoons || []).map(r => r.ctoonId).sort()
+          const afterIds  = (exclusiveCtoons || []).slice().sort()
+          if (JSON.stringify(beforeIds) !== JSON.stringify(afterIds)) {
+            await logAdminChange(tx, {
+              userId: me.id,
+              area,
+              key: 'exclusiveCtoons',
+              prevValue: beforeIds,
+              newValue: afterIds
+            })
+          }
+        }
+      } catch {}
 
       return cfg
     })

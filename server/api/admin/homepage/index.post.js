@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -106,6 +107,25 @@ export default defineEventHandler(async (event) => {
     create: { id: 'homepage', ...next },
     update: { ...next, updatedAt: new Date() }
   })
+
+  // Log any field changes compared to prior values
+  try {
+    const area = 'HomepageConfig'
+    const fields = [
+      'topLeftImagePath',
+      'bottomLeftImagePath',
+      'topRightImagePath',
+      'bottomRightImagePath',
+      'showcaseImagePath'
+    ]
+    for (const key of fields) {
+      const prev = current[key] ?? null
+      const now  = cfg[key] ?? null
+      if (prev !== now) {
+        await logAdminChange(db, { userId: me.id, area, key, prevValue: prev, newValue: now })
+      }
+    }
+  } catch {}
 
   return {
     topLeftImagePath:     cfg.topLeftImagePath,

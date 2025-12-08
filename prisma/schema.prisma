@@ -168,6 +168,9 @@ model User {
   scavengerSessions    ScavengerSession[]
   scavengerTriggerLogs ScavengerTriggerLog[]
 
+  // Admin change logs (inverse)
+  adminChangeLogs      AdminChangeLog[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -951,4 +954,21 @@ model ScavengerTriggerLog {
 
   @@index([createdAt])
   @@index([triggerSource, createdAt])
+}
+
+// ── Admin change auditing ─────────────────────────────────────────────
+model AdminChangeLog {
+  id        String   @id @default(uuid())
+  userId    String
+  area      String   // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
+  key       String   // specific field or setting key
+  prevValue String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([area, createdAt])
 }

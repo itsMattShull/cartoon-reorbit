@@ -6,6 +6,7 @@ import {
   createError
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate & authorize
@@ -49,6 +50,7 @@ export default defineEventHandler(async (event) => {
 
   // 3) Upsert the singleton global config row
   try {
+    const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
     const result = await db.globalGameConfig.upsert({
       where: { id: 'singleton' },
       create: {
@@ -68,6 +70,21 @@ export default defineEventHandler(async (event) => {
         ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {})
       }
     })
+    // Log field-level changes
+    const fields = ['dailyPointLimit','dailyLoginPoints','dailyNewUserPoints','czoneVisitPoints','czoneVisitMaxPerDay']
+    for (const k of fields) {
+      const prevVal = before ? before[k] : undefined
+      const nextVal = result ? result[k] : undefined
+      if (prevVal !== nextVal) {
+        await logAdminChange(db, {
+          userId: me.id,
+          area: 'GlobalGameConfig',
+          key: k,
+          prevValue: prevVal,
+          newValue: nextVal
+        })
+      }
+    }
     return result
   } catch (err) {
     console.error('Error upserting GlobalGameConfig:', err)

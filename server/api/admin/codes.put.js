@@ -1,6 +1,7 @@
 // server/api/admin/codes.put.js
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -22,7 +23,13 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(rewards) || rewards.length === 0) throw createError({ statusCode: 400, statusMessage: 'At least one reward batch is required.' })
   if (prerequisites && !Array.isArray(prerequisites)) throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
 
-  const existing = await prisma.claimCode.findUnique({ where: { code }, select: { id: true } })
+  const existing = await prisma.claimCode.findUnique({
+    where: { code },
+    include: {
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      prerequisites: true
+    }
+  })
   if (!existing) throw createError({ statusCode: 404, statusMessage: 'Code not found.' })
   const codeId = existing.id
 
@@ -95,6 +102,54 @@ export default defineEventHandler(async (event) => {
       data: { maxClaims, expiresAt: expiresDate, rewards: { create: rewardCreates }, prerequisites: { create: prereqCreates } }
     })
   ])
+  const updated = await prisma.claimCode.findUnique({
+    where: { code },
+    include: {
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      prerequisites: true
+    }
+  })
+
+  // Log changes best-effort
+  function simplify(cc) {
+    return {
+      maxClaims: cc.maxClaims,
+      expiresAt: cc.expiresAt ? new Date(cc.expiresAt).toISOString() : null,
+      rewards: (cc.rewards || []).map(r => ({
+        points: r.points ?? 0,
+        pooledUniqueCount: r.pooledUniqueCount ?? null,
+        ctoons: (r.ctoons || []).map(x => ({ ctoonId: x.ctoonId, quantity: x.quantity })),
+        pool: (r.poolCtoons || []).map(x => ({ ctoonId: x.ctoonId, weight: x.weight })),
+        backgrounds: (r.backgrounds || []).map(b => b.backgroundId)
+      })),
+      prerequisites: (cc.prerequisites || []).map(p => p.ctoonId)
+    }
+  }
+  try {
+    const area = `ClaimCode:${code}`
+    // scalar diffs
+    if (existing.maxClaims !== maxClaims) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'maxClaims', prevValue: existing.maxClaims, newValue: maxClaims })
+    }
+    const prevExp = existing.expiresAt ? new Date(existing.expiresAt).toISOString() : null
+    const nextExp = expiresDate ? new Date(expiresDate).toISOString() : null
+    if (prevExp !== nextExp) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'expiresAt', prevValue: existing.expiresAt, newValue: expiresDate })
+    }
+    // structural diffs
+    const prevStruct = simplify(existing)
+    const nextStruct = simplify(updated)
+    const prevRw = JSON.stringify(prevStruct.rewards)
+    const nextRw = JSON.stringify(nextStruct.rewards)
+    if (prevRw !== nextRw) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'rewards', prevValue: prevStruct.rewards, newValue: nextStruct.rewards })
+    }
+    const prevPre = JSON.stringify(prevStruct.prerequisites)
+    const nextPre = JSON.stringify(nextStruct.prerequisites)
+    if (prevPre !== nextPre) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'prerequisites', prevValue: prevStruct.prerequisites, newValue: nextStruct.prerequisites })
+    }
+  } catch {}
 
   return results[results.length - 1]
 })
