@@ -163,6 +163,9 @@ model User {
   auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
   adImagesCreated    AdImage[]      @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
+  // Ban notes relations
+  banNotes           UserBanNote[]  @relation("BanNoteUser")
+  banNotesAuthored   UserBanNote[]  @relation("BanNoteAdmin")
 
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
@@ -172,6 +175,28 @@ model User {
   adminChangeLogs      AdminChangeLog[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
+}
+
+// ── Ban/Unban auditing ─────────────────────────────────────────────
+
+enum BanAction {
+  BAN
+  UNBAN
+}
+
+model UserBanNote {
+  id        String    @id @default(uuid())
+  userId    String
+  adminId   String
+  action    BanAction
+  reason    String
+  createdAt DateTime  @default(now())
+
+  user    User @relation("BanNoteUser", fields: [userId], references: [id], onDelete: Cascade)
+  admin   User @relation("BanNoteAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([adminId, createdAt])
 }
 
 model UserIP {

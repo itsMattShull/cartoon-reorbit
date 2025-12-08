@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       boosterSince: true,
       isAdmin: true,
       active: true,
+      banned: true,
       warning180: true,
       warning210: true,
       warning240: true,
@@ -79,6 +80,7 @@ export default defineEventHandler(async (event) => {
     boosterSince:  u.boosterSince,
     isAdmin:       u.isAdmin,
     active:        u.active,
+    banned:        u.banned,
 
     // keep flat flags for convenience
     warning180:    u.warning180,
