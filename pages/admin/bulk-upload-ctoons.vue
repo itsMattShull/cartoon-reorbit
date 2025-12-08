@@ -415,28 +415,28 @@ function updateDefaults(f) {
 
   switch (f.rarity) {
     case 'Common':
-      f.totalQuantity   = 100
-      f.initialQuantity = 100
+      f.totalQuantity   = 160
+      f.initialQuantity = 160
       f.perUserLimit    = 7
       break
     case 'Uncommon':
-      f.totalQuantity   = 75
-      f.initialQuantity = 75
+      f.totalQuantity   = 120
+      f.initialQuantity = 120
       f.perUserLimit    = 5
       break
     case 'Rare':
-      f.totalQuantity   = 60
-      f.initialQuantity = 60
+      f.totalQuantity   = 80
+      f.initialQuantity = 80
       f.perUserLimit    = 3
       break
     case 'Very Rare':
-      f.totalQuantity   = 42
-      f.initialQuantity = 42
+      f.totalQuantity   = 60
+      f.initialQuantity = 60
       f.perUserLimit    = 2
       break
     case 'Crazy Rare':
-      f.totalQuantity   = 30
-      f.initialQuantity = 30
+      f.totalQuantity   = 40
+      f.initialQuantity = 40
       f.perUserLimit    = 1
       break
     default:

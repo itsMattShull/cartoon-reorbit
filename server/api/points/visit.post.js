@@ -52,14 +52,23 @@ export default defineEventHandler(async (event) => {
   })
 
   // ── 4) award points ─────────────────────────────────────────────────────
+  // Load public-safe config values for cZone visits with fallback
+  let cfg
+  try {
+    cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { czoneVisitPoints: true } })
+  } catch {
+    cfg = null
+  }
+  const visitPoints = Number(cfg?.czoneVisitPoints ?? 20)
+
   const updated = await prisma.userPoints.upsert({
     where:  { userId: viewerId },
-    update: { points: { increment: 20 } },
-    create: { userId: viewerId, points: 20 },
+    update: { points: { increment: visitPoints } },
+    create: { userId: viewerId, points: visitPoints },
   })
 
   await prisma.pointsLog.create({
-    data: { userId: viewerId, points: 20, total: updated.points, method: "cZone Visit", direction: 'increase' }
+    data: { userId: viewerId, points: visitPoints, total: updated.points, method: "cZone Visit", direction: 'increase' }
   });
 
   return { success: true, message: 'Points awarded' }

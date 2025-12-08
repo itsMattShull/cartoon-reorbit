@@ -394,9 +394,9 @@
                 All ways to gain points in a 24 hour cycle reset at 8pm CST.
               </div>
               <div class="space-y-6">
-                <p>• 20 points every 24 hours for every cZone you visit (up to 200 points per day).</p>
-                <p>• Claim your daily login bonus (500 points) once every 24 hour cycle.</p>
-                <p>• Playing games, such as Winball, will give you up to 250 points every 24 hours.</p>
+                <p>• {{ gc.czoneVisitPoints }} points every 24 hours for every cZone you visit (up to {{ gc.czoneVisitPoints * 10 }} points per day).</p>
+                <p>• Claim your daily login bonus ({{ gc.dailyLoginPoints }} points) once every 24 hour cycle.</p>
+                <p>• Playing games, such as Winball, will give you up to {{ gc.dailyPointLimit }} points every 24 hours.</p>
                 <p>• Special codes that can be found in the announcements channel in Discord.</p>
               </div>
               <div class="mt-6 text-right">
@@ -532,6 +532,16 @@ const winballPrizeUrl = computed(() => prizeData.value?.prize?.ctoon?.imageUrl |
 const winballBgSrc = computed(() =>
   hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png'
 )
+
+
+// Public global config for dynamic copy in the modal
+const { data: globalCfg } = await useAsyncData('global-config', () => $fetch('/api/global-config'))
+const gc = computed(() => ({
+  dailyPointLimit:    Number(globalCfg.value?.dailyPointLimit ?? 250),
+  dailyLoginPoints:   Number(globalCfg.value?.dailyLoginPoints ?? 500),
+  dailyNewUserPoints: Number(globalCfg.value?.dailyNewUserPoints ?? 1000),
+  czoneVisitPoints:   Number(globalCfg.value?.czoneVisitPoints ?? 20)
+}))
 
 
 onMounted(async () => {

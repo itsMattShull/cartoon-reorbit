@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "GlobalGameConfig" ADD COLUMN     "czoneVisitPoints" INTEGER NOT NULL DEFAULT 20,
+ADD COLUMN     "dailyLoginPoints" INTEGER NOT NULL DEFAULT 500,
+ADD COLUMN     "dailyNewUserPoints" INTEGER NOT NULL DEFAULT 1000;

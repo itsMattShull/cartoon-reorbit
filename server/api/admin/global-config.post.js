@@ -22,12 +22,27 @@ export default defineEventHandler(async (event) => {
 
   // 2) Read + validate payload
   const body = await readBody(event)
-  const { dailyPointLimit } = body
+  const {
+    dailyPointLimit,
+    dailyLoginPoints,
+    dailyNewUserPoints,
+    czoneVisitPoints
+  } = body
+
+  // minimally require the existing cap; other fields optional with defaults
   if (dailyPointLimit == null || typeof dailyPointLimit !== 'number') {
     throw createError({
       statusCode: 400,
       statusMessage: 'Missing or invalid "dailyPointLimit", must be a number'
     })
+  }
+
+  const payload = {
+    dailyPointLimit: Number(dailyPointLimit),
+    // allow partial updates; coerce to number if provided else keep existing via upsert+update
+    dailyLoginPoints:   (typeof dailyLoginPoints   === 'number') ? Number(dailyLoginPoints)   : undefined,
+    dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
+    czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -36,10 +51,17 @@ export default defineEventHandler(async (event) => {
       where: { id: 'singleton' },
       create: {
         id: 'singleton',
-        dailyPointLimit
+        dailyPointLimit: payload.dailyPointLimit,
+        dailyLoginPoints:   payload.dailyLoginPoints   ?? 500,
+        dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
+        czoneVisitPoints:   payload.czoneVisitPoints   ?? 20
       },
       update: {
-        dailyPointLimit
+        dailyPointLimit: payload.dailyPointLimit,
+        // only update fields that were provided
+        ...(payload.dailyLoginPoints   !== undefined ? { dailyLoginPoints:   payload.dailyLoginPoints }   : {}),
+        ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
+        ...(payload.czoneVisitPoints   !== undefined ? { czoneVisitPoints:   payload.czoneVisitPoints }   : {})
       }
     })
     return result

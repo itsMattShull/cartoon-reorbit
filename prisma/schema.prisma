@@ -428,6 +428,9 @@ model GameConfig {
 model GlobalGameConfig {
   id               String   @id @default(uuid())
   dailyPointLimit  Int      @default(100)
+  dailyLoginPoints   Int    @default(500)
+  dailyNewUserPoints Int    @default(1000)
+  czoneVisitPoints   Int    @default(20)
   // Scavenger Hunt settings
   scavengerChancePercent Int @default(5)   // 0–100; 0 disables
   scavengerCooldownHours Int @default(24)  // cooldown between completed hunts per user

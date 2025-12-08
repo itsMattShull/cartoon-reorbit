@@ -283,32 +283,32 @@ watch(rarity, val => {
 
   switch (val) {
     case 'Common':
-      initialQuantity.value = 100
-      totalQuantity.value = 100
+      initialQuantity.value = 160
+      totalQuantity.value = 160
       perUserLimit.value = 7
       inCmart.value = true
       break
     case 'Uncommon':
-      initialQuantity.value = 75
-      totalQuantity.value = 75
+      initialQuantity.value = 120
+      totalQuantity.value = 120
       perUserLimit.value = 5
       inCmart.value = true
       break
     case 'Rare':
-      initialQuantity.value = 60
-      totalQuantity.value = 60
+      initialQuantity.value = 80
+      totalQuantity.value = 80
       perUserLimit.value = 3
       inCmart.value = true
       break
     case 'Very Rare':
-      initialQuantity.value = 42
-      totalQuantity.value = 42
+      initialQuantity.value = 60
+      totalQuantity.value = 60
       perUserLimit.value = 2
       inCmart.value = true
       break
     case 'Crazy Rare':
-      initialQuantity.value = 30
-      totalQuantity.value = 30
+      initialQuantity.value = 40
+      totalQuantity.value = 40
       perUserLimit.value = 1
       inCmart.value = true
       break
