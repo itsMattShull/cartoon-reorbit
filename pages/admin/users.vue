@@ -71,6 +71,16 @@
                 class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
                 @click="openActionModal(u, 'UNBAN'); closeMenu()"
               >Unban user</button>
+              <button
+                v-if="isSuperAdmin && !u.isAdmin"
+                class="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                @click="makeAdmin(u); closeMenu()"
+              >Make Admin</button>
+              <button
+                v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
+                class="w-full text-left px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+                @click="removeAdmin(u); closeMenu()"
+              >Remove Admin</button>
             </div>
           </div>
         </div>
@@ -191,6 +201,11 @@ if (error.value) throw error.value
 
 const users = ref(raw.value || [])
 const filter = ref('')
+
+// current viewer (for super-admin gating)
+const { data: meData } = await useAsyncData('admin-me', () => $fetch('/api/auth/me', { headers }))
+const superAdminId = '732319322093125695'
+const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)
 
 // filters
 const statusFilter = ref('all') // 'all' | 'active' | 'inactive'
@@ -373,6 +388,27 @@ function toggleMenu(u) {
   menuOpenId.value = (menuOpenId.value === u.id ? null : u.id)
 }
 function closeMenu() { menuOpenId.value = null }
+
+// Make Admin (super-admin only)
+async function makeAdmin(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/make-admin`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to make admin')
+  }
+}
+
+async function removeAdmin(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/remove-admin`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
+  }
+}
 </script>
 
 <style scoped>
