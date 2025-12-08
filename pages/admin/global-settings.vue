@@ -62,7 +62,8 @@
         <p class="text-sm text-gray-600">
           Configure default values per rarity tier. These defaults prefill Add cToon and Bulk Upload forms.
         </p>
-        <div class="overflow-x-auto">
+        <!-- Desktop table -->
+        <div class="overflow-x-auto hidden sm:block">
           <table class="min-w-full border-separate border-spacing-y-1">
             <thead>
               <tr class="text-left text-sm text-gray-600">
@@ -85,6 +86,39 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="space-y-3 sm:hidden">
+          <div
+            v-for="r in rarityOrder"
+            :key="r"
+            class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+          >
+            <div class="font-semibold text-gray-800 mb-2">{{ r }}</div>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Total Qty</label>
+                <input type="number" class="input" v-model.number="rarityDefaults[r].totalQuantity" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Initial Qty</label>
+                <input type="number" class="input" v-model.number="rarityDefaults[r].initialQuantity" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Per-User Limit</label>
+                <input type="number" class="input" v-model.number="rarityDefaults[r].perUserLimit" />
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" v-model="rarityDefaults[r].inCmart" :id="`inCmart-${r}`" />
+                <label class="text-sm text-gray-700" :for="`inCmart-${r}`">In cMart</label>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Price</label>
+                <input type="number" class="input" v-model.number="rarityDefaults[r].price" />
+              </div>
+            </div>
+          </div>
         </div>
         <div>
           <button class="btn-primary" :disabled="savingRarity" @click="saveRarity">
