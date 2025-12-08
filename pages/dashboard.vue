@@ -394,7 +394,7 @@
                 All ways to gain points in a 24 hour cycle reset at 8pm CST.
               </div>
               <div class="space-y-6">
-                <p>• {{ gc.czoneVisitPoints }} points every 24 hours for every cZone you visit (up to {{ gc.czoneVisitPoints * 10 }} points per day).</p>
+                <p>• {{ gc.czoneVisitPoints }} points every 24 hours for every cZone you visit (up to {{ gc.czoneVisitPoints * gc.czoneVisitMaxPerDay }} points per day).</p>
                 <p>• Claim your daily login bonus ({{ gc.dailyLoginPoints }} points) once every 24 hour cycle.</p>
                 <p>• Playing games, such as Winball, will give you up to {{ gc.dailyPointLimit }} points every 24 hours.</p>
                 <p>• Special codes that can be found in the announcements channel in Discord.</p>
@@ -540,7 +540,8 @@ const gc = computed(() => ({
   dailyPointLimit:    Number(globalCfg.value?.dailyPointLimit ?? 250),
   dailyLoginPoints:   Number(globalCfg.value?.dailyLoginPoints ?? 500),
   dailyNewUserPoints: Number(globalCfg.value?.dailyNewUserPoints ?? 1000),
-  czoneVisitPoints:   Number(globalCfg.value?.czoneVisitPoints ?? 20)
+  czoneVisitPoints:   Number(globalCfg.value?.czoneVisitPoints ?? 20),
+  czoneVisitMaxPerDay:Number(globalCfg.value?.czoneVisitMaxPerDay ?? 10)
 }))
 
 

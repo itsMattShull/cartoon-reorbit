@@ -24,14 +24,23 @@ export default defineEventHandler(async (event) => {
   const boundaryUtc  = boundaryLocal.toUTC().toJSDate()
 
   // ── 1) overall visits in window ─────────────────────────────────────────
+  // Load config for max unique visits per day
+  let cfg
+  try {
+    cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { czoneVisitMaxPerDay: true } })
+  } catch {
+    cfg = null
+  }
+  const maxVisits = Number(cfg?.czoneVisitMaxPerDay ?? 10)
+
   const totalVisits = await prisma.visit.count({
     where: {
       userId: viewerId,
       createdAt: { gte: boundaryUtc },
     },
   })
-  if (totalVisits >= 10) {
-    return { success: false, message: 'Daily limit of 10 visits reached' }
+  if (totalVisits >= maxVisits) {
+    return { success: false, message: `Daily limit of ${maxVisits} visits reached` }
   }
 
   // ── 2) one visit per owner in window ────────────────────────────────────
@@ -53,13 +62,14 @@ export default defineEventHandler(async (event) => {
 
   // ── 4) award points ─────────────────────────────────────────────────────
   // Load public-safe config values for cZone visits with fallback
-  let cfg
+  // Fetch visit points (may be cached above; fetch again selecting points)
+  let cfg2
   try {
-    cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { czoneVisitPoints: true } })
+    cfg2 = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { czoneVisitPoints: true } })
   } catch {
-    cfg = null
+    cfg2 = null
   }
-  const visitPoints = Number(cfg?.czoneVisitPoints ?? 20)
+  const visitPoints = Number(cfg2?.czoneVisitPoints ?? 20)
 
   const updated = await prisma.userPoints.upsert({
     where:  { userId: viewerId },

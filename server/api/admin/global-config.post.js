@@ -26,7 +26,8 @@ export default defineEventHandler(async (event) => {
     dailyPointLimit,
     dailyLoginPoints,
     dailyNewUserPoints,
-    czoneVisitPoints
+    czoneVisitPoints,
+    czoneVisitMaxPerDay
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -42,7 +43,8 @@ export default defineEventHandler(async (event) => {
     // allow partial updates; coerce to number if provided else keep existing via upsert+update
     dailyLoginPoints:   (typeof dailyLoginPoints   === 'number') ? Number(dailyLoginPoints)   : undefined,
     dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
-    czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined
+    czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined,
+    czoneVisitMaxPerDay:(typeof czoneVisitMaxPerDay=== 'number') ? Number(czoneVisitMaxPerDay): undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -54,14 +56,16 @@ export default defineEventHandler(async (event) => {
         dailyPointLimit: payload.dailyPointLimit,
         dailyLoginPoints:   payload.dailyLoginPoints   ?? 500,
         dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
-        czoneVisitPoints:   payload.czoneVisitPoints   ?? 20
+        czoneVisitPoints:   payload.czoneVisitPoints   ?? 20,
+        czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay ?? 10
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
         // only update fields that were provided
         ...(payload.dailyLoginPoints   !== undefined ? { dailyLoginPoints:   payload.dailyLoginPoints }   : {}),
         ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
-        ...(payload.czoneVisitPoints   !== undefined ? { czoneVisitPoints:   payload.czoneVisitPoints }   : {})
+        ...(payload.czoneVisitPoints    !== undefined ? { czoneVisitPoints:    payload.czoneVisitPoints }    : {}),
+        ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {})
       }
     })
     return result

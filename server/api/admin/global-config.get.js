@@ -33,7 +33,8 @@ export default defineEventHandler(async (event) => {
         // new fields defaults
         dailyLoginPoints: 500,
         dailyNewUserPoints: 1000,
-        czoneVisitPoints: 20
+        czoneVisitPoints: 20,
+        czoneVisitMaxPerDay: 10
       }
     })
   }

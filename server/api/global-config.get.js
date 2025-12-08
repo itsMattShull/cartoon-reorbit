@@ -9,7 +9,7 @@ export default defineEventHandler(async () => {
     dailyPointLimit:    cfg?.dailyPointLimit    ?? 250,
     dailyLoginPoints:   cfg?.dailyLoginPoints   ?? 500,
     dailyNewUserPoints: cfg?.dailyNewUserPoints ?? 1000,
-    czoneVisitPoints:   cfg?.czoneVisitPoints   ?? 20
+    czoneVisitPoints:   cfg?.czoneVisitPoints   ?? 20,
+    czoneVisitMaxPerDay: cfg?.czoneVisitMaxPerDay ?? 10
   }
 })
-

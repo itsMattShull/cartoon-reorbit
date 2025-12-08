@@ -142,6 +142,11 @@
             <input type="number" class="input" v-model.number="dailyPointLimit" />
             <p class="text-xs text-gray-500 mt-1">Max points from games per 24h window.</p>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Max cZone Visits Per Day</label>
+            <input type="number" class="input" v-model.number="czoneVisitMaxPerDay" />
+            <p class="text-xs text-gray-500 mt-1">Maximum unique cZones that award visit points per day.</p>
+          </div>
         </div>
         <div>
           <button class="btn-primary" :disabled="savingGlobal" @click="saveGlobal">
@@ -180,6 +185,7 @@ const dailyLoginPoints   = ref(500)
 const dailyNewUserPoints = ref(1000)
 const czoneVisitPoints   = ref(20)
 const dailyPointLimit    = ref(250)
+const czoneVisitMaxPerDay = ref(10)
 const savingGlobal       = ref(false)
 
 function onFile(key, e) { files.value[key] = e.target.files?.[0] || null }
@@ -205,6 +211,7 @@ async function loadGlobal() {
     dailyNewUserPoints.value = Number(g?.dailyNewUserPoints ?? 1000)
     czoneVisitPoints.value   = Number(g?.czoneVisitPoints   ?? 20)
     dailyPointLimit.value    = Number(g?.dailyPointLimit    ?? 250)
+    czoneVisitMaxPerDay.value = Number(g?.czoneVisitMaxPerDay ?? 10)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -268,7 +275,8 @@ async function saveGlobal() {
         dailyLoginPoints:   Number(dailyLoginPoints.value),
         dailyNewUserPoints: Number(dailyNewUserPoints.value),
         czoneVisitPoints:   Number(czoneVisitPoints.value),
-        dailyPointLimit:    Number(dailyPointLimit.value)
+        dailyPointLimit:    Number(dailyPointLimit.value),
+        czoneVisitMaxPerDay: Number(czoneVisitMaxPerDay.value)
       }
     })
     toast.value = { type: 'ok', msg: 'Global points saved.' }
