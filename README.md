@@ -6,8 +6,8 @@ Install VSCode
 Install Postgress
     note the admin username and password you created
     note the database name you created (we recommend "orbitdb")
-Install NodeJS
-Install NPM
+Install NVM
+Using NVM, install NodeJS 23.10.0
 Fork Repo
 Copy /.env.template to /.env
 Update database url to include username and password and database name in the URL

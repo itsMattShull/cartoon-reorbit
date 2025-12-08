@@ -202,6 +202,7 @@ const adminGroups = [
       { label: 'Analytics', to: '/admin' },
       { label: 'Manage Users', to: '/admin/users' },
       { label: 'Manage Homepage', to: '/admin/manage-homepage' },
+      { label: 'Global Settings', to: '/admin/global-settings' },
       { label: 'Manage Ads', to: '/admin/manage-ads' }
     ]
   },
