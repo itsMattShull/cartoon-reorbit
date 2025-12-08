@@ -254,4 +254,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 - If Prisma cannot connect, verify `DATABASE_URL` and that PostgreSQL is running.
 - If Redis jobs don’t process, confirm Redis is running and `REDIS_HOST/PORT` are correct.
 - On Windows, run PowerShell as Administrator when installing `nvm-windows` and ensure you reopen the shell after install.
-
+- `server > cron > sync-guild-members.js` is what is used to do cron jobs on the server.  Like daily auctions from the main account other tasks
+- Database schema is under `prisma/schema.prisma`
+- API is under `server/api`
+- Pages are under `pages/`
