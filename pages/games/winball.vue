@@ -18,6 +18,8 @@
         <button class="modal-btn" @click="closeModal">OK</button>
       </div>
     </div>
+    <!-- Scavenger Hunt Modal (defer until Winball result modal closed) -->
+    <ScavengerHuntModal v-if="!modal.open && scavenger.isOpen && scavenger.sessionId" />
   </div>
 </template>
 
@@ -41,8 +43,11 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import * as CANNON from 'cannon-es'
 import { useAuth } from '~/composables/useAuth'
+import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
+import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 const { fetchSelf } = useAuth()
+const scavenger = useScavengerHunt()
 
 const modal = ref({ open: false, title: '', message: '', imageUrl: '' })
 
@@ -54,6 +59,8 @@ async function closeModal() {
   modal.value.open = false
   resetBall()
   await fetchSelf({ force: true }) // keep points reactive
+  // Open scavenger hunt if a session is pending
+  scavenger.openIfPending()
 }
 
 const COLORS = {
@@ -187,6 +194,8 @@ const resetBall = () => {
 }
 
 onMounted(() => {
+  // Clear any stale scavenger state on page entry
+  scavenger.reset()
   // === TUNABLE PARAMETERS ===
   const ballMass = 8                            // increased mass for realistic pinball feel
   const boardGravityVec = new CANNON.Vec3(0, 0, 15) // gravity along negative Z (board downhill)
@@ -638,12 +647,14 @@ bumperXs.forEach((bx) => {
                   message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
                   imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
                 })
+                await scavenger.maybeTrigger('winball_win', { open: false })
                 resetBall()
               } else {
                 showModal({
                   title: 'Winner',
                   message: `You won ${result.pointsAwarded} points.`
                 })
+                await scavenger.maybeTrigger('winball_win', { open: false })
                 resetBall()
               }
             }
@@ -824,12 +835,14 @@ bumperXs.forEach((bx) => {
                 message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
                 imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
               })
+              await scavenger.maybeTrigger('winball_win', { open: false })
               resetBall()
             } else {
               showModal({
                 title: 'Winner',
                 message: `You won ${result.pointsAwarded} points.`
               })
+              await scavenger.maybeTrigger('winball_win', { open: false })
               resetBall()
             }
             await fetchSelf({ force: true })

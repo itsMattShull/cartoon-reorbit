@@ -215,6 +215,7 @@ const adminGroups = [
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
       { label: 'Manage Codes', to: '/admin/codes' },
       { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
       { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
       { label: 'Manage Auction Only', to: '/admin/manage-auctions' }
     ]
@@ -230,7 +231,8 @@ const adminGroups = [
       { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
       { label: 'Point Logs', to: '/admin/points-log' },
       { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
-      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' }
+      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
+      { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
     ]
   }
 ]

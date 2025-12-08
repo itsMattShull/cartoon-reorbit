@@ -61,6 +61,10 @@ model Ctoon {
   redeemedAsResult HolidayRedemption[] @relation("HolidayResultDefinition")
   rewardPoolRows  RewardCtoonPool[] @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
+
+  // Scavenger Hunt relations
+  scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
+  scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
 }
 
 model UserCtoon {
@@ -159,6 +163,10 @@ model User {
   auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
   adImagesCreated    AdImage[]      @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
+
+  // Scavenger Hunt relations
+  scavengerSessions    ScavengerSession[]
+  scavengerTriggerLogs ScavengerTriggerLog[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -420,6 +428,9 @@ model GameConfig {
 model GlobalGameConfig {
   id               String   @id @default(uuid())
   dailyPointLimit  Int      @default(100)
+  // Scavenger Hunt settings
+  scavengerChancePercent Int @default(5)   // 0–100; 0 disables
+  scavengerCooldownHours Int @default(24)  // cooldown between completed hunts per user
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -831,4 +842,108 @@ model WinballGrandPrizeSchedule {
 
   @@index([startsAt])
   @@index([ctoonId, startsAt])
+}
+
+// ── Scavenger Hunt feature ─────────────────────────────────────────────
+
+enum ScavengerResultType {
+  NOTHING
+  POINTS
+  EXCLUSIVE_CTOON
+}
+
+enum ScavengerSessionStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+model ScavengerStory {
+  id        String   @id @default(uuid())
+  title     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps     ScavengerStep[]
+  outcomes  ScavengerOutcome[]
+  sessions  ScavengerSession[]
+}
+
+model ScavengerStep {
+  id           String @id @default(uuid())
+  storyId      String
+  layer        Int    // 1..3
+  path         String // '', 'A', 'B', 'AA', 'AB', 'BA', 'BB'
+  description  String
+  imagePath    String?
+  optionAText  String
+  optionBText  String
+
+  story ScavengerStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, layer, path])
+}
+
+model ScavengerOutcome {
+  id         String               @id @default(uuid())
+  storyId    String
+  path       String               // e.g. "AAA", "ABB" (exactly 3 chars)
+  resultType ScavengerResultType
+  points     Int?
+  text       String?
+  createdAt  DateTime             @default(now())
+
+  story ScavengerStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, path])
+}
+
+model ScavengerExclusiveCtoon {
+  id        String   @id @default(uuid())
+  ctoonId   String   @unique
+  createdAt DateTime @default(now())
+
+  ctoon Ctoon @relation("ScavengerExclusivePool", fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@index([ctoonId])
+}
+
+model ScavengerSession {
+  id              String                  @id @default(uuid())
+  userId          String
+  storyId         String
+  stepIndex       Int                     @default(1) // next step to answer (1..3, 4 means ended) — derived from path length + 1
+  path            String                  @default("") // accumulated choices (e.g. "A", "AB", ...)
+  status          ScavengerSessionStatus  @default(PENDING)
+  triggerSource   String
+
+  // resolution snapshot
+  resultType      ScavengerResultType?
+  pointsAwarded   Int?
+  ctoonIdAwarded  String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story  ScavengerStory  @relation(fields: [storyId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon?          @relation("ScavengerAwardedCtoon", fields: [ctoonIdAwarded], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model ScavengerTriggerLog {
+  id            String   @id @default(uuid())
+  userId        String
+  triggerSource String
+  started       Boolean  @default(false)
+  reason        String?  // 'started' | 'cooldown' | 'chance_miss' | 'no_stories' | 'disabled' | 'resumed'
+  createdAt     DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([triggerSource, createdAt])
 }

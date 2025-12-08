@@ -182,6 +182,8 @@
 
       <!-- Toast -->
       <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
+      <!-- Scavenger Hunt Modal -->
+      <ScavengerHuntModal v-if="scavenger.isOpen && scavenger.sessionId" />
     </template>
   </div>
 </template>
@@ -194,6 +196,8 @@ import { useRoute } from 'vue-router'
 import { useRuntimeConfig } from '#imports'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
+import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
+import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 definePageMeta({ middleware: ['auth'], layout: 'default' })
 
@@ -201,6 +205,7 @@ definePageMeta({ middleware: ['auth'], layout: 'default' })
 const route       = useRoute()
 const auctionId   = route.params.id
 const { user, fetchSelf } = useAuth()
+const scavenger = useScavengerHunt()
 
 const loading      = ref(true)
 const auction      = ref({ ctoon: {}, winnerUsername: null, endAt: null, highestBid: 0, initialBet: 0 })
@@ -338,6 +343,8 @@ async function placeBid() {
       body: { amount: nextBidAmount.value }
     })
     showToast(!hasBids.value ? `Bid ${nextBidAmount.value} placed!` : `Bid +${bidIncrement.value} placed!`, 'success')
+    // Trigger scavenger immediately (no result modal here)
+    await scavenger.maybeTrigger('auction_bid', { open: true })
   } catch (err) {
     showToast(err.data?.message || 'Bid failed.')
   }
@@ -370,6 +377,8 @@ async function disableAutoBid() {
 
 // --- Lifecycle ---
 onMounted(async () => {
+  // Clear any stale scavenger state on page entry
+  scavenger.reset()
   await loadAuction()
   loading.value = false
   timer = setInterval(() => { now.value = new Date() }, 1000)
