@@ -176,13 +176,12 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 - Seed the first drop:
   - macOS/Linux:
     ```bash
-    node ./prisma/drops/addFirstDrop.js
+    node ./prisma/seed.js
     ```
   - Windows (PowerShell):
     ```powershell
-    node .\prisma\drops\addFirstDrop.js
+    node .\prisma\seed.js
     ```
-
 ---
 
 #### 11) Run the app
@@ -213,6 +212,21 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 - Add to Server → choose your server → Continue → Authorize. This can take a while on first run.
 
 ---
+
+#### 13) Create account and admin yourself
+- Go to http://localhost:3000
+- Sign in with your discord account
+- Give yourself admin role and some points:
+  - macOS/Linux:
+    ```bash
+    node ./prisma/makeUsersAdmins.js
+    ```
+  - Windows (PowerShell):
+    ```powershell
+    node .\prisma\makeUsersAdmins.js
+    ```
+- Set OFFICIAL_USERNAME in `.env` to be your username, this is so features like Auction insta-bidding and Auction Only cToons work.
+
 
 ### Quick troubleshooting
 - If Prisma cannot connect, verify `DATABASE_URL` and that PostgreSQL is running.
