@@ -220,29 +220,36 @@ export default defineEventHandler(async (event) => {
     setTimeout(finish, 1500)
   })
 
-  // Notify outbid users (unique) post-commit
+  // Notify only the most recent outbid leader post-commit
   try {
     const { notifyOutbidByUserId } = await import('@/server/utils/discord')
-    // Remove current leader
     const final = await db.auction.findUnique({
       where: { id: auctionId },
       select: { highestBidderId: true }
     })
-    const unique = Array.from(new Set(outbidUserIds.filter(Boolean)))
-      .filter(uid => uid !== final?.highestBidderId)
- 
-    if (unique.length) {
-      // Keep only users who actually have a Bid on this auction
-      const bidders = await db.bid.findMany({
-        where: { auctionId, userId: { in: unique } },
-        select: { userId: true }
-      })
-      const eligible = Array.from(new Set(bidders.map(b => b.userId)))
-      if (eligible.length) {
-        await Promise.all(eligible.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+
+    // Reconstruct last leadership change from steps.
+    // Initial leader (before auto-bidding) is the auction's current leader when this endpoint was called.
+    let leader = auc?.highestBidderId || null
+    let lastOutbid = null
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]
+      if (!leader || step.userId !== leader) {
+        const next = steps[i + 1]
+        const leaderDefended = next && leader && next.userId === leader
+        if (leaderDefended) {
+          i++ // skip leader auto-raise
+        } else {
+          if (leader) lastOutbid = leader
+          leader = step.userId
+        }
       }
     }
-  } catch { /* ignore failures */ }
+
+    if (lastOutbid && lastOutbid !== final?.highestBidderId) {
+      await notifyOutbidByUserId(db, lastOutbid, auctionId)
+    }
+  } catch { /* ignore DM failures */ }
 
   return {
     ok: true,

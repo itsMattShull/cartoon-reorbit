@@ -222,29 +222,41 @@ export default defineEventHandler(async (event) => {
     setTimeout(finish, 1500)
   })
 
-  // 6) Notify prior leaders (unique) via Discord DM, non-blocking
+  // 6) Notify only the latest outbid leader via Discord DM (non-blocking)
   try {
     const { notifyOutbidByUserId } = await import('@/server/utils/discord')
-    // Remove current leader
     const final = await db.auction.findUnique({
       where: { id: auctionId },
       select: { highestBidderId: true }
     })
-    const unique = Array.from(new Set(outbidUserIds.filter(Boolean)))
-      .filter(uid => uid !== final?.highestBidderId)
 
-    if (unique.length) {
-      // Keep only users who actually have a Bid on this auction
-      const bidders = await db.bid.findMany({
-        where: { auctionId, userId: { in: unique } },
-        select: { userId: true }
-      })
-      const eligible = Array.from(new Set(bidders.map(b => b.userId)))
-      if (eligible.length) {
-        await Promise.all(eligible.map(uid => notifyOutbidByUserId(db, uid, auctionId)))
+    // Reconstruct the last leadership change from the auto-bid steps.
+    // Leader at start of auto-bidding is the manual bidder.
+    let leader = userId
+    let lastOutbid = null
+    for (let i = 0; i < autoSteps.length; i++) {
+      const step = autoSteps[i]
+      if (step.userId !== leader) {
+        const next = autoSteps[i + 1]
+        const leaderDefended = next && next.userId === leader
+        if (leaderDefended) {
+          i++ // skip the leader's auto-raise step
+        } else {
+          if (leader) lastOutbid = leader
+          leader = step.userId
+        }
       }
     }
-  } catch { /* ignore failures */ }
+
+    // If no auto-bid leadership change occurred, the manual bid outbid the previous leader
+    if (!lastOutbid && pre?.highestBidderId && pre.highestBidderId !== final?.highestBidderId) {
+      lastOutbid = pre.highestBidderId
+    }
+
+    if (lastOutbid && lastOutbid !== final?.highestBidderId) {
+      await notifyOutbidByUserId(db, lastOutbid, auctionId)
+    }
+  } catch { /* ignore DM failures */ }
 
   return {
     ok: true,
