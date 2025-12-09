@@ -142,7 +142,7 @@
       <div class="bg-white rounded-xl shadow-md p-4">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold">2) Your Collection & Points</h2>
-        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
               <label class="text-sm">Points to offer</label>
               <input
@@ -158,10 +158,10 @@
             <button
               class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
               :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer"
-              @click="sendOffer"
+              @click="currentStep = 3"
             >
-              <span v-if="makingOffer">Making Offer…</span>
-              <span v-else>Make Offer</span>
+              <span v-if="makingOffer">Preparing…</span>
+              <span v-else>Confirm Offer</span>
             </button>
           </div>
         </div>
@@ -185,11 +185,33 @@
           @update:rarity-filter="v => (filters.self.rarity = v)"
           @update:duplicates-filter="v => (filters.self.duplicates = v)"
           @request-name-suggest="onSelfNameSuggest"
-        />
+        >
+          <!-- Inline Wishlist control (same row, wraps as needed) -->
+          <label v-if="targetUser" class="inline-flex items-center gap-2 ml-1">
+            <input
+              type="checkbox"
+              v-model="filters.self.wishlistOnly"
+              :disabled="loadingWishlist || (!loadingWishlist && targetWishlistIds.size === 0)"
+              class="h-4 w-4 border rounded"
+            />
+            <span class="text-base md:text-lg font-medium">Show Their Wishlist cToons</span>
+          </label>
+
+          <span v-if="loadingWishlist" class="text-xs text-gray-600">Loading…</span>
+          <span v-else-if="targetWishlistIds.size === 0" class="text-xs text-gray-600">
+            {{ targetUser.username }} has no wishlist items.
+          </span>
+        </FilterBar>
+
 
         <div v-if="loading.self" class="py-16 text-center text-gray-500">Loading…</div>
         <div v-else>
-          <EmptyState v-if="!filteredSelf.length" label="No cToons match your filters" />
+          <EmptyState
+            v-if="!filteredSelf.length"
+            :label="filters.self.wishlistOnly
+              ? `No cToons from ${targetUser?.username ?? 'user'}’s Wishlist in your collection`
+              : 'No cToons match your filters'"
+          />
           <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
             <CtoonCard
               v-for="c in filteredSelf"
@@ -208,6 +230,66 @@
           <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 1">Back</button>
           <button
             class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+            :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer"
+            @click="currentStep = 3"
+          >
+            <span v-if="makingOffer">Preparing…</span>
+            <span v-else>Confirm Offer</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3: Confirm Offer -->
+    <section v-if="targetUser && currentStep === 3" class="mb-6">
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-lg font-semibold">3) Confirm Offer</h2>
+            <span class="text-xs text-gray-500">Review before sending</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Requested from other user -->
+          <div>
+            <h3 class="font-semibold mb-2">Requesting from {{ targetUser.username }}</h3>
+            <div v-if="!selectedTargetCtoons.length" class="text-sm text-gray-600">
+              No cToons selected from {{ targetUser.username }}.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div v-for="c in selectedTargetCtoons" :key="c.id" class="border rounded p-2">
+                <img :src="c.assetPath" :alt="c.name" class="w-full h-24 object-contain mb-1" />
+                <p class="text-xs font-medium truncate">{{ c.name }}</p>
+                <p class="text-[11px] text-gray-600">{{ c.rarity }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Offering -->
+          <div>
+            <h3 class="font-semibold mb-2">You’re Offering</h3>
+            <div class="mb-3 text-sm">
+              <span class="font-medium">Points:</span>
+              <span>{{ pointsToOffer }}</span>
+            </div>
+            <div v-if="!selectedInitiatorCtoons.length" class="text-sm text-gray-600">
+              No cToons offered.
+            </div>
+            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div v-for="c in selectedInitiatorCtoons" :key="c.id" class="border rounded p-2">
+                <img :src="c.assetPath" :alt="c.name" class="w-full h-24 object-contain mb-1" />
+                <p class="text-xs font-medium truncate">{{ c.name }}</p>
+                <p class="text-[11px] text-gray-600">{{ c.rarity }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between">
+          <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 2">Back</button>
+          <button
+            class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
             :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer"
             @click="sendOffer"
           >
@@ -268,7 +350,7 @@ const userSearchCache = new Map() // simple in-memory cache by query string
 // add rarity to both sides
 const filters = reactive({
   other: { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' },
-  self:  { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
+  self:  { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
 })
 
 // compute which ctoonIds are duplicates for each list
@@ -413,6 +495,7 @@ function selectTargetUser(u) {
   highlightedIndex.value = -1
   currentStep.value = 1              // start at Step 1
   bootstrapCollections()
+  loadTargetWishlist()
 }
 
 /**
@@ -432,7 +515,11 @@ async function clearTarget(focusInput = false) {
   otherCtoons.value = []
   selfCtoons.value = []
   filters.other = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
-  filters.self  = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
+  filters.self  = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
+
+  // reset wishlist state
+  targetWishlist.value = []
+  loadingWishlist.value = false
 
   if (focusInput) {
     await nextTick()
@@ -467,6 +554,27 @@ const otherCtoons = ref([])
 const selfCtoons = ref([])
 const targetOwnedIds = computed(() => new Set(otherCtoons.value.map(c => c.ctoonId)))
 const selfOwnedIds = computed(() => new Set(selfCtoons.value.map(c => c.ctoonId)))
+
+// Target user's wishlist
+const targetWishlist = ref([]) // [{ id, offeredPoints, createdAt, hasEnough, ctoon }]
+const loadingWishlist = ref(false)
+const targetWishlistIds = computed(() => {
+  const ids = targetWishlist.value.map(w => w?.ctoon?.id).filter(Boolean)
+  return new Set(ids)
+})
+
+async function loadTargetWishlist() {
+  if (!targetUser.value) return
+  try {
+    loadingWishlist.value = true
+    const res = await $fetch(`/api/wishlist/users/${targetUser.value.username}`)
+    targetWishlist.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    targetWishlist.value = []
+  } finally {
+    loadingWishlist.value = false
+  }
+}
 
 async function bootstrapCollections() {
   if (!targetUser.value) return
@@ -505,26 +613,30 @@ function toggleInitiatorCtoon(c) {
   else selectedInitiatorCtoons.value.push(c)
 }
 
+function sortAlpha(arr) {
+  return [...arr].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }))
+}
+function uniqueTruthies(arr) {
+  return [...new Set(arr.map(x => (x ?? '').toString().trim()).filter(Boolean))]
+}
+
 const setOptionsOther = computed(() => [
   'All',
-  ...uniqueTruthies(otherCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet))
+  ...sortAlpha(uniqueTruthies(otherCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet)))
 ])
 const setOptionsSelf = computed(() => [
   'All',
-  ...uniqueTruthies(selfCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet))
+  ...sortAlpha(uniqueTruthies(selfCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet)))
 ])
 
 const seriesOptionsOther = computed(() => [
   'All',
-  ...uniqueTruthies(otherCtoons.value.map(c => c.series ?? c.seriesName))
+  ...sortAlpha(uniqueTruthies(otherCtoons.value.map(c => c.series ?? c.seriesName)))
 ])
 const seriesOptionsSelf = computed(() => [
   'All',
-  ...uniqueTruthies(selfCtoons.value.map(c => c.series ?? c.seriesName))
+  ...sortAlpha(uniqueTruthies(selfCtoons.value.map(c => c.series ?? c.seriesName)))
 ])
-
-
-function uniqueTruthies(arr) { return [...new Set(arr.filter(Boolean))] }
 
 const nameSuggestionsOther = ref([])
 const nameSuggestionsSelf = ref([])
@@ -569,10 +681,16 @@ const filteredOther = computed(() => applyFilters(otherCtoons.value, filters.oth
   ownedPredicate: (c) => selfOwnedIds.value.has(c.ctoonId),
   dupIds: dupIdsOther.value
 }))
-const filteredSelf = computed(() => applyFilters(selfCtoons.value, filters.self, {
-  ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId),
-  dupIds: dupIdsSelf.value
-}))
+const filteredSelf = computed(() => {
+  let list = applyFilters(selfCtoons.value, filters.self, {
+    ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId),
+    dupIds: dupIdsSelf.value
+  })
+  if (filters.self.wishlistOnly) {
+    list = list.filter(c => targetWishlistIds.value.has(c.ctoonId))
+  }
+  return list
+})
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Offer

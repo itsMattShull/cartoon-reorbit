@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+  <div class="flex flex-wrap items-end gap-3 mb-6">
     <!-- Name filter with local suggestions -->
     <div class="flex-1">
       <label class="block text-xs font-medium mb-1">cToon Name</label>
@@ -11,7 +11,7 @@
           @blur="onBlur"
           type="text"
           placeholder="Type at least 3 characters…"
-          class="w-full border rounded px-3 py-2"
+          class="w-full min-w-[200px] border rounded px-3 py-2"
         />
         <div
           v-if="showSuggest && nameSuggestions.length"
@@ -93,6 +93,9 @@
         <option value="unowned">Unowned</option>
       </select>
     </div>
+
+    <!-- Extra inline controls slot (e.g., Wishlist checkbox) -->
+    <slot />
   </div>
 </template>
 
