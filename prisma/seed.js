@@ -72,6 +72,26 @@ async function seedHomepageConfig() {
   })
 }
 
+async function seedLottoSettings() {
+  await prisma.lottoSettings.upsert({
+    where: { id: 'lotto' },
+    update: {
+      baseOdds: 1.0,
+      incrementRate: 0.02,
+      countPerDay: 5,
+      cost: 50 // Ensure cost is updated to 50
+    },
+    create: {
+      id: 'lotto',
+      baseOdds: 1.0,
+      incrementRate: 0.02,
+      countPerDay: 5,
+      cost: 50 // Set the default cost to 50 here
+    }
+  })
+  console.log('Seeded LottoSettings (defaults)')
+}
+
 async function seedCtoonsIfEmpty() {
   const count = await prisma.ctoon.count()
   if (count > 0) {
@@ -211,6 +231,9 @@ async function main() {
 
   console.log('Seeding HomepageConfig…')
   await seedHomepageConfig()
+
+  console.log('Seeding LottoSettings…')
+  await seedLottoSettings()
 
   console.log('Seeding cToons (if none exist)…')
   await seedCtoonsIfEmpty()
