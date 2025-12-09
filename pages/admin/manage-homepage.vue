@@ -15,6 +15,7 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Showcase' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Showcase'">Showcase</button>
+          
         </nav>
       </div>
 
@@ -89,7 +90,7 @@
       </section>
 
       <!-- Showcase tab -->
-      <section v-else class="space-y-4">
+      <section v-if="activeTab==='Showcase'" class="space-y-4">
         <p class="text-sm text-gray-600">
           Upload a single Showcase image. SVG/PNG/JPEG.
         </p>
@@ -111,6 +112,8 @@
           </div>
         </div>
       </section>
+
+      
 
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
@@ -137,6 +140,7 @@ const showcaseFile = ref(null)
 const saving = ref(false)
 const toast  = ref(null)
 
+
 function onFile(key, e) { files.value[key] = e.target.files?.[0] || null }
 function clearPath(key) { paths.value[key] = ''; files.value[key] = null }
 
@@ -151,6 +155,7 @@ async function loadConfig() {
   paths.value.bottomRight = cfg.bottomRightImagePath || ''
   showcasePath.value      = cfg.showcaseImagePath    || ''
 }
+
 
 async function saveAll() {
   saving.value = true; toast.value = null
@@ -198,9 +203,13 @@ async function saveShowcase() {
 }
 
 onMounted(loadConfig)
+
+ 
 </script>
 
 <style scoped>
 .btn-primary{ background-color:#6366F1; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
 .btn-primary:disabled{ opacity:.5 }
 </style>
+
+ 

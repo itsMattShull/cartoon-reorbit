@@ -401,47 +401,31 @@ function profileFromName(basename) {
   return { name: working, rarity: detected }
 }
 
-// apply the same defaults logic as addCtoon.vue
+// server-provided rarity defaults (loaded in onMounted)
+const rarityDefaults = ref(null)
+
+// apply the same defaults logic as addCtoon.vue, but sourced from global settings
 function updateDefaults(f) {
-  const pricing = {
-    Common: 100,
-    Uncommon: 200,
-    Rare: 400,
-    'Very Rare': 750,
-    'Crazy Rare': 1250
+  const d = rarityDefaults.value?.[f.rarity]
+  if (d) {
+    f.totalQuantity   = d.totalQuantity ?? null
+    f.initialQuantity = d.initialQuantity ?? null
+    f.perUserLimit    = d.perUserLimit ?? null
+    f.inCmart         = !!d.inCmart
+    f.price           = Number(d.price ?? 0)
+    return
   }
+  // fallback hard-coded if settings unavailable
+  const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
   f.price = pricing[f.rarity] ?? 0
   f.inCmart = f.rarity !== 'Code Only'
-
   switch (f.rarity) {
-    case 'Common':
-      f.totalQuantity   = 100
-      f.initialQuantity = 100
-      f.perUserLimit    = 7
-      break
-    case 'Uncommon':
-      f.totalQuantity   = 75
-      f.initialQuantity = 75
-      f.perUserLimit    = 5
-      break
-    case 'Rare':
-      f.totalQuantity   = 60
-      f.initialQuantity = 60
-      f.perUserLimit    = 3
-      break
-    case 'Very Rare':
-      f.totalQuantity   = 42
-      f.initialQuantity = 42
-      f.perUserLimit    = 2
-      break
-    case 'Crazy Rare':
-      f.totalQuantity   = 30
-      f.initialQuantity = 30
-      f.perUserLimit    = 1
-      break
-    default:
-      // for Prize Only / Auction Only or others, leave as-is
-      break
+    case 'Common':     f.totalQuantity = 160; f.initialQuantity = 160; f.perUserLimit = 7; break
+    case 'Uncommon':   f.totalQuantity = 120; f.initialQuantity = 120; f.perUserLimit = 5; break
+    case 'Rare':       f.totalQuantity = 80;  f.initialQuantity = 80;  f.perUserLimit = 3; break
+    case 'Very Rare':  f.totalQuantity = 60;  f.initialQuantity = 60;  f.perUserLimit = 2; break
+    case 'Crazy Rare': f.totalQuantity = 40;  f.initialQuantity = 40;  f.perUserLimit = 1; break
+    default: break
   }
 }
 
@@ -461,12 +445,14 @@ const filteredBulkSeriesOptions = computed(() => {
 })
 
 onMounted(async () => {
-  const [setsRes, seriesRes] = await Promise.all([
+  const [setsRes, seriesRes, rarityRes] = await Promise.all([
     fetch('/api/admin/sets', { credentials: 'include' }),
-    fetch('/api/admin/series', { credentials: 'include' })
+    fetch('/api/admin/series', { credentials: 'include' }),
+    fetch('/api/rarity-defaults')
   ])
   setsOptions.value = await setsRes.json()
   seriesOptions.value = await seriesRes.json()
+  try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
 })
 
 function handleFiles(e) {
@@ -557,4 +543,3 @@ async function uploadAll() {
   }
 }
 </script>
-

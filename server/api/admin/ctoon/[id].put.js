@@ -7,6 +7,7 @@ import {
   readMultipartFormData
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -152,11 +153,34 @@ export default defineEventHandler(async (event) => {
     updateData.type = imagePart.type
   }
 
-  // 8) Persist
+  // 8) Persist (fetch before and then update)
+  const before = await prisma.ctoon.findUnique({ where: { id } })
   const updated = await prisma.ctoon.update({
     where: { id },
     data: updateData
   })
+
+  // 9) Log field-level changes
+  try {
+    const area = `Ctoon:${id}`
+    const keys = [
+      'name','series','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
+      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type'
+    ]
+    for (const k of keys) {
+      const prev = before ? (before[k] instanceof Date ? before[k].toISOString() : (Array.isArray(before[k]) || typeof before[k] === 'object' ? JSON.stringify(before[k]) : before[k])) : undefined
+      const next = updated ? (updated[k] instanceof Date ? updated[k].toISOString() : (Array.isArray(updated[k]) || typeof updated[k] === 'object' ? JSON.stringify(updated[k]) : updated[k])) : undefined
+      if (prev !== next) {
+        await logAdminChange(prisma, {
+          userId: me.id,
+          area,
+          key: k,
+          prevValue: before ? before[k] : null,
+          newValue: updated ? updated[k] : null
+        })
+      }
+    }
+  } catch {}
 
   return { success: true, ctoon: updated }
 })

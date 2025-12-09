@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -64,6 +65,7 @@ export default defineEventHandler(async (event) => {
 
   // 4) Update DB config
   try {
+    const before = await db.gameConfig.findUnique({ where: { gameName: 'Winwheel' } })
     await db.gameConfig.upsert({
       where: { gameName: 'Winwheel' },
       create: {
@@ -75,6 +77,16 @@ export default defineEventHandler(async (event) => {
         updatedAt: new Date()
       }
     })
+    // log change if any
+    if ((before?.winWheelImagePath || null) !== (assetPath || null)) {
+      await logAdminChange(db, {
+        userId: me.id,
+        area: 'GameConfig:Winwheel',
+        key: 'winWheelImagePath',
+        prevValue: before?.winWheelImagePath || null,
+        newValue: assetPath || null
+      })
+    }
   } catch (err) {
     console.error('Failed to update winWheelImagePath on GameConfig:', err)
     throw createError({ statusCode: 500, statusMessage: 'Image saved, but updating config failed' })

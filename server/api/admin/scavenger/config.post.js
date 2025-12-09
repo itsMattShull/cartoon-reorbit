@@ -1,6 +1,7 @@
 // server/api/admin/scavenger/config.post.js
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -20,6 +21,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid scavengerCooldownHours' })
   }
 
+  const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
   const res = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: {
@@ -33,9 +35,19 @@ export default defineEventHandler(async (event) => {
       scavengerCooldownHours: Math.round(cooldown)
     }
   })
+  try {
+    const changes = [
+      ['scavengerChancePercent', before?.scavengerChancePercent, res.scavengerChancePercent],
+      ['scavengerCooldownHours', before?.scavengerCooldownHours, res.scavengerCooldownHours]
+    ]
+    for (const [key, prev, next] of changes) {
+      if (prev !== next) {
+        await logAdminChange(db, { userId: me.id, area: 'GlobalGameConfig', key, prevValue: prev, newValue: next })
+      }
+    }
+  } catch {}
   return {
     scavengerChancePercent: res.scavengerChancePercent,
     scavengerCooldownHours: res.scavengerCooldownHours
   }
 })
-

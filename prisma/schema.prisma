@@ -163,12 +163,41 @@ model User {
   auctionsOnlyCreated AuctionOnly[] @relation("AuctionOnlyCreatedBy")
   adImagesCreated    AdImage[]      @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
+  // Ban notes relations
+  banNotes           UserBanNote[]  @relation("BanNoteUser")
+  banNotesAuthored   UserBanNote[]  @relation("BanNoteAdmin")
 
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
   scavengerTriggerLogs ScavengerTriggerLog[]
 
+  // Admin change logs (inverse)
+  adminChangeLogs      AdminChangeLog[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
+}
+
+// ── Ban/Unban auditing ─────────────────────────────────────────────
+
+enum BanAction {
+  BAN
+  UNBAN
+  DISSOLVE
+}
+
+model UserBanNote {
+  id        String    @id @default(uuid())
+  userId    String
+  adminId   String
+  action    BanAction
+  reason    String
+  createdAt DateTime  @default(now())
+
+  user    User @relation("BanNoteUser", fields: [userId], references: [id], onDelete: Cascade)
+  admin   User @relation("BanNoteAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([adminId, createdAt])
 }
 
 model UserIP {
@@ -428,6 +457,11 @@ model GameConfig {
 model GlobalGameConfig {
   id               String   @id @default(uuid())
   dailyPointLimit  Int      @default(100)
+  dailyLoginPoints   Int    @default(500)
+  dailyNewUserPoints Int    @default(1000)
+  czoneVisitPoints   Int    @default(20)
+  czoneVisitMaxPerDay Int   @default(10)
+  rarityDefaults     Json?
   // Scavenger Hunt settings
   scavengerChancePercent Int @default(5)   // 0–100; 0 disables
   scavengerCooldownHours Int @default(24)  // cooldown between completed hunts per user
@@ -946,4 +980,21 @@ model ScavengerTriggerLog {
 
   @@index([createdAt])
   @@index([triggerSource, createdAt])
+}
+
+// ── Admin change auditing ─────────────────────────────────────────────
+model AdminChangeLog {
+  id        String   @id @default(uuid())
+  userId    String
+  area      String   // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
+  key       String   // specific field or setting key
+  prevValue String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([area, createdAt])
 }

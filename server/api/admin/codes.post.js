@@ -1,6 +1,7 @@
 // server/api/admin/codes.post.js
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -105,5 +106,14 @@ export default defineEventHandler(async (event) => {
     if (e.code === 'P2002') throw createError({ statusCode: 400, statusMessage: 'Code already exists.' })
     throw e
   }
+  try {
+    await logAdminChange(prisma, {
+      userId: me.id,
+      area: `ClaimCode:${created.code}`,
+      key: 'create',
+      prevValue: null,
+      newValue: { code: created.code, maxClaims: created.maxClaims, expiresAt: created.expiresAt }
+    })
+  } catch {}
   return created
 })

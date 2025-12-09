@@ -266,53 +266,49 @@ const filteredSetsOptions = computed(() => {
   )
 })
 
+// rarity defaults fetched from server
+const rarityDefaults = ref(null)
+
 onMounted(async () => {
-  const [seriesRes, setsRes] = await Promise.all([
+  const [seriesRes, setsRes, rarityRes] = await Promise.all([
     fetch('/api/admin/series', { credentials: 'include' }),
-    fetch('/api/admin/sets', { credentials: 'include' })
+    fetch('/api/admin/sets', { credentials: 'include' }),
+    fetch('/api/rarity-defaults')
   ])
   seriesOptions.value = await seriesRes.json()
   setsOptions.value = await setsRes.json()
+  try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
 })
 
 watch(rarity, val => {
-  const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
-  price.value = pricing[val] || 0
+  const d = rarityDefaults.value?.[val]
+  if (d) {
+    totalQuantity.value   = d.totalQuantity ?? null
+    initialQuantity.value = d.initialQuantity ?? null
+    perUserLimit.value    = d.perUserLimit ?? null
+    inCmart.value         = !!d.inCmart
+    price.value           = Number(d.price ?? 0)
+  } else {
+    // fallback hard-coded
+    const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
+    price.value = pricing[val] || 0
+    switch (val) {
+      case 'Common':
+        initialQuantity.value = 160; totalQuantity.value = 160; perUserLimit.value = 7; inCmart.value = true; break
+      case 'Uncommon':
+        initialQuantity.value = 120; totalQuantity.value = 120; perUserLimit.value = 5; inCmart.value = true; break
+      case 'Rare':
+        initialQuantity.value = 80; totalQuantity.value = 80; perUserLimit.value = 3; inCmart.value = true; break
+      case 'Very Rare':
+        initialQuantity.value = 60; totalQuantity.value = 60; perUserLimit.value = 2; inCmart.value = true; break
+      case 'Crazy Rare':
+        initialQuantity.value = 40; totalQuantity.value = 40; perUserLimit.value = 1; inCmart.value = true; break
+      default:
+        break
+    }
+  }
   codeOnly.value = val === 'Code Only'
   if (val === 'Code Only') inCmart.value = false
-
-  switch (val) {
-    case 'Common':
-      initialQuantity.value = 100
-      totalQuantity.value = 100
-      perUserLimit.value = 7
-      inCmart.value = true
-      break
-    case 'Uncommon':
-      initialQuantity.value = 75
-      totalQuantity.value = 75
-      perUserLimit.value = 5
-      inCmart.value = true
-      break
-    case 'Rare':
-      initialQuantity.value = 60
-      totalQuantity.value = 60
-      perUserLimit.value = 3
-      inCmart.value = true
-      break
-    case 'Very Rare':
-      initialQuantity.value = 42
-      totalQuantity.value = 42
-      perUserLimit.value = 2
-      inCmart.value = true
-      break
-    case 'Crazy Rare':
-      initialQuantity.value = 30
-      totalQuantity.value = 30
-      perUserLimit.value = 1
-      inCmart.value = true
-      break
-  }
 })
 
 function handleFile(e) {
