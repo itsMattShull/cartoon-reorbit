@@ -182,6 +182,7 @@ model User {
 enum BanAction {
   BAN
   UNBAN
+  DISSOLVE
 }
 
 model UserBanNote {

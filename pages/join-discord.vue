@@ -1,15 +1,21 @@
 <template>
     <div class="p-6 max-w-md mx-auto text-center">
-      <h2 class="text-2xl font-bold mb-4" v-if="!isBanned">You're Almost In!</h2>
-      <h2 class="text-2xl font-bold mb-4 text-red-600" v-else>Account Banned</h2>
-      <p class="mb-4" v-if="!isBanned">
+      <h2 class="text-2xl font-bold mb-4" v-if="!isBanned && !isInactive">You're Almost In!</h2>
+      <h2 class="text-2xl font-bold mb-4 text-red-600" v-else-if="isBanned">Account Banned</h2>
+      <h2 class="text-2xl font-bold mb-4 text-amber-600" v-else>Account Inactive</h2>
+
+      <p class="mb-4" v-if="!isBanned && !isInactive">
         Join our Discord server, then come back and refresh the page, to unlock all features.
       </p>
-      <p class="mb-4 text-red-600" v-else>
+      <p class="mb-4 text-red-600" v-else-if="isBanned">
         Your account has been banned. If you believe this is a mistake, please contact a moderator in Discord.
       </p>
+      <p class="mb-4 text-amber-700" v-else>
+        Your account has been marked as inactive. If you believe this is a mistake, please reach out to the admins in Discord.
+      </p>
+
       <a
-        v-if="!isBanned"
+        v-if="!isBanned && !isInactive"
         :href="inviteUrl"
         target="_blank"
         rel="noopener noreferrer"
@@ -36,13 +42,14 @@
     const router = useRouter()
     const route = useRoute()
 
-    // If URL has ?banned=1, show ban message and stop polling.
+    // If URL has ?banned=1 or ?inactive=1, show appropriate message and stop polling.
     const isBanned = computed(() => route.query.banned === '1')
+    const isInactive = computed(() => route.query.inactive === '1')
 
     let checkInterval = null
 
     async function checkGuildMembership () {
-      if (isBanned.value) return // don't poll if banned
+      if (isBanned.value || isInactive.value) return // don't poll if banned or inactive
       try {
         const res = await fetch('/api/discord/guild-check')
         if (res.ok) {

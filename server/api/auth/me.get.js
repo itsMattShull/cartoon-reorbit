@@ -74,6 +74,7 @@ export default defineEventHandler(async (event) => {
     needsSetup: !(user.username && user.avatar && user.ctoons.length > 0),
     inGuild: user.inGuild,
     isAdmin: user.isAdmin,
+    active: user.active,
     ctoons: user.ctoons,
     isBooster: user.isBooster
   }
