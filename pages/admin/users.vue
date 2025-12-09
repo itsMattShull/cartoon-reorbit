@@ -72,6 +72,11 @@
                 @click="openActionModal(u, 'UNBAN'); closeMenu()"
               >Unban user</button>
               <button
+                v-if="!u.isAdmin && !u.active && !u.banned"
+                class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                @click="activateUser(u); closeMenu()"
+              >Activate User</button>
+              <button
                 v-if="!u.isAdmin && u.active"
                 class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
                 @click="openDissolveModal(u); closeMenu()"
@@ -446,6 +451,17 @@ async function removeAdmin(u) {
     if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
+  }
+}
+
+// Activate user (for inactive, non-admin, non-banned users)
+async function activateUser(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/activate`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], active: true }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to activate user')
   }
 }
 

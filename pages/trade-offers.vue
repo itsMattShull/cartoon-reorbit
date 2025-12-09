@@ -192,9 +192,9 @@
           <!-- Scrollable Body -->
           <div class="p-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <!-- Offered CToons -->
+              <!-- Offered cToons -->
               <div>
-                <h3 class="font-semibold mb-2">Offered CToons</h3>
+                <h3 class="font-semibold mb-2">Offered cToons</h3>
                 <div class="grid grid-cols-2 gap-4">
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
@@ -225,9 +225,9 @@
                   </div>
                 </div>
               </div>
-              <!-- Requested CToons -->
+              <!-- Requested cToons -->
               <div>
-                <h3 class="font-semibold mb-2">Requested CToons</h3>
+                <h3 class="font-semibold mb-2">Requested cToons</h3>
                 <div class="grid grid-cols-2 gap-4">
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
@@ -255,6 +255,26 @@
                     <p class="text-xs text-gray-600">
                       {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
                     </p>
+                    <!-- Viewer ownership stats for this cToon -->
+                    <div class="text-xs text-gray-700 mt-1 w-full text-center">
+                      <template v-if="!isLoadingSelf">
+                        <span>
+                          You own: {{ getSelfStats(tc.userCtoon.ctoonId).count }}
+                        </span>
+                        <span class="block" v-if="getSelfStats(tc.userCtoon.ctoonId).count > 0">
+                          Mint range owned:
+                          <template v-if="getSelfStats(tc.userCtoon.ctoonId).hasMints">
+                            {{ getSelfStats(tc.userCtoon.ctoonId).minMint }} – {{ getSelfStats(tc.userCtoon.ctoonId).maxMint }}
+                          </template>
+                          <template v-else>
+                            n/a
+                          </template>
+                        </span>
+                      </template>
+                      <template v-else>
+                        <span class="text-gray-500">Loading your ownership…</span>
+                      </template>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -322,6 +342,30 @@ async function loadSelfCollection() {
 const selfOwnedIds = computed(() =>
   new Set(selfCtoons.value.map(sc => sc.ctoonId))
 )
+
+// Precompute viewer's ownership stats per cToonId
+const selfStatsByCtoonId = computed(() => {
+  const map = new Map()
+  for (const uc of selfCtoons.value) {
+    const id = uc.ctoonId
+    let entry = map.get(id)
+    if (!entry) {
+      entry = { count: 0, minMint: null, maxMint: null, hasMints: false }
+      map.set(id, entry)
+    }
+    entry.count++
+    if (uc.mintNumber != null) {
+      entry.minMint = entry.minMint == null ? uc.mintNumber : Math.min(entry.minMint, uc.mintNumber)
+      entry.maxMint = entry.maxMint == null ? uc.mintNumber : Math.max(entry.maxMint, uc.mintNumber)
+      entry.hasMints = true
+    }
+  }
+  return map
+})
+
+function getSelfStats(ctoonId) {
+  return selfStatsByCtoonId.value.get(ctoonId) || { count: 0, minMint: null, maxMint: null, hasMints: false }
+}
 
 const toast = ref({ show: false, message: '', type: 'success' })
 function showToast(msg, type = 'success') {
