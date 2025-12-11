@@ -112,6 +112,8 @@ model User {
   tokenExpiresAt   DateTime?
   roles            String[]         @default([])
   allowAuctionNotifications Boolean  @default(true)
+  // Receive Discord DMs when a cToon on the user's wishlist goes on auction
+  allowWishlistAuctionNotifications Boolean @default(true)
   isAdmin          Boolean          @default(false)
   inGuild          Boolean          @default(true)
   active           Boolean          @default(true)
