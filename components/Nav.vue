@@ -173,7 +173,6 @@ const q = ref('')
 
 /* main links */
 const mainLinks = [
-  { label: 'Lottery', to: '/lottery' },
   { label: 'Showcase', to: '/dashboard' },
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'Collection', to: '/collection' },
@@ -184,6 +183,7 @@ const mainLinks = [
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
+  { label: 'Lottery', to: '/lottery' },
   { label: 'gToons Clash', to: '/games/clash/rooms' },
   { label: 'Settings', to: '/settings' }
 ]
