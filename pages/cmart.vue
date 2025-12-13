@@ -72,6 +72,15 @@
               </div>
             </div>
 
+            <!-- Availability -->
+            <div>
+              <div class="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+              <div class="flex items-center gap-2">
+                <div class="h-4 w-4 bg-gray-200 rounded"></div>
+                <div class="h-3 w-28 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+
             <!-- Sort Select -->
             <div>
               <div class="h-4 w-20 bg-gray-200 rounded mb-2"></div>
@@ -278,6 +287,21 @@
                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
                 />
                 <span class="ml-2">Un‐owned</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Filter by Availability -->
+          <div class="mb-10">
+            <p class="text-sm font-medium text-gray-700 mb-2">Availability</p>
+            <div class="space-y-1">
+              <label class="flex items-center text-sm">
+                <input
+                  type="checkbox"
+                  v-model="hideOutOfStock"
+                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                />
+                <span class="ml-2">Hide Out Of Stock</span>
               </label>
             </div>
           </div>
@@ -707,6 +731,7 @@ const selectedSets     = ref([])
 const selectedSeries   = ref([])
 const selectedRarities = ref([])
 const ownedFilter      = ref('all')   // 'all' | 'owned' | 'unowned'
+const hideOutOfStock   = ref(false)
 const sortBy           = ref('releaseDateDesc')
 const currentPage      = ref(1)
 const itemsPerPage     = 50
@@ -738,6 +763,9 @@ function updateUrlQueryFromFilters() {
 
   if (ownedFilter.value && ownedFilter.value !== 'all') newQuery.owned = ownedFilter.value
   else delete newQuery.owned
+
+  if (hideOutOfStock.value) newQuery.available = 'true';
+  else delete newQuery.available
 
   if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
   else delete newQuery.sort
@@ -806,7 +834,16 @@ const filteredCtoons = computed(() => {
       ownedMatch = !c.owned
     }
 
-    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch
+    // 6) Filter by availability
+    let availabilityMatch = true
+    if (hideOutOfStock.value) {
+      const released = isReleased(c)
+      const inStock = c.quantity === null || c.minted < c.quantity
+      availabilityMatch = released && inStock
+    }
+
+
+    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch && availabilityMatch
   })
 })
 
@@ -843,7 +880,7 @@ const pagedCtoons = computed(() => {
 
 // Reset to page 1 whenever filters/sort change
 watch(
-  [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, sortBy],
+  [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, hideOutOfStock, sortBy],
   () => {
     currentPage.value = 1
     updateUrlQueryFromFilters()
@@ -930,6 +967,7 @@ onMounted(async () => {
   const seriesParam = route.query.series
   const rarityParam = route.query.rarity
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
+  const availableParam = route.query.available
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
@@ -940,6 +978,7 @@ onMounted(async () => {
   if (initSeries.length)   selectedSeries.value = initSeries
   if (initRarities.length) selectedRarities.value = initRarities
   if (['all','owned','unowned'].includes(ownedParam)) ownedFilter.value = ownedParam
+  if (availableParam === 'true') hideOutOfStock.value = true
 
   const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','series']
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
