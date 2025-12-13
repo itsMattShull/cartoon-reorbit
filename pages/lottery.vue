@@ -23,13 +23,47 @@
         <div class="bg-white rounded-lg p-6 w-11/12 max-w-md text-center">
           <h2 class="text-2xl font-semibold mb-2">{{ modalTitle }}</h2>
           <div class="text-lg mb-4">Rolled: <span class="font-mono">{{ modalRoll }}</span></div>
-          <div class="mb-4">{{ modalMessage }}</div>
+          <!-- Prize Display -->
+          <div class="mb-4">
+            <div v-if="modalCtoon" class="flex flex-col items-center gap-2">
+              <img :src="modalCtoon.assetPath" class="h-32 w-auto rounded" />
+              <p class="font-semibold">{{ modalCtoon.name }}</p>
+            </div>
+            <div v-else-if="modalVerificationCode" class="text-sm text-left space-y-2">
+              <p>{{ modalMessage }}</p>
+              <div class="bg-gray-100 p-2 rounded">
+                <p><strong>Code:</strong> {{ modalVerificationCode }}</p>
+                <p class="break-all"><strong>Hash:</strong> <span class="font-mono text-xs">{{ modalVerificationHash }}</span></p>
+              </div>
+            </div>
+            <p v-else>{{ modalMessage }}</p>
+          </div>
           <div class="flex justify-center">
             <button class="btn-primary" @click="closeModal">Close</button>
           </div>
         </div>
       </div>
     </transition>
+
+    <!-- Prize Pool Display -->
+    <div v-if="prizePool.length > 0" class="mt-8 max-w-4xl mx-auto">
+      <h2 class="text-2xl font-bold mb-4 text-center">Available cToon Prizes</h2>
+      <div class="flex justify-center flex-wrap gap-4">
+        <div
+          v-for="ctoon in prizePool"
+          :key="ctoon.id"
+          class="bg-white rounded-lg shadow p-3 flex flex-col items-center text-center w-[150px] h-[175px]"
+        >
+          <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-full h-24 object-contain mb-2" />
+          <p class="text-sm font-semibold flex-grow flex items-center">{{ ctoon.name }}</p>
+          <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
+          <p class="text-xs text-gray-500">
+            Stock: {{ ctoon.quantity !== null ? ctoon.quantity - ctoon.totalMinted : 'Unlimited' }}
+          </p>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -45,11 +79,15 @@ const { fetchSelf } = useAuth()
 const odds = ref(0)
 const remaining = ref(0)
 const cost = ref(0)
+const prizePool = ref([])
 const buying = ref(false)
 const showModal = ref(false)
 const modalTitle = ref('')
 const modalRoll = ref('')
 const modalMessage = ref('')
+const modalVerificationCode = ref(null)
+const modalVerificationHash = ref(null)
+const modalCtoon = ref(null)
 
 const oddsDisplay = computed(() => Number(odds.value).toFixed(2))
 
@@ -59,6 +97,7 @@ async function load() {
     odds.value = Number(res?.odds ?? 0)
     remaining.value = res?.remaining ?? 0
     cost.value = res?.cost ?? 50
+    prizePool.value = res?.prizePool || []
   } catch (e) {
     console.error('Failed to load lottery', e)
   }
@@ -67,14 +106,25 @@ async function load() {
 async function buy() {
   buying.value = true
   try {
-    const res = await $fetch('/api/lottery', { method: 'POST' })
-    const { roll, win, newOdds, remaining: rem, awardedPoints } = res
+    const { roll, win, newOdds, remaining: rem, awardedPoints, awardedCtoon, emptyPoolWin, verificationCode, verificationHash } = await $fetch('/api/lottery', { method: 'POST' })
     odds.value = Number(newOdds)
     remaining.value = rem
     modalRoll.value = Number(roll).toFixed(2)
+    modalCtoon.value = null // Reset ctoon prize
+    modalVerificationCode.value = null // Reset verification
+    modalVerificationHash.value = null
+
     if (win) {
       modalTitle.value = 'You won!'
-      modalMessage.value = `You won ${awardedPoints ?? 0} points!` 
+      if (emptyPoolWin) {
+        modalMessage.value = 'You WON... but the lotto pool has gone empty. Screen Shot this window and show it to a mod and we will make it right!'
+        modalVerificationCode.value = verificationCode
+        modalVerificationHash.value = verificationHash
+      } else if (awardedCtoon) {
+        modalCtoon.value = awardedCtoon
+      } else {
+        modalMessage.value = `You won ${awardedPoints ?? 0} points! Your odds have increased to ${Number(newOdds).toFixed(2)}%.`
+      }
     } else {
       modalTitle.value = 'You lost'
       modalMessage.value = `Better luck next time. Your odds increased to ${Number(newOdds).toFixed(2)}%` 

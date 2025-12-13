@@ -20,16 +20,34 @@ export default defineEventHandler(async (event) => {
   }
 
   // Fetch or create singleton
-  let row = await db.lottoSettings.findUnique({ where: { id: 'lotto' } })
+  let row = await db.lottoSettings.findUnique({
+    where: { id: 'lotto' },
+    include: {
+      ctoonPool: {
+        include: { ctoon: true }
+      }
+    }
+  })
+
   if (!row) {
     row = await db.lottoSettings.create({
       data: {
         id: 'lotto',
-        baseOdds: 1.0,
-        incrementRate: 0.02,
-        countPerDay: 5
+        baseOdds: 1.0, // default
+        incrementRate: 0.02, // default
+        countPerDay: 5, // default
+        cost: 50, // default
+        lottoPointsWinnings: 5000 // default
       }
     })
+    row.ctoonPool = [] // ensure shape matches
+  } else {
+    // Remap to flatten the relation for the frontend
+    row.ctoonPool = row.ctoonPool.map(p => ({
+      ...p.ctoon,
+      // Calculate remaining quantity
+      remaining: p.ctoon.quantity != null ? p.ctoon.quantity - p.ctoon.totalMinted : Infinity
+    }))
   }
   return row
 })

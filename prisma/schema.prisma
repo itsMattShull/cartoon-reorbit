@@ -58,6 +58,7 @@ model Ctoon {
   holidayItems               HolidayEventItem[]
   holidayPoolRows            HolidayEventPool[]
   redeemedAsItem             HolidayRedemption[]         @relation("HolidayItemDefinition")
+  lottoPoolEntries           LottoPoolCtoon[]
   redeemedAsResult           HolidayRedemption[]         @relation("HolidayResultDefinition")
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
@@ -1023,6 +1024,22 @@ model LottoSettings {
   incrementRate Float    @default(0.02)
   countPerDay   Int @default(5)
   cost          Int @default(1)
+  lottoPointsWinnings Int    @default(5000)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  ctoonPool LottoPoolCtoon[]
+}
+
+model LottoPoolCtoon {
+  id              String @id @default(uuid())
+  lottoSettingsId String
+  ctoonId         String
+  weight          Int    @default(1)
+  createdAt       DateTime @default(now())
+
+  lottoSettings LottoSettings @relation(fields: [lottoSettingsId], references: [id], onDelete: Cascade)
+  ctoon         Ctoon         @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([lottoSettingsId, ctoonId])
 }

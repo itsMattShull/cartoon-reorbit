@@ -1,6 +1,7 @@
 // server/api/lottery.js
 import { defineEventHandler, getRequestHeader, createError, readBody, getMethod } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { createHash } from 'crypto'
 
 function isSameUtcDay(a, b) {
   if (!a || !b) return false
@@ -23,9 +24,16 @@ export default defineEventHandler(async (event) => {
   const method = getMethod(event)
 
   // ensure LottoSettings exists
-  let settings = await db.lottoSettings.findUnique({ where: { id: 'lotto' } })
+  let settings = await db.lottoSettings.findUnique({
+    where: { id: 'lotto' },
+    include: {
+      ctoonPool: {
+        include: { ctoon: true }
+      }
+    }
+  })
   if (!settings) {
-    settings = await db.lottoSettings.create({ data: { id: 'lotto', baseOdds: 1.0, incrementRate: 0.02, countPerDay: 5, cost: 50 } })
+    throw createError({ statusCode: 500, statusMessage: 'Lotto settings not found. Please seed the database.' })
   }
 
   // fetch or create user's lotto state
@@ -54,7 +62,15 @@ export default defineEventHandler(async (event) => {
 
   if (method === 'GET') {
     const remaining = (settings.countPerDay === -1) ? -1 : Math.max(0, settings.countPerDay - u.purchasesToday)
-    return { odds: u.odds, remaining, cost: settings.cost }
+
+    const availablePrizes = settings.ctoonPool
+      .map(p => p.ctoon)
+      .filter(c => c.quantity === null || c.totalMinted < c.quantity)
+
+    return {
+      odds: u.odds,
+      remaining, cost: settings.cost, prizePool: availablePrizes
+    }
   }
 
   if (method === 'POST') {
@@ -88,25 +104,63 @@ export default defineEventHandler(async (event) => {
     // roll between 0 and 100, two decimals
     const raw = Math.random() * 100
     const roll = Number(raw.toFixed(2))
-    const win = roll <= u.odds
+
+    const ctoonWin = roll <= u.odds
+    const pointsWin = !ctoonWin && roll <= (u.odds * 2)
 
     let awardedPoints = 0
-    if (win) {
-      // Award big points (configurable later). Use 5000 points for now.
-      awardedPoints = 5000
-      // upsert user's points and log
-      await db.$transaction(async (tx) => {
-        // The user's points record is guaranteed to exist from the subtraction step
-        const newTotal = pointsAfterPurchase + awardedPoints
-        await tx.userPoints.update({ where: { userId: me.id }, data: { points: newTotal, updatedAt: new Date() } })
-        await tx.pointsLog.create({ data: { userId: me.id, direction: 'increase', points: awardedPoints, total: newTotal, method: 'lottery-win' } })
-      })
-      // reset odds back to baseOdds after win
+    let awardedCtoon = null
+    let emptyPoolWin = false
+    let verificationCode = null
+    let verificationHash = null
+
+    if (ctoonWin) {
+      // Grand Prize: Win a cToon from the pool
+      const availablePool = settings.ctoonPool.filter(p => p.ctoon.quantity === null || p.ctoon.totalMinted < p.ctoon.quantity)
+      if (availablePool.length > 0) {
+        await db.$transaction(async (tx) => {
+          const randomIndex = Math.floor(Math.random() * availablePool.length)
+          const prizeCtoonInfo = availablePool[randomIndex]
+          awardedCtoon = prizeCtoonInfo.ctoon
+
+          // Mint the new ctoon for the user
+          await tx.userCtoon.create({
+            data: {
+              userId: me.id,
+              ctoonId: awardedCtoon.id,
+              isTradeable: true,
+              mintNumber: awardedCtoon.totalMinted + 1
+            }
+          })
+          // Increment the total minted count for the ctoon
+          await tx.ctoon.update({ where: { id: awardedCtoon.id }, data: { totalMinted: { increment: 1 } } })
+        })
+      } else {
+        // Fallback to points if pool is empty
+        // Pool is empty. Generate a verification code for the user to report.
+        emptyPoolWin = true
+        awardedPoints = 0
+        verificationCode = Math.floor(Math.random() * (99 - 10 + 1)) + 10 // Random int between 10 and 99
+        const stringToHash = `${verificationCode}${me.username}`
+        verificationHash = createHash('sha256').update(stringToHash).digest('hex')
+      }
+      // Reset odds back to baseOdds after a grand prize win
       await db.lottoUser.update({ where: { userId: me.id }, data: { odds: settings.baseOdds } })
     } else {
-      // lose: increment odds by incrementRate
+      // Not a cToon win, so odds should increase.
+      // This block covers both a points win and a loss.
       const newOdds = Number((u.odds + settings.incrementRate).toFixed(6))
       await db.lottoUser.update({ where: { userId: me.id }, data: { odds: newOdds } })
+
+      if (pointsWin) {
+        // Secondary Prize: Win points
+        awardedPoints = settings.lottoPointsWinnings
+        await db.$transaction(async (tx) => {
+          const newTotal = pointsAfterPurchase + awardedPoints
+          await tx.userPoints.update({ where: { userId: me.id }, data: { points: newTotal, updatedAt: new Date() } })
+          await tx.pointsLog.create({ data: { userId: me.id, direction: 'increase', points: awardedPoints, total: newTotal, method: 'lottery-win' } })
+        })
+      }
     }
 
     // increment purchasesToday and lastPurchaseAt
@@ -116,10 +170,14 @@ export default defineEventHandler(async (event) => {
 
     return {
       roll,
-      win,
+      win: ctoonWin || pointsWin,
       newOdds: updated.odds,
       remaining,
-      awardedPoints
+      awardedPoints,
+      awardedCtoon,
+      emptyPoolWin,
+      verificationCode,
+      verificationHash
     }
   }
 

@@ -76,17 +76,17 @@ async function seedLottoSettings() {
   await prisma.lottoSettings.upsert({
     where: { id: 'lotto' },
     update: {
-      baseOdds: 1.0,
-      incrementRate: 0.02,
-      countPerDay: 5,
-      cost: 50 // Ensure cost is updated to 50
+      // On re-seed, ensure these values are set.
+      cost: 50,
+      lottoPointsWinnings: 5000
     },
     create: {
       id: 'lotto',
       baseOdds: 1.0,
       incrementRate: 0.02,
       countPerDay: 5,
-      cost: 50 // Set the default cost to 50 here
+      cost: 50,
+      lottoPointsWinnings: 5000
     }
   })
   console.log('Seeded LottoSettings (defaults)')

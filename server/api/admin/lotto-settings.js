@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     let row = await db.lottoSettings.findUnique({ where: { id: 'lotto' } })
     if (!row) {
       row = await db.lottoSettings.create({
-        data: { id: 'lotto', baseOdds: 1.0, incrementRate: 0.02, countPerDay: 5, cost: 1 }
+        data: { id: 'lotto', baseOdds: 1.0, incrementRate: 0.02, countPerDay: 5, cost: 50, lottoPointsWinnings: 5000 }
       })
     }
     return row
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
 
   if (method === 'POST') {
     const body = await readBody(event)
-    const { baseOdds, incrementRate, countPerDay, cost } = body
+    const { baseOdds, incrementRate, countPerDay, cost, lottoPointsWinnings } = body
     if (baseOdds == null || typeof baseOdds !== 'number') {
       throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "baseOdds"' })
     }
@@ -42,16 +42,19 @@ export default defineEventHandler(async (event) => {
     if (cost == null || typeof cost !== 'number') {
       throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "cost"' })
     }
+    if (lottoPointsWinnings == null || typeof lottoPointsWinnings !== 'number') {
+      throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "lottoPointsWinnings"' })
+    }
 
     try {
       const before = await db.lottoSettings.findUnique({ where: { id: 'lotto' } })
       const result = await db.lottoSettings.upsert({
         where: { id: 'lotto' },
-        create: { id: 'lotto', baseOdds: Number(baseOdds), incrementRate: Number(incrementRate), countPerDay: Number(countPerDay), cost: Number(cost) },
-        update: { baseOdds: Number(baseOdds), incrementRate: Number(incrementRate), countPerDay: Number(countPerDay), cost: Number(cost) }
+        create: { id: 'lotto', baseOdds: Number(baseOdds), incrementRate: Number(incrementRate), countPerDay: Number(countPerDay), cost: Number(cost), lottoPointsWinnings: Number(lottoPointsWinnings) },
+        update: { baseOdds: Number(baseOdds), incrementRate: Number(incrementRate), countPerDay: Number(countPerDay), cost: Number(cost), lottoPointsWinnings: Number(lottoPointsWinnings) }
       })
 
-      const fields = ['baseOdds', 'incrementRate', 'countPerDay', 'cost']
+      const fields = ['baseOdds', 'incrementRate', 'countPerDay', 'cost', 'lottoPointsWinnings']
       for (const k of fields) {
         const prevVal = before ? before[k] : undefined
         const nextVal = result ? result[k] : undefined
