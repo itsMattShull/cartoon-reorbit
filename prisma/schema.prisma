@@ -8,17 +8,17 @@ datasource db {
 }
 
 model CZone {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
-  layoutData  Json
-  background  String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id])
+  layoutData Json
+  background String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Ctoon {
-  id              String          @id @default(uuid())
+  id              String    @id @default(uuid())
   name            String
   series          String?
   type            String
@@ -26,40 +26,41 @@ model Ctoon {
   assetPath       String
   releaseDate     DateTime?
   perUserLimit    Int?
-  codeOnly        Boolean         @default(false)
-  inCmart         Boolean         @default(false)
-  price           Int             @default(0)
-  initialQuantity Int?             // NULL means unlimited
-  quantity        Int?             // NULL means unlimited
-  createdAt       DateTime        @default(now())
+  codeOnly        Boolean   @default(false)
+  inCmart         Boolean   @default(false)
+  price           Int       @default(0)
+  initialQuantity Int? // NULL means unlimited
+  quantity        Int? // NULL means unlimited
+  createdAt       DateTime  @default(now())
   set             String?
   characters      String[]
-  totalMinted  Int     @default(0)
+  totalMinted     Int       @default(0)
 
   // gToon fields
-  isGtoon         Boolean         @default(false)
-  gtoonType       String?
-  cost            Int?      @default(1)
-  power           Int?      @default(1)
-  abilityKey      String?
-  abilityData     Json?
+  isGtoon     Boolean @default(false)
+  gtoonType   String?
+  cost        Int?    @default(1)
+  power       Int?    @default(1)
+  abilityKey  String?
+  abilityData Json?
 
-  owners          UserCtoon[]
-  deckCards        ClashDeckCard[]
-  rewardCtoons    RewardCtoon[]
-  packOptions     PackCtoonOption[]
-  gameConfigsAsGrandPrize  GameConfig[] @relation("GrandPrize", fields: [], references: [])
-  wishlistItems   WishlistItem[]
-  prerequisites  ClaimCodePrerequisite[]
-  wheelSpinLogs   WheelSpinLog[]  @relation("WheelSpinLogToCtoon")
-  winWheelOptions WinWheelOption[]
-  starterSetItems StarterSetItem[]
-  ownerLogs       CtoonOwnerLog[]
-  holidayItems     HolidayEventItem[]
-  holidayPoolRows  HolidayEventPool[]
-  redeemedAsItem   HolidayRedemption[] @relation("HolidayItemDefinition")
-  redeemedAsResult HolidayRedemption[] @relation("HolidayResultDefinition")
-  rewardPoolRows  RewardCtoonPool[] @relation("RewardPoolToCtoon")
+  owners                     UserCtoon[]
+  deckCards                  ClashDeckCard[]
+  rewardCtoons               RewardCtoon[]
+  packOptions                PackCtoonOption[]
+  gameConfigsAsGrandPrize    GameConfig[]                @relation("GrandPrize", fields: [], references: [])
+  wishlistItems              WishlistItem[]
+  prerequisites              ClaimCodePrerequisite[]
+  wheelSpinLogs              WheelSpinLog[]              @relation("WheelSpinLogToCtoon")
+  winWheelOptions            WinWheelOption[]
+  starterSetItems            StarterSetItem[]
+  ownerLogs                  CtoonOwnerLog[]
+  holidayItems               HolidayEventItem[]
+  holidayPoolRows            HolidayEventPool[]
+  redeemedAsItem             HolidayRedemption[]         @relation("HolidayItemDefinition")
+  lottoPoolEntries           LottoPoolCtoon[]
+  redeemedAsResult           HolidayRedemption[]         @relation("HolidayResultDefinition")
+  rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
 
   // Scavenger Hunt relations
@@ -79,15 +80,15 @@ model UserCtoon {
   createdAt      DateTime  @default(now())
   burnedAt       DateTime?
 
-  user   User   @relation(fields: [userId], references: [id])
-  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
 
-  tradeCtoons   TradeCtoon[]
-  tradeOfferCtoons TradeOfferCtoon[]
-  auctions          Auction[]
-  ownerLogs         CtoonOwnerLog[]
+  tradeCtoons               TradeCtoon[]
+  tradeOfferCtoons          TradeOfferCtoon[]
+  auctions                  Auction[]
+  ownerLogs                 CtoonOwnerLog[]
   holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
-  auctionOnlyListings  AuctionOnly[]
+  auctionOnlyListings       AuctionOnly[]
 }
 
 model UserPoints {
@@ -96,10 +97,72 @@ model UserPoints {
   lastDailyAward DateTime?
   updatedAt      DateTime  @default(now())
 
-  user   User   @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model User {
+  id                        String    @id @default(uuid())
+  username                  String?   @unique
+  discordId                 String    @unique
+  discordTag                String?
+  discordAvatar             String?
+  email                     String?   @unique
+  avatar                    String?
+  accessToken               String?
+  refreshToken              String?
+  tokenExpiresAt            DateTime?
+  roles                     String[]  @default([])
+  allowAuctionNotifications Boolean   @default(true)
+  isAdmin                   Boolean   @default(false)
+  inGuild                   Boolean   @default(true)
+  active                    Boolean   @default(true)
+  banned                    Boolean   @default(false)
+  createdAt                 DateTime  @default(now())
+  lastLogin                 DateTime?
+  lastActivity              DateTime?
+  discordCreatedAt          DateTime?
+  isBooster                 Boolean   @default(false)
+  boosterSince              DateTime?
+  warning180                Boolean   @default(false)
+  warning210                Boolean   @default(false)
+  warning240                Boolean   @default(false)
+
+  cZones                   CZone[]
+  clashDecks               ClashDeck[]
+  logins                   LoginLog[]
+  gamePointLogs            GamePointLog[]
+  pointsLogs               PointsLog[]
+  claims                   Claim[]
+  visits                   Visit[]
+  points                   UserPoints?
+  ctoons                   UserCtoon[]
+  friends                  Friend[]                    @relation("UserFriends")
+  friendedBy               Friend[]                    @relation("UserFriendOf")
+  traderARooms             TradeRoom[]                 @relation("TraderA")
+  traderBRooms             TradeRoom[]                 @relation("TraderB")
+  trades                   Trade[]
+  tradeSpectators          TradeSpectator[]
+  ips                      UserIP[]
+  packs                    UserPack[]
+  wishlistItems            WishlistItem[]
+  tradeOffersInitiated     TradeOffer[]                @relation("OfferInitiator")
+  tradeOffersReceived      TradeOffer[]                @relation("OfferRecipient")
+  auctionsAsHighestBid     Auction[]                   @relation("HighestBidder")
+  auctionsAsWinner         Auction[]                   @relation("AuctionWinner")
+  bids                     Bid[]
+  autoBids                 AuctionAutoBid[]
+  auctionsCreated          Auction[]                   @relation("AuctionsCreated")
+  clashGamesAsPlayer1      ClashGame[]                 @relation("ClashGamePlayer1")
+  clashGamesAsPlayer2      ClashGame[]                 @relation("ClashGamePlayer2")
+  clashGamesWhoLeft        ClashGame[]                 @relation("ClashGameWhoLeft")
+  clashGamesAsWinner       ClashGame[]                 @relation("ClashGameWinner")
+  wheelSpinLogs            WheelSpinLog[]              @relation("WheelSpinLogToUser")
+  backgroundsCreated       Background[]                @relation("BackgroundCreatedBy")
+  ownedBackgrounds         UserBackground[]            @relation("User_UserBackgrounds")
+  ownerLogs                CtoonOwnerLog[]
+  holidayRedemptions       HolidayRedemption[]
+  auctionsOnlyCreated      AuctionOnly[]               @relation("AuctionOnlyCreatedBy")
+  adImagesCreated          AdImage[]                   @relation("AdImagesCreatedBy")
   id               String           @id @default(uuid())
   username         String?          @unique
   discordId        String           @unique
@@ -166,15 +229,16 @@ model User {
   adImagesCreated    AdImage[]      @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
   // Ban notes relations
-  banNotes           UserBanNote[]  @relation("BanNoteUser")
-  banNotesAuthored   UserBanNote[]  @relation("BanNoteAdmin")
+  banNotes                 UserBanNote[]               @relation("BanNoteUser")
+  banNotesAuthored         UserBanNote[]               @relation("BanNoteAdmin")
 
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
   scavengerTriggerLogs ScavengerTriggerLog[]
 
   // Admin change logs (inverse)
-  adminChangeLogs      AdminChangeLog[]
+  adminChangeLogs AdminChangeLog[]
+  lottoUser       LottoUser?
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -195,8 +259,8 @@ model UserBanNote {
   reason    String
   createdAt DateTime  @default(now())
 
-  user    User @relation("BanNoteUser", fields: [userId], references: [id], onDelete: Cascade)
-  admin   User @relation("BanNoteAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  user  User @relation("BanNoteUser", fields: [userId], references: [id], onDelete: Cascade)
+  admin User @relation("BanNoteAdmin", fields: [adminId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt])
   @@index([adminId, createdAt])
@@ -207,7 +271,7 @@ model UserIP {
   userId String
   ip     String
 
-  user   User   @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, ip])
 }
@@ -225,75 +289,75 @@ model Friend {
 }
 
 model ClaimCode {
-  id         String             @id @default(uuid())
-  code       String             @unique
-  showInFrontend    Boolean            @default(true)
-  maxClaims  Int
-  createdAt  DateTime           @default(now())
-  expiresAt  DateTime?
+  id             String    @id @default(uuid())
+  code           String    @unique
+  showInFrontend Boolean   @default(true)
+  maxClaims      Int
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
 
-  claims     Claim[]
-  rewards    ClaimCodeReward[]
-  prerequisites  ClaimCodePrerequisite[]
-  userBackgroundUnlocks UserBackground[] @relation("UserBackgroundSourceCode")
+  claims                Claim[]
+  rewards               ClaimCodeReward[]
+  prerequisites         ClaimCodePrerequisite[]
+  userBackgroundUnlocks UserBackground[]        @relation("UserBackgroundSourceCode")
 }
 
 model Claim {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
   codeId    String
-  claimedAt DateTime  @default(now())
+  claimedAt DateTime @default(now())
 
-  user  User      @relation(fields: [userId], references: [id])
-  code  ClaimCode @relation(fields: [codeId], references: [id])
+  user User      @relation(fields: [userId], references: [id])
+  code ClaimCode @relation(fields: [codeId], references: [id])
 
   @@unique([userId, codeId])
 }
 
 model ClaimCodeReward {
-  id       String            @id @default(uuid())
-  codeId   String
-  points   Int?
+  id                String @id @default(uuid())
+  codeId            String
+  points            Int?
   pooledUniqueCount Int?
 
-  poolCtoons        RewardCtoonPool[]
-  code     ClaimCode         @relation(fields: [codeId], references: [id])
-  ctoons   RewardCtoon[]
-  packs    RewardPack[]
+  poolCtoons  RewardCtoonPool[]
+  code        ClaimCode          @relation(fields: [codeId], references: [id])
+  ctoons      RewardCtoon[]
+  packs       RewardPack[]
   backgrounds RewardBackground[]
 }
 
 model RewardCtoonPool {
-  id       String  @id @default(uuid())
+  id       String @id @default(uuid())
   rewardId String
   ctoonId  String
-  weight   Int     @default(1)
+  weight   Int    @default(1)
 
-  reward   ClaimCodeReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  ctoon    Ctoon           @relation("RewardPoolToCtoon", fields: [ctoonId], references: [id])
+  reward ClaimCodeReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  ctoon  Ctoon           @relation("RewardPoolToCtoon", fields: [ctoonId], references: [id])
 
   @@unique([rewardId, ctoonId])
   @@index([ctoonId])
 }
 
 model RewardCtoon {
-  id        String             @id @default(uuid())
-  rewardId  String
-  ctoonId   String
-  quantity  Int                @default(1)
+  id       String @id @default(uuid())
+  rewardId String
+  ctoonId  String
+  quantity Int    @default(1)
 
-  reward    ClaimCodeReward    @relation(fields: [rewardId], references: [id])
-  ctoon     Ctoon              @relation(fields: [ctoonId], references: [id])
+  reward ClaimCodeReward @relation(fields: [rewardId], references: [id])
+  ctoon  Ctoon           @relation(fields: [ctoonId], references: [id])
 }
 
 model RewardPack {
-  id        String   @id @default(uuid())
-  rewardId  String
-  packId    String
-  quantity  Int      @default(1)
+  id       String @id @default(uuid())
+  rewardId String
+  packId   String
+  quantity Int    @default(1)
 
-  reward    ClaimCodeReward @relation(fields: [rewardId], references: [id])
-  pack      Pack            @relation(fields: [packId], references: [id])
+  reward ClaimCodeReward @relation(fields: [rewardId], references: [id])
+  pack   Pack            @relation(fields: [packId], references: [id])
 
   @@unique([rewardId, packId])
 }
@@ -304,37 +368,37 @@ model Visit {
   zoneOwnerId String
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model TradeRoom {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  createdAt   DateTime @default(now())
-  active      Boolean  @default(true)
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  active    Boolean  @default(true)
 
-  traderAId   String?
-  traderBId   String?
-  traderA     User?    @relation("TraderA", fields: [traderAId], references: [id])
-  traderB     User?    @relation("TraderB", fields: [traderBId], references: [id])
+  traderAId String?
+  traderBId String?
+  traderA   User?   @relation("TraderA", fields: [traderAId], references: [id])
+  traderB   User?   @relation("TraderB", fields: [traderBId], references: [id])
 
-  trades      Trade[]
-  spectators  TradeSpectator[]
+  trades     Trade[]
+  spectators TradeSpectator[]
 }
 
 model Trade {
-  id          String   @id @default(uuid())
-  userId      String
-  roomId      String
-  confirmed   Boolean  @default(false)
+  id        String  @id @default(uuid())
+  userId    String
+  roomId    String
+  confirmed Boolean @default(false)
 
-  user   User      @relation(fields: [userId], references: [id])
-  room   TradeRoom @relation(fields: [roomId], references: [id])
+  user   User         @relation(fields: [userId], references: [id])
+  room   TradeRoom    @relation(fields: [roomId], references: [id])
   ctoons TradeCtoon[]
 }
 
 model TradeCtoon {
-  id          String   @id @default(uuid())
+  id          String @id @default(uuid())
   tradeId     String
   userCtoonId String
 
@@ -343,23 +407,23 @@ model TradeCtoon {
 }
 
 model TradeSpectator {
-  id     String   @id @default(uuid())
+  id     String @id @default(uuid())
   roomId String
   userId String
 
-  room   TradeRoom   @relation(fields: [roomId], references: [id])
-  user   User        @relation(fields: [userId], references: [id])
+  room TradeRoom @relation(fields: [roomId], references: [id])
+  user User      @relation(fields: [userId], references: [id])
 }
 
 model Pack {
-  id            String   @id @default(uuid())
-  name          String
-  description   String?
-  price         Int      @default(0)
-  imagePath     String?
-  inCmart       Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Int      @default(0)
+  imagePath   String?
+  inCmart     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   rarityConfigs PackRarityConfig[]
   ctoonOptions  PackCtoonOption[]
@@ -368,36 +432,36 @@ model Pack {
 }
 
 model PackRarityConfig {
-  id                  String @id @default(uuid())
-  packId              String
-  rarity              String
-  count               Int
-  probabilityPercent  Int    @default(100)
+  id                 String @id @default(uuid())
+  packId             String
+  rarity             String
+  count              Int
+  probabilityPercent Int    @default(100)
 
-  pack      Pack   @relation(fields: [packId], references: [id])
+  pack Pack @relation(fields: [packId], references: [id])
 
   @@unique([packId, rarity])
 }
 
 model PackCtoonOption {
-  id        String @id @default(uuid())
-  packId    String
-  ctoonId   String
-  weight    Int    @default(1)
+  id      String @id @default(uuid())
+  packId  String
+  ctoonId String
+  weight  Int    @default(1)
 
-  pack   Pack   @relation(fields: [packId], references: [id])
-  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
+  pack  Pack  @relation(fields: [packId], references: [id])
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
 
   @@unique([packId, ctoonId])
 }
 
 model UserPack {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   packId    String
-  opened    Boolean  @default(false)
+  opened    Boolean   @default(false)
   openedAt  DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
   pack Pack @relation(fields: [packId], references: [id])
@@ -415,101 +479,101 @@ model LoginLog {
 }
 
 model GamePointLog {
-  id         String   @id @default(uuid())
-  userId     String
-  points     Int
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  points    Int
+  createdAt DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model PointsLog {
-  id         String   @id @default(uuid())
-  userId     String
-  direction  String? // 'increase' or 'decrease'
-  points     Int
-  total      Int?      // the user’s total points _after_ this change
-  method     String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  direction String? // 'increase' or 'decrease'
+  points    Int
+  total     Int? // the user’s total points _after_ this change
+  method    String?
+  createdAt DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model GameConfig {
-  id                   String   @id @default(uuid())
-  gameName             String   @unique
-  leftCupPoints        Int      @default(0)
-  rightCupPoints       Int      @default(0)
-  goldCupPoints        Int      @default(0)
-  grandPrizeCtoonId    String? 
-  grandPrizeCtoon      Ctoon?   @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
-  pointsPerWin         Int?      @default(0)
+  id                String  @id @default(uuid())
+  gameName          String  @unique
+  leftCupPoints     Int     @default(0)
+  rightCupPoints    Int     @default(0)
+  goldCupPoints     Int     @default(0)
+  grandPrizeCtoonId String?
+  grandPrizeCtoon   Ctoon?  @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
+  pointsPerWin      Int?    @default(0)
 
   // — Win Wheel settings —
-  spinCost             Int       @default(100)
-  pointsWon            Int       @default(250)
-  maxDailySpins        Int       @default(2)
-  exclusiveCtoons      WinWheelOption[]   @relation("WinWheelOptions")
-  winWheelImagePath    String?
+  spinCost          Int              @default(100)
+  pointsWon         Int              @default(250)
+  maxDailySpins     Int              @default(2)
+  exclusiveCtoons   WinWheelOption[] @relation("WinWheelOptions")
+  winWheelImagePath String?
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model GlobalGameConfig {
-  id               String   @id @default(uuid())
-  dailyPointLimit  Int      @default(100)
-  dailyLoginPoints   Int    @default(500)
-  dailyNewUserPoints Int    @default(1000)
-  czoneVisitPoints   Int    @default(20)
-  czoneVisitMaxPerDay Int   @default(10)
-  rarityDefaults     Json?
+  id                     String   @id @default(uuid())
+  dailyPointLimit        Int      @default(100)
+  dailyLoginPoints       Int      @default(500)
+  dailyNewUserPoints     Int      @default(1000)
+  czoneVisitPoints       Int      @default(20)
+  czoneVisitMaxPerDay    Int      @default(10)
+  rarityDefaults         Json?
   // Scavenger Hunt settings
-  scavengerChancePercent Int @default(5)   // 0–100; 0 disables
-  scavengerCooldownHours Int @default(24)  // cooldown between completed hunts per user
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  scavengerChancePercent Int      @default(5) // 0–100; 0 disables
+  scavengerCooldownHours Int      @default(24) // cooldown between completed hunts per user
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model WishlistItem {
   id            String   @id @default(uuid())
   userId        String
   ctoonId       String
-  offeredPoints Int      @default(0)   // NEW
+  offeredPoints Int      @default(0) // NEW
   createdAt     DateTime @default(now())
 
-  user   User   @relation(fields: [userId], references: [id])
-  ctoon  Ctoon  @relation(fields: [ctoonId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
 
   @@unique([userId, ctoonId])
 }
 
 /// A pending trade between two users
 model TradeOffer {
-  id             String               @id @default(uuid())
-  initiatorId    String               // who is making the offer
-  recipientId    String               // who will receive the offer
-  pointsOffered  Int                  @default(0)
-  status         String               @default("PENDING")   // e.g. PENDING, ACCEPTED, REJECTED
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id            String   @id @default(uuid())
+  initiatorId   String // who is making the offer
+  recipientId   String // who will receive the offer
+  pointsOffered Int      @default(0)
+  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  initiator      User                 @relation("OfferInitiator", fields: [initiatorId], references: [id])
-  recipient      User                 @relation("OfferRecipient", fields: [recipientId], references: [id])
+  initiator User @relation("OfferInitiator", fields: [initiatorId], references: [id])
+  recipient User @relation("OfferRecipient", fields: [recipientId], references: [id])
 
-  ctoons          TradeOfferCtoon[]
+  ctoons TradeOfferCtoon[]
 }
 
 /// Join table tying a specific UserCtoon to a TradeOffer,
 /// tagged as either OFFERED or REQUESTED
 model TradeOfferCtoon {
-  id             String                   @id @default(uuid())
-  tradeOfferId   String
-  userCtoonId    String
-  role           TradeOfferCtoonRole
+  id           String              @id @default(uuid())
+  tradeOfferId String
+  userCtoonId  String
+  role         TradeOfferCtoonRole
 
-  tradeOffer     TradeOffer               @relation(fields: [tradeOfferId], references: [id])
-  userCtoon      UserCtoon                @relation(fields: [userCtoonId],  references: [id])
+  tradeOffer TradeOffer @relation(fields: [tradeOfferId], references: [id])
+  userCtoon  UserCtoon  @relation(fields: [userCtoonId], references: [id])
 
   @@unique([tradeOfferId, userCtoonId, role])
 }
@@ -527,119 +591,120 @@ enum AuctionStatus {
 }
 
 model Auction {
-  id               String         @id @default(uuid())
-  userCtoonId      String
-  initialBet       Int
-  duration         Int            // days
-  endAt            DateTime
-  status           AuctionStatus  @default(ACTIVE)
-  createdAt        DateTime       @default(now())
-  creatorId        String?
-  highestBid       Int            @default(0)
-  highestBidderId  String?        
-  winnerId         String?        
-  winnerAt         DateTime?
-  endingSoonNotified Boolean @default(false)
-  isFeatured          Boolean        @default(false)
+  id                 String        @id @default(uuid())
+  userCtoonId        String
+  initialBet         Int
+  duration           Int // days
+  endAt              DateTime
+  status             AuctionStatus @default(ACTIVE)
+  createdAt          DateTime      @default(now())
+  creatorId          String?
+  highestBid         Int           @default(0)
+  highestBidderId    String?
+  winnerId           String?
+  winnerAt           DateTime?
+  endingSoonNotified Boolean       @default(false)
+  isFeatured         Boolean       @default(false)
 
-  userCtoon        UserCtoon      @relation(fields: [userCtoonId],    references: [id])
-  creator          User?           @relation("AuctionsCreated", fields: [creatorId],    references: [id])
-  highestBidder    User?          @relation("HighestBidder",   fields: [highestBidderId], references: [id])
-  winner           User?          @relation("AuctionWinner",    fields: [winnerId],        references: [id])
+  userCtoon     UserCtoon @relation(fields: [userCtoonId], references: [id])
+  creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
+  highestBidder User?     @relation("HighestBidder", fields: [highestBidderId], references: [id])
+  winner        User?     @relation("AuctionWinner", fields: [winnerId], references: [id])
 
-  bids             Bid[]          // one-to-many on Bid
-  autoBids   AuctionAutoBid[]
+  bids     Bid[] // one-to-many on Bid
+  autoBids AuctionAutoBid[]
+
   @@index([userCtoonId, status])
 }
 
 model Bid {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   auctionId String
   userId    String
   amount    Int
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  auction   Auction   @relation(fields: [auctionId], references: [id])
-  user      User      @relation(fields: [userId],    references: [id])
+  auction Auction @relation(fields: [auctionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 }
 
 model ClashGame {
-  id              String   @id @default(uuid())
-  player1UserId   String
-  player2UserId   String?   // null for AI
-  player1Points   Int      @default(0) // staked by P1
-  player2Points   Int      @default(0) // staked by P2
+  id            String  @id @default(uuid())
+  player1UserId String
+  player2UserId String? // null for AI
+  player1Points Int     @default(0) // staked by P1
+  player2Points Int     @default(0) // staked by P2
 
-  winnerUserId  String?   // null if AI won or tie
-  outcome       String?   // 'player' | 'ai' | 'tie' | 'incomplete'
-  startedAt     DateTime @default(now())
+  winnerUserId  String? // null if AI won or tie
+  outcome       String? // 'player' | 'ai' | 'tie' | 'incomplete'
+  startedAt     DateTime  @default(now())
   endedAt       DateTime?
-  whoLeftUserId   String?
+  whoLeftUserId String?
 
-  whoLeft         User?    @relation("ClashGameWhoLeft", fields: [whoLeftUserId], references: [id])
-  player1       User     @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
-  player2       User?    @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
-  winner        User?    @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+  whoLeft User? @relation("ClashGameWhoLeft", fields: [whoLeftUserId], references: [id])
+  player1 User  @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
+  player2 User? @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
+  winner  User? @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
 }
 
 model ClaimCodePrerequisite {
-  id       String    @id @default(uuid())
-  codeId   String
-  ctoonId  String
+  id      String @id @default(uuid())
+  codeId  String
+  ctoonId String
 
-  code     ClaimCode @relation(fields: [codeId],  references: [id], onDelete: Cascade)
-  ctoon    Ctoon     @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+  code  ClaimCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  ctoon Ctoon     @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@unique([codeId, ctoonId])
 }
 
 model WheelSpinLog {
-  id          String   @id @default(uuid())
-  userId      String
-  result      String               // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive'
-  points      Int?                  // how many points awarded, if any
-  ctoonId     String?               // FK to the minted cToon, if any
+  id      String  @id @default(uuid())
+  userId  String
+  result  String // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive'
+  points  Int? // how many points awarded, if any
+  ctoonId String? // FK to the minted cToon, if any
 
-  sliceIndex  Int      // 0–5
-  createdAt   DateTime @default(now())
+  sliceIndex Int // 0–5
+  createdAt  DateTime @default(now())
 
-  user        User     @relation("WheelSpinLogToUser", fields: [userId], references: [id])
-  ctoon       Ctoon?   @relation("WheelSpinLogToCtoon", fields: [ctoonId], references: [id])
+  user  User   @relation("WheelSpinLogToUser", fields: [userId], references: [id])
+  ctoon Ctoon? @relation("WheelSpinLogToCtoon", fields: [ctoonId], references: [id])
 
   @@index([userId, createdAt])
   @@index([ctoonId])
 }
 
 model WinWheelOption {
-  id            String      @id @default(uuid())
-  gameConfigId  String
-  ctoonId       String
+  id           String @id @default(uuid())
+  gameConfigId String
+  ctoonId      String
 
-  gameConfig    GameConfig  @relation("WinWheelOptions", fields: [gameConfigId], references: [id])
-  ctoon         Ctoon       @relation(fields: [ctoonId], references: [id])
+  gameConfig GameConfig @relation("WinWheelOptions", fields: [gameConfigId], references: [id])
+  ctoon      Ctoon      @relation(fields: [ctoonId], references: [id])
 
   @@unique([gameConfigId, ctoonId])
   @@index([ctoonId])
 }
 
 model ClashDeck {
-  id         String           @id @default(uuid())
-  userId     String
-  name       String
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user       User             @relation(fields: [userId], references: [id])
-  cards      ClashDeckCard[]
+  user  User            @relation(fields: [userId], references: [id])
+  cards ClashDeckCard[]
 }
 
 model ClashDeckCard {
-  id        String    @id @default(uuid())
-  deckId    String
-  ctoonId   String
+  id      String @id @default(uuid())
+  deckId  String
+  ctoonId String
 
-  deck      ClashDeck @relation(fields: [deckId], references: [id])
-  ctoon     Ctoon     @relation(fields: [ctoonId], references: [id])
+  deck  ClashDeck @relation(fields: [deckId], references: [id])
+  ctoon Ctoon     @relation(fields: [ctoonId], references: [id])
 }
 
 // ── Add enum ──────────────────────────────────────────────────────────
@@ -650,17 +715,17 @@ enum BackgroundVisibility {
 
 // ── New table ─────────────────────────────────────────────────────────
 model Background {
-  id          String                 @id @default(uuid())
+  id          String               @id @default(uuid())
   label       String?
   imagePath   String
-  filename    String                 @unique
+  filename    String               @unique
   width       Int
   height      Int
   mimeType    String
-  visibility  BackgroundVisibility   @default(PUBLIC)
-  createdAt   DateTime               @default(now())
+  visibility  BackgroundVisibility @default(PUBLIC)
+  createdAt   DateTime             @default(now())
   createdById String?
-  createdBy   User?                  @relation("BackgroundCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?                @relation("BackgroundCreatedBy", fields: [createdById], references: [id])
 
   // back‑relations
   rewardBackgrounds RewardBackground[] @relation("BackgroundReward")
@@ -670,84 +735,84 @@ model Background {
 }
 
 model RewardBackground {
-  id            String      @id @default(uuid())
-  rewardId      String
-  backgroundId  String
+  id           String @id @default(uuid())
+  rewardId     String
+  backgroundId String
 
-  reward        ClaimCodeReward @relation(fields: [rewardId], references: [id])
-  background    Background      @relation("BackgroundReward", fields: [backgroundId], references: [id])
+  reward     ClaimCodeReward @relation(fields: [rewardId], references: [id])
+  background Background      @relation("BackgroundReward", fields: [backgroundId], references: [id])
 
   @@unique([rewardId, backgroundId])
 }
 
 model UserBackground {
-  id             String     @id @default(uuid())
-  userId         String
-  backgroundId   String
-  unlockedAt     DateTime   @default(now())
-  sourceCodeId   String?
+  id           String   @id @default(uuid())
+  userId       String
+  backgroundId String
+  unlockedAt   DateTime @default(now())
+  sourceCodeId String?
 
-  user         User        @relation("User_UserBackgrounds", fields: [userId], references: [id])
-  background   Background  @relation("Background_UserBackgrounds", fields: [backgroundId], references: [id])
-  sourceCode   ClaimCode?  @relation("UserBackgroundSourceCode", fields: [sourceCodeId], references: [id])
+  user       User       @relation("User_UserBackgrounds", fields: [userId], references: [id])
+  background Background @relation("Background_UserBackgrounds", fields: [backgroundId], references: [id])
+  sourceCode ClaimCode? @relation("UserBackgroundSourceCode", fields: [sourceCodeId], references: [id])
 
   @@unique([userId, backgroundId])
 }
 
 model StarterSet {
-  id          String            @id @default(uuid())
-  key         String            @unique                // machine-friendly key/slug
-  name        String                                     // admin-facing label
+  id          String   @id @default(uuid())
+  key         String   @unique // machine-friendly key/slug
+  name        String // admin-facing label
   description String?
-  isActive    Boolean           @default(true)         // only active sets are shown to new users
-  sortOrder   Int               @default(0)            // order sets in UI
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  isActive    Boolean  @default(true) // only active sets are shown to new users
+  sortOrder   Int      @default(0) // order sets in UI
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  items       StarterSetItem[]
+  items StarterSetItem[]
 }
 
 model StarterSetItem {
-  id        String     @id @default(uuid())
-  setId     String
-  ctoonId   String
-  position  Int        @default(0)     // display order within a set
+  id       String @id @default(uuid())
+  setId    String
+  ctoonId  String
+  position Int    @default(0) // display order within a set
 
-  set       StarterSet @relation(fields: [setId],   references: [id], onDelete: Cascade)
-  ctoon     Ctoon      @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  set   StarterSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  ctoon Ctoon      @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
 
-  @@unique([setId, ctoonId])           // don't allow the same cToon twice in one set
+  @@unique([setId, ctoonId]) // don't allow the same cToon twice in one set
   @@index([setId, position])
   @@index([ctoonId])
 }
 
 model AuctionAutoBid {
-  id         String   @id @default(uuid())
-  auctionId  String
-  userId     String
-  maxAmount  Int
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  auctionId String
+  userId    String
+  maxAmount Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   auction Auction @relation(fields: [auctionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
 
-  @@unique([auctionId, userId])  // one max per user per auction
+  @@unique([auctionId, userId]) // one max per user per auction
   @@index([auctionId, createdAt]) // FIFO tie-breaks
 }
 
 model CtoonOwnerLog {
-  id           String    @id @default(uuid())
-  userId       String?
-  ctoonId      String?
-  userCtoonId  String?
-  mintNumber   Int?      // snapshot at the time of ownership
-  createdAt    DateTime  @default(now())
+  id          String   @id @default(uuid())
+  userId      String?
+  ctoonId     String?
+  userCtoonId String?
+  mintNumber  Int? // snapshot at the time of ownership
+  createdAt   DateTime @default(now())
 
-  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  ctoon       Ctoon?      @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
-  userCtoon   UserCtoon?  @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ctoon     Ctoon?     @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
+  userCtoon UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
 
   @@index([userCtoonId, createdAt])
   @@index([ctoonId, createdAt])
@@ -757,46 +822,46 @@ model CtoonOwnerLog {
 // ── Holiday feature ─────────────────────────────────────────────
 
 model HolidayEvent {
-  id            String   @id @default(uuid())
-  name          String   @unique
-  startsAt      DateTime
-  endsAt        DateTime
-  minRevealAt   DateTime?            // earliest date a redeemed item can reveal into its pool result
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String    @id @default(uuid())
+  name        String    @unique
+  startsAt    DateTime
+  endsAt      DateTime
+  minRevealAt DateTime? // earliest date a redeemed item can reveal into its pool result
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // relations
-  items         HolidayEventItem[]
-  poolEntries   HolidayEventPool[]
-  redemptions   HolidayRedemption[]
+  items       HolidayEventItem[]
+  poolEntries HolidayEventPool[]
+  redemptions HolidayRedemption[]
 
   @@index([isActive, startsAt, endsAt])
   @@index([startsAt, endsAt])
 }
 
 model HolidayEventItem {
-  id        String @id @default(uuid())
-  eventId   String
-  ctoonId   String
+  id      String @id @default(uuid())
+  eventId String
+  ctoonId String
 
-  event     HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ctoon     Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  event HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ctoon Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, ctoonId])  // a cToon listed once per event
+  @@unique([eventId, ctoonId]) // a cToon listed once per event
   @@index([ctoonId])
 }
 
 model HolidayEventPool {
-  id                   String @id @default(uuid())
-  eventId              String
-  ctoonId              String
-  probabilityPercent   Int    @default(0) // admin sets; “split evenly” is UI logic
+  id                 String @id @default(uuid())
+  eventId            String
+  ctoonId            String
+  probabilityPercent Int    @default(0) // admin sets; “split evenly” is UI logic
 
-  event     HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ctoon     Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  event HolidayEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ctoon Ctoon        @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, ctoonId])  // one chance row per cToon per event
+  @@unique([eventId, ctoonId]) // one chance row per cToon per event
   @@index([eventId])
   @@index([ctoonId])
 }
@@ -823,58 +888,58 @@ model HolidayRedemption {
 }
 
 model AuctionOnly {
-  id String @id @default(uuid())
+  id          String   @id @default(uuid())
   userCtoonId String
   pricePoints Int
-  startsAt DateTime // stored in UTC
-  endsAt DateTime // stored in UTC
-  isStarted    Boolean   @default(false)
-  createdAt DateTime @default(now())
+  startsAt    DateTime // stored in UTC
+  endsAt      DateTime // stored in UTC
+  isStarted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
   createdById String?
-  isFeatured   Boolean  @default(false)
+  isFeatured  Boolean  @default(false)
 
   // relations
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
-  createdBy User? @relation("AuctionOnlyCreatedBy", fields: [createdById], references: [id])
+  createdBy User?     @relation("AuctionOnlyCreatedBy", fields: [createdById], references: [id])
 
   @@index([startsAt])
   @@index([endsAt])
 }
 
 model HomepageConfig {
-  id                  String   @id
+  id                   String   @id
   topLeftImagePath     String?
   bottomLeftImagePath  String?
   topRightImagePath    String?
   bottomRightImagePath String?
-  showcaseImagePath  String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  showcaseImagePath    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 model AdImage {
-  id          String   @id @default(uuid())
-  imagePath   String   @unique
-  filename    String   @unique
-  label       String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  imagePath String   @unique
+  filename  String   @unique
+  label     String?
+  createdAt DateTime @default(now())
 
   createdById String?
-  createdBy   User?    @relation("AdImagesCreatedBy", fields: [createdById], references: [id])
+  createdBy   User?   @relation("AdImagesCreatedBy", fields: [createdById], references: [id])
 
   @@index([createdAt])
 }
 
 model WinballGrandPrizeSchedule {
-  id           String   @id @default(uuid())
-  ctoonId      String
-  startsAt     DateTime           // stored in UTC
-  createdAt    DateTime @default(now())
-  createdById  String?
+  id          String   @id @default(uuid())
+  ctoonId     String
+  startsAt    DateTime // stored in UTC
+  createdAt   DateTime @default(now())
+  createdById String?
 
   // name relations so they don't collide with existing ones
-  ctoon        Ctoon   @relation("WinballGrandPrizeCtoon", fields: [ctoonId], references: [id])
-  createdBy    User?   @relation("WinballGrandPrizeCreatedBy", fields: [createdById], references: [id])
+  ctoon     Ctoon @relation("WinballGrandPrizeCtoon", fields: [ctoonId], references: [id])
+  createdBy User? @relation("WinballGrandPrizeCreatedBy", fields: [createdById], references: [id])
 
   @@index([startsAt])
   @@index([ctoonId, startsAt])
@@ -901,20 +966,20 @@ model ScavengerStory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  steps     ScavengerStep[]
-  outcomes  ScavengerOutcome[]
-  sessions  ScavengerSession[]
+  steps    ScavengerStep[]
+  outcomes ScavengerOutcome[]
+  sessions ScavengerSession[]
 }
 
 model ScavengerStep {
-  id           String @id @default(uuid())
-  storyId      String
-  layer        Int    // 1..3
-  path         String // '', 'A', 'B', 'AA', 'AB', 'BA', 'BB'
-  description  String
-  imagePath    String?
-  optionAText  String
-  optionBText  String
+  id          String  @id @default(uuid())
+  storyId     String
+  layer       Int // 1..3
+  path        String // '', 'A', 'B', 'AA', 'AB', 'BA', 'BB'
+  description String
+  imagePath   String?
+  optionAText String
+  optionBText String
 
   story ScavengerStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
@@ -922,13 +987,13 @@ model ScavengerStep {
 }
 
 model ScavengerOutcome {
-  id         String               @id @default(uuid())
+  id         String              @id @default(uuid())
   storyId    String
-  path       String               // e.g. "AAA", "ABB" (exactly 3 chars)
+  path       String // e.g. "AAA", "ABB" (exactly 3 chars)
   resultType ScavengerResultType
   points     Int?
   text       String?
-  createdAt  DateTime             @default(now())
+  createdAt  DateTime            @default(now())
 
   story ScavengerStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
@@ -946,25 +1011,25 @@ model ScavengerExclusiveCtoon {
 }
 
 model ScavengerSession {
-  id              String                  @id @default(uuid())
-  userId          String
-  storyId         String
-  stepIndex       Int                     @default(1) // next step to answer (1..3, 4 means ended) — derived from path length + 1
-  path            String                  @default("") // accumulated choices (e.g. "A", "AB", ...)
-  status          ScavengerSessionStatus  @default(PENDING)
-  triggerSource   String
+  id            String                 @id @default(uuid())
+  userId        String
+  storyId       String
+  stepIndex     Int                    @default(1) // next step to answer (1..3, 4 means ended) — derived from path length + 1
+  path          String                 @default("") // accumulated choices (e.g. "A", "AB", ...)
+  status        ScavengerSessionStatus @default(PENDING)
+  triggerSource String
 
   // resolution snapshot
-  resultType      ScavengerResultType?
-  pointsAwarded   Int?
-  ctoonIdAwarded  String?
+  resultType     ScavengerResultType?
+  pointsAwarded  Int?
+  ctoonIdAwarded String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  story  ScavengerStory  @relation(fields: [storyId], references: [id], onDelete: Restrict)
-  ctoon  Ctoon?          @relation("ScavengerAwardedCtoon", fields: [ctoonIdAwarded], references: [id])
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story ScavengerStory @relation(fields: [storyId], references: [id], onDelete: Restrict)
+  ctoon Ctoon?         @relation("ScavengerAwardedCtoon", fields: [ctoonIdAwarded], references: [id])
 
   @@index([userId, createdAt])
   @@index([status])
@@ -975,10 +1040,10 @@ model ScavengerTriggerLog {
   userId        String
   triggerSource String
   started       Boolean  @default(false)
-  reason        String?  // 'started' | 'cooldown' | 'chance_miss' | 'no_stories' | 'disabled' | 'resumed'
+  reason        String? // 'started' | 'cooldown' | 'chance_miss' | 'no_stories' | 'disabled' | 'resumed'
   createdAt     DateTime @default(now())
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([triggerSource, createdAt])
@@ -988,15 +1053,58 @@ model ScavengerTriggerLog {
 model AdminChangeLog {
   id        String   @id @default(uuid())
   userId    String
-  area      String   // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
-  key       String   // specific field or setting key
+  area      String // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
+  key       String // specific field or setting key
   prevValue String?
   newValue  String?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([area, createdAt])
+}
+
+// Per-user lotto state (current odds and daily purchases)
+model LottoUser {
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  odds           Float     @default(0)
+  purchasesToday Int       @default(0)
+  lastPurchaseAt DateTime?
+  lastReset      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Lotto settings editable from Admin → Content
+model LottoSettings {
+  id            String   @id
+  baseOdds      Float    @default(1.0)
+  incrementRate Float    @default(0.02)
+  countPerDay   Int @default(5)
+  cost          Int @default(1)
+  lottoPointsWinnings Int    @default(5000)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ctoonPool LottoPoolCtoon[]
+}
+
+model LottoPoolCtoon {
+  id              String @id @default(uuid())
+  lottoSettingsId String
+  ctoonId         String
+  weight          Int    @default(1)
+  createdAt       DateTime @default(now())
+
+  lottoSettings LottoSettings @relation(fields: [lottoSettingsId], references: [id], onDelete: Cascade)
+  ctoon         Ctoon         @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([lottoSettingsId, ctoonId])
 }

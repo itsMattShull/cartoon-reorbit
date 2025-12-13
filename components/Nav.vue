@@ -173,6 +173,7 @@ const q = ref('')
 
 /* main links */
 const mainLinks = [
+  { label: 'Lottery', to: '/lottery' },
   { label: 'Showcase', to: '/dashboard' },
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'Collection', to: '/collection' },
@@ -216,6 +217,7 @@ const adminGroups = [
       { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
       { label: 'Manage Codes', to: '/admin/codes' },
+          { label: 'Manage Lotto', to: '/admin/manage-lotto' },
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
       { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
