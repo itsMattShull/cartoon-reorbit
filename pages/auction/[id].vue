@@ -359,6 +359,8 @@ async function saveAutoBid() {
     })
     myAutoBid.value = { maxAmount: Number(autoBidInput.value), isActive: true }
     showToast('Max Auto Bid saved.', 'success')
+    // Trigger scavenger chance after setting/updating auto-bid
+    await scavenger.maybeTrigger('auction_bid', { open: true })
   } catch (err) {
     showToast(err.data?.message || 'Failed to save Max Auto Bid.')
   }

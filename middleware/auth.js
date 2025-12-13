@@ -5,6 +5,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Smart behavior on the public home
   if (to.path === '/') {
     try { await fetchSelf() } catch {}
+    if (user.value?.active === false) return navigateTo('/join-discord?inactive=1')
     if (user.value?.needsSetup) return navigateTo('/setup-username')
     if (user.value) return navigateTo('/dashboard')
     return
@@ -22,6 +23,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   if (!user.value) return navigateTo('/')
+
+  // Inactive accounts are sent to join-discord with a notice
+  if (user.value.active === false && to.path !== '/join-discord') {
+    return navigateTo('/join-discord?inactive=1')
+  }
 
   if (user.value.needsSetup && to.path !== '/setup-username') {
     return navigateTo('/setup-username')

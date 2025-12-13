@@ -17,6 +17,7 @@
           </div>
 
           <div class="p-6 text-slate-900">
+            <!-- Outbid notifications -->
             <div class="flex items-start justify-between gap-6">
               <div>
                 <h2 class="text-lg font-semibold">Auction Notifications</h2>
@@ -26,56 +27,43 @@
               </div>
 
               <div class="flex items-center">
-                <!-- Skeleton while loading -->
-                <div
-                  v-if="loading"
-                  class="w-12 h-7 rounded-full bg-[var(--reorbit-tint)] border border-[var(--reorbit-border)] animate-pulse"
-                ></div>
-
-                <!-- Real toggle once loaded -->
-                <label
-                  v-else
-                  class="inline-flex items-center cursor-pointer select-none"
-                >
-                  <!-- hidden checkbox, bound to `allow` -->
-                  <input
-                    type="checkbox"
-                    class="sr-only"
-                    v-model="allow"
-                    @change="onToggle"
-                    :disabled="saving || loading"
-                  />
-                  <!-- track -->
-                  <div
-                    :class="[
-                      'w-12 h-7 rounded-full relative transition-colors',
-                      allow ? 'bg-[var(--reorbit-blue)]' : 'bg-gray-300'
-                    ]"
-                  >
-                    <!-- knob -->
-                    <div
-                      :class="[
-                        'absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform',
-                        allow ? 'translate-x-5' : 'translate-x-0'
-                      ]"
-                    ></div>
+                <div v-if="loading" class="w-12 h-7 rounded-full bg-[var(--reorbit-tint)] border border-[var(--reorbit-border)] animate-pulse"></div>
+                <label v-else class="inline-flex items-center cursor-pointer select-none">
+                  <input type="checkbox" class="sr-only" v-model="allow" @change="onToggleOutbid" :disabled="savingOutbid || loading" />
+                  <div :class="['w-12 h-7 rounded-full relative transition-colors', allow ? 'bg-[var(--reorbit-blue)]' : 'bg-gray-300']">
+                    <div :class="['absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform', allow ? 'translate-x-5' : 'translate-x-0']"></div>
                   </div>
                 </label>
               </div>
             </div>
-
-            <p class="text-xs mt-2" :class="(saving || loading) ? 'opacity-60' : 'opacity-80'">
-              {{
-                loading
-                  ? 'Loading current setting…'
-                  : saving
-                    ? 'Saving…'
-                    : 'Changes are saved instantly.'
-              }}
+            <p class="text-xs mt-2" :class="(savingOutbid || loading) ? 'opacity-60' : 'opacity-80'">
+              {{ loading ? 'Loading current setting…' : (savingOutbid ? 'Saving…' : 'Changes are saved instantly.') }}
             </p>
+            <p v-if="error" class="text-xs text-red-600 mt-2">{{ error }}</p>
 
-            <p v-if="error" class="text-xs text-red-600 mt-2">
-              {{ error }}
+            <div class="h-px w-full bg-[var(--reorbit-border)] my-6"></div>
+
+            <!-- Wishlist auction notifications -->
+            <div class="flex items-start justify-between gap-6">
+              <div>
+                <h2 class="text-lg font-semibold">Wishlist Auction Alerts</h2>
+                <p class="text-sm text-slate-600">
+                  Receive Discord DMs when a cToon on your wishlist goes on auction.
+                </p>
+              </div>
+
+              <div class="flex items-center">
+                <div v-if="loading" class="w-12 h-7 rounded-full bg-[var(--reorbit-tint)] border border-[var(--reorbit-border)] animate-pulse"></div>
+                <label v-else class="inline-flex items-center cursor-pointer select-none">
+                  <input type="checkbox" class="sr-only" v-model="allowWishlist" @change="onToggleWishlist" :disabled="savingWishlist || loading" />
+                  <div :class="['w-12 h-7 rounded-full relative transition-colors', allowWishlist ? 'bg-[var(--reorbit-blue)]' : 'bg-gray-300']">
+                    <div :class="['absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform', allowWishlist ? 'translate-x-5' : 'translate-x-0']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <p class="text-xs mt-2" :class="(savingWishlist || loading) ? 'opacity-60' : 'opacity-80'">
+              {{ loading ? 'Loading current setting…' : (savingWishlist ? 'Saving…' : 'Changes are saved instantly.') }}
             </p>
           </div>
         </div>
@@ -89,10 +77,12 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 
 import { ref, onMounted } from 'vue'
 
-const allow   = ref(true)
-const saving  = ref(false)
-const loading = ref(true)
-const error   = ref('')
+const allow          = ref(true)   // outbid
+const allowWishlist  = ref(true)   // wishlist auctions
+const savingOutbid   = ref(false)
+const savingWishlist = ref(false)
+const loading        = ref(true)
+const error          = ref('')
 
 async function loadSetting() {
   error.value = ''
@@ -101,8 +91,9 @@ async function loadSetting() {
     const res = await fetch('/api/user/notifications', { credentials: 'include' })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
-    console.log('Loaded notification setting:', data)
+    console.log('Loaded notification settings:', data)
     allow.value = !!data.allowAuctionNotifications
+    allowWishlist.value = !!data.allowWishlistAuctionNotifications
   } catch (e) {
     console.error(e)
     error.value = 'Failed to load preference.'
@@ -112,13 +103,12 @@ async function loadSetting() {
   }
 }
 
-async function onToggle() {
+async function onToggleOutbid() {
   if (loading.value) return
-
   error.value = ''
-  const next = allow.value          // v-model already updated
-  const prev = !allow.value         // previous state is opposite
-  saving.value = true
+  const next = allow.value
+  const prev = !allow.value
+  savingOutbid.value = true
   try {
     const res = await fetch('/api/user/notifications', {
       method: 'PUT',
@@ -128,14 +118,40 @@ async function onToggle() {
     })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
-    console.log('Saved notification setting:', data)
+    console.log('Saved outbid notification setting:', data)
     allow.value = !!data.allowAuctionNotifications
   } catch (err) {
     console.error(err)
     allow.value = prev
     error.value = 'Could not save. Please try again.'
   } finally {
-    saving.value = false
+    savingOutbid.value = false
+  }
+}
+
+async function onToggleWishlist() {
+  if (loading.value) return
+  error.value = ''
+  const next = allowWishlist.value
+  const prev = !allowWishlist.value
+  savingWishlist.value = true
+  try {
+    const res = await fetch('/api/user/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ allowWishlistAuctionNotifications: next })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    console.log('Saved wishlist notification setting:', data)
+    allowWishlist.value = !!data.allowWishlistAuctionNotifications
+  } catch (err) {
+    console.error(err)
+    allowWishlist.value = prev
+    error.value = 'Could not save. Please try again.'
+  } finally {
+    savingWishlist.value = false
   }
 }
 

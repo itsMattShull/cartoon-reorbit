@@ -12,12 +12,24 @@ export default defineEventHandler(async (event) => {
   if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
   const body = await readBody(event)
-  const next = Boolean(body?.allowAuctionNotifications)
+  const data = {}
+  if (typeof body?.allowAuctionNotifications !== 'undefined') {
+    data.allowAuctionNotifications = Boolean(body.allowAuctionNotifications)
+  }
+  if (typeof body?.allowWishlistAuctionNotifications !== 'undefined') {
+    data.allowWishlistAuctionNotifications = Boolean(body.allowWishlistAuctionNotifications)
+  }
+  if (Object.keys(data).length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'No fields to update' })
+  }
 
   const updated = await db.user.update({
     where: { id: me.id },
-    data: { allowAuctionNotifications: next },
-    select: { allowAuctionNotifications: true }
+    data,
+    select: { allowAuctionNotifications: true, allowWishlistAuctionNotifications: true }
   })
-  return { allowAuctionNotifications: updated.allowAuctionNotifications }
+  return {
+    allowAuctionNotifications: updated.allowAuctionNotifications,
+    allowWishlistAuctionNotifications: updated.allowWishlistAuctionNotifications
+  }
 })

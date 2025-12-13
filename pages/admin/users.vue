@@ -60,9 +60,9 @@
               v-if="menuOpenId === u.id"
               class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
             >
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Ban History</button>
+              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
               <button
-                v-if="!u.isAdmin && !u.banned && u.active"
+                v-if="!u.isAdmin && !u.banned"
                 class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
                 @click="openActionModal(u, 'BAN'); closeMenu()"
               >Ban user</button>
@@ -71,6 +71,16 @@
                 class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
                 @click="openActionModal(u, 'UNBAN'); closeMenu()"
               >Unban user</button>
+              <button
+                v-if="!u.isAdmin && !u.active && !u.banned"
+                class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                @click="activateUser(u); closeMenu()"
+              >Activate User</button>
+              <button
+                v-if="!u.isAdmin && u.active"
+                class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
+                @click="openDissolveModal(u); closeMenu()"
+              >Dissolve User</button>
               <button
                 v-if="isSuperAdmin && !u.isAdmin"
                 class="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
@@ -160,18 +170,18 @@
     </div>
   </div>
 
-  <!-- Ban Notes modal -->
+  <!-- Account History modal -->
   <div v-if="showNotesModal" class="fixed inset-0 z-50 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/50" @click="closeNotesModal()"></div>
     <div class="relative bg-white w-[92%] max-w-xl rounded-lg shadow-lg p-5">
-      <h3 class="text-lg font-semibold">Ban Notes — {{ notesTarget?.username || notesTarget?.discordTag || 'user' }}</h3>
+      <h3 class="text-lg font-semibold">Account History — {{ notesTarget?.username || notesTarget?.discordTag || 'user' }}</h3>
       <div class="mt-3 max-h-80 overflow-auto divide-y">
         <div v-if="notesLoading" class="text-sm text-gray-500 py-3">Loading…</div>
         <div v-else-if="notesError" class="text-sm text-red-600 py-3">{{ notesError }}</div>
-        <div v-else-if="!banNotes.length" class="text-sm text-gray-500 py-3">No notes yet.</div>
+        <div v-else-if="!banNotes.length" class="text-sm text-gray-500 py-3">No history yet.</div>
         <div v-for="n in banNotes" :key="n.id" class="py-2">
           <div class="text-sm">
-            <span :class="n.action==='BAN' ? 'text-red-700' : 'text-emerald-700'" class="font-medium">{{ n.action }}</span>
+            <span :class="noteTone(n.action)" class="font-medium">{{ n.action }}</span>
             by <span class="font-medium">{{ n.admin?.name || 'Unknown' }}</span>
             <span class="text-gray-500">• {{ formatDate(n.createdAt) }}</span>
           </div>
@@ -180,6 +190,30 @@
       </div>
       <div class="mt-4 flex items-center justify-end">
         <button class="px-3 py-1 text-sm border rounded-md" @click="closeNotesModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dissolve User modal -->
+  <div v-if="showDissolveModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeDissolveModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <h3 class="text-lg font-semibold">Dissolve {{ dissolveTarget?.username || dissolveTarget?.discordTag || 'user' }}</h3>
+      <div class="mt-2 text-sm text-gray-700 space-y-2">
+        <p>
+          Confirming will make this user Inactive, transfer all of their points to
+          <strong>{{ official?.username || '—' }}</strong>, reassign their cToons to
+          <strong>{{ official?.username || '—' }}</strong>, and immediately start 24‑hour auctions for those items.
+        </p>
+      </div>
+      <div v-if="dissolveError" class="mt-2 text-sm text-red-600">{{ dissolveError }}</div>
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeDissolveModal" :disabled="dissolveWorking">Cancel</button>
+        <button
+          class="px-3 py-1 text-sm rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
+          :disabled="dissolveWorking || !dissolveTarget"
+          @click="confirmDissolve"
+        >{{ dissolveWorking ? 'Dissolving…' : 'Confirm' }}</button>
       </div>
     </div>
   </div>
@@ -201,6 +235,9 @@ if (error.value) throw error.value
 
 const users = ref(raw.value || [])
 const filter = ref('')
+
+// Official account (for dissolve UI)
+const { data: official } = await useAsyncData('admin-official', () => $fetch('/api/admin/official', { headers }))
 
 // current viewer (for super-admin gating)
 const { data: meData } = await useAsyncData('admin-me', () => $fetch('/api/auth/me', { headers }))
@@ -299,6 +336,13 @@ const warnClass = (on, tone = 'amber') => {
     'px-2 py-0.5 rounded text-xs border',
     on ? onCls : 'bg-gray-100 text-gray-700 border-gray-300'
   ].join(' ')
+}
+
+const noteTone = (action) => {
+  if (action === 'BAN') return 'text-red-700'
+  if (action === 'UNBAN') return 'text-emerald-700'
+  if (action === 'DISSOLVE') return 'text-rose-700'
+  return 'text-gray-700'
 }
 
 // Ban/Unban modal state + actions
@@ -407,6 +451,54 @@ async function removeAdmin(u) {
     if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
+  }
+}
+
+// Activate user (for inactive, non-admin, non-banned users)
+async function activateUser(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/activate`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], active: true }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to activate user')
+  }
+}
+
+// Dissolve logic
+const showDissolveModal = ref(false)
+const dissolveTarget = ref(null)
+const dissolveWorking = ref(false)
+const dissolveError = ref('')
+
+function openDissolveModal(u) {
+  dissolveTarget.value = u
+  dissolveError.value = ''
+  dissolveWorking.value = false
+  showDissolveModal.value = true
+}
+function closeDissolveModal() {
+  showDissolveModal.value = false
+  dissolveTarget.value = null
+  dissolveWorking.value = false
+  dissolveError.value = ''
+}
+async function confirmDissolve() {
+  if (!dissolveTarget.value) return
+  dissolveWorking.value = true
+  dissolveError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, { method: 'POST' })
+    // Update local state: inactive, zero points
+    const idx = users.value.findIndex(x => x.id === dissolveTarget.value.id)
+    if (idx !== -1) {
+      users.value[idx] = { ...users.value[idx], active: false, points: 0 }
+    }
+    closeDissolveModal()
+  } catch (e) {
+    dissolveError.value = e?.data?.statusMessage || e?.message || 'Failed to dissolve user.'
+  } finally {
+    dissolveWorking.value = false
   }
 }
 </script>
