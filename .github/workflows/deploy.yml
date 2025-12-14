@@ -3,14 +3,15 @@ name: Deploy
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, dev ]
 
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  deploy_production:
+    if: ${{ github.ref_name == 'master' }}
     runs-on: ubuntu-latest
     steps:
       - name: Write key and known_hosts
@@ -46,4 +47,40 @@ jobs:
                 npm run build
 
                 pm2 restart 2 5 3 6
+              "'
+  deploy_development:
+    if: ${{ github.ref_name == 'dev' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write key and known_hosts (dev)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.DEV_SSH_PORT }}" "${{ secrets.DEV_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH (dev)
+        run: |
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -i ~/.ssh/deploy_key -p "${{ secrets.DEV_SSH_PORT }}" \
+              "${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}" 'bash -lc "
+                set -eo pipefail
+
+                export NVM_DIR=\"\$HOME/.nvm\"
+                if [ -s \"\$NVM_DIR/nvm.sh\" ]; then
+                  . \"\$NVM_DIR/nvm.sh\"
+                  nvm use --lts >/dev/null 2>&1 || true
+                fi
+                [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
+                command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
+
+                cd /var/www/dev.cartoon-reorbit
+                git pull origin dev
+
+                npm ci
+                npx prisma migrate deploy
+                npx prisma generate
+                npm run build
+
+                pm2 restart 6 2 3 7
               "'
