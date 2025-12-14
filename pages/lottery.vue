@@ -1,10 +1,14 @@
 <template>
   <Nav />
   <div class="min-h-screen bg-gray-100 p-6 mt-16 md:mt-20">
-    <h1 class="text-3xl font-bold mb-6">Lottery</h1>
+    <h1 class="text-3xl font-bold mb-6 text-center">Lottery</h1>
 
     <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto text-center">
-      <p class="mb-4 text-sm text-gray-600">Try your luck! Buy up to <strong v-if="remaining!==-1">{{ remaining }}</strong><strong v-else>unlimited</strong> tickets per day.</p>
+      <p class="mb-4 text-sm text-gray-600">
+        You can buy
+        <strong v-if="remaining !== -1">{{ remaining }}</strong>
+        <strong v-else>unlimited</strong> more tickets today.
+      </p>
 
       <div class="text-lg mb-4">Your current odds: <span class="font-semibold">{{ oddsDisplay }}%</span></div>
 
@@ -22,7 +26,6 @@
       <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg p-6 w-11/12 max-w-md text-center">
           <h2 class="text-2xl font-semibold mb-2">{{ modalTitle }}</h2>
-          <div class="text-lg mb-4">Rolled: <span class="font-mono">{{ modalRoll }}</span></div>
           <!-- Prize Display -->
           <div class="mb-4">
             <div v-if="modalCtoon" class="flex flex-col items-center gap-2">
@@ -47,7 +50,7 @@
 
     <!-- Prize Pool Display -->
     <div v-if="prizePool.length > 0" class="mt-8 max-w-4xl mx-auto">
-      <h2 class="text-2xl font-bold mb-4 text-center">Available cToon Prizes</h2>
+      <h2 class="text-2xl font-bold mb-4 text-center text-gray-800">Available cToon Prizes</h2>
       <div class="flex justify-center flex-wrap gap-4">
         <div
           v-for="ctoon in prizePool"
@@ -55,7 +58,7 @@
           class="bg-white rounded-lg shadow p-3 flex flex-col items-center text-center w-[150px] h-[175px]"
         >
           <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-full h-24 object-contain mb-2" />
-          <p class="text-sm font-semibold flex-grow flex items-center">{{ ctoon.name }}</p>
+          <p class="text-sm font-semibold flex-grow flex items-center text-gray-800">{{ ctoon.name }}</p>
           <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
           <p class="text-xs text-gray-500">
             Stock: {{ ctoon.quantity !== null ? ctoon.quantity - ctoon.totalMinted : 'Unlimited' }}
@@ -63,7 +66,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -83,7 +85,6 @@ const prizePool = ref([])
 const buying = ref(false)
 const showModal = ref(false)
 const modalTitle = ref('')
-const modalRoll = ref('')
 const modalMessage = ref('')
 const modalVerificationCode = ref(null)
 const modalVerificationHash = ref(null)
@@ -105,12 +106,11 @@ async function load() {
 
 async function buy() {
   buying.value = true
+  modalCtoon.value = null // Reset ctoon prize
   try {
-    const { roll, win, newOdds, remaining: rem, awardedPoints, awardedCtoon, emptyPoolWin, verificationCode, verificationHash } = await $fetch('/api/lottery', { method: 'POST' })
+    const { win, newOdds, remaining: rem, awardedPoints, awardedCtoon, emptyPoolWin, verificationCode, verificationHash } = await $fetch('/api/lottery', { method: 'POST' })
     odds.value = Number(newOdds)
     remaining.value = rem
-    modalRoll.value = Number(roll).toFixed(2)
-    modalCtoon.value = null // Reset ctoon prize
     modalVerificationCode.value = null // Reset verification
     modalVerificationHash.value = null
 
@@ -134,7 +134,6 @@ async function buy() {
     console.error('Buy failed', e)
     modalTitle.value = 'Error'
     modalMessage.value = e?.statusMessage || 'Purchase failed'
-    modalRoll.value = ''
     showModal.value = true
   } finally {
     await fetchSelf({ force: true })
@@ -151,5 +150,5 @@ onMounted(load)
 
 <style scoped>
 .btn-primary{ background-color:#6366F1; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
-.btn-primary:disabled{ opacity:.5 }
+.btn-primary:disabled { @apply opacity-50 cursor-not-allowed; }
 </style>
