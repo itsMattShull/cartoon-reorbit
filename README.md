@@ -232,6 +232,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 #### 12) Add the bot to your server
 - In your browser, open the Discord OAuth2 URL you saved earlier.
 - Add to Server → choose your server → Continue → Authorize. This can take a while on first run.
+- Once the bot has beed added to your server, give it the member role from earlier.
 
 ---
 
@@ -252,6 +253,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 
 ### Quick troubleshooting
 - If Prisma cannot connect, verify `DATABASE_URL` and that PostgreSQL is running.
+- `Error: Invalid prisma.user.findFirst() invocation` is an indication that `npx prisma migrate dev` may not have run properly.
 - If Redis jobs don’t process, confirm Redis is running and `REDIS_HOST/PORT` are correct.
 - On Windows, run PowerShell as Administrator when installing `nvm-windows` and ensure you reopen the shell after install.
 - `server > cron > sync-guild-members.js` is what is used to do cron jobs on the server.  Like daily auctions from the main account other tasks
