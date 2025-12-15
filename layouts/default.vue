@@ -1,7 +1,7 @@
 <template>
   <div class="app-layout">
-    <!-- Snow overlay -->
-    <div class="snow-overlay" aria-hidden="true">
+    <!-- Snow overlay (dashboard only) -->
+    <div v-if="isDashboard" class="snow-overlay" aria-hidden="true">
       <div v-for="n in 80" :key="n" class="snowflake">
         <div class="snowflake-inner"></div>
       </div>
@@ -11,6 +11,12 @@
     <slot />
   </div>
 </template>
+
+<script setup>
+// Only show snow on the dashboard route
+const route = useRoute()
+const isDashboard = computed(() => route.path === '/dashboard')
+</script>
 
 <style scoped>
 .app-layout {
