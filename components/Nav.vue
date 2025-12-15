@@ -183,6 +183,7 @@ const mainLinks = [
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
+  { label: 'Lottery', to: '/lottery' },
   { label: 'gToons Clash', to: '/games/clash/rooms' },
   { label: 'Settings', to: '/settings' }
 ]
@@ -216,6 +217,7 @@ const adminGroups = [
       { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
       { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
       { label: 'Manage Codes', to: '/admin/codes' },
+          { label: 'Manage Lotto', to: '/admin/manage-lotto' },
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
       { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
