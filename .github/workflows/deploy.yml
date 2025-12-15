@@ -62,23 +62,39 @@ jobs:
       - name: Deploy over SSH (dev)
         run: |
           ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-              -i ~/.ssh/deploy_key -p "${{ secrets.DEV_SSH_PORT }}" \
-              "${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}" 'bash -lc "
-                set -eo pipefail
+            -i ~/.ssh/deploy_key -p "${{ secrets.DEV_SSH_PORT }}" \
+            "${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}" bash -s <<'EOF'
+          set -eo pipefail
 
-                export NVM_DIR="$HOME/.nvm"
-                [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          # Load nvm (user install or system install)
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            . "$NVM_DIR/nvm.sh"
+          elif [ -s "/usr/local/nvm/nvm.sh" ]; then
+            . "/usr/local/nvm/nvm.sh"
+          fi
 
-                nvm install 23.10.0 >/dev/null
-                nvm use 23.10.0
-               
-                cd /var/www/dev.cartoon-reorbit
-                git pull origin dev
+          if ! command -v nvm >/dev/null 2>&1; then
+            echo "ERROR: nvm not found for user: $(whoami). Install nvm or use system Node."
+            exit 1
+          fi
 
-                npm install --no-audit --no-fund
-                npx prisma migrate deploy
-                npx prisma generate
-                npm run build
+          # Use a supported Node (Nuxt wants >=20.19; 22 LTS is safer than 23.x)
+          nvm install 23.10.0 >/dev/null
+          nvm use 23.10.0 >/dev/null
 
-                pm2 restart 6 2 3 7
-              "'
+          cd /var/www/dev.cartoon-reorbit
+
+          # Keep repo clean between deploys
+          git fetch origin dev
+          git reset --hard origin/dev
+
+          rm -rf node_modules
+          npm install --no-audit --no-fund
+
+          npx prisma migrate deploy
+          npx prisma generate
+          npm run build
+
+          pm2 restart 6 2 3 7
+          EOF
