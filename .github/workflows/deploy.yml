@@ -61,7 +61,7 @@ jobs:
 
       - name: Deploy over SSH (dev)
         run: |
-          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -oKexAlgorithms=+diffie-hellman-group14-sha1 \
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
               -i ~/.ssh/deploy_key -p "${{ secrets.DEV_SSH_PORT }}" \
               "${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}" 'bash -lc "
                 set -eo pipefail
