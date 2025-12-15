@@ -1737,14 +1737,20 @@ setInterval(async () => {
         resolvedCreatorId = official?.id || null
       }
 
-      // 1) fetch *all* bids for this auction, descending
+      // 1) fetch all bids placed before auction end; highest first, then earliest
       const allBids = await db.bid.findMany({
-        where: { auctionId: id },
-        orderBy: { amount: 'desc' }
+        where: {
+          auctionId: id,
+          createdAt: { lte: auc.endAt }
+        },
+        orderBy: [
+          { amount: 'desc' },
+          { createdAt: 'asc' }
+        ]
       })
 
-      // 2) winner is simply the top bidder, even if it makes their points go negative
-      const winningBid = allBids.length ? allBids[0] : null
+      // 2) winner is the highest eligible bid (before end)
+      const winningBid = allBids[0] || null
 
       // 3) transaction
       await db.$transaction(async tx => {
