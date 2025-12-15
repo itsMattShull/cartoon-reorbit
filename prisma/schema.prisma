@@ -175,6 +175,7 @@ model User {
   logins                   LoginLog[]
   gamePointLogs            GamePointLog[]
   pointsLogs               PointsLog[]
+  lockedPoints             LockedPoints[]
   claims                   Claim[]
   visits                   Visit[]
   points                   UserPoints?
