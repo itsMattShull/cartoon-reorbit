@@ -1743,13 +1743,8 @@ setInterval(async () => {
         orderBy: { amount: 'desc' }
       })
 
-      // 2) pick the first bid whose bidder still has ≥ that many points
-      let winningBid = null
-      for (const b of allBids) {
-        const ptsRec = await db.userPoints.findUnique({ where: { userId: b.userId } })
-        const pts    = ptsRec?.points ?? 0
-        if (pts >= b.amount) { winningBid = b; break }
-      }
+      // 2) winner is simply the top bidder, even if it makes their points go negative
+      const winningBid = allBids.length ? allBids[0] : null
 
       // 3) transaction
       await db.$transaction(async tx => {
