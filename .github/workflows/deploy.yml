@@ -33,11 +33,12 @@ jobs:
                 if [ -s \"\$NVM_DIR/nvm.sh\" ]; then
                   # nvm is incompatible with set -u; do NOT enable -u
                   . \"\$NVM_DIR/nvm.sh\"
-                  nvm use --lts >/dev/null 2>&1 || true
+                  nvm use 23.10.0 >/dev/null 2>&1 || true
                 fi
                 [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
                 command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
+                nvm use 23.10.0
                 cd /var/www/cartoon-reorbit
                 git pull origin master
 
