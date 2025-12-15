@@ -81,19 +81,44 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   })
   if (!auto.length) return { finalAuction: auc, steps }
 
-  // Collect balances for all participants
+  // Collect balances and active lock sums (all contexts) for availability
   const ids = Array.from(new Set(auto.map(a => a.userId).concat(leader ? [leader] : [])))
   const balances = await tx.userPoints.findMany({
     where: { userId: { in: ids } },
     select: { userId: true, points: true }
   })
   const balanceOf = Object.fromEntries(balances.map(b => [b.userId, b.points]))
+  const lockRows = ids.length
+    ? await tx.lockedPoints.findMany({
+        where: { userId: { in: ids }, status: 'ACTIVE' },
+        select: { userId: true, amount: true }
+      })
+    : []
+  const totalActiveLocked = {}
+  for (const r of lockRows) totalActiveLocked[r.userId] = (totalActiveLocked[r.userId] || 0) + (r.amount || 0)
+  const availableOf = {}
+  for (const id of ids) availableOf[id] = (balanceOf[id] || 0) - (totalActiveLocked[id] || 0)
+
+  // Track how much is currently locked on this auction per user (ACTIVE only)
+  const auctionLockRows = ids.length
+    ? await tx.lockedPoints.findMany({
+        where: {
+          userId: { in: ids },
+          status: 'ACTIVE',
+          contextType: 'AUCTION',
+          contextId: auctionId
+        },
+        select: { userId: true, amount: true, id: true }
+      })
+    : []
+  const auctionLockOf = {}
+  for (const r of auctionLockRows) auctionLockOf[r.userId] = (auctionLockOf[r.userId] || 0) + (r.amount || 0)
 
   function capsAt(currentPrice, currentLeader) {
     const list = auto.map(a => ({
       userId: a.userId,
       createdAt: a.createdAt,
-      cap: Math.min(a.maxAmount, balanceOf[a.userId] ?? 0),
+      cap: Math.min(a.maxAmount, availableOf[a.userId] ?? 0),
       hasAuto: true
     }))
     const inList = list.some(x => x.userId === currentLeader)
@@ -137,9 +162,25 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     const needOverLead  = leadCap + incrementFor(leadCap)
     const challengerBid = Math.min(ch.cap, Math.max(needOverPrice, needOverLead))
 
-    // 1) Record challenger bid
+    // 1) Record challenger bid and lock incrementally for this auction
     await tx.bid.create({ data: { auctionId, userId: ch.userId, amount: challengerBid } })
     steps.push({ userId: ch.userId, amount: challengerBid })
+    const prevChLock = auctionLockOf[ch.userId] || 0
+    const chDelta = Math.max(0, challengerBid - prevChLock)
+    if (chDelta > 0) {
+      await tx.lockedPoints.create({
+        data: {
+          userId: ch.userId,
+          amount: chDelta,
+          reason: 'AUTOBID',
+          status: 'ACTIVE',
+          contextType: 'AUCTION',
+          contextId: auctionId
+        }
+      })
+      auctionLockOf[ch.userId] = prevChLock + chDelta
+      availableOf[ch.userId] = (availableOf[ch.userId] || 0) - chDelta
+    }
 
     // 2) Decide who is leader after challenger
     price = challengerBid
@@ -149,6 +190,16 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
       // Challenger becomes new leader
       if (leader) {
         outbids.push(leader) // previous leader was just outbid
+        // Release previous leader's active locks for this auction
+        const prevLeaderLock = auctionLockOf[leader] || 0
+        if (prevLeaderLock > 0) {
+          await tx.lockedPoints.updateMany({
+            where: { userId: leader, status: 'ACTIVE', contextType: 'AUCTION', contextId: auctionId },
+            data:  { status: 'RELEASED' }
+          })
+          availableOf[leader] = (availableOf[leader] || 0) + prevLeaderLock
+          auctionLockOf[leader] = 0
+        }
       }
       leader = ch.userId
 
@@ -177,7 +228,35 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
           data: { auctionId, userId: leader, amount: leaderBid }
         })
         steps.push({ userId: leader, amount: leaderBid })
+        // Lock incremental for leader's defend
+        const prevLeadLock = auctionLockOf[leader] || 0
+        const leadDelta = Math.max(0, leaderBid - prevLeadLock)
+        if (leadDelta > 0) {
+          await tx.lockedPoints.create({
+            data: {
+              userId: leader,
+              amount: leadDelta,
+              reason: 'AUTOBID',
+              status: 'ACTIVE',
+              contextType: 'AUCTION',
+              contextId: auctionId
+            }
+          })
+          auctionLockOf[leader] = prevLeadLock + leadDelta
+          availableOf[leader] = (availableOf[leader] || 0) - leadDelta
+        }
         price = leaderBid
+      }
+
+      // Challenger was just outbid by leader's defend → release their locks for this auction
+      const chCurrLock = auctionLockOf[ch.userId] || 0
+      if (chCurrLock > 0) {
+        await tx.lockedPoints.updateMany({
+          where: { userId: ch.userId, status: 'ACTIVE', contextType: 'AUCTION', contextId: auctionId },
+          data:  { status: 'RELEASED' }
+        })
+        availableOf[ch.userId] = (availableOf[ch.userId] || 0) + chCurrLock
+        auctionLockOf[ch.userId] = 0
       }
 
       // Anti-snipe check/extend
