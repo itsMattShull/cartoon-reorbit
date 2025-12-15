@@ -78,7 +78,7 @@ jobs:
                 cd /var/www/dev.cartoon-reorbit
                 git pull origin dev
 
-                npm ci
+                npm install
                 npx prisma migrate deploy
                 npx prisma generate
                 npm run build
