@@ -1790,6 +1790,16 @@ setInterval(async () => {
             }
           })
 
+          // Consume winner's active locks for this auction; release others just in case
+          await tx.lockedPoints.updateMany({
+            where: { userId: winningBid.userId, status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+            data:  { status: 'CONSUMED' }
+          })
+          await tx.lockedPoints.updateMany({
+            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id, NOT: { userId: winningBid.userId } },
+            data:  { status: 'RELEASED' }
+          })
+
           // credit seller (creator or OFFICIAL_USERNAME), if resolved
           if (resolvedCreatorId) {
             const creatorPts = await tx.userPoints.upsert({
@@ -1812,6 +1822,12 @@ setInterval(async () => {
           await tx.userCtoon.update({
             where: { id: userCtoonId },
             data:  { isTradeable: true }
+          })
+
+          // No winner → release any remaining active locks on this auction
+          await tx.lockedPoints.updateMany({
+            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+            data:  { status: 'RELEASED' }
           })
         }
       })

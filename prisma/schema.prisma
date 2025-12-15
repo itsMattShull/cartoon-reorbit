@@ -7,6 +7,49 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Locked Points (reservations for auctions/trades) ─────────────────────────
+
+/// Reason a lock was created
+enum LockedPointsReason {
+  AUCTION_BID
+  AUTOBID
+  TRADE_OFFER
+}
+
+/// Current state of a lock
+enum LockedPointsStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
+/// Context/object a lock belongs to
+enum LockedContextType {
+  AUCTION
+  TRADE
+}
+
+/// Tracks reserved points so users can’t overspend across auctions/trades.
+/// Model name follows Prisma conventions; underlying table is mapped to
+/// `loackedPoints` per project naming preference.
+model LockedPoints {
+  id          String              @id @default(uuid())
+  userId      String
+  amount      Int
+  reason      LockedPointsReason
+  status      LockedPointsStatus  @default(ACTIVE)
+  contextType LockedContextType
+  contextId   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([contextType, contextId, status])
+  @@map("loackedPoints")
+}
+
 model CZone {
   id         String   @id @default(uuid())
   userId     String   @unique

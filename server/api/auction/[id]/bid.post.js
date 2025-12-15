@@ -9,6 +9,7 @@ const ANTI_SNIPE_MS = 60_000
 const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
 
 export default defineEventHandler(async (event) => {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US')
   // 1) Auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -139,9 +140,20 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: `Next bid must be exactly ${requiredBid}` })
     }
 
+    // Compute available points = total points - active locked points
     const up = await tx.userPoints.findUnique({ where: { userId } })
-    if (!up || up.points < manualAmount) {
-      throw createError({ statusCode: 400, statusMessage: 'Insufficient points to place this bid' })
+    const activeLocks = await tx.lockedPoints.findMany({
+      where: { userId, status: 'ACTIVE' },
+      select: { amount: true }
+    })
+    const lockedSum = activeLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
+    const totalPts  = up?.points || 0
+    const available = totalPts - lockedSum
+    if (available < manualAmount) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Insufficient points: you have ${fmt(totalPts)} points, with ${fmt(lockedSum)} locked.`
+      })
     }
 
     await tx.bid.create({ data: { auctionId, userId, amount: manualAmount } })
@@ -149,6 +161,37 @@ export default defineEventHandler(async (event) => {
       where: { id: auctionId },
       data: { highestBid: manualAmount, highestBidderId: userId }
     })
+
+    // Lock the bid amount for this auction (will be released if outbid by autobid)
+    await tx.lockedPoints.create({
+      data: {
+        userId,
+        amount: manualAmount,
+        reason: 'AUCTION_BID',
+        status: 'ACTIVE',
+        contextType: 'AUCTION',
+        contextId: auctionId
+      }
+    })
+
+    // Release previous leader’s locks for this auction (they’ve just been outbid)
+    if (prevLeaderId) {
+      const prevActive = await tx.lockedPoints.findMany({
+        where: {
+          userId: prevLeaderId,
+          status: 'ACTIVE',
+          contextType: 'AUCTION',
+          contextId: auctionId
+        },
+        select: { id: true }
+      })
+      if (prevActive.length) {
+        await tx.lockedPoints.updateMany({
+          where: { id: { in: prevActive.map(r => r.id) } },
+          data: { status: 'RELEASED' }
+        })
+      }
+    }
 
     const res = await applyProxyAutoBids(tx, auctionId, { antiSnipeMs: ANTI_SNIPE_MS })
     autoSteps    = res.steps || []

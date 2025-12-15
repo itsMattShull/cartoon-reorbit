@@ -81,10 +81,8 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 5) Verify initiator still has the points
-  const pts = await prisma.userPoints.findUnique({
-    where: { userId: offer.initiatorId }
-  })
+  // 5) Verify initiator still has the points (basic guard)
+  const pts = await prisma.userPoints.findUnique({ where: { userId: offer.initiatorId } })
   if ((pts?.points || 0) < offer.pointsOffered) {
     await prisma.tradeOffer.update({
       where: { id: offerId },
@@ -112,6 +110,17 @@ export default defineEventHandler(async (event) => {
           method:    'Requested Trade',
           direction: 'decrease'
         }
+      })
+
+      // Mark the corresponding trade lock as consumed
+      await tx.lockedPoints.updateMany({
+        where: {
+          userId: offer.initiatorId,
+          status: 'ACTIVE',
+          contextType: 'TRADE',
+          contextId: offerId
+        },
+        data: { status: 'CONSUMED' }
       })
 
       const recipientPoints = await tx.userPoints.update({
