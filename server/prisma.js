@@ -61,11 +61,17 @@ function prismaClientFactory() {
     })
   }
 
-  // Useful to know when Node is exiting while Prisma is still active
-  client.$on('beforeExit', async () => {
-    console.warn('[Prisma] beforeExit — disconnecting...')
-    try { await client.$disconnect() } catch {}
-  })
+  // Library engine (Prisma 5+) does not support client $on('beforeExit').
+  // Instead, register process-level hooks once.
+  if (!global.__prismaProcessHooksRegistered) {
+    global.__prismaProcessHooksRegistered = true
+    const disconnect = async () => {
+      try { await client.$disconnect() } catch {}
+    }
+    process.once('beforeExit', disconnect)
+    process.once('SIGINT',  () => { disconnect().finally(() => process.exit(0)) })
+    process.once('SIGTERM', () => { disconnect().finally(() => process.exit(0)) })
+  }
 
   return client
 }
