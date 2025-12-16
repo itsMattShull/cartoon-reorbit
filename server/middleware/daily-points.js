@@ -3,9 +3,34 @@ import { DateTime } from 'luxon'
 import { prisma }   from '@/server/prisma'
 import { defineEventHandler } from 'h3'
 
+// Lightweight throttle so we don't hit the DB on every request.
+const lastCheck = new Map() // userId -> timestamp ms
+const TTL_MS = Number(process.env.DAILY_POINTS_CHECK_TTL_MS || 60_000)
+
+function isStaticOrAsset(event) {
+  try {
+    const url = getRequestURL(event)
+    const p = url.pathname || ''
+    if (p.startsWith('/_nuxt') || p.startsWith('/public') || p === '/favicon.ico') return true
+    if (/(\.js|\.css|\.png|\.jpg|\.jpeg|\.gif|\.svg|\.ico|\.webp|\.mp3|\.woff2?)$/i.test(p)) return true
+    // Only run for HTML pages or API calls
+    const accept = String(event.node.req.headers['accept'] || '')
+    const isHtml = accept.includes('text/html')
+    const isApi  = p.startsWith('/api')
+    return !(isHtml || isApi)
+  } catch { return false }
+}
+
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) return
+  if (isStaticOrAsset(event)) return
+
+  // Throttle per user
+  const now = Date.now()
+  const prev = lastCheck.get(userId) || 0
+  if (now - prev < TTL_MS) return
+  lastCheck.set(userId, now)
 
   // 1. Current Chicago time
   const chicagoNow = DateTime.now().setZone('America/Chicago')
