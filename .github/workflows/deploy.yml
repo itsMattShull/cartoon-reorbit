@@ -46,7 +46,7 @@ jobs:
                 npx prisma generate
                 npm run build
 
-                pm2 restart 2 5 3 6
+                pm2 restart 0 1 2 3
               "'
   deploy_development:
     if: ${{ github.ref_name == 'dev' }}
