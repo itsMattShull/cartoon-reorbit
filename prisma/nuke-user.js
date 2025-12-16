@@ -327,6 +327,4 @@ main()
     console.error('❌ Error while deleting user and related data:', err)
     process.exit(1)
   })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .finally(async () => {})

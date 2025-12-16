@@ -7,7 +7,6 @@ import {
 import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
-import { notifyWishlistNewAuction } from '@/server/utils/discord'
 
 function formatDuration(days, minutes) {
   if (minutes > 0) {
@@ -243,15 +242,6 @@ export default defineEventHandler(async (event) => {
       )
     } catch (discordErr) {
       console.error('Failed to send Discord notification:', discordErr)
-    }
-  })()
-
-  // 9.1. DM wishlisters (best effort, async)
-  ;(async () => {
-    try {
-      await notifyWishlistNewAuction(prisma, userCtoonRec.ctoonId, auction.id)
-    } catch {
-      // ignore failures
     }
   })()
 

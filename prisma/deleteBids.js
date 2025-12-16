@@ -51,4 +51,4 @@ main()
     console.error('Error deleting orphan bids:', err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => {});

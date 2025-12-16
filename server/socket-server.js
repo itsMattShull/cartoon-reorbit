@@ -2008,6 +2008,32 @@ setInterval(async () => {
 }, 60 * 1000)
 
 
-httpServer.listen(PORT, () => {
-  console.log('Socket server listening on port 3001')
-})
+// Boot server only after Prisma is connected to avoid race conditions
+async function boot() {
+  try {
+    await db.$connect()
+    // Warm-up: establish a DB connection early
+    try { await db.$queryRaw`SELECT 1` } catch {}
+    console.log('[Prisma] Connected; starting socket server…')
+  } catch (err) {
+    console.error('[Prisma] Failed to connect at boot:', err)
+    process.exit(1)
+  }
+
+  httpServer.listen(PORT, () => {
+    console.log(`Socket server listening on port ${PORT}`)
+  })
+}
+
+boot()
+
+// Graceful shutdown: close Prisma and HTTP server
+async function shutdown(signal = 'SIGTERM') {
+  console.log(`\n[Server] Received ${signal}; shutting down…`)
+  httpServer.close(() => process.exit(0))
+  // Fallback if close hangs
+  setTimeout(() => process.exit(0), 5000).unref()
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))

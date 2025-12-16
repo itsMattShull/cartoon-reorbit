@@ -169,6 +169,3 @@ main()
     console.error('❌ Error while seeding starter cToons:', err)
     process.exit(1)
   })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })

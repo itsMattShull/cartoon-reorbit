@@ -9,7 +9,6 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
-  try {
     const { userId, ctoonId, isSpecial = false } = job.data
 
     // Fetch cToon details
@@ -143,9 +142,6 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
         })
       })
     }
-  } finally {
-    await prisma.$disconnect()
-  }
 }, { connection })
 
 // Optional: logging

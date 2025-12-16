@@ -76,9 +76,6 @@ export default defineEventHandler(async (event) => {
       else if (/purchase limit/i.test(msg)) statusCode = 403
       else if (/not-for-sale/i.test(msg)) statusCode = 404
       throw createError({ statusCode, statusMessage: msg })
-    } finally {
-      // best-effort cleanup
-      try { /* eslint-disable no-unused-expressions */ await prisma.$disconnect } catch {}
     }
 
     // Fetch the newest minted copy for the owner & cToon
