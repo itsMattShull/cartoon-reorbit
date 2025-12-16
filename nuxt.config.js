@@ -7,7 +7,7 @@ export default defineNuxtConfig({
   // ───────────────────────────────────────────────
   // 1)  Modules
   // ───────────────────────────────────────────────
-  modules: ['@nuxtjs/tailwindcss', '@prisma/nuxt', '@sentry/nuxt/module'],
+  modules: ['@nuxtjs/tailwindcss', '@sentry/nuxt/module'],
 
   // ───────────────────────────────────────────────
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
