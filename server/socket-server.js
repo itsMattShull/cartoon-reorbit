@@ -2014,7 +2014,6 @@ boot()
 // Graceful shutdown: close Prisma and HTTP server
 async function shutdown(signal = 'SIGTERM') {
   console.log(`\n[Server] Received ${signal}; shutting down…`)
-  try { await db.$disconnect() } catch {}
   httpServer.close(() => process.exit(0))
   // Fallback if close hangs
   setTimeout(() => process.exit(0), 5000).unref()

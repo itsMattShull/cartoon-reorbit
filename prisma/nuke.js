@@ -87,7 +87,7 @@ async function nuke() {
     console.error('\n❌ Reset failed:', err)
     process.exitCode = 1
   } finally {
-    await prisma.$disconnect()
+    // no explicit disconnect
   }
 }
 

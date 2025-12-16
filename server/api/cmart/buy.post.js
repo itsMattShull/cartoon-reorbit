@@ -91,6 +91,5 @@ export default defineEventHandler(async (event) => {
   } finally {
     // — Clean up
     if (queueEvents) await queueEvents.close()
-    await prisma.$disconnect()
   }
 })

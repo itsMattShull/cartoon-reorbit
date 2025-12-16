@@ -40,7 +40,4 @@ main()
     console.error('❌ Error:', e)
     process.exit(1)
   })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
-
+  .finally(async () => {})

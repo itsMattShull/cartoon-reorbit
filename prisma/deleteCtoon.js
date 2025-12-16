@@ -97,7 +97,7 @@ async function main() {
   } catch (err) {
     console.error('Error fetching cToons to delete:', err)
   } finally {
-    await prisma.$disconnect()
+    // no explicit disconnect
   }
 }
 

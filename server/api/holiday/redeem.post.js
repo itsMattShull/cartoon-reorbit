@@ -318,6 +318,5 @@ export default defineEventHandler(async (event) => {
 
   } finally {
     if (queueEvents) await queueEvents.close()
-    await prisma.$disconnect()
   }
 })

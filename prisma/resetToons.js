@@ -87,7 +87,7 @@ async function run() {
     console.error('\n❌ Failed:', err)
     process.exitCode = 1
   } finally {
-    await prisma.$disconnect()
+    // no explicit disconnect
   }
 }
 
