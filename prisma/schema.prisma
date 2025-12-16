@@ -101,31 +101,31 @@ model UserPoints {
 }
 
 model User {
-  id                        String    @id @default(uuid())
-  username                  String?   @unique
-  discordId                 String    @unique
-  discordTag                String?
-  discordAvatar             String?
-  email                     String?   @unique
-  avatar                    String?
-  accessToken               String?
-  refreshToken              String?
-  tokenExpiresAt            DateTime?
-  roles                     String[]  @default([])
-  allowAuctionNotifications Boolean   @default(true)
-  isAdmin                   Boolean   @default(false)
-  inGuild                   Boolean   @default(true)
-  active                    Boolean   @default(true)
-  banned                    Boolean   @default(false)
-  createdAt                 DateTime  @default(now())
-  lastLogin                 DateTime?
-  lastActivity              DateTime?
-  discordCreatedAt          DateTime?
-  isBooster                 Boolean   @default(false)
-  boosterSince              DateTime?
-  warning180                Boolean   @default(false)
-  warning210                Boolean   @default(false)
-  warning240                Boolean   @default(false)
+  id               String           @id @default(uuid())
+  username         String?          @unique
+  discordId        String           @unique
+  discordTag       String?
+  discordAvatar    String?
+  email            String?          @unique
+  avatar           String?
+  accessToken      String?
+  refreshToken     String?
+  tokenExpiresAt   DateTime?
+  roles            String[]         @default([])
+  allowAuctionNotifications Boolean  @default(true)
+  isAdmin          Boolean          @default(false)
+  inGuild          Boolean          @default(true)
+  active           Boolean          @default(true)
+  banned           Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  lastLogin        DateTime?
+  lastActivity     DateTime?
+  discordCreatedAt DateTime?
+  isBooster       Boolean   @default(false)
+  boosterSince    DateTime? 
+  warning180       Boolean  @default(false)
+  warning210       Boolean  @default(false)
+  warning240       Boolean  @default(false)
 
   cZones                   CZone[]
   clashDecks               ClashDeck[]
