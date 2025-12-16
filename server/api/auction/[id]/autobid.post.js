@@ -9,6 +9,7 @@ const ANTI_SNIPE_MS = 60_000
 const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
 
 export default defineEventHandler(async (event) => {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US')
   // --- Auth ---
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -47,6 +48,22 @@ export default defineEventHandler(async (event) => {
   }
   if (auc.creatorId && auc.creatorId === userId) {
     throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
+  }
+
+  // --- Available points check for autobid max ---
+  const up = await db.userPoints.findUnique({ where: { userId } })
+  const locks = await db.lockedPoints.findMany({
+    where: { userId, status: 'ACTIVE' },
+    select: { amount: true }
+  })
+  const totalPts   = up?.points || 0
+  const lockedSum  = locks.reduce((a, r) => a + (r.amount || 0), 0)
+  const available  = totalPts - lockedSum
+  if (maxCap > available) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Insufficient points: you have ${fmt(totalPts)} points, with ${fmt(lockedSum)} locked.`
+    })
   }
 
   // --- Prevent duplicate max auto-bids (other users) for this auction ---
@@ -158,6 +175,22 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 409,
         statusMessage: 'Another player already has this max auto-bid for this auction'
+      })
+    }
+
+    // Re-check available points inside txn
+    const up2 = await tx.userPoints.findUnique({ where: { userId } })
+    const locks2 = await tx.lockedPoints.findMany({
+      where: { userId, status: 'ACTIVE' },
+      select: { amount: true }
+    })
+    const totalPts2  = up2?.points || 0
+    const lockedSum2 = locks2.reduce((a, r) => a + (r.amount || 0), 0)
+    const available2 = totalPts2 - lockedSum2
+    if (maxCap > available2) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Insufficient points: you have ${fmt(totalPts2)} points, with ${fmt(lockedSum2)} locked.`
       })
     }
 

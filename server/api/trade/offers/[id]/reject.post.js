@@ -40,10 +40,22 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 5) Reject the offer
-  await prisma.tradeOffer.update({
-    where: { id: offerId },
-    data: { status: 'REJECTED', updatedAt: new Date() }
+  // 5) Reject the offer and release any locked points for it
+  await prisma.$transaction(async (tx) => {
+    await tx.tradeOffer.update({
+      where: { id: offerId },
+      data: { status: 'REJECTED', updatedAt: new Date() }
+    })
+
+    await tx.lockedPoints.updateMany({
+      where: {
+        userId: offer.initiatorId,
+        status: 'ACTIVE',
+        contextType: 'TRADE',
+        contextId: offerId
+      },
+      data: { status: 'RELEASED' }
+    })
   })
 
   try {
