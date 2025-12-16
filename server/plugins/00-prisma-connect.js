@@ -18,8 +18,8 @@ export default defineNitroPlugin(async (nitroApp) => {
     console.error('[Prisma] Failed to connect in Nitro plugin:', err)
   }
 
-  // Graceful shutdown hook no longer manually disconnects Prisma
+  // Graceful shutdown for Nitro close hook
   nitroApp.hooks.hook('close', async () => {
-    // No-op: Prisma uses library engine and does not block exit
+    try { await prisma.$disconnect() } catch {}
   })
 })

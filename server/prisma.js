@@ -68,8 +68,8 @@ function prismaClientFactory() {
 
   // Library engine (Prisma 5+) does not support client $on('beforeExit').
   // Instead, register process-level hooks once.
-  if (!global.__prismaProcessHooksRegistered) {
-    global.__prismaProcessHooksRegistered = true
+  if (!globalThis.__prismaProcessHooksRegistered) {
+    globalThis.__prismaProcessHooksRegistered = true
     const disconnect = async () => {
       try { await client.$disconnect() } catch {}
     }
