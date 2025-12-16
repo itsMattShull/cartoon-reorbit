@@ -49,6 +49,11 @@ function prismaClientFactory() {
     log: logConfig
   })
 
+  // Ensure engine is connected before use
+  client.$connect().catch((e) => {
+    console.error('[Prisma] Failed to connect', e)
+  })
+
   // Only log slow queries to keep noise down (configurable threshold)
   if (enableQueryLogs) {
     const threshold = Number(process.env.PRISMA_SLOW_QUERY_MS || 300)
@@ -77,15 +82,6 @@ function prismaClientFactory() {
 }
 
 let prisma
-if (process.env.NODE_ENV === 'production') {
-  // In production, instantiate once
-  prisma = prismaClientFactory()
-} else {
-  // In development, preserve the client across module reloads
-  if (!global.__db) {
-    global.__db = prismaClientFactory()
-  }
-  prisma = global.__db
-}
+prisma = prismaClientFactory()
 
 export { prisma }
