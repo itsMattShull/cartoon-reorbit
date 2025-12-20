@@ -14,7 +14,7 @@ CREATE TYPE "LockedPointsStatus" AS ENUM ('ACTIVE', 'RELEASED', 'CONSUMED');
 CREATE TYPE "LockedContextType" AS ENUM ('AUCTION', 'TRADE');
 
 -- AlterTable
-ALTER TABLE "User" DROP COLUMN "allowWishlistAuctionNotifications";
+ALTER TABLE "User" DROP COLUMN IF EXISTS "allowWishlistAuctionNotifications";
 
 -- CreateTable
 CREATE TABLE "loackedPoints" (

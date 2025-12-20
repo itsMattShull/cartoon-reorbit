@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:guildchecker\"",
+    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:guildchecker\" \"npm:achievements\"",
     "worker": "node server/workers/mint.worker.js",
+    "achievements": "node server/workers/achievements.worker.js",
     "guildchecker": "node ./server/cron/sync-guild-members.js",
     "build": "nuxt build",
     "start": "nuxt start",
