@@ -155,7 +155,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
   // Non-transactional side-effect: announce in Discord channel
   // console.log('[achievements] announce: discord', { userId, ach: achievement?.slug || achievement?.id, title: achievement?.title })
-  await announceAchievement(db, userId, achievement.title)
+  // await announceAchievement(db, userId, achievement.title)
 }
 
 export async function processAchievementsForUser(userId) {
