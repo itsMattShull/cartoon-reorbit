@@ -57,6 +57,11 @@
                 <label class="block text-sm">Unique cToons ≥</label>
                 <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
               </div>
+              <div class="md:col-span-3">
+                <label class="block text-sm">User created before</label>
+                <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
+                <p class="text-xs text-gray-500 mt-1">Users with an account created strictly earlier than this date qualify.</p>
+              </div>
             </div>
           <div class="mt-3">
             <label class="block text-sm">Set completion (AND):</label>
@@ -174,7 +179,7 @@ const ctoonSelection = ref({ name: '', qty: 1 })
 
 const emptyForm = () => ({
   title: '', slug: '', description: '', isActive: true,
-  criteria: { pointsGte: null, totalCtoonsGte: null, uniqueCtoonsGte: null, setsRequired: [] },
+  criteria: { pointsGte: null, totalCtoonsGte: null, uniqueCtoonsGte: null, setsRequired: [], userCreatedBefore: null },
   rewards: { points: 0, ctoons: [], backgrounds: [] }
 })
 const form = reactive(emptyForm())
@@ -259,7 +264,8 @@ function startEdit(a) {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,
       uniqueCtoonsGte: a.uniqueCtoonsGte ?? null,
-      setsRequired: [...(a.setsRequired || [])]
+      setsRequired: [...(a.setsRequired || [])],
+      userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
     },
     rewards: {
       points: a.rewards?.points || 0,

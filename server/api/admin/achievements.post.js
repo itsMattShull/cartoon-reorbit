@@ -78,6 +78,7 @@ export default defineEventHandler(async (event) => {
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
+      userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
       rewards: {
         create: {
           points: Number(rewards?.points || 0) || 0,

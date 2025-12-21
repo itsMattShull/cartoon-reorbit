@@ -12,12 +12,13 @@ export default defineEventHandler(async (event) => {
   const list = await db.achievement.findMany({
     where: { isActive: true },
     orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      description: true,
-      imagePath: true,
+    include: {
+      rewards: {
+        include: {
+          ctoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+          backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true } } } }
+        }
+      }
     }
   })
 
@@ -46,6 +47,19 @@ export default defineEventHandler(async (event) => {
     imagePath: a.imagePath,
     achievers: countMap.get(a.id) || 0,
     achieved: userId ? achievedSet.has(a.id) : false,
+    rewards: a.rewards?.[0]
+      ? {
+          points: a.rewards[0].points || 0,
+          ctoons: (a.rewards[0].ctoons || []).map(rc => ({
+            name: rc.ctoon?.name || rc.ctoonId,
+            quantity: rc.quantity,
+            imagePath: rc.ctoon?.assetPath || null,
+          })),
+          backgrounds: (a.rewards[0].backgrounds || []).map(rb => ({
+            label: rb.background?.label || '',
+            imagePath: rb.background?.imagePath || null
+          }))
+        }
+      : { points: 0, ctoons: [], backgrounds: [] },
   }))
 })
-

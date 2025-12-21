@@ -42,14 +42,8 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
     }
 
-    // Count how many have been minted and existing user purchases
-    const totalMinted = await prisma.userCtoon.count({ where: { ctoonId } })
+    // Count existing user purchases for limit checks
     const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
-
-    // Sold-out check
-    if (ctoon.quantity !== null && totalMinted >= ctoon.quantity) {
-      throw new Error('cToon sold out')
-    }
 
     // Wallet balance check
     const wallet = await prisma.userPoints.findUnique({ where: { userId } })
@@ -76,19 +70,30 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }
 
-    // Calculate mintNumber and first-edition flag
-    const mintNumber = totalMinted + 1
-    const isFirstEdition =
-      ctoon.initialQuantity === null || mintNumber <= ctoon.initialQuantity
+    // Mint inside a single transaction with atomic counter for mintNumber
+    await prisma.$transaction(async (tx) => {
+      // 1) Atomically increment totalMinted and use the new value as mintNumber
+      const updatedCtoon = await tx.ctoon.update({
+        where: { id: ctoonId },
+        data: { totalMinted: { increment: 1 } },
+        select: { totalMinted: true, initialQuantity: true, quantity: true }
+      })
 
-    if (!isSpecial) {
-      await prisma.$transaction(async (tx) => {
-        // 1) Deduct points and capture new total
+      const mintNumber = updatedCtoon.totalMinted
+      // Sold-out guard (rolls back the increment if exceeded)
+      if (updatedCtoon.quantity !== null && mintNumber > updatedCtoon.quantity) {
+        throw new Error('cToon sold out')
+      }
+
+      const isFirstEdition =
+        updatedCtoon.initialQuantity === null || mintNumber <= updatedCtoon.initialQuantity
+
+      // 2) If not special, deduct points + log
+      if (!isSpecial) {
         const updated = await tx.userPoints.update({
           where: { userId },
           data:  { points: { decrement: ctoon.price } }
         })
-        // 2) Log with updated total
         await tx.pointsLog.create({
           data: {
             userId,
@@ -98,50 +103,24 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
             direction: 'decrease'
           }
         })
-        // 3) Create the UserCtoon
-        const uc = await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition },
-          select: { id: true, mintNumber: true }
-        })
-        // 4) Create ownership log
-        await tx.ctoonOwnerLog.create({
-          data: {
-            userId,
-            ctoonId,
-            userCtoonId: uc.id,
-            mintNumber: uc.mintNumber
-          }
-        })
+      }
 
-        // Increment aggregate count on the Ctoon
-        await tx.ctoon.update({
-          where: { id: ctoonId },
-          data: { totalMinted: { increment: 1 } },
-        })
+      // 3) Create the UserCtoon with the atomic mintNumber
+      const uc = await tx.userCtoon.create({
+        data: { userId, ctoonId, mintNumber, isFirstEdition },
+        select: { id: true, mintNumber: true }
       })
-    } else {
-      // Special mints bypass cost
-      await prisma.$transaction(async (tx) => {
-        const uc = await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition },
-          select: { id: true, mintNumber: true }
-        })
-        await tx.ctoonOwnerLog.create({
-          data: {
-            userId,
-            ctoonId,
-            userCtoonId: uc.id,
-            mintNumber: uc.mintNumber
-          }
-        })
-        
-        // Increment aggregate count on the Ctoon
-        await tx.ctoon.update({
-          where: { id: ctoonId },
-          data: { totalMinted: { increment: 1 } },
-        })
+
+      // 4) Create ownership log
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId,
+          ctoonId,
+          userCtoonId: uc.id,
+          mintNumber: uc.mintNumber
+        }
       })
-    }
+    })
 }, { connection })
 
 // Optional: logging
