@@ -1,7 +1,7 @@
 <template>
   <Nav />
   <div class="max-w-5xl mx-auto p-4 mt-12">
-    <div class="mt-12 mb-6 flex items-center justify-between">
+    <div class="mt-12 mb-6 flex flex-col gap-3 items-start sm:flex-row sm:items-center sm:justify-between">
       <h1 class="text-3xl font-bold">Admin: Achievements</h1>
       <div class="flex items-center gap-3">
         <button class="px-3 py-2 bg-blue-600 text-white rounded" @click="openCreate">Create Achievement</button>
