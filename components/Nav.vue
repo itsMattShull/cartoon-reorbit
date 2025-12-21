@@ -184,7 +184,7 @@ const mainLinks = [
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
-  // { label: 'Lottery', to: '/lottery' },
+  { label: 'Lottery', to: '/lottery' },
   { label: 'gToons Clash', to: '/games/clash/rooms' },
   { label: 'Settings', to: '/settings' }
 ]
