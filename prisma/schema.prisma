@@ -134,6 +134,9 @@ model UserCtoon {
   ownerLogs                 CtoonOwnerLog[]
   holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
   auctionOnlyListings       AuctionOnly[]
+
+  // Ensure only one of each mint number exists per cToon
+  @@unique([ctoonId, mintNumber])
 }
 
 model UserPoints {
