@@ -5,18 +5,16 @@
 // With --compact, also renumbers to a contiguous 1..N sequence per cToon
 // (i.e., fills gaps like …1,2,4 → 1,2,3).
 // Also updates Ctoon.totalMinted to at least the highest assigned mintNumber
-// to keep it in sync with the new atomic minting logic. With --check-total,
-// compares Ctoon.totalMinted to the actual UserCtoon count and (with --apply)
-// updates it to match the count.
+// to keep it in sync with the new atomic minting logic.
 //
 // Usage:
 //   node prisma/fixDuplicateMintNumbers.js           # dry-run, duplicates only
 //   node prisma/fixDuplicateMintNumbers.js --apply   # apply duplicates fix
 //   node prisma/fixDuplicateMintNumbers.js --compact # dry-run incl. gap compaction
 //   node prisma/fixDuplicateMintNumbers.js --compact --apply # apply compaction
-//   node prisma/fixDuplicateMintNumbers.js --check-total       # dry-run: show Ctoon.totalMinted vs actual counts (checks ALL cToons)
-//   node prisma/fixDuplicateMintNumbers.js --check-total --apply # apply: set Ctoon.totalMinted = UserCtoon count (for ALL cToons)
-//   node prisma/fixDuplicateMintNumbers.js --compact --apply --check-total # combine fixes + totals sync
+//
+// For syncing Ctoon.totalMinted against actual counts (including burned), use:
+//   node prisma/syncTotalMinted.js [--apply]
 //
 // Notes:
 // - If a cToon has a quantity set and all numbers within [1..quantity] are
@@ -116,9 +114,8 @@ async function main() {
   const args = new Set(process.argv.slice(2))
   const APPLY = args.has('--apply') || args.has('-a')
   const COMPACT = args.has('--compact') || args.has('-c')
-  const CHECK_TOTAL = args.has('--check-total') || args.has('-t')
 
-  console.log(`🔎 Mode: ${COMPACT ? 'compact gaps + fix duplicates' : 'fix duplicates only'}${CHECK_TOTAL ? ' + check totals' : ''} (${APPLY ? 'apply' : 'dry-run'})`)
+  console.log(`🔎 Mode: ${COMPACT ? 'compact gaps + fix duplicates' : 'fix duplicates only'} (${APPLY ? 'apply' : 'dry-run'})`)
 
   // Identify cToons with duplicate mint numbers
   const dupRows = await prisma.$queryRaw`
@@ -173,39 +170,12 @@ async function main() {
     console.log('✅ No duplicates or gaps found.')
   }
 
-  // Optional: check and fix Ctoon.totalMinted vs actual count (independent of dup/gap work)
-  if (CHECK_TOTAL) {
-    console.log('🔢 Checking Ctoon.totalMinted against actual UserCtoon counts…')
-    const counts = await prisma.userCtoon.groupBy({
-      by: ['ctoonId'],
-      _count: { _all: true }
-    })
-    const countMap = new Map(counts.map(r => [r.ctoonId, r._count._all]))
-
-    // Inspect ALL cToons (not tied to dup/compact)
-    const ctoonsToInspect = await prisma.ctoon.findMany({
-      select: { id: true, name: true, totalMinted: true }
-    })
-
-    let totalCtoonUpdated = 0
-    for (const c of ctoonsToInspect) {
-      const actual = countMap.get(c.id) ?? 0
-      if (c.totalMinted !== actual) {
-        console.log(`• ${c.id}${c.name ? ` (${c.name})` : ''}: totalMinted ${APPLY ? '→' : 'would →'} ${actual} (was ${c.totalMinted})`)
-        if (APPLY) {
-          await prisma.ctoon.update({ where: { id: c.id }, data: { totalMinted: actual } })
-          totalCtoonUpdated++
-        }
-      }
-    }
-    console.log(`📈 ${APPLY ? 'Updated' : 'Would update'} totalMinted for ${totalCtoonUpdated} cToon(s).`)
-  }
-
   console.log(`✅ Done (${APPLY ? 'applied' : 'dry-run'}).`)
   console.log(`   cToons processed (dups/gaps): ${results.length}`)
   console.log(`   UserCtoon rows ${APPLY ? 'updated' : 'would update'}: ${totalUpdates}`)
   if (!APPLY) {
-    console.log('   To apply fixes, rerun with --apply. To compact gaps too, add --compact. To sync totals, add --check-total.')
+    console.log('   To apply fixes, rerun with --apply. To compact gaps too, add --compact.')
+    console.log('   To sync totals, run: node prisma/syncTotalMinted.js [--apply]')
   }
 }
 
