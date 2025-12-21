@@ -137,6 +137,7 @@ async function findTextChannelIdByName(name) {
   if (!target) return null
   const channels = await fetchGuildChannels()
   const ch = channels.find(ch => ch?.type === 0 && String(ch?.name || '').toLowerCase() === target)
+  // console.log('findTextChannelIdByName:', name, '->', ch?.id || 'not found')
   return ch?.id || null
 }
 
@@ -154,8 +155,31 @@ export async function sendGuildChannelMessageByName(channelName, content) {
       },
       body: { content }
     })
+    // console.log('sendGuildChannelMessageByName succeeded')
     return true
   } catch {
+    // console.log('sendGuildChannelMessageByName failed')
+    return false
+  }
+}
+
+// New: Send to a channel by its ID (no lookup by name)
+export async function sendGuildChannelMessageById(channelId, content) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
+  if (!BOT_TOKEN || !channelId) return false
+  try {
+    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': BOT_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content })
+    })
+    // console.log('sendGuildChannelMessageById succeeded')
+    return true
+  } catch(e) {
+    // console.error('sendGuildChannelMessageById failed:', e)
     return false
   }
 }
@@ -164,11 +188,12 @@ export async function announceAchievement(prisma, userId, achievementTitle) {
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true } })
     if (!user?.discordId) return
-    const channelName = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL || 'announcements'
+    const channelId = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    if (!channelId) return
     const tag = `<@${user.discordId}>`
     const title = String(achievementTitle || 'an achievement')
     const msg = `🎉 Congrats ${tag}! You unlocked “${title}”.`
-    await sendGuildChannelMessageByName(channelName, msg)
+    await sendGuildChannelMessageById(channelId, msg)
   } catch {
     // swallow in worker/cron context
   }
