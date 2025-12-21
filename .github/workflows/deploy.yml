@@ -97,5 +97,5 @@ jobs:
           npx prisma generate
           npm run build
 
-          pm2 restart 6 2 3 7 --update-env
+          pm2 restart 6 2 3 7 8 --update-env
           EOF
