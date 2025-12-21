@@ -176,6 +176,7 @@ const mainLinks = [
   { label: 'Showcase', to: '/dashboard' },
   { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
   { label: 'Collection', to: '/collection' },
+  { label: 'Achievements', to: '/achievements' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Auctions', to: '/auctions' },
   { label: 'Live Trading', to: '/live-trading' },
