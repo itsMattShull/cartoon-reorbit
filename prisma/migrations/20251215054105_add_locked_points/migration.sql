@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "User" ADD COLUMN     "allowWishlistAuctionNotifications" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS    "allowWishlistAuctionNotifications" BOOLEAN NOT NULL DEFAULT true;

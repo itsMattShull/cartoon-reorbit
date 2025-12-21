@@ -3,6 +3,7 @@ import 'dotenv/config'
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
+import { achievementsQueue } from '../../server/utils/queues.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
@@ -699,3 +700,18 @@ cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
 
 // create daily featured auction at 08:00
 cron.schedule("0 8 * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
+
+// Enqueue daily achievements processing at 03:00 CST
+async function enqueueAchievementsDaily() {
+  try {
+    const users = await prisma.user.findMany({ where: { active: true, banned: false }, select: { id: true } })
+    for (const u of users) {
+      await achievementsQueue.add('processUserAchievements', { userId: u.id })
+    }
+  } catch (e) {
+    // ignore in cron context
+  }
+}
+
+await enqueueAchievementsDaily()
+cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })

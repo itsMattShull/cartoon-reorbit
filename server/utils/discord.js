@@ -113,3 +113,63 @@ export async function notifyOutbidByUserId(prisma, userId, auctionId) {
     // ignore failures
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Guild channel helpers
+
+async function fetchGuildChannels() {
+  const BOT_TOKEN = process.env.BOT_TOKEN
+  const GUILD_ID = process.env.DISCORD_GUILD_ID
+  if (!BOT_TOKEN || !GUILD_ID) return []
+  try {
+    const channels = await $fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
+      method: 'GET',
+      headers: { 'Authorization': BOT_TOKEN }
+    })
+    return Array.isArray(channels) ? channels : []
+  } catch {
+    return []
+  }
+}
+
+async function findTextChannelIdByName(name) {
+  const target = String(name || '').trim().toLowerCase()
+  if (!target) return null
+  const channels = await fetchGuildChannels()
+  const ch = channels.find(ch => ch?.type === 0 && String(ch?.name || '').toLowerCase() === target)
+  return ch?.id || null
+}
+
+export async function sendGuildChannelMessageByName(channelName, content) {
+  const BOT_TOKEN = process.env.BOT_TOKEN
+  if (!BOT_TOKEN) return false
+  try {
+    const channelId = await findTextChannelIdByName(channelName)
+    if (!channelId) return false
+    await $fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': BOT_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: { content }
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function announceAchievement(prisma, userId, achievementTitle) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true } })
+    if (!user?.discordId) return
+    const channelName = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL || 'announcements'
+    const tag = `<@${user.discordId}>`
+    const title = String(achievementTitle || 'an achievement')
+    const msg = `🎉 Congrats ${tag}! You unlocked “${title}”.`
+    await sendGuildChannelMessageByName(channelName, msg)
+  } catch {
+    // swallow in worker/cron context
+  }
+}

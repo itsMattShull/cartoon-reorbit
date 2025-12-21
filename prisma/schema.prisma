@@ -33,15 +33,15 @@ enum LockedContextType {
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
 model LockedPoints {
-  id          String              @id @default(uuid())
+  id          String             @id @default(uuid())
   userId      String
   amount      Int
   reason      LockedPointsReason
-  status      LockedPointsStatus  @default(ACTIVE)
+  status      LockedPointsStatus @default(ACTIVE)
   contextType LockedContextType
   contextId   String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 
@@ -109,6 +109,8 @@ model Ctoon {
   // Scavenger Hunt relations
   scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
   scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
+  // Achievements back‑relation
+  achievementRewardCtoons    AchievementRewardCtoon[]
 }
 
 model UserCtoon {
@@ -144,32 +146,32 @@ model UserPoints {
 }
 
 model User {
-  id                        String    @id @default(uuid())
-  username                  String?   @unique
-  discordId                 String    @unique
-  discordTag                String?
-  discordAvatar             String?
-  email                     String?   @unique
-  avatar                    String?
-  accessToken               String?
-  refreshToken              String?
-  tokenExpiresAt            DateTime?
-  roles                     String[]  @default([])
-  allowAuctionNotifications Boolean   @default(true)
-  allowWishlistAuctionNotifications Boolean @default(true)
-  isAdmin                   Boolean   @default(false)
-  inGuild                   Boolean   @default(true)
-  active                    Boolean   @default(true)
-  banned                    Boolean   @default(false)
-  createdAt                 DateTime  @default(now())
-  lastLogin                 DateTime?
-  lastActivity              DateTime?
-  discordCreatedAt          DateTime?
-  isBooster                 Boolean   @default(false)
-  boosterSince              DateTime?
-  warning180                Boolean   @default(false)
-  warning210                Boolean   @default(false)
-  warning240                Boolean   @default(false)
+  id                                String    @id @default(uuid())
+  username                          String?   @unique
+  discordId                         String    @unique
+  discordTag                        String?
+  discordAvatar                     String?
+  email                             String?   @unique
+  avatar                            String?
+  accessToken                       String?
+  refreshToken                      String?
+  tokenExpiresAt                    DateTime?
+  roles                             String[]  @default([])
+  allowAuctionNotifications         Boolean   @default(true)
+  allowWishlistAuctionNotifications Boolean   @default(true)
+  isAdmin                           Boolean   @default(false)
+  inGuild                           Boolean   @default(true)
+  active                            Boolean   @default(true)
+  banned                            Boolean   @default(false)
+  createdAt                         DateTime  @default(now())
+  lastLogin                         DateTime?
+  lastActivity                      DateTime?
+  discordCreatedAt                  DateTime?
+  isBooster                         Boolean   @default(false)
+  boosterSince                      DateTime?
+  warning180                        Boolean   @default(false)
+  warning210                        Boolean   @default(false)
+  warning240                        Boolean   @default(false)
 
   cZones                   CZone[]
   clashDecks               ClashDeck[]
@@ -220,6 +222,8 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs AdminChangeLog[]
   lottoUser       LottoUser?
+  // Achievements back‑relation
+  achievements    AchievementUser[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -709,8 +713,9 @@ model Background {
   createdBy   User?                @relation("BackgroundCreatedBy", fields: [createdById], references: [id])
 
   // back‑relations
-  rewardBackgrounds RewardBackground[] @relation("BackgroundReward")
-  owners            UserBackground[]   @relation("Background_UserBackgrounds")
+  rewardBackgrounds            RewardBackground[]            @relation("BackgroundReward")
+  owners                       UserBackground[]              @relation("Background_UserBackgrounds")
+  achievementRewardBackgrounds AchievementRewardBackground[]
 
   @@index([createdAt])
 }
@@ -1065,27 +1070,96 @@ model LottoUser {
 
 // Lotto settings editable from Admin → Content
 model LottoSettings {
-  id            String   @id
-  baseOdds      Float    @default(1.0)
-  incrementRate Float    @default(0.02)
-  countPerDay   Int @default(5)
-  cost          Int @default(1)
-  lottoPointsWinnings Int    @default(5000)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                  String   @id
+  baseOdds            Float    @default(1.0)
+  incrementRate       Float    @default(0.02)
+  countPerDay         Int      @default(5)
+  cost                Int      @default(1)
+  lottoPointsWinnings Int      @default(5000)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   ctoonPool LottoPoolCtoon[]
 }
 
 model LottoPoolCtoon {
-  id              String @id @default(uuid())
+  id              String   @id @default(uuid())
   lottoSettingsId String
   ctoonId         String
-  weight          Int    @default(1)
+  weight          Int      @default(1)
   createdAt       DateTime @default(now())
 
   lottoSettings LottoSettings @relation(fields: [lottoSettingsId], references: [id], onDelete: Cascade)
   ctoon         Ctoon         @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@unique([lottoSettingsId, ctoonId])
+}
+
+// ── Achievements ─────────────────────────────────────────────────────────────
+
+model Achievement {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  title           String
+  description     String?
+  imagePath       String?
+  isActive        Boolean  @default(true)
+  // Criteria (all ANDed when present)
+  pointsGte       Int?
+  totalCtoonsGte  Int?
+  uniqueCtoonsGte Int?
+  setsRequired    String[] // complete ALL sets in this array
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rewards AchievementReward[]
+  users   AchievementUser[]
+}
+
+model AchievementUser {
+  id            String   @id @default(uuid())
+  achievementId String
+  userId        String
+  achievedAt    DateTime @default(now())
+
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([achievementId, userId])
+  @@index([userId, achievedAt])
+}
+
+model AchievementReward {
+  id            String @id @default(uuid())
+  achievementId String
+  points        Int?
+
+  achievement Achievement                   @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  ctoons      AchievementRewardCtoon[]
+  backgrounds AchievementRewardBackground[]
+}
+
+model AchievementRewardCtoon {
+  id       String @id @default(uuid())
+  rewardId String
+  ctoonId  String
+  quantity Int    @default(1)
+
+  reward AchievementReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  ctoon  Ctoon             @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([rewardId, ctoonId])
+  @@index([ctoonId])
+}
+
+model AchievementRewardBackground {
+  id           String @id @default(uuid())
+  rewardId     String
+  backgroundId String
+
+  reward     AchievementReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  background Background        @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+
+  @@unique([rewardId, backgroundId])
+  @@index([backgroundId])
 }
