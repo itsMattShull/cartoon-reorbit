@@ -80,7 +80,7 @@ async function fixDuplicatesForCtoon(ctoonId) {
 
     return { ctoonId, name: ctoon.name, updated: updates.length, newMax, warnings }
   })
-}
+} 
 
 async function main() {
   console.log('🔎 Scanning for duplicate mint numbers…')
