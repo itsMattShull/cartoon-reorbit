@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
     totalCtoonsGte: a.totalCtoonsGte,
     uniqueCtoonsGte: a.uniqueCtoonsGte,
     setsRequired: a.setsRequired || [],
+    userCreatedBefore: a.userCreatedBefore,
     rewards: a.rewards?.[0] ? {
       points: a.rewards[0].points || 0,
       ctoons: (a.rewards[0].ctoons || []).map(rc => ({ ctoonId: rc.ctoonId, quantity: rc.quantity, name: rc.ctoon?.name || '' })),
@@ -38,4 +39,3 @@ export default defineEventHandler(async (event) => {
     } : { points: 0, ctoons: [], backgrounds: [] }
   }))
 })
-

@@ -1109,6 +1109,7 @@ model Achievement {
   totalCtoonsGte  Int?
   uniqueCtoonsGte Int?
   setsRequired    String[] // complete ALL sets in this array
+  userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -10,7 +10,7 @@ function toIntOrNull(v) {
 
 export async function evaluateUserAgainstAchievement(client, userId, ach) {
   const db = client || prisma
-  const user = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+  const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, createdAt: true } })
   if (!user) {
     // console.log('[achievements] evaluate: user not found', { userId, ach: ach?.slug || ach?.id })
     return false
@@ -52,6 +52,17 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       return false
     }
     // console.log('[achievements] evaluate: pass uniqueCtoons', { userId, ach: achKey, have: uniq.length, need: ach.uniqueCtoonsGte })
+  }
+
+  // User created before a given date
+  if (ach.userCreatedBefore) {
+    const cutoff = new Date(ach.userCreatedBefore)
+    const created = user.createdAt ? new Date(user.createdAt) : null
+    if (!created || !(created < cutoff)) {
+      // console.log('[achievements] evaluate: fail createdBefore', { userId, ach: achKey, userCreatedAt: created?.toISOString?.(), cutoff: cutoff.toISOString() })
+      return false
+    }
+    // console.log('[achievements] evaluate: pass createdBefore', { userId, ach: achKey, userCreatedAt: created.toISOString(), cutoff: cutoff.toISOString() })
   }
 
   // Set completion (AND across all sets)
