@@ -5,13 +5,18 @@
 // With --compact, also renumbers to a contiguous 1..N sequence per cToon
 // (i.e., fills gaps like …1,2,4 → 1,2,3).
 // Also updates Ctoon.totalMinted to at least the highest assigned mintNumber
-// to keep it in sync with the new atomic minting logic.
+// to keep it in sync with the new atomic minting logic. With --check-total,
+// compares Ctoon.totalMinted to the actual UserCtoon count and (with --apply)
+// updates it to match the count.
 //
 // Usage:
 //   node prisma/fixDuplicateMintNumbers.js           # dry-run, duplicates only
 //   node prisma/fixDuplicateMintNumbers.js --apply   # apply duplicates fix
 //   node prisma/fixDuplicateMintNumbers.js --compact # dry-run incl. gap compaction
 //   node prisma/fixDuplicateMintNumbers.js --compact --apply # apply compaction
+//   node prisma/fixDuplicateMintNumbers.js --check-total       # dry-run: show Ctoon.totalMinted vs actual counts
+//   node prisma/fixDuplicateMintNumbers.js --check-total --apply # apply: set Ctoon.totalMinted = UserCtoon count
+//   node prisma/fixDuplicateMintNumbers.js --compact --apply --check-total # combine fixes + totals sync
 //
 // Notes:
 // - If a cToon has a quantity set and all numbers within [1..quantity] are
@@ -111,8 +116,9 @@ async function main() {
   const args = new Set(process.argv.slice(2))
   const APPLY = args.has('--apply') || args.has('-a')
   const COMPACT = args.has('--compact') || args.has('-c')
+  const CHECK_TOTAL = args.has('--check-total') || args.has('-t')
 
-  console.log(`🔎 Mode: ${COMPACT ? 'compact gaps + fix duplicates' : 'fix duplicates only'} (${APPLY ? 'apply' : 'dry-run'})`)
+  console.log(`🔎 Mode: ${COMPACT ? 'compact gaps + fix duplicates' : 'fix duplicates only'}${CHECK_TOTAL ? ' + check totals' : ''} (${APPLY ? 'apply' : 'dry-run'})`)
 
   // Identify cToons with duplicate mint numbers
   const dupRows = await prisma.$queryRaw`
@@ -139,40 +145,73 @@ async function main() {
   const gapSet = new Set(gapRows.map(r => r.ctoonId))
   const allIds = new Set([...dupSet, ...gapSet])
 
-  if (allIds.size === 0) {
-    console.log('✅ No duplicates or gaps found. Nothing to do.')
-    return
-  }
-
-  console.log(`Found ${dupSet.size} cToon(s) with duplicates${COMPACT ? `; ${gapSet.size} with gaps` : ''}. Processing…`)
   let totalUpdates = 0
   const results = []
 
-  for (const ctoonId of allIds) {
-    try {
-      const res = await fixForCtoon(ctoonId, { compact: COMPACT, apply: APPLY })
-      totalUpdates += res.updated
-      results.push(res)
-      const nameInfo = res.name ? ` (${res.name})` : ''
-      if (res.updated === 0) {
-        console.log(`• ${ctoonId}${nameInfo}: no changes needed`)
-      } else {
-        console.log(`• ${ctoonId}${nameInfo}: ${APPLY ? 'updated' : 'would update'} ${res.updated} row(s); newMax = ${res.newMax}`)
-        // Log a small preview of changes
-        const preview = res.updates.slice(0, 10).map(u => `${u.old}→${u.new}`).join(', ')
-        if (preview) console.log(`   changes: ${preview}${res.updates.length > 10 ? ', …' : ''}`)
+  if (allIds.size > 0) {
+    console.log(`Found ${dupSet.size} cToon(s) with duplicates${COMPACT ? `; ${gapSet.size} with gaps` : ''}. Processing…`)
+    for (const ctoonId of allIds) {
+      try {
+        const res = await fixForCtoon(ctoonId, { compact: COMPACT, apply: APPLY })
+        totalUpdates += res.updated
+        results.push(res)
+        const nameInfo = res.name ? ` (${res.name})` : ''
+        if (res.updated === 0) {
+          console.log(`• ${ctoonId}${nameInfo}: no changes needed`)
+        } else {
+          console.log(`• ${ctoonId}${nameInfo}: ${APPLY ? 'updated' : 'would update'} ${res.updated} row(s); newMax = ${res.newMax}`)
+          // Log a small preview of changes
+          const preview = res.updates.slice(0, 10).map(u => `${u.old}→${u.new}`).join(', ')
+          if (preview) console.log(`   changes: ${preview}${res.updates.length > 10 ? ', …' : ''}`)
+        }
+        for (const w of res.warnings || []) console.warn(`  ⚠️  ${w}`)
+      } catch (err) {
+        console.error(`❌ Failed to fix duplicates for ${ctoonId}:`, err?.message || err)
       }
-      for (const w of res.warnings || []) console.warn(`  ⚠️  ${w}`)
-    } catch (err) {
-      console.error(`❌ Failed to fix duplicates for ${ctoonId}:`, err?.message || err)
     }
+  } else {
+    console.log('✅ No duplicates or gaps found.')
+  }
+
+  // Optional: check and fix Ctoon.totalMinted vs actual count
+  if (CHECK_TOTAL) {
+    console.log('🔢 Checking Ctoon.totalMinted against actual UserCtoon counts…')
+    const counts = await prisma.userCtoon.groupBy({
+      by: ['ctoonId'],
+      _count: { _all: true }
+    })
+    const countMap = new Map(counts.map(r => [r.ctoonId, r._count._all]))
+
+    // Ctoons with any mismatch (including those with zero count but nonzero totalMinted)
+    const ctoonsToInspect = await prisma.ctoon.findMany({
+      where: {
+        OR: [
+          { id: { in: Array.from(countMap.keys()) } },
+          { totalMinted: { gt: 0 } }
+        ]
+      },
+      select: { id: true, name: true, totalMinted: true }
+    })
+
+    let totalCtoonUpdated = 0
+    for (const c of ctoonsToInspect) {
+      const actual = countMap.get(c.id) ?? 0
+      if (c.totalMinted !== actual) {
+        console.log(`• ${c.id}${c.name ? ` (${c.name})` : ''}: totalMinted ${APPLY ? '→' : 'would →'} ${actual} (was ${c.totalMinted})`)
+        if (APPLY) {
+          await prisma.ctoon.update({ where: { id: c.id }, data: { totalMinted: actual } })
+          totalCtoonUpdated++
+        }
+      }
+    }
+    console.log(`📈 ${APPLY ? 'Updated' : 'Would update'} totalMinted for ${totalCtoonUpdated} cToon(s).`)
   }
 
   console.log(`✅ Done (${APPLY ? 'applied' : 'dry-run'}).`)
-  console.log(`   cToons processed: ${results.length}`)
+  console.log(`   cToons processed (dups/gaps): ${results.length}`)
   console.log(`   UserCtoon rows ${APPLY ? 'updated' : 'would update'}: ${totalUpdates}`)
   if (!APPLY) {
-    console.log('   To apply fixes, rerun with --apply. To compact gaps too, add --compact.')
+    console.log('   To apply fixes, rerun with --apply. To compact gaps too, add --compact. To sync totals, add --check-total.')
   }
 }
 
