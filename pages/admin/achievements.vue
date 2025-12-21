@@ -58,19 +58,22 @@
                 <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
               </div>
             </div>
-            <div class="mt-3">
-              <label class="block text-sm">Set completion (AND):</label>
-              <div class="flex gap-2 items-center mb-2">
-                <input v-model="setInput" class="border rounded px-2 py-1" placeholder="Type set name then Add" />
-                <button type="button" class="px-3 py-1 border rounded" @click="addSet">Add</button>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="s in form.criteria.setsRequired" :key="s" class="px-2 py-1 bg-gray-100 rounded">
-                  {{ s }}
-                  <button type="button" class="ml-1 text-red-600" @click="removeSet(s)">×</button>
-                </span>
-              </div>
+          <div class="mt-3">
+            <label class="block text-sm">Set completion (AND):</label>
+            <div class="flex gap-2 items-center mb-2">
+              <datalist id="ach-sets-list">
+                <option v-for="opt in filteredSetOptions(setInput)" :key="opt" :value="opt" />
+              </datalist>
+              <input v-model="setInput" list="ach-sets-list" class="border rounded px-2 py-1 flex-1" placeholder="Type 3+ characters to search" />
+              <button type="button" class="px-3 py-1 border rounded" @click="addSet">Add</button>
             </div>
+            <div class="flex flex-wrap gap-2">
+              <span v-for="s in form.criteria.setsRequired" :key="s" class="px-2 py-1 bg-gray-100 rounded">
+                {{ s }}
+                <button type="button" class="ml-1 text-red-600" @click="removeSet(s)">×</button>
+              </span>
+            </div>
+          </div>
 
             <h3 class="text-lg font-semibold mt-6">Rewards</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -102,15 +105,27 @@
             </div>
             </div>
 
-            <div class="mt-3">
-              <label class="block text-sm">Backgrounds</label>
-              <div class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-auto border p-2 rounded">
-                <label v-for="b in backgrounds" :key="b.id" class="flex items-center gap-2 text-sm">
-                  <input type="checkbox" :value="b.id" v-model="bgSelection" />
-                  <span>{{ b.label || 'Background' }}</span>
-                </label>
-              </div>
+          <div class="mt-3">
+            <label class="block text-sm">Backgrounds</label>
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-48 overflow-auto border p-2 rounded">
+              <button
+                v-for="b in backgrounds"
+                :key="b.id"
+                type="button"
+                class="relative focus:outline-none"
+                @click="toggleBg(b.id)"
+                :title="b.label || 'Background'"
+              >
+                <img
+                  :src="b.imagePath"
+                  :alt="b.label || 'Background'"
+                  class="w-20 h-14 object-cover rounded border"
+                  :class="bgSelection.includes(b.id) ? 'ring-2 ring-blue-600' : ''"
+                />
+                <div v-if="bgSelection.includes(b.id)" class="absolute inset-0 bg-blue-500/20 rounded pointer-events-none"></div>
+              </button>
             </div>
+          </div>
           </div>
           <div class="px-4 py-3 border-t flex gap-3 justify-end">
             <button type="button" class="px-4 py-2 border rounded" @click="closeForm">Cancel</button>
@@ -144,9 +159,11 @@ definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
 const { data: achievements, pending, refresh } = await useFetch('/api/admin/achievements')
 const { data: ctoonsData } = await useFetch('/api/admin/list-ctoons')
 const { data: backgroundsData } = await useFetch('/api/admin/backgrounds')
+const { data: setsData } = await useFetch('/api/admin/sets')
 
 const ctoons = computed(() => ctoonsData.value || [])
 const backgrounds = computed(() => backgroundsData.value || [])
+const setsOptions = computed(() => setsData.value || [])
 
 const editId = ref('')
 const showForm = ref(false)
@@ -191,6 +208,12 @@ function removeSet(s) {
   form.criteria.setsRequired = form.criteria.setsRequired.filter(x => x !== s)
 }
 
+function filteredSetOptions(input) {
+  const v = String(input || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  return (setsOptions.value || []).filter(opt => String(opt || '').toLowerCase().includes(v))
+}
+
 function nameForCtoon(id) {
   const c = ctoons.value.find(c => c.id === id)
   return c ? c.name : id
@@ -217,6 +240,12 @@ function addCtoon() {
   const qty = Math.max(1, Number(ctoonSelection.value.qty || 1))
   form.rewards.ctoons.push({ ctoonId: match.id, quantity: qty })
   ctoonSelection.value = { name: '', qty: 1 }
+}
+
+function toggleBg(id) {
+  const i = bgSelection.value.indexOf(id)
+  if (i >= 0) bgSelection.value.splice(i, 1)
+  else bgSelection.value.push(id)
 }
 
 function startEdit(a) {
