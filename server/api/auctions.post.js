@@ -95,6 +95,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'There’s already an active auction for this cToon' })
   }
 
+  // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
+  const inPendingTrade = await prisma.tradeOfferCtoon.findFirst({
+    where: {
+      userCtoonId,
+      tradeOffer: { status: 'PENDING' }
+    },
+    select: { id: true }
+  })
+  if (inPendingTrade) {
+    throw createError({ statusCode: 400, statusMessage: 'This cToon is already in a pending trade. Please resolve the trade before auctioning it.' })
+  }
+
   // 5. Compute endAt
   const nowMs    = Date.now()
   const daysMs   = durationDays * 24 * 60 * 60 * 1000
