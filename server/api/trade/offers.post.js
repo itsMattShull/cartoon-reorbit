@@ -100,6 +100,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 5.5) Prevent trades involving cToons in active auctions
+  if (ctoonIdsOffered.length) {
+    const offeredActiveAuction = await prisma.auction.findFirst({
+      where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    if (offeredActiveAuction) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more of the cToons you offered is in an active auction.'
+      })
+    }
+  }
+  if (ctoonIdsRequested.length) {
+    const requestedActiveAuction = await prisma.auction.findFirst({
+      where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    if (requestedActiveAuction) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more of the cToons you requested is in an active auction.'
+      })
+    }
+  }
+
   // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points
   const offer = await prisma.$transaction(async (tx) => {
     const created = await tx.tradeOffer.create({
