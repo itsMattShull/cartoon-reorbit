@@ -55,14 +55,14 @@
         <div
           v-for="ctoon in prizePool"
           :key="ctoon.id"
-          class="bg-white rounded-lg shadow p-3 flex flex-col items-center text-center w-[150px] h-[175px]"
+          class="bg-white rounded-lg shadow p-3 flex flex-col items-center text-center w-[150px]"
         >
           <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-full h-24 object-contain mb-2" />
           <p class="text-sm font-semibold flex-grow flex items-center text-gray-800">{{ ctoon.name }}</p>
-          <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
+          <!-- <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
           <p class="text-xs text-gray-500">
             Stock: {{ ctoon.quantity !== null ? ctoon.quantity - ctoon.totalMinted : 'Unlimited' }}
-          </p>
+          </p> -->
         </div>
       </div>
     </div>
