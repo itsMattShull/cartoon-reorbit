@@ -4,8 +4,8 @@
       <div
         class="stage"
         :style="{
-          width: canvasWidth + 'px',
-          height: canvasHeight + 'px',
+          width: (canvasWidth + BORDER_W * 2) + 'px',
+          height: (canvasHeight + BORDER_W * 2) + 'px',
           transform: 'scale(' + scale + ')'
         }"
       >
@@ -18,7 +18,7 @@
           ref="spriteEl"
           class="sprite-dom"
           v-show="isLoaded"
-          :src="sprite_src"
+          :src="currentSpriteSrc"
           :style="{
             left: spriteLeft,
             top: spriteTop,
@@ -45,19 +45,20 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 const STEPS_WIDE = 100
 const FRAME_MS = 100 // controls pace; 100–160 feels nice for digivice vibes
 
-// Your asset path (put the gif in /public/sprites/ or similar)
-// If you have a dynamic value elsewhere, bind that here instead
-const sprite_src = 'images/sprites/character.gif'
+// Sprite sources
+const WALK_SPRITE_SRC = 'images/sprites/character.gif'
+const IDLE_SPRITE_SRC = 'images/sprites/standstill.gif'
+const JUMP_SPRITE_SRC = 'images/sprites/jump.gif'
 
 // Canvas sizing (simple, crisp pixel look)
 const canvasWidth = 800
-const canvasHeight = 220
+const canvasHeight = 600
 const BORDER_W = 4 // keep in sync with .screen border width
 
 // Character placement/render
 const spriteDrawW = 128
 const spriteDrawH = 128
-const floorY = 170 // baseline where feet sit
+const floorY = 570 // baseline where feet sit
 
 // State
 const canvas = ref(null)
@@ -68,7 +69,10 @@ let ctx = null
 let rafId = 0
 let lastTick = 0
 
-let spriteImg = null
+// Sprite assets (preloaded)
+let walkImg = null
+let idleImg = null
+let jumpImg = null
 const isLoaded = ref(false)
 
 // Responsive: scale stage based on available width (max 100%)
@@ -94,6 +98,42 @@ function updateScale() {
 // Position is in "steps" (0..STEPS_WIDE-1)
 let stepX = Math.floor(STEPS_WIDE / 2)
 let dir = 1 // +1 east (right), -1 west (left)
+
+// Behavior: walk vs idle vs jump with random durations and turns
+const currentSpriteSrc = ref(WALK_SPRITE_SRC)
+let state = 'walk' // 'walk' | 'idle' | 'jump'
+let stateRemainingMs = 0
+const IDLE_MIN_MS = 1200
+const IDLE_MAX_MS = 4500
+const WALK_MIN_MS = 2000
+const WALK_MAX_MS = 7000
+const TURN_PROB = 0.02 // 2% chance each tick to flip while walking
+const JUMP_PROB = 0.005 // 0.5% chance per tick to jump
+const GRAVITY = 1.2 // px per tick^2
+const JUMP_V0 = -12 // initial upward velocity (px / tick)
+let jumpY = 0 // vertical offset from ground (0 at ground, negative when in air)
+let jumpVy = 0
+
+function randInt(min, max) { // inclusive of both ends
+  return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+function enterState(next) {
+  state = next
+  if (state === 'idle') {
+    currentSpriteSrc.value = IDLE_SPRITE_SRC
+    stateRemainingMs = randInt(IDLE_MIN_MS, IDLE_MAX_MS)
+  } else if (state === 'walk') {
+    currentSpriteSrc.value = WALK_SPRITE_SRC
+    stateRemainingMs = randInt(WALK_MIN_MS, WALK_MAX_MS)
+  } else if (state === 'jump') {
+    currentSpriteSrc.value = JUMP_SPRITE_SRC
+    // jump uses physics; timer not used
+    jumpY = 0
+    jumpVy = JUMP_V0
+    stateRemainingMs = 0
+  }
+}
 
 // GIF frames note:
 // Browsers do not give per-frame access for GIFs via <img>.
@@ -127,23 +167,67 @@ function drawSprite() {
   const x = stepToPx(stepX)
   const y = floorY - spriteDrawH
 
-  // Update overlayed <img> position and flip
-  spriteLeft.value = `${x}px`
-  spriteTop.value = `${y + 10}px`
+  // Update overlayed <img> position and flip (account for canvas border)
+  spriteLeft.value = `${BORDER_W + x}px`
+  spriteTop.value = `${BORDER_W + y + 10 + Math.round(jumpY)}px`
   spriteTransform.value = dir === -1 ? 'scaleX(-1)' : 'scaleX(1)'
 }
 
 function tick() {
-  // Move 1 step per tick
-  stepX += dir
+  // If not jumping, handle walk/idle timers and potential jump trigger
+  if (state !== 'jump') {
+    stateRemainingMs -= FRAME_MS
+    if (stateRemainingMs <= 0) {
+      if (state === 'walk') {
+        // randomly decide to idle
+        enterState('idle')
+      } else if (state === 'idle') {
+        // leaving idle: 50% chance to flip direction
+        if (Math.random() < 0.5) dir *= -1
+        enterState('walk')
+      }
+    }
 
-  // Bounce at edges
-  if (stepX >= STEPS_WIDE - 1) {
-    stepX = STEPS_WIDE - 1
-    dir = -1
-  } else if (stepX <= 0) {
-    stepX = 0
-    dir = 1
+    // Random jump trigger while not already jumping
+    if (Math.random() < JUMP_PROB) {
+      enterState('jump')
+    }
+  }
+
+  if (state === 'walk') {
+    // Move 1 step per tick
+    stepX += dir
+
+    // Bounce at edges
+    if (stepX >= STEPS_WIDE - 1) {
+      stepX = STEPS_WIDE - 1
+      dir = -1
+    } else if (stepX <= 0) {
+      stepX = 0
+      dir = 1
+    } else {
+      // occasional random turn while walking
+      if (Math.random() < TURN_PROB) dir *= -1
+    }
+  } else if (state === 'jump') {
+    // Horizontal motion during jump (keep same step speed)
+    stepX += dir
+    if (stepX >= STEPS_WIDE - 1) {
+      stepX = STEPS_WIDE - 1
+      dir = -1
+    } else if (stepX <= 0) {
+      stepX = 0
+      dir = 1
+    }
+    // Vertical physics
+    jumpVy += GRAVITY
+    jumpY += jumpVy
+    if (jumpY >= 0) {
+      // landed
+      jumpY = 0
+      // Continue walking after landing
+      enterState('walk')
+    }
   }
 }
 
@@ -164,12 +248,12 @@ function loop(ts) {
   drawSprite()
 }
 
-function loadSprite() {
+function loadSprite(src) {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve(img)
     img.onerror = reject
-    img.src = sprite_src
+    img.src = src
   })
 }
 
@@ -183,8 +267,12 @@ onMounted(async () => {
   window.addEventListener('orientationchange', updateScale)
 
   try {
-    // Preload image dimensions if needed; the on-canvas draw is no longer required
-    spriteImg = await loadSprite()
+    // Preload both animations
+    ;[walkImg, idleImg, jumpImg] = await Promise.all([
+      loadSprite(WALK_SPRITE_SRC),
+      loadSprite(IDLE_SPRITE_SRC),
+      loadSprite(JUMP_SPRITE_SRC),
+    ])
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('Failed to load sprite gif:', e)
@@ -194,7 +282,7 @@ onMounted(async () => {
   // Start in middle
   stepX = Math.floor(STEPS_WIDE / 2)
   dir = 1
-
+  enterState('walk')
   isLoaded.value = true
   rafId = requestAnimationFrame(loop)
 })
