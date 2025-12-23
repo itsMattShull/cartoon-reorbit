@@ -70,19 +70,43 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }
 
+    // Load global settings (for window-aware caps)
+    let initialPercent = 75
+    let delayHours = 12
+    try {
+      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+      if (cfg) {
+        if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
+        if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+      }
+    } catch {}
+
     // Mint inside a single transaction with atomic counter for mintNumber
     await prisma.$transaction(async (tx) => {
       // 1) Atomically increment totalMinted and use the new value as mintNumber
       const updatedCtoon = await tx.ctoon.update({
         where: { id: ctoonId },
         data: { totalMinted: { increment: 1 } },
-        select: { totalMinted: true, initialQuantity: true, quantity: true }
+        select: { totalMinted: true, initialQuantity: true, quantity: true, releaseDate: true }
       })
 
       const mintNumber = updatedCtoon.totalMinted
       // Sold-out guard (rolls back the increment if exceeded)
       if (updatedCtoon.quantity !== null && mintNumber > updatedCtoon.quantity) {
         throw new Error('cToon sold out')
+      }
+
+      // Window-aware cap (non-special mints only)
+      if (!isSpecial && updatedCtoon.quantity !== null && ctoon.releaseDate) {
+        const qty = Number(updatedCtoon.quantity)
+        const initialCap = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+        const finalReleaseAt = new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+        const now = new Date()
+        const beforeFinal = now < finalReleaseAt
+        const allowedCap = beforeFinal ? initialCap : qty
+        if (mintNumber > allowedCap) {
+          throw new Error('Initial window sold out. Please wait for the final release.')
+        }
       }
 
       const isFirstEdition =

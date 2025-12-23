@@ -27,7 +27,13 @@ export default defineEventHandler(async (event) => {
         cost:       true,
         power:      true,
         abilityKey: true,
-        abilityData:true
+        abilityData:true,
+
+        // advisory schedule fields
+        initialReleaseAt: true,
+        finalReleaseAt:   true,
+        initialReleaseQty: true,
+        finalReleaseQty:   true
       }
     })
 

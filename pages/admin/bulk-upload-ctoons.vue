@@ -93,6 +93,21 @@
           </div>
         </div>
 
+        <!-- Release schedule preview (applies to each row based on its Total Qty) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="new Date(new Date(bulkReleaseDate).getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mt-8">Initial/Final quantities are computed per row from each Total Qty.</p>
+          </div>
+        </div>
+
         <!-- Desktop Table -->
         <div class="overflow-x-auto hidden sm:block">
           <table class="min-w-max table-auto border-separate border-spacing-0">
@@ -303,6 +318,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
@@ -318,6 +334,8 @@ const bulkSet = ref('')
 const bulkSeries = ref('')
 const bulkReleaseDate = ref('')
 const uploading = ref(false)
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 // only allow upload once every file has a rarity AND a non-empty characters string
 const canUpload = computed(() => {
@@ -445,14 +463,16 @@ const filteredBulkSeriesOptions = computed(() => {
 })
 
 onMounted(async () => {
-  const [setsRes, seriesRes, rarityRes] = await Promise.all([
+  const [setsRes, seriesRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/sets', { credentials: 'include' }),
     fetch('/api/admin/series', { credentials: 'include' }),
-    fetch('/api/rarity-defaults')
+    fetch('/api/rarity-defaults'),
+    fetch('/api/release-settings')
   ])
   setsOptions.value = await setsRes.json()
   seriesOptions.value = await seriesRes.json()
   try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
+  try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
 })
 
 function handleFiles(e) {
@@ -509,12 +529,24 @@ async function uploadAll() {
       'characters',
       JSON.stringify(f.characters.split(',').map(c => c.trim()))
     )
-    formData.append(
-      'releaseDate',
-      new Date(bulkReleaseDate.value).toISOString()
-    )
+    // Convert admin-entered CST/CDT to UTC
+    try {
+      formData.append('releaseDate', zonedTimeToUtc(bulkReleaseDate.value, 'America/Chicago').toISOString())
+    } catch {
+      formData.append('releaseDate', new Date(bulkReleaseDate.value).toISOString())
+    }
     formData.append('totalQuantity', f.totalQuantity ?? '')
     formData.append('initialQuantity', f.initialQuantity ?? '')
+    // advisory schedule fields per row
+    if (f.totalQuantity && bulkReleaseDate.value) {
+      const init = Math.max(1, Math.floor((Number(f.totalQuantity) * Number(releasePercent.value)) / 100))
+      const fin  = Math.max(0, Number(f.totalQuantity) - init)
+      const finAt = new Date(new Date(bulkReleaseDate.value).getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+      formData.append('initialReleaseAt', new Date(bulkReleaseDate.value).toISOString())
+      formData.append('finalReleaseAt', finAt.toISOString())
+      formData.append('initialReleaseQty', init)
+      formData.append('finalReleaseQty', fin)
+    }
     formData.append('perUserLimit', f.perUserLimit ?? '')
     formData.append('inCmart', f.inCmart)
     formData.append('price', f.price)

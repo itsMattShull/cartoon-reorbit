@@ -82,6 +82,26 @@
           </div>
         </div>
 
+        <!-- Release schedule (computed, read-only) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Initial Release Qty</label>
+            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release Qty</label>
+            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+        </div>
+
         <!-- In C-mart -->
         <div class="flex items-center">
           <input v-model="inCmart" type="checkbox" class="mr-2"
@@ -216,18 +236,52 @@ const err = reactive({ cost:'', power:'', image:'' })
 /* series + rarity lists */
 const seriesOptions = ref([])
 const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 /* toast helpers */
 const showToast = ref(false)
 const toastMessage = ref(''); const toastType = ref('success')
 function displayToast(msg, type='error'){ toastMessage.value = msg; toastType.value = type; showToast.value = true; setTimeout(()=>showToast.value = false, 4000) }
 
-/* date helpers */
-function toDateTimeLocal(utc){
-  const dt = new Date(utc)
-  return new Date(dt.getTime() - dt.getTimezoneOffset()*60000).toISOString().slice(0,16)
+/* date helpers (pure JS; America/Chicago) */
+function nthSundayDay(year, monthNumber) {
+  const monthIdx = monthNumber - 1
+  const first = new Date(Date.UTC(year, monthIdx, 1))
+  const firstDow = first.getUTCDay() // 0=Sun
+  const firstSunday = 1 + ((7 - firstDow) % 7)
+  if (monthNumber === 3) return firstSunday + 7 // second Sunday in March
+  if (monthNumber === 11) return firstSunday    // first Sunday in November
+  return firstSunday
 }
-const localToUtcIso = l => new Date(l).toISOString()
+function isChicagoDstLocalParts(y, m, d) {
+  if (m < 3 || m > 11) return false
+  if (m > 3 && m < 11) return true
+  if (m === 3) return d >= nthSundayDay(y, 3)
+  if (m === 11) return d < nthSundayDay(y, 11)
+  return false
+}
+function toDateTimeLocal(utc) {
+  const dt = new Date(utc)
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Chicago',
+    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(dt).map(p => [p.type, p.value]))
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+function localToUtcIso(localStr) {
+  // localStr is 'YYYY-MM-DDTHH:mm' in America/Chicago
+  const [datePart, timePart] = localStr.split('T')
+  const [y, m, d] = datePart.split('-').map(n => parseInt(n, 10))
+  const [hh, mm] = timePart.split(':').map(n => parseInt(n, 10))
+  const isDst = isChicagoDstLocalParts(y, m, d)
+  const offset = isDst ? '-05:00' : '-06:00'
+  const isoLike = `${datePart}T${timePart}:00${offset}`
+  return new Date(isoLike).toISOString()
+}
 
 /* reset param when ability cleared */
 watch(abilityKey, val => {
@@ -237,6 +291,12 @@ watch(abilityKey, val => {
 /* load data */
 onMounted(async ()=>{
   try{
+    // load staged release settings
+    try {
+      const rs = await $fetch('/api/release-settings')
+      releasePercent.value = Number(rs.initialReleasePercent ?? 75)
+      delayHours.value = Number(rs.finalReleaseDelayHours ?? 12)
+    } catch {}
     const res = await fetch(`/api/admin/ctoon/${id}`,{credentials:'include'})
     if(!res.ok) throw new Error()
     const { ctoon } = await res.json()
@@ -290,6 +350,20 @@ function handleNewFile(e){
   reader.readAsDataURL(file)
 }
 
+// computed schedule for display + advisory persistence
+const schedule = computed(() => {
+  const qty = Number(quantity.value)
+  const hasQty = Number.isFinite(qty) && qty > 0
+  const hasDate = Boolean(releaseDate.value)
+  if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
+  const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
+  const fin = Math.max(0, qty - init)
+  const base = new Date(releaseDate.value)
+  const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+  const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
+  return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
+})
+
 /* submit */
 async function submitForm(){
   err.cost=''; err.power=''
@@ -322,6 +396,12 @@ async function submitForm(){
     if (abilityKey.value){
       fd.append('abilityData', JSON.stringify({ value: abilityParam.value }))
     }
+
+    // advisory schedule fields
+    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
+    fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
+    fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
 
     const res = await fetch(`/api/admin/ctoon/${id}`, {
       method: 'PUT',
@@ -357,7 +437,13 @@ async function submitForm(){
     abilityKey:      abilityKey.value || null,
     abilityData:     abilityKey.value
                       ? JSON.stringify({ value: abilityParam.value })
-                      : null
+                      : null,
+
+    // advisory schedule fields
+    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
+    initialReleaseQty: schedule.value.initialQty ?? null,
+    finalReleaseQty:   schedule.value.finalQty ?? null
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {

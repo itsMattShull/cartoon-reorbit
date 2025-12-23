@@ -79,6 +79,12 @@ model Ctoon {
   characters      String[]
   totalMinted     Int       @default(0)
 
+  // Two-phase release (advisory fields; availability driven by global settings)
+  initialReleaseAt DateTime?
+  finalReleaseAt   DateTime?
+  initialReleaseQty Int?
+  finalReleaseQty   Int?
+
   // gToon fields
   isGtoon     Boolean @default(false)
   gtoonType   String?
@@ -519,6 +525,9 @@ model GlobalGameConfig {
   // Scavenger Hunt settings
   scavengerChancePercent Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours Int      @default(24) // cooldown between completed hunts per user
+  // cToon release settings
+  initialReleasePercent  Int      @default(75)
+  finalReleaseDelayHours Int      @default(12)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
