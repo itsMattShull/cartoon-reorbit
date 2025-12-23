@@ -41,6 +41,13 @@
           }"
           alt="sprite"
         />
+        <img
+          v-if="itemVisible"
+          class="item-dom"
+          :src="itemSrc"
+          :style="{ left: itemLeft, top: itemTop, width: itemDrawW + 'px', height: itemDrawH + 'px' }"
+          alt="item"
+        />
       </div>
     </div>
   </div>
@@ -69,6 +76,10 @@ const FRAME_MS = 100 // controls pace; 100–160 feels nice for digivice vibes
 const WALK_SPRITE_SRC = 'images/sprites/character.gif'
 const IDLE_SPRITE_SRC = 'images/sprites/standstill.gif'
 const JUMP_SPRITE_SRC = 'images/sprites/jump.gif'
+// Item sources
+const APPLE0_SRC = 'images/sprites/items/apple/apple0.png'
+const APPLE1_SRC = 'images/sprites/items/apple/apple1.png'
+const APPLE2_SRC = 'images/sprites/items/apple/apple2.png'
 
 // Canvas sizing (simple, crisp pixel look)
 const canvasWidth = 800
@@ -109,21 +120,29 @@ function closeMenu() {
 }
 
 function onBtnLeft() {
+  if (isCutscene.value) return
   if (!isMenuOpen.value) return openMenu()
   // navigate up
   menuIndex.value = (menuIndex.value - 1 + menuOptions.length) % menuOptions.length
 }
 
 function onBtnCenter() {
+  if (isCutscene.value) return
   if (!isMenuOpen.value) return openMenu()
   // navigate down
   menuIndex.value = (menuIndex.value + 1) % menuOptions.length
 }
 
 function onBtnRight() {
+  if (isCutscene.value) return
   if (!isMenuOpen.value) return openMenu()
-  // select current option (for now both just close the menu)
-  closeMenu()
+  // select current option
+  const choice = menuOptions[menuIndex.value]
+  if (choice === 'EAT') {
+    performEat()
+  } else {
+    closeMenu()
+  }
 }
 
 // Responsive: scale stage based on available width (max 100%)
@@ -164,6 +183,17 @@ const GRAVITY = 1.2 // px per tick^2
 const JUMP_V0 = -12 // initial upward velocity (px / tick)
 let jumpY = 0 // vertical offset from ground (0 at ground, negative when in air)
 let jumpVy = 0
+
+// Cutscene/action mode (pauses normal walking/jumping behavior)
+const isCutscene = ref(false)
+
+// Item overlay state
+const itemVisible = ref(false)
+const itemSrc = ref('')
+const itemDrawW = 64
+const itemDrawH = 64
+const itemLeft = ref('0px')
+const itemTop = ref('0px')
 
 function randInt(min, max) { // inclusive of both ends
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -222,9 +252,21 @@ function drawSprite() {
   spriteLeft.value = `${BORDER_W + x}px`
   spriteTop.value = `${BORDER_W + y + 10 + Math.round(jumpY)}px`
   spriteTransform.value = dir === -1 ? 'scaleX(-1)' : 'scaleX(1)'
+
+  // Update item position to be in front of the monster near the ground
+  if (itemVisible.value) {
+    const frontOffset = dir === 1
+      ? Math.floor(spriteDrawW * 0.7) + 40 // further by +40px when facing right
+      : -Math.floor(itemDrawW * 0.4) - 40 // further by -40px when facing left
+    const itemX = x + frontOffset
+    const itemY = floorY - itemDrawH + 10 - 20 // 20px higher vertically
+    itemLeft.value = `${BORDER_W + itemX}px`
+    itemTop.value = `${BORDER_W + itemY}px`
+  }
 }
 
 function tick() {
+  if (isCutscene.value) return // freeze behavior during scripted actions
   // If not jumping, handle walk/idle timers and potential jump trigger
   if (state !== 'jump') {
     stateRemainingMs -= FRAME_MS
@@ -308,6 +350,48 @@ function loadSprite(src) {
   })
 }
 
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)) }
+
+async function performEat() {
+  // Close menu and pause normal behavior
+  isMenuOpen.value = false
+  isCutscene.value = true
+
+  // Move monster to center and hold position
+  stepX = Math.floor((STEPS_WIDE - 1) / 2)
+  currentSpriteSrc.value = IDLE_SPRITE_SRC
+
+  // Show initial apple in front
+  itemSrc.value = APPLE0_SRC
+  itemVisible.value = true
+  await sleep(400)
+
+  // Helper to play a single bite: jump -> standstill -> update apple
+  const bite = async (nextAppleSrcOrNull) => {
+    currentSpriteSrc.value = JUMP_SPRITE_SRC
+    await sleep(600)
+    currentSpriteSrc.value = IDLE_SPRITE_SRC
+    // Update apple AFTER returning to standstill
+    if (nextAppleSrcOrNull === null) {
+      itemVisible.value = false
+    } else {
+      itemSrc.value = nextAppleSrcOrNull
+    }
+    await sleep(400)
+  }
+
+  // Bite 1 updates to apple1
+  await bite(APPLE1_SRC)
+  // Bite 2 updates to apple2
+  await bite(APPLE2_SRC)
+  // Bite 3 hides apple
+  await bite(null)
+
+  // Resume
+  enterState('walk')
+  isCutscene.value = false
+}
+
 onMounted(async () => {
   ctx = canvas.value.getContext('2d')
   ctx.imageSmoothingEnabled = false
@@ -385,6 +469,15 @@ onBeforeUnmount(() => {
   left: 0;
   top: 0;
   z-index: 2;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.item-dom {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3; /* above sprite */
   pointer-events: none;
   image-rendering: pixelated;
 }
