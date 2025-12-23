@@ -13,6 +13,19 @@
         <div v-if="!isLoaded" class="loading-overlay">
           <div class="spinner" aria-label="Loading"></div>
         </div>
+        <!-- Retro Tamagotchi-style menu overlay -->
+        <div v-if="isMenuOpen" class="menu-overlay">
+          <div class="menu-box">
+            <div
+              v-for="(opt, i) in menuOptions"
+              :key="opt"
+              :class="['menu-row', { selected: i === menuIndex }]"
+            >
+              <span class="menu-caret">{{ i === menuIndex ? '▶' : '\u00A0' }}</span>
+              <span class="menu-text">{{ opt }}</span>
+            </div>
+          </div>
+        </div>
         <!-- Overlay the GIF so it animates naturally -->
         <img
           ref="spriteEl"
@@ -29,6 +42,13 @@
           alt="sprite"
         />
       </div>
+    </div>
+  </div>
+  <div class="controls" :style="{ width: shellWidth + 'px' }">
+    <div class="gb-buttons">
+      <button class="gb-btn" aria-label="Button A" @click="onBtnLeft"></button>
+      <button class="gb-btn gb-btn--center" aria-label="Button B" @click="onBtnCenter"></button>
+      <button class="gb-btn" aria-label="Button C" @click="onBtnRight"></button>
     </div>
   </div>
   
@@ -74,6 +94,37 @@ let walkImg = null
 let idleImg = null
 let jumpImg = null
 const isLoaded = ref(false)
+// Menu state
+const isMenuOpen = ref(false)
+const menuOptions = ['EAT', 'PLAY', 'SLEEP', 'SCAVENGE', 'BATTLE', 'EXIT']
+const menuIndex = ref(0)
+
+function openMenu() {
+  isMenuOpen.value = true
+  menuIndex.value = 0
+}
+
+function closeMenu() {
+  isMenuOpen.value = false
+}
+
+function onBtnLeft() {
+  if (!isMenuOpen.value) return openMenu()
+  // navigate up
+  menuIndex.value = (menuIndex.value - 1 + menuOptions.length) % menuOptions.length
+}
+
+function onBtnCenter() {
+  if (!isMenuOpen.value) return openMenu()
+  // navigate down
+  menuIndex.value = (menuIndex.value + 1) % menuOptions.length
+}
+
+function onBtnRight() {
+  if (!isMenuOpen.value) return openMenu()
+  // select current option (for now both just close the menu)
+  closeMenu()
+}
 
 // Responsive: scale stage based on available width (max 100%)
 const scale = ref(1)
@@ -108,7 +159,7 @@ const IDLE_MAX_MS = 4500
 const WALK_MIN_MS = 2000
 const WALK_MAX_MS = 7000
 const TURN_PROB = 0.02 // 2% chance each tick to flip while walking
-const JUMP_PROB = 0.005 // 0.5% chance per tick to jump
+const JUMP_PROB = 0.0005 // 0.05% chance per tick to jump
 const GRAVITY = 1.2 // px per tick^2
 const JUMP_V0 = -12 // initial upward velocity (px / tick)
 let jumpY = 0 // vertical offset from ground (0 at ground, negative when in air)
@@ -358,5 +409,124 @@ onBeforeUnmount(() => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Retro Tamagotchi-style menu */
+.menu-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4; /* above loader + sprite */
+}
+
+.menu-box {
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 4px),
+    #d6ef9e;
+  border: 3px solid #2c4a1d;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 2px rgba(44,74,29,0.25),
+    0 6px 0 rgba(0,0,0,0.25);
+  padding: 16px 18px;
+  color: #1f3813;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 22px; /* larger, Tamagotchi-like */
+  line-height: 1.1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px; /* taller rows for larger text */
+  line-height: 1;
+  font-weight: 800;
+}
+
+.menu-row + .menu-row {
+  border-top: 2px dotted rgba(44,74,29,0.3);
+}
+
+.menu-row.selected {
+  background: rgba(44,74,29,0.15);
+  outline: 2px solid rgba(44,74,29,0.55);
+}
+
+.menu-caret {
+  width: 24px;
+  display: inline-block;
+}
+
+.menu-text { letter-spacing: 2px; }
+
+/* Game Boy-like buttons */
+.controls {
+  margin: 12px auto 0; /* center horizontally like canvas */
+  display: grid;
+  place-items: center;
+}
+
+.gb-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* spread across full width */
+  width: 100%;
+  gap: 0;
+  padding: 0 12px; /* keep off the very edge */
+}
+
+.gb-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  background: radial-gradient(120% 120% at 30% 30%, #ad3c6e, #7c2d54 60%, #5a2341 100%);
+  box-shadow:
+    inset 0 3px 6px rgba(255,255,255,0.15),
+    inset 0 -6px 10px rgba(0,0,0,0.35),
+    0 4px 0 #34152a,
+    0 6px 8px rgba(0,0,0,0.35);
+  position: relative;
+  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.2s ease;
+}
+
+.gb-btn::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  width: 12px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  filter: blur(0.3px);
+}
+
+.gb-btn:hover { filter: brightness(1.05); }
+.gb-btn:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 5px rgba(255,255,255,0.1),
+    inset 0 -3px 8px rgba(0,0,0,0.4),
+    0 2px 0 #34152a,
+    0 3px 4px rgba(0,0,0,0.35);
+}
+
+.gb-btn--center {
+  transform: translateY(25px);
+}
+
+.gb-btn--center:active {
+  /* Keep the same pressed effect but from a lower resting position */
+  transform: translateY(27px);
 }
 </style>
