@@ -26,6 +26,14 @@
             </div>
           </div>
         </div>
+        <!-- HUD: Health bar -->
+        <div class="hud">
+          <div class="healthbar">
+            <div class="healthbar-fill" :class="'is-' + healthTier" :style="{ width: healthPercent + '%' }"></div>
+            <div class="healthbar-frame"></div>
+            <div class="healthbar-label">{{ health }}/{{ maxHealth }}</div>
+          </div>
+        </div>
         <!-- Overlay the GIF so it animates naturally -->
         <img
           ref="spriteEl"
@@ -194,6 +202,16 @@ const itemDrawW = 64
 const itemDrawH = 64
 const itemLeft = ref('0px')
 const itemTop = ref('0px')
+
+// Health
+const maxHealth = 100
+const health = ref(50)
+const healthPercent = computed(() => Math.max(0, Math.min(100, Math.round((health.value / maxHealth) * 100))))
+const healthTier = computed(() => {
+  if (health.value <= 29) return 'red'
+  if (health.value <= 49) return 'yellow' // 30-49
+  return 'green' // >= 50
+})
 
 function randInt(min, max) { // inclusive of both ends
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -387,6 +405,9 @@ async function performEat() {
   // Bite 3 hides apple
   await bite(null)
 
+  // Heal on eat completion
+  health.value = Math.min(maxHealth, health.value + 10)
+
   // Resume
   enterState('walk')
   isCutscene.value = false
@@ -480,6 +501,57 @@ onBeforeUnmount(() => {
   z-index: 3; /* above sprite */
   pointer-events: none;
   image-rendering: pixelated;
+}
+
+/* HUD */
+.hud {
+  position: absolute;
+  left: 6px; /* slight inset from canvas border */
+  top: 6px;
+  z-index: 3; /* above sprite, below menu */
+  pointer-events: none;
+}
+
+.healthbar {
+  position: relative;
+  width: 240px; /* larger for readability when scaled */
+  height: 32px; /* taller bar */
+  background: #cfe9a2;
+  border: 3px solid #2c4a1d;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px rgba(44,74,29,0.25);
+}
+
+.healthbar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(0deg, #8dd16a, #6bb44b);
+}
+
+.healthbar-fill.is-green { background: linear-gradient(0deg, #8dd16a, #6bb44b); }
+.healthbar-fill.is-yellow { background: linear-gradient(0deg, #f5d36a, #e9b83c); }
+.healthbar-fill.is-red { background: linear-gradient(0deg, #e56565, #c94747); }
+
+.healthbar-frame { /* decorative scanlines */
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 4px);
+  border-radius: 2px;
+}
+
+.healthbar-label {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #1f3813;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+  font-size: 16px; /* scale text up; still scales with stage */
 }
 
 .loading-overlay {
