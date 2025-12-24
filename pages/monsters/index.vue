@@ -1,5 +1,7 @@
 <template>
-  <div class="wrap" :class="{ 'wrap--center': !isScaledDown }">
+  <Nav />
+  <div class="mt-6 md:mt-12">&nbsp;</div>
+  <div class="mt-12 wrap" :class="{ 'wrap--center': !isScaledDown }">
     <div class="stage-shell" ref="stageShell" :style="{ width: shellWidth + 'px', height: scaledHeight + 'px' }">
       <div
         class="stage"
@@ -153,8 +155,10 @@ function onBtnRight() {
   }
 }
 
-// Responsive: scale stage based on available width (max 100%)
-const scale = ref(1)
+// Responsive: scale stage based on available width
+// Minimum downscale target: 0.8 (i.e., show at 80% on large screens)
+const BASE_SCALE = 0.8
+const scale = ref(BASE_SCALE)
 const scaledHeight = computed(() => Math.round((canvasHeight + BORDER_W * 2) * scale.value))
 const isScaledDown = computed(() => scale.value < 1)
 const shellWidth = ref(canvasWidth + BORDER_W * 2)
@@ -162,14 +166,10 @@ const shellWidth = ref(canvasWidth + BORDER_W * 2)
 function updateScale() {
   const vw = Math.min(window.innerWidth || 0, document.documentElement.clientWidth || 0) || 0
   const fullContentW = canvasWidth + BORDER_W * 2
-  if (vw < fullContentW) {
-    // Small screens: fit to 98% of viewport width
-    const availW = Math.floor(vw * 0.98)
-    scale.value = Math.max(0.01, Math.min(1, availW / fullContentW))
-  } else {
-    // Large screens: no scale-down
-    scale.value = 1
-  }
+  // Available width as a scale factor relative to full content
+  const sW = vw > 0 ? (vw / fullContentW) : 1
+  // On large screens, cap at BASE_SCALE (80%). On small screens, scale down further to fit.
+  scale.value = Math.max(0.01, Math.min(BASE_SCALE, sW))
   shellWidth.value = Math.round(fullContentW * scale.value)
 }
 
