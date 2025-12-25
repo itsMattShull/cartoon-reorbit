@@ -37,7 +37,7 @@
               <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsMonster" />
             </div>
           </div>
-          <div class="text-xs mt-1" :class="sumOddsOk ? 'text-green-700' : 'text-red-700'">Sum: {{ (oddsNothing + oddsItem + oddsMonster).toFixed(2) }}</div>
+          <div class="text-xs mt-1" :class="sumOddsOk ? 'text-green-700' : 'text-red-700'">Sum: {{ sumOddsDisplay }}</div>
         </div>
 
         <!-- Distributions: side-by-side on large screens, stacked on mobile -->
@@ -577,7 +577,9 @@ const rarityDisplayOrder = [
   { key: 'Common',    label: 'Common' }
 ]
 
-const sumOddsOk = computed(() => Math.abs((oddsNothing.value + oddsItem.value + oddsMonster.value) - 1) < 1e-6)
+const sumOdds = computed(() => (Number(oddsNothing.value) || 0) + (Number(oddsItem.value) || 0) + (Number(oddsMonster.value) || 0))
+const sumOddsDisplay = computed(() => sumOdds.value.toFixed(2))
+const sumOddsOk = computed(() => Math.abs(sumOdds.value - 1) < 1e-6)
 
 const savingCfg = ref(false)
   async function loadConfig() {
