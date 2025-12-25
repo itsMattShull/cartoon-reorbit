@@ -12,24 +12,25 @@
         }"
       >
         <canvas ref="canvas" class="screen" :width="canvasWidth" :height="canvasHeight" />
-        <div v-if="!isLoaded" class="loading-overlay">
-          <div class="spinner" aria-label="Loading"></div>
+        <div v-if="!isLoaded || noMonster" class="loading-overlay">
+          <div v-if="noMonster" class="no-monster-msg">No monster captured, try scanning to capture one!</div>
+          <div v-else class="spinner" aria-label="Loading"></div>
         </div>
         <!-- Retro Tamagotchi-style menu overlay -->
         <div v-if="isMenuOpen" class="menu-overlay">
           <div class="menu-box">
             <div
-              v-for="(opt, i) in menuOptions"
-              :key="opt"
+              v-for="(opt, i) in menuEntries"
+              :key="opt.key"
               :class="['menu-row', { selected: i === menuIndex }]"
             >
               <span class="menu-caret">{{ i === menuIndex ? '▶' : '\u00A0' }}</span>
-              <span class="menu-text">{{ opt }}</span>
+              <span class="menu-text">{{ opt.label }}</span>
             </div>
           </div>
         </div>
         <!-- HUD: Health bar -->
-        <div class="hud">
+        <div v-if="!noMonster && isLoaded" class="hud">
           <div class="healthbar">
             <div class="healthbar-fill" :class="'is-' + healthTier" :style="{ width: healthPercent + '%' }"></div>
             <div class="healthbar-frame"></div>
@@ -40,7 +41,7 @@
         <img
           ref="spriteEl"
           class="sprite-dom"
-          v-show="isLoaded"
+          v-show="isLoaded && !noMonster"
           :src="currentSpriteSrc"
           :style="{
             left: spriteLeft,
@@ -82,10 +83,10 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 const STEPS_WIDE = 100
 const FRAME_MS = 100 // controls pace; 100–160 feels nice for digivice vibes
 
-// Sprite sources
-const WALK_SPRITE_SRC = 'images/sprites/character.gif'
-const IDLE_SPRITE_SRC = 'images/sprites/standstill.gif'
-const JUMP_SPRITE_SRC = 'images/sprites/jump.gif'
+// Sprite sources (dynamic; required from selected monster)
+const walkSpriteSrc = ref('')
+const idleSpriteSrc = ref('')
+const jumpSpriteSrc = ref('')
 // Item sources
 const APPLE0_SRC = 'images/sprites/items/apple/apple0.png'
 const APPLE1_SRC = 'images/sprites/items/apple/apple1.png'
@@ -117,41 +118,80 @@ let jumpImg = null
 const isLoaded = ref(false)
 // Menu state
 const isMenuOpen = ref(false)
-const menuOptions = ['EAT', 'PLAY', 'SLEEP', 'SCAVENGE', 'BATTLE', 'EXIT']
 const menuIndex = ref(0)
+const menuMode = ref('main') // 'main' | 'eat'
+const mainMenuOptions = ['EAT', 'PLAY', 'SLEEP', 'SCAVENGE', 'BATTLE', 'EXIT']
+const healItems = ref([])
+
+const menuEntries = computed(() => {
+  if (menuMode.value === 'eat') {
+    const items = healItems.value.map((it) => ({
+      key: it.id,
+      label: `${it.name} (+${it.power} HP)`,
+      action: 'item',
+      item: it,
+    }))
+    return [
+      ...items,
+      { key: 'back', label: 'BACK', action: 'back' },
+    ]
+  }
+  return mainMenuOptions.map((opt) => ({ key: opt, label: opt, action: opt }))
+})
 
 function openMenu() {
+  if (noMonster.value) return
   isMenuOpen.value = true
+  menuMode.value = 'main'
   menuIndex.value = 0
 }
 
 function closeMenu() {
   isMenuOpen.value = false
+  menuMode.value = 'main'
 }
 
 function onBtnLeft() {
   if (isCutscene.value) return
+  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   // navigate up
-  menuIndex.value = (menuIndex.value - 1 + menuOptions.length) % menuOptions.length
+  menuIndex.value = (menuIndex.value - 1 + menuEntries.value.length) % menuEntries.value.length
 }
 
 function onBtnCenter() {
   if (isCutscene.value) return
+  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   // navigate down
-  menuIndex.value = (menuIndex.value + 1) % menuOptions.length
+  menuIndex.value = (menuIndex.value + 1) % menuEntries.value.length
 }
 
 function onBtnRight() {
   if (isCutscene.value) return
+  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   // select current option
-  const choice = menuOptions[menuIndex.value]
-  if (choice === 'EAT') {
-    performEat()
-  } else {
-    closeMenu()
+  const entry = menuEntries.value[menuIndex.value]
+  if (!entry) return
+  if (menuMode.value === 'main') {
+    if (entry.action === 'EAT') {
+      openEatMenu()
+    } else if (entry.action === 'EXIT') {
+      closeMenu()
+    } else {
+      closeMenu()
+    }
+    return
+  }
+
+  if (entry.action === 'back') {
+    menuMode.value = 'main'
+    menuIndex.value = 0
+    return
+  }
+  if (entry.action === 'item' && entry.item) {
+    useHealItem(entry.item)
   }
 }
 
@@ -178,7 +218,7 @@ let stepX = Math.floor(STEPS_WIDE / 2)
 let dir = 1 // +1 east (right), -1 west (left)
 
 // Behavior: walk vs idle vs jump with random durations and turns
-const currentSpriteSrc = ref(WALK_SPRITE_SRC)
+const currentSpriteSrc = ref(walkSpriteSrc.value)
 let state = 'walk' // 'walk' | 'idle' | 'jump'
 let stateRemainingMs = 0
 const IDLE_MIN_MS = 1200
@@ -204,12 +244,13 @@ const itemLeft = ref('0px')
 const itemTop = ref('0px')
 
 // Health
-const maxHealth = 100
+const maxHealth = ref(100)
 const health = ref(50)
-const healthPercent = computed(() => Math.max(0, Math.min(100, Math.round((health.value / maxHealth) * 100))))
+const healthPercent = computed(() => Math.max(0, Math.min(100, Math.round((health.value / maxHealth.value) * 100))))
 const healthTier = computed(() => {
-  if (health.value <= 29) return 'red'
-  if (health.value <= 49) return 'yellow' // 30-49
+  const pct = maxHealth.value > 0 ? (health.value / maxHealth.value) * 100 : 0
+  if (pct < 25) return 'red'
+  if (pct < 50) return 'yellow' // 25-49
   return 'green' // >= 50
 })
 
@@ -220,13 +261,13 @@ function randInt(min, max) { // inclusive of both ends
 function enterState(next) {
   state = next
   if (state === 'idle') {
-    currentSpriteSrc.value = IDLE_SPRITE_SRC
+    currentSpriteSrc.value = idleSpriteSrc.value
     stateRemainingMs = randInt(IDLE_MIN_MS, IDLE_MAX_MS)
   } else if (state === 'walk') {
-    currentSpriteSrc.value = WALK_SPRITE_SRC
+    currentSpriteSrc.value = walkSpriteSrc.value
     stateRemainingMs = randInt(WALK_MIN_MS, WALK_MAX_MS)
   } else if (state === 'jump') {
-    currentSpriteSrc.value = JUMP_SPRITE_SRC
+    currentSpriteSrc.value = jumpSpriteSrc.value
     // jump uses physics; timer not used
     jumpY = 0
     jumpVy = JUMP_V0
@@ -370,25 +411,33 @@ function loadSprite(src) {
 
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)) }
 
-async function performEat() {
+function resolveItemImages(item) {
+  const img0 = item?.itemImage0Path || item?.itemImage1Path || item?.itemImage2Path || null
+  const img1 = item?.itemImage1Path || img0
+  const img2 = item?.itemImage2Path || img1 || img0
+  return [img0, img1, img2]
+}
+
+async function performEatWithItem(item) {
   // Close menu and pause normal behavior
   isMenuOpen.value = false
   isCutscene.value = true
 
   // Move monster to center and hold position
   stepX = Math.floor((STEPS_WIDE - 1) / 2)
-  currentSpriteSrc.value = IDLE_SPRITE_SRC
+  currentSpriteSrc.value = idleSpriteSrc.value
 
-  // Show initial apple in front
-  itemSrc.value = APPLE0_SRC
+  const [img0, img1, img2] = resolveItemImages(item)
+  // Show initial item in front
+  itemSrc.value = img0 || APPLE0_SRC
   itemVisible.value = true
   await sleep(400)
 
   // Helper to play a single bite: jump -> standstill -> update apple
   const bite = async (nextAppleSrcOrNull) => {
-    currentSpriteSrc.value = JUMP_SPRITE_SRC
+    currentSpriteSrc.value = jumpSpriteSrc.value
     await sleep(600)
-    currentSpriteSrc.value = IDLE_SPRITE_SRC
+    currentSpriteSrc.value = idleSpriteSrc.value
     // Update apple AFTER returning to standstill
     if (nextAppleSrcOrNull === null) {
       itemVisible.value = false
@@ -399,19 +448,52 @@ async function performEat() {
   }
 
   // Bite 1 updates to apple1
-  await bite(APPLE1_SRC)
+  await bite(img1 || img0 || APPLE1_SRC)
   // Bite 2 updates to apple2
-  await bite(APPLE2_SRC)
+  await bite(img2 || img1 || img0 || APPLE2_SRC)
   // Bite 3 hides apple
   await bite(null)
 
   // Heal on eat completion
-  health.value = Math.min(maxHealth, health.value + 10)
+  const healAmount = Number(item?.power) || 0
+  health.value = Math.min(maxHealth.value, health.value + healAmount)
 
   // Resume
   enterState('walk')
   isCutscene.value = false
 }
+
+async function loadHealItems() {
+  try {
+    const res = await $fetch('/api/monsters/items')
+    healItems.value = Array.isArray(res?.items) ? res.items : []
+  } catch (e) {
+    healItems.value = []
+  }
+}
+
+function openEatMenu() {
+  menuMode.value = 'eat'
+  menuIndex.value = 0
+  loadHealItems()
+}
+
+async function useHealItem(item) {
+  try {
+    const res = await $fetch('/api/monsters/items/use', {
+      method: 'POST',
+      body: { id: item.id }
+    })
+    healItems.value = healItems.value.filter((it) => it.id !== item.id)
+    if (menuIndex.value >= menuEntries.value.length) menuIndex.value = Math.max(0, menuEntries.value.length - 1)
+    await performEatWithItem(res?.item || item)
+  } catch (e) {
+    healItems.value = healItems.value.filter((it) => it.id !== item.id)
+    if (menuIndex.value >= menuEntries.value.length) menuIndex.value = Math.max(0, menuEntries.value.length - 1)
+  }
+}
+
+const noMonster = ref(false)
 
 onMounted(async () => {
   ctx = canvas.value.getContext('2d')
@@ -422,12 +504,46 @@ onMounted(async () => {
   window.addEventListener('resize', updateScale)
   window.addEventListener('orientationchange', updateScale)
 
+  // Attempt to load the user's selected monster to derive sprite sources
+  try {
+    const selected = await $fetch('/api/monsters/selected-monster')
+    if (selected && selected.monster) {
+      // Use provided image paths if available, else keep defaults
+      if (selected.src?.walk) walkSpriteSrc.value = selected.src.walk
+      if (selected.src?.idle) idleSpriteSrc.value = selected.src.idle
+      if (selected.src?.jump) jumpSpriteSrc.value = selected.src.jump
+      if (selected.monster?.maxHealth != null) {
+        const maxHp = Number(selected.monster.maxHealth)
+        maxHealth.value = Number.isFinite(maxHp) ? Math.max(1, maxHp) : maxHealth.value
+      }
+      if (selected.monster?.hp != null) {
+        const hp = Number(selected.monster.hp)
+        health.value = Number.isFinite(hp) ? Math.max(0, Math.min(maxHealth.value, hp)) : health.value
+      }
+      // Sync current state sprite in case it was initialized from defaults
+      if (state === 'walk') currentSpriteSrc.value = walkSpriteSrc.value
+      else if (state === 'idle') currentSpriteSrc.value = idleSpriteSrc.value
+      else if (state === 'jump') currentSpriteSrc.value = jumpSpriteSrc.value
+    } else {
+      // No selected monster
+      noMonster.value = true
+    }
+  } catch (e) {
+    // If auth missing or error, treat as no monster
+    noMonster.value = true
+  }
+
+  if (noMonster.value) {
+    // Do not preload or start the game loop if no monster exists
+    return
+  }
+
   try {
     // Preload both animations
     ;[walkImg, idleImg, jumpImg] = await Promise.all([
-      loadSprite(WALK_SPRITE_SRC),
-      loadSprite(IDLE_SPRITE_SRC),
-      loadSprite(JUMP_SPRITE_SRC),
+      loadSprite(walkSpriteSrc.value),
+      loadSprite(idleSpriteSrc.value),
+      loadSprite(jumpSpriteSrc.value),
     ])
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -569,6 +685,17 @@ onBeforeUnmount(() => {
   border-top-color: rgba(0, 0, 0, 0.45);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
+}
+
+.no-monster-msg {
+  color: #10310f;
+  background: rgba(255,255,255,0.7);
+  border: 2px solid rgba(44,74,29,0.5);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  text-align: center;
 }
 
 @keyframes spin {

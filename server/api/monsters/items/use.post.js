@@ -1,0 +1,55 @@
+// server/api/monsters/items/use.post.js
+import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
+import { prisma as db } from '@/server/prisma'
+
+export default defineEventHandler(async (event) => {
+  const cookie = getRequestHeader(event, 'cookie') || ''
+  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
+  if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+
+  const body = await readBody(event)
+  const id = body?.id
+  if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id' })
+
+  const owned = await db.userMonsterItem.findFirst({
+    where: {
+      id: String(id),
+      userId: String(me.id),
+      isUsed: false,
+      item: { effect: 'HEAL' },
+    },
+    select: {
+      id: true,
+      item: {
+        select: {
+          name: true,
+          power: true,
+          effect: true,
+          itemImage0Path: true,
+          itemImage1Path: true,
+          itemImage2Path: true,
+        },
+      },
+    },
+  })
+
+  if (!owned) throw createError({ statusCode: 404, statusMessage: 'Item not found' })
+
+  await db.userMonsterItem.update({
+    where: { id: owned.id },
+    data: { isUsed: true },
+  })
+
+  return {
+    ok: true,
+    item: {
+      id: owned.id,
+      name: owned.item?.name || 'Item',
+      power: owned.item?.power ?? 0,
+      effect: owned.item?.effect || null,
+      itemImage0Path: owned.item?.itemImage0Path || null,
+      itemImage1Path: owned.item?.itemImage1Path || null,
+      itemImage2Path: owned.item?.itemImage2Path || null,
+    },
+  }
+})
