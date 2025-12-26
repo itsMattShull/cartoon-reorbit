@@ -1,7 +1,7 @@
 <template>
   <ClientOnly>
     <div class="scanner">
-      <div class="controls">
+      <div class="controls mt-12">
         <button
           type="button"
           @click="toggleScan"
@@ -232,7 +232,7 @@ async function onScanSuccess(decodedText, decodedResult) {
     matchCount = 1;
     lastNormalized = normalized;
   }
-  if (matchCount < 2) {
+  if (matchCount < 3) {
     pendingMatch.value = true;
     postingLock = false;
     return;
