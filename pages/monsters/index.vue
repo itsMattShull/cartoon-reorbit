@@ -153,6 +153,12 @@ const renameOptions = [
 const router = useRouter()
 
 const menuEntries = computed(() => {
+  if (menuMode.value === 'main' && noMonster.value) {
+    return [
+      { key: 'SCAN', label: 'SCAN', action: 'SCAN' },
+      { key: 'EXIT', label: 'EXIT', action: 'EXIT' },
+    ]
+  }
   if (menuMode.value === 'eat') {
     const items = healItems.value.map((it) => ({
       key: it.id,
@@ -186,7 +192,6 @@ const menuEntries = computed(() => {
 })
 
 function openMenu() {
-  if (noMonster.value) return
   isMenuOpen.value = true
   menuMode.value = 'main'
   menuIndex.value = 0
@@ -199,7 +204,6 @@ function closeMenu() {
 
 function onBtnLeft() {
   if (isCutscene.value) return
-  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   if (menuMode.value === 'rename') {
     renameError.value = ''
@@ -212,7 +216,6 @@ function onBtnLeft() {
 
 function onBtnCenter() {
   if (isCutscene.value) return
-  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   if (menuMode.value === 'rename') {
     renameError.value = ''
@@ -225,7 +228,6 @@ function onBtnCenter() {
 
 function onBtnRight() {
   if (isCutscene.value) return
-  if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
   // select current option
   const entry = menuEntries.value[menuIndex.value]
