@@ -868,9 +868,9 @@ onBeforeUnmount(() => {
 
 @media (max-width: 640px) {
   .healthbar-label { font-size: 20px; }
-  .menu-box { font-size: 28px; }
-  .menu-row { height: 64px; }
-  .menu-caret { width: 28px; }
+  .menu-box { font-size: 32px; }
+  .menu-row { height: 72px; }
+  .menu-caret { width: 32px; }
 }
 
 .loading-overlay {
