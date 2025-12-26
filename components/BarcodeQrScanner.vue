@@ -37,7 +37,7 @@
 
       <div :id="readerId" ref="readerEl" class="reader">
         <div v-if="pendingMatch" class="reader-status">
-          Code found — scan again to confirm.
+          Code found — keep scanning code to confirm.
         </div>
       </div>
 
@@ -53,13 +53,13 @@
       <p v-if="error" class="error">{{ error }}</p>
 
       <div v-if="scanResult" class="result-card">
-        <div class="result-meta">
+        <!-- <div class="result-meta">
           <span class="result-code">Raw: {{ scanRawValue }}</span>
           <span class="result-dot">•</span>
           <span class="result-code">Normalized: {{ scanNormalizedValue }}</span>
           <span class="result-dot">•</span>
           <span class="result-type">{{ scanTypeLabel }}</span>
-        </div>
+        </div> -->
         <div v-if="scanResult.outcome === 'NOTHING'" class="result-inner">
           <h3 class="result-title">No luck this time</h3>
           <p class="result-subtitle">You didn’t get an item or a monster.</p>
