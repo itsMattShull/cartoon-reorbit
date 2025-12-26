@@ -409,7 +409,7 @@ onBeforeUnmount(async () => {
 .reader-status {
   position: absolute;
   left: 50%;
-  bottom: 12px;
+  top: 12px;
   transform: translateX(-50%);
   background: rgba(15, 23, 42, 0.8);
   color: #fff;
