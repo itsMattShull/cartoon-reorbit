@@ -442,21 +442,32 @@ onBeforeUnmount(async () => {
 }
 .result-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
   margin-bottom: 12px;
   font-weight: 700;
   color: #0f172a;
+  text-align: center;
+  word-break: break-all;
 }
 .result-code {
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
 }
 .result-dot {
   opacity: 0.6;
+}
+
+@media (max-width: 520px) {
+  .result-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .result-dot {
+    display: none;
+  }
 }
 .result-inner {
   display: grid;
