@@ -1,7 +1,7 @@
 <template>
   <ClientOnly>
     <div class="scanner">
-      <div class="controls mt-12">
+      <div class="controls">
         <button
           type="button"
           @click="toggleScan"
