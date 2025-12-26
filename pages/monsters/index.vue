@@ -18,7 +18,7 @@
         </div>
         <!-- Retro Tamagotchi-style menu overlay -->
         <div v-if="isMenuOpen" class="menu-overlay">
-          <div class="menu-box">
+          <div class="menu-box" :class="{ 'menu-box--scroll': menuScrollable }">
             <div v-if="menuMode === 'rename'" class="rename-panel">
               <div class="rename-title">Rename Monster</div>
               <div class="rename-slots">
@@ -34,11 +34,11 @@
             </div>
             <div v-else>
               <div
-                v-for="(opt, i) in menuEntries"
+                v-for="opt in menuVisibleEntries"
                 :key="opt.key"
-                :class="['menu-row', { selected: i === menuIndex }]"
+                :class="['menu-row', { selected: opt.index === menuIndex }]"
               >
-                <span class="menu-caret">{{ i === menuIndex ? '▶' : '\u00A0' }}</span>
+                <span class="menu-caret">{{ opt.index === menuIndex ? '▶' : '\u00A0' }}</span>
                 <span class="menu-text">{{ opt.label }}</span>
               </div>
             </div>
@@ -189,6 +189,30 @@ const menuEntries = computed(() => {
     ]
   }
   return mainMenuOptions.map((opt) => ({ key: opt, label: opt, action: opt }))
+})
+
+const MENU_ROW_HEIGHT = 52
+const MENU_PADDING_Y = 32
+const menuVisibleRows = computed(() => Math.max(1, Math.floor((canvasHeight - MENU_PADDING_Y) / MENU_ROW_HEIGHT)))
+const menuScrollable = computed(() => menuEntries.value.length > menuVisibleRows.value)
+const menuWindowStart = computed(() => {
+  const total = menuEntries.value.length
+  const visible = menuVisibleRows.value
+  if (total <= visible) return 0
+  const maxStart = total - visible
+  const cur = menuIndex.value
+  return Math.min(Math.max(cur - visible + 1, 0), maxStart)
+})
+const menuVisibleEntries = computed(() => {
+  if (!menuScrollable.value) {
+    return menuEntries.value.map((entry, idx) => ({ ...entry, index: idx }))
+  }
+  const start = menuWindowStart.value
+  const end = start + menuVisibleRows.value
+  return menuEntries.value.slice(start, end).map((entry, idx) => ({
+    ...entry,
+    index: start + idx,
+  }))
 })
 
 function openMenu() {
@@ -910,6 +934,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+.menu-box--scroll {
+  justify-content: flex-start;
 }
 
 .menu-row {
