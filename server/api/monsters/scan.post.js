@@ -375,6 +375,7 @@ export default defineEventHandler(async (event) => {
     outcome: mapping.outcome, // MONSTER | ITEM | NOTHING
     result: mapping.result,   // monster template | item payload | null
     mappingId: mapping.id,
+    barcodeKey,
     cooldown: {
       days: cooldownDays,
       nextAvailableAt: nextAllowed.toISOString(),

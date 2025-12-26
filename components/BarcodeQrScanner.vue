@@ -317,7 +317,7 @@ const monsterStats = computed(() => {
   };
 });
 
-const scanCode = computed(() => lastPayload.value?.rawValue || "");
+const scanCode = computed(() => scanResult.value?.barcodeKey || lastPayload.value?.rawValue || "");
 const scanTypeLabel = computed(() => {
   const type = scanResult.value?.outcome;
   if (type === "NOTHING") return "Nothing";
