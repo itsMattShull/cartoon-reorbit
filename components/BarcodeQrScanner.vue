@@ -331,7 +331,10 @@ async function scanImageFile(file) {
       error.value = "This browser build does not support image scanning.";
     }
   } catch (e) {
-    error.value = e?.errorMessage || e?.message || String(e);
+    const msg = e?.errorMessage || e?.message || String(e);
+    error.value = msg === "No MultiFormat Readers were able to detect the code."
+      ? "No barcode or QR code was detected."
+      : msg;
   } finally {
     if (readerEl.value) readerEl.value.innerHTML = "";
     isProcessingFile.value = false;
