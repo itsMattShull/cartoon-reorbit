@@ -49,6 +49,11 @@
       <p v-if="error" class="error">{{ error }}</p>
 
       <div v-if="scanResult" class="result-card">
+        <div class="result-meta">
+          <span class="result-code">{{ scanCode }}</span>
+          <span class="result-dot">•</span>
+          <span class="result-type">{{ scanTypeLabel }}</span>
+        </div>
         <div v-if="scanResult.outcome === 'NOTHING'" class="result-inner">
           <h3 class="result-title">No luck this time</h3>
           <p class="result-subtitle">You didn’t get an item or a monster.</p>
@@ -312,6 +317,15 @@ const monsterStats = computed(() => {
   };
 });
 
+const scanCode = computed(() => lastPayload.value?.rawValue || "");
+const scanTypeLabel = computed(() => {
+  const type = scanResult.value?.outcome;
+  if (type === "NOTHING") return "Nothing";
+  if (type === "ITEM") return "Item";
+  if (type === "MONSTER") return "Monster";
+  return "Unknown";
+});
+
 const itemEffectDescription = computed(() => {
   const effect = scanResult.value?.result?.effect;
   if (!effect) return "Effect: Unknown";
@@ -368,6 +382,24 @@ onBeforeUnmount(async () => {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+.result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.result-code {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-dot {
+  opacity: 0.6;
 }
 .result-inner {
   display: grid;
