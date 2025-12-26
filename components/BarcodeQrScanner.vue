@@ -35,7 +35,11 @@
         </button>
       </div>
 
-      <div :id="readerId" ref="readerEl" class="reader"></div>
+      <div :id="readerId" ref="readerEl" class="reader">
+        <div v-if="pendingMatch" class="reader-status">
+          Code found — scan again to confirm.
+        </div>
+      </div>
 
       <!-- hidden file input for image uploads -->
       <input
@@ -50,7 +54,9 @@
 
       <div v-if="scanResult" class="result-card">
         <div class="result-meta">
-          <span class="result-code">{{ scanCode }}</span>
+          <span class="result-code">Raw: {{ scanRawValue }}</span>
+          <span class="result-dot">•</span>
+          <span class="result-code">Normalized: {{ scanNormalizedValue }}</span>
           <span class="result-dot">•</span>
           <span class="result-type">{{ scanTypeLabel }}</span>
         </div>
@@ -117,6 +123,9 @@ const isProcessingFile = ref(false);
 const fileInput = ref(null);
 const readerEl = ref(null);
 const router = useRouter();
+const pendingMatch = ref(false);
+let lastNormalized = "";
+let matchCount = 0;
 
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
@@ -216,6 +225,21 @@ async function onScanSuccess(decodedText, decodedResult) {
   postingLock = true;
 
   const formatName = decodedResult?.result?.format?.formatName || "unknown";
+  const normalized = normalizeValue(formatName, decodedText);
+  if (normalized && normalized === lastNormalized) {
+    matchCount += 1;
+  } else {
+    matchCount = 1;
+    lastNormalized = normalized;
+  }
+  if (matchCount < 2) {
+    pendingMatch.value = true;
+    postingLock = false;
+    return;
+  }
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
 
   const payload = {
     format: String(formatName).toLowerCase(),
@@ -287,6 +311,9 @@ async function scanImageFile(file) {
         rawValue: r?.decodedText ?? "",
       };
 
+      pendingMatch.value = false;
+      matchCount = 0;
+      lastNormalized = "";
       await postScan(payload);
     } else if (typeof scanner.scanFile === "function") {
       const text = await scanner.scanFile(file, true);
@@ -296,6 +323,9 @@ async function scanImageFile(file) {
         rawValue: text ?? "",
       };
 
+      pendingMatch.value = false;
+      matchCount = 0;
+      lastNormalized = "";
       await postScan(payload);
     } else {
       error.value = "This browser build does not support image scanning.";
@@ -317,7 +347,12 @@ const monsterStats = computed(() => {
   };
 });
 
-const scanCode = computed(() => scanResult.value?.barcodeKey || lastPayload.value?.rawValue || "");
+const scanRawValue = computed(() => lastPayload.value?.rawValue || "");
+const scanNormalizedValue = computed(() => {
+  const key = scanResult.value?.barcodeKey || "";
+  const idx = key.indexOf(":");
+  return idx === -1 ? key : key.slice(idx + 1);
+});
 const scanTypeLabel = computed(() => {
   const type = scanResult.value?.outcome;
   if (type === "NOTHING") return "Nothing";
@@ -336,10 +371,19 @@ const itemEffectDescription = computed(() => {
 function clearResult() {
   scanResult.value = null;
   lastPayload.value = null;
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
 }
 
 function goToMonsters() {
   router.push("/monsters");
+}
+
+function normalizeValue(formatName, decodedText) {
+  const raw = String(decodedText || "").trim();
+  const looksNumeric = /^[0-9\s-]+$/.test(raw);
+  return looksNumeric ? raw.replace(/[^0-9]/g, "") : raw;
 }
 
 onBeforeUnmount(async () => {
@@ -357,9 +401,22 @@ onBeforeUnmount(async () => {
   margin: 16px 0 8px;
 }
 .reader {
+  position: relative;
   width: 100%;
   max-width: 520px;
   margin: 16px auto 0;
+}
+.reader-status {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
 }
 .error {
   color: #c00;
@@ -438,6 +495,10 @@ onBeforeUnmount(async () => {
   }
   .result-image {
     margin: 0 auto;
+  }
+  .controls button {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.95rem;
   }
 }
 </style>
