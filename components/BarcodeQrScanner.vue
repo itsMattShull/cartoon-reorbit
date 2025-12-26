@@ -24,9 +24,18 @@
         >
           Upload Image
         </button>
+
+        <button
+          v-if="showViewMonsters"
+          type="button"
+          @click="goToMonsters"
+          class="px-8 py-4 text-xl font-semibold rounded-xl shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-slate-700 hover:bg-slate-800 text-white focus:ring-slate-300"
+        >
+          View Monsters
+        </button>
       </div>
 
-      <div :id="readerId" class="reader"></div>
+      <div :id="readerId" ref="readerEl" class="reader"></div>
 
       <!-- hidden file input for image uploads -->
       <input
@@ -85,11 +94,13 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from "vue";
+import { useRouter } from "vue-router";
 
 const endpointUrl = "/api/monsters/scan";
 
 const props = defineProps({
   stopAfterSuccess: { type: Boolean, default: true },
+  showViewMonsters: { type: Boolean, default: false },
 });
 
 const readerId = `html5qr-${Math.random().toString(36).slice(2)}`;
@@ -99,6 +110,8 @@ const lastPayload = ref(null);
 const scanResult = ref(null);
 const isProcessingFile = ref(false);
 const fileInput = ref(null);
+const readerEl = ref(null);
+const router = useRouter();
 
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
@@ -257,6 +270,7 @@ async function scanImageFile(file) {
 
   error.value = null;
   isProcessingFile.value = true;
+  if (readerEl.value) readerEl.value.innerHTML = "";
 
   try {
     if (typeof scanner.scanFileV2 === "function") {
@@ -284,6 +298,7 @@ async function scanImageFile(file) {
   } catch (e) {
     error.value = e?.errorMessage || e?.message || String(e);
   } finally {
+    if (readerEl.value) readerEl.value.innerHTML = "";
     isProcessingFile.value = false;
   }
 }
@@ -307,6 +322,10 @@ const itemEffectDescription = computed(() => {
 function clearResult() {
   scanResult.value = null;
   lastPayload.value = null;
+}
+
+function goToMonsters() {
+  router.push("/monsters");
 }
 
 onBeforeUnmount(async () => {

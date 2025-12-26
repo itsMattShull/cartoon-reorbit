@@ -35,13 +35,29 @@ export default defineEventHandler(async (event) => {
 
   if (!owned) throw createError({ statusCode: 404, statusMessage: 'Item not found' })
 
+  const monster = await db.userMonster.findFirst({
+    where: { userId: String(me.id), lastSelected: true },
+    select: { id: true, hp: true, maxHealth: true },
+  })
+  if (!monster) throw createError({ statusCode: 404, statusMessage: 'Monster not found' })
+
+  const power = Number(owned.item?.power) || 0
+  const maxHp = Number(monster.maxHealth) || 0
+  const nextHp = Math.max(0, Math.min(maxHp || 0, Number(monster.hp) + power))
+
   await db.userMonsterItem.update({
     where: { id: owned.id },
     data: { isUsed: true },
   })
 
+  await db.userMonster.update({
+    where: { id: monster.id },
+    data: { hp: nextHp },
+  })
+
   return {
     ok: true,
+    hp: nextHp,
     item: {
       id: owned.id,
       name: owned.item?.name || 'Item',

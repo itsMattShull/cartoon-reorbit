@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
       name: true,
       monsterType: true,
       rarity: true,
+      customName: true,
       hp: true,
       maxHealth: true,
       atk: true,

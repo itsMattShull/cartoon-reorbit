@@ -19,13 +19,28 @@
         <!-- Retro Tamagotchi-style menu overlay -->
         <div v-if="isMenuOpen" class="menu-overlay">
           <div class="menu-box">
-            <div
-              v-for="(opt, i) in menuEntries"
-              :key="opt.key"
-              :class="['menu-row', { selected: i === menuIndex }]"
-            >
-              <span class="menu-caret">{{ i === menuIndex ? '▶' : '\u00A0' }}</span>
-              <span class="menu-text">{{ opt.label }}</span>
+            <div v-if="menuMode === 'rename'" class="rename-panel">
+              <div class="rename-title">Rename Monster</div>
+              <div class="rename-slots">
+                <span
+                  v-for="(ch, i) in renameChars"
+                  :key="i"
+                  :class="['rename-slot', { active: i === renameCursor }]"
+                >
+                  {{ i === renameCursor ? (renameOptions[renamePickerIndex] || '_') : (ch || '_') }}
+                </span>
+              </div>
+              <div v-if="renameError" class="rename-error">{{ renameError }}</div>
+            </div>
+            <div v-else>
+              <div
+                v-for="(opt, i) in menuEntries"
+                :key="opt.key"
+                :class="['menu-row', { selected: i === menuIndex }]"
+              >
+                <span class="menu-caret">{{ i === menuIndex ? '▶' : '\u00A0' }}</span>
+                <span class="menu-text">{{ opt.label }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -74,6 +89,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 /**
  * CONFIG
@@ -119,9 +135,22 @@ const isLoaded = ref(false)
 // Menu state
 const isMenuOpen = ref(false)
 const menuIndex = ref(0)
-const menuMode = ref('main') // 'main' | 'eat'
-const mainMenuOptions = ['EAT', 'PLAY', 'SLEEP', 'SCAVENGE', 'BATTLE', 'EXIT']
+const menuMode = ref('main') // 'main' | 'eat' | 'change' | 'rename'
+const mainMenuOptions = ['SCAN', 'EAT', 'BATTLE', 'CHANGE MONSTER', 'RENAME MONSTER', 'EXIT']
 const healItems = ref([])
+const otherMonsters = ref([])
+const currentMonsterId = ref(null)
+const currentMonsterName = ref('')
+const renameChars = ref(Array.from({ length: 10 }, () => ''))
+const renameCursor = ref(0)
+const renamePickerIndex = ref(0)
+const renameError = ref('')
+const renameOptions = [
+  '',
+  ...'abcdefghijklmnopqrstuvwxyz'.split(''),
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+]
+const router = useRouter()
 
 const menuEntries = computed(() => {
   if (menuMode.value === 'eat') {
@@ -134,6 +163,23 @@ const menuEntries = computed(() => {
     return [
       ...items,
       { key: 'back', label: 'BACK', action: 'back' },
+    ]
+  }
+  if (menuMode.value === 'change') {
+    const entries = otherMonsters.value.map((m) => ({
+      key: m.id,
+      label: `${m.displayName} — HP ${m.hp} ATK ${m.atk} DEF ${m.def}`,
+      action: 'monster',
+      monster: m,
+    }))
+    return [
+      ...entries,
+      { key: 'back', label: 'BACK', action: 'back' },
+    ]
+  }
+  if (menuMode.value === 'rename') {
+    return [
+      { key: 'rename', label: 'RENAME', action: 'rename' },
     ]
   }
   return mainMenuOptions.map((opt) => ({ key: opt, label: opt, action: opt }))
@@ -155,6 +201,11 @@ function onBtnLeft() {
   if (isCutscene.value) return
   if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
+  if (menuMode.value === 'rename') {
+    renameError.value = ''
+    renamePickerIndex.value = (renamePickerIndex.value - 1 + renameOptions.length) % renameOptions.length
+    return
+  }
   // navigate up
   menuIndex.value = (menuIndex.value - 1 + menuEntries.value.length) % menuEntries.value.length
 }
@@ -163,6 +214,11 @@ function onBtnCenter() {
   if (isCutscene.value) return
   if (noMonster.value) return
   if (!isMenuOpen.value) return openMenu()
+  if (menuMode.value === 'rename') {
+    renameError.value = ''
+    renamePickerIndex.value = (renamePickerIndex.value + 1) % renameOptions.length
+    return
+  }
   // navigate down
   menuIndex.value = (menuIndex.value + 1) % menuEntries.value.length
 }
@@ -175,13 +231,27 @@ function onBtnRight() {
   const entry = menuEntries.value[menuIndex.value]
   if (!entry) return
   if (menuMode.value === 'main') {
-    if (entry.action === 'EAT') {
+    if (entry.action === 'CHANGE MONSTER') {
+      openChangeMenu()
+    } else if (entry.action === 'RENAME MONSTER') {
+      openRenameMenu()
+    } else if (entry.action === 'SCAN') {
+      closeMenu()
+      router.push('/monsters/scan')
+    } else if (entry.action === 'EAT') {
       openEatMenu()
+    } else if (entry.action === 'BATTLE') {
+      performBattle()
     } else if (entry.action === 'EXIT') {
       closeMenu()
     } else {
       closeMenu()
     }
+    return
+  }
+
+  if (menuMode.value === 'rename') {
+    handleRenameSelect()
     return
   }
 
@@ -192,6 +262,10 @@ function onBtnRight() {
   }
   if (entry.action === 'item' && entry.item) {
     useHealItem(entry.item)
+    return
+  }
+  if (entry.action === 'monster' && entry.monster) {
+    selectMonster(entry.monster)
   }
 }
 
@@ -487,13 +561,137 @@ async function useHealItem(item) {
     healItems.value = healItems.value.filter((it) => it.id !== item.id)
     if (menuIndex.value >= menuEntries.value.length) menuIndex.value = Math.max(0, menuEntries.value.length - 1)
     await performEatWithItem(res?.item || item)
+    if (res?.hp != null) {
+      const hp = Number(res.hp)
+      health.value = Number.isFinite(hp) ? Math.max(0, Math.min(maxHealth.value, hp)) : health.value
+    }
   } catch (e) {
     healItems.value = healItems.value.filter((it) => it.id !== item.id)
     if (menuIndex.value >= menuEntries.value.length) menuIndex.value = Math.max(0, menuEntries.value.length - 1)
   }
 }
 
+async function loadOtherMonsters() {
+  try {
+    const res = await $fetch('/api/monsters/list')
+    const all = Array.isArray(res?.monsters) ? res.monsters : []
+    otherMonsters.value = all.filter((m) => m.id !== currentMonsterId.value)
+  } catch (e) {
+    otherMonsters.value = []
+  }
+}
+
+function openChangeMenu() {
+  menuMode.value = 'change'
+  menuIndex.value = 0
+  loadOtherMonsters()
+}
+
+async function selectMonster(monster) {
+  try {
+    await $fetch('/api/monsters/select', { method: 'POST', body: { id: monster.id } })
+    await loadSelectedMonster()
+  } catch (e) {
+    // ignore selection failures
+  } finally {
+    closeMenu()
+  }
+}
+
+function openRenameMenu() {
+  menuMode.value = 'rename'
+  menuIndex.value = 0
+  const baseName = currentMonsterName.value || ''
+  const letters = baseName.replace(/[^A-Za-z]/g, '').slice(0, 10).split('')
+  const slots = Array.from({ length: 10 }, () => '')
+  letters.forEach((ch, i) => { slots[i] = ch })
+  renameChars.value = slots
+  renameCursor.value = 0
+  const firstChar = renameChars.value[0] || ''
+  const firstIndex = renameOptions.indexOf(firstChar)
+  renamePickerIndex.value = firstIndex >= 0 ? firstIndex : 0
+  renameError.value = ''
+}
+
+async function handleRenameSelect() {
+  renameError.value = ''
+  renameChars.value[renameCursor.value] = renameOptions[renamePickerIndex.value]
+  if (renameCursor.value < renameChars.value.length - 1) {
+    renameCursor.value += 1
+    const nextChar = renameChars.value[renameCursor.value] || ''
+    const nextIndex = renameOptions.indexOf(nextChar)
+    renamePickerIndex.value = nextIndex >= 0 ? nextIndex : 0
+    return
+  }
+
+  const hasLetter = renameChars.value.some((ch) => ch)
+  if (!hasLetter) {
+    renameError.value = 'Name must include at least 1 letter.'
+    renameCursor.value = 0
+    renamePickerIndex.value = 0
+    return
+  }
+
+  const name = renameChars.value.join('').replace(/\s+$/g, '')
+  try {
+    await $fetch('/api/monsters/rename', { method: 'POST', body: { name } })
+    menuMode.value = 'main'
+    menuIndex.value = 0
+  } catch (e) {
+    renameError.value = 'Failed to rename.'
+  }
+}
+
 const noMonster = ref(false)
+
+async function performBattle() {
+  if (!currentMonsterId.value) {
+    closeMenu()
+    return
+  }
+  try {
+    const res = await $fetch('/api/monsters/battle', { method: 'POST' })
+    if (res?.monster?.hp != null) {
+      const hp = Number(res.monster.hp)
+      health.value = Number.isFinite(hp) ? Math.max(0, Math.min(maxHealth.value, hp)) : health.value
+    }
+  } catch (e) {
+    // ignore battle failures
+  } finally {
+    closeMenu()
+  }
+}
+
+async function loadSelectedMonster() {
+  try {
+    const selected = await $fetch('/api/monsters/selected-monster')
+    if (!selected?.monster) {
+      noMonster.value = true
+      return false
+    }
+    noMonster.value = false
+    currentMonsterId.value = selected.monster.id
+    currentMonsterName.value = selected.monster.customName || selected.species?.name || selected.monster.name || ''
+    if (selected.src?.walk) walkSpriteSrc.value = selected.src.walk
+    if (selected.src?.idle) idleSpriteSrc.value = selected.src.idle
+    if (selected.src?.jump) jumpSpriteSrc.value = selected.src.jump
+    if (selected.monster?.maxHealth != null) {
+      const maxHp = Number(selected.monster.maxHealth)
+      maxHealth.value = Number.isFinite(maxHp) ? Math.max(1, maxHp) : maxHealth.value
+    }
+    if (selected.monster?.hp != null) {
+      const hp = Number(selected.monster.hp)
+      health.value = Number.isFinite(hp) ? Math.max(0, Math.min(maxHealth.value, hp)) : health.value
+    }
+    if (state === 'walk') currentSpriteSrc.value = walkSpriteSrc.value
+    else if (state === 'idle') currentSpriteSrc.value = idleSpriteSrc.value
+    else if (state === 'jump') currentSpriteSrc.value = jumpSpriteSrc.value
+    return true
+  } catch (e) {
+    noMonster.value = true
+    return false
+  }
+}
 
 onMounted(async () => {
   ctx = canvas.value.getContext('2d')
@@ -504,36 +702,8 @@ onMounted(async () => {
   window.addEventListener('resize', updateScale)
   window.addEventListener('orientationchange', updateScale)
 
-  // Attempt to load the user's selected monster to derive sprite sources
-  try {
-    const selected = await $fetch('/api/monsters/selected-monster')
-    if (selected && selected.monster) {
-      // Use provided image paths if available, else keep defaults
-      if (selected.src?.walk) walkSpriteSrc.value = selected.src.walk
-      if (selected.src?.idle) idleSpriteSrc.value = selected.src.idle
-      if (selected.src?.jump) jumpSpriteSrc.value = selected.src.jump
-      if (selected.monster?.maxHealth != null) {
-        const maxHp = Number(selected.monster.maxHealth)
-        maxHealth.value = Number.isFinite(maxHp) ? Math.max(1, maxHp) : maxHealth.value
-      }
-      if (selected.monster?.hp != null) {
-        const hp = Number(selected.monster.hp)
-        health.value = Number.isFinite(hp) ? Math.max(0, Math.min(maxHealth.value, hp)) : health.value
-      }
-      // Sync current state sprite in case it was initialized from defaults
-      if (state === 'walk') currentSpriteSrc.value = walkSpriteSrc.value
-      else if (state === 'idle') currentSpriteSrc.value = idleSpriteSrc.value
-      else if (state === 'jump') currentSpriteSrc.value = jumpSpriteSrc.value
-    } else {
-      // No selected monster
-      noMonster.value = true
-    }
-  } catch (e) {
-    // If auth missing or error, treat as no monster
-    noMonster.value = true
-  }
-
-  if (noMonster.value) {
+  const hasMonster = await loadSelectedMonster()
+  if (!hasMonster) {
     // Do not preload or start the game loop if no monster exists
     return
   }
@@ -670,6 +840,13 @@ onBeforeUnmount(() => {
   font-size: 16px; /* scale text up; still scales with stage */
 }
 
+@media (max-width: 640px) {
+  .healthbar-label { font-size: 20px; }
+  .menu-box { font-size: 28px; }
+  .menu-row { height: 64px; }
+  .menu-caret { width: 28px; }
+}
+
 .loading-overlay {
   position: absolute;
   inset: 0;
@@ -757,6 +934,40 @@ onBeforeUnmount(() => {
 }
 
 .menu-text { letter-spacing: 2px; }
+
+.rename-panel {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.rename-title {
+  font-weight: 800;
+  font-size: 22px;
+}
+.rename-slots {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+}
+.rename-slot {
+  background: rgba(255,255,255,0.45);
+  border: 2px solid rgba(44,74,29,0.4);
+  border-radius: 6px;
+  padding: 8px 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+.rename-slot.active {
+  background: rgba(44,74,29,0.2);
+  border-color: rgba(44,74,29,0.7);
+}
+.rename-error {
+  color: #8a1d1d;
+  font-size: 14px;
+  font-weight: 700;
+}
 
 /* Game Boy-like buttons */
 .controls {

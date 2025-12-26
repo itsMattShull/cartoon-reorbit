@@ -186,7 +186,6 @@ const mainLinks = [
   { label: 'Win Wheel', to: '/games/winwheel' },
   { label: 'Lottery', to: '/lottery' },
   { label: 'Monsters', to: '/monsters' },
-  { label: 'Scan', to: '/monsters/scan' },
   { label: 'gToons Clash', to: '/games/clash/rooms' },
   { label: 'Settings', to: '/settings' }
 ]
