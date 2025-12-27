@@ -62,7 +62,6 @@
             left: spriteLeft,
             top: spriteTop,
             width: spriteDrawW + 'px',
-            height: spriteDrawH + 'px',
             transform: spriteTransform,
           }"
           alt="sprite"
@@ -405,7 +404,14 @@ const spriteTransform = ref('scaleX(1)')
 
 function drawSprite() {
   const x = stepToPx(stepX)
-  const y = floorY - spriteDrawH
+  const spriteH = (() => {
+    const img = spriteEl.value
+    if (img && img.naturalWidth && img.naturalHeight) {
+      return Math.round(spriteDrawW * (img.naturalHeight / img.naturalWidth))
+    }
+    return spriteDrawH
+  })()
+  const y = floorY - spriteH
 
   // Update overlayed <img> position and flip (account for canvas border)
   spriteLeft.value = `${BORDER_W + x}px`

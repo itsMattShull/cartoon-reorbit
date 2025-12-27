@@ -75,6 +75,7 @@ export default defineEventHandler(async (event) => {
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,
+    acquiredAt: uc.createdAt,
     auctions: uc.auctions || [],
     isHolidayItem: holidaySet.has(uc.ctoonId)
   }))

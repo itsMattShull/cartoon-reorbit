@@ -197,6 +197,8 @@
             v-model="sortBy"
             class="mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           >
+            <option value="acquiredDateDesc">Acquired Date – Descending</option>
+            <option value="acquiredDateAsc">Acquired Date – Ascending</option>
             <option value="releaseDateDesc">Release Date – Descending</option>
             <option value="releaseDateAsc">Release Date – Ascending</option>
             <option value="priceDesc">Price – Descending</option>
@@ -618,7 +620,7 @@ const selectedSets   = ref([])
 const selectedSeries = ref([])
 const selectedRarities = ref([])
 const selectedOwned  = ref('all')
-const sortBy         = ref('name') // default: Name A→Z, then Mint #
+const sortBy         = ref(defaultSortForTab(activeTab.value))
 const duplicatesOnly = ref(false)  // My Collection: only show duplicate holdings
 
 const filterMeta       = ref({ sets: [], series: [], rarities: [] })
@@ -644,6 +646,10 @@ const ownersPanelVisible   = ref(false)
 const ownersList           = ref([])
 const ownersLoading        = ref(false)
 const currentOwnersCtoon   = ref(null)
+
+function defaultSortForTab(tab) {
+  return tab === 'MyCollection' ? 'acquiredDateDesc' : 'name'
+}
 
 // ─── ROUTE QUERY SYNC ─────────────────────────────────────────────────────────
 const route  = useRoute()
@@ -673,7 +679,8 @@ function updateUrlQueryFromFilters() {
   if (selectedOwned.value && selectedOwned.value !== 'all') newQuery.owned = selectedOwned.value
   else delete newQuery.owned
 
-  if (sortBy.value && sortBy.value !== 'name') newQuery.sort = sortBy.value
+  const defaultSort = defaultSortForTab(activeTab.value)
+  if (sortBy.value && sortBy.value !== defaultSort) newQuery.sort = sortBy.value
   else delete newQuery.sort
 
   // My Collection: duplicates-only toggle
@@ -692,6 +699,10 @@ function sortCmp(a, b, { useMintTie = false } = {}) {
   const numDesc = (x,y) => (y ?? Number.NEGATIVE_INFINITY) - (x ?? Number.NEGATIVE_INFINITY)
 
   switch (sortBy.value) {
+    case 'acquiredDateAsc':
+      return getTimeAsc(a.acquiredAt) - getTimeAsc(b.acquiredAt)
+    case 'acquiredDateDesc':
+      return getTimeDesc(b.acquiredAt) - getTimeDesc(a.acquiredAt)
     case 'releaseDateAsc':  return getTimeAsc(a.releaseDate)  - getTimeAsc(b.releaseDate)
     case 'releaseDateDesc': return getTimeDesc(b.releaseDate) - getTimeDesc(a.releaseDate)
     case 'priceAsc':        return numAsc(a.price, b.price)
@@ -850,7 +861,11 @@ function percentageOwnedBySeries(seriesName) {
 
 // ─── TAB SWITCH & DATA LOADERS ────────────────────────────────────────────────
 function switchTab(tab) {
+  const prevTab = activeTab.value
   activeTab.value = tab
+  const prevDefault = defaultSortForTab(prevTab)
+  const nextDefault = defaultSortForTab(tab)
+  if (sortBy.value === prevDefault) sortBy.value = nextDefault
 
   if (tab === 'MyCollection') {
     if (!userCtoons.value.length) loadUser()
@@ -945,7 +960,18 @@ onMounted(async () => {
 
   if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
 
-  const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','rarity','series','set','name']
+  const validSorts = [
+    'acquiredDateDesc',
+    'acquiredDateAsc',
+    'releaseDateDesc',
+    'releaseDateAsc',
+    'priceDesc',
+    'priceAsc',
+    'rarity',
+    'series',
+    'set',
+    'name'
+  ]
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
 
   if (['1', 'true'].includes(dupesParam.toLowerCase ? dupesParam.toLowerCase() : dupesParam)) {
