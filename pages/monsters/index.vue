@@ -90,6 +90,11 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
+definePageMeta({
+  middleware: 'auth',
+  layout: 'default'
+})
+
 /**
  * CONFIG
  * - "steps" are discrete positions across the canvas width.
