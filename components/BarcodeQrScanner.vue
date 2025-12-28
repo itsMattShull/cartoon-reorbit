@@ -225,6 +225,8 @@ async function onScanSuccess(decodedText, decodedResult) {
   postingLock = true;
 
   const formatName = decodedResult?.result?.format?.formatName || "unknown";
+  const formatLower = String(formatName).toLowerCase();
+  const requiredMatches = formatLower.includes("qr") ? 1 : 3;
   const normalized = normalizeValue(formatName, decodedText);
   if (normalized && normalized === lastNormalized) {
     matchCount += 1;
@@ -232,8 +234,8 @@ async function onScanSuccess(decodedText, decodedResult) {
     matchCount = 1;
     lastNormalized = normalized;
   }
-  if (matchCount < 3) {
-    pendingMatch.value = true;
+  if (matchCount < requiredMatches) {
+    pendingMatch.value = requiredMatches > 1;
     postingLock = false;
     return;
   }
