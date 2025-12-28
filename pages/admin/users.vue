@@ -25,9 +25,13 @@
 
         <div class="flex items-center gap-2">
           <label class="text-sm text-gray-600">Sort:</label>
+          <select v-model="sortField" class="px-3 py-1 text-sm border rounded-md">
+            <option value="lastActivity">Last activity</option>
+            <option value="joined">Account created</option>
+          </select>
           <select v-model="sortDir" class="px-3 py-1 text-sm border rounded-md">
-            <option value="desc">Last activity • Newest</option>
-            <option value="asc">Last activity • Oldest</option>
+            <option value="desc">Newest</option>
+            <option value="asc">Oldest</option>
           </select>
         </div>
 
@@ -61,6 +65,7 @@
               class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
             >
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
+              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
               <button
                 v-if="!u.isAdmin && !u.banned"
                 class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
@@ -194,6 +199,50 @@
     </div>
   </div>
 
+  <!-- Locked Points modal -->
+  <div v-if="showLockedModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeLockedModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-xl rounded-lg shadow-lg p-5">
+      <h3 class="text-lg font-semibold">Locked Points — {{ lockedTarget?.username || lockedTarget?.discordTag || 'user' }}</h3>
+      <div class="mt-3">
+        <div class="text-sm text-gray-600">Total locked</div>
+        <div class="text-2xl font-semibold tabular-nums">{{ lockedSummary.totalLocked }}</div>
+        <div class="mt-2 flex flex-wrap gap-2 text-xs">
+          <span class="px-2 py-1 rounded bg-gray-100 text-gray-700">Auctions: {{ lockedSummary.byType.AUCTION }}</span>
+          <span class="px-2 py-1 rounded bg-gray-100 text-gray-700">Trades: {{ lockedSummary.byType.TRADE }}</span>
+        </div>
+      </div>
+
+      <div class="mt-4 max-h-80 overflow-auto divide-y">
+        <div v-if="lockedLoading" class="text-sm text-gray-500 py-3">Loading…</div>
+        <div v-else-if="lockedError" class="text-sm text-red-600 py-3">{{ lockedError }}</div>
+        <div v-else-if="!lockedSummary.locks.length" class="text-sm text-gray-500 py-3">No active locks.</div>
+        <div v-else v-for="lock in lockedSummary.locks" :key="lock.id" class="py-2 text-sm">
+          <div class="flex items-center justify-between">
+            <div class="font-medium">{{ lock.contextType }}</div>
+            <div class="tabular-nums">{{ lock.amount }}</div>
+          </div>
+          <div class="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600">
+            <div class="truncate">
+              {{ lock.reason }} • {{ lock.contextId }} • {{ formatDate(lock.createdAt) }}
+            </div>
+            <button
+              class="px-2 py-1 text-xs border rounded-md text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              :disabled="unlockWorking === lock.id"
+              @click="unlockLock(lock)"
+            >
+              {{ unlockWorking === lock.id ? 'Unlocking…' : 'Unlock' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center justify-end">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeLockedModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Dissolve User modal -->
   <div v-if="showDissolveModal" class="fixed inset-0 z-50 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/50" @click="closeDissolveModal()"></div>
@@ -250,6 +299,7 @@ const onlyGuild = ref(false)
 const onlyWarned = ref(false)
 
 // sorting
+const sortField = ref('lastActivity') // 'lastActivity' | 'joined'
 const sortDir = ref('desc') // 'desc' newest first, 'asc' oldest first
 function toggleSort() { sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc' }
 
@@ -275,8 +325,9 @@ const filteredSorted = computed(() => {
   const dir = sortDir.value === 'desc' ? -1 : 1
 
   return candidate.sort((a,b) => {
-    const ta = toTs(a.lastActivity)
-    const tb = toTs(b.lastActivity)
+    const field = sortField.value
+    const ta = toTs(a[field])
+    const tb = toTs(b[field])
     const na = Number.isFinite(ta), nb = Number.isFinite(tb)
     if (!na && !nb) return 0
     if (!na) return 1
@@ -300,6 +351,7 @@ function resetFilters() {
   statusFilter.value = 'all'
   onlyGuild.value = false
   onlyWarned.value = false
+  sortField.value = 'lastActivity'
   sortDir.value = 'desc'
 }
 
@@ -423,6 +475,71 @@ async function openNotes(u) {
     notesError.value = e?.data?.statusMessage || e?.message || 'Failed to load notes.'
   } finally {
     notesLoading.value = false
+  }
+}
+
+// Locked Points state
+const showLockedModal = ref(false)
+const lockedTarget = ref(null)
+const lockedLoading = ref(false)
+const lockedError = ref('')
+const lockedSummary = ref({
+  totalLocked: 0,
+  byType: { AUCTION: 0, TRADE: 0 },
+  locks: []
+})
+const unlockWorking = ref(null)
+
+function closeLockedModal() {
+  showLockedModal.value = false
+  lockedTarget.value = null
+  lockedLoading.value = false
+  lockedError.value = ''
+  lockedSummary.value = { totalLocked: 0, byType: { AUCTION: 0, TRADE: 0 }, locks: [] }
+  unlockWorking.value = null
+}
+
+async function openLockedPoints(u) {
+  lockedTarget.value = u
+  showLockedModal.value = true
+  lockedLoading.value = true
+  lockedError.value = ''
+  lockedSummary.value = { totalLocked: 0, byType: { AUCTION: 0, TRADE: 0 }, locks: [] }
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/locked-points`)
+    lockedSummary.value = res || { totalLocked: 0, byType: { AUCTION: 0, TRADE: 0 }, locks: [] }
+  } catch (e) {
+    lockedError.value = e?.data?.statusMessage || e?.message || 'Failed to load locked points.'
+  } finally {
+    lockedLoading.value = false
+  }
+}
+
+function recomputeLockedSummary(locks) {
+  const totals = { AUCTION: 0, TRADE: 0 }
+  for (const lock of locks) {
+    if (lock.contextType === 'AUCTION') totals.AUCTION += lock.amount || 0
+    if (lock.contextType === 'TRADE') totals.TRADE += lock.amount || 0
+  }
+  return {
+    totalLocked: totals.AUCTION + totals.TRADE,
+    byType: totals,
+    locks
+  }
+}
+
+async function unlockLock(lock) {
+  if (!lock?.id) return
+  unlockWorking.value = lock.id
+  lockedError.value = ''
+  try {
+    await $fetch(`/api/admin/locked-points/${lock.id}/release`, { method: 'POST' })
+    const nextLocks = lockedSummary.value.locks.filter(l => l.id !== lock.id)
+    lockedSummary.value = recomputeLockedSummary(nextLocks)
+  } catch (e) {
+    lockedError.value = e?.data?.statusMessage || e?.message || 'Failed to unlock points.'
+  } finally {
+    unlockWorking.value = null
   }
 }
 

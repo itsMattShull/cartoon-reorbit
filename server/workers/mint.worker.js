@@ -45,9 +45,18 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     // Count existing user purchases for limit checks
     const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
 
-    // Wallet balance check
-    const wallet = await prisma.userPoints.findUnique({ where: { userId } })
-    if (!isSpecial && (!wallet || wallet.points < ctoon.price)) {
+    // Wallet balance check (available = total - active locks)
+    const [wallet, activeLocks] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId }, select: { points: true } }),
+      prisma.lockedPoints.findMany({
+        where: { userId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const totalPoints = wallet?.points ?? 0
+    const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+    const availablePoints = totalPoints - lockedSum
+    if (!isSpecial && availablePoints < ctoon.price) {
       throw new Error('Insufficient points')
     }
 

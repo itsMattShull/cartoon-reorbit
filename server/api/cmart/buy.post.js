@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     // Fetch cToon for release check (and basic availability)
     const ctoon = await prisma.ctoon.findUnique({
       where: { id: ctoonId },
-      select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true }
+      select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true, price: true }
     })
 
     // Allow if in cMart OR part of an active holiday event
@@ -84,7 +84,23 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // — (all your existing pre‐checks: fetch ctoon, sold-out, wallet, per-user limit, etc.)
+    // — Verify available points (total - active locks)
+    const [wallet, activeLocks] = await Promise.all([
+      prisma.userPoints.findUnique({
+        where: { userId },
+        select: { points: true }
+      }),
+      prisma.lockedPoints.findMany({
+        where: { userId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const totalPoints = wallet?.points ?? 0
+    const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+    const availablePoints = totalPoints - lockedSum
+    if (ctoon.price > availablePoints) {
+      throw createError({ statusCode: 400, statusMessage: 'Not enough available points.' })
+    }
 
     // — Enqueue the mint job
     const job = await mintQueue.add('mintCtoon', { userId, ctoonId })
