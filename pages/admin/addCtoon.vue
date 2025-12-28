@@ -90,6 +90,26 @@
           </div>
         </div>
 
+        <!-- Release schedule (computed, read-only) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Initial Release Qty</label>
+            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release Qty</label>
+            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+        </div>
+
         <!-- Per User Limit -->
         <div>
           <label class="block mb-1 font-medium">Per-User Limit</label>
@@ -206,7 +226,8 @@ definePageMeta({
   middleware: ['auth', 'admin'],
   layout: 'default'
 })
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { zonedTimeToUtc } from 'date-fns-tz'
 import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
@@ -268,16 +289,20 @@ const filteredSetsOptions = computed(() => {
 
 // rarity defaults fetched from server
 const rarityDefaults = ref(null)
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 onMounted(async () => {
-  const [seriesRes, setsRes, rarityRes] = await Promise.all([
+  const [seriesRes, setsRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/series', { credentials: 'include' }),
     fetch('/api/admin/sets', { credentials: 'include' }),
-    fetch('/api/rarity-defaults')
+    fetch('/api/rarity-defaults'),
+    fetch('/api/release-settings')
   ])
   seriesOptions.value = await seriesRes.json()
   setsOptions.value = await setsRes.json()
   try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
+  try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
 })
 
 watch(rarity, val => {
@@ -326,6 +351,19 @@ function handleFile(e) {
   type.value = file.type
 }
 
+const schedule = computed(() => {
+  const qty = Number(totalQuantity.value)
+  const hasQty = Number.isFinite(qty) && qty > 0
+  const hasDate = Boolean(releaseDate.value)
+  if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
+  const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
+  const fin = Math.max(0, qty - init)
+  const base = new Date(releaseDate.value)
+  const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+  const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
+  return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
+})
+
 async function submitForm() {
   // Validate
   if (!name.value.trim()) errors.name = 'Name is required.'
@@ -342,9 +380,20 @@ async function submitForm() {
   formData.append('rarity', rarity.value)
   formData.append('set', set.value)
   formData.append('characters', JSON.stringify(characters.value.split(',').map(c => c.trim())))
-  formData.append('releaseDate', new Date(releaseDate.value).toISOString())
+  // Convert admin-entered CST/CDT time to UTC
+  try {
+    const utcIso = zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString()
+    formData.append('releaseDate', utcIso)
+  } catch {
+    formData.append('releaseDate', new Date(releaseDate.value).toISOString())
+  }
   formData.append('totalQuantity', totalQuantity.value ?? '')
   formData.append('initialQuantity', initialQuantity.value ?? '')
+  // advisory schedule fields
+  formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+  formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
+  formData.append('initialReleaseQty', schedule.value.initialQty ?? '')
+  formData.append('finalReleaseQty', schedule.value.finalQty ?? '')
   formData.append('perUserLimit', perUserLimit.value ?? '')
   formData.append('codeOnly', codeOnly.value)
   formData.append('inCmart', inCmart.value)

@@ -79,6 +79,12 @@ model Ctoon {
   characters      String[]
   totalMinted     Int       @default(0)
 
+  // Two-phase release (advisory fields; availability driven by global settings)
+  initialReleaseAt DateTime?
+  finalReleaseAt   DateTime?
+  initialReleaseQty Int?
+  finalReleaseQty   Int?
+
   // gToon fields
   isGtoon     Boolean @default(false)
   gtoonType   String?
@@ -227,6 +233,10 @@ model User {
   lottoUser       LottoUser?
   // Achievements back‑relation
   achievements    AchievementUser[]
+
+  userMonsters     UserMonster[]
+  userBarcodeScans UserBarcodeScan[]
+  userMonsterItems UserMonsterItem[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -519,6 +529,9 @@ model GlobalGameConfig {
   // Scavenger Hunt settings
   scavengerChancePercent Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours Int      @default(24) // cooldown between completed hunts per user
+  // cToon release settings
+  initialReleasePercent  Int      @default(75)
+  finalReleaseDelayHours Int      @default(12)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -1166,4 +1179,227 @@ model AchievementRewardBackground {
 
   @@unique([rewardId, backgroundId])
   @@index([backgroundId])
+}
+
+// ── Barcode / Monster Scanning ──────────────────────────────────────────────
+
+enum ScanOutcome {
+  NOTHING
+  ITEM
+  MONSTER
+}
+
+enum ItemRarity {
+  COMMON
+  RARE
+  CRAZY_RARE
+}
+
+enum ItemEffect {
+  HEAL
+}
+
+enum MonsterRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  VERY_RARE
+  CRAZY_RARE
+}
+
+// Renamed to avoid collision with your existing GameConfig model
+  model BarcodeGameConfig {
+    id        String  @id @default(uuid())
+    version   String  @unique
+    isActive  Boolean @default(false)
+
+  // Roll odds for NEW barcodes (admin-editable)
+  oddsNothing Float @default(0.20)
+  oddsItem    Float @default(0.30)
+  oddsMonster Float @default(0.50)
+
+    // Admin-editable rarity weights (normalized in code)
+    monsterRarityChances Json
+    // Admin-editable item rarity weights (normalized in code)
+    itemRarityChances    Json @default("{}")
+
+  // % variability applied to species base stats per owned instance (e.g. 0.12 = ±12%)
+  monsterStatVariancePct Float @default(0.12)
+
+  // cooldown per user per barcode mapping (admin-editable)
+  barcodeCooldownDays Int @default(7)
+
+  items        ItemDefinition[]
+  species      SpeciesBaseStats[]
+  mappings     BarcodeMapping[]
+  userMonsters UserMonster[]
+  userScans    UserBarcodeScan[]
+  userItems    UserMonsterItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model ItemDefinition {
+  id       String           @id @default(cuid())
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  // Stable per version/item-set (1..20)
+  code   Int
+  name   String
+  rarity ItemRarity
+  power  Int
+  effect ItemEffect @default(HEAL)
+
+  // Optional images (0..2) for item display
+  itemImage0Path String?
+  itemImage1Path String?
+  itemImage2Path String?
+
+  // backref from owned items
+  ownedBy UserMonsterItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([configId, code])
+  @@index([configId])
+}
+
+model SpeciesBaseStats {
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  // speciesIndex / ID (per version/config)
+  speciesIndex Int
+
+  name   String
+  type   String
+  rarity MonsterRarity
+
+  baseHp  Int
+  baseAtk Int
+  baseDef Int
+
+  // Images for UI/animations
+  walkingImagePath      String?
+  standingStillImagePath String?
+  jumpingImagePath      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([configId, speciesIndex])
+  @@index([configId, rarity])
+}
+
+model BarcodeMapping {
+  id         String           @id @default(uuid())
+  barcodeKey String
+  configId   String
+  config     BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  outcome ScanOutcome
+  result  Json? // null => "nothing"; otherwise item payload or monster template (no rolled stats)
+
+  userMonsters UserMonster[]
+  userScans    UserBarcodeScan[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([barcodeKey, configId])
+  @@index([barcodeKey])
+  @@index([configId])
+}
+
+model UserMonster {
+  id     String @id @default(uuid())
+  userId String
+
+  // ✅ Ties to your existing User table
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mappingId String
+  mapping   BarcodeMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  speciesIndex Int
+  name         String
+  customName   String?
+  monsterType  String
+  rarity       MonsterRarity
+
+  // Seed used to roll this instance's stats
+  seed String
+
+  hp  Int
+  maxHealth Int
+  atk Int
+  def Int
+
+  // UI state: whether this monster was last selected by the user
+  lastSelected Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([mappingId])
+  @@index([userId, mappingId])
+  @@index([configId])
+  @@index([speciesIndex])
+}
+
+// Each row represents one item owned by a user (from barcode scans or future grants)
+model UserMonsterItem {
+  id       String @id @default(uuid())
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  itemId   String
+  item     ItemDefinition @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  isUsed   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([itemId])
+  @@index([configId])
+  @@index([userId, itemId])
+}
+
+model UserBarcodeScan {
+  id     String @id @default(uuid())
+  userId String
+
+  // ✅ Ties to your existing User table
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mappingId String
+  mapping   BarcodeMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  lastScannedAt   DateTime @default(now())
+  nextAvailableAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, mappingId])
+  @@index([userId])
+  @@index([mappingId])
+  @@index([userId, mappingId])
+  @@index([configId])
+  @@index([nextAvailableAt])
 }

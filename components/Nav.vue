@@ -185,6 +185,7 @@ const mainLinks = [
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
   { label: 'Lottery', to: '/lottery' },
+  // { label: 'Monsters', to: '/monsters' },
   { label: 'gToons Clash', to: '/games/clash/rooms' },
   { label: 'Settings', to: '/settings' }
 ]
@@ -209,20 +210,21 @@ const adminGroups = [
       { label: 'Admin Changes', to: '/admin/admin-changes' }
     ]
   },
-  {
-    key: 'content',
-    title: 'Admin — Content',
-    items: [
-      { label: 'Manage cToons', to: '/admin/ctoons' },
-      { label: 'Manage Packs', to: '/admin/packs' },
-      { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
-      { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
-      { label: 'Manage Codes', to: '/admin/codes' },
+      {
+        key: 'content',
+        title: 'Admin — Content',
+        items: [
+          { label: 'Manage cToons', to: '/admin/ctoons' },
+          { label: 'Manage Packs', to: '/admin/packs' },
+          { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
+          { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
+          { label: 'Manage Codes', to: '/admin/codes' },
+          { label: 'Manage Monsters', to: '/admin/manage-monster' },
           { label: 'Manage Lotto', to: '/admin/manage-lotto' },
-      { label: 'Manage Games', to: '/admin/games' },
-      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
-      { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
-      { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
+          { label: 'Manage Games', to: '/admin/games' },
+          { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
+          { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
+          { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
       { label: 'Manage Achievements', to: '/admin/achievements' }
     ]
   },

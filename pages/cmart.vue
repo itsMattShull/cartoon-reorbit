@@ -377,13 +377,24 @@
                   Releases in {{ formatCountdown(ctoon.releaseDate) }}
                 </button>
 
+                <!-- Between windows: initial sold out, more coming -->
+                <button
+                  v-else-if="ctoon.nextReleaseAt && new Date(ctoon.nextReleaseAt).getTime() > nowTs && ctoon.quantity !== null && ctoon.minted >= (ctoon.initialCap || 0) && ctoon.minted < ctoon.quantity"
+                  disabled
+                  class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
+                  :aria-label="`Releases in ${formatCountdown(ctoon.nextReleaseAt)}`"
+                  title="Final release pending"
+                >
+                  Releases in {{ formatCountdown(ctoon.nextReleaseAt) }}
+                </button>
+
                 <button
                   v-else
                   @click="buyCtoon(ctoon)"
-                  :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+                  :disabled="(ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)) || buyingCtoons.has(ctoon.id)"
                   class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
                 >
-                  <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+                  <span v-if="ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
                   <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
                   <span v-else>Buy for {{ ctoon.price }} Pts</span>
                 </button>
@@ -680,6 +691,14 @@ let _tick = null
 function isReleased(ctoon) {
   if (!ctoon.releaseDate) return true
   return new Date(ctoon.releaseDate).getTime() <= nowTs.value
+}
+
+function currentAllowedCap(ctoon) {
+  if (ctoon.quantity === null) return Infinity
+  const finalAt = ctoon.finalReleaseAt ? new Date(ctoon.finalReleaseAt).getTime() : null
+  const beforeFinal = finalAt ? nowTs.value < finalAt : false
+  const initCap = Number(ctoon.initialCap ?? 0)
+  return beforeFinal ? (initCap || 0) : Number(ctoon.quantity)
 }
 
 function formatCountdown(dateLike) {
@@ -1000,6 +1019,10 @@ onMounted(async () => {
       owners:      c.owners,
       characters:  c.characters,
       minted:      c.totalMinted ?? 0,
+      // staged release helpers
+      initialCap:  c.initialCap ?? null,
+      finalReleaseAt: c.finalReleaseAt ?? null,
+      nextReleaseAt:  c.nextReleaseAt ?? null,
       owned:       ownedIds.has(c.id)
     }))
   } catch (err) {

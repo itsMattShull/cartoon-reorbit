@@ -45,7 +45,8 @@ export default defineEventHandler(async (event) => {
   const {
     name, series, rarity, price, releaseDate, perUserLimit,
     quantity, initialQuantity, inCmart, set, characters,
-    isGtoon, cost, power, abilityKey, abilityData, gtoonType
+    isGtoon, cost, power, abilityKey, abilityData, gtoonType,
+    initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty
   } = payload
 
   // 4) Validate basics
@@ -121,7 +122,13 @@ export default defineEventHandler(async (event) => {
     cost:       isGtoonBool ? costInt : null,
     power:      isGtoonBool ? powerInt : null,
     abilityKey: isGtoonBool ? abilityKey : null,
-    abilityData: isGtoonBool ? abilityDataObj : null
+    abilityData: isGtoonBool ? abilityDataObj : null,
+
+    // advisory schedule fields
+    initialReleaseAt: initialReleaseAt ? new Date(initialReleaseAt) : null,
+    finalReleaseAt:   finalReleaseAt   ? new Date(finalReleaseAt)   : null,
+    initialReleaseQty: initialReleaseQty == null || initialReleaseQty === '' ? null : Number(initialReleaseQty),
+    finalReleaseQty:   finalReleaseQty   == null || finalReleaseQty   === '' ? null : Number(finalReleaseQty)
   }
 
   // 7) Optional image save with timestamped filename
@@ -165,7 +172,8 @@ export default defineEventHandler(async (event) => {
     const area = `Ctoon:${id}`
     const keys = [
       'name','series','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
-      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type'
+      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type',
+      'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty'
     ]
     for (const k of keys) {
       const prev = before ? (before[k] instanceof Date ? before[k].toISOString() : (Array.isArray(before[k]) || typeof before[k] === 'object' ? JSON.stringify(before[k]) : before[k])) : undefined

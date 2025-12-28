@@ -44,7 +44,10 @@ export default defineEventHandler(async (event) => {
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
 
     /* NEW G-toon fields */
-    isGtoon, cost, power, abilityKey, abilityData, gtoonType
+    isGtoon, cost, power, abilityKey, abilityData, gtoonType,
+
+    /* Two-phase advisory fields (optional) */
+    initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty
   } = fields
 
   if (!name?.trim())   throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
@@ -79,6 +82,10 @@ export default defineEventHandler(async (event) => {
 
   const priceInt = price ? parseInt(price, 10) : 0
   const limitInt = perUserLimit ? parseInt(perUserLimit, 10) : null
+  const initialReleaseAtDate = initialReleaseAt ? new Date(initialReleaseAt) : null
+  const finalReleaseAtDate   = finalReleaseAt   ? new Date(finalReleaseAt)   : null
+  const initialReleaseQtyInt = initialReleaseQty == null || initialReleaseQty === '' ? null : parseInt(initialReleaseQty, 10)
+  const finalReleaseQtyInt   = finalReleaseQty   == null || finalReleaseQty   === '' ? null : parseInt(finalReleaseQty, 10)
 
   /* 3a. G-toon-specific validation --------------------------- */
   const isGtoonBool = String(isGtoon) === 'true'
@@ -137,6 +144,12 @@ export default defineEventHandler(async (event) => {
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,
       abilityData: isGtoonBool ? abilityDataObj : null
+      ,
+      // advisory schedule fields
+      initialReleaseAt: initialReleaseAtDate,
+      finalReleaseAt:   finalReleaseAtDate,
+      initialReleaseQty: initialReleaseQtyInt,
+      finalReleaseQty:   finalReleaseQtyInt
     }
   })
   try {

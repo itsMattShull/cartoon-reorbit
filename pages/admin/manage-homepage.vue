@@ -15,6 +15,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Showcase' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Showcase'">Showcase</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Release Settings'">Release Settings</button>
           
         </nav>
       </div>
@@ -113,6 +117,26 @@
         </div>
       </section>
 
+      <!-- Release Settings tab -->
+      <section v-if="activeTab==='Release Settings'" class="space-y-6 max-w-md">
+        <p class="text-sm text-gray-600">Configure staged release defaults for all cToons.</p>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Initial Release %</label>
+          <input type="number" v-model.number="releasePercent" min="0" max="100" class="w-full border rounded p-2" />
+          <p class="text-xs text-gray-500">Percent of total released at the initial time (min 1 unit enforced at runtime).</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Delay (hours) to Final Release</label>
+          <input type="number" v-model.number="delayHours" min="1" max="72" class="w-full border rounded p-2" />
+          <p class="text-xs text-gray-500">Hours after initial release when the remaining quantity is released.</p>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="saving" @click="saveReleaseSettings">
+            <span v-if="!saving">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       
 
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
@@ -139,6 +163,10 @@ const showcaseFile = ref(null)
 
 const saving = ref(false)
 const toast  = ref(null)
+
+// Release settings state
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 
 function onFile(key, e) { files.value[key] = e.target.files?.[0] || null }
@@ -204,6 +232,34 @@ async function saveShowcase() {
 
 onMounted(loadConfig)
 
+onMounted(async () => {
+  try {
+    const res = await $fetch('/api/admin/release-settings')
+    releasePercent.value = Number(res.initialReleasePercent ?? 75)
+    delayHours.value = Number(res.finalReleaseDelayHours ?? 12)
+  } catch {}
+})
+
+async function saveReleaseSettings() {
+  saving.value = true; toast.value = null
+  try {
+    const res = await $fetch('/api/admin/release-settings', {
+      method: 'POST',
+      body: {
+        initialReleasePercent: Number(releasePercent.value),
+        finalReleaseDelayHours: Number(delayHours.value)
+      }
+    })
+    releasePercent.value = Number(res.initialReleasePercent)
+    delayHours.value = Number(res.finalReleaseDelayHours)
+    toast.value = { type: 'ok', msg: 'Release settings saved.' }
+  } catch (e) {
+    console.error(e)
+    toast.value = { type: 'error', msg: e?.statusMessage || 'Failed to save release settings' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
  
 </script>
 

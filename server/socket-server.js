@@ -1802,7 +1802,7 @@ setInterval(async () => {
             data:  { status: 'CONSUMED' }
           })
           await tx.lockedPoints.updateMany({
-            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id, NOT: { userId: winningBid.userId } },
+            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
             data:  { status: 'RELEASED' }
           })
 
