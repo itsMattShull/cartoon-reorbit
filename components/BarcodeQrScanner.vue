@@ -36,7 +36,10 @@
       </div>
 
       <div :id="readerId" ref="readerEl" class="reader">
-        <div v-if="pendingMatch" class="reader-status">
+        <div v-if="cooldownMessage" class="reader-status">
+          {{ cooldownMessage }}
+        </div>
+        <div v-else-if="pendingMatch" class="reader-status">
           Code found — keep scanning code to confirm.
         </div>
       </div>
@@ -126,6 +129,8 @@ const router = useRouter();
 const pendingMatch = ref(false);
 let lastNormalized = "";
 let matchCount = 0;
+const cooldownUntil = ref(null);
+const cooldownMessage = ref("");
 
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
@@ -178,6 +183,11 @@ async function postScan(payload) {
     scanResult.value = res;
     return res;
   } catch (e) {
+    const retryAt = extractRetryAt(e);
+    if (retryAt) {
+      setCooldown(retryAt);
+      throw e;
+    }
     error.value =
       e?.data?.statusMessage ||
       e?.statusMessage ||
@@ -223,6 +233,13 @@ async function onScanSuccess(decodedText, decodedResult) {
   // prevent spamming endpoint due to repeated detections
   if (postingLock) return;
   postingLock = true;
+
+  if (cooldownUntil.value) {
+    if (updateCooldownMessage()) {
+      postingLock = false;
+      return;
+    }
+  }
 
   const formatName = decodedResult?.result?.format?.formatName || "unknown";
   const formatLower = String(formatName).toLowerCase();
@@ -316,6 +333,8 @@ async function scanImageFile(file) {
       pendingMatch.value = false;
       matchCount = 0;
       lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
       await postScan(payload);
     } else if (typeof scanner.scanFile === "function") {
       const text = await scanner.scanFile(file, true);
@@ -328,11 +347,18 @@ async function scanImageFile(file) {
       pendingMatch.value = false;
       matchCount = 0;
       lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
       await postScan(payload);
     } else {
       error.value = "This browser build does not support image scanning.";
     }
   } catch (e) {
+    const retryAt = extractRetryAt(e);
+    if (retryAt) {
+      setCooldown(retryAt);
+      return;
+    }
     const msg = e?.errorMessage || e?.message || String(e);
     error.value = msg === "No MultiFormat Readers were able to detect the code."
       ? "No barcode or QR code was detected."
@@ -379,6 +405,8 @@ function clearResult() {
   pendingMatch.value = false;
   matchCount = 0;
   lastNormalized = "";
+  cooldownUntil.value = null;
+  cooldownMessage.value = "";
 }
 
 function goToMonsters() {
@@ -389,6 +417,49 @@ function normalizeValue(formatName, decodedText) {
   const raw = String(decodedText || "").trim();
   const looksNumeric = /^[0-9\s-]+$/.test(raw);
   return looksNumeric ? raw.replace(/[^0-9]/g, "") : raw;
+}
+
+function extractRetryAt(e) {
+  const retryAt = e?.data?.retryAt;
+  if (retryAt) return retryAt;
+  const msg = e?.data?.statusMessage || e?.statusMessage || e?.message || "";
+  const match = String(msg).match(/cooldown until\s+([0-9T:\-\.Z]+)/i);
+  return match ? match[1] : null;
+}
+
+function formatRemaining(ms) {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  return { days, hours, minutes };
+}
+
+function updateCooldownMessage() {
+  if (!cooldownUntil.value) return false;
+  const until = new Date(cooldownUntil.value);
+  if (!Number.isFinite(until.getTime())) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  const ms = until.getTime() - Date.now();
+  if (ms <= 0) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  const { days, hours, minutes } = formatRemaining(ms);
+  cooldownMessage.value = `Barcode cooldown: ${days}d ${hours}h ${minutes}m left`;
+  return true;
+}
+
+function setCooldown(retryAt) {
+  cooldownUntil.value = retryAt;
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
+  updateCooldownMessage();
 }
 
 onBeforeUnmount(async () => {

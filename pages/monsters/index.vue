@@ -78,9 +78,15 @@
   </div>
   <div class="controls" :style="{ width: shellWidth + 'px' }">
     <div class="gb-buttons">
-      <button class="gb-btn" aria-label="Button A" @click="onBtnLeft"></button>
-      <button class="gb-btn gb-btn--center" aria-label="Button B" @click="onBtnCenter"></button>
-      <button class="gb-btn" aria-label="Button C" @click="onBtnRight"></button>
+      <button class="gb-btn gb-btn--up" aria-label="Button A" @click="onBtnLeft">
+        <span class="gb-btn__icon gb-btn__icon--up" aria-hidden="true"></span>
+      </button>
+      <button class="gb-btn gb-btn--center gb-btn--enter" aria-label="Button B" @click="onBtnCenter">
+        <span class="gb-btn__icon gb-btn__icon--enter" aria-hidden="true"></span>
+      </button>
+      <button class="gb-btn gb-btn--down" aria-label="Button C" @click="onBtnRight">
+        <span class="gb-btn__icon gb-btn__icon--down" aria-hidden="true"></span>
+      </button>
     </div>
   </div>
   
@@ -245,19 +251,7 @@ function onBtnLeft() {
 function onBtnCenter() {
   if (isCutscene.value) return
   if (!isMenuOpen.value) return openMenu()
-  if (menuMode.value === 'rename') {
-    renameError.value = ''
-    renamePickerIndex.value = (renamePickerIndex.value + 1) % renameOptions.length
-    return
-  }
-  // navigate down
-  menuIndex.value = (menuIndex.value + 1) % menuEntries.value.length
-}
-
-function onBtnRight() {
-  if (isCutscene.value) return
-  if (!isMenuOpen.value) return openMenu()
-  // select current option
+  // confirm/select
   const entry = menuEntries.value[menuIndex.value]
   if (!entry) return
   if (menuMode.value === 'main') {
@@ -297,6 +291,18 @@ function onBtnRight() {
   if (entry.action === 'monster' && entry.monster) {
     selectMonster(entry.monster)
   }
+}
+
+function onBtnRight() {
+  if (isCutscene.value) return
+  if (!isMenuOpen.value) return openMenu()
+  if (menuMode.value === 'rename') {
+    renameError.value = ''
+    renamePickerIndex.value = (renamePickerIndex.value + 1) % renameOptions.length
+    return
+  }
+  // navigate down
+  menuIndex.value = (menuIndex.value + 1) % menuEntries.value.length
 }
 
 // Responsive: scale stage based on available width
@@ -1040,6 +1046,7 @@ onBeforeUnmount(() => {
     0 6px 8px rgba(0,0,0,0.35);
   position: relative;
   transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.2s ease;
+  --gb-icon-color: #3c1528;
 }
 
 .gb-btn::after {
@@ -1071,5 +1078,60 @@ onBeforeUnmount(() => {
 .gb-btn--center:active {
   /* Keep the same pressed effect but from a lower resting position */
   transform: translateY(27px);
+}
+
+.gb-btn__icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.gb-btn__icon--up,
+.gb-btn__icon--down {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+
+.gb-btn__icon--up {
+  border-bottom: 12px solid var(--gb-icon-color);
+}
+
+.gb-btn__icon--down {
+  border-top: 12px solid var(--gb-icon-color);
+}
+
+.gb-btn__icon--enter {
+  width: 18px;
+  height: 14px;
+  border-right: 3px solid var(--gb-icon-color);
+  border-bottom: 3px solid var(--gb-icon-color);
+  border-radius: 2px;
+}
+
+.gb-btn__icon--enter::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 7px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 6px solid var(--gb-icon-color);
+}
+
+.gb-btn__icon--enter::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 8px;
+  width: 8px;
+  height: 3px;
+  background: var(--gb-icon-color);
+  border-radius: 2px;
 }
 </style>
