@@ -29,6 +29,13 @@ enum LockedContextType {
   TRADE
 }
 
+enum MonsterBattleEndReason {
+  KO
+  RETREAT
+  TIMEOUT
+  DISCONNECT
+}
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -212,6 +219,9 @@ model User {
   clashGamesAsPlayer2      ClashGame[]                 @relation("ClashGamePlayer2")
   clashGamesWhoLeft        ClashGame[]                 @relation("ClashGameWhoLeft")
   clashGamesAsWinner       ClashGame[]                 @relation("ClashGameWinner")
+  monsterBattlesAsPlayer1  MonsterBattle[]             @relation("MonsterBattlePlayer1")
+  monsterBattlesAsPlayer2  MonsterBattle[]             @relation("MonsterBattlePlayer2")
+  monsterBattlesAsWinner   MonsterBattle[]             @relation("MonsterBattleWinner")
   wheelSpinLogs            WheelSpinLog[]              @relation("WheelSpinLogToUser")
   backgroundsCreated       Background[]                @relation("BackgroundCreatedBy")
   ownedBackgrounds         UserBackground[]            @relation("User_UserBackgrounds")
@@ -646,6 +656,36 @@ model ClashGame {
   player1 User  @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
   player2 User? @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+}
+
+model MonsterBattle {
+  id                String                 @id @default(uuid())
+  player1UserId     String
+  player2UserId     String?
+  player2IsAi       Boolean                @default(false)
+  player1MonsterId  String
+  player2MonsterId  String?
+  player1StartStats Json
+  player2StartStats Json
+  player1FinalHp    Int?
+  player2FinalHp    Int?
+  winnerUserId      String?
+  winnerIsAi        Boolean                @default(false)
+  endReason         MonsterBattleEndReason?
+  turnLog           Json?
+  startedAt         DateTime               @default(now())
+  endedAt           DateTime?
+
+  player1        User         @relation("MonsterBattlePlayer1", fields: [player1UserId], references: [id])
+  player2        User?        @relation("MonsterBattlePlayer2", fields: [player2UserId], references: [id])
+  winner         User?        @relation("MonsterBattleWinner", fields: [winnerUserId], references: [id])
+  player1Monster UserMonster  @relation("MonsterBattlePlayer1Monster", fields: [player1MonsterId], references: [id])
+  player2Monster UserMonster? @relation("MonsterBattlePlayer2Monster", fields: [player2MonsterId], references: [id])
+
+  @@index([player1UserId])
+  @@index([player2UserId])
+  @@index([player1MonsterId])
+  @@index([player2MonsterId])
 }
 
 model ClaimCodePrerequisite {
@@ -1187,6 +1227,7 @@ enum ScanOutcome {
   NOTHING
   ITEM
   MONSTER
+  BATTLE
 }
 
 enum ItemRarity {
@@ -1217,6 +1258,7 @@ enum MonsterRarity {
   oddsNothing Float @default(0.20)
   oddsItem    Float @default(0.30)
   oddsMonster Float @default(0.50)
+  oddsBattle  Float @default(0.00)
 
     // Admin-editable rarity weights (normalized in code)
     monsterRarityChances Json
@@ -1296,6 +1338,27 @@ model SpeciesBaseStats {
   @@index([configId, rarity])
 }
 
+model AiMonster {
+  id      String        @id @default(uuid())
+  name    String
+  type    String
+  rarity  MonsterRarity
+
+  baseHp  Int
+  baseAtk Int
+  baseDef Int
+
+  walkingImagePath       String?
+  standingStillImagePath String?
+  jumpingImagePath       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rarity])
+  @@index([createdAt])
+}
+
 model BarcodeMapping {
   id         String           @id @default(uuid())
   barcodeKey String
@@ -1346,6 +1409,9 @@ model UserMonster {
   lastSelected Boolean @default(false)
 
   createdAt DateTime @default(now())
+
+  monsterBattlesAsPlayer1 MonsterBattle[] @relation("MonsterBattlePlayer1Monster")
+  monsterBattlesAsPlayer2 MonsterBattle[] @relation("MonsterBattlePlayer2Monster")
 
   @@index([userId])
   @@index([mappingId])

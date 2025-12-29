@@ -14,6 +14,13 @@ import { randomUUID }     from 'crypto'
 
 /* ── Clash engine & helpers ────────────────────────────────── */
 import { createBattle }   from './utils/battleEngine.js'
+import {
+  applyForfeit,
+  chooseAiAction,
+  createInitialState,
+  resolveTurn,
+  validateAction
+} from './utils/monsterBattleEngine.js'
 
 /* ── Load Cartoon-Network lanes once at boot ──────────────── */
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -37,6 +44,12 @@ const zoneSockets  = {}        // zone → Set(socketId)
 const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
 const pvpMatches = new Map();    // roomId -> { battle, recordId }
 
+/* ── Monster Battles (1v1) ───────────────────────────────── */
+const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
+const monsterBattleByUser = new Map(); // userId -> battleId
+const MONSTER_ACTION_TIMEOUT_MS = 60_000
+const MONSTER_DISCONNECT_GRACE_MS = 5_000
+
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
@@ -53,6 +66,316 @@ const withAsset = p => (p
   : null);
 
 const sid = v => String(v)
+
+const battlePublicState = (battle) => {
+  const { state, actions } = battle
+  const p1 = state.participants.player1
+  const p2 = state.participants.player2
+  return {
+    battleId: state.id,
+    turnNumber: state.turnNumber,
+    status: state.status,
+    endReason: state.endReason,
+    winnerKey: state.winnerKey,
+    participants: {
+      player1: {
+        userId: p1.userId,
+        monsterId: p1.monsterId,
+        name: p1.name || null,
+        currentHp: p1.currentHp,
+        maxHealth: p1.maxHealth,
+        attack: p1.attack,
+        defense: p1.defense,
+        blocksRemaining: p1.blocksRemaining,
+        isAi: p1.isAi,
+        sprites: p1.sprites || null
+      },
+      player2: {
+        userId: p2.userId,
+        monsterId: p2.monsterId,
+        name: p2.name || null,
+        currentHp: p2.currentHp,
+        maxHealth: p2.maxHealth,
+        attack: p2.attack,
+        defense: p2.defense,
+        blocksRemaining: p2.blocksRemaining,
+        isAi: p2.isAi,
+        sprites: p2.sprites || null
+      }
+    },
+    actionsSubmitted: {
+      player1: Boolean(actions.player1),
+      player2: Boolean(actions.player2)
+    }
+  }
+}
+
+const monsterPlayerKeyForUser = (battle, userId) => {
+  const p1 = battle.state.participants.player1
+  const p2 = battle.state.participants.player2
+  if (p1.userId && String(p1.userId) === String(userId)) return 'player1'
+  if (p2.userId && String(p2.userId) === String(userId)) return 'player2'
+  return null
+}
+
+const clearMonsterTimers = (battle) => {
+  if (battle.timers.player1) clearTimeout(battle.timers.player1)
+  if (battle.timers.player2) clearTimeout(battle.timers.player2)
+  battle.timers.player1 = null
+  battle.timers.player2 = null
+}
+
+const clearMonsterDisconnectTimer = (battle, playerKey) => {
+  if (!battle?.disconnectTimers?.[playerKey]) return
+  console.log('[battle:disconnect] clear', battle.state.id, playerKey)
+  clearTimeout(battle.disconnectTimers[playerKey])
+  battle.disconnectTimers[playerKey] = null
+}
+
+const scheduleMonsterDisconnect = (io, battle, playerKey) => {
+  if (!battle || battle.state.status !== 'active') return
+  if (!battle.disconnectTimers) battle.disconnectTimers = { player1: null, player2: null }
+  if (battle.disconnectTimers[playerKey]) return
+  console.log('[battle:disconnect] schedule', battle.state.id, playerKey)
+  battle.disconnectTimers[playerKey] = setTimeout(() => {
+    console.log('[battle:disconnect] firing', battle.state.id, playerKey)
+    handleMonsterForfeit(io, battle, playerKey, 'DISCONNECT')
+  }, MONSTER_DISCONNECT_GRACE_MS)
+}
+
+const scheduleMonsterTimeouts = (io, battle) => {
+  clearMonsterTimers(battle)
+  const deadline = Date.now() + MONSTER_ACTION_TIMEOUT_MS
+  battle.deadlines = { player1: deadline, player2: deadline }
+
+  const p1 = battle.state.participants.player1
+  const p2 = battle.state.participants.player2
+
+  if (!p1.isAi) {
+    battle.timers.player1 = setTimeout(() => {
+      handleMonsterForfeit(io, battle, 'player1', 'TIMEOUT')
+    }, MONSTER_ACTION_TIMEOUT_MS)
+  }
+
+  if (!p2.isAi) {
+    battle.timers.player2 = setTimeout(() => {
+      handleMonsterForfeit(io, battle, 'player2', 'TIMEOUT')
+    }, MONSTER_ACTION_TIMEOUT_MS)
+  }
+}
+
+const persistMonsterBattleState = async (battle) => {
+  const p1 = battle.state.participants.player1
+  const p2 = battle.state.participants.player2
+  const winnerKey = battle.state.winnerKey
+  const winner = winnerKey ? battle.state.participants[winnerKey] : null
+  await db.monsterBattle.update({
+    where: { id: battle.recordId },
+    data: {
+      turnLog: battle.state.turnLog,
+      player1FinalHp: p1.currentHp,
+      player2FinalHp: p2.currentHp,
+      winnerUserId: winner?.userId ?? null,
+      winnerIsAi: Boolean(winner?.isAi),
+      endReason: battle.state.endReason ?? null,
+      endedAt: battle.state.status === 'finished' ? new Date() : null
+    }
+  })
+}
+
+const cleanupMonsterBattle = (battle) => {
+  clearMonsterTimers(battle)
+  clearMonsterDisconnectTimer(battle, 'player1')
+  clearMonsterDisconnectTimer(battle, 'player2')
+  const p1Id = battle.state.participants.player1.userId
+  const p2Id = battle.state.participants.player2.userId
+  if (p1Id) monsterBattleByUser.delete(String(p1Id))
+  if (p2Id) monsterBattleByUser.delete(String(p2Id))
+  monsterBattles.delete(battle.state.id)
+}
+
+const finishMonsterBattle = async (io, battle, resultPayload) => {
+  await persistMonsterBattleState(battle)
+  const p1 = battle.state.participants.player1
+  const p2 = battle.state.participants.player2
+  try {
+    if (p1?.userId && p1?.monsterId) {
+      await db.userMonster.update({
+        where: { id: p1.monsterId },
+        data: { hp: Math.max(0, Number(p1.currentHp || 0)) }
+      })
+    }
+    if (p2?.userId && p2?.monsterId && !p2.isAi) {
+      await db.userMonster.update({
+        where: { id: p2.monsterId },
+        data: { hp: Math.max(0, Number(p2.currentHp || 0)) }
+      })
+    }
+  } catch (e) {
+    console.error('Failed to persist battle HP to UserMonster:', e)
+  }
+  io.to(battle.state.id).emit('battle:finished', {
+    ...resultPayload,
+    turnLog: battle.state.turnLog
+  })
+  cleanupMonsterBattle(battle)
+}
+
+async function handleMonsterForfeit(io, battle, loserKey, reason) {
+  if (!battle || battle.state.status !== 'active') return
+  clearMonsterTimers(battle)
+  const { state: nextState, turnResult } = applyForfeit(battle.state, loserKey, reason)
+  battle.state = nextState
+  battle.state.turnLog.push({
+    turnNumber: nextState.turnNumber,
+    actions: {},
+    firstActor: null,
+    dodge: {},
+    damage: {},
+    hpAfter: turnResult.hpAfter,
+    blocksRemaining: turnResult.blocksRemaining,
+    timestamps: { endedAt: new Date().toISOString() },
+    endReason: reason,
+    winnerKey: turnResult.winnerKey
+  })
+  const finalState = battlePublicState(battle)
+  await finishMonsterBattle(io, battle, {
+    battleId: battle.state.id,
+    winner: turnResult.winnerKey ? battle.state.participants[turnResult.winnerKey] : null,
+    endReason: reason,
+    finalState
+  })
+}
+
+const resolveMonsterTurn = async (io, battle) => {
+  clearMonsterTimers(battle)
+  const resolvedTurn = battle.state.turnNumber
+  io.to(battle.state.id).emit('battle:turnResolving', {
+    battleId: battle.state.id,
+    turnNumber: resolvedTurn,
+    actionsLocked: true
+  })
+
+  const { state: nextState, turnResult } = resolveTurn(battle.state, battle.actions)
+  battle.state = nextState
+  battle.state.turnLog.push({
+    turnNumber: resolvedTurn,
+    actions: { ...battle.actions },
+    firstActor: turnResult.firstActor,
+    dodge: turnResult.dodge,
+    damage: turnResult.damage,
+    hpAfter: turnResult.hpAfter,
+    blocksRemaining: turnResult.blocksRemaining,
+    timestamps: { resolvedAt: new Date().toISOString() },
+    endReason: turnResult.endReason ?? null,
+    winnerKey: turnResult.winnerKey ?? null
+  })
+
+  const updatedState = battlePublicState(battle)
+  io.to(battle.state.id).emit('battle:turnResolved', {
+    battleId: battle.state.id,
+    turnNumber: resolvedTurn,
+    actions: { ...battle.actions },
+    firstActor: turnResult.firstActor,
+    results: turnResult,
+    updatedState
+  })
+
+  if (battle.state.status === 'finished') {
+    await finishMonsterBattle(io, battle, {
+      battleId: battle.state.id,
+      winner: turnResult.winnerKey ? battle.state.participants[turnResult.winnerKey] : null,
+      endReason: battle.state.endReason,
+      finalState: updatedState
+    })
+    return
+  }
+
+  await persistMonsterBattleState(battle)
+
+  battle.state.turnNumber += 1
+  battle.actions = { player1: null, player2: null }
+  scheduleMonsterTimeouts(io, battle)
+  io.to(battle.state.id).emit('battle:state', battlePublicState(battle))
+}
+
+const getUserMonsterBattleData = async (monsterId, userId) => {
+  const monster = await db.userMonster.findFirst({
+    where: { id: String(monsterId), userId: String(userId) },
+    select: {
+      id: true,
+      name: true,
+      customName: true,
+      hp: true,
+      maxHealth: true,
+      atk: true,
+      def: true,
+      configId: true,
+      speciesIndex: true
+    }
+  })
+  if (!monster) return null
+  const species = await db.speciesBaseStats.findUnique({
+    where: { configId_speciesIndex: { configId: monster.configId, speciesIndex: monster.speciesIndex } },
+    select: {
+      name: true,
+      walkingImagePath: true,
+      standingStillImagePath: true,
+      jumpingImagePath: true
+    }
+  })
+  return {
+    id: monster.id,
+    name: monster.customName || species?.name || monster.name || 'Monster',
+    stats: {
+      hp: monster.hp,
+      maxHealth: monster.maxHealth,
+      atk: monster.atk,
+      def: monster.def
+    },
+    sprites: {
+      walk: species?.walkingImagePath || null,
+      idle: species?.standingStillImagePath || null,
+      jump: species?.jumpingImagePath || null
+    }
+  }
+}
+
+const selectAiMonster = async () => {
+  const total = await db.aiMonster.count()
+  if (!total) return null
+  const skip = Math.floor(Math.random() * total)
+  const [row] = await db.aiMonster.findMany({
+    skip,
+    take: 1,
+    select: {
+      id: true,
+      name: true,
+      baseHp: true,
+      baseAtk: true,
+      baseDef: true,
+      walkingImagePath: true,
+      standingStillImagePath: true,
+      jumpingImagePath: true
+    }
+  })
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    stats: {
+      hp: row.baseHp,
+      maxHealth: row.baseHp,
+      atk: row.baseAtk,
+      def: row.baseDef
+    },
+    sprites: {
+      walk: row.walkingImagePath || null,
+      idle: row.standingStillImagePath || null,
+      jump: row.jumpingImagePath || null
+    }
+  }
+}
 
 /* ── Clash PvE: Select → Reveal → Setup ───────────────────── */
 // Fisher–Yates shuffle helper
@@ -729,6 +1052,217 @@ function startPvpTimer(io, roomId) {
 }
 
 io.on('connection', socket => {
+  socket.on('battle:create', async ({ player1UserId, player1MonsterId, opponent }) => {
+    try {
+      const uid = player1UserId ? sid(player1UserId) : null
+      console.log('[battle:create] request', { uid, player1MonsterId, opponent })
+      if (!uid || !player1MonsterId) {
+        socket.emit('battle:error', { battleId: null, message: 'Missing player data.', code: 'BadPayload' })
+        return
+      }
+      if (monsterBattleByUser.has(uid)) {
+        socket.emit('battle:error', { battleId: null, message: 'Already in an active battle.', code: 'AlreadyInBattle' })
+        return
+      }
+      const existing = await db.monsterBattle.findFirst({
+        where: {
+          endedAt: null,
+          OR: [{ player1UserId: uid }, { player2UserId: uid }]
+        },
+        select: { id: true }
+      })
+      if (existing) {
+        socket.emit('battle:error', { battleId: existing.id, message: 'Already in an active battle.', code: 'AlreadyInBattle' })
+        return
+      }
+
+      const p1Monster = await getUserMonsterBattleData(player1MonsterId, uid)
+      if (!p1Monster) {
+        socket.emit('battle:error', { battleId: null, message: 'Monster not found.', code: 'MonsterNotFound' })
+        return
+      }
+
+      let player2UserId = null
+      let player2Monster = null
+      let player2IsAi = false
+
+      if (opponent?.type === 'AI') {
+        player2IsAi = true
+        player2Monster = await selectAiMonster()
+        if (!player2Monster) {
+          socket.emit('battle:error', { battleId: null, message: 'No AI monster available.', code: 'AiUnavailable' })
+          return
+        }
+      } else if (opponent?.type === 'USER') {
+        if (!opponent.userId || !opponent.monsterId) {
+          socket.emit('battle:error', { battleId: null, message: 'Missing opponent data.', code: 'BadPayload' })
+          return
+        }
+        player2UserId = sid(opponent.userId)
+        if (monsterBattleByUser.has(player2UserId)) {
+          socket.emit('battle:error', { battleId: null, message: 'Opponent already in an active battle.', code: 'OpponentBusy' })
+          return
+        }
+        const existingOpponent = await db.monsterBattle.findFirst({
+          where: {
+            endedAt: null,
+            OR: [{ player1UserId: player2UserId }, { player2UserId: player2UserId }]
+          },
+          select: { id: true }
+        })
+        if (existingOpponent) {
+          socket.emit('battle:error', { battleId: null, message: 'Opponent already in an active battle.', code: 'OpponentBusy' })
+          return
+        }
+        player2Monster = await getUserMonsterBattleData(opponent.monsterId, player2UserId)
+        if (!player2Monster) {
+          socket.emit('battle:error', { battleId: null, message: 'Opponent monster not found.', code: 'MonsterNotFound' })
+          return
+        }
+      } else {
+        socket.emit('battle:error', { battleId: null, message: 'Invalid opponent type.', code: 'BadPayload' })
+        return
+      }
+
+      const record = await db.monsterBattle.create({
+        data: {
+          player1UserId: uid,
+          player2UserId: player2UserId,
+          player2IsAi: player2IsAi,
+          player1MonsterId: p1Monster.id,
+          player2MonsterId: player2IsAi ? null : player2Monster?.id ?? null,
+          player1StartStats: {
+            hp: p1Monster.stats.hp,
+            maxHealth: p1Monster.stats.maxHealth,
+            attack: p1Monster.stats.atk,
+            defense: p1Monster.stats.def
+          },
+          player2StartStats: {
+            hp: player2Monster.stats.hp,
+            maxHealth: player2Monster.stats.maxHealth,
+            attack: player2Monster.stats.atk,
+            defense: player2Monster.stats.def,
+            aiMonsterId: player2IsAi ? player2Monster.id : null,
+            name: player2Monster.name
+          },
+          turnLog: []
+        }
+      })
+
+      const state = createInitialState({
+        battleId: record.id,
+        player1: {
+          userId: uid,
+          monsterId: p1Monster.id,
+          stats: p1Monster.stats
+        },
+        player2: {
+          userId: player2UserId,
+          monsterId: player2Monster?.id ?? null,
+          stats: player2Monster.stats
+        },
+        player2IsAi
+      })
+
+      state.participants.player1.name = p1Monster.name
+      state.participants.player1.sprites = p1Monster.sprites
+      state.participants.player2.name = player2Monster.name
+      state.participants.player2.sprites = player2Monster.sprites
+
+  const battle = {
+        state,
+        recordId: record.id,
+        actions: { player1: null, player2: null },
+        timers: { player1: null, player2: null },
+        deadlines: {},
+        disconnectTimers: { player1: null, player2: null }
+      }
+
+      monsterBattles.set(record.id, battle)
+      monsterBattleByUser.set(uid, record.id)
+      if (player2UserId) monsterBattleByUser.set(player2UserId, record.id)
+
+      socket.join(record.id)
+      socket.data.monsterBattleId = record.id
+      socket.data.userId = uid
+
+      console.log('[battle:create] created', record.id)
+      scheduleMonsterTimeouts(io, battle)
+
+      socket.emit('battle:created', { battleId: record.id })
+      socket.emit('battle:state', battlePublicState(battle))
+    } catch (e) {
+      console.error('battle:create failed:', e)
+      socket.emit('battle:error', { battleId: null, message: 'Failed to create battle.', code: 'ServerError' })
+    }
+  })
+
+  socket.on('battle:join', async ({ battleId, userId }) => {
+    console.log('[battle:join] request', battleId, userId)
+    const battle = monsterBattles.get(battleId)
+    if (!battle) {
+      console.log('[battle:join] not found', battleId)
+      socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
+      return
+    }
+    const uid = userId ? sid(userId) : socket.data.userId
+    const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
+    if (!playerKey) {
+      console.log('[battle:join] not participant', battleId, uid)
+      socket.emit('battle:error', { battleId, message: 'Not a participant.', code: 'NotParticipant' })
+      return
+    }
+    socket.data.userId = uid
+    socket.data.monsterBattleId = battleId
+    socket.join(battleId)
+    clearMonsterDisconnectTimer(battle, playerKey)
+    console.log('[battle:join] joined', battleId, uid, playerKey)
+    socket.emit('battle:state', battlePublicState(battle))
+  })
+
+  socket.on('battle:chooseAction', async ({ battleId, turnNumber, action }) => {
+    console.log('[battle:chooseAction] request', battleId, turnNumber, action)
+    const battle = monsterBattles.get(battleId)
+    if (!battle) {
+      socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
+      return
+    }
+    const uid = socket.data.userId
+    const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
+    if (!playerKey) {
+      socket.emit('battle:error', { battleId, message: 'Not a participant.', code: 'NotParticipant' })
+      return
+    }
+    if (battle.state.status !== 'active') return
+    if (battle.state.turnNumber !== Number(turnNumber)) {
+      socket.emit('battle:error', { battleId, message: 'Stale turn.', code: 'BadTurn' })
+      return
+    }
+    if (battle.actions[playerKey]) return
+
+    const validation = validateAction(battle.state, playerKey, action)
+    if (!validation.ok) {
+      socket.emit('battle:error', { battleId, message: 'Invalid action.', code: validation.code })
+      return
+    }
+
+    battle.actions[playerKey] = action
+    if (battle.timers[playerKey]) {
+      clearTimeout(battle.timers[playerKey])
+      battle.timers[playerKey] = null
+    }
+    io.to(battleId).emit('battle:actionAccepted', { battleId, turnNumber, playerId: uid })
+
+    const aiKey = battle.state.participants.player1.isAi ? 'player1' : 'player2'
+    if (battle.state.participants[aiKey].isAi && !battle.actions[aiKey]) {
+      battle.actions[aiKey] = chooseAiAction(battle.state)
+    }
+
+    if (battle.actions.player1 && battle.actions.player2) {
+      console.log('[battle:chooseAction] resolving turn', battleId, battle.state.turnNumber)
+      await resolveMonsterTurn(io, battle)
+    }
+  })
 
   socket.on('leaveClashRoom', async ({ roomId, userId }) => {
     try {
@@ -1458,6 +1992,24 @@ io.on('connection', socket => {
         userId: socket.data.userId,
         leavingSocketId: socket.id
       })
+    }
+
+    const battleId = socket.data?.monsterBattleId
+    const userId = socket.data?.userId
+    if (battleId && userId) {
+      const battle = monsterBattles.get(battleId)
+      if (battle && battle.state.status === 'active') {
+        const sockets = await io.in(battleId).fetchSockets()
+        const stillConnected = sockets.some(s =>
+          s.id !== socket.id && String(s.data?.userId) === String(userId)
+        )
+        if (!stillConnected) {
+          const loserKey = monsterPlayerKeyForUser(battle, userId)
+          if (loserKey) {
+            scheduleMonsterDisconnect(io, battle, loserKey)
+          }
+        }
+      }
     }
 
     const zone = socket.zone

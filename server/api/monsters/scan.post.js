@@ -25,19 +25,21 @@ function u32ToUnitFloat(u32) {
   return u32 / 4294967296 // 0 <= x < 1
 }
 
-function normalizeOdds(nothing, item, monster) {
+function normalizeOdds(nothing, item, monster, battle) {
   const n = Number(nothing) || 0
   const i = Number(item) || 0
   const m = Number(monster) || 0
-  const sum = n + i + m
-  if (sum <= 0) return { nothing: 0.2, item: 0.3, monster: 0.5 }
-  return { nothing: n / sum, item: i / sum, monster: m / sum }
+  const b = Number(battle) || 0
+  const sum = n + i + m + b
+  if (sum <= 0) return { nothing: 0.2, item: 0.3, monster: 0.5, battle: 0.0 }
+  return { nothing: n / sum, item: i / sum, monster: m / sum, battle: b / sum }
 }
 
 function pickOutcome(r01, odds) {
   if (r01 < odds.nothing) return 'NOTHING'
   if (r01 < odds.nothing + odds.item) return 'ITEM'
-  return 'MONSTER'
+  if (r01 < odds.nothing + odds.item + odds.monster) return 'MONSTER'
+  return 'BATTLE'
 }
 
 function buildRarityThresholds(chancesJson, availability = {}, order = ['CRAZY_RARE', 'VERY_RARE', 'RARE', 'UNCOMMON', 'COMMON']) {
@@ -230,7 +232,7 @@ export default defineEventHandler(async (event) => {
   if (!mapping) {
     const seedHex = hmacHex(process.env.BARCODE_SECRET, `${config.version}:${barcodeKey}`)
 
-    const odds = normalizeOdds(config.oddsNothing, config.oddsItem, config.oddsMonster)
+    const odds = normalizeOdds(config.oddsNothing, config.oddsItem, config.oddsMonster, config.oddsBattle)
     const outcomeRoll01 = u32ToUnitFloat(hexToU32(seedHex, 0))
     const outcome = pickOutcome(outcomeRoll01, odds) // ScanOutcome enum key
 
@@ -275,6 +277,8 @@ export default defineEventHandler(async (event) => {
       const speciesRow = pool[speciesPick]
 
       result = buildMonsterTemplate(speciesRow)
+    } else if (outcome === 'BATTLE') {
+      result = { type: 'battle' }
     }
 
     mapping = await db.barcodeMapping.upsert({
@@ -371,8 +375,38 @@ export default defineEventHandler(async (event) => {
     },
   })
 
+  let battleInfo = null
+  if (mapping.outcome === 'BATTLE') {
+    let selected = await db.userMonster.findFirst({
+      where: { userId, lastSelected: true },
+      select: { id: true }
+    })
+    if (!selected) {
+      const fallback = await db.userMonster.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true }
+      })
+      if (fallback) {
+        await db.userMonster.updateMany({
+          where: { userId, lastSelected: true },
+          data: { lastSelected: false }
+        })
+        await db.userMonster.update({
+          where: { id: fallback.id },
+          data: { lastSelected: true }
+        })
+        selected = fallback
+      }
+    }
+    battleInfo = {
+      type: 'AI',
+      monsterId: selected?.id ?? null
+    }
+  }
+
   return {
-    outcome: mapping.outcome, // MONSTER | ITEM | NOTHING
+    outcome: mapping.outcome, // MONSTER | ITEM | NOTHING | BATTLE
     result: mapping.result,   // monster template | item payload | null
     mappingId: mapping.id,
     barcodeKey,
@@ -383,5 +417,6 @@ export default defineEventHandler(async (event) => {
     ownedMonsterId: ownedMonster?.id ?? null,
     ownedStats: ownedMonster ? { hp: ownedMonster.hp, atk: ownedMonster.atk, def: ownedMonster.def } : null,
     awardedItemId: awardedItem?.id ?? null,
+    battle: battleInfo,
   }
 })

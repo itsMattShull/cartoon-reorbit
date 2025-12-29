@@ -71,6 +71,7 @@ export default defineEventHandler(async (event) => {
     oddsNothing,
     oddsItem,
     oddsMonster,
+    oddsBattle,
     monsterRarityChances, // expected as percentages (0..100), any sum
     itemRarityChances,    // expected as percentages (0..100), any sum
     monsterStatVariancePct, // expected percent (0..50)
@@ -81,7 +82,8 @@ export default defineEventHandler(async (event) => {
   const on = clamp01(oddsNothing)
   const oi = clamp01(oddsItem)
   const om = clamp01(oddsMonster)
-  const sum = on + oi + om
+  const ob = clamp01(oddsBattle)
+  const sum = on + oi + om + ob
   if (!approxEqual(sum, 1)) {
     throw createError({ statusCode: 400, statusMessage: 'Odds must sum to 1.00' })
   }
@@ -108,6 +110,7 @@ export default defineEventHandler(async (event) => {
     oddsNothing: on,
     oddsItem: oi,
     oddsMonster: om,
+    oddsBattle: ob,
     monsterRarityChances: rarity,
     itemRarityChances: itemRarity,
     monsterStatVariancePct: varPct / 100, // store as 0..0.5
@@ -140,7 +143,7 @@ export default defineEventHandler(async (event) => {
 
   // Log changes field-by-field
   try {
-    const fields = ['oddsNothing','oddsItem','oddsMonster','monsterRarityChances','itemRarityChances','monsterStatVariancePct','barcodeCooldownDays']
+    const fields = ['oddsNothing','oddsItem','oddsMonster','oddsBattle','monsterRarityChances','itemRarityChances','monsterStatVariancePct','barcodeCooldownDays']
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
       const nextVal = cfg ? cfg[k] : undefined

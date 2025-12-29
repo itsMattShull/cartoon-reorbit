@@ -101,6 +101,13 @@
             </div>
           </div>
         </div>
+
+        <div v-else-if="scanResult.outcome === 'BATTLE'" class="result-inner">
+          <div>
+            <h3 class="result-title">Battle Triggered</h3>
+            <p class="result-subtitle">Preparing your battle now…</p>
+          </div>
+        </div>
       </div>
     </div>
   </ClientOnly>
@@ -109,6 +116,9 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import { io } from "socket.io-client";
+import { useRuntimeConfig } from "#imports";
+import { useAuth } from "@/composables/useAuth";
 
 const endpointUrl = "/api/monsters/scan";
 
@@ -126,6 +136,8 @@ const isProcessingFile = ref(false);
 const fileInput = ref(null);
 const readerEl = ref(null);
 const router = useRouter();
+const config = useRuntimeConfig();
+const { user, fetchSelf } = useAuth();
 const pendingMatch = ref(false);
 let lastNormalized = "";
 let matchCount = 0;
@@ -135,10 +147,12 @@ const cooldownMessage = ref("");
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
 let scanner;
+let battleSocket;
 
 let postingLock = false;
 
 onMounted(async () => {
+  await fetchSelf();
   // Client-only import (SSR-safe)
   const mod = await import("html5-qrcode");
   Html5Qrcode = mod.Html5Qrcode;
@@ -181,6 +195,9 @@ async function postScan(payload) {
     // Store both request + response for debugging/UI
     lastPayload.value = { ...payload, response: res };
     scanResult.value = res;
+    if (res?.outcome === "BATTLE") {
+      await startBattleFromScan(res);
+    }
     return res;
   } catch (e) {
     const retryAt = extractRetryAt(e);
@@ -195,6 +212,51 @@ async function postScan(payload) {
       String(e);
     throw e;
   }
+}
+
+function getSocketPath() {
+  return import.meta.env.PROD
+    ? "https://www.cartoonreorbit.com"
+    : `http://localhost:${config.public.socketPort}`;
+}
+
+function ensureBattleSocket() {
+  if (battleSocket) return;
+  battleSocket = io(getSocketPath(), {
+    transports: ["websocket", "polling"],
+  });
+  battleSocket.on("battle:created", ({ battleId }) => {
+    if (battleId) router.push(`/monsters/${battleId}`);
+  });
+  battleSocket.on("battle:error", ({ message }) => {
+    error.value = message || "Failed to start battle.";
+  });
+}
+
+async function startBattleFromScan(res) {
+  let monsterId = res?.battle?.monsterId || null;
+  if (!monsterId) {
+    try {
+      const selected = await $fetch("/api/monsters/selected-monster");
+      monsterId = selected?.monster?.id || null;
+    } catch {}
+  }
+  if (!monsterId) {
+    error.value = "No selected monster available for battle.";
+    return;
+  }
+  try {
+    await $fetch("/api/monsters/select", {
+      method: "POST",
+      body: { id: monsterId },
+    });
+  } catch {}
+  ensureBattleSocket();
+  battleSocket.emit("battle:create", {
+    player1UserId: user.value?.id,
+    player1MonsterId: monsterId,
+    opponent: { type: "AI" },
+  });
 }
 
 async function start() {
@@ -389,6 +451,7 @@ const scanTypeLabel = computed(() => {
   if (type === "NOTHING") return "Nothing";
   if (type === "ITEM") return "Item";
   if (type === "MONSTER") return "Monster";
+  if (type === "BATTLE") return "Battle";
   return "Unknown";
 });
 
@@ -464,6 +527,10 @@ function setCooldown(retryAt) {
 
 onBeforeUnmount(async () => {
   await stop();
+  if (battleSocket) {
+    battleSocket.disconnect();
+    battleSocket = null;
+  }
 });
 </script>
 
