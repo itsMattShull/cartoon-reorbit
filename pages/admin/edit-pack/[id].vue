@@ -79,6 +79,31 @@
               class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"/>
             <label class="select-none text-sm">List in cMart</label>
           </div>
+
+          <!-- sell-out behavior -->
+          <div class="lg:col-span-2 space-y-2">
+            <p class="text-sm font-medium">Pack sell-out behavior</p>
+            <div class="flex flex-col gap-2 text-sm text-gray-700">
+              <label class="inline-flex items-start gap-2">
+                <input
+                  v-model="sellOutBehavior"
+                  type="radio"
+                  value="REMOVE_ON_ANY_RARITY_EMPTY"
+                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+                />
+                <span>Remove pack when any rarity sells out</span>
+              </label>
+              <label class="inline-flex items-start gap-2">
+                <input
+                  v-model="sellOutBehavior"
+                  type="radio"
+                  value="KEEP_IF_SINGLE_RARITY_EMPTY"
+                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+                />
+                <span>Keep pack even if a rarity is sold out</span>
+              </label>
+            </div>
+          </div>
         </section>
 
         <!-- 2️⃣  ADD / REMOVE CTOONS ---------------------------------------- -->
@@ -208,6 +233,7 @@ const name        = ref('')
 const price       = ref(0)
 const description = ref('')
 const inCmart     = ref(true)
+const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
 
 /* ---------------- thumbnail upload ---------------- */
 const fileInput    = ref(null)
@@ -370,6 +396,7 @@ onMounted(async () => {
     price.value       = p.price
     description.value = p.description
     inCmart.value     = p.inCmart
+    sellOutBehavior.value = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
     imagePreview.value= p.imagePath
 
     /* rarity configs */
@@ -414,6 +441,7 @@ async function submit () {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
+    sellOutBehavior: sellOutBehavior.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({
       ctoonId: id,

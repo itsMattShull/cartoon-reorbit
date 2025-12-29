@@ -36,6 +36,11 @@ enum MonsterBattleEndReason {
   DISCONNECT
 }
 
+enum PackSellOutBehavior {
+  REMOVE_ON_ANY_RARITY_EMPTY
+  KEEP_IF_SINGLE_RARITY_EMPTY
+}
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -430,6 +435,7 @@ model Pack {
   price       Int      @default(0)
   imagePath   String?
   inCmart     Boolean  @default(false)
+  sellOutBehavior PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -64,6 +64,11 @@ function validateMeta (meta) {
   const probs = meta.rarityConfigs.map(r => r.probabilityPercent)
   if (!probs.some(p => p === 100)) throw createError({ statusCode: 400, statusMessage: 'At least one rarity must have 100% probability' })
   if (probs.some(p => p < 1 || p > 100)) throw createError({ statusCode: 400, statusMessage: 'Probabilities must be 1–100' })
+
+  const allowedBehaviors = new Set(['REMOVE_ON_ANY_RARITY_EMPTY', 'KEEP_IF_SINGLE_RARITY_EMPTY'])
+  if (meta.sellOutBehavior && !allowedBehaviors.has(meta.sellOutBehavior)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid sellOutBehavior value' })
+  }
 }
 
 /* ─────────── main handler ───────── */
@@ -111,6 +116,7 @@ export default defineEventHandler(async (event) => {
         price:       meta.price ?? 0,
         description: meta.description ?? null,
         inCmart:     !!meta.inCmart,
+        sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
         ...(imagePath ? { imagePath } : {})
       }
     })

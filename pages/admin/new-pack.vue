@@ -114,6 +114,31 @@
             List in cMart (uncheck to save as draft).
           </label>
         </div>
+
+        <!-- Sell-out behavior -->
+        <div class="lg:col-span-2 space-y-2">
+          <p class="text-sm font-medium">Pack sell-out behavior</p>
+          <div class="flex flex-col gap-2 text-sm text-gray-700">
+            <label class="inline-flex items-start gap-2">
+              <input
+                v-model="sellOutBehavior"
+                type="radio"
+                value="REMOVE_ON_ANY_RARITY_EMPTY"
+                class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+              />
+              <span>Remove pack when any rarity sells out</span>
+            </label>
+            <label class="inline-flex items-start gap-2">
+              <input
+                v-model="sellOutBehavior"
+                type="radio"
+                value="KEEP_IF_SINGLE_RARITY_EMPTY"
+                class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+              />
+              <span>Keep pack even if a rarity is sold out</span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <!-- 2️⃣  SEARCH / ADD CTOONS ---------------------------------------- -->
@@ -343,6 +368,7 @@ const name        = ref('')
 const price       = ref(900)
 const description = ref('')
 const inCmart     = ref(true)
+const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
 
 // 2️⃣ Thumbnail upload
 const fileInput    = ref(null)
@@ -607,6 +633,7 @@ async function submit() {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
+    sellOutBehavior: sellOutBehavior.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({ ctoonId: id, weight: weights.value[id] }))
   }

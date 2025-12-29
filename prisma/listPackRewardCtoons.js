@@ -5,6 +5,7 @@ async function main() {
     where: {
       inCmart: false,
       quantity: { not: null },
+      rarity: { in: ['Common', 'Uncommon', 'Rare', 'Very Rare'] },
       packOptions: { some: {} }
     },
     select: {

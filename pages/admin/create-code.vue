@@ -55,7 +55,7 @@
               <option
                 v-for="ct in filteredCtoons(pc.ctoonName)"
                 :key="ct.id"
-                :value="ct.name"
+                :value="ctoonLabel(ct)"
               />
             </datalist>
 
@@ -68,8 +68,8 @@
             />
 
             <img
-              v-if="findCtoon(pc.ctoonName)?.assetPath"
-              :src="findCtoon(pc.ctoonName).assetPath"
+              v-if="findCtoonByInput(pc.ctoonName)?.assetPath"
+              :src="findCtoonByInput(pc.ctoonName).assetPath"
               class="w-8 h-8 object-cover rounded"
               alt="cToon preview"
             />
@@ -120,15 +120,15 @@
               <label class="block font-medium mb-1">Pool cToons</label>
               <div v-for="(row, idx) in poolItems" :key="'pool-'+idx" class="flex items-center gap-2 mb-2">
                 <datalist :id="`pool-ctoons-${idx}`">
-                  <option v-for="ct in filteredCtoons(row.ctoonName)" :key="ct.id" :value="ct.name" />
+                  <option v-for="ct in filteredCtoons(row.ctoonName)" :key="ct.id" :value="ctoonLabel(ct)" />
                 </datalist>
 
                 <input v-model="row.ctoonName" :list="`pool-ctoons-${idx}`" class="flex-1 border rounded p-2" placeholder="Type 3+ characters" />
 
                 <!-- NEW: preview -->
                 <img
-                  v-if="findCtoon(row.ctoonName)?.assetPath"
-                  :src="findCtoon(row.ctoonName).assetPath"
+                  v-if="findCtoonByInput(row.ctoonName)?.assetPath"
+                  :src="findCtoonByInput(row.ctoonName).assetPath"
                   class="w-8 h-8 object-cover rounded"
                   alt="cToon preview"
                 />
@@ -156,7 +156,7 @@
               <option
                 v-for="ct in filteredCtoons(rc.ctoonName)"
                 :key="ct.id"
-                :value="ct.name"
+                :value="ctoonLabel(ct)"
               />
             </datalist>
 
@@ -175,8 +175,8 @@
             />
 
             <img
-              v-if="findCtoon(rc.ctoonName)"
-              :src="findCtoon(rc.ctoonName).assetPath"
+              v-if="findCtoonByInput(rc.ctoonName)"
+              :src="findCtoonByInput(rc.ctoonName).assetPath"
               class="w-8 h-8 object-cover rounded"
               alt="cToon preview"
             />
@@ -288,15 +288,49 @@ function filteredCtoons(input) {
   const v = (input || '').trim()
   if (v.length < 2) return []
   return ctoonOptions.value.filter(ct =>
-    ct.name.toLowerCase().includes(v.toLowerCase())
+    ct.name.toLowerCase().includes(v.toLowerCase()) ||
+    ct.id.toLowerCase().includes(v.toLowerCase())
   )
+}
+
+function ctoonLabel(ct) {
+  return `${ct.name} (${ct.id})`
 }
 
 // list of all cToons from the DB
 const ctoonOptions = ref([])
 
-function findCtoon(name) {
-  return ctoonOptions.value.find(ct => ct.name === name)
+function resolveCtoonId(input) {
+  const v = (input || '').trim()
+  if (!v) return { id: null }
+  const direct = ctoonOptions.value.find(ct => ct.id === v)
+  if (direct) return { id: direct.id }
+  const idMatch = v.match(/\(([^)]+)\)\s*$/)
+  if (idMatch) {
+    const id = idMatch[1].trim()
+    const byId = ctoonOptions.value.find(ct => ct.id === id)
+    if (byId) return { id: byId.id }
+  }
+  const matches = ctoonOptions.value.filter(ct => ct.name === v)
+  if (matches.length === 1) return { id: matches[0].id }
+  if (matches.length > 1) return { id: null, reason: 'ambiguous', name: v }
+  return { id: null, reason: 'notfound', name: v }
+}
+
+function findCtoonByInput(input) {
+  const v = (input || '').trim()
+  if (!v) return null
+  const direct = ctoonOptions.value.find(ct => ct.id === v)
+  if (direct) return direct
+  const idMatch = v.match(/\(([^)]+)\)\s*$/)
+  if (idMatch) {
+    const id = idMatch[1].trim()
+    const byId = ctoonOptions.value.find(ct => ct.id === id)
+    if (byId) return byId
+  }
+  const matches = ctoonOptions.value.filter(ct => ct.name === v)
+  if (matches.length === 1) return matches[0]
+  return null
 }
 
 const highlighted = ref('')
@@ -369,32 +403,20 @@ async function submitForm() {
     })
     .filter(Boolean)
 
-  // prepare ctoon array, looking up IDs by name
-  const validCtoons = []
-  for (const r of ctoonRewards.value) {
-    const name = r.ctoonName.trim()
-    if (!name || r.quantity < 1) continue
-    const match = ctoonOptions.value.find(ct => ct.name === name)
-    if (!match) {
-      error.value = `Unrecognized cToon: “${name}”`
-      return
-    }
-    validCtoons.push({
-      ctoonId: match.id,
-      quantity: r.quantity
-    })
-  }
-
   const validPrereqs = []
   for (const p of prereqCtoons.value) {
     const name = p.ctoonName.trim()
     if (!name) continue
-    const match = ctoonOptions.value.find(ct => ct.name === name)
-    if (!match) {
-      error.value = `Unrecognized prerequisite cToon: “${name}”`
+    const resolved = resolveCtoonId(name)
+    if (!resolved.id) {
+      if (resolved.reason === 'ambiguous') {
+        error.value = `Multiple prerequisite cToons named “${resolved.name}”. Select one by ID from the dropdown.`
+      } else {
+        error.value = `Unrecognized prerequisite cToon: “${resolved.name}”`
+      }
       return
     }
-    validPrereqs.push({ ctoonId: match.id })
+    validPrereqs.push({ ctoonId: resolved.id })
   }
 
   // build payload
@@ -406,9 +428,16 @@ async function submitForm() {
     for (const r of poolItems.value) {
       const name = (r.ctoonName || '').trim()
       if (!name) continue
-      const match = ctoonOptions.value.find(ct => ct.name === name)
-      if (!match) { error.value = `Unrecognized cToon in pool: “${name}”`; return }
-      validPool.push({ ctoonId: match.id, weight: Number(r.weight) || 1 })
+      const resolved = resolveCtoonId(name)
+      if (!resolved.id) {
+        if (resolved.reason === 'ambiguous') {
+          error.value = `Multiple cToons named “${resolved.name}”. Select one by ID from the dropdown.`
+        } else {
+          error.value = `Unrecognized cToon in pool: “${resolved.name}”`
+        }
+        return
+      }
+      validPool.push({ ctoonId: resolved.id, weight: Number(r.weight) || 1 })
     }
     if (validPool.length === 0) { error.value = 'Add at least one cToon to the pool.'; return }
     if (poolUniqueCount.value < 1) { error.value = 'Number to give out must be at least 1.'; return }
@@ -419,9 +448,16 @@ async function submitForm() {
     for (const r of ctoonRewards.value) {
       const name = (r.ctoonName||'').trim()
       if (!name || r.quantity < 1) continue
-      const found = ctoonOptions.value.find(ct => ct.name === name)
-      if (!found) { error.value = `Unrecognized cToon: “${name}”`; return }
-      validCtoons.push({ ctoonId: found.id, quantity: r.quantity })
+      const resolved = resolveCtoonId(name)
+      if (!resolved.id) {
+        if (resolved.reason === 'ambiguous') {
+          error.value = `Multiple cToons named “${resolved.name}”. Select one by ID from the dropdown.`
+        } else {
+          error.value = `Unrecognized cToon: “${resolved.name}”`
+        }
+        return
+      }
+      validCtoons.push({ ctoonId: resolved.id, quantity: r.quantity })
     }
     rewardBlock.ctoons = validCtoons
   }

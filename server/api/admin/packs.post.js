@@ -35,6 +35,10 @@ function validatePayload (meta) {
   if (dupRarity) throw createError({ statusCode: 400, statusMessage: `Duplicate rarity \"${dupRarity}\"` })
   const dupCtoon = meta.ctoonOptions.map(o => o.ctoonId).find((r, i, a) => a.indexOf(r) !== i)
   if (dupCtoon) throw createError({ statusCode: 400, statusMessage: `Duplicate cToon \"${dupCtoon}\"` })
+  const allowedBehaviors = new Set(['REMOVE_ON_ANY_RARITY_EMPTY', 'KEEP_IF_SINGLE_RARITY_EMPTY'])
+  if (meta.sellOutBehavior && !allowedBehaviors.has(meta.sellOutBehavior)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid sellOutBehavior value' })
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -93,7 +97,8 @@ export default defineEventHandler(async (event) => {
         price: meta.price ?? 0,
         description: meta.description ?? null,
         imagePath,
-        inCmart: meta.inCmart ?? false
+        inCmart: meta.inCmart ?? false,
+        sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY'
       }
     })
 
