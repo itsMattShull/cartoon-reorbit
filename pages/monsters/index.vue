@@ -94,7 +94,7 @@
             left: spriteLeft,
             top: spriteTop,
             width: spriteDrawW + 'px',
-            height: spriteDrawH + 'px',
+            height: spriteHeight,
             transform: spriteTransform,
           }"
           alt="sprite"
@@ -108,7 +108,7 @@
             left: opponentSpriteLeft,
             top: opponentSpriteTop,
             width: spriteDrawW + 'px',
-            height: spriteDrawH + 'px',
+            height: opponentSpriteHeight,
             transform: opponentSpriteTransform,
           }"
           alt="opponent sprite"
@@ -330,7 +330,9 @@ const battleWinnerLabel = computed(() => {
 
 const closeBattleModal = () => {
   battleOutcome.value = null
-  router.push('/monsters')
+  router.push('/monsters').then(() => {
+    loadSelectedMonster()
+  })
 }
 
 const menuEntries = computed(() => {
@@ -601,6 +603,8 @@ function drawBackground() {
 const spriteLeft = ref('0px')
 const spriteTop = ref('0px')
 const spriteTransform = ref('scaleX(1)')
+const spriteHeight = ref(`${spriteDrawH}px`)
+const opponentSpriteHeight = ref(`${spriteDrawH}px`)
 
 function getSpriteHeight(imgEl) {
   const img = imgEl
@@ -618,11 +622,13 @@ function drawSprite() {
     const rightH = getSpriteHeight(opponentSpriteEl.value)
     const yLeft = floorY - leftH
     const yRight = floorY - rightH
+    spriteHeight.value = `${leftH}px`
+    opponentSpriteHeight.value = `${rightH}px`
     spriteLeft.value = `${BORDER_W + leftX}px`
-    spriteTop.value = `${BORDER_W + yLeft + 60}px`
+    spriteTop.value = `${BORDER_W + yLeft + 10}px`
     spriteTransform.value = 'scaleX(1)'
     opponentSpriteLeft.value = `${BORDER_W + rightX}px`
-    opponentSpriteTop.value = `${BORDER_W + yRight + 20}px`
+    opponentSpriteTop.value = `${BORDER_W + yRight + 10}px`
     opponentSpriteTransform.value = 'scaleX(-1)'
     return
   }
@@ -637,8 +643,9 @@ function drawSprite() {
   const y = floorY - spriteH
 
   // Update overlayed <img> position and flip (account for canvas border)
+  spriteHeight.value = `${spriteH}px`
   spriteLeft.value = `${BORDER_W + x}px`
-  spriteTop.value = `${BORDER_W + y + 60 + Math.round(jumpY)}px`
+  spriteTop.value = `${BORDER_W + y + 10 + Math.round(jumpY)}px`
   spriteTransform.value = dir === -1 ? 'scaleX(-1)' : 'scaleX(1)'
 
   // Update item position to be in front of the monster near the ground
@@ -1097,6 +1104,7 @@ watch(battleId, (nextId) => {
     if (!isCutscene.value && isLoaded.value && walkSpriteSrc.value) {
       enterState('walk')
     }
+    loadSelectedMonster()
     return
   }
   if (battleSocket?.connected) joinBattle(nextId)
