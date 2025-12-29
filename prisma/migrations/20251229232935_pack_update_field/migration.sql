@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "PackSellOutBehavior" AS ENUM ('REMOVE_ON_ANY_RARITY_EMPTY', 'KEEP_IF_SINGLE_RARITY_EMPTY');
+
+-- AlterTable
+ALTER TABLE "Pack" ADD COLUMN     "sellOutBehavior" "PackSellOutBehavior" NOT NULL DEFAULT 'REMOVE_ON_ANY_RARITY_EMPTY';
