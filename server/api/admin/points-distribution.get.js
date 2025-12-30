@@ -1,6 +1,6 @@
 // server/api/admin/points-distribution.get.js
 
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -16,7 +16,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Build 1 000-point buckets, exclude a specific user, fill gaps
+  // 2) Build buckets, exclude a specific user, fill gaps
+  const { bucketSize: rawBucketSize } = getQuery(event)
+  const bucketSize = [500, 1000, 5000, 10000].includes(Number(rawBucketSize))
+    ? Number(rawBucketSize)
+    : 1000
+
   const rows = await prisma.$queryRaw`
     WITH all_pts AS (
       SELECT
@@ -29,18 +34,18 @@ export default defineEventHandler(async (event) => {
     ),
     counts AS (
       SELECT
-        (floor(pts / 1000)::int * 1000) AS bucket_start,
+        (floor(pts / ${bucketSize})::int * ${bucketSize}) AS bucket_start,
         COUNT(*)::int                  AS cnt
       FROM all_pts
       GROUP BY bucket_start
     ),
     max_bucket AS (
-      SELECT (floor(MAX(pts) / 1000)::int * 1000) AS max_b
+      SELECT (floor(MAX(pts) / ${bucketSize})::int * ${bucketSize}) AS max_b
       FROM all_pts
     ),
     buckets AS (
       -- now both 0 and max_b are ints
-      SELECT generate_series(0, (SELECT max_b FROM max_bucket), 1000) AS bucket_start
+      SELECT generate_series(0, (SELECT max_b FROM max_bucket), ${bucketSize}) AS bucket_start
     )
     SELECT
       b.bucket_start,
@@ -54,7 +59,7 @@ export default defineEventHandler(async (event) => {
   // 3) Shape payload with human-readable labels
   return rows.map(r => {
     const start = Number(r.bucket_start)
-    const end   = start + 999
+    const end   = start + (bucketSize - 1)
     return {
       bucketStart: start,
       bucketEnd:   end,

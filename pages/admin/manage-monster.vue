@@ -9,6 +9,7 @@
         <nav class="flex gap-4">
           <button class="px-3 py-2 border-b-2" :class="activeTab==='Game Config' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Game Config'">Game Config</button>
           <button class="px-3 py-2 border-b-2" :class="activeTab==='Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Monsters'">Monsters</button>
+          <button class="px-3 py-2 border-b-2" :class="activeTab==='AI Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='AI Monsters'">AI Monsters</button>
           <button class="px-3 py-2 border-b-2" :class="activeTab==='Items' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Items'">Items</button>
         </nav>
       </div>
@@ -35,6 +36,10 @@
             <div>
               <label class="block text-sm font-medium text-gray-700">Odds — Monster</label>
               <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsMonster" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Odds — Battle</label>
+              <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsBattle" />
             </div>
           </div>
           <div class="text-xs mt-1" :class="sumOddsOk ? 'text-green-700' : 'text-red-700'">Sum: {{ sumOddsDisplay }}</div>
@@ -127,12 +132,22 @@
           </div>
         </div>
 
-        <!-- Variance & Cooldown -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <!-- Variance, Decay, Daily Limit & Cooldown -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
             <label class="block text-sm font-medium text-gray-700">Monster Stat Variance</label>
             <input type="number" class="input" min="0" max="50" step="1" v-model.number="variancePct" />
             <p class="text-xs text-gray-500 mt-1">Percent variability applied per monster instance when rolled (e.g., 12 means ±12%).</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Inactivity HP Decay (hours)</label>
+            <input type="number" class="input" min="0" max="720" step="1" v-model.number="decayHours" />
+            <p class="text-xs text-gray-500 mt-1">Hours until the last-selected monster reaches 0 HP with no activity. Set to 0 to disable.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Daily Scan Limit</label>
+            <input type="number" class="input" min="0" max="500" step="1" v-model.number="dailyScanLimit" />
+            <p class="text-xs text-gray-500 mt-1">Max scans per user per day. Resets at 8am CST. Set to 0 to disable.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Barcode Cooldown (days)</label>
@@ -357,6 +372,172 @@
         </div>
       </section>
 
+      <!-- AI Monsters -->
+      <section v-if="activeTab==='AI Monsters'" class="space-y-6">
+        <div class="text-sm text-gray-600">Create, edit, and delete AI monster templates used for battles.</div>
+
+        <div class="flex justify-end">
+          <button class="btn-primary" @click="openAddAiMonsterModal">Add AI Monster</button>
+        </div>
+
+        <transition name="fade">
+          <div v-if="showAddAiMonsterModal" class="fixed inset-0 z-50">
+            <div class="absolute inset-0 bg-black/40" @click="closeAddAiMonsterModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-4">
+              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addAiMonsterTitle">
+                <div class="px-6 py-4 border-b flex items-center justify-between">
+                  <h3 id="addAiMonsterTitle" class="text-lg font-semibold">Add AI Monster</h3>
+                  <button class="text-gray-500 hover:text-gray-700" @click="closeAddAiMonsterModal" aria-label="Close">✕</button>
+                </div>
+                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input class="input" placeholder="e.g., Shockjaw" v-model="newAiMonster.name" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
+                    <input class="input" placeholder="e.g., Electric" v-model="newAiMonster.type" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
+                    <select class="input" v-model="newAiMonster.rarity">
+                      <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                      <div>
+                        <label class="block text-xs text-gray-600">Base HP</label>
+                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseHp" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600">Base ATK</label>
+                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseAtk" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600">Base DEF</label>
+                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseDef" />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Images</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'walking')" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'standing')" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'jumping')" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="px-6 py-4 border-t flex justify-end gap-3">
+                  <button class="px-4 py-2 rounded border" @click="closeAddAiMonsterModal">Cancel</button>
+                  <button class="btn-primary" :disabled="addingAiMonster" @click="confirmAddAiMonster">
+                    <span v-if="!addingAiMonster">Create</span><span v-else>Saving…</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <transition name="fade">
+          <div v-if="showEditAiMonsterModal" class="fixed inset-0 z-50">
+            <div class="absolute inset-0 bg-black/40" @click="closeEditAiMonsterModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-4">
+              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editAiMonsterTitle">
+                <div class="px-6 py-4 border-b flex items-center justify-between">
+                  <h3 id="editAiMonsterTitle" class="text-lg font-semibold">Edit AI Monster</h3>
+                  <button class="text-gray-500 hover:text-gray-700" @click="closeEditAiMonsterModal" aria-label="Close">✕</button>
+                </div>
+                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input class="input" v-model="editAiMonster.name" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
+                    <input class="input" v-model="editAiMonster.type" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
+                    <select class="input" v-model="editAiMonster.rarity">
+                      <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                      <div>
+                        <label class="block text-xs text-gray-600">Base HP</label>
+                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseHp" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600">Base ATK</label>
+                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseAtk" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600">Base DEF</label>
+                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseDef" />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'walking')" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'standing')" />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
+                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'jumping')" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="px-6 py-4 border-t flex justify-end gap-3">
+                  <button class="px-4 py-2 rounded border" @click="closeEditAiMonsterModal">Cancel</button>
+                  <button class="btn-primary" :disabled="savingAiMonster" @click="saveAiMonster(editAiMonsterId)">
+                    <span v-if="!savingAiMonster">Save</span><span v-else>Saving…</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <div v-if="!aiMonsters.length" class="text-sm text-gray-500">No AI monsters yet.</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div v-for="m in aiMonsters" :key="m.id" class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-lg font-semibold text-gray-800">{{ m.name }}</div>
+                <div class="text-sm text-gray-600">{{ m.type }} · {{ rarityLabel(m.rarity) }}</div>
+                <div class="text-sm text-gray-600 mt-1">HP {{ m.baseHp }} · ATK {{ m.baseAtk }} · DEF {{ m.baseDef }}</div>
+              </div>
+              <div class="flex gap-2">
+                <button class="px-3 py-2 rounded border border-gray-300 text-gray-700" @click="startEditAiMonster(m)">Edit</button>
+                <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeAiMonster(m.id)">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Items -->
       <section v-if="activeTab==='Items'" class="space-y-6">
         <div class="text-sm text-gray-600">Create, edit, and delete items.</div>
@@ -564,7 +745,10 @@ function showToast(type, msg) { toast.value = { type, msg }; setTimeout(() => { 
   const oddsNothing = ref(0.20)
   const oddsItem    = ref(0.30)
   const oddsMonster = ref(0.50)
+  const oddsBattle  = ref(0.00)
   const variancePct = ref(12)
+  const decayHours = ref(48)
+  const dailyScanLimit = ref(20)
   const cooldownDays = ref(7)
   const rarityPercents = reactive({ Common: 60, Uncommon: 25, Rare: 10, VeryRare: 4, CrazyRare: 1 })
   const itemRarityPercents = reactive({ Common: 70, Rare: 25, CrazyRare: 5 })
@@ -577,7 +761,7 @@ const rarityDisplayOrder = [
   { key: 'Common',    label: 'Common' }
 ]
 
-const sumOdds = computed(() => (Number(oddsNothing.value) || 0) + (Number(oddsItem.value) || 0) + (Number(oddsMonster.value) || 0))
+const sumOdds = computed(() => (Number(oddsNothing.value) || 0) + (Number(oddsItem.value) || 0) + (Number(oddsMonster.value) || 0) + (Number(oddsBattle.value) || 0))
 const sumOddsDisplay = computed(() => sumOdds.value.toFixed(2))
 const sumOddsOk = computed(() => Math.abs(sumOdds.value - 1) < 1e-6)
 
@@ -588,7 +772,10 @@ const savingCfg = ref(false)
     if (cfg?.oddsNothing != null) oddsNothing.value = Number(cfg.oddsNothing)
     if (cfg?.oddsItem    != null) oddsItem.value    = Number(cfg.oddsItem)
     if (cfg?.oddsMonster != null) oddsMonster.value = Number(cfg.oddsMonster)
+    if (cfg?.oddsBattle  != null) oddsBattle.value  = Number(cfg.oddsBattle)
     if (cfg?.monsterStatVariancePct != null) variancePct.value = Math.round(Number(cfg.monsterStatVariancePct) * 100)
+    if (cfg?.monsterInactivityDecayHours != null) decayHours.value = Number(cfg.monsterInactivityDecayHours)
+    if (cfg?.monsterDailyScanLimit != null) dailyScanLimit.value = Number(cfg.monsterDailyScanLimit)
     if (cfg?.barcodeCooldownDays != null) cooldownDays.value = Number(cfg.barcodeCooldownDays)
       const c = cfg?.monsterRarityChances || {}
       rarityPercents.Common    = Number(c.Common ?? c.COMMON ?? rarityPercents.Common)
@@ -616,9 +803,12 @@ async function saveConfig() {
         oddsNothing: Number(oddsNothing.value),
         oddsItem: Number(oddsItem.value),
         oddsMonster: Number(oddsMonster.value),
+        oddsBattle: Number(oddsBattle.value),
         monsterRarityChances: { ...rarityPercents },
         itemRarityChances: { ...itemRarityPercents },
         monsterStatVariancePct: Number(variancePct.value), // percent 0..50
+        monsterInactivityDecayHours: Number(decayHours.value),
+        monsterDailyScanLimit: Number(dailyScanLimit.value),
         barcodeCooldownDays: Number(cooldownDays.value)
       }
     })
@@ -784,6 +974,134 @@ async function removeSpecies(index) {
   finally { deletingSpecies.value = false }
 }
 
+// AI Monsters
+const aiMonsters = ref([])
+const addingAiMonster = ref(false)
+const savingAiMonster = ref(false)
+const deletingAiMonster = ref(false)
+const showAddAiMonsterModal = ref(false)
+const showEditAiMonsterModal = ref(false)
+
+const newAiMonster = reactive({ name: '', type: '', rarity: 'COMMON', baseHp: 10, baseAtk: 5, baseDef: 5 })
+const newAiMonsterFiles = reactive({ walking: null, standing: null, jumping: null })
+const editAiMonsterId = ref(null)
+const editAiMonster = reactive({ name: '', type: '', rarity: 'COMMON', baseHp: 1, baseAtk: 1, baseDef: 1 })
+const editAiMonsterFiles = reactive({ walking: null, standing: null, jumping: null })
+
+function applyPresetToNewAi(rKey) {
+  const p = rarityBasePresets[rKey] || rarityBasePresets.COMMON
+  newAiMonster.baseHp = p.hp
+  newAiMonster.baseAtk = p.atk
+  newAiMonster.baseDef = p.def
+}
+function applyPresetToEditAi(rKey) {
+  const p = rarityBasePresets[rKey] || rarityBasePresets.COMMON
+  editAiMonster.baseHp = p.hp
+  editAiMonster.baseAtk = p.atk
+  editAiMonster.baseDef = p.def
+}
+
+watch(() => newAiMonster.rarity, (r) => applyPresetToNewAi(r))
+watch(() => editAiMonster.rarity, (r) => { if (editAiMonsterId.value) applyPresetToEditAi(r) })
+
+async function loadAiMonsters() {
+  try {
+    const res = await $fetch('/api/admin/ai-monsters')
+    aiMonsters.value = Array.isArray(res?.monsters) ? res.monsters : []
+  } catch (e) { console.error('Failed to load AI monsters', e) }
+}
+
+function openAddAiMonsterModal() {
+  Object.assign(newAiMonster, { name: '', type: '', rarity: 'COMMON', baseHp: 10, baseAtk: 5, baseDef: 5 })
+  Object.assign(newAiMonsterFiles, { walking: null, standing: null, jumping: null })
+  applyPresetToNewAi(newAiMonster.rarity)
+  showAddAiMonsterModal.value = true
+}
+function closeAddAiMonsterModal() { showAddAiMonsterModal.value = false }
+
+function onAiMonsterFileChange(e, which) {
+  const file = e?.target?.files?.[0] || null
+  if (!file) return
+  if (which === 'walking') newAiMonsterFiles.walking = file
+  else if (which === 'standing') newAiMonsterFiles.standing = file
+  else if (which === 'jumping') newAiMonsterFiles.jumping = file
+}
+
+async function confirmAddAiMonster() {
+  addingAiMonster.value = true
+  try {
+    if (!newAiMonsterFiles.walking || !newAiMonsterFiles.standing || !newAiMonsterFiles.jumping) {
+      showToast('error', 'Please upload Walking, Standing Still, and Jumping images')
+      return
+    }
+    const fd = new FormData()
+    fd.append('name', newAiMonster.name)
+    fd.append('type', newAiMonster.type)
+    fd.append('rarity', newAiMonster.rarity)
+    fd.append('baseHp', String(newAiMonster.baseHp))
+    fd.append('baseAtk', String(newAiMonster.baseAtk))
+    fd.append('baseDef', String(newAiMonster.baseDef))
+    fd.append('walking', newAiMonsterFiles.walking)
+    fd.append('standingstill', newAiMonsterFiles.standing)
+    fd.append('jumping', newAiMonsterFiles.jumping)
+    const res = await $fetch('/api/admin/ai-monsters', { method: 'POST', body: fd })
+    if (res?.monster) aiMonsters.value.unshift(res.monster)
+    showToast('ok', 'AI monster added')
+    closeAddAiMonsterModal()
+  } catch (e) { showToast('error', e?.statusMessage || 'Add failed') }
+  finally { addingAiMonster.value = false }
+}
+
+function startEditAiMonster(m) {
+  editAiMonsterId.value = m.id
+  Object.assign(editAiMonster, m)
+  Object.assign(editAiMonsterFiles, { walking: null, standing: null, jumping: null })
+  showEditAiMonsterModal.value = true
+}
+function closeEditAiMonsterModal() { showEditAiMonsterModal.value = false; editAiMonsterId.value = null }
+
+function onEditAiMonsterFileChange(e, which) {
+  const file = e?.target?.files?.[0] || null
+  if (!file) return
+  if (which === 'walking') editAiMonsterFiles.walking = file
+  else if (which === 'standing') editAiMonsterFiles.standing = file
+  else if (which === 'jumping') editAiMonsterFiles.jumping = file
+}
+
+async function saveAiMonster(id) {
+  if (!id) return
+  savingAiMonster.value = true
+  try {
+    const fd = new FormData()
+    fd.append('name', editAiMonster.name)
+    fd.append('type', editAiMonster.type)
+    fd.append('rarity', editAiMonster.rarity)
+    fd.append('baseHp', String(editAiMonster.baseHp))
+    fd.append('baseAtk', String(editAiMonster.baseAtk))
+    fd.append('baseDef', String(editAiMonster.baseDef))
+    if (editAiMonsterFiles.walking) fd.append('walking', editAiMonsterFiles.walking)
+    if (editAiMonsterFiles.standing) fd.append('standingstill', editAiMonsterFiles.standing)
+    if (editAiMonsterFiles.jumping) fd.append('jumping', editAiMonsterFiles.jumping)
+    const res = await $fetch(`/api/admin/ai-monsters/${id}`, { method: 'PUT', body: fd })
+    const i = aiMonsters.value.findIndex(m => m.id === id)
+    if (i !== -1) aiMonsters.value[i] = res.monster
+    showToast('ok', 'AI monster saved')
+    closeEditAiMonsterModal()
+  } catch (e) { showToast('error', e?.statusMessage || 'Save failed') }
+  finally { savingAiMonster.value = false }
+}
+
+async function removeAiMonster(id) {
+  if (!confirm('Delete this AI monster?')) return
+  deletingAiMonster.value = true
+  try {
+    await $fetch(`/api/admin/ai-monsters/${id}`, { method: 'DELETE' })
+    aiMonsters.value = aiMonsters.value.filter(m => m.id !== id)
+    showToast('ok', 'AI monster deleted')
+  } catch (e) { showToast('error', e?.statusMessage || 'Delete failed') }
+  finally { deletingAiMonster.value = false }
+}
+
 // Items
 const items = ref([])
 const itemRarities = ['COMMON','RARE','CRAZY_RARE']
@@ -879,7 +1197,7 @@ async function removeItem(id) {
   finally { deletingItem.value = false }
 }
 
-onMounted(async () => { await Promise.all([loadConfig(), loadSpecies(), loadItems()]) })
+onMounted(async () => { await Promise.all([loadConfig(), loadSpecies(), loadAiMonsters(), loadItems()]) })
 </script>
 
 <style scoped>

@@ -16,36 +16,54 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 2. Find the previous user based on createdAt
-  const previousUser = await prisma.user.findFirst({
-    where: {
-      createdAt: { lt: currentUser.createdAt },
-      username: { not: null, notIn: [''] }
-    },
-    orderBy: { createdAt: 'desc' },
-    select: { username: true }
-  })
+  // 2. Find the previous user based on createdAt with at least 1 cToon in layoutData
+  const previousRows = await prisma.$queryRaw`
+    SELECT u."username"
+    FROM "User" u
+    JOIN "CZone" cz ON cz."userId" = u."id"
+    WHERE u."createdAt" < ${currentUser.createdAt}
+      AND u."username" IS NOT NULL
+      AND u."username" <> ''
+      AND COALESCE(
+        (
+          SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+          FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+        ),
+        0
+      ) >= 1
+    ORDER BY u."createdAt" DESC
+    LIMIT 1;
+  `
 
-  if (!previousUser) {
-    // Get the most recently created user (wrap around)
-    const latestUser = await prisma.user.findFirst({
-      where: {
-        username: { not: null, notIn: [''] }
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { username: true }
-    })
+  if (!previousRows || previousRows.length === 0) {
+    // Get the most recently created user with at least 1 cToon (wrap around)
+    const latestRows = await prisma.$queryRaw`
+      SELECT u."username"
+      FROM "User" u
+      JOIN "CZone" cz ON cz."userId" = u."id"
+      WHERE u."username" IS NOT NULL
+        AND u."username" <> ''
+        AND COALESCE(
+          (
+            SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+            FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+          ),
+          0
+        ) >= 1
+      ORDER BY u."createdAt" DESC
+      LIMIT 1;
+    `
 
-    if (!latestUser) {
+    if (!latestRows || latestRows.length === 0) {
       throw createError({
         statusCode: 404,
         statusMessage: 'No users in database'
       })
     }
 
-    return { username: latestUser.username }
+    return { username: latestRows[0].username }
   }
 
   // 3. Return the username
-  return { username: previousUser.username }
+  return { username: previousRows[0].username }
 })

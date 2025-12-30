@@ -12,7 +12,16 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
   // query params
-  const { page = '1', limit = '100', creator = '', status = '', hasBidder = '' } = getQuery(event)
+  const {
+    page = '1',
+    limit = '100',
+    creator = '',
+    status = '',
+    hasBidder = '',
+    ctoonName = '',
+    characters = '',
+    rarity = ''
+  } = getQuery(event)
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1)
   const take = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 100))
   const skip = (pageNum - 1) * take
@@ -20,9 +29,27 @@ export default defineEventHandler(async (event) => {
   // filters
   const where = {}
   if (status) where.status = String(status)
-  if (creator) where.creator = { username: String(creator) }
+  if (creator) {
+    where.creator = { username: { contains: String(creator), mode: 'insensitive' } }
+  }
   if (hasBidder === 'has') where.highestBidderId = { not: null }
   if (hasBidder === 'none') where.highestBidderId = null
+
+  const ctoonFilters = {}
+  if (ctoonName) {
+    ctoonFilters.name = { contains: String(ctoonName), mode: 'insensitive' }
+  }
+  if (rarity) ctoonFilters.rarity = String(rarity)
+  if (characters) {
+    const list = String(characters)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    if (list.length) ctoonFilters.characters = { hasSome: list }
+  }
+  if (Object.keys(ctoonFilters).length) {
+    where.userCtoon = { ctoon: ctoonFilters }
+  }
 
   const [total, rows] = await Promise.all([
     prisma.auction.count({ where }),

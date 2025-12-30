@@ -18,7 +18,9 @@ export default defineEventHandler(async (event) => {
 
   // ── 2. Parse & normalize timeframe (default 3m) + grouping (default weekly) ─
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
-  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly') ? rawGroupBy : 'weekly'
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'weekly'
 
   const now = new Date()
   const startDate = new Date(now)
@@ -73,6 +75,53 @@ export default defineEventHandler(async (event) => {
       LEFT JOIN stats s
         ON s.day = d.day
       ORDER BY d.day
+    `
+    return result
+  }
+
+  if (groupBy === 'monthly') {
+    // ── 3b. Monthly: % of users with ≥1 purchase within 1 day of signup ─────
+    const result = await prisma.$queryRaw`
+      WITH months AS (
+        SELECT generate_series(
+          date_trunc('month', ${startDate}),
+          date_trunc('month', now()),
+          '1 month'
+        ) AS month
+      ),
+      purchases AS (
+        SELECT
+          uc."userId",
+          MIN(uc."createdAt") AS first_purchase
+        FROM "UserCtoon" uc
+        WHERE uc."userPurchased" = TRUE
+        GROUP BY uc."userId"
+      ),
+      stats AS (
+        SELECT
+          date_trunc('month', u."createdAt") AS month,
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (
+            WHERE p.first_purchase <= u."createdAt" + INTERVAL '1 day'
+          )::int AS purchased
+        FROM "User" u
+        LEFT JOIN purchases p
+          ON p."userId" = u.id
+        WHERE u."createdAt" >= ${startDate}
+        GROUP BY month
+      )
+      SELECT
+        to_char(m.month, 'YYYY-MM-DD') AS month,
+        ROUND(
+          CASE
+            WHEN COALESCE(s.total, 0) = 0 THEN 0
+            ELSE (s.purchased::decimal * 100 / s.total)
+          END
+        , 0)::int AS percentage
+      FROM months m
+      LEFT JOIN stats s
+        ON s.month = m.month
+      ORDER BY m.month
     `
     return result
   }

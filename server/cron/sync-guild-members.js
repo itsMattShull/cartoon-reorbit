@@ -1,6 +1,9 @@
 // server/cron/sync-guild-members.js
 import 'dotenv/config'
 import fetch from 'node-fetch'
+import { readFile } from 'node:fs/promises'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
 import { achievementsQueue } from '../../server/utils/queues.js'
@@ -8,6 +11,14 @@ import { achievementsQueue } from '../../server/utils/queues.js'
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
 const DISCORD_API = 'https://discord.com/api/v10'
+const ANNOUNCEMENTS_CHANNEL_ID = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const baseDir = process.env.NODE_ENV === 'production'
+  ? join(__dirname, '..', '..')
+  : process.cwd()
+const announcementsDir = process.env.NODE_ENV === 'production'
+  ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
+  : join(baseDir, 'public', 'announcements')
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -99,6 +110,87 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
     )
   } catch (e1) {
     // swallow in cron context
+  }
+}
+
+async function sendAnnouncementDiscordMessage(row, attempt = 0) {
+  try {
+    if (!BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
+    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    const nativeFetch = globalThis.fetch || fetch
+    const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
+
+    const baseUrl =
+      process.env.PUBLIC_BASE_URL ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://www.cartoonreorbit.com'
+        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
+
+    const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
+    const rawImageUrl = row.imagePath
+      ? (row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`)
+      : null
+    const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
+
+    if (row.imageFilename && canAttach) {
+      try {
+        const filePath = join(announcementsDir, row.imageFilename)
+        const fileBuf = await readFile(filePath)
+        const fd = new FormData()
+        fd.append('payload_json', JSON.stringify({
+          content,
+          embeds: [{ image: { url: `attachment://${row.imageFilename}` } }]
+        }))
+        fd.append('files[0]', new Blob([fileBuf]), row.imageFilename)
+
+        const res = await nativeFetch(
+          `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
+          {
+            method: 'POST',
+            headers: { Authorization: authHeader },
+            body: fd
+          }
+        )
+
+        if (res.status === 429 && attempt < 2) {
+          let body = { retry_after: 5 }
+          try { body = await res.json() } catch {}
+          await sleep(Math.ceil((body.retry_after || 5) * 1000))
+          return sendAnnouncementDiscordMessage(row, attempt + 1)
+        }
+
+        return res.ok
+      } catch {
+        // fall through to URL-based embed
+      }
+    }
+
+    const payload = imageUrl
+      ? { content, embeds: [{ image: { url: imageUrl } }] }
+      : { content }
+
+    const res = await nativeFetch(
+      `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }
+    )
+
+    if (res.status === 429 && attempt < 2) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      return sendAnnouncementDiscordMessage(row, attempt + 1)
+    }
+
+    return res.ok
+  } catch {
+    return false
   }
 }
 
@@ -540,6 +632,37 @@ async function startDueAuctions() {
   }
 }
 
+async function sendDueAnnouncements() {
+  try {
+    if (!ANNOUNCEMENTS_CHANNEL_ID) return
+    const now = new Date()
+
+    const due = await prisma.announcement.findMany({
+      where: { sentAt: null, scheduledAt: { lte: now } },
+      orderBy: { scheduledAt: 'asc' },
+      take: 50
+    })
+
+    for (const row of due) {
+      const claim = await prisma.announcement.updateMany({
+        where: { id: row.id, sentAt: null },
+        data: { sentAt: new Date() }
+      })
+      if (!claim.count) continue
+
+      const ok = await sendAnnouncementDiscordMessage(row)
+      if (!ok) {
+        await prisma.announcement.update({
+          where: { id: row.id },
+          data: { sentAt: null }
+        })
+      }
+    }
+  } catch {
+    // swallow in cron context
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Winball: set current grand prize from schedule (runs hourly)
 async function updateWinballGrandPrizeFromSchedule() {
@@ -685,6 +808,9 @@ cron.schedule('0 0 * * *', syncGuildMembers)  // daily midnight
 await startDueAuctions()
 // start AuctionOnly auctions
 cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
+
+await sendDueAnnouncements()
+cron.schedule('*/5 * * * *', sendDueAnnouncements)
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily

@@ -636,7 +636,7 @@ const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
 
 // Pagination
-const PAGE_SIZE   = 18
+const PAGE_SIZE   = 100
 const pageUser    = ref(1)
 const pageAll     = ref(1)
 const pageWishlist= ref(1)

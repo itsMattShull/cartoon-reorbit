@@ -79,7 +79,6 @@ export default defineEventHandler(async (event) => {
   if (last && global.scavengerCooldownHours > 0) {
     const nextAllowed = new Date(last.createdAt.getTime() + global.scavengerCooldownHours * 3600 * 1000)
     if (nextAllowed.getTime() > Date.now()) {
-      await db.scavengerTriggerLog.create({ data: { userId, triggerSource: trigger, started: false, reason: 'cooldown' } })
       return { started: false, cooldownUntil: nextAllowed.toISOString() }
     }
   }
@@ -92,7 +91,6 @@ export default defineEventHandler(async (event) => {
   }
   const roll = Math.random() * 100
   if (roll >= pct) {
-    await db.scavengerTriggerLog.create({ data: { userId, triggerSource: trigger, started: false, reason: 'chance_miss' } })
     return { started: false }
   }
 

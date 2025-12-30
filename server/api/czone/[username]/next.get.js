@@ -16,35 +16,53 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 2. Find next user by createdAt
-  const nextUser = await prisma.user.findFirst({
-    where: {
-      createdAt: { gt: currentUser.createdAt },
-      username: { not: null, notIn: [''] }
-    },
-    orderBy: { createdAt: 'asc' },
-    select: { username: true }
-  })
+  // 2. Find next user by createdAt with at least 1 cToon in layoutData
+  const nextRows = await prisma.$queryRaw`
+    SELECT u."username"
+    FROM "User" u
+    JOIN "CZone" cz ON cz."userId" = u."id"
+    WHERE u."createdAt" > ${currentUser.createdAt}
+      AND u."username" IS NOT NULL
+      AND u."username" <> ''
+      AND COALESCE(
+        (
+          SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+          FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+        ),
+        0
+      ) >= 1
+    ORDER BY u."createdAt" ASC
+    LIMIT 1;
+  `
 
-  if (nextUser) {
-    return { username: nextUser.username }
+  if (nextRows && nextRows.length > 0) {
+    return { username: nextRows[0].username }
   }
 
-  // 3. Wrap around to earliest user if no next one
-  const firstUser = await prisma.user.findFirst({
-    where: {
-      username: { not: null, notIn: [''] }
-    },
-    orderBy: { createdAt: 'asc' },
-    select: { username: true }
-  })
+  // 3. Wrap around to earliest user with at least 1 cToon if no next one
+  const firstRows = await prisma.$queryRaw`
+    SELECT u."username"
+    FROM "User" u
+    JOIN "CZone" cz ON cz."userId" = u."id"
+    WHERE u."username" IS NOT NULL
+      AND u."username" <> ''
+      AND COALESCE(
+        (
+          SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+          FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+        ),
+        0
+      ) >= 1
+    ORDER BY u."createdAt" ASC
+    LIMIT 1;
+  `
 
-  if (!firstUser) {
+  if (!firstRows || firstRows.length === 0) {
     throw createError({
       statusCode: 404,
       statusMessage: 'No users found'
     })
   }
 
-  return { username: firstUser.username }
+  return { username: firstRows[0].username }
 })

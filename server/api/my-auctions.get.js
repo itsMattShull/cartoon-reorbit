@@ -41,6 +41,7 @@ export default defineEventHandler(async (event) => {
           },
         },
       },
+      _count: { select: { bids: true } },
     },
     orderBy: { endAt: 'desc' },
   })
@@ -55,5 +56,6 @@ export default defineEventHandler(async (event) => {
     initialBid:    a.initialBet,
     winningBid:    a.bids[0]?.amount ?? null,
     winningBidder: a.bids[0]?.user.username ?? null,
+    bidCount:      a._count?.bids ?? 0,
   }))
 })

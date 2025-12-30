@@ -8,7 +8,7 @@ function computeInitialCap(totalQty, percent) {
 
 export default defineEventHandler(async () => {
   const now = new Date()
-  const twoWeeksAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const twoWeeksAhead = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000)
 
   // Load global release settings (with safe defaults)
   let initialPercent = 75

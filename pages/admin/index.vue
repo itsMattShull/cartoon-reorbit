@@ -101,7 +101,30 @@
 
       <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-semibold mb-2">Points Distribution</h2>
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-2">
+          <h2 class="text-xl font-semibold">Points Distribution</h2>
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center space-x-2 text-sm">
+              <span class="font-medium">Bucket size:</span>
+              <select v-model.number="pointsBucketSize" class="border rounded px-2 py-1">
+                <option v-for="opt in pointsBucketOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </label>
+            <div class="flex items-center gap-2 text-sm">
+              <button type="button" class="border rounded px-2 py-1" @click="zoomPointsIn">
+                Zoom In
+              </button>
+              <button type="button" class="border rounded px-2 py-1" @click="zoomPointsOut">
+                Zoom Out
+              </button>
+              <button type="button" class="border rounded px-2 py-1" @click="resetPointsZoom">
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="chart-container"><canvas ref="ptsDistCanvas"></canvas></div>
       </div>
 
@@ -243,18 +266,52 @@ const selectedTimeframe = ref('3m')
 
 const TF_DAYS  = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }
 const TF_WEEKS = { '1m':  4, '3m': 13, '6m':  26, '1y':  52 }
+const TF_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
 
 const groupOptions = [
   { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' }
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' }
 ]
 const groupBy = ref('weekly')
 
+const pointsBucketOptions = [
+  { value: 500, label: '500' },
+  { value: 1000, label: '1,000' },
+  { value: 5000, label: '5,000' },
+  { value: 10000, label: '10,000' }
+]
+const pointsBucketSize = ref(1000)
+const pointsZoomSpan = ref(null)
+const pointsZoomCenter = ref(null)
+const pointsFullData = ref({ labels: [], counts: [] })
+
+const groupUnits = {
+  daily: 'day',
+  weekly: 'week',
+  monthly: 'month'
+}
+const groupUnitLabels = {
+  daily: 'Day',
+  weekly: 'Week',
+  monthly: 'Month'
+}
+const groupLabels = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly'
+}
+const windowUnitPlurals = {
+  daily: 'days',
+  weekly: 'weeks',
+  monthly: 'months'
+}
+
 // derived labels/units
-const groupUnit = computed(() => groupBy.value === 'weekly' ? 'week' : 'day')
-const groupUnitLabel = computed(() => groupBy.value === 'weekly' ? 'Week' : 'Day')
-const groupLabel = computed(() => groupBy.value === 'weekly' ? 'Weekly' : 'Daily')
-const windowUnitPlural = computed(() => groupBy.value === 'weekly' ? 'weeks' : 'days')
+const groupUnit = computed(() => groupUnits[groupBy.value] || 'day')
+const groupUnitLabel = computed(() => groupUnitLabels[groupBy.value] || 'Day')
+const groupLabel = computed(() => groupLabels[groupBy.value] || 'Daily')
+const windowUnitPlural = computed(() => windowUnitPlurals[groupBy.value] || 'days')
 
 // Active Discord meta
 const activeDiscord = ref({ percentage: 0, count: 0, total: 0 })
@@ -530,11 +587,16 @@ const histOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-  scales: { x: { title: { color: '#000', display: true, text: 'Points Range' }, ticks: { color: '#000' } }, y: { title: { color: '#000', display: true, text: 'Users' }, beginAtZero: true, ticks: { color: '#000' } } }
+  scales: { x: { title: { color: '#000', display: true, text: 'Points Range' }, ticks: { color: '#000' } }, y: { title: { color: '#000', display: true, text: 'Users' }, beginAtZero: true, ticks: { color: '#000' } } },
+  onClick: (_evt, elements) => {
+    if (!elements?.length) return
+    pointsZoomCenter.value = elements[0].index
+    applyPointsZoom()
+  }
 }
 
 // --- helpers ---
-const dateOf = (d) => new Date(d.period || d.day || d.week || d.date)
+const dateOf = (d) => new Date(d.period || d.day || d.week || d.month || d.date)
 
 function applyTimeUnit () {
   const unit  = groupUnit.value
@@ -544,11 +606,75 @@ function applyTimeUnit () {
     chart.options.scales.x.time.unit = unit
     if (chart.options.scales.x.title) chart.options.scales.x.title.text = label
     const df = chart.options.scales.x.time.displayFormats || {}
-    df[unit] = df[unit] || (unit === 'day' ? 'MMM d' : 'MMM d')
+    const defaultFormat = unit === 'month' ? 'MMM yyyy' : 'MMM d'
+    df[unit] = df[unit] || defaultFormat
     chart.options.scales.x.time.displayFormats = df
     chart.update('none')
   }
   ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(set)
+}
+
+function applyPointsZoom () {
+  if (!ptsHistChart) return
+  const total = pointsFullData.value.labels.length
+  if (!total) return
+
+  const span = pointsZoomSpan.value
+  if (!span || span >= total) {
+    ptsHistChart.options.scales.x.min = undefined
+    ptsHistChart.options.scales.x.max = undefined
+  } else {
+    const center = pointsZoomCenter.value ?? 0
+    let min = Math.max(0, Math.floor(center - span / 2))
+    let max = Math.min(total - 1, min + span - 1)
+    min = Math.max(0, max - span + 1)
+    ptsHistChart.options.scales.x.min = min
+    ptsHistChart.options.scales.x.max = max
+  }
+  ptsHistChart.update('none')
+}
+
+function zoomPointsIn () {
+  const total = pointsFullData.value.labels.length
+  if (!total) return
+  if (pointsZoomCenter.value == null) pointsZoomCenter.value = 0
+  const current = pointsZoomSpan.value ?? total
+  const next = Math.max(5, Math.floor(current * 0.6))
+  pointsZoomSpan.value = next >= total ? null : next
+  applyPointsZoom()
+}
+
+function zoomPointsOut () {
+  const total = pointsFullData.value.labels.length
+  if (!total) return
+  if (pointsZoomCenter.value == null) pointsZoomCenter.value = 0
+  const current = pointsZoomSpan.value ?? total
+  const next = Math.min(total, Math.ceil(current * 1.4))
+  pointsZoomSpan.value = next >= total ? null : next
+  applyPointsZoom()
+}
+
+function resetPointsZoom () {
+  pointsZoomSpan.value = null
+  pointsZoomCenter.value = null
+  applyPointsZoom()
+}
+
+async function fetchPointsDistribution () {
+  const res = await fetch(`/api/admin/points-distribution?bucketSize=${pointsBucketSize.value}`, { credentials: 'include' })
+  const hd = await res.json()
+  const labels = hd.map(b => b.label)
+  const counts = hd.map(b => b.count)
+  pointsFullData.value = { labels, counts }
+  ptsHistChart.data.labels   = labels
+  ptsHistChart.data.datasets = [{
+    data: counts,
+    backgroundColor: colors.histBar,
+    borderColor: colors.histBar,
+    borderWidth: 1
+  }]
+  ptsHistChart.update()
+  resetPointsZoom()
 }
 
 // --- fetch & populate ---
@@ -583,9 +709,12 @@ async function fetchData() {
   // Net Points Issued (earned/spent bars + net lines)
   res = await fetch(`/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const np = await res.json()
-  netWindowCount.value = groupBy.value === 'weekly'
-    ? TF_WEEKS[selectedTimeframe.value]
-    : TF_DAYS[selectedTimeframe.value]
+  const tfByGroup = {
+    daily: TF_DAYS,
+    weekly: TF_WEEKS,
+    monthly: TF_MONTHS
+  }
+  netWindowCount.value = (tfByGroup[groupBy.value] || TF_DAYS)[selectedTimeframe.value]
 
   const netSeries = (np.daily || np.series || [])
   netChart.data.labels               = netSeries.map(d => dateOf(d))
@@ -710,9 +839,7 @@ async function fetchData() {
   // Spend / Earn Ratio (ratio and MA(spend)/MA(earn))
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const sr = await res.json()
-  ratioWindowCount.value = groupBy.value === 'weekly'
-    ? TF_WEEKS[selectedTimeframe.value]
-    : TF_DAYS[selectedTimeframe.value]
+  ratioWindowCount.value = (tfByGroup[groupBy.value] || TF_DAYS)[selectedTimeframe.value]
 
   const ratioSeries = (sr.daily || sr.series || [])
   ratioChart.data.labels           = ratioSeries.map(d => dateOf(d))
@@ -801,21 +928,17 @@ async function fetchData() {
   packChart.update()
 
   // points distribution
-  res = await fetch('/api/admin/points-distribution', { credentials: 'include' })
-  const hd = await res.json()
-  ptsHistChart.data.labels   = hd.map(b => b.label)
-  ptsHistChart.data.datasets = [{
-    data: hd.map(b => b.count),
-    backgroundColor: colors.histBar,
-    borderColor: colors.histBar,
-    borderWidth: 1
-  }]
-  ptsHistChart.update()
+  await fetchPointsDistribution()
 
   // rarity turnover
   res = await fetch(`/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const turnrate = await res.json()
-  turnoverWindowCount.value = turnrate.days ?? turnrate.weeks ?? 0
+  const turnoverCounts = {
+    daily: turnrate.days,
+    weekly: turnrate.weeks,
+    monthly: turnrate.months
+  }
+  turnoverWindowCount.value = turnoverCounts[groupBy.value] ?? turnrate.days ?? turnrate.weeks ?? turnrate.months ?? 0
 
   turnoverChart.data.labels = turnrate.data.map(d => d.rarity)
   turnoverChart.data.datasets[0].data = turnrate.data.map(d => d.turnoverRate)
@@ -923,9 +1046,9 @@ onMounted(async () => {
     data: {
       labels: [],
       datasets: [
-        { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'yRight', stack: 'points',
+        { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'yRight', stack: 'points', hidden: true,
           datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-        { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'yRight', stack: 'points',
+        { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'yRight', stack: 'points', hidden: true,
           datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
         { type: 'line', label: 'Net',    data: [], borderColor: colors.netLine, backgroundColor: colors.netLine, borderWidth: 2, fill: false, yAxisID: 'yLeft',
           datalabels: { anchor: 'end', align: 'top' } },
@@ -956,6 +1079,11 @@ watch([selectedTimeframe, groupBy], async () => {
     ch.update('none')
   })
   await fetchData()
+})
+
+watch(pointsBucketSize, async () => {
+  if (!ptsHistChart) return
+  await fetchPointsDistribution()
 })
 </script>
 

@@ -315,7 +315,9 @@ function toUrl(v) {
 
 // Filter dropdown options
 const uniqueSeries = computed(() =>
-  [...new Set(ctoons.value.map((c) => c.series).filter(Boolean))]
+  [...new Set(ctoons.value.map((c) => c.series).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )
 )
 const uniqueRarities = computed(() =>
   [...new Set(ctoons.value.map((c) => c.rarity).filter(Boolean))]

@@ -40,10 +40,14 @@ export default defineEventHandler(async (event) => {
   const allMaxRows = await prisma.bid.groupBy({
     by: ['auctionId'],
     where: { auctionId: { in: auctionIds } },
-    _max: { amount: true }
+    _max: { amount: true },
+    _count: { _all: true }
   })
   const allMaxMap = Object.fromEntries(
     allMaxRows.map(r => [r.auctionId, r._max.amount ?? null])
+  )
+  const bidCountMap = Object.fromEntries(
+    allMaxRows.map(r => [r.auctionId, r._count._all ?? 0])
   )
 
   // 6) Load auctions + cToon + winner
@@ -64,6 +68,7 @@ export default defineEventHandler(async (event) => {
     const myBid = myMaxMap[a.id] ?? null
     const highestFromBids = allMaxMap[a.id] ?? null
     const highestBid = highestFromBids != null ? highestFromBids : (a.initialBet ?? null)
+    const bidCount = bidCountMap[a.id] ?? 0
 
     const endAtISO = a.endAt instanceof Date ? a.endAt.toISOString() : new Date(a.endAt).toISOString()
     const ended = new Date(endAtISO) <= now
@@ -75,6 +80,7 @@ export default defineEventHandler(async (event) => {
       endAt: endAtISO,
       myBid,
       highestBid,
+      bidCount,
       didWin: ended && !!a.winner && a.winner.id === userId
     }
   })

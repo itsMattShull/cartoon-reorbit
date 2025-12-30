@@ -1,74 +1,82 @@
 <template>
   <Nav />
-
+  <div class="mt-12">&nbsp;</div>
   <div class="p-4 mt-16 md:mt-20">
     <!-- Filters -->
-    <div class="mb-4 flex flex-wrap items-center gap-4">
-      <!-- Creator Autocomplete -->
-      <div class="relative">
-        <label for="creatorSearch" class="mr-2 font-medium">Creator:</label>
-        <div class="inline-flex items-center border rounded px-2 py-1">
-          <input
-            id="creatorSearch"
-            v-model="creatorQuery"
-            @input="onCreatorInput"
-            @keydown.enter.prevent="applyCreatorQuery"
-            @focus="openSuggestions"
-            class="outline-none"
-            placeholder="Type a username…"
-            autocomplete="off"
-            style="min-width: 220px"
-          />
-          <button
-            v-if="selectedCreator || creatorQuery"
-            @click="clearCreator"
-            class="ml-2 text-xs text-gray-500 hover:text-gray-700"
-            type="button"
-            title="Clear"
-          >
-            ×
-          </button>
-        </div>
-
-        <!-- Suggestions -->
-        <ul
-          v-if="showCreatorSuggestions && creatorQuery.length >= 3 && filteredCreatorSuggestions.length"
-          class="absolute z-10 mt-1 w-full bg-white border rounded shadow max-h-60 overflow-auto"
-        >
-          <li
-            v-for="u in filteredCreatorSuggestions"
-            :key="u.id"
-            @click="selectCreator(u.username)"
-            class="px-3 py-2 cursor-pointer hover:bg-gray-100"
-          >
-            {{ u.username }}
-          </li>
-        </ul>
-
-        <!-- Active filter badge -->
-        <div v-if="selectedCreator" class="text-xs text-gray-600 mt-1">
-          Filter: <span class="font-medium">{{ selectedCreator }}</span>
-        </div>
+    <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+      <div>
+        <label for="ctoonNameSearch" class="block text-sm font-medium text-gray-700 mb-1">cToon Name</label>
+        <input
+          id="ctoonNameSearch"
+          v-model="ctoonNameQuery"
+          type="text"
+          placeholder="Search by name…"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        />
       </div>
 
-      <!-- Status Filter -->
-      <div class="flex items-center">
-        <label for="statusFilter" class="mr-2 font-medium">Status:</label>
-        <select id="statusFilter" v-model="selectedStatus" class="border rounded px-2 py-1">
+      <div>
+        <label for="characterSearch" class="block text-sm font-medium text-gray-700 mb-1">Characters</label>
+        <input
+          id="characterSearch"
+          v-model="characterQuery"
+          type="text"
+          placeholder="e.g. Bugs, Daffy"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        />
+      </div>
+
+      <div>
+        <label for="creatorSearch" class="block text-sm font-medium text-gray-700 mb-1">Creator</label>
+        <input
+          id="creatorSearch"
+          v-model="creatorQuery"
+          type="text"
+          placeholder="Type a username…"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        />
+      </div>
+
+      <div>
+        <label for="rarityFilter" class="block text-sm font-medium text-gray-700 mb-1">Rarity</label>
+        <select
+          id="rarityFilter"
+          v-model="selectedRarity"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">All</option>
+          <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="statusFilter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+        <select
+          id="statusFilter"
+          v-model="selectedStatus"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        >
           <option value="">All</option>
           <option v-for="status in statusOptions" :key="status" :value="status">{{ status }}</option>
         </select>
       </div>
 
-      <!-- Has Bidder Filter -->
-      <div class="flex items-center">
-        <label for="bidderFilter" class="mr-2 font-medium">Has Bidder:</label>
-        <select id="bidderFilter" v-model="selectedHasBidder" class="border rounded px-2 py-1">
+      <div>
+        <label for="bidderFilter" class="block text-sm font-medium text-gray-700 mb-1">Has Bidder</label>
+        <select
+          id="bidderFilter"
+          v-model="selectedHasBidder"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+        >
           <option v-for="opt in hasBidderOptions" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
       </div>
+    </div>
+
+    <div class="mb-4 text-sm text-gray-600">
+      Total Results: {{ total }} auctions
     </div>
 
     <!-- Desktop Table -->
@@ -154,78 +162,25 @@ const total = ref(0)
 const auctions = ref([])
 
 // Filters
-const selectedCreator = ref('')   // applied filter
-const creatorQuery = ref('')      // input text
-const showCreatorSuggestions = ref(false)
-
+const ctoonNameQuery = ref('')
+const characterQuery = ref('')
+const creatorQuery = ref('')
+const selectedRarity = ref('')
 const selectedStatus = ref('')
 const selectedHasBidder = ref('')
+
 const statusOptions = ['ACTIVE', 'CLOSED', 'CANCELLED']
+const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 const hasBidderOptions = [
   { value: '', label: 'All' },
   { value: 'has', label: 'With Bidder' },
   { value: 'none', label: 'No Bidder' }
 ]
 
-// Suggestions source
-const creators = ref([])
-
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
-
-const filteredCreatorSuggestions = computed(() => {
-  const q = creatorQuery.value.trim().toLowerCase()
-  if (q.length < 3) return []
-  return creators.value
-    .filter(u => (u.username || '').toLowerCase().includes(q))
-    .slice(0, 20)
-})
-
-function openSuggestions() { showCreatorSuggestions.value = true }
-function closeSuggestions() { showCreatorSuggestions.value = false }
-function onCreatorInput() {
-  showCreatorSuggestions.value = true
-  if (creatorQuery.value.length === 0) selectedCreator.value = ''
-}
 
 function scrollTop() {
   if (process.client) window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-// NEW: apply creator immediately and refetch
-async function applyCreator(username) {
-  creatorQuery.value = username
-  selectedCreator.value = username
-  page.value = 1
-  await fetchAuctions()
-  await nextTick()
-  scrollTop()
-  closeSuggestions()
-}
-
-function selectCreator(username) {
-  applyCreator(username)
-}
-
-function applyCreatorQuery() {
-  const q = creatorQuery.value.trim()
-  if (q.length >= 3) applyCreator(q)
-  else closeSuggestions()
-}
-
-async function clearCreator() {
-  creatorQuery.value = ''
-  selectedCreator.value = ''
-  page.value = 1
-  await fetchAuctions()
-  await nextTick()
-  scrollTop()
-  openSuggestions()
-}
-
-async function fetchCreators() {
-  // ensure this matches your server route
-  const res = await $fetch('/api/admin/auction-creators')
-  creators.value = res || []
 }
 
 async function fetchAuctions() {
@@ -233,7 +188,10 @@ async function fetchAuctions() {
     query: {
       page: page.value,
       limit: pageSize,
-      creator: selectedCreator.value || undefined,
+      creator: creatorQuery.value.trim() || undefined,
+      ctoonName: ctoonNameQuery.value.trim() || undefined,
+      characters: characterQuery.value.trim() || undefined,
+      rarity: selectedRarity.value || undefined,
       status: selectedStatus.value || undefined,
       hasBidder: selectedHasBidder.value || undefined
     }
@@ -242,9 +200,30 @@ async function fetchAuctions() {
   total.value = res.total || 0
 }
 
-// React only to non-creator filters here to avoid double fetches
-watch([selectedStatus, selectedHasBidder], async () => {
-  page.value = 1
+let filterDebounceId = null
+function scheduleFilterFetch() {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+  filterDebounceId = setTimeout(async () => {
+    if (page.value !== 1) {
+      page.value = 1
+      return
+    }
+    await fetchAuctions()
+    await nextTick()
+    scrollTop()
+  }, 300)
+}
+
+// React to text filters with debounce
+watch([ctoonNameQuery, characterQuery, creatorQuery], () => {
+  scheduleFilterFetch()
+})
+
+watch([selectedStatus, selectedHasBidder, selectedRarity], async () => {
+  if (page.value !== 1) {
+    page.value = 1
+    return
+  }
   await fetchAuctions()
   await nextTick()
   scrollTop()
@@ -257,18 +236,8 @@ watch(page, async () => {
 })
 
 onMounted(async () => {
-  await fetchCreators()
   await fetchAuctions()
 })
-
-// optional: close suggestions when clicking outside
-if (process.client) {
-  window.addEventListener('click', (e) => {
-    const input = document.getElementById('creatorSearch')
-    if (!input) return
-    if (e.target !== input) closeSuggestions()
-  })
-}
 
 // pagination controls
 function prevPage() { if (page.value > 1) page.value-- }

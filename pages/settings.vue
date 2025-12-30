@@ -101,7 +101,6 @@ async function loadSetting() {
     const res = await fetch('/api/user/notifications', { credentials: 'include' })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
-    console.log('Loaded notification setting:', data)
     allow.value = !!data.allowAuctionNotifications
   } catch (e) {
     console.error(e)
@@ -128,7 +127,6 @@ async function onToggle() {
     })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
-    console.log('Saved notification setting:', data)
     allow.value = !!data.allowAuctionNotifications
   } catch (err) {
     console.error(err)

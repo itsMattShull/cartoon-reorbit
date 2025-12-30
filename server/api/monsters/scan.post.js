@@ -25,19 +25,21 @@ function u32ToUnitFloat(u32) {
   return u32 / 4294967296 // 0 <= x < 1
 }
 
-function normalizeOdds(nothing, item, monster) {
+function normalizeOdds(nothing, item, monster, battle) {
   const n = Number(nothing) || 0
   const i = Number(item) || 0
   const m = Number(monster) || 0
-  const sum = n + i + m
-  if (sum <= 0) return { nothing: 0.2, item: 0.3, monster: 0.5 }
-  return { nothing: n / sum, item: i / sum, monster: m / sum }
+  const b = Number(battle) || 0
+  const sum = n + i + m + b
+  if (sum <= 0) return { nothing: 0.2, item: 0.3, monster: 0.5, battle: 0.0 }
+  return { nothing: n / sum, item: i / sum, monster: m / sum, battle: b / sum }
 }
 
 function pickOutcome(r01, odds) {
   if (r01 < odds.nothing) return 'NOTHING'
   if (r01 < odds.nothing + odds.item) return 'ITEM'
-  return 'MONSTER'
+  if (r01 < odds.nothing + odds.item + odds.monster) return 'MONSTER'
+  return 'BATTLE'
 }
 
 function buildRarityThresholds(chancesJson, availability = {}, order = ['CRAZY_RARE', 'VERY_RARE', 'RARE', 'UNCOMMON', 'COMMON']) {
@@ -130,6 +132,81 @@ function addDays(date, days) {
   return d
 }
 
+function getChicagoOffsetMinutes(date) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+  const parts = fmt.formatToParts(date)
+  const tz = parts.find(p => p.type === 'timeZoneName')?.value || ''
+  const match = tz.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/)
+  if (match) {
+    const hours = Number(match[1])
+    const minutes = Number(match[2] || 0)
+    return hours * 60 + (hours >= 0 ? minutes : -minutes)
+  }
+  const shortTz = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    timeZoneName: 'short',
+    hour: '2-digit'
+  }).formatToParts(date).find(p => p.type === 'timeZoneName')?.value
+  if (shortTz === 'CDT') return -300
+  if (shortTz === 'CST') return -360
+  return 0
+}
+
+function chicagoLocalToUtcMs(year, month, day, hour, minute, second) {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second)
+  let offset = getChicagoOffsetMinutes(new Date(utcGuess))
+  let adjusted = utcGuess - offset * 60 * 1000
+  const recheckOffset = getChicagoOffsetMinutes(new Date(adjusted))
+  if (recheckOffset !== offset) {
+    offset = recheckOffset
+    adjusted = utcGuess - offset * 60 * 1000
+  }
+  return adjusted
+}
+
+function getChicagoParts(date) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const parts = fmt.formatToParts(date)
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second)
+  }
+}
+
+function getDailyScanWindowCst(now = new Date()) {
+  const nowParts = getChicagoParts(now)
+  const isBeforeCutoff = nowParts.hour < 8
+  const startBase = isBeforeCutoff ? new Date(now.getTime() - 24 * 60 * 60 * 1000) : now
+  const startParts = getChicagoParts(startBase)
+  const startMs = chicagoLocalToUtcMs(startParts.year, startParts.month, startParts.day, 8, 0, 0)
+  const nextBase = new Date(startBase.getTime() + 24 * 60 * 60 * 1000)
+  const nextParts = getChicagoParts(nextBase)
+  const endMs = chicagoLocalToUtcMs(nextParts.year, nextParts.month, nextParts.day, 8, 0, 0)
+  return {
+    start: new Date(startMs),
+    resetAt: new Date(endMs),
+  }
+}
+
 function buildItemResult(itemRow) {
   return {
     type: 'item',
@@ -220,6 +297,25 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = String(me.id)
+
+  const dailyLimit = Number(config.monsterDailyScanLimit ?? 20)
+  if (Number.isFinite(dailyLimit) && dailyLimit > 0) {
+    const { start, resetAt } = getDailyScanWindowCst()
+    const scansToday = await db.userBarcodeScan.count({
+      where: {
+        userId,
+        lastScannedAt: { gte: start }
+      }
+    })
+    if (scansToday >= dailyLimit) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: 'Daily scan limit reached.',
+        data: { code: 'DailyScanLimit', limit: dailyLimit, resetAt: resetAt.toISOString() }
+      })
+    }
+  }
+
   const barcodeKey = canonicalKey(format, rawValue)
 
   // 1) Get or create canonical mapping for this barcode in this config/version
@@ -230,7 +326,7 @@ export default defineEventHandler(async (event) => {
   if (!mapping) {
     const seedHex = hmacHex(process.env.BARCODE_SECRET, `${config.version}:${barcodeKey}`)
 
-    const odds = normalizeOdds(config.oddsNothing, config.oddsItem, config.oddsMonster)
+    const odds = normalizeOdds(config.oddsNothing, config.oddsItem, config.oddsMonster, config.oddsBattle)
     const outcomeRoll01 = u32ToUnitFloat(hexToU32(seedHex, 0))
     const outcome = pickOutcome(outcomeRoll01, odds) // ScanOutcome enum key
 
@@ -275,6 +371,8 @@ export default defineEventHandler(async (event) => {
       const speciesRow = pool[speciesPick]
 
       result = buildMonsterTemplate(speciesRow)
+    } else if (outcome === 'BATTLE') {
+      result = { type: 'battle' }
     }
 
     mapping = await db.barcodeMapping.upsert({
@@ -371,8 +469,38 @@ export default defineEventHandler(async (event) => {
     },
   })
 
+  let battleInfo = null
+  if (mapping.outcome === 'BATTLE') {
+    let selected = await db.userMonster.findFirst({
+      where: { userId, lastSelected: true },
+      select: { id: true }
+    })
+    if (!selected) {
+      const fallback = await db.userMonster.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true }
+      })
+      if (fallback) {
+        await db.userMonster.updateMany({
+          where: { userId, lastSelected: true },
+          data: { lastSelected: false }
+        })
+        await db.userMonster.update({
+          where: { id: fallback.id },
+          data: { lastSelected: true }
+        })
+        selected = fallback
+      }
+    }
+    battleInfo = {
+      type: 'AI',
+      monsterId: selected?.id ?? null
+    }
+  }
+
   return {
-    outcome: mapping.outcome, // MONSTER | ITEM | NOTHING
+    outcome: mapping.outcome, // MONSTER | ITEM | NOTHING | BATTLE
     result: mapping.result,   // monster template | item payload | null
     mappingId: mapping.id,
     barcodeKey,
@@ -383,5 +511,6 @@ export default defineEventHandler(async (event) => {
     ownedMonsterId: ownedMonster?.id ?? null,
     ownedStats: ownedMonster ? { hp: ownedMonster.hp, atk: ownedMonster.atk, def: ownedMonster.def } : null,
     awardedItemId: awardedItem?.id ?? null,
+    battle: battleInfo,
   }
 })

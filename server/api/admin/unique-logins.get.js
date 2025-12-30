@@ -1,6 +1,6 @@
 // server/api/admin/activity-unique.get.js
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
-import { addDays, addWeeks, subMonths, subYears, format, startOfWeek } from 'date-fns'
+import { addDays, addWeeks, addMonths, subMonths, subYears, format, startOfWeek, startOfMonth } from 'date-fns'
 import { prisma } from '@/server/prisma'
 
 function getStartDate(timeframe) {
@@ -27,7 +27,9 @@ export default defineEventHandler(async (event) => {
   // Params
   const q = getQuery(event)
   const timeframe = q.timeframe || '3m'
-  const groupBy = q.groupBy === 'weekly' ? 'weekly' : 'daily'
+  const groupBy = (q.groupBy === 'daily' || q.groupBy === 'weekly' || q.groupBy === 'monthly')
+    ? q.groupBy
+    : 'daily'
 
   const startDate = getStartDate(timeframe)
   const today = new Date()
@@ -60,6 +62,26 @@ export default defineEventHandler(async (event) => {
       const key = format(w, 'yyyy-MM-dd')
       result.push({ period: key, count: weekMap.get(key)?.size ?? 0 })
       w = addWeeks(w, 1)
+    }
+    return result
+  } else if (groupBy === 'monthly') {
+    const monthMap = new Map() // monthStart -> Set<userId>
+    for (const r of pointsLogs) {
+      if (!r.userId) continue
+      const moStart = startOfMonth(r.createdAt)
+      const key = format(moStart, 'yyyy-MM-dd')
+      if (!monthMap.has(key)) monthMap.set(key, new Set())
+      monthMap.get(key).add(r.userId)
+    }
+
+    const result = []
+    const startMonth = startOfMonth(new Date(format(startDate, 'yyyy-MM-dd')))
+    const endMonth = startOfMonth(endDate)
+    let m = startMonth
+    while (m <= endMonth) {
+      const key = format(m, 'yyyy-MM-dd')
+      result.push({ period: key, count: monthMap.get(key)?.size ?? 0 })
+      m = addMonths(m, 1)
     }
     return result
   } else {

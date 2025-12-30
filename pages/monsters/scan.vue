@@ -9,5 +9,9 @@
 </template>
 
 <script setup>
+  definePageMeta({
+    middleware: 'auth',
+    layout: 'default'
+  })
   // const userId = "USER_ID_HERE";
 </script>

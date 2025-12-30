@@ -36,7 +36,10 @@
       </div>
 
       <div :id="readerId" ref="readerEl" class="reader">
-        <div v-if="pendingMatch" class="reader-status">
+        <div v-if="cooldownMessage" class="reader-status">
+          {{ cooldownMessage }}
+        </div>
+        <div v-else-if="pendingMatch" class="reader-status">
           Code found — keep scanning code to confirm.
         </div>
       </div>
@@ -63,6 +66,13 @@
         <div v-if="scanResult.outcome === 'NOTHING'" class="result-inner">
           <h3 class="result-title">No luck this time</h3>
           <p class="result-subtitle">You didn’t get an item or a monster.</p>
+        </div>
+
+        <div v-else-if="scanResult.outcome === 'LIMIT'" class="result-inner result-inner--solo">
+          <div>
+            <h3 class="result-title">Daily Scan Limit Reached</h3>
+            <p class="result-subtitle">{{ dailyLimitMessage }}</p>
+          </div>
         </div>
 
         <div v-else-if="scanResult.outcome === 'MONSTER'" class="result-inner">
@@ -98,6 +108,13 @@
             </div>
           </div>
         </div>
+
+        <div v-else-if="scanResult.outcome === 'BATTLE'" class="result-inner">
+          <div>
+            <h3 class="result-title">Battle Triggered</h3>
+            <p class="result-subtitle">Preparing your battle now…</p>
+          </div>
+        </div>
       </div>
     </div>
   </ClientOnly>
@@ -106,6 +123,9 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import { io } from "socket.io-client";
+import { useRuntimeConfig } from "#imports";
+import { useAuth } from "@/composables/useAuth";
 
 const endpointUrl = "/api/monsters/scan";
 
@@ -123,17 +143,23 @@ const isProcessingFile = ref(false);
 const fileInput = ref(null);
 const readerEl = ref(null);
 const router = useRouter();
+const config = useRuntimeConfig();
+const { user, fetchSelf } = useAuth();
 const pendingMatch = ref(false);
 let lastNormalized = "";
 let matchCount = 0;
+const cooldownUntil = ref(null);
+const cooldownMessage = ref("");
 
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
 let scanner;
+let battleSocket;
 
 let postingLock = false;
 
 onMounted(async () => {
+  await fetchSelf();
   // Client-only import (SSR-safe)
   const mod = await import("html5-qrcode");
   Html5Qrcode = mod.Html5Qrcode;
@@ -176,8 +202,30 @@ async function postScan(payload) {
     // Store both request + response for debugging/UI
     lastPayload.value = { ...payload, response: res };
     scanResult.value = res;
+    if (res?.outcome === "BATTLE") {
+      await startBattleFromScan(res);
+    }
     return res;
   } catch (e) {
+    const retryAt = extractRetryAt(e);
+    if (retryAt) {
+      setCooldown(retryAt);
+      throw e;
+    }
+    const dailyLimit = extractDailyLimit(e);
+    if (dailyLimit) {
+      scanResult.value = {
+        outcome: "LIMIT",
+        message: dailyLimit.message || null,
+        resetAt: dailyLimit.resetAt || null,
+        limit: dailyLimit.limit ?? null,
+      };
+      lastPayload.value = { ...payload, response: null };
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
+      error.value = null;
+      return scanResult.value;
+    }
     error.value =
       e?.data?.statusMessage ||
       e?.statusMessage ||
@@ -185,6 +233,51 @@ async function postScan(payload) {
       String(e);
     throw e;
   }
+}
+
+function getSocketPath() {
+  return import.meta.env.PROD
+    ? "https://www.cartoonreorbit.com"
+    : `http://localhost:${config.public.socketPort}`;
+}
+
+function ensureBattleSocket() {
+  if (battleSocket) return;
+  battleSocket = io(getSocketPath(), {
+    transports: ["websocket", "polling"],
+  });
+  battleSocket.on("battle:created", ({ battleId }) => {
+    if (battleId) router.push(`/monsters/${battleId}`);
+  });
+  battleSocket.on("battle:error", ({ message }) => {
+    error.value = message || "Failed to start battle.";
+  });
+}
+
+async function startBattleFromScan(res) {
+  let monsterId = res?.battle?.monsterId || null;
+  if (!monsterId) {
+    try {
+      const selected = await $fetch("/api/monsters/selected-monster");
+      monsterId = selected?.monster?.id || null;
+    } catch {}
+  }
+  if (!monsterId) {
+    error.value = "No selected monster available for battle.";
+    return;
+  }
+  try {
+    await $fetch("/api/monsters/select", {
+      method: "POST",
+      body: { id: monsterId },
+    });
+  } catch {}
+  ensureBattleSocket();
+  battleSocket.emit("battle:create", {
+    player1UserId: user.value?.id,
+    player1MonsterId: monsterId,
+    opponent: { type: "AI" },
+  });
 }
 
 async function start() {
@@ -224,7 +317,16 @@ async function onScanSuccess(decodedText, decodedResult) {
   if (postingLock) return;
   postingLock = true;
 
+  if (cooldownUntil.value) {
+    if (updateCooldownMessage()) {
+      postingLock = false;
+      return;
+    }
+  }
+
   const formatName = decodedResult?.result?.format?.formatName || "unknown";
+  const formatLower = String(formatName).toLowerCase();
+  const requiredMatches = formatLower.includes("qr") ? 1 : 3;
   const normalized = normalizeValue(formatName, decodedText);
   if (normalized && normalized === lastNormalized) {
     matchCount += 1;
@@ -232,8 +334,8 @@ async function onScanSuccess(decodedText, decodedResult) {
     matchCount = 1;
     lastNormalized = normalized;
   }
-  if (matchCount < 3) {
-    pendingMatch.value = true;
+  if (matchCount < requiredMatches) {
+    pendingMatch.value = requiredMatches > 1;
     postingLock = false;
     return;
   }
@@ -314,6 +416,8 @@ async function scanImageFile(file) {
       pendingMatch.value = false;
       matchCount = 0;
       lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
       await postScan(payload);
     } else if (typeof scanner.scanFile === "function") {
       const text = await scanner.scanFile(file, true);
@@ -326,11 +430,18 @@ async function scanImageFile(file) {
       pendingMatch.value = false;
       matchCount = 0;
       lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
       await postScan(payload);
     } else {
       error.value = "This browser build does not support image scanning.";
     }
   } catch (e) {
+    const retryAt = extractRetryAt(e);
+    if (retryAt) {
+      setCooldown(retryAt);
+      return;
+    }
     const msg = e?.errorMessage || e?.message || String(e);
     error.value = msg === "No MultiFormat Readers were able to detect the code."
       ? "No barcode or QR code was detected."
@@ -361,6 +472,8 @@ const scanTypeLabel = computed(() => {
   if (type === "NOTHING") return "Nothing";
   if (type === "ITEM") return "Item";
   if (type === "MONSTER") return "Monster";
+  if (type === "BATTLE") return "Battle";
+  if (type === "LIMIT") return "Limit";
   return "Unknown";
 });
 
@@ -371,12 +484,28 @@ const itemEffectDescription = computed(() => {
   return `Effect: ${effect}`;
 });
 
+const dailyLimitMessage = computed(() => {
+  if (scanResult.value?.outcome !== "LIMIT") return "";
+  const limit = scanResult.value?.limit;
+  const resetAt = scanResult.value?.resetAt;
+  if (Number.isFinite(Number(limit)) && resetAt) {
+    return `You have hit the daily scan limit of ${limit}. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (resetAt) {
+    return `You have hit the daily scan limit. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (scanResult.value?.message) return scanResult.value.message;
+  return "Daily scan limit reached.";
+});
+
 function clearResult() {
   scanResult.value = null;
   lastPayload.value = null;
   pendingMatch.value = false;
   matchCount = 0;
   lastNormalized = "";
+  cooldownUntil.value = null;
+  cooldownMessage.value = "";
 }
 
 function goToMonsters() {
@@ -389,8 +518,69 @@ function normalizeValue(formatName, decodedText) {
   return looksNumeric ? raw.replace(/[^0-9]/g, "") : raw;
 }
 
+function extractRetryAt(e) {
+  const retryAt = e?.data?.retryAt;
+  if (retryAt) return retryAt;
+  const retryAtWrapped = e?.data?.data?.retryAt || e?.response?._data?.data?.retryAt || e?.response?._data?.retryAt;
+  if (retryAtWrapped) return retryAtWrapped;
+  const msg = e?.data?.statusMessage || e?.statusMessage || e?.message || "";
+  const match = String(msg).match(/cooldown until\s+([0-9T:\-\.Z]+)/i);
+  return match ? match[1] : null;
+}
+
+function extractDailyLimit(e) {
+  const payload = e?.data?.data || e?.data || e?.response?._data?.data || e?.response?._data || {};
+  const code = payload?.code || payload?.data?.code;
+  const statusMessage = payload?.statusMessage || e?.data?.statusMessage || e?.statusMessage || "";
+  if (code !== "DailyScanLimit" && !/daily scan limit/i.test(String(statusMessage))) return null;
+  return {
+    limit: Number.isFinite(Number(payload?.limit)) ? Number(payload.limit) : null,
+    resetAt: payload?.resetAt || null,
+    message: statusMessage || null,
+  };
+}
+
+function formatRemaining(ms) {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  return { days, hours, minutes };
+}
+
+function updateCooldownMessage() {
+  if (!cooldownUntil.value) return false;
+  const until = new Date(cooldownUntil.value);
+  if (!Number.isFinite(until.getTime())) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  const ms = until.getTime() - Date.now();
+  if (ms <= 0) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  const { days, hours, minutes } = formatRemaining(ms);
+  cooldownMessage.value = `Barcode cooldown: ${days}d ${hours}h ${minutes}m left`;
+  return true;
+}
+
+function setCooldown(retryAt) {
+  cooldownUntil.value = retryAt;
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
+  updateCooldownMessage();
+}
+
 onBeforeUnmount(async () => {
   await stop();
+  if (battleSocket) {
+    battleSocket.disconnect();
+    battleSocket = null;
+  }
 });
 </script>
 
@@ -477,6 +667,9 @@ onBeforeUnmount(async () => {
   grid-template-columns: 120px 1fr;
   gap: 16px;
   align-items: center;
+}
+.result-inner--solo {
+  grid-template-columns: 1fr;
 }
 .result-image {
   width: 120px;
