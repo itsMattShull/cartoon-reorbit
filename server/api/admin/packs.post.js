@@ -41,6 +41,43 @@ function validatePayload (meta) {
   }
 }
 
+function parseLocalYmdHm(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(s)
+  if (!m) return null
+  return { y: +m[1], m: +m[2], d: +m[3], h: +m[4], mi: +m[5] }
+}
+
+function centralLocalToUTC(localYmdHm) {
+  const parts = parseLocalYmdHm(localYmdHm)
+  if (!parts) return null
+
+  const { y, m, d, h, mi } = parts
+  const utcGuessMs = Date.UTC(y, m - 1, d, h, mi, 0)
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  })
+  const displayed = Object.fromEntries(
+    fmt.formatToParts(new Date(utcGuessMs))
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, p.value])
+  )
+  const zonalMs = Date.UTC(
+    Number(displayed.year),
+    Number(displayed.month) - 1,
+    Number(displayed.day),
+    Number(displayed.hour),
+    Number(displayed.minute),
+    Number(displayed.second)
+  )
+
+  const offsetMs = zonalMs - utcGuessMs
+  return new Date(utcGuessMs - offsetMs)
+}
+
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -75,6 +112,38 @@ export default defineEventHandler(async (event) => {
   const meta = fields.meta ? JSON.parse(fields.meta) : null
   validatePayload(meta)
 
+  const scheduledAtLocal = String(meta?.scheduledAtLocal || '').trim()
+  let scheduledAt = null
+  if (scheduledAtLocal) {
+    const parts = parseLocalYmdHm(scheduledAtLocal)
+    if (!parts) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledAtLocal must be "YYYY-MM-DD HH:mm"' })
+    }
+    if (parts.mi !== 0) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledAtLocal must be on the hour (minutes = 00)' })
+    }
+    scheduledAt = centralLocalToUTC(scheduledAtLocal)
+    if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledAtLocal must be "YYYY-MM-DD HH:mm"' })
+    }
+  }
+
+  const scheduledOffAtLocal = String(meta?.scheduledOffAtLocal || '').trim()
+  let scheduledOffAt = null
+  if (scheduledOffAtLocal) {
+    const parts = parseLocalYmdHm(scheduledOffAtLocal)
+    if (!parts) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledOffAtLocal must be "YYYY-MM-DD HH:mm"' })
+    }
+    if (parts.mi !== 0) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledOffAtLocal must be on the hour (minutes = 00)' })
+    }
+    scheduledOffAt = centralLocalToUTC(scheduledOffAtLocal)
+    if (!scheduledOffAt || Number.isNaN(scheduledOffAt.getTime())) {
+      throw createError({ statusCode: 400, statusMessage: 'scheduledOffAtLocal must be "YYYY-MM-DD HH:mm"' })
+    }
+  }
+
   // const uploadDir = join(baseDir, 'cartoon-reorbit-images', 'packs')
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'packs')
@@ -98,7 +167,9 @@ export default defineEventHandler(async (event) => {
         description: meta.description ?? null,
         imagePath,
         inCmart: meta.inCmart ?? false,
-        sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY'
+        sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
+        scheduledAt,
+        scheduledOffAt
       }
     })
 
