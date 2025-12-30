@@ -177,6 +177,69 @@
 
         <!-- Auction cards -->
         <div class="w-full lg:w-3/4">
+          <div v-if="isLoadingTrending || trendingAuctions.length" class="mb-6">
+            <div class="bg-blue-600 rounded-lg shadow p-4">
+            <h2 class="text-xl font-semibold mb-3 bg-blue-200 text-blue-600 px-3 py-2 rounded">
+              Trending Auctions
+            </h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template v-if="isLoadingTrending">
+                  <div v-for="n in 3" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="auction in trendingAuctions"
+                    :key="auction.id"
+                    class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full relative"
+                  >
+                    <span
+                      v-if="auction.isFeatured"
+                      class="absolute top-2 left-2 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                    >
+                      Featured
+                    </span>
+                    <span
+                      v-if="auction.isOwned"
+                      class="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                    >
+                      Owned
+                    </span>
+                    <span
+                      v-else
+                      class="absolute top-2 right-2 bg-gray-300 text-gray-700 text-xs font-semibold px-2 py-1 rounded"
+                    >
+                      Un-owned
+                    </span>
+
+                    <div class="flex-grow flex items-center justify-center">
+                      <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
+                    </div>
+
+                    <div class="mt-4">
+                      <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
+                      <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
+                      <p v-if="!auction.isHolidayItem" class="text-sm text-gray-600 mb-1">
+                        Mint #{{ auction.mintNumber ?? 'N/A' }}
+                      </p>
+                      <p class="text-sm text-gray-600 mb-1">
+                        Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                      </p>
+                      <p class="text-sm text-gray-600 mb-1">
+                        Bids: {{ auction.bidCount ?? 0 }}
+                      </p>
+                      <p class="text-sm text-red-600 mb-4">
+                        Ending in {{ formatRemaining(auction.endAt) }}
+                      </p>
+                      <NuxtLink :to="`/auction/${auction.id}`" class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center">
+                        View Auction
+                      </NuxtLink>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <template v-if="isLoading">
               <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
@@ -391,6 +454,10 @@ const activeTab = ref('current')
 const auctions = ref([])
 const isLoading = ref(false)
 
+const trendingAuctions = ref([])
+const isLoadingTrending = ref(false)
+const hasLoadedTrending = ref(false)
+
 const myAuctions = ref([])
 const isLoadingMy = ref(false)
 
@@ -482,6 +549,7 @@ onMounted(() => {
   updateUrlQueryFromFilters()
 
   loadAuctions()
+  loadTrendingAuctions()
 })
 
 onUnmounted(() => {
@@ -496,6 +564,19 @@ function loadAuctions() {
     })
     .finally(() => {
       isLoading.value = false
+    })
+}
+
+function loadTrendingAuctions() {
+  if (hasLoadedTrending.value) return
+  isLoadingTrending.value = true
+  $fetch('/api/auctions/trending')
+    .then(data => {
+      trendingAuctions.value = Array.isArray(data) ? data : []
+    })
+    .finally(() => {
+      isLoadingTrending.value = false
+      hasLoadedTrending.value = true
     })
 }
 
@@ -565,9 +646,12 @@ const uniqueRarities = computed(() => {
   return [...new Set(auctions.value.map(a => a.rarity).filter(Boolean))].sort()
 })
 
+const trendingIdSet = computed(() => new Set(trendingAuctions.value.map(a => a.id)))
+
 const filteredAuctions = computed(() => {
   const term = (searchQuery.value || '').toLowerCase().trim()
   return auctions.value
+    .filter(a => !trendingIdSet.value.has(a.id))
     .filter(a => {
       if (!term) return true
       const nameMatch = (a.name || '').toLowerCase().includes(term)
