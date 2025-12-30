@@ -18,7 +18,9 @@ export default defineEventHandler(async (event) => {
 
   // 2) Parse & normalize timeframe (default 3m) + grouping (default weekly)
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
-  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly') ? rawGroupBy : 'weekly'
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'weekly'
 
   const now = new Date()
   const startDate = new Date(now)
@@ -69,6 +71,49 @@ export default defineEventHandler(async (event) => {
 
     return raw.map(r => ({
       day: r.day,
+      cumulative: typeof r.cumulative === 'bigint' ? Number(r.cumulative) : r.cumulative
+    }))
+  }
+
+  if (groupBy === 'monthly') {
+    // ---- Monthly cumulative users ----
+    const raw = await prisma.$queryRaw`
+      WITH
+        months AS (
+          SELECT generate_series(
+            date_trunc('month', ${startDate}),
+            date_trunc('month', now()),
+            '1 month'
+          ) AS month
+        ),
+        base AS (
+          SELECT COUNT(*)::int AS before_count
+          FROM "User"
+          WHERE "createdAt" < ${startDate}
+        ),
+        stats AS (
+          SELECT
+            date_trunc('month', "createdAt") AS month,
+            COUNT(*)::int AS cnt
+          FROM "User"
+          WHERE "createdAt" >= ${startDate}
+          GROUP BY month
+        )
+      SELECT
+        to_char(m.month, 'YYYY-MM-DD') AS month,
+        (b.before_count + COALESCE(
+          SUM(s.cnt) OVER (ORDER BY m.month),
+          0
+        ))::int AS cumulative
+      FROM months m
+      LEFT JOIN stats s
+        ON s.month = m.month
+      CROSS JOIN base b
+      ORDER BY m.month
+    `
+
+    return raw.map(r => ({
+      month: r.month,
       cumulative: typeof r.cumulative === 'bigint' ? Number(r.cumulative) : r.cumulative
     }))
   }

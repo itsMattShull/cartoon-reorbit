@@ -75,8 +75,12 @@ export default defineEventHandler(async (event) => {
     monsterRarityChances, // expected as percentages (0..100), any sum
     itemRarityChances,    // expected as percentages (0..100), any sum
     monsterStatVariancePct, // expected percent (0..50)
+    monsterInactivityDecayHours,
+    monsterDailyScanLimit,
     barcodeCooldownDays,
   } = body
+
+  const before = await db.barcodeGameConfig.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'desc' } })
 
   // Validate odds: must be finite numbers in [0,1] and sum to 1
   const on = clamp01(oddsNothing)
@@ -100,12 +104,24 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Cooldown must be an integer 0–365' })
   }
 
+  const decayHours = Number.isFinite(Number(monsterInactivityDecayHours))
+    ? Number(monsterInactivityDecayHours)
+    : Number(before?.monsterInactivityDecayHours ?? 48)
+  if (!Number.isInteger(decayHours) || decayHours < 0 || decayHours > 720) {
+    throw createError({ statusCode: 400, statusMessage: 'Inactivity decay hours must be an integer 0–720' })
+  }
+
+  const dailyLimit = Number.isFinite(Number(monsterDailyScanLimit))
+    ? Number(monsterDailyScanLimit)
+    : Number(before?.monsterDailyScanLimit ?? 20)
+  if (!Number.isInteger(dailyLimit) || dailyLimit < 0 || dailyLimit > 500) {
+    throw createError({ statusCode: 400, statusMessage: 'Daily scan limit must be an integer 0–500' })
+  }
+
   const rarity = normalizeRarityPayload(monsterRarityChances)
   const itemRarity = normalizeItemRarityPayload(itemRarityChances)
 
   // Upsert active config (create if missing)
-  const before = await db.barcodeGameConfig.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'desc' } })
-
   const payload = {
     oddsNothing: on,
     oddsItem: oi,
@@ -114,6 +130,8 @@ export default defineEventHandler(async (event) => {
     monsterRarityChances: rarity,
     itemRarityChances: itemRarity,
     monsterStatVariancePct: varPct / 100, // store as 0..0.5
+    monsterInactivityDecayHours: decayHours,
+    monsterDailyScanLimit: dailyLimit,
     barcodeCooldownDays: cooldownDays,
   }
 
@@ -143,7 +161,7 @@ export default defineEventHandler(async (event) => {
 
   // Log changes field-by-field
   try {
-    const fields = ['oddsNothing','oddsItem','oddsMonster','oddsBattle','monsterRarityChances','itemRarityChances','monsterStatVariancePct','barcodeCooldownDays']
+    const fields = ['oddsNothing','oddsItem','oddsMonster','oddsBattle','monsterRarityChances','itemRarityChances','monsterStatVariancePct','monsterInactivityDecayHours','monsterDailyScanLimit','barcodeCooldownDays']
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
       const nextVal = cfg ? cfg[k] : undefined

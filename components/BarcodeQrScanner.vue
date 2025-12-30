@@ -68,6 +68,13 @@
           <p class="result-subtitle">You didn’t get an item or a monster.</p>
         </div>
 
+        <div v-else-if="scanResult.outcome === 'LIMIT'" class="result-inner result-inner--solo">
+          <div>
+            <h3 class="result-title">Daily Scan Limit Reached</h3>
+            <p class="result-subtitle">{{ dailyLimitMessage }}</p>
+          </div>
+        </div>
+
         <div v-else-if="scanResult.outcome === 'MONSTER'" class="result-inner">
           <img
             v-if="scanResult.result?.standingStillImagePath"
@@ -204,6 +211,20 @@ async function postScan(payload) {
     if (retryAt) {
       setCooldown(retryAt);
       throw e;
+    }
+    const dailyLimit = extractDailyLimit(e);
+    if (dailyLimit) {
+      scanResult.value = {
+        outcome: "LIMIT",
+        message: dailyLimit.message || null,
+        resetAt: dailyLimit.resetAt || null,
+        limit: dailyLimit.limit ?? null,
+      };
+      lastPayload.value = { ...payload, response: null };
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
+      error.value = null;
+      return scanResult.value;
     }
     error.value =
       e?.data?.statusMessage ||
@@ -452,6 +473,7 @@ const scanTypeLabel = computed(() => {
   if (type === "ITEM") return "Item";
   if (type === "MONSTER") return "Monster";
   if (type === "BATTLE") return "Battle";
+  if (type === "LIMIT") return "Limit";
   return "Unknown";
 });
 
@@ -460,6 +482,20 @@ const itemEffectDescription = computed(() => {
   if (!effect) return "Effect: Unknown";
   if (effect === "HEAL") return "Effect: Heals your monster.";
   return `Effect: ${effect}`;
+});
+
+const dailyLimitMessage = computed(() => {
+  if (scanResult.value?.outcome !== "LIMIT") return "";
+  const limit = scanResult.value?.limit;
+  const resetAt = scanResult.value?.resetAt;
+  if (Number.isFinite(Number(limit)) && resetAt) {
+    return `You have hit the daily scan limit of ${limit}. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (resetAt) {
+    return `You have hit the daily scan limit. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (scanResult.value?.message) return scanResult.value.message;
+  return "Daily scan limit reached.";
 });
 
 function clearResult() {
@@ -485,9 +521,23 @@ function normalizeValue(formatName, decodedText) {
 function extractRetryAt(e) {
   const retryAt = e?.data?.retryAt;
   if (retryAt) return retryAt;
+  const retryAtWrapped = e?.data?.data?.retryAt || e?.response?._data?.data?.retryAt || e?.response?._data?.retryAt;
+  if (retryAtWrapped) return retryAtWrapped;
   const msg = e?.data?.statusMessage || e?.statusMessage || e?.message || "";
   const match = String(msg).match(/cooldown until\s+([0-9T:\-\.Z]+)/i);
   return match ? match[1] : null;
+}
+
+function extractDailyLimit(e) {
+  const payload = e?.data?.data || e?.data || e?.response?._data?.data || e?.response?._data || {};
+  const code = payload?.code || payload?.data?.code;
+  const statusMessage = payload?.statusMessage || e?.data?.statusMessage || e?.statusMessage || "";
+  if (code !== "DailyScanLimit" && !/daily scan limit/i.test(String(statusMessage))) return null;
+  return {
+    limit: Number.isFinite(Number(payload?.limit)) ? Number(payload.limit) : null,
+    resetAt: payload?.resetAt || null,
+    message: statusMessage || null,
+  };
 }
 
 function formatRemaining(ms) {
@@ -617,6 +667,9 @@ onBeforeUnmount(async () => {
   grid-template-columns: 120px 1fr;
   gap: 16px;
   align-items: center;
+}
+.result-inner--solo {
+  grid-template-columns: 1fr;
 }
 .result-image {
   width: 120px;

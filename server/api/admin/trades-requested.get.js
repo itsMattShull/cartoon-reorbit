@@ -18,7 +18,9 @@ export default defineEventHandler(async (event) => {
 
   // 2) Parse & normalize timeframe (default 3m) + grouping (default daily)
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
-  const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
 
   const now = new Date()
   const startDate = new Date(now)
@@ -36,6 +38,19 @@ export default defineEventHandler(async (event) => {
     const rows = await prisma.$queryRaw`
       SELECT
         to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "TradeOffer"
+      WHERE "createdAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+    return rows
+  }
+
+  if (groupBy === 'monthly') {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('month', "createdAt"), 'YYYY-MM-DD') AS period,
         COUNT(*)::int AS count
       FROM "TradeOffer"
       WHERE "createdAt" >= ${startDate}

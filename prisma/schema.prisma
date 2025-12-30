@@ -1274,6 +1274,12 @@ enum MonsterRarity {
   // % variability applied to species base stats per owned instance (e.g. 0.12 = ±12%)
   monsterStatVariancePct Float @default(0.12)
 
+  // Hours of inactivity until last-selected monster decays to 0 HP
+  monsterInactivityDecayHours Int @default(48)
+
+  // Max barcode scans per user per day (reset at 8am CST)
+  monsterDailyScanLimit Int @default(20)
+
   // cooldown per user per barcode mapping (admin-editable)
   barcodeCooldownDays Int @default(7)
 
@@ -1410,6 +1416,8 @@ model UserMonster {
   maxHealth Int
   atk Int
   def Int
+
+  lastInteractionAt DateTime?
 
   // UI state: whether this monster was last selected by the user
   lastSelected Boolean @default(false)

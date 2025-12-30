@@ -25,7 +25,8 @@ export default defineEventHandler(async (event) => {
           ctoon: { select: { name: true, series: true, rarity: true, assetPath: true, characters: true } }
         }
       },
-      bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 }
+      bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
+      _count: { select: { bids: true } }
     },
     orderBy: [
       { isFeatured: 'desc' }, // featured first
@@ -71,6 +72,7 @@ export default defineEventHandler(async (event) => {
     assetPath:    a.userCtoon.ctoon.assetPath,
     endAt:        a.endAt.toISOString(),
     highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
+    bidCount:     a._count?.bids ?? 0,
     isOwned:      ownedSet.has(a.userCtoon.ctoonId),
     isHolidayItem: holidaySet.has(a.userCtoon.ctoonId)
   }))

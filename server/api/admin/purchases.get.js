@@ -17,7 +17,9 @@ export default defineEventHandler(async (event) => {
 
   // 2) Parse timeframe, method, and grouping
   const { timeframe = '3m', method = 'ctoon', groupBy: rawGroupBy } = getQuery(event)
-  const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
 
   const now = new Date()
   const startDate = new Date(now)
@@ -36,6 +38,18 @@ export default defineEventHandler(async (event) => {
       return prisma.$queryRaw`
         SELECT
           to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+          COUNT(*)::int AS count
+        FROM "PointsLog"
+        WHERE method LIKE ${like}
+          AND "createdAt" >= ${startDate}
+        GROUP BY period
+        ORDER BY period
+      `
+    }
+    if (groupBy === 'monthly') {
+      return prisma.$queryRaw`
+        SELECT
+          to_char(date_trunc('month', "createdAt"), 'YYYY-MM-DD') AS period,
           COUNT(*)::int AS count
         FROM "PointsLog"
         WHERE method LIKE ${like}

@@ -11,6 +11,7 @@ import path               from 'node:path'
 import { dirname }        from 'node:path'
 import { fileURLToPath }  from 'node:url'
 import { randomUUID }     from 'crypto'
+import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 
 /* ── Clash engine & helpers ────────────────────────────────── */
 import { createBattle }   from './utils/battleEngine.js'
@@ -351,6 +352,7 @@ const selectAiMonster = async () => {
     select: {
       id: true,
       name: true,
+      rarity: true,
       baseHp: true,
       baseAtk: true,
       baseDef: true,
@@ -360,14 +362,25 @@ const selectAiMonster = async () => {
     }
   })
   if (!row) return null
+  const config = await db.barcodeGameConfig.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: 'desc' },
+    select: { monsterStatVariancePct: true }
+  })
+  const variancePct = clampVariancePct(config?.monsterStatVariancePct)
+  const { rolled } = rollInstanceStats({
+    hp: row.baseHp,
+    atk: row.baseAtk,
+    def: row.baseDef
+  }, variancePct)
   return {
     id: row.id,
     name: row.name,
     stats: {
-      hp: row.baseHp,
-      maxHealth: row.baseHp,
-      atk: row.baseAtk,
-      def: row.baseDef
+      hp: rolled.hp,
+      maxHealth: rolled.hp,
+      atk: rolled.atk,
+      def: rolled.def
     },
     sprites: {
       walk: row.walkingImagePath || null,
@@ -1149,6 +1162,15 @@ io.on('connection', socket => {
         }
       })
 
+      try {
+        await db.userMonster.update({
+          where: { id: p1Monster.id },
+          data: { lastInteractionAt: new Date() }
+        })
+      } catch (e) {
+        console.error('Failed to update lastInteractionAt for player1 monster:', e)
+      }
+
       const state = createInitialState({
         battleId: record.id,
         player1: {
@@ -1244,6 +1266,18 @@ io.on('connection', socket => {
     if (!validation.ok) {
       socket.emit('battle:error', { battleId, message: 'Invalid action.', code: validation.code })
       return
+    }
+
+    try {
+      const monsterId = battle.state.participants[playerKey]?.monsterId
+      if (monsterId) {
+        await db.userMonster.update({
+          where: { id: monsterId },
+          data: { lastInteractionAt: new Date() }
+        })
+      }
+    } catch (e) {
+      console.error('Failed to update lastInteractionAt for battle action:', e)
     }
 
     battle.actions[playerKey] = action

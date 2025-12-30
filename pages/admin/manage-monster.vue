@@ -132,12 +132,22 @@
           </div>
         </div>
 
-        <!-- Variance & Cooldown -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <!-- Variance, Decay, Daily Limit & Cooldown -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
             <label class="block text-sm font-medium text-gray-700">Monster Stat Variance</label>
             <input type="number" class="input" min="0" max="50" step="1" v-model.number="variancePct" />
             <p class="text-xs text-gray-500 mt-1">Percent variability applied per monster instance when rolled (e.g., 12 means ±12%).</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Inactivity HP Decay (hours)</label>
+            <input type="number" class="input" min="0" max="720" step="1" v-model.number="decayHours" />
+            <p class="text-xs text-gray-500 mt-1">Hours until the last-selected monster reaches 0 HP with no activity. Set to 0 to disable.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Daily Scan Limit</label>
+            <input type="number" class="input" min="0" max="500" step="1" v-model.number="dailyScanLimit" />
+            <p class="text-xs text-gray-500 mt-1">Max scans per user per day. Resets at 8am CST. Set to 0 to disable.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Barcode Cooldown (days)</label>
@@ -737,6 +747,8 @@ function showToast(type, msg) { toast.value = { type, msg }; setTimeout(() => { 
   const oddsMonster = ref(0.50)
   const oddsBattle  = ref(0.00)
   const variancePct = ref(12)
+  const decayHours = ref(48)
+  const dailyScanLimit = ref(20)
   const cooldownDays = ref(7)
   const rarityPercents = reactive({ Common: 60, Uncommon: 25, Rare: 10, VeryRare: 4, CrazyRare: 1 })
   const itemRarityPercents = reactive({ Common: 70, Rare: 25, CrazyRare: 5 })
@@ -762,6 +774,8 @@ const savingCfg = ref(false)
     if (cfg?.oddsMonster != null) oddsMonster.value = Number(cfg.oddsMonster)
     if (cfg?.oddsBattle  != null) oddsBattle.value  = Number(cfg.oddsBattle)
     if (cfg?.monsterStatVariancePct != null) variancePct.value = Math.round(Number(cfg.monsterStatVariancePct) * 100)
+    if (cfg?.monsterInactivityDecayHours != null) decayHours.value = Number(cfg.monsterInactivityDecayHours)
+    if (cfg?.monsterDailyScanLimit != null) dailyScanLimit.value = Number(cfg.monsterDailyScanLimit)
     if (cfg?.barcodeCooldownDays != null) cooldownDays.value = Number(cfg.barcodeCooldownDays)
       const c = cfg?.monsterRarityChances || {}
       rarityPercents.Common    = Number(c.Common ?? c.COMMON ?? rarityPercents.Common)
@@ -793,6 +807,8 @@ async function saveConfig() {
         monsterRarityChances: { ...rarityPercents },
         itemRarityChances: { ...itemRarityPercents },
         monsterStatVariancePct: Number(variancePct.value), // percent 0..50
+        monsterInactivityDecayHours: Number(decayHours.value),
+        monsterDailyScanLimit: Number(dailyScanLimit.value),
         barcodeCooldownDays: Number(cooldownDays.value)
       }
     })

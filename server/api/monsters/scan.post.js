@@ -132,6 +132,81 @@ function addDays(date, days) {
   return d
 }
 
+function getChicagoOffsetMinutes(date) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+  const parts = fmt.formatToParts(date)
+  const tz = parts.find(p => p.type === 'timeZoneName')?.value || ''
+  const match = tz.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/)
+  if (match) {
+    const hours = Number(match[1])
+    const minutes = Number(match[2] || 0)
+    return hours * 60 + (hours >= 0 ? minutes : -minutes)
+  }
+  const shortTz = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    timeZoneName: 'short',
+    hour: '2-digit'
+  }).formatToParts(date).find(p => p.type === 'timeZoneName')?.value
+  if (shortTz === 'CDT') return -300
+  if (shortTz === 'CST') return -360
+  return 0
+}
+
+function chicagoLocalToUtcMs(year, month, day, hour, minute, second) {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second)
+  let offset = getChicagoOffsetMinutes(new Date(utcGuess))
+  let adjusted = utcGuess - offset * 60 * 1000
+  const recheckOffset = getChicagoOffsetMinutes(new Date(adjusted))
+  if (recheckOffset !== offset) {
+    offset = recheckOffset
+    adjusted = utcGuess - offset * 60 * 1000
+  }
+  return adjusted
+}
+
+function getChicagoParts(date) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const parts = fmt.formatToParts(date)
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]))
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second)
+  }
+}
+
+function getDailyScanWindowCst(now = new Date()) {
+  const nowParts = getChicagoParts(now)
+  const isBeforeCutoff = nowParts.hour < 8
+  const startBase = isBeforeCutoff ? new Date(now.getTime() - 24 * 60 * 60 * 1000) : now
+  const startParts = getChicagoParts(startBase)
+  const startMs = chicagoLocalToUtcMs(startParts.year, startParts.month, startParts.day, 8, 0, 0)
+  const nextBase = new Date(startBase.getTime() + 24 * 60 * 60 * 1000)
+  const nextParts = getChicagoParts(nextBase)
+  const endMs = chicagoLocalToUtcMs(nextParts.year, nextParts.month, nextParts.day, 8, 0, 0)
+  return {
+    start: new Date(startMs),
+    resetAt: new Date(endMs),
+  }
+}
+
 function buildItemResult(itemRow) {
   return {
     type: 'item',
@@ -222,6 +297,25 @@ export default defineEventHandler(async (event) => {
   }
 
   const userId = String(me.id)
+
+  const dailyLimit = Number(config.monsterDailyScanLimit ?? 20)
+  if (Number.isFinite(dailyLimit) && dailyLimit > 0) {
+    const { start, resetAt } = getDailyScanWindowCst()
+    const scansToday = await db.userBarcodeScan.count({
+      where: {
+        userId,
+        lastScannedAt: { gte: start }
+      }
+    })
+    if (scansToday >= dailyLimit) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: 'Daily scan limit reached.',
+        data: { code: 'DailyScanLimit', limit: dailyLimit, resetAt: resetAt.toISOString() }
+      })
+    }
+  }
+
   const barcodeKey = canonicalKey(format, rawValue)
 
   // 1) Get or create canonical mapping for this barcode in this config/version

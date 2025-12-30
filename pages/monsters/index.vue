@@ -39,7 +39,9 @@
                 :class="['menu-row', { selected: opt.index === menuIndex }]"
               >
                 <span class="menu-caret">{{ opt.index === menuIndex ? '▶' : '\u00A0' }}</span>
-                <span class="menu-text">{{ opt.label }}</span>
+                <span :class="['menu-text', { 'menu-text--compact': menuMode === 'change' && opt.action === 'monster' }]">
+                  {{ opt.label }}
+                </span>
               </div>
             </div>
           </div>
@@ -83,6 +85,9 @@
             <span class="battle-action-caret">{{ idx === battleActionIndex ? '▶' : ' ' }}</span>
             <span>{{ entry.label }}</span>
           </div>
+        </div>
+        <div v-if="battleId && battleState && battleActionStatus" class="battle-action-status">
+          {{ battleActionStatus }}
         </div>
         <!-- Overlay the GIF so it animates naturally -->
         <img
@@ -148,16 +153,6 @@
       <div class="battle-modal-body">
         <div class="battle-modal-winner">Winner: {{ battleWinnerLabel }}</div>
         <div class="battle-modal-reason">Reason: {{ battleOutcome?.endReason }}</div>
-        <div class="battle-modal-log">
-          <div class="battle-modal-log-title">Turn Log</div>
-          <div v-if="!battleOutcome?.turnLog?.length" class="battle-modal-log-empty">No turns recorded.</div>
-          <div v-for="turn in battleOutcome?.turnLog || []" :key="turn.turnNumber" class="battle-modal-log-entry">
-            <div class="battle-modal-log-line">Turn {{ turn.turnNumber }} — First: {{ turn.firstActor || 'None' }}</div>
-            <div class="battle-modal-log-line">Actions: P1 {{ turn.actions?.player1 || '-' }} / P2 {{ turn.actions?.player2 || '-' }}</div>
-            <div class="battle-modal-log-line">Damage: P1 {{ turn.damage?.player1 ?? 0 }} / P2 {{ turn.damage?.player2 ?? 0 }}</div>
-            <div class="battle-modal-log-line">HP After: P1 {{ turn.hpAfter?.player1 ?? 0 }} / P2 {{ turn.hpAfter?.player2 ?? 0 }}</div>
-          </div>
-        </div>
       </div>
       <footer class="battle-modal-footer">
         <button class="btn-primary" @click="closeBattleModal">Back to Monsters</button>
@@ -262,6 +257,7 @@ const battleRightSprites = ref({ walk: null, idle: null, jump: null })
 const displayHpLeft = ref(0)
 const displayHpRight = ref(0)
 const battlePlaybackActive = ref(false)
+const battleActionMessage = ref('')
 const battleActionIndex = ref(0)
 const battleActionItems = computed(() => ([
   { key: 'ATTACK', label: 'ATTACK', disabled: !battleActive.value || myActionSubmitted.value || pendingAction.value || battlePlaybackActive.value },
@@ -298,6 +294,13 @@ const battleStatusText = computed(() => {
   if (!battleState.value) return 'Idle'
   if (battleState.value.status === 'finished') return `Finished (${battleState.value.endReason || 'UNKNOWN'})`
   return `Turn ${battleState.value.turnNumber}`
+})
+const battleActionStatus = computed(() => {
+  if (!battleState.value) return ''
+  if (battlePlaybackActive.value && battleActionMessage.value) return battleActionMessage.value
+  if (battleActive.value) return 'Waiting on selection...'
+  if (battleState.value.status === 'finished') return 'Battle finished.'
+  return ''
 })
 const myDamage = computed(() => {
   if (!battleResult.value || !myPlayerKey.value) return null
@@ -357,7 +360,7 @@ const menuEntries = computed(() => {
   if (menuMode.value === 'change') {
     const entries = otherMonsters.value.map((m) => ({
       key: m.id,
-      label: `${m.displayName} — HP ${m.hp} ATK ${m.atk} DEF ${m.def}`,
+      label: `${m.displayName} — ${m.rarity || 'Unknown'} — HP ${m.hp} ATK ${m.atk} DEF ${m.def} TOTAL ${Number(m.hp || 0) + Number(m.atk || 0) + Number(m.def || 0)}`,
       action: 'monster',
       monster: m,
     }))
@@ -916,6 +919,7 @@ const resetBattleUi = () => {
   battleLeftSprites.value = { walk: null, idle: null, jump: null }
   battleRightSprites.value = { walk: null, idle: null, jump: null }
   opponentSpriteSrc.value = ''
+  battleActionMessage.value = ''
   if (battleAttackTimers.player) clearTimeout(battleAttackTimers.player)
   if (battleAttackTimers.opponent) clearTimeout(battleAttackTimers.opponent)
   battleAttackTimers.player = null
@@ -1001,6 +1005,15 @@ const playTurnSequence = async (payload, startHp = {}) => {
     const defenderIsLeft = defender === leftKey
     const defenderHp = defenderIsLeft ? workingLeft : workingRight
     if ((defenderHp ?? 0) <= 0) break
+    const attackerName = participantNameForKey(attacker)
+    const defenderName = participantNameForKey(defender)
+    const dodged = Boolean(payload.results?.dodge?.[defender])
+    const blocked = actions?.[defender] === 'BLOCK' && !dodged
+    battleActionMessage.value = dodged
+      ? `${attackerName} is attacking! ${defenderName} dodged the attack.`
+      : blocked
+        ? `${attackerName} is attacking! ${defenderName} blocked the attack.`
+        : `${attackerName} is attacking!`
     playBattleAttack(attacker)
     await sleep(2000)
     const damage = payload.results?.damage?.[attacker] ?? 0
@@ -1013,6 +1026,7 @@ const playTurnSequence = async (payload, startHp = {}) => {
     }
   }
 
+  battleActionMessage.value = ''
   battlePlaybackActive.value = false
   if (payload?.results?.hpAfter) {
     setDisplayHpFromResult(payload.results.hpAfter)
@@ -1085,6 +1099,15 @@ const connectBattleSocket = () => {
 const joinBattle = (id) => {
   if (!battleSocket || !id) return
   battleSocket.emit('battle:join', { battleId: id, userId: user.value?.id })
+}
+
+const participantNameForKey = (key) => {
+  const participant = battleState.value?.participants?.[key]
+  if (!participant) return 'Monster'
+  if (participant.name) return participant.name
+  if (participant.isAi) return 'AI'
+  if (key === myPlayerKey.value) return 'Your Monster'
+  return 'Opponent'
 }
 
 const submitBattleAction = (action) => {
@@ -1370,6 +1393,26 @@ onBeforeUnmount(() => {
   gap: 10px;
   z-index: 3;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.battle-action-status {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 138px;
+  z-index: 3;
+  padding: 8px 10px;
+  border: 2px solid #2c4a1d;
+  border-radius: 8px;
+  background: rgba(214, 239, 158, 0.9);
+  color: #1f3813;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
   text-transform: uppercase;
   pointer-events: none;
 }
@@ -1751,6 +1794,10 @@ onBeforeUnmount(() => {
 }
 
 .menu-text { letter-spacing: 2px; }
+.menu-text--compact {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
 
 .rename-panel {
   display: grid;

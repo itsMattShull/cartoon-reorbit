@@ -21,13 +21,13 @@ export default defineEventHandler(async (event) => {
   const to = new Date()
   const from = new Date(Date.now() - d * 24 * 3600 * 1000)
 
-  // Trigger attempts
+  // Trigger logs (only starts + reasons we still track)
   const logs = await db.scavengerTriggerLog.findMany({
     where: { createdAt: { gte: from, lte: to } },
     select: { createdAt: true, triggerSource: true, started: true, reason: true }
   })
-  const attemptsCount = logs.length
-  const startedCount = logs.filter(l => l.started).length
+  const startedLogs = logs.filter(l => l.started)
+  const startedCount = startedLogs.length
   const reasonCounts = logs.reduce((acc, l) => {
     acc[l.reason || 'unknown'] = (acc[l.reason || 'unknown'] || 0) + 1
     return acc
@@ -35,8 +35,7 @@ export default defineEventHandler(async (event) => {
 
   // Started by day
   const startedByDayMap = new Map()
-  for (const l of logs) {
-    if (!l.started) continue
+  for (const l of startedLogs) {
     const k = startOfDay(l.createdAt).toISOString().slice(0,10)
     startedByDayMap.set(k, (startedByDayMap.get(k) || 0) + 1)
   }
@@ -60,23 +59,22 @@ export default defineEventHandler(async (event) => {
 
   // Triggers breakdown
   const triggerMap = new Map()
-  for (const l of logs) {
-    const row = triggerMap.get(l.triggerSource) || { trigger: l.triggerSource, attempts: 0, starts: 0, completions: 0 }
-    row.attempts += 1
-    if (l.started) row.starts += 1
+  for (const l of startedLogs) {
+    const row = triggerMap.get(l.triggerSource) || { trigger: l.triggerSource, starts: 0, completions: 0 }
+    row.starts += 1
     triggerMap.set(l.triggerSource, row)
   }
   // attach completions to each trigger row
   for (const [trig, count] of completionsByTrigger.entries()) {
-    const row = triggerMap.get(trig) || { trigger: trig, attempts: 0, starts: 0, completions: 0 }
+    const row = triggerMap.get(trig) || { trigger: trig, starts: 0, completions: 0 }
     row.completions = count
     triggerMap.set(trig, row)
   }
-  const triggers = Array.from(triggerMap.values()).sort((a,b) => b.attempts - a.attempts)
+  const triggers = Array.from(triggerMap.values()).sort((a,b) => (b.starts || 0) - (a.starts || 0))
 
   return {
     from: from.toISOString(), to: to.toISOString(), days: d,
-    attemptsCount, startedCount, reasonCounts, startedByDay,
+    startedCount, reasonCounts, startedByDay,
     outcomes, pointsAwardedTotal, pointsAwardedAvg, triggers
   }
 })

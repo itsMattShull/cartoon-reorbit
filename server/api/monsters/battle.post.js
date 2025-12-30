@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const nextHp = Math.max(0, Math.floor(Number(monster.hp) / 2))
   const updated = await db.userMonster.update({
     where: { id: monster.id },
-    data: { hp: nextHp },
+    data: { hp: nextHp, lastInteractionAt: new Date() },
     select: { id: true, hp: true },
   })
 

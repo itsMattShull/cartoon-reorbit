@@ -19,12 +19,12 @@ export default defineEventHandler(async (event) => {
 
   await db.userMonster.updateMany({
     where: { userId: String(me.id), lastSelected: true },
-    data: { lastSelected: false },
+    data: { lastSelected: false, lastInteractionAt: new Date() },
   })
 
   await db.userMonster.update({
     where: { id: monster.id },
-    data: { lastSelected: true },
+    data: { lastSelected: true, lastInteractionAt: new Date() },
   })
 
   return { ok: true }

@@ -219,6 +219,9 @@
                   <p class="text-sm text-gray-600 mb-1">
                     Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
                   </p>
+                  <p class="text-sm text-gray-600 mb-1">
+                    Bids: {{ auction.bidCount ?? 0 }}
+                  </p>
                   <p class="text-sm text-red-600 mb-4">
                     Ending in {{ formatRemaining(auction.endAt) }}
                   </p>
@@ -244,58 +247,80 @@
           You haven't bid on any auctions yet.
         </div>
 
-        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div
-            v-for="bid in sortedMyBids"
-            :key="bid.id"
-            class="relative bg-white rounded-lg shadow p-4 h-full flex flex-col"
-          >
-            <!-- Outcome badge (ended only) -->
-            <div class="absolute top-2 right-2">
-              <span
-                v-if="isEnded(bid.endAt) && bid.didWin"
-                class="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded"
-              >
-                Won
-              </span>
-              <span
-                v-else-if="isEnded(bid.endAt) && !bid.didWin"
-                class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
-              >
-                Lost
-              </span>
-            </div>
-
-            <div class="flex-grow flex items-center justify-center mb-4">
-              <img :src="bid.assetPath" class="max-w-full rounded" />
-            </div>
-
-            <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
-            <p class="text-sm text-gray-600 mb-1">
-              Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
-            </p>
-            <p class="text-sm text-gray-600 mb-1">
-              Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
-            </p>
-
-            <p
-              class="text-sm mb-4"
-              :class="isEnded(bid.endAt) ? 'text-gray-600' : 'text-red-600'"
+        <div v-else>
+          <div class="flex items-center justify-end mb-4">
+            <label for="mybids-sort" class="text-sm font-medium text-gray-700 mr-2">
+              Sort By
+            </label>
+            <select
+              id="mybids-sort"
+              v-model="myBidsSort"
+              class="block border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             >
-              <template v-if="!isEnded(bid.endAt)">
-                Ending in {{ formatRemaining(bid.endAt) }}
-              </template>
-              <template v-else>
-                Ended on {{ formatDate(bid.endAt) }}
-              </template>
-            </p>
+              <option value="recentDesc">Recent - Descending</option>
+              <option value="recentAsc">Recent - Ascending</option>
+              <option value="biggestBid">My Biggest Bid</option>
+              <option value="recentlyWon">Recently Won</option>
+              <option value="recentlyLost">Recently Lost</option>
+            </select>
+          </div>
 
-            <NuxtLink
-              :to="`/auction/${bid.id}`"
-              class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center mt-auto"
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div
+              v-for="bid in sortedMyBids"
+              :key="bid.id"
+              class="relative bg-white rounded-lg shadow p-4 h-full flex flex-col"
             >
-              View Auction
-            </NuxtLink>
+              <!-- Outcome badge (ended only) -->
+              <div class="absolute top-2 right-2">
+                <span
+                  v-if="isEnded(bid.endAt) && bid.didWin"
+                  class="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Won
+                </span>
+                <span
+                  v-else-if="isEnded(bid.endAt) && !bid.didWin"
+                  class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Lost
+                </span>
+              </div>
+
+              <div class="flex-grow flex items-center justify-center mb-4">
+                <img :src="bid.assetPath" class="max-w-full rounded" />
+              </div>
+
+              <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
+              <p class="text-sm text-gray-600 mb-1">
+                Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">
+                Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">
+                Bids: {{ bid.bidCount ?? 0 }}
+              </p>
+
+              <p
+                class="text-sm mb-4"
+                :class="isEnded(bid.endAt) ? 'text-gray-600' : 'text-red-600'"
+              >
+                <template v-if="!isEnded(bid.endAt)">
+                  Ending in {{ formatRemaining(bid.endAt) }}
+                </template>
+                <template v-else>
+                  Ended on {{ formatDate(bid.endAt) }}
+                </template>
+              </p>
+
+              <NuxtLink
+                :to="`/auction/${bid.id}`"
+                class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center mt-auto"
+              >
+                View Auction
+              </NuxtLink>
+            </div>
           </div>
         </div>
       </div>
@@ -342,6 +367,9 @@
             <p class="text-sm text-gray-600 mb-1">
               Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
             </p>
+            <p class="text-sm text-gray-600 mb-1">
+              Bids: {{ auction.bidCount ?? 0 }}
+            </p>
             <p v-if="auction.winningBidder" class="text-sm text-gray-600">
               Winner: {{ auction.winningBidder }}
             </p>
@@ -368,6 +396,7 @@ const isLoadingMy = ref(false)
 
 const myBids = ref([])
 const isLoadingMyBids = ref(false)
+const myBidsSort = ref('recentDesc')
 
 const now = ref(new Date())
 let timer = null
@@ -486,7 +515,7 @@ function loadMyBids() {
   $fetch('/api/auction/mybids')
     .then(data => {
       // Expect each item to include at least:
-      // { id, name, assetPath, endAt, myBid, highestBid, didWin }
+      // { id, name, assetPath, endAt, myBid, highestBid, bidCount, didWin }
       myBids.value = Array.isArray(data) ? data : []
     })
     .finally(() => {
@@ -573,12 +602,38 @@ const filteredAuctions = computed(() => {
  *  - Within each group, ending soonest first
  */
 const sortedMyBids = computed(() => {
-  return [...myBids.value].sort((a, b) => {
-    const aEnded = isEnded(a.endAt)
-    const bEnded = isEnded(b.endAt)
-    if (aEnded !== bEnded) return aEnded ? 1 : -1
-    return new Date(a.endAt) - new Date(b.endAt)
-  })
+  const items = [...myBids.value]
+
+  switch (myBidsSort.value) {
+    case 'recentAsc':
+      return items.sort((a, b) => new Date(a.endAt) - new Date(b.endAt))
+    case 'biggestBid':
+      return items.sort((a, b) => {
+        const aBid = a.myBid ?? Number.NEGATIVE_INFINITY
+        const bBid = b.myBid ?? Number.NEGATIVE_INFINITY
+        if (bBid !== aBid) return bBid - aBid
+        return new Date(b.endAt) - new Date(a.endAt)
+      })
+    case 'recentlyWon':
+      return items.sort((a, b) => {
+        const aEnded = isEnded(a.endAt)
+        const bEnded = isEnded(b.endAt)
+        if (aEnded !== bEnded) return aEnded ? -1 : 1
+        if (aEnded && bEnded && a.didWin !== b.didWin) return a.didWin ? -1 : 1
+        return new Date(b.endAt) - new Date(a.endAt)
+      })
+    case 'recentlyLost':
+      return items.sort((a, b) => {
+        const aEnded = isEnded(a.endAt)
+        const bEnded = isEnded(b.endAt)
+        if (aEnded !== bEnded) return aEnded ? -1 : 1
+        if (aEnded && bEnded && a.didWin !== b.didWin) return a.didWin ? 1 : -1
+        return new Date(b.endAt) - new Date(a.endAt)
+      })
+    case 'recentDesc':
+    default:
+      return items.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
+  }
 })
 </script>
 

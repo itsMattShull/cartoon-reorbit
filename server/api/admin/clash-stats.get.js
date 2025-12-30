@@ -22,7 +22,9 @@ export default defineEventHandler(async (event) => {
 
   // 2) Parse timeframe + grouping
   const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
-  const groupBy = rawGroupBy === 'weekly' ? 'weekly' : 'daily'
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
 
   const now = new Date()
   const startDate = new Date(now)
@@ -69,6 +71,48 @@ export default defineEventHandler(async (event) => {
       const finished = Number(r.finished)
       return {
         period:          r.period,               // week start (local)
+        count:           total,
+        finishedCount:   finished,
+        percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
+      }
+    })
+  }
+
+  if (groupBy === 'monthly') {
+    // ---- Monthly buckets (month starts per Postgres date_trunc) ----
+    const rows = await prisma.$queryRaw`
+      WITH base AS (
+        SELECT
+          ("startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Chicago') AS local_ts,
+          outcome
+        FROM "ClashGame"
+        WHERE "startedAt" >= ${startDate}
+      ),
+      mo AS (
+        SELECT
+          date_trunc('month', local_ts)::date AS month_start,
+          outcome
+        FROM base
+      )
+      SELECT
+        to_char(month_start, 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS total,
+        SUM(CASE
+              WHEN outcome IS NOT NULL
+               AND outcome != 'incomplete'
+               AND outcome != ''
+              THEN 1 ELSE 0
+            END)::int AS finished
+      FROM mo
+      GROUP BY period
+      ORDER BY period
+    `
+
+    return rows.map(r => {
+      const total    = Number(r.total)
+      const finished = Number(r.finished)
+      return {
+        period:          r.period,               // month start (local)
         count:           total,
         finishedCount:   finished,
         percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
