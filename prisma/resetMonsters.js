@@ -18,9 +18,10 @@ async function resetMonsters() {
     console.log('🧹 Resetting barcode/monster tables (keeping ItemDefinition + SpeciesBaseStats)...\n')
 
     // Dependents first
+    await del('MonsterBattle', () => prisma.monsterBattle.deleteMany())
     await del('UserBarcodeScan', () => prisma.userBarcodeScan.deleteMany())
-    await del('UserMonster', () => prisma.userMonster.deleteMany())
     await del('UserMonsterItem', () => prisma.userMonsterItem.deleteMany())
+    await del('UserMonster', () => prisma.userMonster.deleteMany())
 
     // Mappings (keep barcode config)
     await del('BarcodeMapping', () => prisma.barcodeMapping.deleteMany())
