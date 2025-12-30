@@ -120,17 +120,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     const nativeFetch = globalThis.fetch || fetch
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 
-    const baseUrl =
-      process.env.PUBLIC_BASE_URL ||
-      (process.env.NODE_ENV === 'production'
-        ? 'https://www.cartoonreorbit.com'
-        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
-
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
-    const rawImageUrl = row.imagePath
-      ? (row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`)
-      : null
-    const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
     if (row.imageFilename && canAttach) {
       try {
@@ -138,8 +128,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         const fileBuf = await readFile(filePath)
         const fd = new FormData()
         fd.append('payload_json', JSON.stringify({
-          content,
-          embeds: [{ image: { url: `attachment://${row.imageFilename}` } }]
+          content
         }))
         fd.append('files[0]', new Blob([fileBuf]), row.imageFilename)
 
@@ -161,13 +150,11 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
 
         return res.ok
       } catch {
-        // fall through to URL-based embed
+        // fall through to content-only send
       }
     }
 
-    const payload = imageUrl
-      ? { content, embeds: [{ image: { url: imageUrl } }] }
-      : { content }
+    const payload = { content }
 
     const res = await nativeFetch(
       `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
