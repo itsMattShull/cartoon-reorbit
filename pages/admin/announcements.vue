@@ -137,7 +137,7 @@
 
             <div>
               <label class="block mb-1 font-medium">Image (optional)</label>
-              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif" @change="onFileChange" />
+              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange" />
               <div v-if="form.imagePath" class="text-xs text-gray-500 mt-2">
                 Current: {{ form.imagePath }}
               </div>
@@ -453,7 +453,18 @@ function resetForm() {
 
 function onFileChange(e) {
   const file = e.target.files?.[0]
-  imageFile.value = file || null
+  if (!file) {
+    imageFile.value = null
+    return
+  }
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif'])
+  if (!allowed.has(file.type)) {
+    formError.value = 'Only JPG, JPEG, PNG, or GIF images are allowed.'
+    imageFile.value = null
+    if (fileInput.value) fileInput.value.value = ''
+    return
+  }
+  imageFile.value = file
 }
 
 async function saveAnnouncement() {

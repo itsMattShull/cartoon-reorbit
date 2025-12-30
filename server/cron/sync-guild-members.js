@@ -637,7 +637,17 @@ async function sendDueAnnouncements() {
       })
       if (!claim.count) continue
 
-      const ok = await sendAnnouncementDiscordMessage(row)
+      const latest = await prisma.announcement.findUnique({
+        where: { id: row.id },
+        select: {
+          id: true,
+          message: true,
+          pingOption: true,
+          imagePath: true,
+          imageFilename: true
+        }
+      })
+      const ok = await sendAnnouncementDiscordMessage(latest || row)
       if (!ok) {
         await prisma.announcement.update({
           where: { id: row.id },
@@ -645,6 +655,22 @@ async function sendDueAnnouncements() {
         })
       }
     }
+  } catch {
+    // swallow in cron context
+  }
+}
+
+async function markScheduledPacksInCmart() {
+  try {
+    const now = new Date()
+    await prisma.pack.updateMany({
+      where: { sentAt: null, scheduledAt: { lte: now } },
+      data: { inCmart: true, sentAt: now }
+    })
+    await prisma.pack.updateMany({
+      where: { inCmart: true, scheduledOffAt: { lte: now } },
+      data: { inCmart: false }
+    })
   } catch {
     // swallow in cron context
   }
@@ -798,6 +824,9 @@ cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
 
 await sendDueAnnouncements()
 cron.schedule('*/5 * * * *', sendDueAnnouncements)
+
+await markScheduledPacksInCmart()
+cron.schedule('2 * * * *', markScheduledPacksInCmart)
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily

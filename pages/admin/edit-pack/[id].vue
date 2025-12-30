@@ -80,6 +80,39 @@
             <label class="select-none text-sm">List in cMart</label>
           </div>
 
+          <!-- go live date/time -->
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label for="pack-go-live" class="text-sm font-medium">
+              Pack go live (CST)
+            </label>
+            <input
+              id="pack-go-live"
+              v-model="scheduledAtLocal"
+              type="datetime-local"
+              step="3600"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              Time must be on the hour. Leave blank to keep this pack out of cMart.
+            </p>
+          </div>
+
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label for="pack-go-dark" class="text-sm font-medium">
+              Pack remove from cMart (CST)
+            </label>
+            <input
+              id="pack-go-dark"
+              v-model="scheduledOffAtLocal"
+              type="datetime-local"
+              step="3600"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              Time must be on the hour. Leave blank to keep this pack listed.
+            </p>
+          </div>
+
           <!-- sell-out behavior -->
           <div class="lg:col-span-2 space-y-2">
             <p class="text-sm font-medium">Pack sell-out behavior</p>
@@ -232,7 +265,9 @@ const loadedOk = computed(() => !pending.value && !error.value)
 const name        = ref('')
 const price       = ref(0)
 const description = ref('')
-const inCmart     = ref(true)
+const inCmart     = ref(false)
+const scheduledAtLocal = ref('')
+const scheduledOffAtLocal = ref('')
 const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
 
 /* ---------------- thumbnail upload ---------------- */
@@ -258,6 +293,36 @@ const defaultWeightConfigs = {
   'Very Rare': { true:  12.5, false: 75   },
   'Crazy Rare':{ true:  10,   false: 90   }
 }
+
+function centralDateTimeValue(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  }).formatToParts(date)
+  const map = Object.fromEntries(parts.filter(p => p.type !== 'literal').map(p => [p.type, p.value]))
+  return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`
+}
+
+function normalizeToHour(value) {
+  if (!value) return ''
+  const [date, time] = String(value).split('T')
+  if (!date || !time) return value
+  const [hour] = time.split(':')
+  if (!hour) return value
+  return `${date}T${hour}:00`
+}
+
+watch(scheduledAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledAtLocal.value = normalized
+})
+
+watch(scheduledOffAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledOffAtLocal.value = normalized
+})
 
 /** assign default weights based on each cToon.inCmart flag */
 function assignDefaultWeights(rarity) {
@@ -398,6 +463,8 @@ onMounted(async () => {
     inCmart.value     = p.inCmart
     sellOutBehavior.value = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
     imagePreview.value= p.imagePath
+    scheduledAtLocal.value = p.scheduledAt ? centralDateTimeValue(new Date(p.scheduledAt)) : ''
+    scheduledOffAtLocal.value = p.scheduledOffAt ? centralDateTimeValue(new Date(p.scheduledOffAt)) : ''
 
     /* rarity configs */
     p.rarityConfigs.forEach(rc => {
@@ -441,6 +508,8 @@ async function submit () {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
+    scheduledAtLocal: scheduledAtLocal.value || '',
+    scheduledOffAtLocal: scheduledOffAtLocal.value || '',
     sellOutBehavior: sellOutBehavior.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({

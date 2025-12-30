@@ -436,6 +436,9 @@ model Pack {
   price       Int      @default(0)
   imagePath   String?
   inCmart     Boolean  @default(false)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  scheduledOffAt DateTime?
   sellOutBehavior PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
