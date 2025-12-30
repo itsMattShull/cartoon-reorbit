@@ -235,6 +235,7 @@ model User {
   auctionsOnlyCreated      AuctionOnly[]               @relation("AuctionOnlyCreatedBy")
   adImagesCreated          AdImage[]                   @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
+  announcementsCreated     Announcement[]              @relation("AnnouncementsCreatedBy")
   // Ban notes relations
   banNotes                 UserBanNote[]               @relation("BanNoteUser")
   banNotesAuthored         UserBanNote[]               @relation("BanNoteAdmin")
@@ -976,6 +977,24 @@ model AdImage {
   createdBy   User?   @relation("AdImagesCreatedBy", fields: [createdById], references: [id])
 
   @@index([createdAt])
+}
+
+model Announcement {
+  id            String   @id @default(uuid())
+  message       String
+  pingOption    String?
+  imagePath     String?
+  imageFilename String?
+  scheduledAt   DateTime
+  sentAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  createdById String?
+  createdBy   User? @relation("AnnouncementsCreatedBy", fields: [createdById], references: [id])
+
+  @@index([scheduledAt])
+  @@index([sentAt])
 }
 
 model WinballGrandPrizeSchedule {
