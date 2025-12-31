@@ -16,7 +16,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..')
   : process.cwd()
-const announcementsDir = process.env.NODE_ENV === 'production'
+const announcementsDir = (process.env.PUBLIC_BASE_URL || process.env.NODE_ENV === 'production')
   ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
   : join(baseDir, 'public', 'announcements')
 
@@ -660,7 +660,7 @@ async function sendDueAnnouncements() {
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
-    const claimCutoff = new Date(Date.now() - 60 * 1000)
+    const claimCutoff = new Date(Date.now() - 10 *60 * 1000)
     while (true) {
       const due = await prisma.announcement.findMany({
         where: {
