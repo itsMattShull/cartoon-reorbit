@@ -668,6 +668,7 @@ async function sendDueAnnouncements() {
       if (!due.length) break
 
       for (const row of due) {
+        console.log(`sendDueAnnouncements: processing announcement ID ${row.id}`)
         const claim = await prisma.announcement.updateMany({
           where: {
             id: row.id,
@@ -679,6 +680,7 @@ async function sendDueAnnouncements() {
           },
           data: { sendingAt: new Date() }
         })
+        console.log(`sendDueAnnouncements: claim result for ID ${row.id}:`, claim)
         if (!claim.count) continue
 
         const latest = await prisma.announcement.findUnique({
@@ -693,9 +695,13 @@ async function sendDueAnnouncements() {
             sendingAt: true
           }
         })
+        console.log(`sendDueAnnouncements: sending announcement ID ${row.id}`)
         if (latest?.sentAt) continue
+        console.log(`sendDueAnnouncements: calling sendAnnouncementDiscordMessage for ID ${row.id}`)
         const ok = await sendAnnouncementDiscordMessage(latest || row)
+        console.log(`sendDueAnnouncements: send result for ID ${row.id}:`, ok)
         if (!ok) {
+          console.log(`sendDueAnnouncements: marking sendError for ID ${row.id}`)
           await prisma.announcement.update({
             where: { id: row.id },
             data: {
@@ -705,6 +711,7 @@ async function sendDueAnnouncements() {
             }
           })
         } else {
+          console.log(`sendDueAnnouncements: marking sentAt for ID ${row.id}`)
           await prisma.announcement.update({
             where: { id: row.id },
             data: {
