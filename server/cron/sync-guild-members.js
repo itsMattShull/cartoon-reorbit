@@ -160,7 +160,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         const filePath = join(announcementsDir, attachmentName)
         const fileBuf = await readFile(filePath)
         return await sendWithAttachment(fileBuf, attachmentName)
-      } catch () {
+      } catch {
         // fall through to URL attachment
       }
     }
@@ -175,7 +175,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
           return await sendWithAttachment(buf, fallbackName)
         }
-      } catch () {
+      } catch {
         // fall through to content-only send
       }
     }
@@ -202,7 +202,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     }
 
     return res.ok
-  } catch () {
+  } catch {
     return false
   }
 }
