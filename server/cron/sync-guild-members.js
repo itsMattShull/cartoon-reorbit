@@ -114,16 +114,21 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
 }
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
+  console.log(`sendAnnouncementDiscordMessage: attempt ${attempt} for announcement ID ${row.id}`)
   try {
     if (!BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
     const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
     const nativeFetch = globalThis.fetch || fetch
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
+    console.log(`sendAnnouncementDiscordMessage: canAttach=${canAttach}`)
 
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
+    console.log(`sendAnnouncementDiscordMessage: content prepared`)
+    console.log(`sendAnnouncementDiscordMessage: imagePath=${row.imagePath}, imageFilename=${row.imageFilename}`)
     const pathFilename = row.imagePath
       ? decodeURIComponent(String(row.imagePath).split('/').pop() || '')
       : ''
+    console.log(`sendAnnouncementDiscordMessage: pathFilename=${pathFilename}`)
     const attachmentName = row.imageFilename || pathFilename || ''
     const baseUrl =
       process.env.PUBLIC_BASE_URL ||
@@ -144,6 +149,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           body: fd
         }
       )
+      console.log(`sendWithAttachment: response status ${res.status} for announcement ID ${row.id}`)
 
       if (res.status === 429 && attempt < 2) {
         let body = { retry_after: 5 }
@@ -160,8 +166,9 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         const filePath = join(announcementsDir, attachmentName)
         const fileBuf = await readFile(filePath)
         return await sendWithAttachment(fileBuf, attachmentName)
-      } catch {
+      } catch (e) {
         // fall through to URL attachment
+        console.log(`sendAnnouncementDiscordMessage: failed to read attachment file ${attachmentName}:`, e)
       }
     }
 
@@ -175,8 +182,9 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
           return await sendWithAttachment(buf, fallbackName)
         }
-      } catch {
+      } catch (e) {
         // fall through to content-only send
+        console.log(`sendAnnouncementDiscordMessage: failed to fetch attachment URL ${row.imagePath}:`, e)
       }
     }
 
@@ -193,6 +201,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         body: JSON.stringify(payload)
       }
     )
+    console.log(`sendAnnouncementDiscordMessage: response status ${res.status} for announcement ID ${row.id}` )
 
     if (res.status === 429 && attempt < 2) {
       let body = { retry_after: 5 }
@@ -202,7 +211,8 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     }
 
     return res.ok
-  } catch {
+  } catch (e) {
+    console.log(`sendAnnouncementDiscordMessage: exception for announcement ID ${row.id}:`, e)
     return false
   }
 }
@@ -650,7 +660,7 @@ async function sendDueAnnouncements() {
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
-    const claimCutoff = new Date(Date.now() - 10 * 60 * 1000)
+    const claimCutoff = new Date(Date.now() - 60 * 1000)
     while (true) {
       const due = await prisma.announcement.findMany({
         where: {
