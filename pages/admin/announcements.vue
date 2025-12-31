@@ -29,6 +29,9 @@
               <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
               <span v-if="row.imagePath">Image attached</span>
             </div>
+            <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
+              Last error: {{ row.sendError }}
+            </div>
             <div class="mt-3 flex gap-3">
               <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
               <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
@@ -54,6 +57,9 @@
                 <div class="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
                   <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
                   <span v-if="row.imagePath">Image attached</span>
+                </div>
+                <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
+                  Last error: {{ row.sendError }}
                 </div>
               </td>
               <td class="py-3 pr-4 align-top whitespace-nowrap">
@@ -199,7 +205,7 @@ const form = reactive({
 })
 
 const { data: listData, pending, error, refresh } = await useFetch('/api/admin/announcements')
-const announcements = computed(() => (listData.value?.items || []).filter(item => !item.sentAt))
+const announcements = computed(() => (listData.value?.items || []).filter(item => item.sentAt == null))
 
 const messageCount = computed(() => form.message.length)
 const modalTitle = computed(() => (form.id ? 'Edit Announcement' : 'Add Announcement'))

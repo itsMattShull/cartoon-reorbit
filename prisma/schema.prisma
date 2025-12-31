@@ -990,6 +990,9 @@ model Announcement {
   imageFilename String?
   scheduledAt   DateTime
   sentAt        DateTime?
+  sendingAt     DateTime?
+  sendError     String?
+  sendErrorAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -998,6 +1001,8 @@ model Announcement {
 
   @@index([scheduledAt])
   @@index([sentAt])
+  @@index([sendingAt])
+  @@index([sendErrorAt])
 }
 
 model WinballGrandPrizeSchedule {

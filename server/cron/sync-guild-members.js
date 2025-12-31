@@ -649,36 +649,70 @@ async function sendDueAnnouncements() {
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
-
-    const due = await prisma.announcement.findMany({
-      where: { sentAt: null, scheduledAt: { lte: now } },
-      orderBy: { scheduledAt: 'asc' },
-      take: 50
-    })
-
-    for (const row of due) {
-      const claim = await prisma.announcement.updateMany({
-        where: { id: row.id, sentAt: null },
-        data: { sentAt: new Date() }
+    const claimCutoff = new Date(Date.now() - 10 * 60 * 1000)
+    while (true) {
+      const due = await prisma.announcement.findMany({
+        where: {
+          sentAt: null,
+          scheduledAt: { lte: now },
+          OR: [
+            { sendingAt: null },
+            { sendingAt: { lt: claimCutoff } }
+          ]
+        },
+        orderBy: { scheduledAt: 'asc' },
+        take: 50
       })
-      if (!claim.count) continue
+      if (!due.length) break
 
-      const latest = await prisma.announcement.findUnique({
-        where: { id: row.id },
-        select: {
-          id: true,
-          message: true,
-          pingOption: true,
-          imagePath: true,
-          imageFilename: true
-        }
-      })
-      const ok = await sendAnnouncementDiscordMessage(latest || row)
-      if (!ok) {
-        await prisma.announcement.update({
-          where: { id: row.id },
-          data: { sentAt: null }
+      for (const row of due) {
+        const claim = await prisma.announcement.updateMany({
+          where: {
+            id: row.id,
+            sentAt: null,
+            OR: [
+              { sendingAt: null },
+              { sendingAt: { lt: claimCutoff } }
+            ]
+          },
+          data: { sendingAt: new Date() }
         })
+        if (!claim.count) continue
+
+        const latest = await prisma.announcement.findUnique({
+          where: { id: row.id },
+          select: {
+            id: true,
+            message: true,
+            pingOption: true,
+            imagePath: true,
+            imageFilename: true,
+            sentAt: true,
+            sendingAt: true
+          }
+        })
+        if (latest?.sentAt) continue
+        const ok = await sendAnnouncementDiscordMessage(latest || row)
+        if (!ok) {
+          await prisma.announcement.update({
+            where: { id: row.id },
+            data: {
+              sendingAt: null,
+              sendError: 'Failed to send announcement to Discord.',
+              sendErrorAt: new Date()
+            }
+          })
+        } else {
+          await prisma.announcement.update({
+            where: { id: row.id },
+            data: {
+              sentAt: new Date(),
+              sendingAt: null,
+              sendError: null,
+              sendErrorAt: null
+            }
+          })
+        }
       }
     }
   } catch {

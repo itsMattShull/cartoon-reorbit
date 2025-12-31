@@ -16,7 +16,9 @@ export default defineEventHandler(async (event) => {
       imagePath: true,
       scheduledAt: true,
       createdAt: true,
-      sentAt: true
+      sentAt: true,
+      sendError: true,
+      sendErrorAt: true
     }
   })
 
