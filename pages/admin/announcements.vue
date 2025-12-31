@@ -199,7 +199,7 @@ const form = reactive({
 })
 
 const { data: listData, pending, error, refresh } = await useFetch('/api/admin/announcements')
-const announcements = computed(() => listData.value?.items || [])
+const announcements = computed(() => (listData.value?.items || []).filter(item => !item.sentAt))
 
 const messageCount = computed(() => form.message.length)
 const modalTitle = computed(() => (form.id ? 'Edit Announcement' : 'Add Announcement'))

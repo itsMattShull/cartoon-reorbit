@@ -121,6 +121,10 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
+    const pathFilename = row.imagePath
+      ? decodeURIComponent(String(row.imagePath).split('/').pop() || '')
+      : ''
+    const attachmentName = row.imageFilename || pathFilename || ''
     const baseUrl =
       process.env.PUBLIC_BASE_URL ||
       (process.env.NODE_ENV === 'production'
@@ -151,11 +155,11 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
       return res.ok
     }
 
-    if (row.imageFilename && canAttach) {
+    if (attachmentName && canAttach) {
       try {
-        const filePath = join(announcementsDir, row.imageFilename)
+        const filePath = join(announcementsDir, attachmentName)
         const fileBuf = await readFile(filePath)
-        return await sendWithAttachment(fileBuf, row.imageFilename)
+        return await sendWithAttachment(fileBuf, attachmentName)
       } catch {
         // fall through to URL attachment
       }
@@ -168,7 +172,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         const imgRes = await nativeFetch(imageUrl)
         if (imgRes.ok) {
           const buf = Buffer.from(await imgRes.arrayBuffer())
-          const fallbackName = row.imageFilename || imageUrl.split('/').pop() || 'announcement-image'
+          const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
           return await sendWithAttachment(buf, fallbackName)
         }
       } catch {
