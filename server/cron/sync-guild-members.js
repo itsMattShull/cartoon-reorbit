@@ -121,34 +121,56 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
+    const baseUrl =
+      process.env.PUBLIC_BASE_URL ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://www.cartoonreorbit.com'
+        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
+
+    async function sendWithAttachment(buffer, filename) {
+      const fd = new FormData()
+      fd.append('payload_json', JSON.stringify({ content }))
+      fd.append('files[0]', new Blob([buffer]), filename)
+
+      const res = await nativeFetch(
+        `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
+        {
+          method: 'POST',
+          headers: { Authorization: authHeader },
+          body: fd
+        }
+      )
+
+      if (res.status === 429 && attempt < 2) {
+        let body = { retry_after: 5 }
+        try { body = await res.json() } catch {}
+        await sleep(Math.ceil((body.retry_after || 5) * 1000))
+        return sendAnnouncementDiscordMessage(row, attempt + 1)
+      }
+
+      return res.ok
+    }
 
     if (row.imageFilename && canAttach) {
       try {
         const filePath = join(announcementsDir, row.imageFilename)
         const fileBuf = await readFile(filePath)
-        const fd = new FormData()
-        fd.append('payload_json', JSON.stringify({
-          content
-        }))
-        fd.append('files[0]', new Blob([fileBuf]), row.imageFilename)
+        return await sendWithAttachment(fileBuf, row.imageFilename)
+      } catch {
+        // fall through to URL attachment
+      }
+    }
 
-        const res = await nativeFetch(
-          `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
-          {
-            method: 'POST',
-            headers: { Authorization: authHeader },
-            body: fd
-          }
-        )
-
-        if (res.status === 429 && attempt < 2) {
-          let body = { retry_after: 5 }
-          try { body = await res.json() } catch {}
-          await sleep(Math.ceil((body.retry_after || 5) * 1000))
-          return sendAnnouncementDiscordMessage(row, attempt + 1)
+    if (row.imagePath && canAttach) {
+      try {
+        const rawUrl = row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`
+        const imageUrl = encodeURI(rawUrl)
+        const imgRes = await nativeFetch(imageUrl)
+        if (imgRes.ok) {
+          const buf = Buffer.from(await imgRes.arrayBuffer())
+          const fallbackName = row.imageFilename || imageUrl.split('/').pop() || 'announcement-image'
+          return await sendWithAttachment(buf, fallbackName)
         }
-
-        return res.ok
       } catch {
         // fall through to content-only send
       }
