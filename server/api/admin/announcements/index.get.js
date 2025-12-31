@@ -15,7 +15,8 @@ export default defineEventHandler(async (event) => {
       pingOption: true,
       imagePath: true,
       scheduledAt: true,
-      createdAt: true
+      createdAt: true,
+      sentAt: true
     }
   })
 
