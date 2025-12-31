@@ -883,7 +883,7 @@ await startDueAuctions()
 cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
 
 await sendDueAnnouncements()
-cron.schedule('*/5 * * * *', sendDueAnnouncements)
+cron.schedule('* * * * *', sendDueAnnouncements)
 
 await markScheduledPacksInCmart()
 cron.schedule('2 * * * *', markScheduledPacksInCmart)

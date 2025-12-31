@@ -10,9 +10,12 @@ import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const baseDir = process.env.NODE_ENV === 'production'
+const rootDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
+const announcementUploadDir = process.env.NODE_ENV === 'production'
+  ? join(rootDir, 'cartoon-reorbit-images', 'announcements')
+  : join(rootDir, 'public', 'announcements')
 
 const ALLOWED_TYPES = new Set(['image/png','image/jpeg','image/jpg','image/gif'])
 
@@ -111,15 +114,11 @@ export default defineEventHandler(async (event) => {
     if (!ALLOWED_TYPES.has(filePart.type)) {
       throw createError({ statusCode: 400, statusMessage: `Invalid file type ${filePart.type}` })
     }
-    const uploadDir = process.env.NODE_ENV === 'production'
-      ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
-      : join(baseDir, 'public', 'announcements')
-    await mkdir(uploadDir, { recursive: true })
-
+    await mkdir(announcementUploadDir, { recursive: true })
     const ext = extname(filePart.filename || '').toLowerCase() ||
       (filePart.type === 'image/png' ? '.png' : filePart.type === 'image/gif' ? '.gif' : '.jpg')
     const imageFilename = `announcement-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-    await writeFile(join(uploadDir, imageFilename), filePart.data)
+    await writeFile(join(announcementUploadDir, imageFilename), filePart.data)
     data.imageFilename = imageFilename
     data.imagePath = publicAssetPath(imageFilename)
   }
