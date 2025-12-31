@@ -646,6 +646,7 @@ async function startDueAuctions() {
 }
 
 async function sendDueAnnouncements() {
+  console.log('sendDueAnnouncements started')
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
@@ -663,6 +664,7 @@ async function sendDueAnnouncements() {
         orderBy: { scheduledAt: 'asc' },
         take: 50
       })
+      console.log(`sendDueAnnouncements: found ${due.length} due announcements`)
       if (!due.length) break
 
       for (const row of due) {
