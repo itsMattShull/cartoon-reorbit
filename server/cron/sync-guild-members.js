@@ -115,6 +115,7 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   try {
+    console.log('[sendAnnouncementDiscordMessage] attempt', attempt, 'for announcement id', row.id)
     if (!BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
     const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
     const nativeFetch = globalThis.fetch || fetch
@@ -131,10 +132,13 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         ? 'https://www.cartoonreorbit.com'
         : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
 
+    console.log('[sendAnnouncementDiscordMessage] sending announcement id', row.id)
+
     async function sendWithAttachment(buffer, filename) {
       const fd = new FormData()
       fd.append('payload_json', JSON.stringify({ content }))
       fd.append('files[0]', new Blob([buffer]), filename)
+      console.log('[sendAnnouncementDiscordMessage] sending with attachment:', filename)
 
       const res = await nativeFetch(
         `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
@@ -146,6 +150,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
       )
 
       if (res.status === 429 && attempt < 2) {
+        console.log('[sendAnnouncementDiscordMessage] rate limited, retrying attachment send')
         let body = { retry_after: 5 }
         try { body = await res.json() } catch {}
         await sleep(Math.ceil((body.retry_after || 5) * 1000))
@@ -157,16 +162,19 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
 
     if (attachmentName && canAttach) {
       try {
+        console.log('[sendAnnouncementDiscordMessage] attempting local file attachment:', attachmentName)
         const filePath = join(announcementsDir, attachmentName)
         const fileBuf = await readFile(filePath)
         return await sendWithAttachment(fileBuf, attachmentName)
-      } catch () {
+      } catch(e) {
         // fall through to URL attachment
+        console.log('[sendAnnouncementDiscordMessage] local file attachment failed, falling back to URL:', e.message)
       }
     }
 
     if (row.imagePath && canAttach) {
       try {
+        console.log('[sendAnnouncementDiscordMessage] attempting URL attachment:', row.imagePath)
         const rawUrl = row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`
         const imageUrl = encodeURI(rawUrl)
         const imgRes = await nativeFetch(imageUrl)
@@ -175,8 +183,9 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
           return await sendWithAttachment(buf, fallbackName)
         }
-      } catch () {
+      } catch(e) {
         // fall through to content-only send
+        console.log('[sendAnnouncementDiscordMessage] URL attachment failed, sending content-only:', e.message)
       }
     }
 
@@ -193,6 +202,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         body: JSON.stringify(payload)
       }
     )
+    console.log('[sendAnnouncementDiscordMessage] sent content-only, status:', res.status)
 
     if (res.status === 429 && attempt < 2) {
       let body = { retry_after: 5 }
@@ -202,7 +212,8 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     }
 
     return res.ok
-  } catch () {
+  } catch(e) {
+    console.log('[sendAnnouncementDiscordMessage] exception:', e.message)
     return false
   }
 }
