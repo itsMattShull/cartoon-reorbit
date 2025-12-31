@@ -16,7 +16,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..')
   : process.cwd()
-const announcementsDir = process.env.NODE_ENV === 'production'
+const announcementsDir = (process.env.PUBLIC_BASE_URL || process.env.NODE_ENV === 'production')
   ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
   : join(baseDir, 'public', 'announcements')
 
@@ -160,7 +160,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         const filePath = join(announcementsDir, attachmentName)
         const fileBuf = await readFile(filePath)
         return await sendWithAttachment(fileBuf, attachmentName)
-      } catch {
+      } catch () {
         // fall through to URL attachment
       }
     }
@@ -175,7 +175,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
           return await sendWithAttachment(buf, fallbackName)
         }
-      } catch {
+      } catch () {
         // fall through to content-only send
       }
     }
@@ -202,7 +202,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     }
 
     return res.ok
-  } catch {
+  } catch () {
     return false
   }
 }
@@ -649,7 +649,7 @@ async function sendDueAnnouncements() {
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
-    const claimCutoff = new Date(Date.now() - 10 * 60 * 1000)
+    const claimCutoff = new Date(Date.now() - 10 *60 * 1000)
     while (true) {
       const due = await prisma.announcement.findMany({
         where: {
@@ -883,7 +883,7 @@ await startDueAuctions()
 cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
 
 await sendDueAnnouncements()
-cron.schedule('* * * * *', sendDueAnnouncements)
+cron.schedule('*/5 * * * *', sendDueAnnouncements)
 
 await markScheduledPacksInCmart()
 cron.schedule('2 * * * *', markScheduledPacksInCmart)
