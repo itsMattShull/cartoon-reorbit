@@ -715,8 +715,8 @@ async function sendDueAnnouncements() {
         }
       }
     }
-  } catch {
-    // swallow in cron context
+  } catch (e) {
+    console.error('[sendDueAnnouncements] error:', e)
   }
 }
 
