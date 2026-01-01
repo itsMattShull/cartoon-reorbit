@@ -78,6 +78,7 @@ export default defineEventHandler(async (event) => {
     monsterInactivityDecayHours,
     monsterDailyScanLimit,
     barcodeCooldownDays,
+    scanPoints,
   } = body
 
   const before = await db.barcodeGameConfig.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'desc' } })
@@ -118,6 +119,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Daily scan limit must be an integer 0–500' })
   }
 
+  const scanPointsValue = Number.isFinite(Number(scanPoints))
+    ? Math.floor(Number(scanPoints))
+    : Number(before?.scanPoints ?? 0)
+  if (!Number.isInteger(scanPointsValue) || scanPointsValue < 0 || scanPointsValue > 1_000_000) {
+    throw createError({ statusCode: 400, statusMessage: 'Scan points must be an integer 0–1,000,000' })
+  }
+
   const rarity = normalizeRarityPayload(monsterRarityChances)
   const itemRarity = normalizeItemRarityPayload(itemRarityChances)
 
@@ -133,6 +141,7 @@ export default defineEventHandler(async (event) => {
     monsterInactivityDecayHours: decayHours,
     monsterDailyScanLimit: dailyLimit,
     barcodeCooldownDays: cooldownDays,
+    scanPoints: scanPointsValue,
   }
 
   let cfg
@@ -161,7 +170,7 @@ export default defineEventHandler(async (event) => {
 
   // Log changes field-by-field
   try {
-    const fields = ['oddsNothing','oddsItem','oddsMonster','oddsBattle','monsterRarityChances','itemRarityChances','monsterStatVariancePct','monsterInactivityDecayHours','monsterDailyScanLimit','barcodeCooldownDays']
+    const fields = ['oddsNothing','oddsItem','oddsMonster','oddsBattle','monsterRarityChances','itemRarityChances','monsterStatVariancePct','monsterInactivityDecayHours','monsterDailyScanLimit','barcodeCooldownDays','scanPoints']
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
       const nextVal = cfg ? cfg[k] : undefined

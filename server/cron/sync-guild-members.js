@@ -121,20 +121,21 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
-    const pathFilename = row.imagePath
-      ? decodeURIComponent(String(row.imagePath).split('/').pop() || '')
-      : ''
-    const attachmentName = row.imageFilename || pathFilename || ''
     const baseUrl =
       process.env.PUBLIC_BASE_URL ||
       (process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
 
-    async function sendWithAttachment(buffer, filename) {
+    async function sendWithAttachments(files) {
       const fd = new FormData()
-      fd.append('payload_json', JSON.stringify({ content }))
-      fd.append('files[0]', new Blob([buffer]), filename)
+      fd.append('payload_json', JSON.stringify({
+        content,
+        attachments: files.map((file, idx) => ({ id: idx, filename: file.filename }))
+      }))
+      files.forEach((file, idx) => {
+        fd.append(`files[${idx}]`, new Blob([file.buffer]), file.filename)
+      })
 
       const res = await nativeFetch(
         `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
@@ -155,29 +156,49 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
       return res.ok
     }
 
-    if (attachmentName && canAttach) {
-      try {
-        const filePath = join(announcementsDir, attachmentName)
-        const fileBuf = await readFile(filePath)
-        return await sendWithAttachment(fileBuf, attachmentName)
-      } catch {
-        // fall through to URL attachment
+    const imageSlots = [
+      { imagePath: row.imagePath, imageFilename: row.imageFilename },
+      { imagePath: row.imagePath2, imageFilename: row.imageFilename2 },
+      { imagePath: row.imagePath3, imageFilename: row.imageFilename3 },
+    ]
+    const attachments = []
+    if (canAttach) {
+      for (const slot of imageSlots) {
+        if (attachments.length >= 3) break
+        if (!slot?.imagePath && !slot?.imageFilename) continue
+        const pathFilename = slot.imagePath
+          ? decodeURIComponent(String(slot.imagePath).split('/').pop() || '')
+          : ''
+        const attachmentName = slot.imageFilename || pathFilename || ''
+        if (attachmentName) {
+          try {
+            const filePath = join(announcementsDir, attachmentName)
+            const fileBuf = await readFile(filePath)
+            attachments.push({ buffer: fileBuf, filename: attachmentName })
+            continue
+          } catch {
+            // fall through to URL attachment
+          }
+        }
+        if (slot.imagePath) {
+          try {
+            const rawUrl = slot.imagePath.startsWith('http') ? slot.imagePath : `${baseUrl}${slot.imagePath}`
+            const imageUrl = encodeURI(rawUrl)
+            const imgRes = await nativeFetch(imageUrl)
+            if (imgRes.ok) {
+              const buf = Buffer.from(await imgRes.arrayBuffer())
+              const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
+              attachments.push({ buffer: buf, filename: fallbackName })
+            }
+          } catch {
+            // fall through to content-only send
+          }
+        }
       }
     }
 
-    if (row.imagePath && canAttach) {
-      try {
-        const rawUrl = row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`
-        const imageUrl = encodeURI(rawUrl)
-        const imgRes = await nativeFetch(imageUrl)
-        if (imgRes.ok) {
-          const buf = Buffer.from(await imgRes.arrayBuffer())
-          const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
-          return await sendWithAttachment(buf, fallbackName)
-        }
-      } catch {
-        // fall through to content-only send
-      }
+    if (attachments.length) {
+      return await sendWithAttachments(attachments)
     }
 
     const payload = { content }
@@ -687,6 +708,10 @@ async function sendDueAnnouncements() {
             pingOption: true,
             imagePath: true,
             imageFilename: true,
+            imagePath2: true,
+            imageFilename2: true,
+            imagePath3: true,
+            imageFilename3: true,
             sentAt: true,
             sendingAt: true
           }
@@ -723,12 +748,19 @@ async function sendDueAnnouncements() {
 async function markScheduledPacksInCmart() {
   try {
     const now = new Date()
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
     await prisma.pack.updateMany({
-      where: { sentAt: null, scheduledAt: { lte: now } },
+      where: {
+        sentAt: null,
+        scheduledAt: { lte: now },
+        scheduledOffAt: null
+      },
       data: { inCmart: true, sentAt: now }
     })
     await prisma.pack.updateMany({
-      where: { inCmart: true, scheduledOffAt: { lte: now } },
+      where: {
+        scheduledOffAt: { gt: oneHourAgo, lte: now }
+      },
       data: { inCmart: false }
     })
   } catch {
@@ -886,7 +918,7 @@ await sendDueAnnouncements()
 cron.schedule('*/5 * * * *', sendDueAnnouncements)
 
 await markScheduledPacksInCmart()
-cron.schedule('2 * * * *', markScheduledPacksInCmart)
+cron.schedule('0 * * * *', markScheduledPacksInCmart)
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily

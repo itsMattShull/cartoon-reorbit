@@ -988,6 +988,10 @@ model Announcement {
   pingOption    String?
   imagePath     String?
   imageFilename String?
+  imagePath2     String?
+  imageFilename2 String?
+  imagePath3     String?
+  imageFilename3 String?
   scheduledAt   DateTime
   sentAt        DateTime?
   sendingAt     DateTime?
@@ -1309,6 +1313,9 @@ enum MonsterRarity {
 
   // cooldown per user per barcode mapping (admin-editable)
   barcodeCooldownDays Int @default(7)
+
+  // Points awarded per successful scan (not capped by daily point limit)
+  scanPoints Int @default(0)
 
   items        ItemDefinition[]
   species      SpeciesBaseStats[]

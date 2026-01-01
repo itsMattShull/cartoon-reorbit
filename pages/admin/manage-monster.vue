@@ -6,11 +6,11 @@
     <div class="bg-white rounded-lg shadow-md p-6 max-w-6xl mx-auto">
       <!-- Tabs -->
       <div class="border-b mb-6">
-        <nav class="flex gap-4">
-          <button class="px-3 py-2 border-b-2" :class="activeTab==='Game Config' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Game Config'">Game Config</button>
-          <button class="px-3 py-2 border-b-2" :class="activeTab==='Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Monsters'">Monsters</button>
-          <button class="px-3 py-2 border-b-2" :class="activeTab==='AI Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='AI Monsters'">AI Monsters</button>
-          <button class="px-3 py-2 border-b-2" :class="activeTab==='Items' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Items'">Items</button>
+        <nav class="flex flex-wrap gap-2 sm:gap-4">
+          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Game Config' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Game Config'">Game Config</button>
+          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Monsters'">Monsters</button>
+          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='AI Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='AI Monsters'">AI Monsters</button>
+          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Items' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Items'">Items</button>
         </nav>
       </div>
 
@@ -24,7 +24,7 @@
         <div>
           <h2 class="text-lg font-semibold mb-2">Scan Outcome Odds</h2>
           <p class="text-sm text-gray-600 mb-3">Odds must sum to 1.00. These control the chance of a scan yielding nothing, an item, or a monster.</p>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700">Odds — Nothing</label>
               <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsNothing" />
@@ -132,8 +132,8 @@
           </div>
         </div>
 
-        <!-- Variance, Decay, Daily Limit & Cooldown -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Variance, Decay, Points, Daily Limit & Cooldown -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           <div>
             <label class="block text-sm font-medium text-gray-700">Monster Stat Variance</label>
             <input type="number" class="input" min="0" max="50" step="1" v-model.number="variancePct" />
@@ -143,6 +143,11 @@
             <label class="block text-sm font-medium text-gray-700">Inactivity HP Decay (hours)</label>
             <input type="number" class="input" min="0" max="720" step="1" v-model.number="decayHours" />
             <p class="text-xs text-gray-500 mt-1">Hours until the last-selected monster reaches 0 HP with no activity. Set to 0 to disable.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Scan Points Award</label>
+            <input type="number" class="input" min="0" max="1000000" step="1" v-model.number="scanPoints" />
+            <p class="text-xs text-gray-500 mt-1">Points earned for each successful scan. Not counted toward daily point limits.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Daily Scan Limit</label>
@@ -202,7 +207,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600">Base HP</label>
                         <input class="input" type="number" min="1" v-model.number="newSpecies.baseHp" />
@@ -220,7 +225,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Images</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Walking</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'walking')" />
@@ -279,7 +284,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600">Base HP</label>
                         <input class="input" type="number" min="1" v-model.number="editSpecies.baseHp" />
@@ -296,7 +301,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Walking</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'walking')" />
@@ -406,7 +411,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600">Base HP</label>
                         <input class="input" type="number" min="1" v-model.number="newAiMonster.baseHp" />
@@ -423,7 +428,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Images</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Walking</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'walking')" />
@@ -476,7 +481,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600">Base HP</label>
                         <input class="input" type="number" min="1" v-model.number="editAiMonster.baseHp" />
@@ -493,7 +498,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Walking</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'walking')" />
@@ -590,7 +595,7 @@
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Images</label>
                     <p class="text-xs text-gray-500 mb-2">Upload up to three images. At least one is required.</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Image 0</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image0')" />
@@ -655,7 +660,7 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
                       <div>
                         <label class="block text-xs text-gray-600 mb-1">Image 0</label>
                         <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image0 = e?.target?.files?.[0] || null" />
@@ -750,6 +755,7 @@ function showToast(type, msg) { toast.value = { type, msg }; setTimeout(() => { 
   const decayHours = ref(48)
   const dailyScanLimit = ref(20)
   const cooldownDays = ref(7)
+  const scanPoints = ref(0)
   const rarityPercents = reactive({ Common: 60, Uncommon: 25, Rare: 10, VeryRare: 4, CrazyRare: 1 })
   const itemRarityPercents = reactive({ Common: 70, Rare: 25, CrazyRare: 5 })
 
@@ -777,6 +783,7 @@ const savingCfg = ref(false)
     if (cfg?.monsterInactivityDecayHours != null) decayHours.value = Number(cfg.monsterInactivityDecayHours)
     if (cfg?.monsterDailyScanLimit != null) dailyScanLimit.value = Number(cfg.monsterDailyScanLimit)
     if (cfg?.barcodeCooldownDays != null) cooldownDays.value = Number(cfg.barcodeCooldownDays)
+    if (cfg?.scanPoints != null) scanPoints.value = Number(cfg.scanPoints)
       const c = cfg?.monsterRarityChances || {}
       rarityPercents.Common    = Number(c.Common ?? c.COMMON ?? rarityPercents.Common)
       rarityPercents.Uncommon  = Number(c.Uncommon ?? c.UNCOMMON ?? rarityPercents.Uncommon)
@@ -809,7 +816,8 @@ async function saveConfig() {
         monsterStatVariancePct: Number(variancePct.value), // percent 0..50
         monsterInactivityDecayHours: Number(decayHours.value),
         monsterDailyScanLimit: Number(dailyScanLimit.value),
-        barcodeCooldownDays: Number(cooldownDays.value)
+        barcodeCooldownDays: Number(cooldownDays.value),
+        scanPoints: Number(scanPoints.value)
       }
     })
     showToast('ok', 'Game config saved')
