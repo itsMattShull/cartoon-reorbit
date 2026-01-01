@@ -95,7 +95,6 @@ export default defineEventHandler(async (event) => {
   if (extraFileParts.length) {
     throw createError({ statusCode: 400, statusMessage: 'Up to 3 images are allowed' })
   }
-  }
 
   const message = String(fields.message || '').trim()
   if (!message) throw createError({ statusCode: 400, statusMessage: 'Message is required' })
