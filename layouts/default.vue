@@ -9,6 +9,7 @@
 
     <!-- Page content -->
     <slot />
+    <Onboarding />
   </div>
 </template>
 
