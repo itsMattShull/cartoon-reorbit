@@ -1,5 +1,5 @@
 <template>
-  <div ref="onboardingRef" class="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+  <div ref="onboardingRef" class="fixed bottom-3 right-3 z-50 flex flex-col items-end gap-2">
     <transition name="daily-drawer">
       <div
         v-show="isOpen"
