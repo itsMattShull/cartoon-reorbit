@@ -151,6 +151,8 @@ const items = computed(() => {
   const winwheelMax = Number(cfg.winwheelMaxDailySpins ?? 0)
   const lottoCountRaw = Number(cfg.lottoCountPerDay ?? 0)
   const scanLimit = Number(cfg.monsterDailyScanLimit ?? 0)
+  const scanPoints = Number(cfg.scanPoints ?? 0)
+  const scanTotal = formatNumber(scanLimit * scanPoints)
 
   const lottoText = lottoCountRaw === -1
     ? 'Try the lotto for points and exclusive cToons.'
@@ -185,7 +187,7 @@ const items = computed(() => {
     {
       id: 'scan',
       done: Boolean(st.monsterScanComplete),
-      text: `Scan ${pluralize(scanLimit, 'barcode')} and QR codes in Monsters to gain points.`
+      text: `Scan ${pluralize(scanLimit, 'barcode')} and QR codes in Monsters to gain ${scanTotal} points.`
     }
   ]
 })
