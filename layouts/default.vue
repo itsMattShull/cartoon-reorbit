@@ -1,11 +1,11 @@
 <template>
   <div class="app-layout">
-    <!-- Snow overlay (dashboard only) -->
+    <!-- Snow overlay (dashboard only)
     <div v-if="isDashboard" class="snow-overlay" aria-hidden="true">
       <div v-for="n in 80" :key="n" class="snowflake">
         <div class="snowflake-inner"></div>
       </div>
-    </div>
+    </div> -->
 
     <!-- Page content -->
     <slot />
