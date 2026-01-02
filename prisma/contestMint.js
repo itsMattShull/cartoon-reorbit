@@ -5,7 +5,7 @@ import { prisma } from '../server/prisma.js'
 import { randomInt } from 'node:crypto'
 
 /** Target cToon */
-const CTOON_ID = '4b04eeb8-a7d8-4106-8996-5ea66b24f644'
+const CTOON_ID = '41f8f882-58b6-4de5-b69b-45f0c143d320'
 
 /** Behavior flags */
 const RESPECT_STOCK_LIMITS = true
@@ -13,25 +13,32 @@ const USER_PURCHASED_FLAG = false
 
 /** Usernames to mint to */
 const USERNAMES = [
-  'MegaDragonSentinel',
-  'CosmicDrifterDreamer',
-  'ShadowNinjaAce',
-  'AwesomeRocketRebel',
+  'DoodleToonStargazer',
   'RockinVikingAdventurer',
-  'AwesomeHackerAgent',
-  'LegendaryGhostSuperstar',
-  'ZenWarriorStrategist',
-  'ChillNomadMystic',
-  'PrismaticAngelQueen',
-  'VelvetStormWarrior',
-  'LegendaryWarriorGuru',
-  'JollyDrifterGuardian',
-  'SassyViperStargazer',
+  'ChillZebraWarrior',
+  'BraveBeastChampion',
+  'TurboPixelPilot',
+  'HyperTitanAlchemist',
   'QuirkyDJSuperstar',
-  'SuperSharkSlayer',
-  'UmbraWizardSummoner',
+  'RetroWarriorPilot',
+  'LegendaryWarriorGuru',
+  'AwesomeHackerAgent',
+  'ObsidianZombieMystic',
+  'SassyViperStargazer',
+  'CosmicDrifterDreamer',
+  'MightyBeastScholar',
   'CrystalSparkScholar',
-  'BraveCheetahAthlete'
+  'CyberLionOverlord',
+  'GalaxyChargerPilot',
+  'RetroSkaterJuggernaut',
+  'BraveCheetahAthlete',
+  'JollyDrifterGuardian',
+  'ChillNomadMystic',
+  'MysticAlienVoyager',
+  'LegendaryGhostSuperstar',
+  'ShadowNinjaAce',
+  'GrimBravoCourage',
+  'SneakyAlienCommander'
 ]
 
 function shuffleInPlace(arr) {

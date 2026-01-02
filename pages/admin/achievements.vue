@@ -42,10 +42,6 @@
                 <input type="checkbox" v-model="form.isActive" id="isActive" />
                 <label for="isActive">Active</label>
               </div>
-              <div class="flex items-center gap-2">
-                <input type="checkbox" v-model="form.notifyDiscord" id="notifyDiscord" />
-                <label for="notifyDiscord">Announce in Discord</label>
-              </div>
             </div>
 
             <h3 class="text-lg font-semibold mt-6">Criteria</h3>
