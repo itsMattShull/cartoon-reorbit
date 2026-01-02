@@ -184,15 +184,48 @@ export async function sendGuildChannelMessageById(channelId, content) {
   }
 }
 
-export async function announceAchievement(prisma, userId, achievementTitle) {
+function formatList(items) {
+  if (!items.length) return ''
+  if (items.length === 1) return items[0]
+  if (items.length === 2) return `${items[0]} and ${items[1]}`
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
+}
+
+export async function announceAchievement(prisma, userId, achievementTitle, rewardSummary = null) {
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true } })
     if (!user?.discordId) return
-    const channelId = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    const config = await prisma.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { achievementDiscordChannelId: true }
+    })
+    const channelId = (config?.achievementDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
     if (!channelId) return
     const tag = `<@${user.discordId}>`
     const title = String(achievementTitle || 'an achievement')
-    const msg = `🎉 Congrats ${tag}! You unlocked “${title}”.`
+    let msg = `🎉 Congrats ${tag}! You unlocked “${title}”.`
+    if (rewardSummary) {
+      const parts = []
+      if (rewardSummary.points && rewardSummary.points > 0) {
+        parts.push(`${rewardSummary.points} points`)
+      }
+      if (Array.isArray(rewardSummary.ctoons)) {
+        for (const ctoon of rewardSummary.ctoons) {
+          if (!ctoon?.name || !ctoon?.quantity) continue
+          parts.push(ctoon.quantity > 1 ? `${ctoon.name} ×${ctoon.quantity}` : ctoon.name)
+        }
+      }
+      if (rewardSummary.backgrounds && rewardSummary.backgrounds > 0) {
+        parts.push(
+          rewardSummary.backgrounds === 1
+            ? '1 background unlocked for your cZones'
+            : `${rewardSummary.backgrounds} backgrounds unlocked for your cZones`
+        )
+      }
+      if (parts.length) {
+        msg += ` You received ${formatList(parts)}.`
+      }
+    }
     await sendGuildChannelMessageById(channelId, msg)
   } catch {
     // swallow in worker/cron context

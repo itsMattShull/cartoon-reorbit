@@ -555,6 +555,7 @@ model GlobalGameConfig {
   czoneVisitPoints       Int      @default(20)
   czoneVisitMaxPerDay    Int      @default(10)
   rarityDefaults         Json?
+  achievementDiscordChannelId String?
   // Scavenger Hunt settings
   scavengerChancePercent Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours Int      @default(24) // cooldown between completed hunts per user

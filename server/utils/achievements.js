@@ -99,7 +99,7 @@ async function getOrCreateUserPoints(tx, userId) {
 export async function awardAchievementToUser(client, userId, achievement) {
   const db = client || prisma
 
-  await db.$transaction(async (tx) => {
+  const awardSummary = await db.$transaction(async (tx) => {
     // Create marker (will throw on duplicate due to unique)
     // console.log('[achievements] award: creating achievementUser', { userId, ach: achievement?.slug || achievement?.id })
     await tx.achievementUser.create({ data: { achievementId: achievement.id, userId } })
@@ -108,15 +108,17 @@ export async function awardAchievementToUser(client, userId, achievement) {
     const reward = await tx.achievementReward.findFirst({
       where: { achievementId: achievement.id },
       include: {
-        ctoons:      { select: { ctoonId: true, quantity: true, ctoon: { select: { quantity: true } } } },
+        ctoons:      { select: { ctoonId: true, quantity: true, ctoon: { select: { quantity: true, name: true } } } },
         backgrounds: { select: { backgroundId: true } },
       }
     })
 
     if (!reward) {
       // console.log('[achievements] award: no reward row', { userId, ach: achievement?.slug || achievement?.id })
-      return
+      return { points: 0, ctoons: [], backgrounds: 0 }
     }
+
+    const awardSummary = { points: 0, ctoons: [], backgrounds: 0 }
 
     // Points
     const points = toIntOrNull(reward.points)
@@ -126,17 +128,27 @@ export async function awardAchievementToUser(client, userId, achievement) {
       await tx.pointsLog.create({
         data: { userId, points, total: updated.points, method: `achievement:${achievement.slug}`, direction: 'increase' }
       })
+      awardSummary.points = points
       // console.log('[achievements] award: points granted', { userId, ach: achievement?.slug || achievement?.id, points, newTotal: updated.points })
     }
 
     // Backgrounds
-    const bgCreates = (reward.backgrounds || []).map(b => ({ userId, backgroundId: b.backgroundId }))
-    await tx.userBackground.createMany({
-      data: bgCreates,
-      skipDuplicates: true
-    })
-    if (bgCreates.length) {
-      // console.log('[achievements] award: backgrounds granted', { userId, ach: achievement?.slug || achievement?.id, count: bgCreates.length })
+    const bgIds = [...new Set((reward.backgrounds || []).map(b => b.backgroundId))]
+    if (bgIds.length) {
+      const existing = await tx.userBackground.findMany({
+        where: { userId, backgroundId: { in: bgIds } },
+        select: { backgroundId: true }
+      })
+      const existingSet = new Set(existing.map(b => b.backgroundId))
+      const newBgIds = bgIds.filter(id => !existingSet.has(id))
+      awardSummary.backgrounds = newBgIds.length
+      if (newBgIds.length) {
+        await tx.userBackground.createMany({
+          data: newBgIds.map(backgroundId => ({ userId, backgroundId })),
+          skipDuplicates: true
+        })
+      }
+      // console.log('[achievements] award: backgrounds granted', { userId, ach: achievement?.slug || achievement?.id, count: newBgIds.length })
     }
 
     // cToons — enqueue mint jobs, respecting supply where possible
@@ -149,14 +161,22 @@ export async function awardAchievementToUser(client, userId, achievement) {
       for (let i = 0; i < canGive; i++) {
         await mintQueue.add('mintCtoon', { userId, ctoonId: rc.ctoonId, isSpecial: true })
       }
+      if (canGive > 0) {
+        awardSummary.ctoons.push({
+          name: rc?.ctoon?.name || rc.ctoonId,
+          quantity: canGive
+        })
+      }
       // console.log('[achievements] award: ctoon enqueued', { userId, ach: achievement?.slug || achievement?.id, ctoonId: rc.ctoonId, requested: qty, supply: lim, alreadyMinted: minted, enqueued: canGive })
     }
+
+    return awardSummary
   })
 
   // Non-transactional side-effect: announce in Discord channel when enabled.
   if (achievement?.notifyDiscord) {
     try {
-      await announceAchievement(db, userId, achievement.title)
+      await announceAchievement(db, userId, achievement.title, awardSummary)
     } catch {}
   }
 }
