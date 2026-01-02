@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
     slug: desiredSlug,
     description = null,
     isActive = true,
+    notifyDiscord = false,
     criteria = {},
     rewards = {}
   } = payload || {}
@@ -74,6 +75,7 @@ export default defineEventHandler(async (event) => {
       description: description ? String(description) : null,
       imagePath,
       isActive: !!isActive,
+      notifyDiscord: !!notifyDiscord,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,

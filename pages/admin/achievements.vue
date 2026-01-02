@@ -41,6 +41,10 @@
                 <input type="checkbox" v-model="form.isActive" id="isActive" />
                 <label for="isActive">Active</label>
               </div>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" v-model="form.notifyDiscord" id="notifyDiscord" />
+                <label for="notifyDiscord">Announce in Discord</label>
+              </div>
             </div>
 
             <h3 class="text-lg font-semibold mt-6">Criteria</h3>
@@ -178,7 +182,7 @@ const bgSelection = ref([])
 const ctoonSelection = ref({ name: '', qty: 1 })
 
 const emptyForm = () => ({
-  title: '', slug: '', description: '', isActive: true,
+  title: '', slug: '', description: '', isActive: true, notifyDiscord: false,
   criteria: { pointsGte: null, totalCtoonsGte: null, uniqueCtoonsGte: null, setsRequired: [], userCreatedBefore: null },
   rewards: { points: 0, ctoons: [], backgrounds: [] }
 })
@@ -260,6 +264,7 @@ function startEdit(a) {
     slug: a.slug,
     description: a.description || '',
     isActive: !!a.isActive,
+    notifyDiscord: !!a.notifyDiscord,
     criteria: {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,

@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
     description: a.description,
     imagePath: a.imagePath,
     isActive: a.isActive,
+    notifyDiscord: a.notifyDiscord,
     pointsGte: a.pointsGte,
     totalCtoonsGte: a.totalCtoonsGte,
     uniqueCtoonsGte: a.uniqueCtoonsGte,

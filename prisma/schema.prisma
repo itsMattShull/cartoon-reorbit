@@ -1221,6 +1221,7 @@ model Achievement {
   description     String?
   imagePath       String?
   isActive        Boolean  @default(true)
+  notifyDiscord   Boolean  @default(false)
   // Criteria (all ANDed when present)
   pointsGte       Int?
   totalCtoonsGte  Int?

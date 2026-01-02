@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
     db.barcodeGameConfig.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
-      select: { monsterDailyScanLimit: true }
+      select: { monsterDailyScanLimit: true, scanPoints: true }
     })
   ])
 
@@ -88,6 +88,7 @@ export default defineEventHandler(async (event) => {
   const winwheelMaxDailySpins = Number(winwheelConfig?.maxDailySpins ?? 0)
   const lottoCountPerDay = Number(lottoSettings?.countPerDay ?? 0)
   const monsterDailyScanLimit = Number(barcodeConfig?.monsterDailyScanLimit ?? 0)
+  const scanPoints = Number(barcodeConfig?.scanPoints ?? 0)
 
   const gamePointsUsed = Number(gamePointAgg?._sum?.points || 0)
 
@@ -120,7 +121,8 @@ export default defineEventHandler(async (event) => {
       czoneVisitPoints,
       winwheelMaxDailySpins,
       lottoCountPerDay,
-      monsterDailyScanLimit
+      monsterDailyScanLimit,
+      scanPoints
     },
     status,
     counts: {

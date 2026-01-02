@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
     title = ach.title,
     description = ach.description,
     isActive = ach.isActive,
+    notifyDiscord = ach.notifyDiscord,
     criteria = {},
     rewards = {}
   } = payload || {}
@@ -82,6 +83,7 @@ export default defineEventHandler(async (event) => {
       description: description ? String(description) : null,
       imagePath,
       isActive: !!isActive,
+      notifyDiscord: !!notifyDiscord,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
