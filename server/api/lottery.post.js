@@ -77,6 +77,9 @@ export default defineEventHandler(async (event) => {
     db.pointsLog.create({ data: { userId: me.id, direction: 'decrease', points: settings.cost, total: pointsAfterPurchase, method: 'lottery-ticket' } })
   ])
 
+  const oddsBefore = u.odds ?? settings.baseOdds
+  let oddsAfter = oddsBefore
+
   // roll between 0 and 100, two decimals
   const raw = Math.random() * 100
   const roll = Number(raw.toFixed(2))
@@ -121,11 +124,13 @@ export default defineEventHandler(async (event) => {
       verificationHash = createHash('sha256').update(stringToHash).digest('hex')
     }
     // Reset odds back to baseOdds after a grand prize win
+    oddsAfter = settings.baseOdds
     await db.lottoUser.update({ where: { userId: me.id }, data: { odds: settings.baseOdds } })
   } else {
     // Not a cToon win, so odds should increase.
     // This block covers both a points win and a loss.
     const newOdds = Number((u.odds + settings.incrementRate).toFixed(6))
+    oddsAfter = newOdds
     await db.lottoUser.update({ where: { userId: me.id }, data: { odds: newOdds } })
 
     if (pointsWin) {
@@ -139,8 +144,24 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // increment purchasesToday and lastPurchaseAt
-  const updated = await db.lottoUser.update({ where: { userId: me.id }, data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now } })
+  const outcome = ctoonWin ? 'CTOON' : pointsWin ? 'POINTS' : 'NOTHING'
+
+  // increment purchasesToday and lastPurchaseAt + log outcome
+  const updated = await db.$transaction(async (tx) => {
+    const next = await tx.lottoUser.update({
+      where: { userId: me.id },
+      data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now }
+    })
+    await tx.lottoLog.create({
+      data: {
+        userId: me.id,
+        outcome,
+        oddsBefore,
+        oddsAfter
+      }
+    })
+    return next
+  })
 
   const remaining = (settings.countPerDay === -1) ? -1 : Math.max(0, settings.countPerDay - updated.purchasesToday)
 

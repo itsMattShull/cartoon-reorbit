@@ -240,6 +240,7 @@ const adminGroups = [
       { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
       { label: 'Point Logs', to: '/admin/points-log' },
       { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
+      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
       { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
       { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
     ]

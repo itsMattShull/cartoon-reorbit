@@ -3,7 +3,7 @@
     <Nav />
 
     <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 space-y-4 lg:space-y-0">
         <h1 class="text-2xl font-semibold">All cToons</h1>
         <div class="flex space-x-2">
           <NuxtLink
@@ -23,7 +23,7 @@
       </div>
 
       <!-- FILTER BAR -->
-      <div class="flex flex-col sm:flex-row gap-4 mb-6">
+      <div class="flex flex-col lg:flex-row gap-4 mb-6">
         <input
           type="text"
           v-model="searchTerm"
@@ -51,7 +51,7 @@
       </div>
 
       <!-- TABLE VIEW (desktop) -->
-      <div class="overflow-x-auto hidden sm:block">
+      <div class="overflow-x-auto hidden lg:block">
         <table class="min-w-full table-auto border-collapse">
           <thead>
             <tr class="bg-gray-100">
@@ -143,7 +143,7 @@
       </div>
 
       <!-- CARD VIEW (mobile) -->
-      <div class="space-y-4 block sm:hidden">
+      <div class="space-y-4 block lg:hidden">
         <!-- Skeleton cards while loading or searching -->
         <template v-if="loading || (isSearching && searching)">
           <div

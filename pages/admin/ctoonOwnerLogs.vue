@@ -2,23 +2,37 @@
   <Nav />
   <div class="p-4 mt-16 md:mt-20">
     <!-- Filters -->
-    <div class="mb-4 flex flex-wrap items-center gap-4">
+    <div class="mt-8 mb-4 flex flex-wrap items-center gap-4">
       <!-- User Filter -->
       <div class="flex items-center">
         <label for="userFilter" class="mr-2 font-medium">User:</label>
-        <select id="userFilter" v-model="selectedUser" class="border rounded px-2 py-1">
-          <option value="">All</option>
-          <option v-for="u in users" :key="u" :value="u">{{ u }}</option>
-        </select>
+        <input
+          id="userFilter"
+          v-model="userQuery"
+          list="userSuggestions"
+          type="text"
+          class="border rounded px-2 py-1"
+          placeholder="Type a username..."
+        />
+        <datalist id="userSuggestions">
+          <option v-for="u in userSuggestions" :key="u" :value="u" />
+        </datalist>
       </div>
 
       <!-- cToon Filter -->
       <div class="flex items-center">
         <label for="ctoonFilter" class="mr-2 font-medium">cToon:</label>
-        <select id="ctoonFilter" v-model="selectedCtoon" class="border rounded px-2 py-1">
-          <option value="">All</option>
-          <option v-for="n in ctoonNames" :key="n" :value="n">{{ n }}</option>
-        </select>
+        <input
+          id="ctoonFilter"
+          v-model="ctoonQuery"
+          list="ctoonSuggestions"
+          type="text"
+          class="border rounded px-2 py-1"
+          placeholder="Type 3+ characters"
+        />
+        <datalist id="ctoonSuggestions">
+          <option v-for="n in ctoonSuggestions" :key="n" :value="n" />
+        </datalist>
       </div>
 
       <!-- Mint # Filter -->
@@ -45,90 +59,109 @@
           placeholder="Contains…"
         />
       </div>
-    </div>
 
-    <!-- Desktop table -->
-    <div class="hidden md:block overflow-x-auto">
-      <table class="min-w-full bg-white rounded shadow">
-        <thead class="bg-gray-100">
-          <tr>
-            <th class="px-4 py-2 text-left">Time</th>
-            <th class="px-4 py-2 text-left">User</th>
-            <th class="px-4 py-2 text-left">cToon</th>
-            <th class="px-4 py-2 text-left">Rarity</th>
-            <th class="px-4 py-2 text-left">Mint #</th>
-            <th class="px-4 py-2 text-left">UserCtoonId</th>
-            <th class="px-4 py-2 text-left">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="log in logs"
-            :key="log.id"
-            class="border-t"
-          >
-            <td class="px-4 py-2 whitespace-nowrap">{{ formatTs(log.createdAt) }}</td>
-            <td class="px-4 py-2 break-words">{{ log.user?.username || 'Unknown' }}</td>
-            <td class="px-4 py-2">
-              <div class="flex items-center gap-2">
-                <img
-                  v-if="log.ctoon?.assetPath"
-                  :src="img(log.ctoon.assetPath)"
-                  alt
-                  class="w-8 h-8 object-contain rounded"
-                />
-                <span class="break-words">{{ log.ctoon?.name || 'Unknown' }}</span>
-              </div>
-            </td>
-            <td class="px-4 py-2">{{ log.ctoon?.rarity || '-' }}</td>
-            <td class="px-4 py-2">{{ log.mintNumber ?? '—' }}</td>
-            <td class="px-4 py-2 font-mono">
-              <span class="truncate inline-block max-w-[180px]" :title="log.userCtoonId">
-                {{ shorten(log.userCtoonId) }}
-              </span>
-            </td>
-            <td class="px-4 py-2">
-              <button class="bg-blue-500 text-white px-3 py-1 rounded" @click="openModal(log)">
-                View
-              </button>
-            </td>
-          </tr>
-          <!-- show while fetching more -->
-          <tr v-if="isLoading && !isInitialLoad">
-            <td class="px-4 py-3 text-center text-gray-500" colspan="7">Loading more…</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Mobile cards -->
-    <div class="md:hidden grid grid-cols-1 gap-4">
-      <div v-for="log in logs" :key="log.id" class="border rounded p-4 shadow">
-        <div class="text-sm text-gray-500 mb-2">{{ formatTs(log.createdAt) }}</div>
-        <div class="mb-1"><span class="font-medium">User:</span> {{ log.user?.username || 'Unknown' }}</div>
-        <div class="mb-1 flex items-center gap-2">
-          <span class="font-medium">cToon:</span>
-          <img
-            v-if="log.ctoon?.assetPath"
-            :src="img(log.ctoon.assetPath)"
-            alt
-            class="w-8 h-8 object-contain rounded"
-          />
-          <span>{{ log.ctoon?.name || 'Unknown' }} <span class="text-gray-500">({{ log.ctoon?.rarity || '-' }})</span></span>
-        </div>
-        <div class="mb-1"><span class="font-medium">Mint #:</span> {{ log.mintNumber ?? '—' }}</div>
-        <div class="mb-2"><span class="font-medium">UserCtoonId:</span> <span class="font-mono">{{ shorten(log.userCtoonId) }}</span></div>
-        <button class="bg-blue-500 text-white px-3 py-1 rounded" @click="openModal(log)">View</button>
+      <!-- Date Range -->
+      <div class="flex items-center">
+        <label for="fromDate" class="mr-2 font-medium">From:</label>
+        <input id="fromDate" v-model="fromDate" type="date" class="border rounded px-2 py-1" />
       </div>
-      <div v-if="isLoading && !isInitialLoad" class="text-center text-gray-500">Loading more…</div>
+      <div class="flex items-center">
+        <label for="toDate" class="mr-2 font-medium">To:</label>
+        <input id="toDate" v-model="toDate" type="date" class="border rounded px-2 py-1" />
+      </div>
     </div>
 
-    <!-- Bottom sentinel -->
-    <div ref="loadMoreEl" class="h-10"></div>
+    <div class="mb-4 text-sm text-gray-600">
+      Total Results: {{ total }} logs
+    </div>
 
-    <!-- Empty state -->
-    <div v-if="!logs.length && !isLoading" class="text-center text-gray-500 mt-10">
+    <!-- Desktop + Mobile -->
+    <div v-if="isLoading" class="text-gray-500">Loading...</div>
+    <div v-else-if="!logs.length" class="text-center text-gray-500 mt-10">
       No logs match the current filters.
+    </div>
+    <div v-else>
+      <!-- Desktop table -->
+      <div class="hidden md:block overflow-x-auto">
+        <table class="min-w-full bg-white rounded shadow">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-left">Time</th>
+              <th class="px-4 py-2 text-left">User</th>
+              <th class="px-4 py-2 text-left">cToon</th>
+              <th class="px-4 py-2 text-left">Rarity</th>
+              <th class="px-4 py-2 text-left">Mint #</th>
+              <th class="px-4 py-2 text-left">UserCtoonId</th>
+              <th class="px-4 py-2 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="log in logs"
+              :key="log.id"
+              class="border-t"
+            >
+              <td class="px-4 py-2 whitespace-nowrap">{{ formatTs(log.createdAt) }}</td>
+              <td class="px-4 py-2 break-words">{{ log.user?.username || 'Unknown' }}</td>
+              <td class="px-4 py-2">
+                <div class="flex items-center gap-2">
+                  <img
+                    v-if="log.ctoon?.assetPath"
+                    :src="img(log.ctoon.assetPath)"
+                    alt
+                    class="w-8 h-8 object-contain rounded"
+                  />
+                  <span class="break-words">{{ log.ctoon?.name || 'Unknown' }}</span>
+                </div>
+              </td>
+              <td class="px-4 py-2">{{ log.ctoon?.rarity || '-' }}</td>
+              <td class="px-4 py-2">{{ log.mintNumber ?? '—' }}</td>
+              <td class="px-4 py-2 font-mono">
+                <span class="truncate inline-block max-w-[180px]" :title="log.userCtoonId">
+                  {{ shorten(log.userCtoonId) }}
+                </span>
+              </td>
+              <td class="px-4 py-2">
+                <button class="bg-blue-500 text-white px-3 py-1 rounded" @click="openModal(log)">
+                  View
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards -->
+      <div class="md:hidden grid grid-cols-1 gap-4">
+        <div v-for="log in logs" :key="log.id" class="border rounded p-4 shadow">
+          <div class="text-sm text-gray-500 mb-2">{{ formatTs(log.createdAt) }}</div>
+          <div class="mb-1"><span class="font-medium">User:</span> {{ log.user?.username || 'Unknown' }}</div>
+          <div class="mb-1 flex items-center gap-2">
+            <span class="font-medium">cToon:</span>
+            <img
+              v-if="log.ctoon?.assetPath"
+              :src="img(log.ctoon.assetPath)"
+              alt
+              class="w-8 h-8 object-contain rounded"
+            />
+            <span>{{ log.ctoon?.name || 'Unknown' }} <span class="text-gray-500">({{ log.ctoon?.rarity || '-' }})</span></span>
+          </div>
+          <div class="mb-1"><span class="font-medium">Mint #:</span> {{ log.mintNumber ?? '—' }}</div>
+          <div class="mb-2"><span class="font-medium">UserCtoonId:</span> <span class="font-mono">{{ shorten(log.userCtoonId) }}</span></div>
+          <button class="bg-blue-500 text-white px-3 py-1 rounded" @click="openModal(log)">View</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="!isLoading && logs.length" class="mt-6 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        Page {{ page }} of {{ totalPages }} - Showing {{ showingRange }}
+      </div>
+      <div class="space-x-2">
+        <button class="px-3 py-1 border rounded" :disabled="page <= 1" @click="prevPage">Prev</button>
+        <button class="px-3 py-1 border rounded" :disabled="page >= totalPages" @click="nextPage">Next</button>
+      </div>
     </div>
 
     <!-- Details modal -->
@@ -167,43 +200,38 @@
       </div>
     </div>
 
-    <!-- Empty state -->
-    <div v-if="!logs.length" class="text-center text-gray-500 mt-10">
-      No logs match the current filters.
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
 
 // ── State ─────────────────────────────────────────────────────────────
 const logs = ref([])
+const total = ref(0)
 const isLoading = ref(false)
-const isInitialLoad = ref(true)
-const hasMore = ref(true)
 const page = ref(1)
-const LIMIT = 100
+const PAGE_SIZE = 100
 
 // Filters
-const selectedUser = ref('')
-const selectedCtoon = ref('')
+const userQuery = ref('')
+const userSuggestions = ref([])
+const ctoonQuery = ref('')
+const ctoonSuggestions = ref([])
 const mintFilter = ref(null)
 const idSearch = ref('')
+const fromDate = ref('')
+const toDate = ref('')
 
-// Options (from currently-loaded page set)
-const users = computed(() => {
-  const set = new Set()
-  logs.value.forEach(l => l.user?.username && set.add(l.user.username))
-  return Array.from(set).sort()
-})
-const ctoonNames = computed(() => {
-  const set = new Set()
-  logs.value.forEach(l => l.ctoon?.name && set.add(l.ctoon.name))
-  return Array.from(set).sort()
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const showingRange = computed(() => {
+  if (!total.value) return '0-0 of 0'
+  const start = (page.value - 1) * PAGE_SIZE + 1
+  const end = Math.min(page.value * PAGE_SIZE, total.value)
+  return `${start}-${end} of ${total.value}`
 })
 
 // Modal
@@ -218,68 +246,108 @@ function formatTs(ts) { try { return new Date(ts).toLocaleString() } catch { ret
 function img(p) { return !p ? '' : (p.startsWith('http') ? p : p) }
 async function copy(text) { if (text) try { await navigator.clipboard.writeText(text) } catch {} }
 
-// ── Fetching ──────────────────────────────────────────────────────────
-async function fetchPage({ reset = false } = {}) {
-  if (isLoading.value) return
-  if (reset) {
-    logs.value = []
-    page.value = 1
-    hasMore.value = true
-    isInitialLoad.value = true
-  }
-  if (!hasMore.value) return
-
-  isLoading.value = true
-  try {
-    const params = {
-      limit: LIMIT,
-      page: page.value,
-      ...(selectedUser.value && { username: selectedUser.value }),
-      ...(selectedCtoon.value && { ctoonName: selectedCtoon.value }),
-      ...(mintFilter.value && { mintNumber: Number(mintFilter.value) }),
-      ...(idSearch.value && { userCtoonId: idSearch.value })
-    }
-    const batch = await $fetch('/api/admin/ctoonOwnerLogs', { params })
-
-    if (Array.isArray(batch) && batch.length) {
-      logs.value.push(...batch)
-      page.value += 1
-      hasMore.value = batch.length === LIMIT
-    } else {
-      hasMore.value = false
-    }
-  } finally {
-    isLoading.value = false
-    isInitialLoad.value = false
+function normalizeDateRange() {
+  if (!fromDate.value || !toDate.value) return
+  if (new Date(fromDate.value) > new Date(toDate.value)) {
+    const tmp = fromDate.value
+    fromDate.value = toDate.value
+    toDate.value = tmp
   }
 }
 
-// Reset and refetch when filters change (debounced)
-let t = null
-watch([selectedUser, selectedCtoon, mintFilter, idSearch], () => {
-  clearTimeout(t)
-  t = setTimeout(() => fetchPage({ reset: true }), 300)
-})
-
-// ── Infinite scroll sentinel ──────────────────────────────────────────
-const loadMoreEl = ref(null)
-let observer = null
-
-onMounted(async () => {
-  await fetchPage({ reset: true })
-  observer = new IntersectionObserver(entries => {
-    const entry = entries[0]
-    if (entry?.isIntersecting && hasMore.value && !isLoading.value) {
-      // tell user we’re loading more via the UI rows/cards above
-      fetchPage()
+// ── Fetching ──────────────────────────────────────────────────────────
+async function fetchLogs() {
+  if (isLoading.value) return
+  normalizeDateRange()
+  isLoading.value = true
+  try {
+    const userTerm = userQuery.value.trim()
+    const ctoonTerm = ctoonQuery.value.trim()
+    const idTerm = idSearch.value.trim()
+    const params = {
+      limit: PAGE_SIZE,
+      page: page.value,
+      ...(userTerm && { username: userTerm }),
+      ...(ctoonTerm && { ctoonName: ctoonTerm }),
+      ...(mintFilter.value && { mintNumber: Number(mintFilter.value) }),
+      ...(idTerm && { userCtoonId: idTerm }),
+      ...(fromDate.value && { from: fromDate.value }),
+      ...(toDate.value && { to: toDate.value })
     }
-  }, { root: null, rootMargin: '300px', threshold: 0 })
-  if (loadMoreEl.value) observer.observe(loadMoreEl.value)
+    const res = await $fetch('/api/admin/ctoonOwnerLogs', { params })
+    logs.value = res.items || []
+    total.value = res.total || 0
+    if (res.page) page.value = res.page
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function fetchUserSuggestions() {
+  const term = userQuery.value.trim()
+  if (!term) {
+    userSuggestions.value = []
+    return
+  }
+  try {
+    const res = await $fetch('/api/admin/user-mentions', { query: { q: term, limit: 10 } })
+    userSuggestions.value = (res.items || []).map(item => item.username).filter(Boolean)
+  } catch {
+    userSuggestions.value = []
+  }
+}
+
+async function fetchCtoonSuggestions() {
+  const term = ctoonQuery.value.trim()
+  if (term.length < 3) {
+    ctoonSuggestions.value = []
+    return
+  }
+  try {
+    const res = await $fetch(`/api/admin/search-ctoons?q=${encodeURIComponent(term)}`)
+    const names = (Array.isArray(res) ? res : []).map(ct => ct.name).filter(Boolean)
+    ctoonSuggestions.value = Array.from(new Set(names))
+  } catch {
+    ctoonSuggestions.value = []
+  }
+}
+
+function nextPage() {
+  if (page.value >= totalPages.value) return
+  page.value += 1
+  fetchLogs()
+}
+
+function prevPage() {
+  if (page.value <= 1) return
+  page.value -= 1
+  fetchLogs()
+}
+
+// Reset and refetch when filters change (debounced)
+let filterDebounceId = null
+watch([userQuery, ctoonQuery, mintFilter, idSearch, fromDate, toDate], () => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+  filterDebounceId = setTimeout(() => {
+    page.value = 1
+    fetchLogs()
+  }, 300)
 })
 
-onBeforeUnmount(() => {
-  if (observer && loadMoreEl.value) observer.unobserve(loadMoreEl.value)
-  observer = null
+let userSuggestDebounceId = null
+watch(userQuery, () => {
+  if (userSuggestDebounceId) clearTimeout(userSuggestDebounceId)
+  userSuggestDebounceId = setTimeout(fetchUserSuggestions, 200)
+})
+
+let ctoonSuggestDebounceId = null
+watch(ctoonQuery, () => {
+  if (ctoonSuggestDebounceId) clearTimeout(ctoonSuggestDebounceId)
+  ctoonSuggestDebounceId = setTimeout(fetchCtoonSuggestions, 250)
+})
+
+onMounted(() => {
+  fetchLogs()
 })
 </script>
 

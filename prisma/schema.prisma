@@ -41,6 +41,12 @@ enum PackSellOutBehavior {
   KEEP_IF_SINGLE_RARITY_EMPTY
 }
 
+enum LottoOutcome {
+  NOTHING
+  POINTS
+  CTOON
+}
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -247,6 +253,7 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs AdminChangeLog[]
   lottoUser       LottoUser?
+  lottoLogs       LottoLog[]
   // Achievements back‑relation
   achievements    AchievementUser[]
 
@@ -1161,6 +1168,21 @@ model LottoUser {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model LottoLog {
+  id         String       @id @default(uuid())
+  userId     String
+  outcome    LottoOutcome
+  oddsBefore Float
+  oddsAfter  Float
+  createdAt  DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([outcome, createdAt])
 }
 
 // Lotto settings editable from Admin → Content

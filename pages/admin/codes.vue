@@ -39,13 +39,13 @@
 
       <!-- Created Codes Tab -->
       <div v-if="activeTab === 'created'">
-        <div v-if="error" class="text-red-600 mb-4">{{ error.message }}</div>
-        <div v-if="pending" class="text-gray-500">Loading…</div>
+        <div v-if="createdError" class="text-red-600 mb-4">{{ createdError.message }}</div>
+        <div v-if="createdLoading" class="text-gray-500">Loading…</div>
 
         <!-- Desktop Table -->
-        <div class="hidden sm:block">
+        <div v-else class="hidden lg:block">
           <table
-            v-if="codes && codes.length"
+            v-if="codes.length"
             class="w-full table-auto border-collapse"
           >
             <thead>
@@ -59,11 +59,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="c in codes"
-                :key="c.code"
-                class="border-b hover:bg-gray-50"
-              >
+              <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
                 <td class="px-4 py-2 break-words">{{ c.code }}</td>
                 <td class="px-4 py-2">
                   <span v-if="c.expiresAt">
@@ -85,15 +81,14 @@
               </tr>
             </tbody>
           </table>
-          <div v-if="!codes || !codes.length" class="text-gray-500">
+          <div v-if="!codes.length" class="text-gray-500">
             No codes found.
           </div>
         </div>
 
         <!-- Mobile Cards -->
-        <div class="block sm:hidden space-y-4">
+        <div v-else class="block lg:hidden space-y-4">
           <div
-            v-if="codes && codes.length"
             v-for="c in codes"
             :key="c.code"
             class="bg-gray-100 rounded-lg p-4 flex flex-col"
@@ -118,21 +113,50 @@
               Edit
             </NuxtLink>
           </div>
-          <div v-if="!codes || !codes.length" class="text-gray-500">
+          <div v-if="!codes.length" class="text-gray-500">
             No codes found.
+          </div>
+        </div>
+
+        <!-- Created Pagination -->
+        <div v-if="!createdLoading && codes.length" class="mt-6 flex items-center justify-between">
+          <div class="text-sm text-gray-600">
+            Page {{ createdPage }} of {{ createdTotalPages }} - Showing {{ createdShowingRange }}
+          </div>
+          <div class="space-x-2">
+            <button class="px-3 py-1 border rounded" :disabled="createdPage <= 1" @click="prevCreatedPage">Prev</button>
+            <button class="px-3 py-1 border rounded" :disabled="createdPage >= createdTotalPages" @click="nextCreatedPage">Next</button>
           </div>
         </div>
       </div>
 
       <!-- Claimed Codes Tab -->
       <div v-if="activeTab === 'claimed'">
+        <div class="mb-4 flex flex-wrap items-end gap-4">
+          <div class="flex-1">
+            <label for="claimedFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by username or code</label>
+            <input
+              id="claimedFilter"
+              v-model="claimedQuery"
+              list="claimedUserSuggestions"
+              type="text"
+              @focus="fetchClaimedUserSuggestions"
+              placeholder="Type a username or code..."
+              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <datalist id="claimedUserSuggestions">
+              <option v-for="u in claimedUserSuggestions" :key="u" :value="u" />
+            </datalist>
+          </div>
+        </div>
+
         <div v-if="claimedError" class="text-red-600 mb-4">{{ claimedError.message }}</div>
-        <div v-if="claimedPending" class="text-gray-500">Loading…</div>
+        <div v-if="claimedLoading" class="text-gray-500">Loading…</div>
 
         <!-- Desktop Table -->
-        <div class="hidden sm:block">
+        <div v-else class="hidden lg:block">
           <table
-            v-if="claimed && claimed.length"
+            v-if="claimed.length"
             class="w-full table-auto border-collapse"
           >
             <thead>
@@ -143,11 +167,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="row in claimed"
-                :key="row.id"
-                class="border-b hover:bg-gray-50"
-              >
+              <tr v-for="row in claimed" :key="row.id" class="border-b hover:bg-gray-50">
                 <td class="px-4 py-2 break-words">{{ row.code }}</td>
                 <td class="px-4 py-2">{{ row.user.username }}</td>
                 <td class="px-4 py-2">
@@ -156,15 +176,14 @@
               </tr>
             </tbody>
           </table>
-          <div v-if="!claimed || !claimed.length" class="text-gray-500">
+          <div v-if="!claimed.length" class="text-gray-500">
             No claims found.
           </div>
         </div>
 
         <!-- Mobile Cards -->
-        <div class="block sm:hidden space-y-4">
+        <div v-else class="block lg:hidden space-y-4">
           <div
-            v-if="claimed && claimed.length"
             v-for="row in claimed"
             :key="row.id"
             class="bg-gray-100 rounded-lg p-4 flex flex-col"
@@ -175,8 +194,19 @@
               {{ new Date(row.claimedAt).toLocaleString() }}
             </p>
           </div>
-          <div v-if="!claimed || !claimed.length" class="text-gray-500">
+          <div v-if="!claimed.length" class="text-gray-500">
             No claims found.
+          </div>
+        </div>
+
+        <!-- Claimed Pagination -->
+        <div v-if="!claimedLoading && claimed.length" class="mt-6 flex items-center justify-between">
+          <div class="text-sm text-gray-600">
+            Page {{ claimedPage }} of {{ claimedTotalPages }} - Showing {{ claimedShowingRange }}
+          </div>
+          <div class="space-x-2">
+            <button class="px-3 py-1 border rounded" :disabled="claimedPage <= 1" @click="prevClaimedPage">Prev</button>
+            <button class="px-3 py-1 border rounded" :disabled="claimedPage >= claimedTotalPages" @click="nextClaimedPage">Next</button>
           </div>
         </div>
       </div>
@@ -186,8 +216,7 @@
 
 
 <script setup>
-import { ref } from 'vue'
-import { useFetch } from '#app'
+import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
@@ -199,14 +228,119 @@ definePageMeta({
 const activeTab = ref('created')
 
 // Created codes
-const { data: codes, pending, error } = await useFetch('/api/admin/codes')
+const codes = ref([])
+const createdTotal = ref(0)
+const createdPage = ref(1)
+const createdLimit = 50
+const createdLoading = ref(false)
+const createdError = ref(null)
 
 // Claimed codes
-const {
-  data: claimed,
-  pending: claimedPending,
-  error: claimedError
-} = await useFetch('/api/admin/codes/claimed')
+const claimed = ref([])
+const claimedTotal = ref(0)
+const claimedPage = ref(1)
+const claimedLimit = 100
+const claimedLoading = ref(false)
+const claimedError = ref(null)
+const claimedQuery = ref('')
+const claimedUserSuggestions = ref([])
+
+const createdTotalPages = computed(() => Math.max(1, Math.ceil(createdTotal.value / createdLimit)))
+const claimedTotalPages = computed(() => Math.max(1, Math.ceil(claimedTotal.value / claimedLimit)))
+
+const createdShowingRange = computed(() => {
+  if (!createdTotal.value) return '0-0 of 0'
+  const start = (createdPage.value - 1) * createdLimit + 1
+  const end = Math.min(createdPage.value * createdLimit, createdTotal.value)
+  return `${start}-${end} of ${createdTotal.value}`
+})
+
+const claimedShowingRange = computed(() => {
+  if (!claimedTotal.value) return '0-0 of 0'
+  const start = (claimedPage.value - 1) * claimedLimit + 1
+  const end = Math.min(claimedPage.value * claimedLimit, claimedTotal.value)
+  return `${start}-${end} of ${claimedTotal.value}`
+})
+
+async function fetchCreatedCodes() {
+  createdLoading.value = true
+  createdError.value = null
+  try {
+    const res = await $fetch('/api/admin/codes', {
+      query: { page: createdPage.value, limit: createdLimit }
+    })
+    codes.value = res.items || []
+    createdTotal.value = res.total || 0
+    if (res.page) createdPage.value = res.page
+  } catch (err) {
+    createdError.value = err
+    codes.value = []
+    createdTotal.value = 0
+  } finally {
+    createdLoading.value = false
+  }
+}
+
+async function fetchClaimedCodes() {
+  claimedLoading.value = true
+  claimedError.value = null
+  try {
+    const res = await $fetch('/api/admin/codes/claimed', {
+      query: {
+        page: claimedPage.value,
+        limit: claimedLimit,
+        q: claimedQuery.value.trim() || undefined
+      }
+    })
+    claimed.value = res.items || []
+    claimedTotal.value = res.total || 0
+    if (res.page) claimedPage.value = res.page
+  } catch (err) {
+    claimedError.value = err
+    claimed.value = []
+    claimedTotal.value = 0
+  } finally {
+    claimedLoading.value = false
+  }
+}
+
+async function fetchClaimedUserSuggestions() {
+  const term = claimedQuery.value.trim()
+  if (term.length < 3) {
+    claimedUserSuggestions.value = []
+    return
+  }
+  try {
+    const res = await $fetch('/api/admin/user-mentions', { query: { q: term, limit: 10 } })
+    claimedUserSuggestions.value = (res.items || []).map(item => item.username).filter(Boolean)
+  } catch {
+    claimedUserSuggestions.value = []
+  }
+}
+
+function nextCreatedPage() {
+  if (createdPage.value >= createdTotalPages.value) return
+  createdPage.value += 1
+  fetchCreatedCodes()
+}
+
+function prevCreatedPage() {
+  if (createdPage.value <= 1) return
+  createdPage.value -= 1
+  fetchCreatedCodes()
+}
+
+function nextClaimedPage() {
+  if (claimedPage.value >= claimedTotalPages.value) return
+  claimedPage.value += 1
+  fetchClaimedCodes()
+}
+
+function prevClaimedPage() {
+  if (claimedPage.value <= 1) return
+  claimedPage.value -= 1
+  fetchClaimedCodes()
+}
 
 function countBackgrounds(code) {
   const ids = new Set()
@@ -235,6 +369,30 @@ function countCtoons(code) {
     0
   )
 }
+
+let claimedFilterDebounceId = null
+watch(claimedQuery, () => {
+  if (claimedFilterDebounceId) clearTimeout(claimedFilterDebounceId)
+  claimedFilterDebounceId = setTimeout(() => {
+    claimedPage.value = 1
+    fetchClaimedCodes()
+  }, 300)
+})
+
+let claimedSuggestDebounceId = null
+watch(claimedQuery, () => {
+  if (claimedSuggestDebounceId) clearTimeout(claimedSuggestDebounceId)
+  claimedSuggestDebounceId = setTimeout(fetchClaimedUserSuggestions, 200)
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'created' && !codes.value.length) fetchCreatedCodes()
+  if (tab === 'claimed' && !claimed.value.length) fetchClaimedCodes()
+})
+
+onMounted(() => {
+  fetchCreatedCodes()
+})
 </script>
 
 <style scoped>
