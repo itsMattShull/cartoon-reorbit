@@ -280,6 +280,47 @@
             </div>
           </div>
 
+          <!-- Sound upload for Win Wheel -->
+          <div class="space-y-3 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Spin Sound Behavior</label>
+              <select v-model="winWheelSoundMode" class="input">
+                <option value="repeat">Repeat Sound</option>
+                <option value="once">Play Once</option>
+              </select>
+            </div>
+            <label class="block text-sm font-medium text-gray-700">
+              Wheel Sound (MP3/WAV/OGG)
+            </label>
+            <input
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,.mp3,.wav,.ogg"
+              @change="onWinWheelSoundChange"
+              class="block w-full text-sm"
+            />
+            <div class="flex items-center gap-3">
+              <button
+                class="btn-primary"
+                @click="uploadWinWheelSound"
+                :disabled="!winWheelSoundFile || uploadingSound"
+              >
+                <span v-if="!uploadingSound">Upload Sound</span>
+                <span v-else>Uploading…</span>
+              </button>
+              <button
+                v-if="winWheelSoundPath"
+                type="button"
+                class="px-3 py-2 text-sm rounded border"
+                @click="removeWinWheelSound"
+              >Remove Sound</button>
+            </div>
+
+            <div v-if="winWheelSoundPath" class="mt-2">
+              <p class="text-xs text-gray-600 break-all">Saved path: {{ winWheelSoundPath }}</p>
+              <audio :src="winWheelSoundPath" controls class="w-full mt-2"></audio>
+            </div>
+          </div>
+
           <div class="mb-6 relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Exclusive cToon Pool</label>
             <input
@@ -528,6 +569,11 @@ const loadingWinWheel  = ref(false)
 const winWheelFile       = ref(null)
 const uploadingImage     = ref(false)
 const winWheelImagePath  = ref('')
+// sound upload state
+const winWheelSoundFile  = ref(null)
+const uploadingSound     = ref(false)
+const winWheelSoundPath  = ref('')
+const winWheelSoundMode  = ref('repeat')
 
 // preview fallback
 const previewSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
@@ -559,6 +605,8 @@ async function loadWinWheelConfig() {
   pointsWonWW.value       = ww.pointsWon
   maxDailySpinsWW.value   = ww.maxDailySpins
   winWheelImagePath.value = ww.winWheelImagePath || ''
+  winWheelSoundPath.value = ww.winWheelSoundPath || ''
+  winWheelSoundMode.value = ww.winWheelSoundMode || 'repeat'
   poolCtoons.value        = (ww.exclusiveCtoons || []).map(o => o.ctoon)
 }
 
@@ -596,6 +644,40 @@ function removeWinWheelImage() {
   winWheelImagePath.value = ''
 }
 
+// ── Sound upload handlers ────────────────────
+function onWinWheelSoundChange(e) {
+  const f = e.target.files?.[0]
+  winWheelSoundFile.value = f || null
+}
+async function uploadWinWheelSound() {
+  if (!winWheelSoundFile.value) return
+  uploadingSound.value = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('sound', winWheelSoundFile.value)
+    fd.append('label', 'winwheel-sound')
+
+    const res = await $fetch('/api/admin/winwheel-sound', {
+      method: 'POST',
+      body: fd
+    })
+    winWheelSoundPath.value = res.assetPath
+    toastMessage.value = 'Sound uploaded.'
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Sound upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingSound.value = false
+    winWheelSoundFile.value = null
+  }
+}
+function removeWinWheelSound() {
+  winWheelSoundPath.value = ''
+}
+
 // ── Saves ────────────────────────────────────
 async function saveWinWheelConfig() {
   loadingWinWheel.value = true
@@ -609,7 +691,9 @@ async function saveWinWheelConfig() {
         pointsWon:         pointsWonWW.value,
         maxDailySpins:     maxDailySpinsWW.value,
         exclusiveCtoons:   poolCtoons.value.map(c => c.id),
-        winWheelImagePath: winWheelImagePath.value || null
+        winWheelImagePath: winWheelImagePath.value || null,
+        winWheelSoundPath: winWheelSoundPath.value || null,
+        winWheelSoundMode: winWheelSoundMode.value || 'repeat'
       }
     })
     toastMessage.value = 'Win Wheel settings saved!'

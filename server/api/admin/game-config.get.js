@@ -86,7 +86,9 @@ export default defineEventHandler(async (event) => {
             spinCost: 100,
             pointsWon: 250,
             maxDailySpins: 2,
-            winWheelImagePath: null // ensure field exists in response
+            winWheelImagePath: null, // ensure field exists in response
+            winWheelSoundPath: null,
+            winWheelSoundMode: 'repeat'
           },
           include: includeOptions
         })

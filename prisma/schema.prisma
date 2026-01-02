@@ -533,6 +533,8 @@ model GameConfig {
   maxDailySpins     Int              @default(2)
   exclusiveCtoons   WinWheelOption[] @relation("WinWheelOptions")
   winWheelImagePath String?
+  winWheelSoundPath String?
+  winWheelSoundMode String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
