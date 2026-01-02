@@ -29,9 +29,11 @@ export default defineEventHandler(async (event) => {
 
   let filePart = null
   let label = null
+  let url = null
   for (const p of parts) {
     if (p.filename) filePart = p
     else if (p.name === 'label') label = Buffer.isBuffer(p.data) ? p.data.toString('utf-8') : String(p.data ?? '')
+    else if (p.name === 'url') url = Buffer.isBuffer(p.data) ? p.data.toString('utf-8') : String(p.data ?? '')
   }
   if (!filePart) throw createError({ statusCode: 400, statusMessage: 'Image is required' })
   if (!ALLOWED.has(filePart.type)) {
@@ -49,14 +51,16 @@ export default defineEventHandler(async (event) => {
 
   await writeFile(join(uploadDir, filename), filePart.data)
 
+  const cleanedUrl = url?.trim() || null
   const row = await db.adImage.create({
     data: {
       filename,
       imagePath: publicAssetPath(filename),
       label: label?.trim() || null,
+      url: cleanedUrl,
       createdById: me.id || null
     },
-    select: { id: true, imagePath: true, filename: true, label: true, createdAt: true }
+    select: { id: true, imagePath: true, filename: true, label: true, url: true, createdAt: true }
   })
 
   return row

@@ -984,6 +984,7 @@ model AdImage {
   imagePath String   @unique
   filename  String   @unique
   label     String?
+  url       String?
   createdAt DateTime @default(now())
 
   createdById String?
