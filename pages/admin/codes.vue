@@ -40,81 +40,82 @@
       <!-- Created Codes Tab -->
       <div v-if="activeTab === 'created'">
         <div v-if="createdError" class="text-red-600 mb-4">{{ createdError.message }}</div>
-        <div v-if="createdLoading" class="text-gray-500">Loading…</div>
+        <div v-else-if="createdLoading" class="text-gray-500">Loading…</div>
+        <div v-else>
+          <!-- Desktop Table -->
+          <div class="hidden lg:block">
+            <table
+              v-if="codes.length"
+              class="w-full table-auto border-collapse"
+            >
+              <thead>
+                <tr class="bg-gray-100">
+                  <th class="px-4 py-2 text-left">Code</th>
+                  <th class="px-4 py-2 text-left">Expires At</th>
+                  <th class="px-4 py-2 text-right"># cToons</th>
+                  <th class="px-4 py-2 text-right"># of Backgrounds</th>
+                  <th class="px-4 py-2 text-right">Points</th>
+                  <th class="px-4 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
+                  <td class="px-4 py-2 break-words">{{ c.code }}</td>
+                  <td class="px-4 py-2">
+                    <span v-if="c.expiresAt">
+                      {{ new Date(c.expiresAt).toLocaleDateString() }}
+                    </span>
+                    <span v-else class="text-gray-500">Never</span>
+                  </td>
+                  <td class="px-4 py-2 text-right">{{ countCtoons(c) }}</td>
+                  <td class="px-4 py-2 text-right">{{ countBackgrounds(c) }}</td>
+                  <td class="px-4 py-2 text-right">{{ countPoints(c) }}</td>
+                  <td class="px-4 py-2 text-right">
+                    <NuxtLink
+                      :to="`/admin/edit-code?code=${encodeURIComponent(c.code)}`"
+                      class="text-blue-600 hover:underline"
+                    >
+                      Edit
+                    </NuxtLink>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!codes.length" class="text-gray-500">
+              No codes found.
+            </div>
+          </div>
 
-        <!-- Desktop Table -->
-        <div v-else class="hidden lg:block">
-          <table
-            v-if="codes.length"
-            class="w-full table-auto border-collapse"
-          >
-            <thead>
-              <tr class="bg-gray-100">
-                <th class="px-4 py-2 text-left">Code</th>
-                <th class="px-4 py-2 text-left">Expires At</th>
-                <th class="px-4 py-2 text-right"># cToons</th>
-                <th class="px-4 py-2 text-right"># of Backgrounds</th>
-                <th class="px-4 py-2 text-right">Points</th>
-                <th class="px-4 py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
-                <td class="px-4 py-2 break-words">{{ c.code }}</td>
-                <td class="px-4 py-2">
+          <!-- Mobile Cards -->
+          <div class="block lg:hidden space-y-4">
+            <div
+              v-for="c in codes"
+              :key="c.code"
+              class="bg-gray-100 rounded-lg p-4 flex flex-col"
+            >
+              <div class="space-y-2">
+                <p><strong>Code:</strong> {{ c.code }}</p>
+                <p>
+                  <strong>Expires:</strong>
                   <span v-if="c.expiresAt">
                     {{ new Date(c.expiresAt).toLocaleDateString() }}
                   </span>
-                  <span v-else class="text-gray-500">Never</span>
-                </td>
-                <td class="px-4 py-2 text-right">{{ countCtoons(c) }}</td>
-                <td class="px-4 py-2 text-right">{{ countBackgrounds(c) }}</td>
-                <td class="px-4 py-2 text-right">{{ countPoints(c) }}</td>
-                <td class="px-4 py-2 text-right">
-                  <NuxtLink
-                    :to="`/admin/edit-code?code=${encodeURIComponent(c.code)}`"
-                    class="text-blue-600 hover:underline"
-                  >
-                    Edit
-                  </NuxtLink>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-if="!codes.length" class="text-gray-500">
-            No codes found.
-          </div>
-        </div>
-
-        <!-- Mobile Cards -->
-        <div v-else class="block lg:hidden space-y-4">
-          <div
-            v-for="c in codes"
-            :key="c.code"
-            class="bg-gray-100 rounded-lg p-4 flex flex-col"
-          >
-            <div class="space-y-2">
-              <p><strong>Code:</strong> {{ c.code }}</p>
-              <p>
-                <strong>Expires:</strong>
-                <span v-if="c.expiresAt">
-                  {{ new Date(c.expiresAt).toLocaleDateString() }}
-                </span>
-                <span v-else>Never</span>
-              </p>
-              <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
-              <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
-              <p><strong>Points:</strong> {{ countPoints(c) }}</p>
+                  <span v-else>Never</span>
+                </p>
+                <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
+                <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
+                <p><strong>Points:</strong> {{ countPoints(c) }}</p>
+              </div>
+              <NuxtLink
+                :to="`/admin/edit-code?code=${encodeURIComponent(c.code)}`"
+                class="mt-4 self-end text-blue-600 hover:underline"
+              >
+                Edit
+              </NuxtLink>
             </div>
-            <NuxtLink
-              :to="`/admin/edit-code?code=${encodeURIComponent(c.code)}`"
-              class="mt-4 self-end text-blue-600 hover:underline"
-            >
-              Edit
-            </NuxtLink>
-          </div>
-          <div v-if="!codes.length" class="text-gray-500">
-            No codes found.
+            <div v-if="!codes.length" class="text-gray-500">
+              No codes found.
+            </div>
           </div>
         </div>
 
@@ -151,51 +152,52 @@
         </div>
 
         <div v-if="claimedError" class="text-red-600 mb-4">{{ claimedError.message }}</div>
-        <div v-if="claimedLoading" class="text-gray-500">Loading…</div>
-
-        <!-- Desktop Table -->
-        <div v-else class="hidden lg:block">
-          <table
-            v-if="claimed.length"
-            class="w-full table-auto border-collapse"
-          >
-            <thead>
-              <tr class="bg-gray-100">
-                <th class="px-4 py-2 text-left">Code</th>
-                <th class="px-4 py-2 text-left">User</th>
-                <th class="px-4 py-2 text-left">Claimed At</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in claimed" :key="row.id" class="border-b hover:bg-gray-50">
-                <td class="px-4 py-2 break-words">{{ row.code }}</td>
-                <td class="px-4 py-2">{{ row.user.username }}</td>
-                <td class="px-4 py-2">
-                  {{ new Date(row.claimedAt).toLocaleString() }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-if="!claimed.length" class="text-gray-500">
-            No claims found.
+        <div v-else-if="claimedLoading" class="text-gray-500">Loading…</div>
+        <div v-else>
+          <!-- Desktop Table -->
+          <div class="hidden lg:block">
+            <table
+              v-if="claimed.length"
+              class="w-full table-auto border-collapse"
+            >
+              <thead>
+                <tr class="bg-gray-100">
+                  <th class="px-4 py-2 text-left">Code</th>
+                  <th class="px-4 py-2 text-left">User</th>
+                  <th class="px-4 py-2 text-left">Claimed At</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in claimed" :key="row.id" class="border-b hover:bg-gray-50">
+                  <td class="px-4 py-2 break-words">{{ row.code }}</td>
+                  <td class="px-4 py-2">{{ row.user.username }}</td>
+                  <td class="px-4 py-2">
+                    {{ new Date(row.claimedAt).toLocaleString() }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!claimed.length" class="text-gray-500">
+              No claims found.
+            </div>
           </div>
-        </div>
 
-        <!-- Mobile Cards -->
-        <div v-else class="block lg:hidden space-y-4">
-          <div
-            v-for="row in claimed"
-            :key="row.id"
-            class="bg-gray-100 rounded-lg p-4 flex flex-col"
-          >
-            <p><strong>Code:</strong> {{ row.code }}</p>
-            <p><strong>User:</strong> {{ row.user.username }}</p>
-            <p><strong>Claimed At:</strong>
-              {{ new Date(row.claimedAt).toLocaleString() }}
-            </p>
-          </div>
-          <div v-if="!claimed.length" class="text-gray-500">
-            No claims found.
+          <!-- Mobile Cards -->
+          <div class="block lg:hidden space-y-4">
+            <div
+              v-for="row in claimed"
+              :key="row.id"
+              class="bg-gray-100 rounded-lg p-4 flex flex-col"
+            >
+              <p><strong>Code:</strong> {{ row.code }}</p>
+              <p><strong>User:</strong> {{ row.user.username }}</p>
+              <p><strong>Claimed At:</strong>
+                {{ new Date(row.claimedAt).toLocaleString() }}
+              </p>
+            </div>
+            <div v-if="!claimed.length" class="text-gray-500">
+              No claims found.
+            </div>
           </div>
         </div>
 

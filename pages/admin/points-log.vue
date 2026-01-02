@@ -32,64 +32,65 @@
 
       <div v-if="loading" class="text-center py-4">Loading…</div>
       <div v-else-if="logs.length === 0" class="text-center py-4 text-gray-500">No logs found.</div>
+      <div v-else>
+        <!-- TABLE VIEW (desktop) -->
+        <div class="overflow-x-auto hidden sm:block">
+          <table class="min-w-full table-auto border-collapse">
+            <thead>
+              <tr class="bg-gray-100">
+                <th class="px-4 py-2 text-left">User</th>
+                <th class="px-4 py-2 text-left">Direction</th>
+                <th class="px-4 py-2 text-right">Points</th>
+                <th class="px-4 py-2 text-right">New Total</th>
+                <th class="px-4 py-2 text-left">Method</th>
+                <th class="px-4 py-2 text-left">Created At (CDT)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="log in logs"
+                :key="log.id"
+                class="border-b hover:bg-gray-50"
+              >
+                <td class="px-4 py-2">{{ log.user?.username ?? '—' }}</td>
+                <td class="px-4 py-2 capitalize">{{ log.direction }}</td>
+                <td class="px-4 py-2 text-right">{{ log.points }}</td>
+                <td class="px-4 py-2 text-right">{{ log.total }}</td>
+                <td class="px-4 py-2">{{ log.method || '—' }}</td>
+                <td class="px-4 py-2 whitespace-nowrap">
+                  {{ new Date(log.createdAt).toLocaleString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                    timeZone: 'America/Chicago', timeZoneName: 'short'
+                  }) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- TABLE VIEW (desktop) -->
-      <div v-else class="overflow-x-auto hidden sm:block">
-        <table class="min-w-full table-auto border-collapse">
-          <thead>
-            <tr class="bg-gray-100">
-              <th class="px-4 py-2 text-left">User</th>
-              <th class="px-4 py-2 text-left">Direction</th>
-              <th class="px-4 py-2 text-right">Points</th>
-              <th class="px-4 py-2 text-right">New Total</th>
-              <th class="px-4 py-2 text-left">Method</th>
-              <th class="px-4 py-2 text-left">Created At (CDT)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="log in logs"
-              :key="log.id"
-              class="border-b hover:bg-gray-50"
-            >
-              <td class="px-4 py-2">{{ log.user?.username ?? '—' }}</td>
-              <td class="px-4 py-2 capitalize">{{ log.direction }}</td>
-              <td class="px-4 py-2 text-right">{{ log.points }}</td>
-              <td class="px-4 py-2 text-right">{{ log.total }}</td>
-              <td class="px-4 py-2">{{ log.method || '—' }}</td>
-              <td class="px-4 py-2 whitespace-nowrap">
+        <!-- CARD VIEW (mobile) -->
+        <div class="space-y-4 block sm:hidden">
+          <div
+            v-for="log in logs"
+            :key="log.id"
+            class="bg-gray-100 rounded-lg p-4 flex flex-col"
+          >
+            <div class="flex justify-between">
+              <div>
+                <p class="font-semibold">{{ log.user?.username ?? '—' }}</p>
+                <p class="text-sm capitalize">{{ log.direction }}</p>
+                <p class="text-sm">Points: {{ log.points }}</p>
+                <p class="text-sm">Method: {{ log.method || '—' }}</p>
+              </div>
+              <p class="text-xs whitespace-nowrap">
                 {{ new Date(log.createdAt).toLocaleString('en-US', {
                   year: 'numeric', month: 'short', day: 'numeric',
                   hour: '2-digit', minute: '2-digit',
-                  timeZone: 'America/Chicago', timeZoneName: 'short'
+                  timeZone: 'America/Chicago'
                 }) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- CARD VIEW (mobile) -->
-      <div v-else class="space-y-4 block sm:hidden">
-        <div
-          v-for="log in logs"
-          :key="log.id"
-          class="bg-gray-100 rounded-lg p-4 flex flex-col"
-        >
-          <div class="flex justify-between">
-            <div>
-              <p class="font-semibold">{{ log.user?.username ?? '—' }}</p>
-              <p class="text-sm capitalize">{{ log.direction }}</p>
-              <p class="text-sm">Points: {{ log.points }}</p>
-              <p class="text-sm">Method: {{ log.method || '—' }}</p>
+              </p>
             </div>
-            <p class="text-xs whitespace-nowrap">
-              {{ new Date(log.createdAt).toLocaleString('en-US', {
-                year: 'numeric', month: 'short', day: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-                timeZone: 'America/Chicago'
-              }) }}
-            </p>
           </div>
         </div>
       </div>

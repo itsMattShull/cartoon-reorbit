@@ -65,42 +65,43 @@
 
         <div v-if="logsLoading" class="text-gray-500">Loading…</div>
         <div v-else-if="logs.length === 0" class="text-gray-500">No logs in this range.</div>
+        <div v-else>
+          <!-- Desktop table -->
+          <div class="hidden md:block overflow-auto">
+            <table class="min-w-[900px] w-full border rounded">
+              <thead class="bg-gray-50 text-left text-sm">
+                <tr>
+                  <th class="px-3 py-2 border-b">Time (CDT)</th>
+                  <th class="px-3 py-2 border-b">User</th>
+                  <th class="px-3 py-2 border-b">Outcome</th>
+                  <th class="px-3 py-2 border-b">Odds Before</th>
+                  <th class="px-3 py-2 border-b">Odds After</th>
+                </tr>
+              </thead>
+              <tbody class="text-sm">
+                <tr v-for="log in logs" :key="log.id" class="border-b">
+                  <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(log.createdAt) }}</td>
+                  <td class="px-3 py-2">{{ displayUser(log.user) }}</td>
+                  <td class="px-3 py-2">{{ labelFor(log.outcome) }}</td>
+                  <td class="px-3 py-2">{{ formatOdds(log.oddsBefore) }}</td>
+                  <td class="px-3 py-2">{{ formatOdds(log.oddsAfter) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <!-- Desktop table -->
-        <div v-else class="hidden md:block overflow-auto">
-          <table class="min-w-[900px] w-full border rounded">
-            <thead class="bg-gray-50 text-left text-sm">
-              <tr>
-                <th class="px-3 py-2 border-b">Time (CDT)</th>
-                <th class="px-3 py-2 border-b">User</th>
-                <th class="px-3 py-2 border-b">Outcome</th>
-                <th class="px-3 py-2 border-b">Odds Before</th>
-                <th class="px-3 py-2 border-b">Odds After</th>
-              </tr>
-            </thead>
-            <tbody class="text-sm">
-              <tr v-for="log in logs" :key="log.id" class="border-b">
-                <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(log.createdAt) }}</td>
-                <td class="px-3 py-2">{{ displayUser(log.user) }}</td>
-                <td class="px-3 py-2">{{ labelFor(log.outcome) }}</td>
-                <td class="px-3 py-2">{{ formatOdds(log.oddsBefore) }}</td>
-                <td class="px-3 py-2">{{ formatOdds(log.oddsAfter) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Mobile cards -->
-        <div v-else class="md:hidden space-y-3">
-          <div v-for="log in logs" :key="log.id" class="border rounded bg-white p-3">
-            <div class="flex items-center justify-between text-xs text-gray-500">
-              <span>{{ formatDate(log.createdAt) }}</span>
-              <span>{{ labelFor(log.outcome) }}</span>
-            </div>
-            <div class="mt-1 text-sm font-medium">{{ displayUser(log.user) }}</div>
-            <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div><span class="text-gray-500">Odds Before:</span> {{ formatOdds(log.oddsBefore) }}</div>
-              <div><span class="text-gray-500">Odds After:</span> {{ formatOdds(log.oddsAfter) }}</div>
+          <!-- Mobile cards -->
+          <div class="md:hidden space-y-3">
+            <div v-for="log in logs" :key="log.id" class="border rounded bg-white p-3">
+              <div class="flex items-center justify-between text-xs text-gray-500">
+                <span>{{ formatDate(log.createdAt) }}</span>
+                <span>{{ labelFor(log.outcome) }}</span>
+              </div>
+              <div class="mt-1 text-sm font-medium">{{ displayUser(log.user) }}</div>
+              <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <div><span class="text-gray-500">Odds Before:</span> {{ formatOdds(log.oddsBefore) }}</div>
+                <div><span class="text-gray-500">Odds After:</span> {{ formatOdds(log.oddsAfter) }}</div>
+              </div>
             </div>
           </div>
         </div>
