@@ -281,12 +281,47 @@ async function recomputeLastActivity() {
 }
 
 const MS_PER_DAY = 86_400_000
+function startOfUtcDay(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
 function daysAgo(n) {
   const now = Date.now()
   return new Date(now - n * MS_PER_DAY)
 }
 function addDays(date, n) {
   return new Date(date.getTime() + n * MS_PER_DAY)
+}
+
+async function recordDailyActivity(daysBack = 3) {
+  const now = new Date()
+  const end = startOfUtcDay(now)
+  const start = new Date(end.getTime() - daysBack * MS_PER_DAY)
+  const sql = `
+  INSERT INTO "UserDailyActivity" ("id", "userId", "day")
+  SELECT md5(a."userId" || ':' || a."day"::text), a."userId", a."day"
+  FROM (
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "LoginLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "PointsLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "GamePointLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "Visit" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "WheelSpinLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "Bid" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "initiatorId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "TradeOffer" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "recipientId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "TradeOffer" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "creatorId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "Auction" WHERE "createdAt" >= $1 AND "createdAt" < $2 AND "creatorId" IS NOT NULL
+  ) a
+  GROUP BY a."userId", a."day"
+  ON CONFLICT ("userId", "day") DO NOTHING;
+  `
+  try { await prisma.$executeRawUnsafe(sql, start, end) } catch {}
 }
 
 async function sendInactivityWarnings() {
@@ -919,6 +954,9 @@ cron.schedule('*/5 * * * *', sendDueAnnouncements)
 
 await markScheduledPacksInCmart()
 cron.schedule('0 * * * *', markScheduledPacksInCmart)
+
+await recordDailyActivity()
+cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' })
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily

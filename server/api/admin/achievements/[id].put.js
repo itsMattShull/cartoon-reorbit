@@ -87,6 +87,10 @@ export default defineEventHandler(async (event) => {
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
+      auctionsWonGte:  criteria?.auctionsWonGte  ?? null,
+      auctionsCreatedGte: criteria?.auctionsCreatedGte ?? null,
+      tradesAcceptedGte: criteria?.tradesAcceptedGte ?? null,
+      consecutiveActiveDaysGte: criteria?.consecutiveActiveDaysGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
     }

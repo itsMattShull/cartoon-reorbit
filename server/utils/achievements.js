@@ -8,6 +8,30 @@ function toIntOrNull(v) {
   return Number.isFinite(n) ? n : null
 }
 
+const MS_PER_DAY = 86_400_000
+function startOfUtcDay(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
+async function hasConsecutiveActivityDays(db, userId, requiredDays) {
+  const days = Math.floor(Number(requiredDays || 0))
+  if (!Number.isFinite(days) || days <= 0) return true
+
+  const latest = await db.userDailyActivity.findFirst({
+    where: { userId },
+    orderBy: { day: 'desc' },
+    select: { day: true }
+  })
+  if (!latest?.day) return false
+
+  const end = startOfUtcDay(new Date(latest.day))
+  const start = new Date(end.getTime() - (days - 1) * MS_PER_DAY)
+  const count = await db.userDailyActivity.count({
+    where: { userId, day: { gte: start, lte: end } }
+  })
+  return count >= days
+}
+
 export async function evaluateUserAgainstAchievement(client, userId, ach) {
   const db = client || prisma
   const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, createdAt: true } })
@@ -52,6 +76,39 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       return false
     }
     // console.log('[achievements] evaluate: pass uniqueCtoons', { userId, ach: achKey, have: uniq.length, need: ach.uniqueCtoonsGte })
+  }
+
+  // Auctions won (closed with winner)
+  if (ach.auctionsWonGte != null) {
+    const won = await db.auction.count({
+      where: { winnerId: userId, status: 'CLOSED' }
+    })
+    if (won < ach.auctionsWonGte) return false
+  }
+
+  // Auctions created (closed with winner)
+  if (ach.auctionsCreatedGte != null) {
+    const created = await db.auction.count({
+      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null } }
+    })
+    if (created < ach.auctionsCreatedGte) return false
+  }
+
+  // Accepted trades (initiator or recipient)
+  if (ach.tradesAcceptedGte != null) {
+    const trades = await db.tradeOffer.count({
+      where: {
+        status: 'ACCEPTED',
+        OR: [{ initiatorId: userId }, { recipientId: userId }]
+      }
+    })
+    if (trades < ach.tradesAcceptedGte) return false
+  }
+
+  // Consecutive active days based on activity logs
+  if (ach.consecutiveActiveDaysGte != null) {
+    const ok = await hasConsecutiveActivityDays(db, userId, ach.consecutiveActiveDaysGte)
+    if (!ok) return false
   }
 
   // User created before a given date

@@ -62,6 +62,23 @@
                 <label class="block text-sm">Unique cToons ≥</label>
                 <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
               </div>
+              <div>
+                <label class="block text-sm">Auctions Won ≥</label>
+                <input v-model.number="form.criteria.auctionsWonGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Auctions Created (Completed) ≥</label>
+                <input v-model.number="form.criteria.auctionsCreatedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Accepted Trades ≥</label>
+                <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Consecutive Active Days ≥</label>
+                <input v-model.number="form.criteria.consecutiveActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
+              </div>
               <div class="md:col-span-3">
                 <label class="block text-sm">User created before</label>
                 <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
@@ -213,7 +230,17 @@ const ctoonSelection = ref({ name: '', qty: 1 })
 
 const emptyForm = () => ({
   title: '', slug: '', description: '', isActive: true, notifyDiscord: false,
-  criteria: { pointsGte: null, totalCtoonsGte: null, uniqueCtoonsGte: null, setsRequired: [], userCreatedBefore: null },
+  criteria: {
+    pointsGte: null,
+    totalCtoonsGte: null,
+    uniqueCtoonsGte: null,
+    auctionsWonGte: null,
+    auctionsCreatedGte: null,
+    tradesAcceptedGte: null,
+    consecutiveActiveDaysGte: null,
+    setsRequired: [],
+    userCreatedBefore: null
+  },
   rewards: { points: 0, ctoons: [], backgrounds: [] }
 })
 const form = reactive(emptyForm())
@@ -335,6 +362,10 @@ function startEdit(a) {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,
       uniqueCtoonsGte: a.uniqueCtoonsGte ?? null,
+      auctionsWonGte: a.auctionsWonGte ?? null,
+      auctionsCreatedGte: a.auctionsCreatedGte ?? null,
+      tradesAcceptedGte: a.tradesAcceptedGte ?? null,
+      consecutiveActiveDaysGte: a.consecutiveActiveDaysGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
     },

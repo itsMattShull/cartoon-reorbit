@@ -256,6 +256,7 @@ model User {
   lottoLogs       LottoLog[]
   // Achievements back‑relation
   achievements    AchievementUser[]
+  dailyActivities UserDailyActivity[]
 
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
@@ -1228,6 +1229,10 @@ model Achievement {
   pointsGte       Int?
   totalCtoonsGte  Int?
   uniqueCtoonsGte Int?
+  auctionsWonGte  Int?
+  auctionsCreatedGte Int?
+  tradesAcceptedGte Int?
+  consecutiveActiveDaysGte Int?
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   createdAt       DateTime @default(now())
@@ -1248,6 +1253,19 @@ model AchievementUser {
 
   @@unique([achievementId, userId])
   @@index([userId, achievedAt])
+}
+
+model UserDailyActivity {
+  id        String   @id @default(uuid())
+  userId    String
+  day       DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([userId, day])
+  @@index([day])
 }
 
 model AchievementReward {
