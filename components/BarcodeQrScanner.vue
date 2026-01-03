@@ -150,6 +150,11 @@ let lastNormalized = "";
 let matchCount = 0;
 const cooldownUntil = ref(null);
 const cooldownMessage = ref("");
+const cooldownKey = ref("");
+const cooldownStatusMessage = ref("");
+const COOLDOWN_MESSAGE_VISIBLE_MS = 4000;
+let cooldownIntervalId = null;
+let cooldownMessageTimeoutId = null;
 
 let Html5Qrcode;
 let Html5QrcodeSupportedFormats;
@@ -209,7 +214,11 @@ async function postScan(payload) {
   } catch (e) {
     const retryAt = extractRetryAt(e);
     if (retryAt) {
-      setCooldown(retryAt);
+      setCooldown(
+        retryAt,
+        buildCooldownKey(payload.format, payload.rawValue),
+        extractStatusMessage(e)
+      );
       throw e;
     }
     const dailyLimit = extractDailyLimit(e);
@@ -317,17 +326,19 @@ async function onScanSuccess(decodedText, decodedResult) {
   if (postingLock) return;
   postingLock = true;
 
-  if (cooldownUntil.value) {
-    if (updateCooldownMessage()) {
-      postingLock = false;
-      return;
-    }
-  }
-
   const formatName = decodedResult?.result?.format?.formatName || "unknown";
   const formatLower = String(formatName).toLowerCase();
   const requiredMatches = formatLower.includes("qr") ? 1 : 3;
   const normalized = normalizeValue(formatName, decodedText);
+  const scanKey = normalized ? `${formatLower}:${normalized}` : "";
+
+  if (cooldownUntil.value && scanKey && scanKey === cooldownKey.value) {
+    if (showCooldownMessage()) {
+      postingLock = false;
+      return;
+    }
+    clearCooldownState();
+  }
   if (normalized && normalized === lastNormalized) {
     matchCount += 1;
   } else {
@@ -437,11 +448,7 @@ async function scanImageFile(file) {
       error.value = "This browser build does not support image scanning.";
     }
   } catch (e) {
-    const retryAt = extractRetryAt(e);
-    if (retryAt) {
-      setCooldown(retryAt);
-      return;
-    }
+    if (extractRetryAt(e)) return;
     const msg = e?.errorMessage || e?.message || String(e);
     error.value = msg === "No MultiFormat Readers were able to detect the code."
       ? "No barcode or QR code was detected."
@@ -499,13 +506,8 @@ const dailyLimitMessage = computed(() => {
 });
 
 function clearResult() {
-  scanResult.value = null;
-  lastPayload.value = null;
-  pendingMatch.value = false;
-  matchCount = 0;
-  lastNormalized = "";
-  cooldownUntil.value = null;
-  cooldownMessage.value = "";
+  resetScanState();
+  clearCooldownState();
 }
 
 function goToMonsters() {
@@ -516,6 +518,24 @@ function normalizeValue(formatName, decodedText) {
   const raw = String(decodedText || "").trim();
   const looksNumeric = /^[0-9\s-]+$/.test(raw);
   return looksNumeric ? raw.replace(/[^0-9]/g, "") : raw;
+}
+
+function buildCooldownKey(formatName, decodedText) {
+  const normalized = normalizeValue(formatName, decodedText);
+  if (!normalized) return "";
+  return `${String(formatName || "").toLowerCase()}:${normalized}`;
+}
+
+function extractStatusMessage(e) {
+  return (
+    e?.data?.statusMessage ||
+    e?.data?.data?.statusMessage ||
+    e?.response?._data?.statusMessage ||
+    e?.response?._data?.data?.statusMessage ||
+    e?.statusMessage ||
+    e?.message ||
+    ""
+  );
 }
 
 function extractRetryAt(e) {
@@ -541,11 +561,54 @@ function extractDailyLimit(e) {
 }
 
 function formatRemaining(ms) {
-  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
-  const days = Math.floor(totalMinutes / (60 * 24));
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-  const minutes = totalMinutes % 60;
-  return { days, hours, minutes };
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { hours, minutes, seconds };
+}
+
+function formatCountdown(ms) {
+  const { hours, minutes, seconds } = formatRemaining(ms);
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+  return parts.join(" ");
+}
+
+function clearCooldownTimers() {
+  if (cooldownIntervalId) {
+    clearInterval(cooldownIntervalId);
+    cooldownIntervalId = null;
+  }
+  if (cooldownMessageTimeoutId) {
+    clearTimeout(cooldownMessageTimeoutId);
+    cooldownMessageTimeoutId = null;
+  }
+}
+
+function resetScanState() {
+  scanResult.value = null;
+  lastPayload.value = null;
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
+  error.value = null;
+}
+
+function clearCooldownState() {
+  cooldownUntil.value = null;
+  cooldownKey.value = "";
+  cooldownStatusMessage.value = "";
+  cooldownMessage.value = "";
+  clearCooldownTimers();
+}
+
+function cooldownLabel() {
+  const raw = cooldownStatusMessage.value || "Barcode on cooldown";
+  const trimmed = raw.replace(/\s*until\s+.*/i, "").trim();
+  return trimmed || "Barcode on cooldown";
 }
 
 function updateCooldownMessage() {
@@ -562,21 +625,40 @@ function updateCooldownMessage() {
     cooldownMessage.value = "";
     return false;
   }
-  const { days, hours, minutes } = formatRemaining(ms);
-  cooldownMessage.value = `Barcode cooldown: ${days}d ${hours}h ${minutes}m left`;
+  cooldownMessage.value = `${cooldownLabel()}: ${formatCountdown(ms)} left`;
   return true;
 }
 
-function setCooldown(retryAt) {
+function showCooldownMessage() {
+  if (!updateCooldownMessage()) return false;
+  clearCooldownTimers();
+  cooldownIntervalId = setInterval(() => {
+    if (!updateCooldownMessage()) {
+      clearCooldownState();
+    }
+  }, 1000);
+  cooldownMessageTimeoutId = setTimeout(() => {
+    cooldownMessage.value = "";
+    if (cooldownIntervalId) {
+      clearInterval(cooldownIntervalId);
+      cooldownIntervalId = null;
+    }
+    cooldownMessageTimeoutId = null;
+  }, COOLDOWN_MESSAGE_VISIBLE_MS);
+  return true;
+}
+
+function setCooldown(retryAt, key, statusMessage) {
   cooldownUntil.value = retryAt;
-  pendingMatch.value = false;
-  matchCount = 0;
-  lastNormalized = "";
-  updateCooldownMessage();
+  cooldownKey.value = key || "";
+  cooldownStatusMessage.value = statusMessage || "";
+  resetScanState();
+  showCooldownMessage();
 }
 
 onBeforeUnmount(async () => {
   await stop();
+  clearCooldownTimers();
   if (battleSocket) {
     battleSocket.disconnect();
     battleSocket = null;
