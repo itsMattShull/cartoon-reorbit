@@ -123,12 +123,26 @@
             @touchend="onTouchEnd"
             @touchcancel="onTouchEnd"
           >
-            <img
-              :src="item.assetPath"
-              :alt="item.name"
-              class="max-w-none object-contain"
-              draggable="false"
-            />
+            <div class="relative w-full h-full">
+              <button
+                type="button"
+                class="absolute top-1 right-1 z-10 w-6 h-6 rounded-full bg-white/80 text-gray-700 shadow hover:bg-white flex items-center justify-center"
+                aria-label="Bring to front"
+                @click.stop="bringToFront(index)"
+                @mousedown.stop
+                @touchstart.stop
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+                </svg>
+              </button>
+              <img
+                :src="item.assetPath"
+                :alt="item.name"
+                class="max-w-none object-contain"
+                draggable="false"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -532,6 +546,18 @@ async function removeItem(idx) {
       characters: Array.isArray(removed.characters) ? removed.characters : [],
     })
   }
+}
+
+async function bringToFront(idx) {
+  if (idx < 0 || idx >= layout.value.length) return
+  const [item] = layout.value.splice(idx, 1)
+  layout.value.push(item)
+  if (currentlyDraggingIndex.value === idx) {
+    currentlyDraggingIndex.value = layout.value.length - 1
+  } else if (currentlyDraggingIndex.value > idx) {
+    currentlyDraggingIndex.value -= 1
+  }
+  await saveZones(false)
 }
 
 async function clearZone() {
