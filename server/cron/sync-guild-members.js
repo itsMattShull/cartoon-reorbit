@@ -9,6 +9,7 @@ import cron from 'node-cron'
 import { achievementsQueue } from '../../server/utils/queues.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
+const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
 const DISCORD_API = 'https://discord.com/api/v10'
 const ANNOUNCEMENTS_CHANNEL_ID = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
@@ -24,11 +25,11 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
   try {
-    const botToken = process.env.BOT_TOKEN
+    const botToken = ANNOUNCEMENTS_BOT_TOKEN
     const guildId  = process.env.DISCORD_GUILD_ID
 
     if (!botToken || !guildId) {
-      console.error('Missing BOT_TOKEN or DISCORD_GUILD_ID env vars.')
+      console.error('Missing DISCORD_ANNOUNCEMENTS_BOT_TOKEN/BOT_TOKEN or DISCORD_GUILD_ID env vars.')
       return
     }
 
@@ -115,8 +116,10 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   try {
-    if (!BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
-    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    if (!ANNOUNCEMENTS_BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
+    const authHeader = ANNOUNCEMENTS_BOT_TOKEN.startsWith('Bot ')
+      ? ANNOUNCEMENTS_BOT_TOKEN
+      : `Bot ${ANNOUNCEMENTS_BOT_TOKEN}`
     const nativeFetch = globalThis.fetch || fetch
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 

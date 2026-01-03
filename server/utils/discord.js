@@ -7,6 +7,10 @@ export function auctionLink(auctionId) {
     : `http://localhost:3000/auction/${auctionId}`
 }
 
+function getAnnouncementsBotToken() {
+  return process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
+}
+
 async function openDmChannel(discordId) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN || !discordId) return null
@@ -164,14 +168,15 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 }
 
 // New: Send to a channel by its ID (no lookup by name)
-export async function sendGuildChannelMessageById(channelId, content) {
-  const BOT_TOKEN = process.env.BOT_TOKEN
-  if (!BOT_TOKEN || !channelId) return false
+export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null) {
+  const rawToken = tokenOverride || process.env.BOT_TOKEN
+  if (!rawToken || !channelId) return false
+  const authHeader = rawToken.startsWith('Bot ') ? rawToken : `Bot ${rawToken}`
   try {
     await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': BOT_TOKEN,
+        'Authorization': authHeader,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ content })
@@ -200,7 +205,8 @@ export async function announceAchievement(prisma, userId, achievementTitle, rewa
       select: { achievementDiscordChannelId: true }
     })
     const channelId = (config?.achievementDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
-    if (!channelId) return
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !botToken) return
     const tag = `<@${user.discordId}>`
     const title = String(achievementTitle || 'an achievement')
     let msg = `🎉 Congrats ${tag}! You unlocked “${title}”.`
@@ -226,7 +232,7 @@ export async function announceAchievement(prisma, userId, achievementTitle, rewa
         msg += ` You received ${formatList(parts)}.`
       }
     }
-    await sendGuildChannelMessageById(channelId, msg)
+    await sendGuildChannelMessageById(channelId, msg, botToken)
   } catch {
     // swallow in worker/cron context
   }

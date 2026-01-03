@@ -2,6 +2,8 @@
 // Usage: DATABASE_URL="postgres://..." node prisma/contestMint.js [--mint] [--totals]
 
 import { prisma } from '../server/prisma.js'
+import { mintQueue } from '../server/utils/queues.js'
+import { QueueEvents } from 'bullmq'
 import { randomInt } from 'node:crypto'
 
 /** Target cToon */
@@ -9,7 +11,12 @@ const CTOON_ID = '41f8f882-58b6-4de5-b69b-45f0c143d320'
 
 /** Behavior flags */
 const RESPECT_STOCK_LIMITS = true
-const USER_PURCHASED_FLAG = false
+
+const redisConnection = {
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD || undefined,
+}
 
 /** Usernames to mint to */
 const USERNAMES = [
@@ -55,114 +62,124 @@ function shuffleInPlace(arr) {
 }
 
 async function main() {
-  if (DRY_RUN) {
-    console.log('ℹ️ Dry run: no changes will be made. Use --mint and/or --totals to apply.')
+  let queueEvents = null
+  if (DO_MINT) {
+    queueEvents = new QueueEvents(mintQueue.name, { connection: redisConnection })
+    await queueEvents.waitUntilReady()
   }
-  console.log('🔎 Loading target cToon…')
-  const ctoon = await prisma.ctoon.findUnique({
-    where: { id: CTOON_ID },
-    select: { id: true, name: true, initialQuantity: true, quantity: true },
-  })
-  if (!ctoon) throw new Error(`cToon not found: ${CTOON_ID}`)
-
-  const startingCount = await prisma.userCtoon.count({ where: { ctoonId: CTOON_ID } })
-  let mintedNow = 0
-  const shouldProcessMints = DO_MINT || DRY_RUN
-
-  const projectedTotal = () => startingCount + mintedNow
-  const canMintMore = () => {
-    if (!RESPECT_STOCK_LIMITS) return true
-    if (ctoon.quantity == null) return true
-    return projectedTotal() < ctoon.quantity
-  }
-
-  const missingUsers = []
-  const alreadyOwned = []
-  const mintedUsers = []
-  const soldOutSkips = []
-
-  if (shouldProcessMints) {
-    console.log('🔀 Shuffling usernames…')
-    shuffleInPlace(USERNAMES)
-
-    console.log(`🚀 ${DO_MINT ? 'Beginning mints' : 'Evaluating mints'} for ${USERNAMES.length} users`)
-    for (const username of USERNAMES) {
-      const user = await prisma.user.findFirst({
-        where: { username },
-        select: { id: true, username: true },
-      })
-      if (!user) {
-        missingUsers.push(username)
-        continue
-      }
-
-      // Skip if already owns the cToon
-      const owns = await prisma.userCtoon.findFirst({
-        where: { userId: user.id, ctoonId: CTOON_ID },
-        select: { id: true },
-      })
-      if (owns) {
-        alreadyOwned.push(username)
-        continue
-      }
-
-      if (!canMintMore()) {
-        soldOutSkips.push(username)
-        continue
-      }
-
-      const nextMintNumber = projectedTotal() + 1
-      const isFirstEdition =
-        ctoon.initialQuantity == null ? true : nextMintNumber <= ctoon.initialQuantity
-
-      if (DO_MINT) {
-        await prisma.userCtoon.create({
-          data: {
-            userId: user.id,
-            ctoonId: CTOON_ID,
-            mintNumber: nextMintNumber,
-            isFirstEdition,
-            userPurchased: USER_PURCHASED_FLAG,
-          },
-        })
-      }
-
-      mintedNow++
-      mintedUsers.push(username)
-      if (DO_MINT && mintedNow % 25 === 0) {
-        console.log(`…progress: ${mintedNow} minted so far`)
-      }
+  try {
+    if (DRY_RUN) {
+      console.log('ℹ️ Dry run: no changes will be made. Use --mint and/or --totals to apply.')
     }
-  } else {
-    console.log('ℹ️ Minting skipped (use --mint to enable).')
-  }
-
-  let finalCount = null
-  if (DO_TOTALS) {
-    finalCount = await prisma.userCtoon.count({ where: { ctoonId: CTOON_ID } })
-    await prisma.ctoon.update({
+    console.log('🔎 Loading target cToon…')
+    const ctoon = await prisma.ctoon.findUnique({
       where: { id: CTOON_ID },
-      data: { totalMinted: finalCount }
+      select: { id: true, name: true, initialQuantity: true, quantity: true },
     })
-  } else if (DRY_RUN) {
-    finalCount = projectedTotal()
-  }
+    if (!ctoon) throw new Error(`cToon not found: ${CTOON_ID}`)
 
-  console.log('✅ Done')
-  console.log(`   cToon: "${ctoon.name ?? CTOON_ID}"`)
-  if (shouldProcessMints) {
-    console.log(`   Minted: ${mintedNow}${DO_MINT ? '' : ' (dry run)'}`)
-    console.log(`   Skipped (already owned): ${alreadyOwned.length} ${alreadyOwned.length ? '→ ' + alreadyOwned.join(', ') : ''}`)
-    console.log(`   Skipped (missing users): ${missingUsers.length} ${missingUsers.length ? '→ ' + missingUsers.join(', ') : ''}`)
-    if (RESPECT_STOCK_LIMITS) {
-      console.log(`   Skipped (sold out): ${soldOutSkips.length} ${soldOutSkips.length ? '→ ' + soldOutSkips.join(', ') : ''}`)
+    const startingCount = await prisma.userCtoon.count({ where: { ctoonId: CTOON_ID } })
+    let mintedNow = 0
+    const shouldProcessMints = DO_MINT || DRY_RUN
+
+    const projectedTotal = () => startingCount + mintedNow
+    const canMintMore = () => {
+      if (DO_MINT) return true
+      if (!RESPECT_STOCK_LIMITS) return true
+      if (ctoon.quantity == null) return true
+      return projectedTotal() < ctoon.quantity
     }
-    console.log(`   Order used: ${mintedUsers.concat(alreadyOwned, missingUsers, soldOutSkips).join(' | ')}`)
-  }
-  if (DO_TOTALS) {
-    console.log(`   Total minted (updated): ${finalCount}`)
-  } else if (DRY_RUN) {
-    console.log(`   Total minted (would update): ${finalCount}`)
+
+    const missingUsers = []
+    const alreadyOwned = []
+    const mintedUsers = []
+    const soldOutSkips = []
+    const failedMints = []
+
+    if (shouldProcessMints) {
+      console.log('🔀 Shuffling usernames…')
+      shuffleInPlace(USERNAMES)
+
+      console.log(`🚀 ${DO_MINT ? 'Beginning mints' : 'Evaluating mints'} for ${USERNAMES.length} users`)
+      for (const username of USERNAMES) {
+        const user = await prisma.user.findFirst({
+          where: { username },
+          select: { id: true, username: true },
+        })
+        if (!user) {
+          missingUsers.push(username)
+          continue
+        }
+
+        // Skip if already owns the cToon
+        const owns = await prisma.userCtoon.findFirst({
+          where: { userId: user.id, ctoonId: CTOON_ID },
+          select: { id: true },
+        })
+        if (owns) {
+          alreadyOwned.push(username)
+          continue
+        }
+
+        if (!canMintMore()) {
+          soldOutSkips.push(username)
+          continue
+        }
+
+        if (DO_MINT) {
+          try {
+            const job = await mintQueue.add('mintCtoon', { userId: user.id, ctoonId: CTOON_ID, isSpecial: true })
+            await job.waitUntilFinished(queueEvents)
+          } catch (err) {
+            const msg = err?.message || String(err)
+            if (/sold out/i.test(msg)) soldOutSkips.push(username)
+            else failedMints.push(`${username}: ${msg}`)
+            continue
+          }
+        }
+
+        mintedNow++
+        mintedUsers.push(username)
+        if (DO_MINT && mintedNow % 25 === 0) {
+          console.log(`…progress: ${mintedNow} minted so far`)
+        }
+      }
+    } else {
+      console.log('ℹ️ Minting skipped (use --mint to enable).')
+    }
+
+    let finalCount = null
+    if (DO_TOTALS) {
+      finalCount = await prisma.userCtoon.count({ where: { ctoonId: CTOON_ID } })
+      await prisma.ctoon.update({
+        where: { id: CTOON_ID },
+        data: { totalMinted: finalCount }
+      })
+    } else if (DRY_RUN) {
+      finalCount = projectedTotal()
+    }
+
+    console.log('✅ Done')
+    console.log(`   cToon: "${ctoon.name ?? CTOON_ID}"`)
+    if (shouldProcessMints) {
+      console.log(`   Minted: ${mintedNow}${DO_MINT ? '' : ' (dry run)'}`)
+      console.log(`   Skipped (already owned): ${alreadyOwned.length} ${alreadyOwned.length ? '→ ' + alreadyOwned.join(', ') : ''}`)
+      console.log(`   Skipped (missing users): ${missingUsers.length} ${missingUsers.length ? '→ ' + missingUsers.join(', ') : ''}`)
+      if (RESPECT_STOCK_LIMITS) {
+        console.log(`   Skipped (sold out): ${soldOutSkips.length} ${soldOutSkips.length ? '→ ' + soldOutSkips.join(', ') : ''}`)
+      }
+      if (failedMints.length) {
+        console.log(`   Failed mints: ${failedMints.length} ${failedMints.length ? '→ ' + failedMints.join(', ') : ''}`)
+      }
+      console.log(`   Order used: ${mintedUsers.concat(alreadyOwned, missingUsers, soldOutSkips).join(' | ')}`)
+    }
+    if (DO_TOTALS) {
+      console.log(`   Total minted (updated): ${finalCount}`)
+    } else if (DRY_RUN) {
+      console.log(`   Total minted (would update): ${finalCount}`)
+    }
+  } finally {
+    if (queueEvents) await queueEvents.close()
   }
 }
 
