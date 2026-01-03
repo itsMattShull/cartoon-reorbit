@@ -49,7 +49,6 @@ const pvpMatches = new Map();    // roomId -> { battle, recordId }
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
-const MONSTER_DISCONNECT_GRACE_MS = 5_000
 
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
@@ -119,6 +118,40 @@ const monsterPlayerKeyForUser = (battle, userId) => {
   return null
 }
 
+const hasPendingMonsterAction = (battle, playerKey) => {
+  if (!battle || battle.state.status !== 'active') return false
+  const participant = battle.state.participants?.[playerKey]
+  if (!participant || participant.isAi) return false
+  return !battle.actions?.[playerKey]
+}
+
+const ensureMonsterActionDeadline = (battle, playerKey) => {
+  if (!battle.deadlines) battle.deadlines = { player1: null, player2: null }
+  if (!battle.deadlines[playerKey]) {
+    battle.deadlines[playerKey] = Date.now() + MONSTER_ACTION_TIMEOUT_MS
+  }
+  return battle.deadlines[playerKey]
+}
+
+const getMonsterActionRemainingMs = (battle, playerKey) => {
+  const deadline = battle.deadlines?.[playerKey]
+  if (!deadline) return MONSTER_ACTION_TIMEOUT_MS
+  return Math.max(0, Number(deadline) - Date.now())
+}
+
+const scheduleMonsterActionTimeout = (io, battle, playerKey, { skipIfExisting = false } = {}) => {
+  if (!hasPendingMonsterAction(battle, playerKey)) return
+  ensureMonsterActionDeadline(battle, playerKey)
+  if (skipIfExisting && battle.timers[playerKey]) return
+  if (battle.timers[playerKey]) clearTimeout(battle.timers[playerKey])
+  const delay = getMonsterActionRemainingMs(battle, playerKey)
+  battle.timers[playerKey] = setTimeout(() => {
+    handleMonsterForfeit(io, battle, playerKey, 'TIMEOUT').catch(err => {
+      console.error('Failed to forfeit monster battle on timeout:', err)
+    })
+  }, delay)
+}
+
 const clearMonsterTimers = (battle) => {
   if (battle.timers.player1) clearTimeout(battle.timers.player1)
   if (battle.timers.player2) clearTimeout(battle.timers.player2)
@@ -134,35 +167,34 @@ const clearMonsterDisconnectTimer = (battle, playerKey) => {
 }
 
 const scheduleMonsterDisconnect = (io, battle, playerKey) => {
-  if (!battle || battle.state.status !== 'active') return
+  if (!hasPendingMonsterAction(battle, playerKey)) return
   if (!battle.disconnectTimers) battle.disconnectTimers = { player1: null, player2: null }
   if (battle.disconnectTimers[playerKey]) return
   console.log('[battle:disconnect] schedule', battle.state.id, playerKey)
+  ensureMonsterActionDeadline(battle, playerKey)
+  if (battle.timers[playerKey]) {
+    clearTimeout(battle.timers[playerKey])
+    battle.timers[playerKey] = null
+  }
+  const delay = getMonsterActionRemainingMs(battle, playerKey)
   battle.disconnectTimers[playerKey] = setTimeout(() => {
     console.log('[battle:disconnect] firing', battle.state.id, playerKey)
-    handleMonsterForfeit(io, battle, playerKey, 'DISCONNECT')
-  }, MONSTER_DISCONNECT_GRACE_MS)
+    handleMonsterForfeit(io, battle, playerKey, 'DISCONNECT').catch(err => {
+      console.error('Failed to forfeit monster battle on disconnect:', err)
+    })
+  }, delay)
 }
 
 const scheduleMonsterTimeouts = (io, battle) => {
   clearMonsterTimers(battle)
-  const deadline = Date.now() + MONSTER_ACTION_TIMEOUT_MS
-  battle.deadlines = { player1: deadline, player2: deadline }
-
-  const p1 = battle.state.participants.player1
-  const p2 = battle.state.participants.player2
-
-  if (!p1.isAi) {
-    battle.timers.player1 = setTimeout(() => {
-      handleMonsterForfeit(io, battle, 'player1', 'TIMEOUT')
-    }, MONSTER_ACTION_TIMEOUT_MS)
+  const now = Date.now()
+  battle.deadlines = {
+    player1: battle.state.participants.player1.isAi ? null : now + MONSTER_ACTION_TIMEOUT_MS,
+    player2: battle.state.participants.player2.isAi ? null : now + MONSTER_ACTION_TIMEOUT_MS
   }
 
-  if (!p2.isAi) {
-    battle.timers.player2 = setTimeout(() => {
-      handleMonsterForfeit(io, battle, 'player2', 'TIMEOUT')
-    }, MONSTER_ACTION_TIMEOUT_MS)
-  }
+  scheduleMonsterActionTimeout(io, battle, 'player1')
+  scheduleMonsterActionTimeout(io, battle, 'player2')
 }
 
 const persistMonsterBattleState = async (battle) => {
@@ -1238,6 +1270,7 @@ io.on('connection', socket => {
     socket.data.monsterBattleId = battleId
     socket.join(battleId)
     clearMonsterDisconnectTimer(battle, playerKey)
+    scheduleMonsterActionTimeout(io, battle, playerKey, { skipIfExisting: true })
     console.log('[battle:join] joined', battleId, uid, playerKey)
     socket.emit('battle:state', battlePublicState(battle))
   })
@@ -1281,10 +1314,14 @@ io.on('connection', socket => {
     }
 
     battle.actions[playerKey] = action
+    if (battle.deadlines?.[playerKey]) {
+      battle.deadlines[playerKey] = null
+    }
     if (battle.timers[playerKey]) {
       clearTimeout(battle.timers[playerKey])
       battle.timers[playerKey] = null
     }
+    clearMonsterDisconnectTimer(battle, playerKey)
     io.to(battleId).emit('battle:actionAccepted', { battleId, turnNumber, playerId: uid })
 
     const aiKey = battle.state.participants.player1.isAi ? 'player1' : 'player2'

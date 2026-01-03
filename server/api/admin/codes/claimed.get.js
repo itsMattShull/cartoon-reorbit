@@ -24,7 +24,36 @@ export default defineEventHandler(async (event) => {
     ? {
         OR: [
           { code: { code: { contains: q, mode: 'insensitive' } } },
-          { user: { username: { contains: q, mode: 'insensitive' } } }
+          { user: { username: { contains: q, mode: 'insensitive' } } },
+          {
+            code: {
+              rewards: {
+                some: {
+                  ctoons: {
+                    some: { ctoon: { name: { contains: q, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            }
+          },
+          {
+            code: {
+              rewards: {
+                some: {
+                  poolCtoons: {
+                    some: { ctoon: { name: { contains: q, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            }
+          },
+          {
+            code: {
+              prerequisites: {
+                some: { ctoon: { name: { contains: q, mode: 'insensitive' } } }
+              }
+            }
+          }
         ]
       }
     : {}

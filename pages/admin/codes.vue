@@ -39,6 +39,18 @@
 
       <!-- Created Codes Tab -->
       <div v-if="activeTab === 'created'">
+        <div class="mb-4 flex flex-wrap items-end gap-4">
+          <div class="flex-1">
+            <label for="createdFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by code or cToon</label>
+            <input
+              id="createdFilter"
+              v-model="createdQuery"
+              type="text"
+              placeholder="Type a code or cToon name..."
+              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+        </div>
         <div v-if="createdError" class="text-red-600 mb-4">{{ createdError.message }}</div>
         <div v-else-if="createdLoading" class="text-gray-500">Loading…</div>
         <div v-else>
@@ -135,14 +147,14 @@
       <div v-if="activeTab === 'claimed'">
         <div class="mb-4 flex flex-wrap items-end gap-4">
           <div class="flex-1">
-            <label for="claimedFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by username or code</label>
+            <label for="claimedFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by username, code, or cToon</label>
             <input
               id="claimedFilter"
               v-model="claimedQuery"
               list="claimedUserSuggestions"
               type="text"
               @focus="fetchClaimedUserSuggestions"
-              placeholder="Type a username or code..."
+              placeholder="Type a username, code, or cToon name..."
               class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
             <datalist id="claimedUserSuggestions">
@@ -236,6 +248,7 @@ const createdPage = ref(1)
 const createdLimit = 50
 const createdLoading = ref(false)
 const createdError = ref(null)
+const createdQuery = ref('')
 
 // Claimed codes
 const claimed = ref([])
@@ -269,7 +282,11 @@ async function fetchCreatedCodes() {
   createdError.value = null
   try {
     const res = await $fetch('/api/admin/codes', {
-      query: { page: createdPage.value, limit: createdLimit }
+      query: {
+        page: createdPage.value,
+        limit: createdLimit,
+        q: createdQuery.value.trim() || undefined
+      }
     })
     codes.value = res.items || []
     createdTotal.value = res.total || 0
@@ -378,6 +395,15 @@ watch(claimedQuery, () => {
   claimedFilterDebounceId = setTimeout(() => {
     claimedPage.value = 1
     fetchClaimedCodes()
+  }, 300)
+})
+
+let createdFilterDebounceId = null
+watch(createdQuery, () => {
+  if (createdFilterDebounceId) clearTimeout(createdFilterDebounceId)
+  createdFilterDebounceId = setTimeout(() => {
+    createdPage.value = 1
+    fetchCreatedCodes()
   }, 300)
 })
 

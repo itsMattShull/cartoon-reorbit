@@ -17,13 +17,45 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const codeFilter = typeof query.code === 'string' ? query.code.trim() : ''
+  const searchTerm = typeof query.q === 'string' ? query.q.trim() : ''
   const hasCodeFilter = Boolean(codeFilter)
+  const hasSearchTerm = Boolean(searchTerm)
   const page = hasCodeFilter ? 1 : Math.max(parseInt(query.page || '1', 10), 1)
   const limit = hasCodeFilter ? 1 : Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
   const skip = hasCodeFilter ? 0 : (page - 1) * limit
   const where = {
     showInFrontend: true,
-    ...(hasCodeFilter ? { code: codeFilter } : {})
+    ...(hasCodeFilter ? { code: codeFilter } : {}),
+    ...(!hasCodeFilter && hasSearchTerm
+      ? {
+          OR: [
+            { code: { contains: searchTerm, mode: 'insensitive' } },
+            {
+              rewards: {
+                some: {
+                  ctoons: {
+                    some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            },
+            {
+              rewards: {
+                some: {
+                  poolCtoons: {
+                    some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            },
+            {
+              prerequisites: {
+                some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+              }
+            }
+          ]
+        }
+      : {})
   }
 
   // 2) Fetch codes with fixed, pooled, and background rewards
