@@ -16,15 +16,21 @@ export default defineEventHandler(async (event) => {
   }
 
   const query = getQuery(event)
-  const page = Math.max(parseInt(query.page || '1', 10), 1)
-  const limit = Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
-  const skip = (page - 1) * limit
+  const codeFilter = typeof query.code === 'string' ? query.code.trim() : ''
+  const hasCodeFilter = Boolean(codeFilter)
+  const page = hasCodeFilter ? 1 : Math.max(parseInt(query.page || '1', 10), 1)
+  const limit = hasCodeFilter ? 1 : Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
+  const skip = hasCodeFilter ? 0 : (page - 1) * limit
+  const where = {
+    showInFrontend: true,
+    ...(hasCodeFilter ? { code: codeFilter } : {})
+  }
 
   // 2) Fetch codes with fixed, pooled, and background rewards
   const [total, codes] = await Promise.all([
-    prisma.claimCode.count({ where: { showInFrontend: true } }),
+    prisma.claimCode.count({ where }),
     prisma.claimCode.findMany({
-      where: { showInFrontend: true },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,

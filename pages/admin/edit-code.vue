@@ -306,14 +306,16 @@ onMounted(async () => {
     const resBgs = await fetch('/api/admin/list-backgrounds', { credentials: 'include' })
     if (resBgs.ok) bgOptions.value = await resBgs.json() // [{id,label,imagePath}]
 
-    // 3) fetch codes list
-    const codesRes = await fetch('/api/admin/codes', { credentials: 'include' })
-    if (!codesRes.ok) throw new Error(await codesRes.text())
-    const all = await codesRes.json()
-
-    const target = route.query.code
+    const target = Array.isArray(route.query.code) ? route.query.code[0] : route.query.code
     if (!target) throw new Error('No code specified')
-    const entry = all.find(c => c.code === target)
+
+    // 3) fetch the requested code
+    const codesRes = await fetch(`/api/admin/codes?code=${encodeURIComponent(target)}`, { credentials: 'include' })
+    if (!codesRes.ok) throw new Error(await codesRes.text())
+    const payload = await codesRes.json()
+    const items = Array.isArray(payload) ? payload : payload?.items
+    if (!Array.isArray(items)) throw new Error('Unexpected codes response')
+    const entry = items.find(c => c.code === target)
     if (!entry) throw new Error('Code not found')
 
     const pooledReward = entry.rewards.find(r => r.pooledUniqueCount && r.poolCtoons?.length)
