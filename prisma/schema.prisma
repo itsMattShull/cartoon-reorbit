@@ -195,6 +195,7 @@ model User {
   lastActivity                      DateTime?
   discordCreatedAt                  DateTime?
   isBooster                         Boolean   @default(false)
+  isVerified                        Boolean   @default(false)
   boosterSince                      DateTime?
   warning180                        Boolean   @default(false)
   warning210                        Boolean   @default(false)

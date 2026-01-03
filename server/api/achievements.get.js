@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   // Load all active achievements
   const list = await db.achievement.findMany({
     where: { isActive: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { title: 'asc' },
     include: {
       rewards: {
         include: {

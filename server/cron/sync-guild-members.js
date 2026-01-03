@@ -372,6 +372,79 @@ async function recordDailyActivity() {
   }
 }
 
+async function getVerifiedRoleId() {
+  if (!BOT_TOKEN || !GUILD_ID) return null
+  const envId = (process.env.DISCORD_VERIFIED_ROLE_ID || '').trim()
+  if (envId) return envId
+
+  try {
+    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    const res = await fetch(`${DISCORD_API}/guilds/${GUILD_ID}/roles`, {
+      headers: { Authorization: authHeader }
+    })
+    if (!res.ok) return null
+    const roles = await res.json()
+    const role = Array.isArray(roles) ? roles.find(r => r?.name === 'Verified') : null
+    return role?.id || null
+  } catch {
+    return null
+  }
+}
+
+async function addRoleToMember(discordUserId, roleId) {
+  if (!discordUserId || !roleId || !BOT_TOKEN || !GUILD_ID) return false
+  const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(
+      `${DISCORD_API}/guilds/${GUILD_ID}/members/${discordUserId}/roles/${roleId}`,
+      { method: 'PUT', headers: { Authorization: authHeader } }
+    )
+    if (res.status === 204) return true
+    if (res.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      continue
+    }
+    return false
+  }
+  return false
+}
+
+async function syncVerifiedRoles() {
+  const roleId = await getVerifiedRoleId()
+  if (!roleId) return
+
+  let rows = []
+  try {
+    rows = await prisma.$queryRawUnsafe(`
+      SELECT u."id", u."discordId"
+      FROM "User" u
+      JOIN (
+        SELECT "userId"
+        FROM "UserDailyActivity"
+        GROUP BY "userId"
+        HAVING COUNT(*) >= 7
+      ) a ON a."userId" = u."id"
+      WHERE u."isVerified" = false
+        AND u."discordId" IS NOT NULL
+        AND u."inGuild" = true
+        AND u."active" = true
+    `)
+  } catch {
+    return
+  }
+
+  for (const row of rows) {
+    const ok = await addRoleToMember(row.discordId, roleId)
+    if (!ok) continue
+    try {
+      await prisma.user.update({ where: { id: row.id }, data: { isVerified: true } })
+    } catch {}
+  }
+}
+
 async function sendInactivityWarnings() {
   const d180 = daysAgo(180)
   const d210 = daysAgo(210)
@@ -1004,7 +1077,9 @@ await markScheduledPacksInCmart()
 cron.schedule('0 * * * *', markScheduledPacksInCmart)
 
 await recordDailyActivity()
+await syncVerifiedRoles()
 cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' }) // 02:30 CST daily
+cron.schedule('35 2 * * *', syncVerifiedRoles, { timezone: 'America/Chicago' }) // 02:35 CST daily
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily
