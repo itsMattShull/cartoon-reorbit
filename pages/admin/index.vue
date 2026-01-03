@@ -433,6 +433,21 @@ colors.turnover = {
   'Crazy Rare':'#EF4444'
 }
 
+const getTickValue = (tick) => (tick && typeof tick === 'object' && 'value' in tick ? tick.value : tick)
+const makeUniqueTickFormatter = (formatter, suffix = '') => (value, index, ticks = []) => {
+  const current = formatter(value)
+  if (!Number.isFinite(current)) return ''
+  if (index > 0) {
+    const prevRaw = getTickValue(ticks[index - 1])
+    const prev = formatter(prevRaw)
+    if (prev === current) return ''
+  }
+  return `${current}${suffix}`
+}
+const wholeTick = makeUniqueTickFormatter(v => Math.round(v))
+const percentTick = makeUniqueTickFormatter(v => Math.round(v), '%')
+const percentFromDecimalTick = makeUniqueTickFormatter(v => Math.round(v * 100), '%')
+
 // --- chart options (base) ---
 const commonLineOptions = {
   responsive: true,
@@ -446,8 +461,10 @@ const pctOptions = {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Day' }, ticks: {color: '#000'} },
     y: {
       title: { color: '#000', display: true, text: '% First cToon Purchase' },
-      ticks: { callback: v => v + '%', color: '#000' },
-      min: 0, max: 100
+      ticks: { callback: percentTick, color: '#000' },
+      min: 0,
+      suggestedMax: 100,
+      grace: '20%'
     }
   }
 }
@@ -458,7 +475,7 @@ const ratioOptions = {
   spanGaps: false,
   scales: {
     x: { type: 'time', time: { unit: 'day', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Day' }, ticks: {color: '#000'} },
-    y: { title: { color: '#000', display: true, text: 'Spend / Earn Ratio' }, min: 0, ticks: { color: '#000' } }
+    y: { title: { color: '#000', display: true, text: 'Spend / Earn Ratio' }, min: 0, ticks: { color: '#000' }, grace: '20%' }
   },
   plugins: {
     legend: { display: false },
@@ -504,7 +521,8 @@ const uniqueOptions = {
       title: { color: '#000', display: true, text: 'Unique Logons' },
       min: 0,               // <-- forces axis to start at 0
       // or: beginAtZero: true
-      ticks: { color: '#000' }
+      ticks: { color: '#000', callback: wholeTick },
+      grace: '20%'
     }
   }
 }
@@ -515,8 +533,8 @@ const netOptions = {
   maintainAspectRatio: false,
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Day' }, ticks: { color: '#000' } },
-    yLeft: { title: { color: '#000', display: true, text: 'Net Points' }, beginAtZero: true, stacked: false, ticks: { color: '#000' } },
-    yRight:{ color: '#000', position: 'right', title: { color: '#000', display: true, text: 'Earned / Spent' }, beginAtZero: true, stacked: true, grid: { drawOnChartArea: false }, ticks: { color: '#000' } }
+    yLeft: { title: { color: '#000', display: true, text: 'Net Points' }, beginAtZero: true, stacked: false, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
+    yRight:{ color: '#000', position: 'right', title: { color: '#000', display: true, text: 'Earned / Spent' }, beginAtZero: true, stacked: true, grid: { drawOnChartArea: false }, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
   },
   plugins: {
     legend: {
@@ -545,8 +563,8 @@ const clashOptions = {
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
       ticks: { color: '#000', source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
-    y:  { title: { color: '#000', display: true, text: 'Games Played' }, beginAtZero: true, ticks: { color: '#000' } },
-    y1: { position: 'right', title: { color: '#000', display: true, text: '% Finished' }, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%', color: '#000' }, min: 0, max: 100 }
+    y:  { title: { color: '#000', display: true, text: 'Games Played' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
+    y1: { position: 'right', title: { color: '#000', display: true, text: '% Finished' }, grid: { drawOnChartArea: false }, ticks: { callback: percentTick, color: '#000' }, min: 0, suggestedMax: 100, grace: '20%' }
   },
   plugins: { legend: { position: 'top' } }
 }
@@ -557,8 +575,8 @@ const monsterScansOptions = {
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
       ticks: { color: '#000', source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
-    y:  { title: { color: '#000', display: true, text: 'Scans' }, beginAtZero: true, ticks: { color: '#000' } },
-    y1: { position: 'right', title: { color: '#000', display: true, text: 'Unique Users' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { color: '#000' } }
+    y:  { title: { color: '#000', display: true, text: 'Scans' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
+    y1: { position: 'right', title: { color: '#000', display: true, text: 'Unique Users' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
   },
   plugins: { legend: { position: 'top' } }
 }
@@ -586,7 +604,7 @@ const cumOptions = {
   },
   scales: {
     x: { type: 'time', time: { unit: 'week', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Week' }, ticks: {color: '#000'} },
-    y: { title: { color: '#000', display: true, text: 'Cumulative Users' }, ticks: { color: '#000' } }
+    y: { title: { color: '#000', display: true, text: 'Cumulative Users' }, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
   }
 }
 
@@ -601,7 +619,7 @@ const barOptions = {
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
       ticks: { color: '#000', source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
-    y: { title: { color: '#000', display: true, text: 'Count' }, beginAtZero: true, ticks: {color: '#000'} }
+    y: { title: { color: '#000', display: true, text: 'Count' }, beginAtZero: true, ticks: {color: '#000', callback: wholeTick}, grace: '20%' }
   }
 }
 
@@ -610,7 +628,7 @@ const histOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
-  scales: { x: { title: { color: '#000', display: true, text: 'Points Range' }, ticks: { color: '#000' } }, y: { title: { color: '#000', display: true, text: 'Users' }, beginAtZero: true, ticks: { color: '#000' } } },
+  scales: { x: { title: { color: '#000', display: true, text: 'Points Range' }, ticks: { color: '#000' } }, y: { title: { color: '#000', display: true, text: 'Users' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' } },
   onClick: (_evt, elements) => {
     if (!elements?.length) return
     pointsZoomCenter.value = elements[0].index
@@ -1089,8 +1107,9 @@ onMounted(async () => {
         x: { title: { color: '#000', display: true, text: 'Rarity' } },
         y: {
           title: { color: '#000', display: true, text: 'Turnover Rate' },
-          ticks: { callback: v => (v * 100).toFixed(0) + '%', color: '#000' },
-          beginAtZero: true
+          ticks: { callback: percentFromDecimalTick, color: '#000' },
+          beginAtZero: true,
+          grace: '20%'
         }
       }
     },
