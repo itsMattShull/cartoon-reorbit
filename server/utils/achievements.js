@@ -228,7 +228,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
 export async function processAchievementsForUser(userId) {
   // Only process active + non-banned users
-  // console.log('[achievements] process: start', { userId })
+  console.log('[achievements] process: start', { userId })
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true } })
   if (!user) {
     // console.log('[achievements] process: skip no user', { userId })
@@ -243,7 +243,7 @@ export async function processAchievementsForUser(userId) {
     where: { isActive: true },
     orderBy: { createdAt: 'asc' },
   })
-  // console.log('[achievements] process: loaded achievements', { userId, count: achievements.length })
+  console.log('[achievements] process: loaded achievements', { userId, count: achievements.length })
 
   let awarded = 0
   for (const ach of achievements) {
@@ -263,11 +263,12 @@ export async function processAchievementsForUser(userId) {
     try {
       await awardAchievementToUser(prisma, userId, ach)
       awarded++
-      // console.log('[achievements] process: awarded', { userId, ach: ach.slug })
+      onsole.log('[achievements] process: awarded', { userId, ach: ach.slug })
     } catch (err) {
       // uniqueness or other issue — skip; continue others
       // console.log('[achievements] process: award failed', { userId, ach: ach.slug, error: err?.message })
     }
+    console.log(' ')
   }
 
   // console.log('[achievements] process: complete', { userId, awarded })
