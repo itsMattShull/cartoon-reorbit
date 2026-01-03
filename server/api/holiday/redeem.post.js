@@ -81,6 +81,66 @@ function replaceBurnedInZones(zones, burnedUserCtoonId, reward) {
   return { zones: next, replaced }
 }
 
+async function getIdempotentRedemptionResponse(userId, sourceUserCtoonId) {
+  const redemption = await prisma.holidayRedemption.findFirst({
+    where: { userId, sourceUserCtoonId },
+    select: {
+      resultCtoonId: true,
+      event: { select: { id: true, name: true, minRevealAt: true } }
+    }
+  })
+  if (!redemption) return null
+
+  const rewardUC = await prisma.userCtoon.findFirst({
+    where: { userId, ctoonId: redemption.resultCtoonId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      mintNumber: true,
+      isFirstEdition: true,
+      ctoon: {
+        select: {
+          id: true,
+          name: true,
+          rarity: true,
+          series: true,
+          set: true,
+          assetPath: true,
+          releaseDate: true,
+          quantity: true
+        }
+      }
+    }
+  })
+
+  return {
+    success: true,
+    message: 'cToon opened!',
+    event: redemption.event
+      ? {
+          id: redemption.event.id,
+          name: redemption.event.name,
+          minRevealAt: redemption.event.minRevealAt
+        }
+      : null,
+    reward: rewardUC
+      ? {
+          userCtoonId: rewardUC.id,
+          id: rewardUC.ctoon.id,
+          name: rewardUC.ctoon.name,
+          rarity: rewardUC.ctoon.rarity,
+          series: rewardUC.ctoon.series,
+          set: rewardUC.ctoon.set,
+          assetPath: rewardUC.ctoon.assetPath,
+          releaseDate: rewardUC.ctoon.releaseDate,
+          quantity: rewardUC.ctoon.quantity,
+          isFirstEdition: rewardUC.isFirstEdition,
+          mintNumber: rewardUC.mintNumber
+        }
+      : { userCtoonId: null, id: redemption.resultCtoonId }
+  }
+}
+
 export default defineEventHandler(async (event) => {
   let queueEvents
   try {
@@ -94,6 +154,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonId' })
     }
 
+    const idempotentResponse = await getIdempotentRedemptionResponse(userId, userCtoonId)
+    if (idempotentResponse) return idempotentResponse
+
     // Load the owned, not-yet-burned UserCtoon (the Holiday Item)
     const source = await prisma.userCtoon.findUnique({
       where: { id: userCtoonId },
@@ -106,6 +169,8 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
     }
     if (source.burnedAt) {
+      const burnedResponse = await getIdempotentRedemptionResponse(userId, userCtoonId)
+      if (burnedResponse) return burnedResponse
       throw createError({ statusCode: 409, statusMessage: 'This cToon is already opened/burned' })
     }
 
@@ -174,6 +239,8 @@ export default defineEventHandler(async (event) => {
       data:  { burnedAt: now, isTradeable: false }
     })
     if (lockRes.count === 0) {
+      const lockedResponse = await getIdempotentRedemptionResponse(userId, userCtoonId)
+      if (lockedResponse) return lockedResponse
       throw createError({ statusCode: 409, statusMessage: 'This cToon was already opened' })
     }
 

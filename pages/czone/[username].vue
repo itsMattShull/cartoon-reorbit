@@ -104,7 +104,7 @@
           :disabled="!hasPrevious"
           aria-label="Previous Zone"
         >←</button>
-        <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
+        <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of {{ maxZoneNumber }}</span>
         <button
           class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
           @click="goToNext"
@@ -344,7 +344,7 @@
               :disabled="!hasPrevious"
               aria-label="Previous Zone"
             >←</button>
-            <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
+            <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of {{ maxZoneNumber }}</span>
             <button
               class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
               @click="goToNext"
@@ -924,6 +924,15 @@ function closeWishlist() {
 // Which zone index is currently displayed (0, 1, or 2)
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
+const maxZoneNumber = computed(() => {
+  let max = 1
+  zones.value.forEach((zone, idx) => {
+    if (Array.isArray(zone.toons) && zone.toons.length > 0) {
+      max = Math.max(max, idx + 1)
+    }
+  })
+  return max
+})
 
 // Build a list of “renderable” cToon items for the current zone
 // (Expose indices so we can update the clicked slot later)
