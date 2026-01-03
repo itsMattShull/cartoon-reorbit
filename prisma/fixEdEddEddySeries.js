@@ -1,6 +1,6 @@
 import { prisma } from '../server/prisma.js'
 
-const TARGET_SERIES = ['Ed, Edd, N Eddy', 'Ed Edd N Eddy']
+const TARGET_SERIES = ['Ed, Edd, n Eddy', 'Ed Edd n Eddy']
 const UPDATED_SERIES = 'Ed, Edd n Eddy'
 
 async function main() {
