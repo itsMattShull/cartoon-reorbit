@@ -143,6 +143,23 @@
                 </div>
               </div>
             </div>
+
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -373,6 +390,24 @@
               </div>
             </div>
 
+            <!-- Trending Spenders -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
+              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-blue)] to-[var(--reorbit-cyan)]"></div>
+              <div class="w-full p-6 text-slate-900">
+                <div class="flex items-baseline justify-between gap-3">
+                  <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Trending Spenders</h2>
+                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
+                </div>
+                <ul class="w-full mt-3">
+                  <li v-for="(entry, i) in trendingSpenders" :key="entry.username"
+                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                    <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <!-- Total cToon Count Leaderboard -->
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
               <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
@@ -560,19 +595,22 @@ const uniqueCtoonLb = ref([])
 const totalCtoonLb  = ref([])
 const activeCtoonAcquirers = ref([])
 const trendingEarners = ref([])
+const trendingSpenders = ref([])
 
 async function fetchLeaderboards() {
   try {
-    const [uRes, tRes, aRes, eRes] = await Promise.all([
+    const [uRes, tRes, aRes, eRes, sRes] = await Promise.all([
       fetch('/api/leaderboard/unique-ctoons', { credentials: 'include' }),
       fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' }),
       fetch('/api/leaderboard/active-ctoon-acquirers', { credentials: 'include' }),
-      fetch('/api/leaderboard/trending-earners', { credentials: 'include' })
+      fetch('/api/leaderboard/trending-earners', { credentials: 'include' }),
+      fetch('/api/leaderboard/trending-spenders', { credentials: 'include' })
     ])
     if (uRes.ok) uniqueCtoonLb.value = await uRes.json()
     if (tRes.ok) totalCtoonLb.value  = await tRes.json()
     if (aRes.ok) activeCtoonAcquirers.value  = await aRes.json()
     if (eRes.ok) trendingEarners.value  = await eRes.json()
+    if (sRes.ok) trendingSpenders.value  = await sRes.json()
   } catch (err) {
     console.error('Leaderboard fetch error:', err)
   }
