@@ -99,6 +99,14 @@
         </div>
       </div>
 
+      <!-- Monster Scans -->
+      <div>
+        <h2 class="text-xl font-semibold mb-2">Monster Scans</h2>
+        <div class="chart-container">
+          <canvas ref="monsterScansCanvas"></canvas>
+        </div>
+      </div>
+
       <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
         <div class="flex flex-wrap items-center justify-between gap-4 mb-2">
@@ -329,6 +337,7 @@ const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
 const ratioCanvas   = ref(null)
 const turnoverCanvas= ref(null)
+const monsterScansCanvas = ref(null)
 
 // window counts
 const netWindowCount      = ref(0)
@@ -398,7 +407,7 @@ const ratioBadgeText = computed(() => ({
 // Chart instances
 let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
-    netChart, ratioChart, turnoverChart
+    netChart, ratioChart, turnoverChart, monsterScansChart
 
 // --- color palette ---
 const colors = {
@@ -412,7 +421,9 @@ const colors = {
   earnedBar: '#22C55E', // Green
   spentBar:  '#EF4444', // Red
   netLine:   '#111827', // Slate-900
-  maLine:    '#FACC15'  // Yellow
+  maLine:    '#FACC15', // Yellow
+  scanBar:   '#F97316', // Orange
+  scanLine:  '#0EA5E9'  // Sky
 }
 colors.turnover = {
   Common:    '#9CA3AF',
@@ -540,6 +551,18 @@ const clashOptions = {
   plugins: { legend: { position: 'top' } }
 }
 
+const monsterScansOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
+      ticks: { color: '#000', source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
+    y:  { title: { color: '#000', display: true, text: 'Scans' }, beginAtZero: true, ticks: { color: '#000' } },
+    y1: { position: 'right', title: { color: '#000', display: true, text: 'Unique Users' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { color: '#000' } }
+  },
+  plugins: { legend: { position: 'top' } }
+}
+
 // cumulative users
 const cumOptions = {
   responsive: true,
@@ -611,7 +634,7 @@ function applyTimeUnit () {
     chart.options.scales.x.time.displayFormats = df
     chart.update('none')
   }
-  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(set)
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, ratioChart].forEach(set)
 }
 
 function applyPointsZoom () {
@@ -836,6 +859,38 @@ async function fetchData() {
   ]
   clashChart.update()
 
+  // Monster scans
+  res = await fetch(`/api/admin/monster-scans?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  const ms = await res.json()
+  monsterScansChart.data.labels = ms.map(d => dateOf(d))
+  monsterScansChart.data.datasets = [
+    {
+      type: 'bar',
+      label: 'Scans',
+      data: ms.map(d => d.scans ?? 0),
+      yAxisID: 'y',
+      backgroundColor: colors.scanBar,
+      borderColor: colors.scanBar,
+      borderWidth: 1,
+      order: 1,
+      datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
+    },
+    {
+      type: 'line',
+      label: 'Unique Users',
+      data: ms.map(d => d.uniqueUsers ?? 0),
+      yAxisID: 'y1',
+      borderColor: colors.scanLine,
+      backgroundColor: colors.scanLine,
+      fill: false,
+      tension: 0.3,
+      order: 0,
+      pointBackgroundColor: colors.scanLine,
+      datalabels: { anchor: 'end', align: 'top', color: '#222222', font: { weight: 'bold' } }
+    }
+  ]
+  monsterScansChart.update()
+
   // Spend / Earn Ratio (ratio and MA(spend)/MA(earn))
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   const sr = await res.json()
@@ -985,6 +1040,7 @@ onMounted(async () => {
   packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
+  monsterScansChart = new Chart(monsterScansCanvas.value.getContext('2d'), { data: { labels: [], datasets: [] }, options: monsterScansOptions })
 
   // spend/earn ratio chart
   ratioChart = new Chart(ratioCanvas.value.getContext('2d'), {
@@ -1072,7 +1128,7 @@ onMounted(async () => {
 watch([selectedTimeframe, groupBy], async () => {
   if (!netChart) return
   applyTimeUnit()
-  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(ch => {
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, ratioChart].forEach(ch => {
     if (!ch) return
     ch.data.labels = []
     ch.data.datasets.forEach(ds => (ds.data = []))

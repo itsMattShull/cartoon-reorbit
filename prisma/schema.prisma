@@ -262,6 +262,7 @@ model User {
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
   userMonsterItems UserMonsterItem[]
+  scanEvents       UserScan[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -1368,6 +1369,7 @@ enum MonsterRarity {
   mappings     BarcodeMapping[]
   userMonsters UserMonster[]
   userScans    UserBarcodeScan[]
+  scanEvents   UserScan[]
   userItems    UserMonsterItem[]
 
   createdAt DateTime @default(now())
@@ -1462,6 +1464,7 @@ model BarcodeMapping {
 
   userMonsters UserMonster[]
   userScans    UserBarcodeScan[]
+  scanEvents   UserScan[]
 
   createdAt DateTime @default(now())
 
@@ -1562,4 +1565,25 @@ model UserBarcodeScan {
   @@index([userId, mappingId])
   @@index([configId])
   @@index([nextAvailableAt])
+}
+
+model UserScan {
+  id     String @id @default(uuid())
+  userId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mappingId String
+  mapping   BarcodeMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  outcome   ScanOutcome
+  scannedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([mappingId])
+  @@index([configId])
+  @@index([scannedAt])
 }

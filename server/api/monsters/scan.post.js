@@ -472,6 +472,19 @@ export default defineEventHandler(async (event) => {
       lastScannedAt: now,
     },
   })
+  try {
+    await db.userScan.create({
+      data: {
+        userId,
+        mappingId: mapping.id,
+        configId: config.id,
+        outcome: mapping.outcome,
+        scannedAt: now,
+      },
+    })
+  } catch (e) {
+    console.warn('Failed to log user scan:', e?.message || e)
+  }
 
   if (scanPointsValue > 0) {
     const updatedPoints = await db.userPoints.upsert({
