@@ -113,7 +113,7 @@
             v-for="(item, index) in layout"
             :key="item.id"
             class="absolute cursor-pointer"
-            :class="{ dragging: currentlyDraggingIndex === index }"
+            :class="{ dragging: currentlyDraggingIndex === index && isDragging }"
             :style="{ top: item.y + 'px', left: item.x + 'px', width: item.width + 'px', height: item.height + 'px' }"
             @contextmenu.prevent="removeItem(index)"
             @mousedown="onMouseDown($event, index)"
@@ -126,7 +126,7 @@
             <img
               :src="item.assetPath"
               :alt="item.name"
-              class="max-w-none object-contain border border-gray-300"
+              class="max-w-none object-contain"
               draggable="false"
             />
           </div>
@@ -427,11 +427,13 @@ async function onDrop(e) {
 }
 
 const currentlyDraggingIndex = ref(null)
+const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
 function onMouseDown(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   const rect = e.target.closest('.absolute').getBoundingClientRect()
   dragOffset.value = {
     x: (e.clientX - rect.left) / scale.value,
@@ -444,6 +446,7 @@ function onMouseDown(e, idx) {
 function onTouchStart(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   document.body.style.overflow = 'hidden'
   startLongPress(idx)
   const t = e.touches[0]
@@ -458,6 +461,9 @@ function onTouchStart(e, idx) {
 
 async function onMouseMove(e) {
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (e.clientX - canvasRect.left) / scale.value - dragOffset.value.x
   let rawY = (e.clientY - canvasRect.top) / scale.value - dragOffset.value.y
@@ -471,6 +477,9 @@ async function onTouchMove(e) {
   e.preventDefault()
   cancelLongPress()
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const t = e.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (t.clientX - canvasRect.left) / scale.value - dragOffset.value.x
@@ -486,6 +495,7 @@ async function onMouseUp() {
   cancelLongPress()
   await saveZones(false)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
 }
@@ -497,6 +507,7 @@ async function onTouchEnd() {
   cancelLongPress()
   document.body.style.overflow = ''
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('touchmove', onTouchMove)
   window.removeEventListener('touchend', onTouchEnd)
 }
@@ -504,6 +515,7 @@ async function onTouchEnd() {
 async function removeItem(idx) {
   const [removed] = layout.value.splice(idx, 1)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   await saveZones(false)
