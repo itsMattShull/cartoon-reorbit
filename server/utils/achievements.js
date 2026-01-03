@@ -263,7 +263,7 @@ export async function processAchievementsForUser(userId) {
     try {
       await awardAchievementToUser(prisma, userId, ach)
       awarded++
-      onsole.log('[achievements] process: awarded', { userId, ach: ach.slug })
+      console.log('[achievements] process: awarded', { userId, ach: ach.slug })
     } catch (err) {
       // uniqueness or other issue — skip; continue others
       // console.log('[achievements] process: award failed', { userId, ach: ach.slug, error: err?.message })
