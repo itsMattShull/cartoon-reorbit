@@ -738,7 +738,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Monster', middleware: ['auth','admin'], layout: 'default' })
 
 const activeTab = ref('Game Config')
 

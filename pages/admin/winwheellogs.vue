@@ -69,7 +69,7 @@ Chart.register(PieController, ArcElement, Tooltip, Legend, ChartDataLabels)
 // Chart.defaults.color = '#fff'
 // Chart.defaults.plugins.legend.labels.color = '#fff'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - WinWheel Logs', middleware: ['auth', 'admin'], layout: 'default' })
 
 // --- date state ---
 const from = ref('')

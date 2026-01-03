@@ -220,7 +220,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Trades', middleware: ['auth', 'admin'], layout: 'default' })
 
 const rarityValues = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
 

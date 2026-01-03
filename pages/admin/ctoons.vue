@@ -241,7 +241,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - cToons', middleware: ['auth','admin'], layout: 'default' })
 
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'

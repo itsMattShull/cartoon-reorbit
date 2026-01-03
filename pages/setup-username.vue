@@ -118,6 +118,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Set Username',
   middleware: ['auth'],
   layout: 'default'
 })

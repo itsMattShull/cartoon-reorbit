@@ -47,6 +47,7 @@ import LeaderboardCard from '@/components/LeaderboardCard.vue'
 import { ref, onMounted, watch } from 'vue'
 
 definePageMeta({
+  title: 'gToons Clash Leaderboard',
   middleware: 'auth',
   layout: 'default'
 })

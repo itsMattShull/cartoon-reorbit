@@ -74,7 +74,7 @@ import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 import { useAuth } from '~/composables/useAuth'
 
-definePageMeta({ middleware: ['auth'], layout: 'default' })
+definePageMeta({ title: 'Lottery', middleware: ['auth'], layout: 'default' })
 
 const { fetchSelf } = useAuth()
 

@@ -315,6 +315,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Check Cheating',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

@@ -129,6 +129,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Admin - Packs',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

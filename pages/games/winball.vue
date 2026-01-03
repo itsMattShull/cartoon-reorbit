@@ -26,6 +26,7 @@
 <script setup>
   import { useHead } from '#imports'
   definePageMeta({
+    title: 'Winball',
     middleware: 'auth',
     layout: 'default'
   })

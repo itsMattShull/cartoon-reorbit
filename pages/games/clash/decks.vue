@@ -187,7 +187,7 @@ import abilitiesJson from '~/data/abilities.json'
 import Nav from '@/components/Nav.vue'
 import { useRouter } from 'vue-router'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Decks', middleware: 'auth', layout: 'default' })
 
 // Toast state
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })

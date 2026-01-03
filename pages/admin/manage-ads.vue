@@ -108,6 +108,7 @@ import { useFetch } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Manage Ads',
   middleware: ['auth','admin'],
   layout: 'default'
 })

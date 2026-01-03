@@ -114,7 +114,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Monster Battles', middleware: ['auth', 'admin'], layout: 'default' })
 
 const battles = ref([])
 const total = ref(0)

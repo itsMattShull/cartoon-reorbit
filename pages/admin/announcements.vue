@@ -197,6 +197,7 @@ import { useFetch } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Announcements',
   middleware: ['auth','admin'],
   layout: 'default'
 })

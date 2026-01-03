@@ -227,6 +227,7 @@ import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 definePageMeta({
+  title: 'WinWheel',
   middleware: 'auth',
   layout: 'default'
 })

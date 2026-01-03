@@ -313,6 +313,7 @@ import Toast from '@/components/Toast.vue'
 import { useAuth } from '@/composables/useAuth'
 
 definePageMeta({
+  title: 'Trade Offers',
   middleware: 'auth',
   layout: 'default'
 })

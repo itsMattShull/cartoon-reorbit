@@ -194,7 +194,7 @@ import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
 import CardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Play', middleware: 'auth', layout: 'default' })
 
 // shared Nuxt state
 const { socket, battleState } = useClashSocket()

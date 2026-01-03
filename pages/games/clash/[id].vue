@@ -228,7 +228,7 @@ import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Match', middleware: 'auth', layout: 'default' })
 
 // — Auth & Deck Loading —
 const { user, fetchSelf } = useAuth()

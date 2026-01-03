@@ -259,6 +259,7 @@ Chart.register(
 
 // auth/admin guard
 definePageMeta({
+  title: 'Admin - Dashboard',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

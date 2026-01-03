@@ -695,6 +695,11 @@ import Toast from '@/components/Toast.vue'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({
+  title: route => {
+    const raw = route.params.username
+    const name = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw[0] : '')
+    return name ? `${name}'s cZone` : 'cZone'
+  },
   middleware: 'auth',
   layout: 'default',
   // Force a fresh instance per path to avoid reuse/flicker (stable, encoded)

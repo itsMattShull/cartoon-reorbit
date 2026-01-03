@@ -242,6 +242,7 @@ import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
 definePageMeta({
+  title: 'Edit cZone',
   middleware: 'auth',
   layout: 'default',
 })

@@ -270,6 +270,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Auth Logs',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

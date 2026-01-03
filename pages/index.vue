@@ -195,6 +195,7 @@ import { useAuth } from '@/composables/useAuth'
 const { login } = useAuth()
 
 definePageMeta({
+  title: 'Home',
   layout: 'home'
 })
 

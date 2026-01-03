@@ -139,7 +139,7 @@
 import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Global Settings', middleware: ['auth','admin'], layout: 'default' })
 
 const activeTab = ref('Global Points')
 const toast  = ref(null)

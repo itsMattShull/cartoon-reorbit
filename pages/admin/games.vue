@@ -384,6 +384,7 @@ import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Games',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

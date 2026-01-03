@@ -91,6 +91,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Admin - Holiday Events',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

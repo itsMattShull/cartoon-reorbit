@@ -71,9 +71,26 @@
           </div>
         </div>
 
-        <!-- Unique + Total cToon leaderboards skeleton -->
+        <!-- Leaderboards skeleton -->
         <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
           <div class="w-full lg:w-1/2">
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
               <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
               <div class="w-full p-6">
@@ -93,6 +110,23 @@
           </div>
 
           <div class="w-full lg:w-1/2">
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
+              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+              <div class="w-full p-6">
+                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+                <div class="space-y-2">
+                  <div
+                    v-for="i in 5"
+                    :key="i"
+                    class="flex items-center justify-between py-1"
+                  >
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
               <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
               <div class="w-full p-6">
@@ -286,6 +320,24 @@
         <!-- leaderboards -->
         <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
           <div class="w-full lg:w-1/2">
+            <!-- Active cToon Acquirers -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
+              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-teal)] via-[var(--reorbit-green-2)] to-[var(--reorbit-lime)]"></div>
+              <div class="w-full p-6 text-slate-900">
+                <div class="flex items-baseline justify-between gap-3">
+                  <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Active cToon Acquirers</h2>
+                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
+                </div>
+                <ul class="w-full mt-3">
+                  <li v-for="(entry, i) in activeCtoonAcquirers" :key="entry.username"
+                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                    <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <!-- Unique cToon Count Leaderboard -->
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
               <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
@@ -303,6 +355,24 @@
           </div>
 
           <div class="w-full lg:w-1/2">
+            <!-- Trending Earners -->
+            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
+              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-cyan)] via-[var(--reorbit-aqua)] to-[var(--reorbit-teal)]"></div>
+              <div class="w-full p-6 text-slate-900">
+                <div class="flex items-baseline justify-between gap-3">
+                  <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Trending Earners</h2>
+                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
+                </div>
+                <ul class="w-full mt-3">
+                  <li v-for="(entry, i) in trendingEarners" :key="entry.username"
+                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                    <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <!-- Total cToon Count Leaderboard -->
             <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
               <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
@@ -421,7 +491,7 @@ import { useRouter } from 'vue-router'
 import { DateTime } from 'luxon'
 import * as Sentry from '@sentry/nuxt'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Showcase', middleware: 'auth', layout: 'default' })
 
 /* pull public homepage config */
 const { data: hp } = await useAsyncData('homepage-public', () =>
@@ -488,15 +558,21 @@ const fetchCToons = async () => {
 
 const uniqueCtoonLb = ref([])
 const totalCtoonLb  = ref([])
+const activeCtoonAcquirers = ref([])
+const trendingEarners = ref([])
 
 async function fetchLeaderboards() {
   try {
-    const [uRes, tRes] = await Promise.all([
+    const [uRes, tRes, aRes, eRes] = await Promise.all([
       fetch('/api/leaderboard/unique-ctoons', { credentials: 'include' }),
-      fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' })
+      fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' }),
+      fetch('/api/leaderboard/active-ctoon-acquirers', { credentials: 'include' }),
+      fetch('/api/leaderboard/trending-earners', { credentials: 'include' })
     ])
     if (uRes.ok) uniqueCtoonLb.value = await uRes.json()
     if (tRes.ok) totalCtoonLb.value  = await tRes.json()
+    if (aRes.ok) activeCtoonAcquirers.value  = await aRes.json()
+    if (eRes.ok) trendingEarners.value  = await eRes.json()
   } catch (err) {
     console.error('Leaderboard fetch error:', err)
   }

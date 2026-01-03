@@ -301,6 +301,7 @@ import { io } from 'socket.io-client'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({
+  title: 'Trade Room',
   middleware: 'auth',
   layout: 'default'
 })

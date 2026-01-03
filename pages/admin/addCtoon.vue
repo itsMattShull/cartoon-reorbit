@@ -223,6 +223,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Admin - Add cToon',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })

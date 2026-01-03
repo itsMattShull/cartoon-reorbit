@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Settings', middleware: 'auth', layout: 'default' })
 
 import { ref, onMounted } from 'vue'
 

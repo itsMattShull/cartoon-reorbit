@@ -125,7 +125,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Lotto Logs', middleware: ['auth', 'admin'], layout: 'default' })
 
 const from = ref('')
 const to = ref('')
