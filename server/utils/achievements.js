@@ -9,10 +9,13 @@ function toIntOrNull(v) {
 }
 
 async function hasCumulativeActivityDays(db, userId, requiredDays) {
+  console.log('[achievements] checking cumulative activity days', { userId, requiredDays })
   const days = Math.floor(Number(requiredDays || 0))
   if (!Number.isFinite(days) || days <= 0) return true
+  console.log('[achievements] querying userDailyActivity count', { userId })
 
   const count = await db.userDailyActivity.count({ where: { userId } })
+  console.log('[achievements] userDailyActivity count', { userId, count, required: days })
   return count >= days
 }
 
@@ -91,6 +94,7 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
 
   // Cumulative active days based on activity logs
   if (ach.cumulativeActiveDaysGte != null) {
+    console.log('[achievements] evaluate: checking cumulativeActiveDaysGte', { userId, ach: achKey, requiredDays: ach.cumulativeActiveDaysGte })
     const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)
     if (!ok) return false
   }

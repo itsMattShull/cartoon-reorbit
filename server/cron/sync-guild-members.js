@@ -295,10 +295,51 @@ function addDays(date, n) {
   return new Date(date.getTime() + n * MS_PER_DAY)
 }
 
-async function recordDailyActivity(daysBack = 3) {
+async function recordDailyActivity() {
   const now = new Date()
   const end = startOfUtcDay(now)
-  const start = new Date(end.getTime() - daysBack * MS_PER_DAY)
+  const last = await prisma.userDailyActivity.findFirst({
+    orderBy: { day: 'desc' },
+    select: { day: true }
+  })
+
+  let start = null
+  if (last?.day) {
+    start = startOfUtcDay(new Date(last.day))
+    start = new Date(start.getTime() + MS_PER_DAY)
+  } else {
+    const minSql = `
+    SELECT MIN(a."createdAt") AS "minDate"
+    FROM (
+      SELECT "createdAt" FROM "LoginLog"
+      UNION ALL
+      SELECT "createdAt" FROM "PointsLog"
+      UNION ALL
+      SELECT "createdAt" FROM "GamePointLog"
+      UNION ALL
+      SELECT "createdAt" FROM "Visit"
+      UNION ALL
+      SELECT "createdAt" FROM "WheelSpinLog"
+      UNION ALL
+      SELECT "createdAt" FROM "Bid"
+      UNION ALL
+      SELECT "createdAt" FROM "TradeOffer"
+      UNION ALL
+      SELECT "createdAt" FROM "Auction"
+    ) a;
+    `
+    let minDate = null
+    try {
+      const rows = await prisma.$queryRawUnsafe(minSql)
+      minDate = rows?.[0]?.minDate || null
+    } catch {}
+    if (!minDate) return
+    start = startOfUtcDay(new Date(minDate))
+  }
+
+  if (start.getTime() >= end.getTime()) return
+
+  const chunkDays = 31
   const sql = `
   INSERT INTO "UserDailyActivity" ("id", "userId", "day")
   SELECT md5(a."userId" || ':' || a."day"::text), a."userId", a."day"
@@ -324,7 +365,11 @@ async function recordDailyActivity(daysBack = 3) {
   GROUP BY a."userId", a."day"
   ON CONFLICT ("userId", "day") DO NOTHING;
   `
-  try { await prisma.$executeRawUnsafe(sql, start, end) } catch {}
+
+  for (let cursor = start.getTime(); cursor < end.getTime(); cursor += chunkDays * MS_PER_DAY) {
+    const next = new Date(Math.min(end.getTime(), cursor + chunkDays * MS_PER_DAY))
+    try { await prisma.$executeRawUnsafe(sql, new Date(cursor), next) } catch {}
+  }
 }
 
 async function sendInactivityWarnings() {
@@ -959,7 +1004,7 @@ await markScheduledPacksInCmart()
 cron.schedule('0 * * * *', markScheduledPacksInCmart)
 
 await recordDailyActivity()
-cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' })
+cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' }) // 02:30 CST daily
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily
