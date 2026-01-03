@@ -9,13 +9,10 @@ function toIntOrNull(v) {
 }
 
 async function hasCumulativeActivityDays(db, userId, requiredDays) {
-  console.log('[achievements] checking cumulative activity days', { userId, requiredDays })
   const days = Math.floor(Number(requiredDays || 0))
   if (!Number.isFinite(days) || days <= 0) return true
-  console.log('[achievements] querying userDailyActivity count', { userId })
 
   const count = await db.userDailyActivity.count({ where: { userId } })
-  console.log('[achievements] userDailyActivity count', { userId, count, required: days })
   return count >= days
 }
 
@@ -94,7 +91,6 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
 
   // Cumulative active days based on activity logs
   if (ach.cumulativeActiveDaysGte != null) {
-    console.log('[achievements] evaluate: checking cumulativeActiveDaysGte', { userId, ach: achKey, requiredDays: ach.cumulativeActiveDaysGte })
     const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)
     if (!ok) return false
   }
@@ -228,7 +224,6 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
 export async function processAchievementsForUser(userId) {
   // Only process active + non-banned users
-  console.log('[achievements] process: start', { userId })
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true } })
   if (!user) {
     // console.log('[achievements] process: skip no user', { userId })
@@ -243,7 +238,6 @@ export async function processAchievementsForUser(userId) {
     where: { isActive: true },
     orderBy: { createdAt: 'asc' },
   })
-  console.log('[achievements] process: loaded achievements', { userId, count: achievements.length })
 
   let awarded = 0
   for (const ach of achievements) {
@@ -263,12 +257,10 @@ export async function processAchievementsForUser(userId) {
     try {
       await awardAchievementToUser(prisma, userId, ach)
       awarded++
-      console.log('[achievements] process: awarded', { userId, ach: ach.slug })
     } catch (err) {
       // uniqueness or other issue — skip; continue others
       // console.log('[achievements] process: award failed', { userId, ach: ach.slug, error: err?.message })
     }
-    console.log(' ')
   }
 
   // console.log('[achievements] process: complete', { userId, awarded })
