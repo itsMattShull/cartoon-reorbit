@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     auctionsWonGte: a.auctionsWonGte,
     auctionsCreatedGte: a.auctionsCreatedGte,
     tradesAcceptedGte: a.tradesAcceptedGte,
-    consecutiveActiveDaysGte: a.consecutiveActiveDaysGte,
+    cumulativeActiveDaysGte: a.cumulativeActiveDaysGte,
     setsRequired: a.setsRequired || [],
     userCreatedBefore: a.userCreatedBefore,
     rewards: a.rewards?.[0] ? {

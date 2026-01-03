@@ -75,8 +75,8 @@
                 <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
               </div>
               <div>
-                <label class="block text-sm">Consecutive Active Days ≥</label>
-                <input v-model.number="form.criteria.consecutiveActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <label class="block text-sm">Cumulative Active Days ≥</label>
+                <input v-model.number="form.criteria.cumulativeActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
                 <p class="text-xs text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
               </div>
               <div class="md:col-span-3">
@@ -237,7 +237,7 @@ const emptyForm = () => ({
     auctionsWonGte: null,
     auctionsCreatedGte: null,
     tradesAcceptedGte: null,
-    consecutiveActiveDaysGte: null,
+    cumulativeActiveDaysGte: null,
     setsRequired: [],
     userCreatedBefore: null
   },
@@ -365,7 +365,7 @@ function startEdit(a) {
       auctionsWonGte: a.auctionsWonGte ?? null,
       auctionsCreatedGte: a.auctionsCreatedGte ?? null,
       tradesAcceptedGte: a.tradesAcceptedGte ?? null,
-      consecutiveActiveDaysGte: a.consecutiveActiveDaysGte ?? null,
+      cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
     },

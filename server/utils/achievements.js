@@ -90,8 +90,8 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
   }
 
   // Cumulative active days based on activity logs
-  if (ach.consecutiveActiveDaysGte != null) {
-    const ok = await hasCumulativeActivityDays(db, userId, ach.consecutiveActiveDaysGte)
+  if (ach.cumulativeActiveDaysGte != null) {
+    const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)
     if (!ok) return false
   }
 

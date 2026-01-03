@@ -1232,7 +1232,7 @@ model Achievement {
   auctionsWonGte  Int?
   auctionsCreatedGte Int?
   tradesAcceptedGte Int?
-  consecutiveActiveDaysGte Int?
+  cumulativeActiveDaysGte Int?
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   createdAt       DateTime @default(now())
