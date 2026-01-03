@@ -302,7 +302,7 @@ async function recordDailyActivity() {
     orderBy: { day: 'desc' },
     select: { day: true }
   })
-
+  console.log('[daily-activity] last recorded day:', last?.day ? last.day.toISOString().split('T')[0] : 'none')
   let start = null
   if (last?.day) {
     start = startOfUtcDay(new Date(last.day))
@@ -368,7 +368,11 @@ async function recordDailyActivity() {
 
   for (let cursor = start.getTime(); cursor < end.getTime(); cursor += chunkDays * MS_PER_DAY) {
     const next = new Date(Math.min(end.getTime(), cursor + chunkDays * MS_PER_DAY))
-    try { await prisma.$executeRawUnsafe(sql, new Date(cursor), next) } catch {}
+    try { await prisma.$executeRawUnsafe(sql, new Date(cursor), next) } catch(e) {
+      console.log('[daily-activity] error recording activity chunk:', e?.message || e)
+    }
+    console.log('[daily-activity] recorded activity for days:', new Date(cursor).toISOString().split('T')[0], 'to', new Date(next.getTime() - 1).toISOString().split('T')[0] )
+    console.log(' ')
   }
 }
 
