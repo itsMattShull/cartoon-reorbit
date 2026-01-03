@@ -38,7 +38,13 @@ export default defineEventHandler(async (event) => {
 
   // Fetch ONLY points logs in window
   const pointsLogs = await prisma.pointsLog.findMany({
-    where: { createdAt: { gte: startDate, lt: endExclusive } },
+    where: {
+      createdAt: { gte: startDate, lt: endExclusive },
+      OR: [
+        { method: null },
+        { method: { not: { startsWith: 'achievement:' } } }
+      ]
+    },
     select: { userId: true, createdAt: true },
     orderBy: { createdAt: 'asc' }
   })

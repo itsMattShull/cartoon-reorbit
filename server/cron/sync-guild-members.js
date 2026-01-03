@@ -313,7 +313,7 @@ async function recordDailyActivity() {
     FROM (
       SELECT "createdAt" FROM "LoginLog"
       UNION ALL
-      SELECT "createdAt" FROM "PointsLog"
+      SELECT "createdAt" FROM "PointsLog" WHERE COALESCE("method", '') NOT LIKE 'achievement:%'
       UNION ALL
       SELECT "createdAt" FROM "GamePointLog"
       UNION ALL
@@ -346,7 +346,7 @@ async function recordDailyActivity() {
   FROM (
     SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "LoginLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
     UNION ALL
-    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "PointsLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "PointsLog" WHERE "createdAt" >= $1 AND "createdAt" < $2 AND COALESCE("method", '') NOT LIKE 'achievement:%'
     UNION ALL
     SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "GamePointLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
     UNION ALL
