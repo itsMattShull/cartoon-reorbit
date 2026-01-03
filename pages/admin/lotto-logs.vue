@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <Nav />
-
+    <div class="mt-12">&nbsp;</div>
     <div class="px-6 mt-16 md:mt-20 pb-10">
       <h1 class="text-2xl font-bold mb-4">Lotto Logs</h1>
 
