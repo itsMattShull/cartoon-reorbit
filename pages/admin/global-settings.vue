@@ -15,6 +15,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Rarity Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Rarity Settings'">Rarity Settings</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Image Duplicates' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Image Duplicates'">Image Duplicates</button>
         </nav>
       </div>
 
@@ -127,6 +131,36 @@
         </div>
       </section>
 
+      <!-- Image Duplicates tab -->
+      <section v-if="activeTab==='Image Duplicates'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Tune how sensitive duplicate detection should be. Higher numbers flag more possible duplicates.
+          Detection uses Hamming distance on 64-bit hashes and flags a match when
+          <strong>pHash ≤ threshold</strong> or <strong>dHash ≤ threshold</strong>.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">pHash Threshold</label>
+            <input type="number" min="0" max="64" class="input" v-model.number="phashDuplicateThreshold" />
+            <p class="text-xs text-gray-500 mt-1">
+              Lower = stricter (fewer matches), higher = more possible duplicates. Typical range: 10–20.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">dHash Threshold</label>
+            <input type="number" min="0" max="64" class="input" v-model.number="dhashDuplicateThreshold" />
+            <p class="text-xs text-gray-500 mt-1">
+              Lower = stricter (fewer matches), higher = more possible duplicates. Typical range: 12–22.
+            </p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="savingDuplicates" @click="saveDuplicateSettings">
+            <span v-if="!savingDuplicates">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -145,6 +179,7 @@ const activeTab = ref('Global Points')
 const toast  = ref(null)
 const savingGlobal = ref(false)
 const savingRarity = ref(false)
+const savingDuplicates = ref(false)
 
 // Global Points state
 const dailyLoginPoints     = ref(500)
@@ -152,6 +187,8 @@ const dailyNewUserPoints   = ref(1000)
 const czoneVisitPoints     = ref(20)
 const dailyPointLimit      = ref(250)
 const czoneVisitMaxPerDay  = ref(10)
+const phashDuplicateThreshold = ref(14)
+const dhashDuplicateThreshold = ref(16)
 
 async function loadGlobal() {
   try {
@@ -162,6 +199,8 @@ async function loadGlobal() {
     czoneVisitPoints.value     = Number(g?.czoneVisitPoints     ?? 20)
     dailyPointLimit.value      = Number(g?.dailyPointLimit      ?? 250)
     czoneVisitMaxPerDay.value  = Number(g?.czoneVisitMaxPerDay  ?? 10)
+    phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
+    dhashDuplicateThreshold.value = Number(g?.dhashDuplicateThreshold ?? 16)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -230,6 +269,25 @@ async function saveRarity() {
 }
 
 onMounted(loadRarityDefaults)
+
+async function saveDuplicateSettings() {
+  savingDuplicates.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config', {
+      method: 'POST',
+      body: {
+        dailyPointLimit: Number(dailyPointLimit.value),
+        phashDuplicateThreshold: Number(phashDuplicateThreshold.value),
+        dhashDuplicateThreshold: Number(dhashDuplicateThreshold.value)
+      }
+    })
+    toast.value = { type: 'ok', msg: 'Duplicate thresholds saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    savingDuplicates.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
 </script>
 
 <style scoped>

@@ -5,9 +5,8 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
-import { computeMultiHash, bucketFromHash, findNearDuplicate } from '@/server/utils/multiHash'
+import { computeMultiHash, bucketFromHash, findNearDuplicate, normalizeDuplicateThresholds } from '@/server/utils/multiHash'
 
-const DUP_THRESHOLDS = { phash: 10, dhash: 12 }
 const MAX_CANDIDATES = 2000
 
 export default defineEventHandler(async (event) => {
@@ -32,6 +31,15 @@ export default defineEventHandler(async (event) => {
   const { phash, dhash } = await computeMultiHash(imagePart.data)
   const bucket = bucketFromHash(phash)
 
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { phashDuplicateThreshold: true, dhashDuplicateThreshold: true }
+  })
+  const thresholds = normalizeDuplicateThresholds({
+    phash: config?.phashDuplicateThreshold,
+    dhash: config?.dhashDuplicateThreshold
+  })
+
   const candidates = await prisma.ctoonImageHash.findMany({
     where: { bucket },
     take: MAX_CANDIDATES,
@@ -43,7 +51,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  const match = findNearDuplicate({ phash, dhash }, candidates, DUP_THRESHOLDS)
+  const match = findNearDuplicate({ phash, dhash }, candidates, thresholds)
   if (!match) return { duplicate: false }
 
   return {

@@ -574,6 +574,8 @@ model GlobalGameConfig {
   dailyNewUserPoints     Int      @default(1000)
   czoneVisitPoints       Int      @default(20)
   czoneVisitMaxPerDay    Int      @default(10)
+  phashDuplicateThreshold Int     @default(14)
+  dhashDuplicateThreshold Int     @default(16)
   rarityDefaults         Json?
   achievementDiscordChannelId String?
   // Scavenger Hunt settings

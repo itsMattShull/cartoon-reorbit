@@ -215,6 +215,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
   })
 
   // Non-transactional side-effect: announce in Discord channel when enabled.
+  // console.log('[achievements] notifiyDiscord', achievement?.notifyDiscord)
   if (achievement?.notifyDiscord) {
     try {
       await announceAchievement(db, userId, achievement.title, awardSummary)
