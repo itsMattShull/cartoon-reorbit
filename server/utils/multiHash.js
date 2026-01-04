@@ -8,6 +8,7 @@ const HASH_BITS = 8
 const HASH_HEX_LENGTH = 16
 const HASH_BIT_LENGTH = 64
 const HEX_POPCOUNT = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4]
+export const DEFAULT_DUP_THRESHOLDS = { phash: 14, dhash: 16 }
 const HASH_FN = typeof imghash === 'function'
   ? imghash
   : imghash?.hash || imghash?.default?.hash
@@ -37,15 +38,16 @@ export function bucketFromHash(hash, prefixLen = 4) {
   return normalizeHash(hash).slice(0, prefixLen)
 }
 
-export function findNearDuplicate(incoming, candidates, thresholds = { phash: 10, dhash: 12 }) {
+export function findNearDuplicate(incoming, candidates, thresholds = DEFAULT_DUP_THRESHOLDS) {
   if (!incoming?.phash || !incoming?.dhash) return null
+  const resolvedThresholds = normalizeDuplicateThresholds(thresholds)
   let best = null
 
   for (const candidate of candidates || []) {
     if (!candidate?.phash || !candidate?.dhash) continue
     const phashDist = hammingDistanceHex(incoming.phash, candidate.phash)
     const dhashDist = hammingDistanceHex(incoming.dhash, candidate.dhash)
-    const isDuplicate = phashDist <= thresholds.phash || dhashDist <= thresholds.dhash
+    const isDuplicate = phashDist <= resolvedThresholds.phash || dhashDist <= resolvedThresholds.dhash
     if (!isDuplicate) continue
 
     const score = Math.min(phashDist, dhashDist)
@@ -65,6 +67,12 @@ export function findNearDuplicate(incoming, candidates, thresholds = { phash: 10
   if (!best) return null
   const { score, tieBreaker, ...match } = best
   return match
+}
+
+export function normalizeDuplicateThresholds(input, fallback = DEFAULT_DUP_THRESHOLDS) {
+  const phash = clampThreshold(input?.phash, fallback.phash)
+  const dhash = clampThreshold(input?.dhash, fallback.dhash)
+  return { phash, dhash }
 }
 
 async function normalizeImageBuffer(buffer) {
@@ -206,4 +214,10 @@ function bitsToHex(bits) {
     hex += nibble.toString(16)
   }
   return hex.padStart(HASH_HEX_LENGTH, '0')
+}
+
+function clampThreshold(value, fallback) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(64, Math.max(0, Math.round(num)))
 }

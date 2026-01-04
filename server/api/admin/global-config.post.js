@@ -28,7 +28,9 @@ export default defineEventHandler(async (event) => {
     dailyLoginPoints,
     dailyNewUserPoints,
     czoneVisitPoints,
-    czoneVisitMaxPerDay
+    czoneVisitMaxPerDay,
+    phashDuplicateThreshold,
+    dhashDuplicateThreshold
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -45,7 +47,9 @@ export default defineEventHandler(async (event) => {
     dailyLoginPoints:   (typeof dailyLoginPoints   === 'number') ? Number(dailyLoginPoints)   : undefined,
     dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
     czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined,
-    czoneVisitMaxPerDay:(typeof czoneVisitMaxPerDay=== 'number') ? Number(czoneVisitMaxPerDay): undefined
+    czoneVisitMaxPerDay:(typeof czoneVisitMaxPerDay=== 'number') ? Number(czoneVisitMaxPerDay): undefined,
+    phashDuplicateThreshold: (typeof phashDuplicateThreshold === 'number') ? Number(phashDuplicateThreshold) : undefined,
+    dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -59,7 +63,9 @@ export default defineEventHandler(async (event) => {
         dailyLoginPoints:   payload.dailyLoginPoints   ?? 500,
         dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
         czoneVisitPoints:   payload.czoneVisitPoints   ?? 20,
-        czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay ?? 10
+        czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay ?? 10,
+        phashDuplicateThreshold: payload.phashDuplicateThreshold ?? 14,
+        dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -67,11 +73,21 @@ export default defineEventHandler(async (event) => {
         ...(payload.dailyLoginPoints   !== undefined ? { dailyLoginPoints:   payload.dailyLoginPoints }   : {}),
         ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
         ...(payload.czoneVisitPoints    !== undefined ? { czoneVisitPoints:    payload.czoneVisitPoints }    : {}),
-        ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {})
+        ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {}),
+        ...(payload.phashDuplicateThreshold !== undefined ? { phashDuplicateThreshold: payload.phashDuplicateThreshold } : {}),
+        ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {})
       }
     })
     // Log field-level changes
-    const fields = ['dailyPointLimit','dailyLoginPoints','dailyNewUserPoints','czoneVisitPoints','czoneVisitMaxPerDay']
+    const fields = [
+      'dailyPointLimit',
+      'dailyLoginPoints',
+      'dailyNewUserPoints',
+      'czoneVisitPoints',
+      'czoneVisitMaxPerDay',
+      'phashDuplicateThreshold',
+      'dhashDuplicateThreshold'
+    ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
       const nextVal = result ? result[k] : undefined
