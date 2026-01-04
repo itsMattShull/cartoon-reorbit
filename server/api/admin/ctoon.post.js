@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -105,6 +106,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const { phash, dhash } = await computeMultiHash(imagePart.data)
+  const bucket = bucketFromHash(phash)
+
   /* 4. Save image ------------------------------------------- */
   const safeSeries = series.trim()
   const uploadDir = process.env.NODE_ENV === 'production'
@@ -149,7 +153,14 @@ export default defineEventHandler(async (event) => {
       initialReleaseAt: initialReleaseAtDate,
       finalReleaseAt:   finalReleaseAtDate,
       initialReleaseQty: initialReleaseQtyInt,
-      finalReleaseQty:   finalReleaseQtyInt
+      finalReleaseQty:   finalReleaseQtyInt,
+      imageHash: {
+        create: {
+          phash,
+          dhash,
+          bucket
+        }
+      }
     }
   })
   try {

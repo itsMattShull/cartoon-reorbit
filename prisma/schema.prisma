@@ -129,12 +129,29 @@ model Ctoon {
   redeemedAsResult           HolidayRedemption[]         @relation("HolidayResultDefinition")
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
+  imageHash                  CtoonImageHash?
 
   // Scavenger Hunt relations
   scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
   scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
   // Achievements back‑relation
   achievementRewardCtoons    AchievementRewardCtoon[]
+}
+
+model CtoonImageHash {
+  id        String   @id @default(uuid())
+  ctoonId   String   @unique
+  phash     String
+  dhash     String
+  bucket    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@index([bucket])
+  @@index([phash])
+  @@index([dhash])
 }
 
 model UserCtoon {

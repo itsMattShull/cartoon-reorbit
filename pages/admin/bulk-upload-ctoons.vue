@@ -114,6 +114,7 @@
             <thead>
               <tr class="bg-gray-100">
                 <th class="px-4 py-2">Preview</th>
+                <th class="px-4 py-2">Duplicate</th>
                 <th class="px-4 py-2">Name</th>
                 <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
@@ -129,6 +130,32 @@
               <tr v-for="(f, i) in imageFiles" :key="f.id" class="border-b">
                 <td class="px-4 py-2">
                   <img :src="f.preview" alt class="h-12 w-auto rounded" />
+                </td>
+                <td class="px-4 py-2">
+                  <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking...</div>
+                  <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                    {{ f.duplicateError || 'Duplicate check failed.' }}
+                  </div>
+                  <div v-else-if="f.duplicateMatch" class="text-xs">
+                    <div class="text-amber-700 font-medium">Possible duplicate</div>
+                    <div class="flex items-center gap-2 mt-1">
+                      <img
+                        v-if="f.duplicateMatch.ctoon?.assetPath"
+                        :src="f.duplicateMatch.ctoon.assetPath"
+                        alt="Possible duplicate"
+                        class="w-10 h-10 object-contain border rounded bg-white"
+                      />
+                      <div class="text-[11px] leading-tight">
+                        <div class="font-medium truncate max-w-[140px]">
+                          {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                        </div>
+                        <div class="text-gray-600">
+                          p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates</div>
                 </td>
                 <td class="px-4 py-2">
                   <input v-model="f.nameField" class="w-full border rounded p-1" />
@@ -194,6 +221,32 @@
               :alt="f.nameField"
               class="w-full h-40 object-cover rounded mb-4"
             />
+            <div class="mb-4">
+              <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking for duplicates...</div>
+              <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                {{ f.duplicateError || 'Duplicate check failed.' }}
+              </div>
+              <div v-else-if="f.duplicateMatch" class="text-xs bg-amber-50 border rounded p-2">
+                <div class="text-amber-700 font-medium">Possible duplicate found</div>
+                <div class="flex items-center gap-2 mt-2">
+                  <img
+                    v-if="f.duplicateMatch.ctoon?.assetPath"
+                    :src="f.duplicateMatch.ctoon.assetPath"
+                    alt="Possible duplicate"
+                    class="w-12 h-12 object-contain border rounded bg-white"
+                  />
+                  <div class="text-[11px] leading-tight">
+                    <div class="font-medium">
+                      {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                    </div>
+                    <div class="text-gray-600">
+                      p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates found.</div>
+            </div>
 
             <!-- Fields underneath -->
             <div class="space-y-4">
@@ -427,6 +480,8 @@ const makeRowId = (() => {
     (globalThis.crypto?.randomUUID?.() ?? `row_${Date.now().toString(36)}_${n++}`)
 })()
 
+const DUPLICATE_CHECK_CONCURRENCY = 3
+
 // toast state
 const toasts = ref([])
 function showToast(message, type = 'error') {
@@ -564,11 +619,55 @@ function handleFiles(e) {
       perUserLimit: null,
       inCmart: false,
       price: 0,
+      duplicateStatus: 'idle',
+      duplicateMatch: null,
+      duplicateError: ''
     }
 
     if (row.rarity) updateDefaults?.(row)
     return row
   })
+  runDuplicateChecks(imageFiles.value)
+}
+
+async function runDuplicateChecks(rows) {
+  const queue = rows.slice()
+  const workers = Array.from({ length: DUPLICATE_CHECK_CONCURRENCY }, () => (async () => {
+    while (queue.length) {
+      const row = queue.shift()
+      if (!row) return
+      await checkDuplicateForRow(row)
+    }
+  })())
+  await Promise.all(workers)
+}
+
+async function checkDuplicateForRow(row) {
+  if (!row?.file) return
+  row.duplicateStatus = 'checking'
+  row.duplicateMatch = null
+  row.duplicateError = ''
+  const formData = new FormData()
+  formData.append('image', row.file)
+
+  try {
+    const res = await fetch('/api/admin/ctoon-duplicate', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    })
+    if (!res.ok) {
+      row.duplicateStatus = 'error'
+      row.duplicateError = 'Duplicate check failed.'
+      return
+    }
+    const data = await res.json()
+    row.duplicateMatch = data?.duplicate ? data.match : null
+    row.duplicateStatus = 'done'
+  } catch {
+    row.duplicateStatus = 'error'
+    row.duplicateError = 'Duplicate check failed.'
+  }
 }
 
 async function uploadAll() {
