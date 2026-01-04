@@ -27,12 +27,23 @@
 
       <!-- logo: right on small, centered on md+ -->
       <NuxtLink
-        to="/"
+        v-if="!hasAdUrl"
+        to="/dashboard"
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
       >
         <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
         <span class="sr-only">Cartoon ReOrbit</span>
       </NuxtLink>
+      <a
+        v-else
+        :href="currentAdUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
+      >
+        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+        <span class="sr-only">Cartoon ReOrbit</span>
+      </a>
 
       <div
         class="hidden md:block ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
@@ -239,7 +250,10 @@ const adminGroups = [
       { label: 'Auth Logs', to: '/admin/auth-logs' },
       { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
       { label: 'Point Logs', to: '/admin/points-log' },
+      { label: 'Achievement Logs', to: '/admin/achievement-logs' },
       { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
+      { label: 'Monster Battle Logs', to: '/admin/manage-monster-battles' },
+      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
       { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
       { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
     ]
@@ -271,6 +285,8 @@ function filteredAdmin(group) {
    - PNG/JPG/JPEG/WEBP/SVG: rotate every 8s
    ──────────────────────────────────────────────────────────── */
 const currentAdSrc = ref('')
+const currentAdUrl = ref('')
+const hasAdUrl = computed(() => !!currentAdUrl.value)
 let adOrder = []
 let adIdx = 0
 let timer = null
@@ -289,7 +305,9 @@ function shuffle(arr) {
 function nextAd() {
   if (!adOrder.length) return
   adIdx = (adIdx + 1) % adOrder.length
-  currentAdSrc.value = adOrder[adIdx]
+  const current = adOrder[adIdx]
+  currentAdSrc.value = current?.imagePath || ''
+  currentAdUrl.value = (current?.url || '').trim()
   scheduleNext()
 }
 
@@ -403,11 +421,15 @@ async function initAds() {
   try {
     const res = await $fetch('/api/ads', { params: { take: 100 } })
     const items = Array.isArray(res?.items) ? res.items : []
-    const urls = items.map(i => i.imagePath).filter(Boolean)
-    if (!urls.length) return
-    adOrder = shuffle(urls)
+    const ads = items
+      .filter(i => i?.imagePath)
+      .map(i => ({ imagePath: i.imagePath, url: i?.url || '' }))
+    if (!ads.length) return
+    adOrder = shuffle(ads)
     adIdx = Math.floor(Math.random() * adOrder.length)
-    currentAdSrc.value = adOrder[adIdx]
+    const current = adOrder[adIdx]
+    currentAdSrc.value = current?.imagePath || ''
+    currentAdUrl.value = (current?.url || '').trim()
     scheduleNext()
   } catch {
     // ignore, keep default logo

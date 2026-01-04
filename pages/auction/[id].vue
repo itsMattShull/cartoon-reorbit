@@ -199,7 +199,7 @@ import Toast from '@/components/Toast.vue'
 import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
-definePageMeta({ middleware: ['auth'], layout: 'default' })
+definePageMeta({ title: 'Auction Details', middleware: ['auth'], layout: 'default' })
 
 // --- Setup & state ---
 const route       = useRoute()

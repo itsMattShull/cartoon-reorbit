@@ -109,7 +109,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Analytics', middleware: ['auth', 'admin'], layout: 'default' })
 
 const tabs = [{ key: 'Retention', label: 'Retention' }]
 const activeTab = ref('Retention')

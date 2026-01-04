@@ -113,7 +113,7 @@
             v-for="(item, index) in layout"
             :key="item.id"
             class="absolute cursor-pointer"
-            :class="{ dragging: currentlyDraggingIndex === index }"
+            :class="{ dragging: currentlyDraggingIndex === index && isDragging }"
             :style="{ top: item.y + 'px', left: item.x + 'px', width: item.width + 'px', height: item.height + 'px' }"
             @contextmenu.prevent="removeItem(index)"
             @mousedown="onMouseDown($event, index)"
@@ -123,12 +123,26 @@
             @touchend="onTouchEnd"
             @touchcancel="onTouchEnd"
           >
-            <img
-              :src="item.assetPath"
-              :alt="item.name"
-              class="max-w-none object-contain border border-gray-300"
-              draggable="false"
-            />
+            <div class="relative w-full h-full">
+              <button
+                type="button"
+                class="absolute top-1 right-1 z-10 w-6 h-6 rounded-full bg-white/80 text-gray-700 shadow hover:bg-white flex items-center justify-center"
+                aria-label="Bring to front"
+                @click.stop="bringToFront(index)"
+                @mousedown.stop
+                @touchstart.stop
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+                </svg>
+              </button>
+              <img
+                :src="item.assetPath"
+                :alt="item.name"
+                class="max-w-none object-contain"
+                draggable="false"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -228,6 +242,7 @@ import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
 definePageMeta({
+  title: 'Edit cZone',
   middleware: 'auth',
   layout: 'default',
 })
@@ -427,11 +442,13 @@ async function onDrop(e) {
 }
 
 const currentlyDraggingIndex = ref(null)
+const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
 function onMouseDown(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   const rect = e.target.closest('.absolute').getBoundingClientRect()
   dragOffset.value = {
     x: (e.clientX - rect.left) / scale.value,
@@ -444,6 +461,7 @@ function onMouseDown(e, idx) {
 function onTouchStart(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   document.body.style.overflow = 'hidden'
   startLongPress(idx)
   const t = e.touches[0]
@@ -458,6 +476,9 @@ function onTouchStart(e, idx) {
 
 async function onMouseMove(e) {
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (e.clientX - canvasRect.left) / scale.value - dragOffset.value.x
   let rawY = (e.clientY - canvasRect.top) / scale.value - dragOffset.value.y
@@ -471,6 +492,9 @@ async function onTouchMove(e) {
   e.preventDefault()
   cancelLongPress()
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const t = e.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (t.clientX - canvasRect.left) / scale.value - dragOffset.value.x
@@ -486,6 +510,7 @@ async function onMouseUp() {
   cancelLongPress()
   await saveZones(false)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
 }
@@ -497,6 +522,7 @@ async function onTouchEnd() {
   cancelLongPress()
   document.body.style.overflow = ''
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('touchmove', onTouchMove)
   window.removeEventListener('touchend', onTouchEnd)
 }
@@ -504,6 +530,7 @@ async function onTouchEnd() {
 async function removeItem(idx) {
   const [removed] = layout.value.splice(idx, 1)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   await saveZones(false)
@@ -520,6 +547,18 @@ async function removeItem(idx) {
       characters: Array.isArray(removed.characters) ? removed.characters : [],
     })
   }
+}
+
+async function bringToFront(idx) {
+  if (idx < 0 || idx >= layout.value.length) return
+  const [item] = layout.value.splice(idx, 1)
+  layout.value.push(item)
+  if (currentlyDraggingIndex.value === idx) {
+    currentlyDraggingIndex.value = layout.value.length - 1
+  } else if (currentlyDraggingIndex.value > idx) {
+    currentlyDraggingIndex.value -= 1
+  }
+  await saveZones(false)
 }
 
 async function clearZone() {

@@ -79,7 +79,7 @@ import ClashCToonCard from '@/components/ClashCToonCard.vue'
 import Nav from '@/components/Nav.vue'
 import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash', middleware: 'auth', layout: 'default' })
 
 const { socket, battleState } = useClashSocket()
 const router = useRouter()

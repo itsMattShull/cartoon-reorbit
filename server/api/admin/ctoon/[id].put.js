@@ -8,6 +8,7 @@ import {
 } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -131,11 +132,16 @@ export default defineEventHandler(async (event) => {
     finalReleaseQty:   finalReleaseQty   == null || finalReleaseQty   === '' ? null : Number(finalReleaseQty)
   }
 
+  let imageHashData = null
+
   // 7) Optional image save with timestamped filename
   if (imagePart) {
     if (!['image/png','image/gif'].includes(imagePart.type)) {
       throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
     }
+
+    const { phash, dhash } = await computeMultiHash(imagePart.data)
+    imageHashData = { phash, dhash, bucket: bucketFromHash(phash) }
 
     const safeSeries = series.trim()
     const uploadDir = process.env.NODE_ENV === 'production'
@@ -166,6 +172,14 @@ export default defineEventHandler(async (event) => {
     where: { id },
     data: updateData
   })
+
+  if (imageHashData) {
+    await prisma.ctoonImageHash.upsert({
+      where: { ctoonId: id },
+      create: { ctoonId: id, ...imageHashData },
+      update: imageHashData
+    })
+  }
 
   // 9) Log field-level changes
   try {

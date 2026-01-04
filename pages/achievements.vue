@@ -80,6 +80,8 @@
 </template>
 
 <script setup>
+definePageMeta({ title: 'Achievements' })
+
 const { data: achievements, pending } = await useFetch('/api/achievements')
 
 const showModal = ref(false)

@@ -70,11 +70,11 @@
             <label class="block mb-1 font-medium">Series</label>
             <input
               v-model="bulkSeries"
-              list="series-list"
+              list="bulk-series-list"
               required
               class="w-full border rounded p-2"
             />
-            <datalist v-if="bulkSeries.length >= 2" id="series-list">
+            <datalist v-if="bulkSeries.length >= 2" id="bulk-series-list">
               <option
                 v-for="opt in filteredBulkSeriesOptions"
                 :key="opt"
@@ -114,7 +114,9 @@
             <thead>
               <tr class="bg-gray-100">
                 <th class="px-4 py-2">Preview</th>
+                <th class="px-4 py-2">Duplicate</th>
                 <th class="px-4 py-2">Name</th>
+                <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
                 <th class="px-4 py-2">Characters</th>
                 <th class="px-4 py-2">Total Qty</th>
@@ -130,7 +132,51 @@
                   <img :src="f.preview" alt class="h-12 w-auto rounded" />
                 </td>
                 <td class="px-4 py-2">
+                  <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking...</div>
+                  <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                    {{ f.duplicateError || 'Duplicate check failed.' }}
+                  </div>
+                  <div v-else-if="f.duplicateMatch" class="text-xs">
+                    <div class="text-amber-700 font-medium">Possible duplicate</div>
+                    <div class="flex items-center gap-2 mt-1">
+                      <img
+                        v-if="f.duplicateMatch.ctoon?.assetPath"
+                        :src="f.duplicateMatch.ctoon.assetPath"
+                        alt="Possible duplicate"
+                        class="w-10 h-10 object-contain border rounded bg-white"
+                      />
+                      <div class="text-[11px] leading-tight">
+                        <div class="font-medium truncate max-w-[140px]">
+                          {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                        </div>
+                        <div class="text-gray-600">
+                          p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates</div>
+                </td>
+                <td class="px-4 py-2">
                   <input v-model="f.nameField" class="w-full border rounded p-1" />
+                </td>
+                <td class="px-4 py-2">
+                  <input
+                    v-model="f.series"
+                    :list="`row-series-list-desktop-${f.id}`"
+                    class="w-full border rounded p-1"
+                    @input="lockRowSeries(f)"
+                  />
+                  <datalist
+                    v-if="(f.series || '').length >= 2"
+                    :id="`row-series-list-desktop-${f.id}`"
+                  >
+                    <option
+                      v-for="opt in filteredSeriesOptionsFor(f.series)"
+                      :key="opt"
+                      :value="opt"
+                    />
+                  </datalist>
                 </td>
                 <td class="px-4 py-2">
                   <select v-model="f.rarity" class="w-full border rounded p-1" @change="updateDefaults(f)">
@@ -175,6 +221,32 @@
               :alt="f.nameField"
               class="w-full h-40 object-cover rounded mb-4"
             />
+            <div class="mb-4">
+              <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking for duplicates...</div>
+              <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                {{ f.duplicateError || 'Duplicate check failed.' }}
+              </div>
+              <div v-else-if="f.duplicateMatch" class="text-xs bg-amber-50 border rounded p-2">
+                <div class="text-amber-700 font-medium">Possible duplicate found</div>
+                <div class="flex items-center gap-2 mt-2">
+                  <img
+                    v-if="f.duplicateMatch.ctoon?.assetPath"
+                    :src="f.duplicateMatch.ctoon.assetPath"
+                    alt="Possible duplicate"
+                    class="w-12 h-12 object-contain border rounded bg-white"
+                  />
+                  <div class="text-[11px] leading-tight">
+                    <div class="font-medium">
+                      {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                    </div>
+                    <div class="text-gray-600">
+                      p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates found.</div>
+            </div>
 
             <!-- Fields underneath -->
             <div class="space-y-4">
@@ -188,6 +260,31 @@
                 />
                 <p class="text-sm text-gray-500">
                   The display name for this cToon.
+                </p>
+              </div>
+
+              <!-- Series -->
+              <div>
+                <label class="block mb-1 font-medium">Series</label>
+                <input
+                  v-model="f.series"
+                  :list="`row-series-list-mobile-${f.id}`"
+                  class="w-full border rounded p-2"
+                  placeholder="Enter series"
+                  @input="lockRowSeries(f)"
+                />
+                <datalist
+                  v-if="(f.series || '').length >= 2"
+                  :id="`row-series-list-mobile-${f.id}`"
+                >
+                  <option
+                    v-for="opt in filteredSeriesOptionsFor(f.series)"
+                    :key="opt"
+                    :value="opt"
+                  />
+                </datalist>
+                <p class="text-sm text-gray-500">
+                  Defaults to the bulk series unless overridden.
                 </p>
               </div>
 
@@ -317,13 +414,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'default' })
 
 const router = useRouter()
 const step = ref(1)
@@ -346,10 +443,11 @@ const canUpload = computed(() => {
     Boolean(bulkSet.value.trim()) &&
     Boolean(bulkSeries.value.trim()) &&
     Boolean(bulkReleaseDate.value) &&
-    // each row has rarity + non-empty characters
+    // each row has rarity + non-empty characters + series
     imageFiles.value.every(f =>
       Boolean(f.rarity) &&
-      f.characters.trim().length > 0
+      f.characters.trim().length > 0 &&
+      resolveRowSeries(f).length > 0
     )
   )
 })
@@ -381,6 +479,8 @@ const makeRowId = (() => {
   return () =>
     (globalThis.crypto?.randomUUID?.() ?? `row_${Date.now().toString(36)}_${n++}`)
 })()
+
+const DUPLICATE_CHECK_CONCURRENCY = 3
 
 // toast state
 const toasts = ref([])
@@ -462,6 +562,30 @@ const filteredBulkSeriesOptions = computed(() => {
   )
 })
 
+const filteredSeriesOptionsFor = (value = '') => {
+  const normalized = (value || '').trim()
+  if (normalized.length < 2) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(normalized.toLowerCase())
+  )
+}
+
+const resolveRowSeries = (row) => {
+  if (row?.seriesLocked) return (row.series || '').trim()
+  return (row?.series || '').trim() || bulkSeries.value.trim()
+}
+
+const lockRowSeries = (row) => {
+  if (!row?.seriesLocked) row.seriesLocked = true
+}
+
+watch(bulkSeries, (next) => {
+  const nextValue = (next || '').trim()
+  imageFiles.value.forEach((row) => {
+    if (!row.seriesLocked) row.series = nextValue
+  })
+})
+
 onMounted(async () => {
   const [setsRes, seriesRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/sets', { credentials: 'include' }),
@@ -488,16 +612,62 @@ function handleFiles(e) {
       nameField: cleanedName,      // ← prefilled name
       characters: cleanedName,     // ← prefilled to match name
       rarity: rarity || '',
+      series: bulkSeries.value.trim(),
+      seriesLocked: false,
       totalQuantity: null,
       initialQuantity: null,
       perUserLimit: null,
       inCmart: false,
       price: 0,
+      duplicateStatus: 'idle',
+      duplicateMatch: null,
+      duplicateError: ''
     }
 
     if (row.rarity) updateDefaults?.(row)
     return row
   })
+  runDuplicateChecks(imageFiles.value)
+}
+
+async function runDuplicateChecks(rows) {
+  const queue = rows.slice()
+  const workers = Array.from({ length: DUPLICATE_CHECK_CONCURRENCY }, () => (async () => {
+    while (queue.length) {
+      const row = queue.shift()
+      if (!row) return
+      await checkDuplicateForRow(row)
+    }
+  })())
+  await Promise.all(workers)
+}
+
+async function checkDuplicateForRow(row) {
+  if (!row?.file) return
+  row.duplicateStatus = 'checking'
+  row.duplicateMatch = null
+  row.duplicateError = ''
+  const formData = new FormData()
+  formData.append('image', row.file)
+
+  try {
+    const res = await fetch('/api/admin/ctoon-duplicate', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    })
+    if (!res.ok) {
+      row.duplicateStatus = 'error'
+      row.duplicateError = 'Duplicate check failed.'
+      return
+    }
+    const data = await res.json()
+    row.duplicateMatch = data?.duplicate ? data.match : null
+    row.duplicateStatus = 'done'
+  } catch {
+    row.duplicateStatus = 'error'
+    row.duplicateError = 'Duplicate check failed.'
+  }
 }
 
 async function uploadAll() {
@@ -511,17 +681,19 @@ async function uploadAll() {
       !f.rarity ||
       !bulkSet.value ||
       !bulkSeries.value ||
-      !bulkReleaseDate.value
+      !bulkReleaseDate.value ||
+      !resolveRowSeries(f)
     ) {
       showToast(`Missing required fields for ${f.nameField}`, 'error')
       allSuccess = false
       continue
     }
 
+    const rowSeries = resolveRowSeries(f)
     const formData = new FormData()
     formData.append('image', f.file)
     formData.append('name', f.nameField)
-    formData.append('series', bulkSeries.value)
+    formData.append('series', rowSeries)
     formData.append('type', f.file.type)
     formData.append('rarity', f.rarity)
     formData.append('set', bulkSet.value)

@@ -49,6 +49,16 @@ function validatePayload(payload) {
     if (payload.winWheelImagePath != null && typeof payload.winWheelImagePath !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"winWheelImagePath" must be a string or null' })
     }
+    if (payload.winWheelSoundPath != null && typeof payload.winWheelSoundPath !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelSoundPath" must be a string or null' })
+    }
+    if (
+      payload.winWheelSoundMode != null &&
+      payload.winWheelSoundMode !== 'repeat' &&
+      payload.winWheelSoundMode !== 'once'
+    ) {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelSoundMode" must be "repeat", "once", or null' })
+    }
 
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
@@ -86,7 +96,9 @@ export default defineEventHandler(async (event) => {
     pointsWon,
     maxDailySpins,
     exclusiveCtoons = [],
-    winWheelImagePath = null
+    winWheelImagePath = null,
+    winWheelSoundPath = null,
+    winWheelSoundMode = null
   } = body
 
   // 3) Upsert
@@ -124,14 +136,18 @@ export default defineEventHandler(async (event) => {
           spinCost,
           pointsWon,
           maxDailySpins,
-          winWheelImagePath: winWheelImagePath || null
+          winWheelImagePath: winWheelImagePath || null,
+          winWheelSoundPath: winWheelSoundPath || null,
+          winWheelSoundMode: winWheelSoundMode || 'repeat'
         }
         updateData = {
           ...updateData,
           spinCost,
           pointsWon,
           maxDailySpins,
-          winWheelImagePath: winWheelImagePath || null
+          winWheelImagePath: winWheelImagePath || null,
+          winWheelSoundPath: winWheelSoundPath || null,
+          winWheelSoundMode: winWheelSoundMode || 'repeat'
         }
       }
 
@@ -179,7 +195,9 @@ export default defineEventHandler(async (event) => {
             ['spinCost', before?.spinCost, spinCost],
             ['pointsWon', before?.pointsWon, pointsWon],
             ['maxDailySpins', before?.maxDailySpins, maxDailySpins],
-            ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null]
+            ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null],
+            ['winWheelSoundPath', before?.winWheelSoundPath || null, winWheelSoundPath || null],
+            ['winWheelSoundMode', before?.winWheelSoundMode || 'repeat', winWheelSoundMode || 'repeat']
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })

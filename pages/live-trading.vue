@@ -63,6 +63,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Live Trading',
   middleware: 'auth',
   layout: 'default'
 })

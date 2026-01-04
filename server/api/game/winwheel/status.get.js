@@ -15,6 +15,8 @@ export default defineEventHandler(async (event) => {
       maxDailySpins: true,
       pointsWon: true,
       winWheelImagePath: true,
+      winWheelSoundPath: true,
+      winWheelSoundMode: true,
       exclusiveCtoons: {
         include: {
           ctoon: {
@@ -27,7 +29,14 @@ export default defineEventHandler(async (event) => {
   if (!config) {
     throw createError({ statusCode: 500, statusMessage: 'Winwheel config not found' })
   }
-  const { spinCost, maxDailySpins, pointsWon, winWheelImagePath } = config
+  const {
+    spinCost,
+    maxDailySpins,
+    pointsWon,
+    winWheelImagePath,
+    winWheelSoundPath,
+    winWheelSoundMode
+  } = config
 
   // Build exclusive cToon pool
   const pool = (config.exclusiveCtoons || [])
@@ -75,6 +84,8 @@ export default defineEventHandler(async (event) => {
     maxDailySpins,
     pointsWon,
     winWheelImagePath: winWheelImagePath || null,
+    winWheelSoundPath: winWheelSoundPath || null,
+    winWheelSoundMode: winWheelSoundMode || 'repeat',
     exclusivePool
   }
 })

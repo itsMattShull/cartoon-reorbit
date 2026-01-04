@@ -139,6 +139,7 @@ import { useClashSocket } from '@/composables/useClashSocket'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({
+  title: 'gToons Clash Rooms',
   middleware: 'auth',
   layout: 'default'
 })

@@ -41,6 +41,12 @@ enum PackSellOutBehavior {
   KEEP_IF_SINGLE_RARITY_EMPTY
 }
 
+enum LottoOutcome {
+  NOTHING
+  POINTS
+  CTOON
+}
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -123,12 +129,29 @@ model Ctoon {
   redeemedAsResult           HolidayRedemption[]         @relation("HolidayResultDefinition")
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
+  imageHash                  CtoonImageHash?
 
   // Scavenger Hunt relations
   scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
   scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
   // Achievements back‑relation
   achievementRewardCtoons    AchievementRewardCtoon[]
+}
+
+model CtoonImageHash {
+  id        String   @id @default(uuid())
+  ctoonId   String   @unique
+  phash     String
+  dhash     String
+  bucket    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@index([bucket])
+  @@index([phash])
+  @@index([dhash])
 }
 
 model UserCtoon {
@@ -189,6 +212,7 @@ model User {
   lastActivity                      DateTime?
   discordCreatedAt                  DateTime?
   isBooster                         Boolean   @default(false)
+  isVerified                        Boolean   @default(false)
   boosterSince                      DateTime?
   warning180                        Boolean   @default(false)
   warning210                        Boolean   @default(false)
@@ -247,12 +271,15 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs AdminChangeLog[]
   lottoUser       LottoUser?
+  lottoLogs       LottoLog[]
   // Achievements back‑relation
   achievements    AchievementUser[]
+  dailyActivities UserDailyActivity[]
 
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
   userMonsterItems UserMonsterItem[]
+  scanEvents       UserScan[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -533,6 +560,8 @@ model GameConfig {
   maxDailySpins     Int              @default(2)
   exclusiveCtoons   WinWheelOption[] @relation("WinWheelOptions")
   winWheelImagePath String?
+  winWheelSoundPath String?
+  winWheelSoundMode String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -546,6 +575,7 @@ model GlobalGameConfig {
   czoneVisitPoints       Int      @default(20)
   czoneVisitMaxPerDay    Int      @default(10)
   rarityDefaults         Json?
+  achievementDiscordChannelId String?
   // Scavenger Hunt settings
   scavengerChancePercent Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours Int      @default(24) // cooldown between completed hunts per user
@@ -974,6 +1004,7 @@ model AdImage {
   imagePath String   @unique
   filename  String   @unique
   label     String?
+  url       String?
   createdAt DateTime @default(now())
 
   createdById String?
@@ -988,6 +1019,10 @@ model Announcement {
   pingOption    String?
   imagePath     String?
   imageFilename String?
+  imagePath2     String?
+  imageFilename2 String?
+  imagePath3     String?
+  imageFilename3 String?
   scheduledAt   DateTime
   sentAt        DateTime?
   sendingAt     DateTime?
@@ -1157,6 +1192,21 @@ model LottoUser {
   @@index([userId])
 }
 
+model LottoLog {
+  id         String       @id @default(uuid())
+  userId     String
+  outcome    LottoOutcome
+  oddsBefore Float
+  oddsAfter  Float
+  createdAt  DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([outcome, createdAt])
+}
+
 // Lotto settings editable from Admin → Content
 model LottoSettings {
   id                  String   @id
@@ -1193,10 +1243,15 @@ model Achievement {
   description     String?
   imagePath       String?
   isActive        Boolean  @default(true)
+  notifyDiscord   Boolean  @default(false)
   // Criteria (all ANDed when present)
   pointsGte       Int?
   totalCtoonsGte  Int?
   uniqueCtoonsGte Int?
+  auctionsWonGte  Int?
+  auctionsCreatedGte Int?
+  tradesAcceptedGte Int?
+  cumulativeActiveDaysGte Int?
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   createdAt       DateTime @default(now())
@@ -1217,6 +1272,19 @@ model AchievementUser {
 
   @@unique([achievementId, userId])
   @@index([userId, achievedAt])
+}
+
+model UserDailyActivity {
+  id        String   @id @default(uuid())
+  userId    String
+  day       DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([userId, day])
+  @@index([day])
 }
 
 model AchievementReward {
@@ -1310,11 +1378,15 @@ enum MonsterRarity {
   // cooldown per user per barcode mapping (admin-editable)
   barcodeCooldownDays Int @default(7)
 
+  // Points awarded per successful scan (not capped by daily point limit)
+  scanPoints Int @default(0)
+
   items        ItemDefinition[]
   species      SpeciesBaseStats[]
   mappings     BarcodeMapping[]
   userMonsters UserMonster[]
   userScans    UserBarcodeScan[]
+  scanEvents   UserScan[]
   userItems    UserMonsterItem[]
 
   createdAt DateTime @default(now())
@@ -1409,6 +1481,7 @@ model BarcodeMapping {
 
   userMonsters UserMonster[]
   userScans    UserBarcodeScan[]
+  scanEvents   UserScan[]
 
   createdAt DateTime @default(now())
 
@@ -1509,4 +1582,25 @@ model UserBarcodeScan {
   @@index([userId, mappingId])
   @@index([configId])
   @@index([nextAvailableAt])
+}
+
+model UserScan {
+  id     String @id @default(uuid())
+  userId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mappingId String
+  mapping   BarcodeMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  configId String
+  config   BarcodeGameConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  outcome   ScanOutcome
+  scannedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([mappingId])
+  @@index([configId])
+  @@index([scannedAt])
 }

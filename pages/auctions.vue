@@ -447,7 +447,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Auctions', middleware: 'auth', layout: 'default' })
 
 const activeTab = ref('current')
 

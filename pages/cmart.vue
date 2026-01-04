@@ -647,6 +647,7 @@
 <script setup>
 // ────────── Nuxt Meta ──────────────────────────
 definePageMeta({
+  title: 'cMart',
   middleware: 'auth',
   layout: 'default'
 })

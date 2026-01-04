@@ -10,6 +10,7 @@
 
 <script setup>
   definePageMeta({
+    title: 'Monster Scan',
     middleware: 'auth',
     layout: 'default'
   })

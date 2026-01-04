@@ -59,6 +59,12 @@ function publicAssetPath(filename) {
     : `/announcements/${filename}`
 }
 
+function normalizeImageSlot(name) {
+  if (name === 'image') return 'image1'
+  if (name === 'image1' || name === 'image2' || name === 'image3') return name
+  return ''
+}
+
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
@@ -67,16 +73,32 @@ export default defineEventHandler(async (event) => {
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'Missing form data' })
 
-  let filePart = null
+  const fileParts = { image1: null, image2: null, image3: null }
+  const extraFileParts = []
   const fields = {}
   for (const part of parts) {
-    if (part.filename) filePart = part
-    else fields[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : String(part.data ?? '')
+    if (part.filename) {
+      const slot = normalizeImageSlot(String(part.name || ''))
+      if (slot && !fileParts[slot]) fileParts[slot] = part
+      else extraFileParts.push(part)
+      continue
+    }
+    fields[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : String(part.data ?? '')
+  }
+  if (extraFileParts.length) {
+    for (const slot of ['image1', 'image2', 'image3']) {
+      if (!fileParts[slot]) {
+        fileParts[slot] = extraFileParts.shift()
+      }
+    }
+  }
+  if (extraFileParts.length) {
+    throw createError({ statusCode: 400, statusMessage: 'Up to 3 images are allowed' })
   }
 
   const message = String(fields.message || '').trim()
   if (!message) throw createError({ statusCode: 400, statusMessage: 'Message is required' })
-  if (message.length > 280) throw createError({ statusCode: 400, statusMessage: 'Message must be 280 characters or less' })
+  if (message.length > 1000) throw createError({ statusCode: 400, statusMessage: 'Message must be 1000 characters or less' })
 
   const scheduledAtLocal = String(fields.scheduledAtLocal || '').trim()
   if (!scheduledAtLocal) throw createError({ statusCode: 400, statusMessage: 'Scheduled time is required' })
@@ -94,30 +116,34 @@ export default defineEventHandler(async (event) => {
   }
   const pingOption = pingRaw || null
 
-  let imagePath = null
-  let imageFilename = null
-  if (filePart) {
+  const uploadDir = process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
+    : join(baseDir, 'public', 'announcements')
+  const images = {}
+  for (const slot of ['image1', 'image2', 'image3']) {
+    const filePart = fileParts[slot]
+    if (!filePart) continue
     if (!ALLOWED_TYPES.has(filePart.type)) {
       throw createError({ statusCode: 400, statusMessage: `Invalid file type ${filePart.type}` })
     }
-    const uploadDir = process.env.NODE_ENV === 'production'
-      ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
-      : join(baseDir, 'public', 'announcements')
     await mkdir(uploadDir, { recursive: true })
-
     const ext = extname(filePart.filename || '').toLowerCase() ||
       (filePart.type === 'image/png' ? '.png' : filePart.type === 'image/gif' ? '.gif' : '.jpg')
-    imageFilename = `announcement-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+    const imageFilename = `announcement-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
     await writeFile(join(uploadDir, imageFilename), filePart.data)
-    imagePath = publicAssetPath(imageFilename)
+    images[slot] = { imageFilename, imagePath: publicAssetPath(imageFilename) }
   }
 
   const row = await db.announcement.create({
     data: {
       message,
       pingOption,
-      imagePath,
-      imageFilename,
+      imagePath: images.image1?.imagePath || null,
+      imageFilename: images.image1?.imageFilename || null,
+      imagePath2: images.image2?.imagePath || null,
+      imageFilename2: images.image2?.imageFilename || null,
+      imagePath3: images.image3?.imagePath || null,
+      imageFilename3: images.image3?.imageFilename || null,
       scheduledAt,
       createdById: me.id || null
     },
@@ -126,6 +152,8 @@ export default defineEventHandler(async (event) => {
       message: true,
       pingOption: true,
       imagePath: true,
+      imagePath2: true,
+      imagePath3: true,
       scheduledAt: true,
       createdAt: true
     }

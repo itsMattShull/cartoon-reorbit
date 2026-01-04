@@ -393,7 +393,7 @@
 
 <script setup>
 // Meta & imports
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - New Pack', middleware: ['auth','admin'], layout: 'default' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from '#app'
 

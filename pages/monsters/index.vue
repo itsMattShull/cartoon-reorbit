@@ -170,6 +170,7 @@ import { useRuntimeConfig } from '#imports'
 import { useAuth } from '@/composables/useAuth'
 
 definePageMeta({
+  title: 'Monsters',
   middleware: 'auth',
   layout: 'default',
   alias: ['/monsters/:battleId']

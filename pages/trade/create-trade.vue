@@ -223,7 +223,7 @@ import FilterBar from '@/components/trade/FilterBar.vue'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Create Trade', middleware: 'auth', layout: 'default' })
 
 const router = useRouter()
 const { user, fetchSelf } = useAuth()

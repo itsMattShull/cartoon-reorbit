@@ -11,6 +11,28 @@
           <input type="file" accept="image/png,image/gif" @change="handleFile" required class="w-full" />
           <p class="text-sm text-gray-500">This image will represent the cToon visually. PNG or GIF only.</p>
           <p v-if="errors.image" class="text-red-600 text-sm mt-1">{{ errors.image }}</p>
+          <div v-if="duplicateStatus !== 'idle'" class="mt-2">
+            <p v-if="duplicateStatus === 'checking'" class="text-sm text-gray-500">Checking for duplicates...</p>
+            <p v-else-if="duplicateStatus === 'error'" class="text-sm text-red-600">{{ duplicateError }}</p>
+            <div v-else-if="duplicateMatch" class="border rounded p-3 bg-amber-50">
+              <p class="text-sm text-amber-700 font-medium">Possible duplicate found</p>
+              <div class="flex items-center gap-3 mt-2">
+                <img
+                  v-if="duplicateMatch.ctoon && duplicateMatch.ctoon.assetPath"
+                  :src="duplicateMatch.ctoon.assetPath"
+                  alt="Possible duplicate"
+                  class="w-20 h-20 object-contain border rounded bg-white"
+                />
+                <div class="text-sm">
+                  <p class="font-medium">{{ duplicateMatch.ctoon?.name || 'Unknown cToon' }}</p>
+                  <p class="text-gray-600">
+                    pHash distance: {{ duplicateMatch.phashDist }}, dHash distance: {{ duplicateMatch.dhashDist }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-green-600">No duplicates found.</p>
+          </div>
         </div>
 
         <!-- Type (auto-filled) -->
@@ -223,6 +245,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Admin - Add cToon',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })
@@ -249,6 +272,9 @@ const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
 const setsOptions = ref([])
+const duplicateStatus = ref('idle')
+const duplicateMatch = ref(null)
+const duplicateError = ref('')
 /* ── NEW: G-toon state ───────────────────────────────── */
 const isGtoon     = ref(false)
 const cost        = ref(1)
@@ -339,6 +365,9 @@ watch(rarity, val => {
 function handleFile(e) {
   const file = e.target.files[0]
   errors.image = ''
+  duplicateStatus.value = 'idle'
+  duplicateMatch.value = null
+  duplicateError.value = ''
   if (!file) {
     errors.image = 'Image is required.'
     return
@@ -349,6 +378,34 @@ function handleFile(e) {
   }
   imageFile.value = file
   type.value = file.type
+  checkDuplicate(file)
+}
+
+async function checkDuplicate(file) {
+  duplicateStatus.value = 'checking'
+  duplicateMatch.value = null
+  duplicateError.value = ''
+  const formData = new FormData()
+  formData.append('image', file)
+
+  try {
+    const res = await fetch('/api/admin/ctoon-duplicate', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    })
+    if (!res.ok) {
+      duplicateStatus.value = 'error'
+      duplicateError.value = 'Duplicate check failed.'
+      return
+    }
+    const data = await res.json()
+    duplicateMatch.value = data?.duplicate ? data.match : null
+    duplicateStatus.value = 'done'
+  } catch {
+    duplicateStatus.value = 'error'
+    duplicateError.value = 'Duplicate check failed.'
+  }
 }
 
 const schedule = computed(() => {

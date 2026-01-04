@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Backgrounds', middleware: ['auth','admin'], layout: 'default' })
 import { ref } from 'vue'
 
 const label = ref('')

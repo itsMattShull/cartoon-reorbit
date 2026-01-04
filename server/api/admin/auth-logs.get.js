@@ -1,5 +1,5 @@
 
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
 
@@ -17,28 +17,40 @@ export default defineEventHandler(async (event) => {
   }
   
   const query = getQuery(event)
-  const offset = parseInt(query.offset || '0', 10)
-  const limit = 50
+  const page = Math.max(parseInt(query.page || '1', 10), 1)
+  const limit = Math.min(Math.max(parseInt(query.limit || '100', 10), 1), 200)
+  const skip = (page - 1) * limit
+  const username = typeof query.username === 'string' ? query.username.trim() : ''
 
-  const logs = await prisma.loginLog.findMany({
-    skip: offset,
-    take: limit,
-    orderBy: {
-      createdAt: 'desc'
-    },
-    include: {
-      user: {
-        select: {
-          username: true,
-          createdAt: true,
-          discordTag: true,
-          discordCreatedAt: true
+  const where = username
+    ? { user: { username: { contains: username, mode: 'insensitive' } } }
+    : {}
+
+  const [total, logs] = await Promise.all([
+    prisma.loginLog.count({ where }),
+    prisma.loginLog.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            username: true,
+            createdAt: true,
+            discordTag: true,
+            discordCreatedAt: true,
+            isAdmin: true
+          }
         }
       }
-    }
-  })
+    })
+  ])
 
   return {
-    logs
+    items: logs,
+    total,
+    page,
+    limit
   }
 })

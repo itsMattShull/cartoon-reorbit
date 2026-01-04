@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
       skip: skipNum,
       take: takeNum,
       orderBy: { createdAt: 'desc' },
-      select: { id: true, imagePath: true, filename: true, label: true, createdAt: true }
+      select: { id: true, imagePath: true, filename: true, label: true, url: true, createdAt: true }
     }),
     db.adImage.count()
   ])

@@ -9,6 +9,7 @@ import cron from 'node-cron'
 import { achievementsQueue } from '../../server/utils/queues.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
+const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
 const GUILD_ID    = process.env.DISCORD_GUILD_ID
 const DISCORD_API = 'https://discord.com/api/v10'
 const ANNOUNCEMENTS_CHANNEL_ID = process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
@@ -24,11 +25,11 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
   try {
-    const botToken = process.env.BOT_TOKEN
+    const botToken = ANNOUNCEMENTS_BOT_TOKEN
     const guildId  = process.env.DISCORD_GUILD_ID
 
     if (!botToken || !guildId) {
-      console.error('Missing BOT_TOKEN or DISCORD_GUILD_ID env vars.')
+      console.error('Missing DISCORD_ANNOUNCEMENTS_BOT_TOKEN/BOT_TOKEN or DISCORD_GUILD_ID env vars.')
       return
     }
 
@@ -115,26 +116,29 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   try {
-    if (!BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
-    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    if (!ANNOUNCEMENTS_BOT_TOKEN || !ANNOUNCEMENTS_CHANNEL_ID) return false
+    const authHeader = ANNOUNCEMENTS_BOT_TOKEN.startsWith('Bot ')
+      ? ANNOUNCEMENTS_BOT_TOKEN
+      : `Bot ${ANNOUNCEMENTS_BOT_TOKEN}`
     const nativeFetch = globalThis.fetch || fetch
     const canAttach = typeof globalThis.FormData === 'function' && typeof globalThis.Blob === 'function'
 
     const content = row.pingOption ? `${row.pingOption} ${row.message}` : row.message
-    const pathFilename = row.imagePath
-      ? decodeURIComponent(String(row.imagePath).split('/').pop() || '')
-      : ''
-    const attachmentName = row.imageFilename || pathFilename || ''
     const baseUrl =
       process.env.PUBLIC_BASE_URL ||
       (process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
 
-    async function sendWithAttachment(buffer, filename) {
+    async function sendWithAttachments(files) {
       const fd = new FormData()
-      fd.append('payload_json', JSON.stringify({ content }))
-      fd.append('files[0]', new Blob([buffer]), filename)
+      fd.append('payload_json', JSON.stringify({
+        content,
+        attachments: files.map((file, idx) => ({ id: idx, filename: file.filename }))
+      }))
+      files.forEach((file, idx) => {
+        fd.append(`files[${idx}]`, new Blob([file.buffer]), file.filename)
+      })
 
       const res = await nativeFetch(
         `${DISCORD_API}/channels/${ANNOUNCEMENTS_CHANNEL_ID}/messages`,
@@ -155,29 +159,49 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
       return res.ok
     }
 
-    if (attachmentName && canAttach) {
-      try {
-        const filePath = join(announcementsDir, attachmentName)
-        const fileBuf = await readFile(filePath)
-        return await sendWithAttachment(fileBuf, attachmentName)
-      } catch {
-        // fall through to URL attachment
+    const imageSlots = [
+      { imagePath: row.imagePath, imageFilename: row.imageFilename },
+      { imagePath: row.imagePath2, imageFilename: row.imageFilename2 },
+      { imagePath: row.imagePath3, imageFilename: row.imageFilename3 },
+    ]
+    const attachments = []
+    if (canAttach) {
+      for (const slot of imageSlots) {
+        if (attachments.length >= 3) break
+        if (!slot?.imagePath && !slot?.imageFilename) continue
+        const pathFilename = slot.imagePath
+          ? decodeURIComponent(String(slot.imagePath).split('/').pop() || '')
+          : ''
+        const attachmentName = slot.imageFilename || pathFilename || ''
+        if (attachmentName) {
+          try {
+            const filePath = join(announcementsDir, attachmentName)
+            const fileBuf = await readFile(filePath)
+            attachments.push({ buffer: fileBuf, filename: attachmentName })
+            continue
+          } catch {
+            // fall through to URL attachment
+          }
+        }
+        if (slot.imagePath) {
+          try {
+            const rawUrl = slot.imagePath.startsWith('http') ? slot.imagePath : `${baseUrl}${slot.imagePath}`
+            const imageUrl = encodeURI(rawUrl)
+            const imgRes = await nativeFetch(imageUrl)
+            if (imgRes.ok) {
+              const buf = Buffer.from(await imgRes.arrayBuffer())
+              const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
+              attachments.push({ buffer: buf, filename: fallbackName })
+            }
+          } catch {
+            // fall through to content-only send
+          }
+        }
       }
     }
 
-    if (row.imagePath && canAttach) {
-      try {
-        const rawUrl = row.imagePath.startsWith('http') ? row.imagePath : `${baseUrl}${row.imagePath}`
-        const imageUrl = encodeURI(rawUrl)
-        const imgRes = await nativeFetch(imageUrl)
-        if (imgRes.ok) {
-          const buf = Buffer.from(await imgRes.arrayBuffer())
-          const fallbackName = attachmentName || imageUrl.split('/').pop() || 'announcement-image'
-          return await sendWithAttachment(buf, fallbackName)
-        }
-      } catch {
-        // fall through to content-only send
-      }
+    if (attachments.length) {
+      return await sendWithAttachments(attachments)
     }
 
     const payload = { content }
@@ -260,12 +284,165 @@ async function recomputeLastActivity() {
 }
 
 const MS_PER_DAY = 86_400_000
+function startOfUtcDay(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
 function daysAgo(n) {
   const now = Date.now()
   return new Date(now - n * MS_PER_DAY)
 }
 function addDays(date, n) {
   return new Date(date.getTime() + n * MS_PER_DAY)
+}
+
+async function recordDailyActivity() {
+  const now = new Date()
+  const end = startOfUtcDay(now)
+  const last = await prisma.userDailyActivity.findFirst({
+    orderBy: { day: 'desc' },
+    select: { day: true }
+  })
+  
+  let start = null
+  if (last?.day) {
+    start = startOfUtcDay(new Date(last.day))
+    start = new Date(start.getTime() + MS_PER_DAY)
+  } else {
+    const minSql = `
+    SELECT MIN(a."createdAt") AS "minDate"
+    FROM (
+      SELECT "createdAt" FROM "LoginLog"
+      UNION ALL
+      SELECT "createdAt" FROM "PointsLog" WHERE COALESCE("method", '') NOT LIKE 'achievement:%'
+      UNION ALL
+      SELECT "createdAt" FROM "GamePointLog"
+      UNION ALL
+      SELECT "createdAt" FROM "Visit"
+      UNION ALL
+      SELECT "createdAt" FROM "WheelSpinLog"
+      UNION ALL
+      SELECT "createdAt" FROM "Bid"
+      UNION ALL
+      SELECT "createdAt" FROM "TradeOffer"
+      UNION ALL
+      SELECT "createdAt" FROM "Auction"
+    ) a;
+    `
+    let minDate = null
+    try {
+      const rows = await prisma.$queryRawUnsafe(minSql)
+      minDate = rows?.[0]?.minDate || null
+    } catch {}
+    if (!minDate) return
+    start = startOfUtcDay(new Date(minDate))
+  }
+
+  if (start.getTime() >= end.getTime()) return
+
+  const chunkDays = 31
+  const sql = `
+  INSERT INTO "UserDailyActivity" ("id", "userId", "day")
+  SELECT md5(a."userId" || ':' || a."day"::text), a."userId", a."day"
+  FROM (
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "LoginLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "PointsLog" WHERE "createdAt" >= $1 AND "createdAt" < $2 AND COALESCE("method", '') NOT LIKE 'achievement:%'
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "GamePointLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "Visit" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "WheelSpinLog" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "userId", date_trunc('day', "createdAt") AS "day" FROM "Bid" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "initiatorId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "TradeOffer" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "recipientId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "TradeOffer" WHERE "createdAt" >= $1 AND "createdAt" < $2
+    UNION ALL
+    SELECT "creatorId" AS "userId", date_trunc('day', "createdAt") AS "day" FROM "Auction" WHERE "createdAt" >= $1 AND "createdAt" < $2 AND "creatorId" IS NOT NULL
+  ) a
+  GROUP BY a."userId", a."day"
+  ON CONFLICT ("userId", "day") DO NOTHING;
+  `
+
+  for (let cursor = start.getTime(); cursor < end.getTime(); cursor += chunkDays * MS_PER_DAY) {
+    const next = new Date(Math.min(end.getTime(), cursor + chunkDays * MS_PER_DAY))
+    try { await prisma.$executeRawUnsafe(sql, new Date(cursor), next) } catch {}
+  }
+}
+
+async function getVerifiedRoleId() {
+  if (!BOT_TOKEN || !GUILD_ID) return null
+  const envId = (process.env.DISCORD_VERIFIED_ROLE_ID || '').trim()
+  if (envId) return envId
+
+  try {
+    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    const res = await fetch(`${DISCORD_API}/guilds/${GUILD_ID}/roles`, {
+      headers: { Authorization: authHeader }
+    })
+    if (!res.ok) return null
+    const roles = await res.json()
+    const role = Array.isArray(roles) ? roles.find(r => r?.name === 'Verified') : null
+    return role?.id || null
+  } catch {
+    return null
+  }
+}
+
+async function addRoleToMember(discordUserId, roleId) {
+  if (!discordUserId || !roleId || !BOT_TOKEN || !GUILD_ID) return false
+  const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(
+      `${DISCORD_API}/guilds/${GUILD_ID}/members/${discordUserId}/roles/${roleId}`,
+      { method: 'PUT', headers: { Authorization: authHeader } }
+    )
+    if (res.status === 204) return true
+    if (res.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      continue
+    }
+    return false
+  }
+  return false
+}
+
+async function syncVerifiedRoles() {
+  const roleId = await getVerifiedRoleId()
+  if (!roleId) return
+
+  let rows = []
+  try {
+    rows = await prisma.$queryRawUnsafe(`
+      SELECT u."id", u."discordId"
+      FROM "User" u
+      JOIN (
+        SELECT "userId"
+        FROM "UserDailyActivity"
+        GROUP BY "userId"
+        HAVING COUNT(*) >= 7
+      ) a ON a."userId" = u."id"
+      WHERE u."isVerified" = false
+        AND u."discordId" IS NOT NULL
+        AND u."inGuild" = true
+        AND u."active" = true
+    `)
+  } catch {
+    return
+  }
+
+  for (const row of rows) {
+    const ok = await addRoleToMember(row.discordId, roleId)
+    if (!ok) continue
+    try {
+      await prisma.user.update({ where: { id: row.id }, data: { isVerified: true } })
+    } catch {}
+  }
 }
 
 async function sendInactivityWarnings() {
@@ -687,6 +864,10 @@ async function sendDueAnnouncements() {
             pingOption: true,
             imagePath: true,
             imageFilename: true,
+            imagePath2: true,
+            imageFilename2: true,
+            imagePath3: true,
+            imageFilename3: true,
             sentAt: true,
             sendingAt: true
           }
@@ -723,12 +904,19 @@ async function sendDueAnnouncements() {
 async function markScheduledPacksInCmart() {
   try {
     const now = new Date()
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
     await prisma.pack.updateMany({
-      where: { sentAt: null, scheduledAt: { lte: now } },
+      where: {
+        sentAt: null,
+        scheduledAt: { lte: now },
+        scheduledOffAt: null
+      },
       data: { inCmart: true, sentAt: now }
     })
     await prisma.pack.updateMany({
-      where: { inCmart: true, scheduledOffAt: { lte: now } },
+      where: {
+        scheduledOffAt: { gt: oneHourAgo, lte: now }
+      },
       data: { inCmart: false }
     })
   } catch {
@@ -886,7 +1074,12 @@ await sendDueAnnouncements()
 cron.schedule('*/5 * * * *', sendDueAnnouncements)
 
 await markScheduledPacksInCmart()
-cron.schedule('2 * * * *', markScheduledPacksInCmart)
+cron.schedule('0 * * * *', markScheduledPacksInCmart)
+
+await recordDailyActivity()
+await syncVerifiedRoles()
+cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' }) // 02:30 CST daily
+cron.schedule('35 2 * * *', syncVerifiedRoles, { timezone: 'America/Chicago' }) // 02:35 CST daily
 
 await recomputeLastActivity()
 cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily

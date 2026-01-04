@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <Nav />
-
+    <div class="mt-8">&nbsp;</div>
     <div class="px-6 mt-16 md:mt-20">
       <h1 class="text-2xl font-bold mb-4">Win Wheel Logs</h1>
 
@@ -69,7 +69,7 @@ Chart.register(PieController, ArcElement, Tooltip, Legend, ChartDataLabels)
 // Chart.defaults.color = '#fff'
 // Chart.defaults.plugins.legend.labels.color = '#fff'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - WinWheel Logs', middleware: ['auth', 'admin'], layout: 'default' })
 
 // --- date state ---
 const from = ref('')

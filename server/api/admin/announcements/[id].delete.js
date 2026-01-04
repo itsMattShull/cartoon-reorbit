@@ -23,11 +23,14 @@ export default defineEventHandler(async (event) => {
 
   await db.announcement.delete({ where: { id } })
 
-  if (existing.imageFilename) {
+  const filenames = [existing.imageFilename, existing.imageFilename2, existing.imageFilename3].filter(Boolean)
+  if (filenames.length) {
     const uploadDir = process.env.NODE_ENV === 'production'
       ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
       : join(baseDir, 'public', 'announcements')
-    try { await unlink(join(uploadDir, existing.imageFilename)) } catch {}
+    for (const filename of filenames) {
+      try { await unlink(join(uploadDir, filename)) } catch {}
+    }
   }
 
   return { ok: true }

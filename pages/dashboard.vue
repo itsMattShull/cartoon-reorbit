@@ -71,89 +71,49 @@
           </div>
         </div>
 
-        <!-- Unique + Total cToon leaderboards skeleton -->
-        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
-          <div class="w-full lg:w-1/2">
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
-              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
-              <div class="w-full p-6">
-                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
-                <div class="space-y-2">
-                  <div
-                    v-for="i in 5"
-                    :key="i"
-                    class="flex items-center justify-between py-1"
-                  >
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="w-full lg:w-1/2">
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse mt-2">
-              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
-              <div class="w-full p-6">
-                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
-                <div class="space-y-2">
-                  <div
-                    v-for="i in 5"
-                    :key="i"
-                    class="flex items-center justify-between py-1"
-                  >
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
-                  </div>
+        <!-- Leaderboards skeleton -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mt-6 mx-auto">
+          <div
+            v-for="i in 6"
+            :key="i"
+            class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse"
+          >
+            <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
+            <div class="w-full p-6">
+              <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
+              <div class="space-y-2">
+                <div
+                  v-for="j in 5"
+                  :key="j"
+                  class="flex items-center justify-between py-1"
+                >
+                  <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
+                  <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- Points leaderboard + Discord skeleton -->
-        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
-          <!-- Points leaderboard -->
-          <div class="w-full lg:w-1/2">
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/90 backdrop-blur-sm animate-pulse">
-              <div class="h-1 w-full bg-[var(--reorbit-tint)]"></div>
-              <div class="w-full p-6">
-                <div class="h-5 bg-[var(--reorbit-tint)] rounded w-2/3 mb-4"></div>
-                <div class="space-y-2">
-                  <div
-                    v-for="i in 5"
-                    :key="i"
-                    class="flex items-center justify-between py-1"
-                  >
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-2/3"></div>
-                    <div class="h-4 bg-[var(--reorbit-tint)] rounded w-1/4"></div>
-                  </div>
-                </div>
-              </div>
+        <!-- Discord skeleton -->
+        <section class="max-w-4xl mt-6 mx-auto">
+          <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/90 backdrop-blur-sm overflow-hidden animate-pulse">
+            <div class="bg-[#5865F2] px-4 py-3 flex items-center gap-2">
+              <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
+              <div class="h-4 w-32 bg-[var(--reorbit-tint)] rounded"></div>
+              <div class="ml-auto h-3 w-16 bg-[var(--reorbit-tint)] rounded"></div>
             </div>
-          </div>
 
-          <!-- Discord card -->
-          <div class="w-full lg:w-1/2">
-            <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/90 backdrop-blur-sm overflow-hidden animate-pulse">
-              <div class="bg-[#5865F2] px-4 py-3 flex items-center gap-2">
-                <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
-                <div class="h-4 w-32 bg-[var(--reorbit-tint)] rounded"></div>
-                <div class="ml-auto h-3 w-16 bg-[var(--reorbit-tint)] rounded"></div>
-              </div>
-
-              <div class="p-6">
-                <div class="h-9 w-full bg-[var(--reorbit-tint)] rounded mb-4"></div>
-                <div class="space-y-2 max-h-[144px] overflow-hidden">
-                  <div
-                    v-for="i in 4"
-                    :key="i"
-                    class="flex items-center gap-2"
-                  >
-                    <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
-                    <div class="h-4 w-1/2 bg-[var(--reorbit-tint)] rounded"></div>
-                  </div>
+            <div class="p-6">
+              <div class="h-9 w-full bg-[var(--reorbit-tint)] rounded mb-4"></div>
+              <div class="space-y-2 max-h-[144px] overflow-hidden">
+                <div
+                  v-for="i in 4"
+                  :key="i"
+                  class="flex items-center gap-2"
+                >
+                  <div class="w-6 h-6 rounded-full bg-[var(--reorbit-tint)]"></div>
+                  <div class="h-4 w-1/2 bg-[var(--reorbit-tint)] rounded"></div>
                 </div>
               </div>
             </div>
@@ -284,101 +244,148 @@
         </div>
 
         <!-- leaderboards -->
-        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
-          <div class="w-full lg:w-1/2">
-            <!-- Unique cToon Count Leaderboard -->
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
-              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
-              <div class="w-full p-6 text-slate-900">
-                <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Unique cToon Count Leaderboard</h2>
-                <ul class="w-full">
-                  <li v-for="(entry, i) in uniqueCtoonLb" :key="entry.username"
-                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
-                    <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
-                  </li>
-                </ul>
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mt-6 mx-auto">
+          <!-- Active cToon Acquirers -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-teal)] via-[var(--reorbit-green-2)] to-[var(--reorbit-lime)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <div class="flex items-baseline justify-between gap-3">
+                <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Active cToon Acquirers</h2>
+                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
               </div>
+              <ul class="w-full mt-3">
+                <li v-for="(entry, i) in activeCtoonAcquirers" :key="entry.username"
+                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          <div class="w-full lg:w-1/2">
-            <!-- Total cToon Count Leaderboard -->
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm mt-2">
-              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
-              <div class="w-full p-6 text-slate-900">
-                <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Total cToon Count Leaderboard</h2>
-                <ul class="w-full">
-                  <li v-for="(entry, i) in totalCtoonLb" :key="entry.username"
-                      class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                    <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
-                    <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
-                  </li>
-                </ul>
+          <!-- Trending Earners -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-cyan)] via-[var(--reorbit-aqua)] to-[var(--reorbit-teal)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <div class="flex items-baseline justify-between gap-3">
+                <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Trending Earners</h2>
+                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
               </div>
+              <ul class="w-full mt-3">
+                <li v-for="(entry, i) in trendingEarners" :key="entry.username"
+                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Trending Spenders -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-blue)] to-[var(--reorbit-cyan)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <div class="flex items-baseline justify-between gap-3">
+                <h2 class="text-lg font-semibold text-[var(--reorbit-blue)]">Trending Spenders</h2>
+                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Last 7 Days</span>
+              </div>
+              <ul class="w-full mt-3">
+                <li v-for="(entry, i) in trendingSpenders" :key="entry.username"
+                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Unique cToon Count Leaderboard -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Unique cToon Count Leaderboard</h2>
+              <ul class="w-full">
+                <li v-for="(entry, i) in uniqueCtoonLb" :key="entry.username"
+                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Total cToon Count Leaderboard -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Total cToon Count Leaderboard</h2>
+              <ul class="w-full">
+                <li v-for="(entry, i) in totalCtoonLb" :key="entry.username"
+                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
+                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Points Leaderboard -->
+          <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+            <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
+            <div class="w-full p-6 text-slate-900">
+              <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Points Leaderboard</h2>
+              <ul class="w-full">
+                <li
+                  v-for="(entry, i) in leaderboard"
+                  :key="entry.username"
+                  class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2"
+                >
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}. {{ entry.username }}
+                  </span>
+                  <span class="font-medium text-right">
+                    {{ entry.points.toLocaleString() }}
+                  </span>
+                </li>
+              </ul>
             </div>
           </div>
         </section>
 
-        <!-- Leaderboard + Discord -->
-        <section class="flex flex-col lg:flex-row gap-6 max-w-4xl mt-6 mx-auto">
-          <div class="w-full lg:w-1/2">
-            <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
-              <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-lime)] via-[var(--reorbit-green-2)] to-[var(--reorbit-teal)]"></div>
-              <div class="w-full p-6 text-slate-900">
-                <h2 class="text-lg font-semibold mb-2 text-[var(--reorbit-blue)]">Points Leaderboard</h2>
-                <ul class="w-full">
-                  <li
-                    v-for="(entry, i) in leaderboard"
-                    :key="entry.username"
-                    class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2"
-                  >
-                    <span class="flex-1 mr-2 truncate">
-                      {{ i + 1 }}. {{ entry.username }}
-                    </span>
-                    <span class="font-medium text-right">
-                      {{ entry.points.toLocaleString() }}
-                    </span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div class="w-full lg:w-1/2">
-            <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/95 backdrop-blur-sm overflow-hidden">
-              <div class="flex flex-col lg:flex-row gap-6">
-                <div class="flex w-full">
-                  <div class="w-full rounded-lg shadow-lg bg-[#2b2d31] text-white overflow-hidden">
-                    <div class="bg-[#5865F2] px-4 py-3 flex items-center gap-2">
-                      <svg class="w-6 h-6" viewBox="0 0 71 55" fill="currentColor" aria-hidden="true">
-                        <path d="M60.104 4.552A58.9 58.9 0 0046.852.8a40.627 40.627 0 00-1.93 3.99 55.353 55.353 0 00-16.861 0A40.63 40.63 0 0026.13.8 58.9 58.9 0 0012.877 4.55C2.665 19.039-.58 33.145.264 47.144a59.267 59.267 0 0018.272 9.27 43.657 43.657 0 003.914-6.378 37.03 37.03 0 01-5.877-2.815c.494-.371.974-.757 1.438-1.155a41.586 41.586 0 0037.932 0c.465.398.945.784 1.439 1.155a37.036 37.036 0 01-5.884 2.82 43.575 43.575 0 003.914 6.378 59.295 59.295 0 0018.274-9.27c.93-15.098-2.314-29.192-12.526-42.592zM23.725 37.139c-3.6 0-6.568-3.291-6.568-7.349 0-4.058 2.916-7.349 6.568-7.349 3.667 0 6.568 3.308 6.568 7.349 0 4.058-2.916 7.349-6.568 7.349zm23.55 0c-3.6 0-6.568-3.291-6.568-7.349 0-4.058 2.915-7.349 6.568-7.349 3.667 0 6.568 3.308 6.568 7.349 0 4.058-2.901 7.349-6.568 7.349z"/>
-                      </svg>
-                      <span class="font-semibold truncate">{{ guild?.name || 'Discord' }}</span>
-                      <span class="ml-auto text-xs opacity-80">{{ guild?.presence_count ?? 0 }} online</span>
-                    </div>
-
-                    <div class="p-6">
-                      <a
-                        :href="chatLink"
-                        target="_blank"
-                        rel="noopener"
-                        class="block w-full text-center text-[var(--reorbit-deep)] bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] transition-colors text-sm font-medium py-2 rounded-md hover:brightness-95"
-                      >
-                        Start Chatting 
-                      </a>
-                    </div>
-
-                    <div class="p-4 space-y-2 max-h-[144px] overflow-y-auto" v-if="guild">
-                      <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Members Online</h4>
-                      <div v-for="m in guild.members" :key="m.id" class="flex items-center gap-2">
-                        <img :src="m.avatar_url" class="w-6 h-6 rounded-full object-cover" :alt="m.username" />
-                        <span class="text-sm truncate">{{ m.username }}</span>
-                      </div>
-                    </div>
-
-                    <div v-else class="p-4 text-center text-sm text-gray-300">Loading…</div>
+        <!-- Discord -->
+        <section class="max-w-4xl mt-6 mx-auto">
+          <div class="rounded-xl shadow-md border border-[var(--reorbit-border)] w-full bg-white/95 backdrop-blur-sm overflow-hidden">
+            <div class="flex flex-col lg:flex-row gap-6">
+              <div class="flex w-full">
+                <div class="w-full rounded-lg shadow-lg bg-[#2b2d31] text-white overflow-hidden">
+                  <div class="bg-[#5865F2] px-4 py-3 flex items-center gap-2">
+                    <svg class="w-6 h-6" viewBox="0 0 71 55" fill="currentColor" aria-hidden="true">
+                      <path d="M60.104 4.552A58.9 58.9 0 0046.852.8a40.627 40.627 0 00-1.93 3.99 55.353 55.353 0 00-16.861 0A40.63 40.63 0 0026.13.8 58.9 58.9 0 0012.877 4.55C2.665 19.039-.58 33.145.264 47.144a59.267 59.267 0 0018.272 9.27 43.657 43.657 0 003.914-6.378 37.03 37.03 0 01-5.877-2.815c.494-.371.974-.757 1.438-1.155a41.586 41.586 0 0037.932 0c.465.398.945.784 1.439 1.155a37.036 37.036 0 01-5.884 2.82 43.575 43.575 0 003.914 6.378 59.295 59.295 0 0018.274-9.27c.93-15.098-2.314-29.192-12.526-42.592zM23.725 37.139c-3.6 0-6.568-3.291-6.568-7.349 0-4.058 2.916-7.349 6.568-7.349 3.667 0 6.568 3.308 6.568 7.349 0 4.058-2.916 7.349-6.568 7.349zm23.55 0c-3.6 0-6.568-3.291-6.568-7.349 0-4.058 2.915-7.349 6.568-7.349 3.667 0 6.568 3.308 6.568 7.349 0 4.058-2.901 7.349-6.568 7.349z"/>
+                    </svg>
+                    <span class="font-semibold truncate">{{ guild?.name || 'Discord' }}</span>
+                    <span class="ml-auto text-xs opacity-80">{{ guild?.presence_count ?? 0 }} online</span>
                   </div>
+
+                  <div class="p-6">
+                    <a
+                      :href="chatLink"
+                      target="_blank"
+                      rel="noopener"
+                      class="block w-full text-center text-[var(--reorbit-deep)] bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] transition-colors text-sm font-medium py-2 rounded-md hover:brightness-95"
+                    >
+                      Start Chatting 
+                    </a>
+                  </div>
+
+                  <div class="p-4 space-y-2 max-h-[144px] overflow-y-auto" v-if="guild">
+                    <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Members Online</h4>
+                    <div v-for="m in guild.members" :key="m.id" class="flex items-center gap-2">
+                      <img :src="m.avatar_url" class="w-6 h-6 rounded-full object-cover" :alt="m.username" />
+                      <span class="text-sm truncate">{{ m.username }}</span>
+                    </div>
+                  </div>
+
+                  <div v-else class="p-4 text-center text-sm text-gray-300">Loading…</div>
                 </div>
               </div>
             </div>
@@ -421,7 +428,7 @@ import { useRouter } from 'vue-router'
 import { DateTime } from 'luxon'
 import * as Sentry from '@sentry/nuxt'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Showcase', middleware: 'auth', layout: 'default' })
 
 /* pull public homepage config */
 const { data: hp } = await useAsyncData('homepage-public', () =>
@@ -488,15 +495,24 @@ const fetchCToons = async () => {
 
 const uniqueCtoonLb = ref([])
 const totalCtoonLb  = ref([])
+const activeCtoonAcquirers = ref([])
+const trendingEarners = ref([])
+const trendingSpenders = ref([])
 
 async function fetchLeaderboards() {
   try {
-    const [uRes, tRes] = await Promise.all([
+    const [uRes, tRes, aRes, eRes, sRes] = await Promise.all([
       fetch('/api/leaderboard/unique-ctoons', { credentials: 'include' }),
-      fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' })
+      fetch('/api/leaderboard/total-ctoons',  { credentials: 'include' }),
+      fetch('/api/leaderboard/active-ctoon-acquirers', { credentials: 'include' }),
+      fetch('/api/leaderboard/trending-earners', { credentials: 'include' }),
+      fetch('/api/leaderboard/trending-spenders', { credentials: 'include' })
     ])
     if (uRes.ok) uniqueCtoonLb.value = await uRes.json()
     if (tRes.ok) totalCtoonLb.value  = await tRes.json()
+    if (aRes.ok) activeCtoonAcquirers.value  = await aRes.json()
+    if (eRes.ok) trendingEarners.value  = await eRes.json()
+    if (sRes.ok) trendingSpenders.value  = await sRes.json()
   } catch (err) {
     console.error('Leaderboard fetch error:', err)
   }

@@ -3,10 +3,10 @@
     <Nav />
 
     <div class="max-w-5xl mx-auto bg-white rounded-lg shadow p-6">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h1 class="text-2xl font-semibold">Manage Announcements</h1>
         <button
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           @click="openCreate"
         >
           Add Announcement
@@ -27,7 +27,7 @@
             <div class="text-gray-900">{{ previewMessage(row.message) }}</div>
             <div class="text-xs text-gray-500 mt-2 flex flex-wrap gap-2">
               <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
-              <span v-if="row.imagePath">Image attached</span>
+              <span v-if="imageCount(row)">Images: {{ imageCount(row) }}</span>
             </div>
             <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
               Last error: {{ row.sendError }}
@@ -56,7 +56,7 @@
                 </div>
                 <div class="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
                   <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
-                  <span v-if="row.imagePath">Image attached</span>
+                  <span v-if="imageCount(row)">Images: {{ imageCount(row) }}</span>
                 </div>
                 <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
                   Last error: {{ row.sendError }}
@@ -113,7 +113,7 @@
               <textarea
                 ref="messageInput"
                 v-model="form.message"
-                maxlength="280"
+                maxlength="1000"
                 rows="5"
                 class="w-full border rounded px-3 py-2"
                 @input="onMessageInput"
@@ -121,7 +121,7 @@
                 @keydown="onMessageKeydown"
               ></textarea>
               <div class="text-xs text-gray-500 mt-1">
-                {{ messageCount }}/280 characters
+                {{ messageCount }}/1000 characters
               </div>
               <div v-if="showMentionSuggestions" class="mt-2 border rounded bg-white shadow-sm max-h-48 overflow-y-auto">
                 <div v-if="mentionLoading" class="px-3 py-2 text-xs text-gray-500">Searching...</div>
@@ -142,12 +142,33 @@
             </div>
 
             <div>
-              <label class="block mb-1 font-medium">Image (optional)</label>
-              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange" />
-              <div v-if="form.imagePath" class="text-xs text-gray-500 mt-2">
-                Current: {{ form.imagePath }}
+              <label class="block mb-1 font-medium">Images (optional, up to 3)</label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Image 1</label>
+                  <input ref="fileInput1" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image1')" />
+                  <div v-if="form.imagePath" class="text-xs text-gray-500 mt-2">
+                    Current: {{ form.imagePath }}
+                  </div>
+                  <div v-if="imageFile1" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile1.name }}</div>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Image 2</label>
+                  <input ref="fileInput2" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image2')" />
+                  <div v-if="form.imagePath2" class="text-xs text-gray-500 mt-2">
+                    Current: {{ form.imagePath2 }}
+                  </div>
+                  <div v-if="imageFile2" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile2.name }}</div>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Image 3</label>
+                  <input ref="fileInput3" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image3')" />
+                  <div v-if="form.imagePath3" class="text-xs text-gray-500 mt-2">
+                    Current: {{ form.imagePath3 }}
+                  </div>
+                  <div v-if="imageFile3" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile3.name }}</div>
+                </div>
               </div>
-              <div v-if="imageFile" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile.name }}</div>
             </div>
 
             <div v-if="formError" class="text-red-600 text-sm">{{ formError }}</div>
@@ -176,6 +197,7 @@ import { useFetch } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Announcements',
   middleware: ['auth','admin'],
   layout: 'default'
 })
@@ -183,8 +205,12 @@ definePageMeta({
 const showModal = ref(false)
 const saving = ref(false)
 const formError = ref('')
-const imageFile = ref(null)
-const fileInput = ref(null)
+const imageFile1 = ref(null)
+const imageFile2 = ref(null)
+const imageFile3 = ref(null)
+const fileInput1 = ref(null)
+const fileInput2 = ref(null)
+const fileInput3 = ref(null)
 const messageInput = ref(null)
 const mentionSuggestions = ref([])
 const mentionQuery = ref('')
@@ -201,7 +227,9 @@ const form = reactive({
   time: '',
   pingOption: '',
   message: '',
-  imagePath: ''
+  imagePath: '',
+  imagePath2: '',
+  imagePath3: ''
 })
 
 const { data: listData, pending, error, refresh } = await useFetch('/api/admin/announcements')
@@ -214,6 +242,14 @@ function previewMessage(msg) {
   const text = displayMessage(String(msg || ''))
   if (text.length <= 150) return text
   return `${text.slice(0, 150)}...`
+}
+
+function imageCount(row) {
+  let count = 0
+  if (row?.imagePath) count += 1
+  if (row?.imagePath2) count += 1
+  if (row?.imagePath3) count += 1
+  return count
 }
 
 function cacheMentionUsers(items) {
@@ -431,6 +467,8 @@ async function openEdit(row) {
   form.message = await convertDiscordToUsernames(row.message || '')
   form.pingOption = row.pingOption || ''
   form.imagePath = row.imagePath || ''
+  form.imagePath2 = row.imagePath2 || ''
+  form.imagePath3 = row.imagePath3 || ''
   const parts = centralParts(new Date(row.scheduledAt))
   form.date = parts.date
   form.time = parts.time
@@ -449,28 +487,41 @@ function resetForm() {
   form.pingOption = ''
   form.message = ''
   form.imagePath = ''
+  form.imagePath2 = ''
+  form.imagePath3 = ''
   formError.value = ''
-  imageFile.value = null
-  if (fileInput.value) fileInput.value.value = ''
+  imageFile1.value = null
+  imageFile2.value = null
+  imageFile3.value = null
+  if (fileInput1.value) fileInput1.value.value = ''
+  if (fileInput2.value) fileInput2.value.value = ''
+  if (fileInput3.value) fileInput3.value.value = ''
   mentionQuery.value = ''
   mentionSuggestions.value = []
   showMentionSuggestions.value = false
 }
 
-function onFileChange(e) {
+function onFileChange(e, slot) {
   const file = e.target.files?.[0]
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif'])
+  const refs = {
+    image1: { file: imageFile1, input: fileInput1 },
+    image2: { file: imageFile2, input: fileInput2 },
+    image3: { file: imageFile3, input: fileInput3 }
+  }
+  const target = refs[slot]
+  if (!target) return
   if (!file) {
-    imageFile.value = null
+    target.file.value = null
     return
   }
-  const allowed = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif'])
   if (!allowed.has(file.type)) {
     formError.value = 'Only JPG, JPEG, PNG, or GIF images are allowed.'
-    imageFile.value = null
-    if (fileInput.value) fileInput.value.value = ''
+    target.file.value = null
+    if (target.input.value) target.input.value.value = ''
     return
   }
-  imageFile.value = file
+  target.file.value = file
 }
 
 async function saveAnnouncement() {
@@ -484,8 +535,8 @@ async function saveAnnouncement() {
     formError.value = 'Message is required.'
     return
   }
-  if (message.length > 280) {
-    formError.value = 'Message must be 280 characters or less.'
+  if (message.length > 1000) {
+    formError.value = 'Message must be 1000 characters or less.'
     return
   }
 
@@ -493,7 +544,7 @@ async function saveAnnouncement() {
   try {
     const fd = new FormData()
     const formattedMessage = await convertUsernamesToDiscord(message)
-    if (formattedMessage.length > 280) {
+    if (formattedMessage.length > 1000) {
       formError.value = 'Message is too long after mentions are expanded.'
       saving.value = false
       return
@@ -501,7 +552,9 @@ async function saveAnnouncement() {
     fd.append('message', formattedMessage)
     fd.append('pingOption', form.pingOption || '')
     fd.append('scheduledAtLocal', `${form.date} ${form.time}`)
-    if (imageFile.value) fd.append('image', imageFile.value)
+    if (imageFile1.value) fd.append('image1', imageFile1.value)
+    if (imageFile2.value) fd.append('image2', imageFile2.value)
+    if (imageFile3.value) fd.append('image3', imageFile3.value)
 
     if (form.id) {
       await $fetch(`/api/admin/announcements/${form.id}`, { method: 'PUT', body: fd })

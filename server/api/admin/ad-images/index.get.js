@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   const rows = await db.adImage.findMany({
     orderBy: { createdAt: 'desc' },
-    select: { id: true, imagePath: true, filename: true, label: true, createdAt: true }
+    select: { id: true, imagePath: true, filename: true, label: true, url: true, createdAt: true }
   })
   return rows
 })

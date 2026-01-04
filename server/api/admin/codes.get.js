@@ -1,5 +1,5 @@
 // server/api/admin/codes.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -15,51 +15,99 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Fetch codes with fixed, pooled, and background rewards
-  const codes = await prisma.claimCode.findMany({
-    where: { showInFrontend: true },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      code: true,
-      maxClaims: true,
-      expiresAt: true,
-      prerequisites: {
-        select: {
-          ctoonId: true,
-          ctoon: { select: { id: true, name: true } }
+  const query = getQuery(event)
+  const codeFilter = typeof query.code === 'string' ? query.code.trim() : ''
+  const searchTerm = typeof query.q === 'string' ? query.q.trim() : ''
+  const hasCodeFilter = Boolean(codeFilter)
+  const hasSearchTerm = Boolean(searchTerm)
+  const page = hasCodeFilter ? 1 : Math.max(parseInt(query.page || '1', 10), 1)
+  const limit = hasCodeFilter ? 1 : Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
+  const skip = hasCodeFilter ? 0 : (page - 1) * limit
+  const where = {
+    showInFrontend: true,
+    ...(hasCodeFilter ? { code: codeFilter } : {}),
+    ...(!hasCodeFilter && hasSearchTerm
+      ? {
+          OR: [
+            { code: { contains: searchTerm, mode: 'insensitive' } },
+            {
+              rewards: {
+                some: {
+                  ctoons: {
+                    some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            },
+            {
+              rewards: {
+                some: {
+                  poolCtoons: {
+                    some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            },
+            {
+              prerequisites: {
+                some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
+              }
+            }
+          ]
         }
-      },
-      rewards: {
-        select: {
-          points: true,
-          // fixed cToons (legacy)
-          ctoons: {
-            select: {
-              ctoonId: true,
-              quantity: true,
-              ctoon: { select: { id: true, name: true } }
-            }
-          },
-          // pooled cToons (new)
-          pooledUniqueCount: true,
-          poolCtoons: {
-            select: {
-              ctoonId: true,
-              weight: true,
-              ctoon: { select: { id: true, name: true } }
-            }
-          },
-          // background rewards
-          backgrounds: {
-            select: {
-              backgroundId: true,
-              background: { select: { id: true, label: true, imagePath: true } }
+      : {})
+  }
+
+  // 2) Fetch codes with fixed, pooled, and background rewards
+  const [total, codes] = await Promise.all([
+    prisma.claimCode.count({ where }),
+    prisma.claimCode.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        code: true,
+        maxClaims: true,
+        expiresAt: true,
+        prerequisites: {
+          select: {
+            ctoonId: true,
+            ctoon: { select: { id: true, name: true } }
+          }
+        },
+        rewards: {
+          select: {
+            points: true,
+            // fixed cToons (legacy)
+            ctoons: {
+              select: {
+                ctoonId: true,
+                quantity: true,
+                ctoon: { select: { id: true, name: true } }
+              }
+            },
+            // pooled cToons (new)
+            pooledUniqueCount: true,
+            poolCtoons: {
+              select: {
+                ctoonId: true,
+                weight: true,
+                ctoon: { select: { id: true, name: true } }
+              }
+            },
+            // background rewards
+            backgrounds: {
+              select: {
+                backgroundId: true,
+                background: { select: { id: true, label: true, imagePath: true } }
+              }
             }
           }
         }
       }
-    }
-  })
+    })
+  ])
 
-  return codes
+  return { items: codes, total, page, limit }
 })

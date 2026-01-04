@@ -4,8 +4,9 @@
 
     <!-- Jingle audio -->
     <audio
+      v-if="winWheelSoundPath"
       ref="spinAudio"
-      src="/images/jingle.mp3"
+      :src="winWheelSoundPath"
       preload="auto"
     ></audio>
 
@@ -85,9 +86,7 @@
             class="w-full h-auto"
             :style="{
               transform: `rotate(${rotation}deg)`,
-              transition: isSpinning
-                ? 'transform 4s cubic-bezier(0.33, 1, 0.68, 1)'
-                : 'none'
+              transition: spinTransition
             }"
             alt="Win Wheel"
           />
@@ -228,6 +227,7 @@ import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 definePageMeta({
+  title: 'WinWheel',
   middleware: 'auth',
   layout: 'default'
 })
@@ -235,6 +235,7 @@ definePageMeta({
 const sliceCount   = 6
 const sliceAngle   = 360 / sliceCount
 const startOffset  = -90
+const spinDurationMs = 4000
 
 const { user, fetchSelf } = useAuth()
 
@@ -242,6 +243,7 @@ const loading = ref(true)
 
 // audio ref for jingle
 const spinAudio = ref(null)
+let spinSoundTimer = null
 
 // reactive state
 const spinCost         = ref(null)
@@ -264,12 +266,19 @@ const scavenger = useScavengerHunt()
 
 // wheel image path
 const winWheelImagePath = ref('')
+const winWheelSoundPath = ref('')
+const winWheelSoundMode = ref('repeat')
 
 // exclusive pool
 const exclusivePool = ref([])
 
 // computed img src with fallback
 const wheelSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
+const spinTransition = computed(() =>
+  isSpinning.value
+    ? `transform ${spinDurationMs / 1000}s cubic-bezier(0.33, 1, 0.68, 1)`
+    : 'none'
+)
 
 // fetch status
 async function fetchStatus() {
@@ -281,6 +290,8 @@ async function fetchStatus() {
     maxDailySpins: maxSpins,
     pointsWon: pts,
     winWheelImagePath: wheelPath,
+    winWheelSoundPath: soundPath,
+    winWheelSoundMode: soundMode,
     exclusivePool: pool
   } = res
 
@@ -290,6 +301,8 @@ async function fetchStatus() {
   maxDailySpins.value     = maxSpins
   pointsWon.value         = pts
   winWheelImagePath.value = wheelPath || ''
+  winWheelSoundPath.value = soundPath || ''
+  winWheelSoundMode.value = soundMode || 'repeat'
   exclusivePool.value     = Array.isArray(pool) ? pool : []
   updateCountdown()
 }
@@ -318,6 +331,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   clearInterval(countdownTimer)
+  stopSpinSound()
 })
 
 const userPoints = computed(() => user.value?.points || 0)
@@ -334,20 +348,7 @@ async function spinWheel() {
   // New spin: ensure we wait for this round's result modal first
   hasShownResult.value = false
 
-  // play jingle
-  try {
-    if (spinAudio.value) {
-      spinAudio.value.currentTime = 0
-      const playPromise = spinAudio.value.play()
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.catch(err => {
-          console.warn('Spin audio play prevented by browser:', err)
-        })
-      }
-    }
-  } catch (e) {
-    console.warn('Unable to play spin audio', e)
-  }
+  startSpinSound()
 
   // optimistic
   user.value.points -= spinCost.value
@@ -369,11 +370,12 @@ async function spinWheel() {
     rotation.value  = fullTurns*360 - wedgeMid
 
     setTimeout(async () => {
+      stopSpinSound()
       await fetchSelf({ force: true })
       await fetchStatus()
       hasShownResult.value = true
       showResultModal.value = true
-    }, 4000)
+    }, spinDurationMs)
   } catch (err) {
     console.error(err)
     alert(err.statusMessage || 'Spin failed — please try again.')
@@ -381,6 +383,7 @@ async function spinWheel() {
     user.value.points += spinCost.value
     spinsLeft.value++
     isSpinning.value = false
+    stopSpinSound()
   }
 }
 
@@ -390,6 +393,59 @@ function closeModal() {
   isSpinning.value     = false
   // If a scavenger session is pending, open it now
   scavenger.openIfPending()
+}
+
+function playSpinSoundOnce() {
+  try {
+    if (spinAudio.value) {
+      spinAudio.value.currentTime = 0
+      const playPromise = spinAudio.value.play()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch(err => {
+          console.warn('Spin audio play prevented by browser:', err)
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('Unable to play spin audio', e)
+  }
+}
+
+function startSpinSound() {
+  if (!spinAudio.value || !winWheelSoundPath.value) return
+  stopSpinSound()
+  if (winWheelSoundMode.value === 'once') {
+    playSpinSoundOnce()
+    return
+  }
+  const start = performance.now()
+  const minInterval = 110
+  const maxInterval = 550
+  const slowWindowMs = 2500
+  const tick = () => {
+    const elapsed = performance.now() - start
+    if (elapsed >= spinDurationMs) return
+    playSpinSoundOnce()
+    const slowStart = Math.max(0, spinDurationMs - slowWindowMs)
+    let nextDelay = minInterval
+    if (elapsed >= slowStart) {
+      const t = Math.min(1, (elapsed - slowStart) / slowWindowMs)
+      nextDelay = minInterval + (maxInterval - minInterval) * t
+    }
+    spinSoundTimer = setTimeout(tick, nextDelay)
+  }
+  tick()
+}
+
+function stopSpinSound() {
+  if (spinSoundTimer) {
+    clearTimeout(spinSoundTimer)
+    spinSoundTimer = null
+  }
+  if (spinAudio.value) {
+    spinAudio.value.pause()
+    spinAudio.value.currentTime = 0
+  }
 }
 </script>
 

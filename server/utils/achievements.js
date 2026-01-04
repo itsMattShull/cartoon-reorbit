@@ -8,6 +8,14 @@ function toIntOrNull(v) {
   return Number.isFinite(n) ? n : null
 }
 
+async function hasCumulativeActivityDays(db, userId, requiredDays) {
+  const days = Math.floor(Number(requiredDays || 0))
+  if (!Number.isFinite(days) || days <= 0) return true
+
+  const count = await db.userDailyActivity.count({ where: { userId } })
+  return count >= days
+}
+
 export async function evaluateUserAgainstAchievement(client, userId, ach) {
   const db = client || prisma
   const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, createdAt: true } })
@@ -52,6 +60,39 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       return false
     }
     // console.log('[achievements] evaluate: pass uniqueCtoons', { userId, ach: achKey, have: uniq.length, need: ach.uniqueCtoonsGte })
+  }
+
+  // Auctions won (closed with winner)
+  if (ach.auctionsWonGte != null) {
+    const won = await db.auction.count({
+      where: { winnerId: userId, status: 'CLOSED' }
+    })
+    if (won < ach.auctionsWonGte) return false
+  }
+
+  // Auctions created (closed with winner)
+  if (ach.auctionsCreatedGte != null) {
+    const created = await db.auction.count({
+      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null } }
+    })
+    if (created < ach.auctionsCreatedGte) return false
+  }
+
+  // Accepted trades (initiator or recipient)
+  if (ach.tradesAcceptedGte != null) {
+    const trades = await db.tradeOffer.count({
+      where: {
+        status: 'ACCEPTED',
+        OR: [{ initiatorId: userId }, { recipientId: userId }]
+      }
+    })
+    if (trades < ach.tradesAcceptedGte) return false
+  }
+
+  // Cumulative active days based on activity logs
+  if (ach.cumulativeActiveDaysGte != null) {
+    const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)
+    if (!ok) return false
   }
 
   // User created before a given date
@@ -99,7 +140,7 @@ async function getOrCreateUserPoints(tx, userId) {
 export async function awardAchievementToUser(client, userId, achievement) {
   const db = client || prisma
 
-  await db.$transaction(async (tx) => {
+  const awardSummary = await db.$transaction(async (tx) => {
     // Create marker (will throw on duplicate due to unique)
     // console.log('[achievements] award: creating achievementUser', { userId, ach: achievement?.slug || achievement?.id })
     await tx.achievementUser.create({ data: { achievementId: achievement.id, userId } })
@@ -108,15 +149,17 @@ export async function awardAchievementToUser(client, userId, achievement) {
     const reward = await tx.achievementReward.findFirst({
       where: { achievementId: achievement.id },
       include: {
-        ctoons:      { select: { ctoonId: true, quantity: true, ctoon: { select: { quantity: true } } } },
+        ctoons:      { select: { ctoonId: true, quantity: true, ctoon: { select: { quantity: true, name: true } } } },
         backgrounds: { select: { backgroundId: true } },
       }
     })
 
     if (!reward) {
       // console.log('[achievements] award: no reward row', { userId, ach: achievement?.slug || achievement?.id })
-      return
+      return { points: 0, ctoons: [], backgrounds: 0 }
     }
+
+    const awardSummary = { points: 0, ctoons: [], backgrounds: 0 }
 
     // Points
     const points = toIntOrNull(reward.points)
@@ -126,17 +169,27 @@ export async function awardAchievementToUser(client, userId, achievement) {
       await tx.pointsLog.create({
         data: { userId, points, total: updated.points, method: `achievement:${achievement.slug}`, direction: 'increase' }
       })
+      awardSummary.points = points
       // console.log('[achievements] award: points granted', { userId, ach: achievement?.slug || achievement?.id, points, newTotal: updated.points })
     }
 
     // Backgrounds
-    const bgCreates = (reward.backgrounds || []).map(b => ({ userId, backgroundId: b.backgroundId }))
-    await tx.userBackground.createMany({
-      data: bgCreates,
-      skipDuplicates: true
-    })
-    if (bgCreates.length) {
-      // console.log('[achievements] award: backgrounds granted', { userId, ach: achievement?.slug || achievement?.id, count: bgCreates.length })
+    const bgIds = [...new Set((reward.backgrounds || []).map(b => b.backgroundId))]
+    if (bgIds.length) {
+      const existing = await tx.userBackground.findMany({
+        where: { userId, backgroundId: { in: bgIds } },
+        select: { backgroundId: true }
+      })
+      const existingSet = new Set(existing.map(b => b.backgroundId))
+      const newBgIds = bgIds.filter(id => !existingSet.has(id))
+      awardSummary.backgrounds = newBgIds.length
+      if (newBgIds.length) {
+        await tx.userBackground.createMany({
+          data: newBgIds.map(backgroundId => ({ userId, backgroundId })),
+          skipDuplicates: true
+        })
+      }
+      // console.log('[achievements] award: backgrounds granted', { userId, ach: achievement?.slug || achievement?.id, count: newBgIds.length })
     }
 
     // cToons — enqueue mint jobs, respecting supply where possible
@@ -149,18 +202,28 @@ export async function awardAchievementToUser(client, userId, achievement) {
       for (let i = 0; i < canGive; i++) {
         await mintQueue.add('mintCtoon', { userId, ctoonId: rc.ctoonId, isSpecial: true })
       }
+      if (canGive > 0) {
+        awardSummary.ctoons.push({
+          name: rc?.ctoon?.name || rc.ctoonId,
+          quantity: canGive
+        })
+      }
       // console.log('[achievements] award: ctoon enqueued', { userId, ach: achievement?.slug || achievement?.id, ctoonId: rc.ctoonId, requested: qty, supply: lim, alreadyMinted: minted, enqueued: canGive })
     }
+
+    return awardSummary
   })
 
-  // Non-transactional side-effect: announce in Discord channel
-  // console.log('[achievements] announce: discord', { userId, ach: achievement?.slug || achievement?.id, title: achievement?.title })
-  // await announceAchievement(db, userId, achievement.title)
+  // Non-transactional side-effect: announce in Discord channel when enabled.
+  if (achievement?.notifyDiscord) {
+    try {
+      await announceAchievement(db, userId, achievement.title, awardSummary)
+    } catch {}
+  }
 }
 
 export async function processAchievementsForUser(userId) {
   // Only process active + non-banned users
-  // console.log('[achievements] process: start', { userId })
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true } })
   if (!user) {
     // console.log('[achievements] process: skip no user', { userId })
@@ -175,7 +238,6 @@ export async function processAchievementsForUser(userId) {
     where: { isActive: true },
     orderBy: { createdAt: 'asc' },
   })
-  // console.log('[achievements] process: loaded achievements', { userId, count: achievements.length })
 
   let awarded = 0
   for (const ach of achievements) {
@@ -195,7 +257,6 @@ export async function processAchievementsForUser(userId) {
     try {
       await awardAchievementToUser(prisma, userId, ach)
       awarded++
-      // console.log('[achievements] process: awarded', { userId, ach: ach.slug })
     } catch (err) {
       // uniqueness or other issue — skip; continue others
       // console.log('[achievements] process: award failed', { userId, ach: ach.slug, error: err?.message })

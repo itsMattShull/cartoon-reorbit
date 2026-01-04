@@ -31,6 +31,13 @@
               {{ new Date(img.createdAt).toLocaleString() }}
             </p>
             <p v-if="img.label" class="mt-1"><strong>Label:</strong> {{ img.label }}</p>
+            <p v-if="img.url" class="mt-1 break-words">
+              <strong>URL:</strong>
+              <a :href="img.url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">
+                {{ img.url }}
+              </a>
+            </p>
+            <p v-else class="mt-1 text-gray-500"><strong>URL:</strong> /dashboard (default)</p>
           </div>
           <div class="p-3 pt-0 flex justify-end gap-2">
             <button
@@ -65,6 +72,16 @@
               <label class="block mb-1 font-medium">Label (optional)</label>
               <input v-model="label" type="text" class="w-full border rounded px-3 py-2" />
             </div>
+            <div>
+              <label class="block mb-1 font-medium">URL (optional)</label>
+              <input
+                v-model="linkUrl"
+                type="url"
+                placeholder="https://example.com"
+                class="w-full border rounded px-3 py-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Leave blank to link to /dashboard</p>
+            </div>
             <div v-if="uploadError" class="text-red-600 text-sm">{{ uploadError }}</div>
           </div>
         </div>
@@ -91,6 +108,7 @@ import { useFetch } from '#app'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
+  title: 'Admin - Manage Ads',
   middleware: ['auth','admin'],
   layout: 'default'
 })
@@ -98,6 +116,7 @@ definePageMeta({
 const showUpload = ref(false)
 const fileInput = ref(null)
 const label = ref('')
+const linkUrl = ref('')
 const uploadError = ref('')
 const uploading = ref(false)
 
@@ -106,6 +125,7 @@ const { data: images, pending, error, refresh } = await useFetch('/api/admin/ad-
 function openUpload() {
   uploadError.value = ''
   label.value = ''
+  linkUrl.value = ''
   showUpload.value = true
 }
 function closeUpload() {
@@ -124,6 +144,7 @@ async function upload() {
     const fd = new FormData()
     fd.append('image', file)
     if (label.value) fd.append('label', label.value)
+    if (linkUrl.value?.trim()) fd.append('url', linkUrl.value.trim())
     await $fetch('/api/admin/ad-images', { method: 'POST', body: fd })
     await refresh()
     showUpload.value = false

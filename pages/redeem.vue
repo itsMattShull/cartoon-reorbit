@@ -104,6 +104,7 @@
 import { onMounted, ref } from 'vue'
 
 definePageMeta({
+  title: 'Redeem Code',
   middleware: ['auth'],
   layout: 'default'
 })

@@ -1,13 +1,14 @@
 <template>
   <Nav />
   <div class="max-w-5xl mx-auto p-4 mt-12">
-    <div class="mt-12 mb-6 flex flex-col gap-3 items-start sm:flex-row sm:items-center sm:justify-between">
+    <div class="mt-12 mb-6 flex flex-col gap-3 items-start lg:flex-row lg:items-center lg:justify-between">
       <h1 class="text-3xl font-bold">Admin: Achievements</h1>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-col items-start gap-3 lg:flex-row lg:items-center">
         <button class="px-3 py-2 bg-blue-600 text-white rounded" @click="openCreate">Create Achievement</button>
         <button class="px-3 py-2 border rounded" @click="queueAll" :disabled="queuing">
           {{ queuing ? 'Queuing…' : 'Queue Achievements Now' }}
         </button>
+        <button class="px-3 py-2 border rounded" @click="openSettings">Settings</button>
       </div>
     </div>
 
@@ -41,6 +42,10 @@
                 <input type="checkbox" v-model="form.isActive" id="isActive" />
                 <label for="isActive">Active</label>
               </div>
+              <div v-if="editId" class="flex items-center gap-2">
+                <input type="checkbox" v-model="form.notifyDiscord" id="notifyDiscord" />
+                <label for="notifyDiscord">Announce in Discord</label>
+              </div>
             </div>
 
             <h3 class="text-lg font-semibold mt-6">Criteria</h3>
@@ -56,6 +61,23 @@
               <div>
                 <label class="block text-sm">Unique cToons ≥</label>
                 <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Auctions Won ≥</label>
+                <input v-model.number="form.criteria.auctionsWonGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Auctions Created (Completed) ≥</label>
+                <input v-model.number="form.criteria.auctionsCreatedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Accepted Trades ≥</label>
+                <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Cumulative Active Days ≥</label>
+                <input v-model.number="form.criteria.cumulativeActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
               </div>
               <div class="md:col-span-3">
                 <label class="block text-sm">User created before</label>
@@ -140,6 +162,34 @@
       </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="closeSettings"></div>
+      <div class="relative bg-white rounded shadow max-w-lg w-full mx-4 flex flex-col overflow-hidden">
+        <div class="px-4 pt-4 pb-2">
+          <h2 class="text-xl font-semibold">Achievement Settings</h2>
+        </div>
+        <div class="px-4 pb-4">
+          <label class="block text-sm font-medium">Discord Channel ID (Announcements)</label>
+          <input
+            v-model="settingsForm.achievementDiscordChannelId"
+            class="w-full border rounded px-2 py-1"
+            placeholder="123456789012345678"
+            :disabled="settingsLoading || settingsSaving"
+          />
+          <p class="text-xs text-gray-500 mt-1">
+            Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
+          </p>
+        </div>
+        <div class="px-4 py-3 border-t flex gap-3 justify-end">
+          <button type="button" class="px-4 py-2 border rounded" @click="closeSettings">Cancel</button>
+          <button class="px-4 py-2 bg-blue-600 text-white rounded" type="button" @click="saveSettings" :disabled="settingsSaving">
+            {{ settingsSaving ? 'Saving…' : 'Save Settings' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div>
       <h2 class="text-xl font-semibold mb-3">Existing Achievements</h2>
       <div v-if="pending">Loading…</div>
@@ -159,7 +209,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Achievements', middleware: ['auth','admin'], layout: 'default' })
 
 const { data: achievements, pending, refresh } = await useFetch('/api/admin/achievements')
 const { data: ctoonsData } = await useFetch('/api/admin/list-ctoons')
@@ -172,18 +222,32 @@ const setsOptions = computed(() => setsData.value || [])
 
 const editId = ref('')
 const showForm = ref(false)
+const showSettings = ref(false)
 const imageInput = ref(null)
 const setInput = ref('')
 const bgSelection = ref([])
 const ctoonSelection = ref({ name: '', qty: 1 })
 
 const emptyForm = () => ({
-  title: '', slug: '', description: '', isActive: true,
-  criteria: { pointsGte: null, totalCtoonsGte: null, uniqueCtoonsGte: null, setsRequired: [], userCreatedBefore: null },
+  title: '', slug: '', description: '', isActive: true, notifyDiscord: false,
+  criteria: {
+    pointsGte: null,
+    totalCtoonsGte: null,
+    uniqueCtoonsGte: null,
+    auctionsWonGte: null,
+    auctionsCreatedGte: null,
+    tradesAcceptedGte: null,
+    cumulativeActiveDaysGte: null,
+    setsRequired: [],
+    userCreatedBefore: null
+  },
   rewards: { points: 0, ctoons: [], backgrounds: [] }
 })
 const form = reactive(emptyForm())
 const queuing = ref(false)
+const settingsForm = reactive({ achievementDiscordChannelId: '' })
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
 
 function resetForm() {
   Object.assign(form, emptyForm())
@@ -201,6 +265,39 @@ function openCreate() {
 function closeForm() {
   resetForm()
   showForm.value = false
+}
+
+function closeSettings() {
+  showSettings.value = false
+}
+
+async function openSettings() {
+  showSettings.value = true
+  settingsLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/achievements/settings')
+    settingsForm.achievementDiscordChannelId = res?.achievementDiscordChannelId || ''
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to load settings')
+    showSettings.value = false
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+async function saveSettings() {
+  try {
+    settingsSaving.value = true
+    await $fetch('/api/admin/achievements/settings', {
+      method: 'POST',
+      body: { achievementDiscordChannelId: settingsForm.achievementDiscordChannelId }
+    })
+    showSettings.value = false
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to save settings')
+  } finally {
+    settingsSaving.value = false
+  }
 }
 
 function addSet() {
@@ -260,10 +357,15 @@ function startEdit(a) {
     slug: a.slug,
     description: a.description || '',
     isActive: !!a.isActive,
+    notifyDiscord: !!a.notifyDiscord,
     criteria: {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,
       uniqueCtoonsGte: a.uniqueCtoonsGte ?? null,
+      auctionsWonGte: a.auctionsWonGte ?? null,
+      auctionsCreatedGte: a.auctionsCreatedGte ?? null,
+      tradesAcceptedGte: a.tradesAcceptedGte ?? null,
+      cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
     },

@@ -179,7 +179,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'default' })
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
 

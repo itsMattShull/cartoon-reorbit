@@ -40,9 +40,9 @@
     </div>
 
     <!-- Unified Card Grid (mobile and desktop) -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <article
-        v-for="u in filteredSorted"
+        v-for="u in pagedUsers"
         :key="u.id"
         class="bg-white border rounded-lg shadow p-4"
       >
@@ -136,6 +136,17 @@
 
       <div v-if="!filteredSorted.length" class="col-span-full text-center text-gray-500 py-8">
         No users match your filters.
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="filteredSorted.length" class="mt-6 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        Page {{ page }} of {{ totalPages }} - Showing {{ showingRange }}
+      </div>
+      <div class="space-x-2">
+        <button class="px-3 py-1 text-sm border rounded-md" :disabled="page <= 1" @click="prevPage">Prev</button>
+        <button class="px-3 py-1 text-sm border rounded-md" :disabled="page >= totalPages" @click="nextPage">Next</button>
       </div>
     </div>
   </div>
@@ -269,11 +280,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAsyncData, useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Users', middleware: ['auth','admin'], layout: 'default' })
 
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
 
@@ -336,6 +347,21 @@ const filteredSorted = computed(() => {
   })
 })
 
+const page = ref(1)
+const pageSize = 100
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredSorted.value.length / pageSize)))
+const showingRange = computed(() => {
+  if (!filteredSorted.value.length) return '0-0 of 0'
+  const start = (page.value - 1) * pageSize + 1
+  const end = Math.min(page.value * pageSize, filteredSorted.value.length)
+  return `${start}-${end} of ${filteredSorted.value.length}`
+})
+const pagedUsers = computed(() => {
+  const start = (page.value - 1) * pageSize
+  return filteredSorted.value.slice(start, start + pageSize)
+})
+
 const chip = (on) =>
   [
     'px-3 py-1 text-sm rounded-md border',
@@ -354,6 +380,20 @@ function resetFilters() {
   sortField.value = 'lastActivity'
   sortDir.value = 'desc'
 }
+
+function nextPage() {
+  if (page.value >= totalPages.value) return
+  page.value += 1
+}
+
+function prevPage() {
+  if (page.value <= 1) return
+  page.value -= 1
+}
+
+watch([filter, statusFilter, onlyGuild, onlyWarned, sortField, sortDir], () => {
+  page.value = 1
+})
 
 // formatting helpers
 const formatDate = dt => {

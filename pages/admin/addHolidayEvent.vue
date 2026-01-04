@@ -229,7 +229,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Add Holiday Event', middleware: ['auth','admin'], layout: 'default' })
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from '#app'
 

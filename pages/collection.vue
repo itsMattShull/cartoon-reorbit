@@ -225,6 +225,9 @@
       <div class="w-full lg:w-3/4">
         <!-- My Collection -->
         <div v-if="activeTab === 'MyCollection'">
+          <p class="mb-4 text-sm font-medium text-gray-600">
+            {{ collectionCountText }}
+          </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <template v-if="isLoadingUserCtoons && pagedUser.length === 0">
               <div
@@ -301,6 +304,9 @@
 
         <!-- My Wishlist -->
         <div v-if="activeTab === 'MyWishlist'">
+          <p class="mb-4 text-sm font-medium text-gray-600">
+            {{ wishlistCountText }}
+          </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <template v-if="isLoadingWishlist && pagedWishlist.length === 0">
               <div
@@ -376,6 +382,9 @@
 
         <!-- All Sets -->
         <div v-if="activeTab === 'AllSets'">
+          <p class="mb-4 text-sm font-medium text-gray-600">
+            {{ setsCountText }}
+          </p>
           <div
             v-for="setName in pageSetsWithItems"
             :key="setName"
@@ -466,6 +475,9 @@
 
         <!-- All Series -->
         <div v-if="activeTab === 'AllSeries'">
+          <p class="mb-4 text-sm font-medium text-gray-600">
+            {{ seriesCountText }}
+          </p>
           <div
             v-for="seriesName in pageSeriesWithItems"
             :key="seriesName"
@@ -606,7 +618,7 @@ import AddToWishlist from '@/components/AddToWishlist.vue'
 import AddToAuction from '@/components/AddToAuction.vue'
 import ProgressiveImage from '@/components/ProgressiveImage.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'Collection', middleware: 'auth', layout: 'default' })
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const { user, fetchSelf } = useAuth()
@@ -627,9 +639,13 @@ const filterMeta       = ref({ sets: [], series: [], rarities: [] })
 
 const allCtoons        = ref([])
 const isLoadingAllCtoons = ref(false)
+const hasLoadedAll       = ref(false)
 
 const userCtoons       = ref([])
 const isLoadingUserCtoons = ref(false)
+const userCtoonsAll      = ref([])
+const isLoadingUserCtoonsAll = ref(false)
+const hasLoadedUserAll   = ref(false)
 
 const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
@@ -838,26 +854,90 @@ const pagedWishlist = computed(() => {
 })
 
 // ─── HELPERS: ownership stats ────────────────────────────────────────────────
+const setStats = computed(() => {
+  const stats = new Map()
+  for (const c of allCtoons.value) {
+    if (!c.set) continue
+    const entry = stats.get(c.set) || { total: 0, owned: 0 }
+    entry.total += 1
+    if (c.isOwned) entry.owned += 1
+    stats.set(c.set, entry)
+  }
+  return stats
+})
+const seriesStats = computed(() => {
+  const stats = new Map()
+  for (const c of allCtoons.value) {
+    if (!c.series) continue
+    const entry = stats.get(c.series) || { total: 0, owned: 0 }
+    entry.total += 1
+    if (c.isOwned) entry.owned += 1
+    stats.set(c.series, entry)
+  }
+  return stats
+})
+
 function totalCountBySet(setName) {
-  return allCtoons.value.filter(c => c.set === setName).length
+  return setStats.value.get(setName)?.total || 0
 }
 function ownedCountBySet(setName) {
-  return allCtoons.value.filter(c => c.set === setName && c.isOwned).length
+  return setStats.value.get(setName)?.owned || 0
 }
 function percentageOwnedBySet(setName) {
   const t = totalCountBySet(setName)
   return t ? Math.round((ownedCountBySet(setName) / t) * 100) : 0
 }
 function totalCountBySeries(seriesName) {
-  return allCtoons.value.filter(c => c.series === seriesName).length
+  return seriesStats.value.get(seriesName)?.total || 0
 }
 function ownedCountBySeries(seriesName) {
-  return allCtoons.value.filter(c => c.series === seriesName && c.isOwned).length
+  return seriesStats.value.get(seriesName)?.owned || 0
 }
 function percentageOwnedBySeries(seriesName) {
   const t = totalCountBySeries(seriesName)
   return t ? Math.round((ownedCountBySeries(seriesName) / t) * 100) : 0
 }
+
+const uniqueCollectedCtoonsCount = computed(() => {
+  const ids = new Set(userCtoonsAll.value.map(uc => uc.ctoonId))
+  return ids.size
+})
+const totalCtoonsCount = computed(() => allCtoons.value.length)
+const completedSetsCount = computed(() => {
+  let count = 0
+  for (const { total, owned } of setStats.value.values()) {
+    if (total && owned === total) count += 1
+  }
+  return count
+})
+const totalSetsCount = computed(() => setStats.value.size)
+const completedSeriesCount = computed(() => {
+  let count = 0
+  for (const { total, owned } of seriesStats.value.values()) {
+    if (total && owned === total) count += 1
+  }
+  return count
+})
+const totalSeriesCount = computed(() => seriesStats.value.size)
+
+const collectionCountText = computed(() => {
+  if (!hasLoadedUserAll.value) return 'Loading collection totals...'
+  const owned = uniqueCollectedCtoonsCount.value
+  if (!hasLoadedAll.value) return `${owned} cToons Collected`
+  return `${owned} of ${totalCtoonsCount.value} cToons Collected`
+})
+const wishlistCountText = computed(() => {
+  if (!hasLoadedWishlist.value) return 'Loading wishlist totals...'
+  return `Total Wishlist cToons: ${wishlistCtoons.value.length}`
+})
+const setsCountText = computed(() => {
+  if (!hasLoadedAll.value) return 'Loading set totals...'
+  return `${completedSetsCount.value} of ${totalSetsCount.value} Sets Collected`
+})
+const seriesCountText = computed(() => {
+  if (!hasLoadedAll.value) return 'Loading series totals...'
+  return `${completedSeriesCount.value} of ${totalSeriesCount.value} Series Collected`
+})
 
 // ─── TAB SWITCH & DATA LOADERS ────────────────────────────────────────────────
 function switchTab(tab) {
@@ -886,6 +966,7 @@ async function loadAll() {
   isLoadingAllCtoons.value = true
   try {
     allCtoons.value = await $fetch('/api/collections/all')
+    hasLoadedAll.value = true
   } finally {
     isLoadingAllCtoons.value = false
   }
@@ -894,10 +975,29 @@ async function loadUser() {
   isLoadingUserCtoons.value = true
   try {
     const qs = duplicatesOnly.value ? '?duplicatesOnly=1' : ''
-    userCtoons.value = await $fetch(`/api/collections${qs}`)
+    const res = await $fetch(`/api/collections${qs}`)
+    userCtoons.value = res
+    if (!duplicatesOnly.value) {
+      userCtoonsAll.value = res
+      hasLoadedUserAll.value = true
+    }
   } finally {
     isLoadingUserCtoons.value = false
   }
+  if (duplicatesOnly.value) loadUserAllIfNeeded()
+}
+async function loadUserAll() {
+  if (isLoadingUserCtoonsAll.value) return
+  isLoadingUserCtoonsAll.value = true
+  try {
+    userCtoonsAll.value = await $fetch('/api/collections')
+    hasLoadedUserAll.value = true
+  } finally {
+    isLoadingUserCtoonsAll.value = false
+  }
+}
+function loadUserAllIfNeeded() {
+  if (!hasLoadedUserAll.value && !isLoadingUserCtoonsAll.value) loadUserAll()
 }
 async function loadWishlist() {
   if (isLoadingWishlist.value || hasLoadedWishlist.value) return
@@ -982,6 +1082,7 @@ onMounted(async () => {
   updateUrlQueryFromFilters()
 
   loadUser()
+  loadAll()
 })
 
 // Scroll helpers for pagination

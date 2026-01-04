@@ -299,6 +299,9 @@ export default defineEventHandler(async (event) => {
   const userId = String(me.id)
 
   const dailyLimit = Number(config.monsterDailyScanLimit ?? 20)
+  const scanPointsValue = Number.isFinite(Number(config.scanPoints))
+    ? Math.max(0, Math.floor(Number(config.scanPoints)))
+    : 0
   if (Number.isFinite(dailyLimit) && dailyLimit > 0) {
     const { start, resetAt } = getDailyScanWindowCst()
     const scansToday = await db.userBarcodeScan.count({
@@ -402,6 +405,7 @@ export default defineEventHandler(async (event) => {
   // 3) If monster, create a NEW owned instance with per-instance rolled stats
   let ownedMonster = null
   let awardedItem = null
+  let scanPointsAwarded = 0
 
   if (mapping.outcome === 'MONSTER' && mapping.result) {
     const tpl = mapping.result
@@ -468,6 +472,31 @@ export default defineEventHandler(async (event) => {
       lastScannedAt: now,
     },
   })
+  try {
+    await db.userScan.create({
+      data: {
+        userId,
+        mappingId: mapping.id,
+        configId: config.id,
+        outcome: mapping.outcome,
+        scannedAt: now,
+      },
+    })
+  } catch (e) {
+    console.warn('Failed to log user scan:', e?.message || e)
+  }
+
+  if (scanPointsValue > 0) {
+    const updatedPoints = await db.userPoints.upsert({
+      where: { userId },
+      update: { points: { increment: scanPointsValue } },
+      create: { userId, points: scanPointsValue },
+    })
+    await db.pointsLog.create({
+      data: { userId, points: scanPointsValue, total: updatedPoints.points, method: 'Barcode Scan', direction: 'increase' }
+    })
+    scanPointsAwarded = scanPointsValue
+  }
 
   let battleInfo = null
   if (mapping.outcome === 'BATTLE') {
@@ -511,6 +540,7 @@ export default defineEventHandler(async (event) => {
     ownedMonsterId: ownedMonster?.id ?? null,
     ownedStats: ownedMonster ? { hp: ownedMonster.hp, atk: ownedMonster.atk, def: ownedMonster.def } : null,
     awardedItemId: awardedItem?.id ?? null,
+    pointsAwarded: scanPointsAwarded,
     battle: battleInfo,
   }
 })

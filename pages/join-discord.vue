@@ -32,6 +32,7 @@
     import { useRuntimeConfig } from '#imports'
 
     definePageMeta({
+      title: 'Join Discord',
       middleware: 'auth',
       layout: 'default'
     })

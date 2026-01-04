@@ -14,6 +14,8 @@ export default defineEventHandler(async (event) => {
       message: true,
       pingOption: true,
       imagePath: true,
+      imagePath2: true,
+      imagePath3: true,
       scheduledAt: true,
       createdAt: true,
       sentAt: true,
