@@ -70,11 +70,11 @@
             <label class="block mb-1 font-medium">Series</label>
             <input
               v-model="bulkSeries"
-              list="series-list"
+              list="bulk-series-list"
               required
               class="w-full border rounded p-2"
             />
-            <datalist v-if="bulkSeries.length >= 2" id="series-list">
+            <datalist v-if="bulkSeries.length >= 2" id="bulk-series-list">
               <option
                 v-for="opt in filteredBulkSeriesOptions"
                 :key="opt"
@@ -115,6 +115,7 @@
               <tr class="bg-gray-100">
                 <th class="px-4 py-2">Preview</th>
                 <th class="px-4 py-2">Name</th>
+                <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
                 <th class="px-4 py-2">Characters</th>
                 <th class="px-4 py-2">Total Qty</th>
@@ -131,6 +132,24 @@
                 </td>
                 <td class="px-4 py-2">
                   <input v-model="f.nameField" class="w-full border rounded p-1" />
+                </td>
+                <td class="px-4 py-2">
+                  <input
+                    v-model="f.series"
+                    :list="`row-series-list-desktop-${f.id}`"
+                    class="w-full border rounded p-1"
+                    @input="lockRowSeries(f)"
+                  />
+                  <datalist
+                    v-if="(f.series || '').length >= 2"
+                    :id="`row-series-list-desktop-${f.id}`"
+                  >
+                    <option
+                      v-for="opt in filteredSeriesOptionsFor(f.series)"
+                      :key="opt"
+                      :value="opt"
+                    />
+                  </datalist>
                 </td>
                 <td class="px-4 py-2">
                   <select v-model="f.rarity" class="w-full border rounded p-1" @change="updateDefaults(f)">
@@ -188,6 +207,31 @@
                 />
                 <p class="text-sm text-gray-500">
                   The display name for this cToon.
+                </p>
+              </div>
+
+              <!-- Series -->
+              <div>
+                <label class="block mb-1 font-medium">Series</label>
+                <input
+                  v-model="f.series"
+                  :list="`row-series-list-mobile-${f.id}`"
+                  class="w-full border rounded p-2"
+                  placeholder="Enter series"
+                  @input="lockRowSeries(f)"
+                />
+                <datalist
+                  v-if="(f.series || '').length >= 2"
+                  :id="`row-series-list-mobile-${f.id}`"
+                >
+                  <option
+                    v-for="opt in filteredSeriesOptionsFor(f.series)"
+                    :key="opt"
+                    :value="opt"
+                  />
+                </datalist>
+                <p class="text-sm text-gray-500">
+                  Defaults to the bulk series unless overridden.
                 </p>
               </div>
 
@@ -317,7 +361,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
@@ -346,10 +390,11 @@ const canUpload = computed(() => {
     Boolean(bulkSet.value.trim()) &&
     Boolean(bulkSeries.value.trim()) &&
     Boolean(bulkReleaseDate.value) &&
-    // each row has rarity + non-empty characters
+    // each row has rarity + non-empty characters + series
     imageFiles.value.every(f =>
       Boolean(f.rarity) &&
-      f.characters.trim().length > 0
+      f.characters.trim().length > 0 &&
+      resolveRowSeries(f).length > 0
     )
   )
 })
@@ -462,6 +507,30 @@ const filteredBulkSeriesOptions = computed(() => {
   )
 })
 
+const filteredSeriesOptionsFor = (value = '') => {
+  const normalized = (value || '').trim()
+  if (normalized.length < 2) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(normalized.toLowerCase())
+  )
+}
+
+const resolveRowSeries = (row) => {
+  if (row?.seriesLocked) return (row.series || '').trim()
+  return (row?.series || '').trim() || bulkSeries.value.trim()
+}
+
+const lockRowSeries = (row) => {
+  if (!row?.seriesLocked) row.seriesLocked = true
+}
+
+watch(bulkSeries, (next) => {
+  const nextValue = (next || '').trim()
+  imageFiles.value.forEach((row) => {
+    if (!row.seriesLocked) row.series = nextValue
+  })
+})
+
 onMounted(async () => {
   const [setsRes, seriesRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/sets', { credentials: 'include' }),
@@ -488,6 +557,8 @@ function handleFiles(e) {
       nameField: cleanedName,      // ← prefilled name
       characters: cleanedName,     // ← prefilled to match name
       rarity: rarity || '',
+      series: bulkSeries.value.trim(),
+      seriesLocked: false,
       totalQuantity: null,
       initialQuantity: null,
       perUserLimit: null,
@@ -511,17 +582,19 @@ async function uploadAll() {
       !f.rarity ||
       !bulkSet.value ||
       !bulkSeries.value ||
-      !bulkReleaseDate.value
+      !bulkReleaseDate.value ||
+      !resolveRowSeries(f)
     ) {
       showToast(`Missing required fields for ${f.nameField}`, 'error')
       allSuccess = false
       continue
     }
 
+    const rowSeries = resolveRowSeries(f)
     const formData = new FormData()
     formData.append('image', f.file)
     formData.append('name', f.nameField)
-    formData.append('series', bulkSeries.value)
+    formData.append('series', rowSeries)
     formData.append('type', f.file.type)
     formData.append('rarity', f.rarity)
     formData.append('set', bulkSet.value)
