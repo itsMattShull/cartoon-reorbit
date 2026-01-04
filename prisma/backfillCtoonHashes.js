@@ -1,9 +1,9 @@
 import { readFile, access } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { prisma } from '../server/prisma.js'
 import { computeMultiHash, bucketFromHash } from '../server/utils/multiHash.js'
 
-const baseDir = process.cwd()
+const baseDir = resolve(process.cwd(), '..')
 const pageSize = Number(process.env.PAGE_SIZE || 100)
 const limit = Number(process.env.LIMIT || 0)
 const onlyMissing = String(process.env.ONLY_MISSING || 'true') !== 'false'
