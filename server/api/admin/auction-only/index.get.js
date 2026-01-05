@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
     pricePoints: r.pricePoints,
     startsAt: r.startsAt,
     endsAt: r.endsAt,
+    isFeatured: r.isFeatured,
     ctoon: r.userCtoon.ctoon
   }))
 })

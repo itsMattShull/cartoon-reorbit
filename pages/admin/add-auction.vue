@@ -81,6 +81,27 @@
           </div>
         </div>
 
+        <!-- Create multiple auctions -->
+        <div>
+          <label class="block font-medium mb-1">Create X Auctions</label>
+          <input
+            v-model.number="createCount"
+            type="number"
+            min="1"
+            class="w-full border rounded p-2"
+            @input="clampCreateCount"
+          />
+          <p class="text-xs text-gray-500 mt-1">
+            Max: {{ maxOwned }} (based on official account owned mints for this cToon)
+          </p>
+        </div>
+
+        <div v-if="createCount > 1">
+          <label class="block font-medium mb-1">Release Every Y Hours</label>
+          <input v-model.number="releaseEveryHours" type="number" min="1" class="w-full border rounded p-2" />
+          <p class="text-xs text-gray-500 mt-1">Hours between each Auction Only created.</p>
+        </div>
+
         <!-- Is Featured checkbox -->
         <div class="flex items-center gap-2">
           <input
@@ -111,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({ title: 'Admin - Add Auction', middleware: ['auth', 'admin'], layout: 'default' })
@@ -125,12 +146,25 @@ const price = ref(0)
 const startDate = ref('') // YYYY-MM-DD
 const startHour = ref('') // 'HH:00'
 const durationDays = ref(1)
+const createCount = ref(1)
+const releaseEveryHours = ref(1)
 const isFeatured = ref(false)
 const error = ref('')
 const saving = ref(false)
 let searchTimer
 
 const hourOptions = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
+const maxOwned = computed(() => Number(selected.value?.ownedCount ?? 0))
+
+function clampCreateCount() {
+  const n = Number(createCount.value || 1)
+  const next = Math.max(1, n)
+  if (maxOwned.value >= 1) {
+    createCount.value = Math.min(next, maxOwned.value)
+  } else {
+    createCount.value = next
+  }
+}
 
 function rarityPrice(r) {
   const s = (r || '').toLowerCase().replace(/[_-]+/g, ' ').trim()
@@ -170,6 +204,8 @@ function selectOption(opt) {
   search.value = opt.name
   showDropdown.value = false
   price.value = rarityPrice(opt.rarity)
+  createCount.value = 1
+  releaseEveryHours.value = 1
 }
 
 function clearSelected() {
@@ -177,6 +213,8 @@ function clearSelected() {
   search.value = ''
   price.value = 0
   results.value = []
+  createCount.value = 1
+  releaseEveryHours.value = 1
 }
 
 // Convert a local date/hour in America/Chicago to a UTC ISO string
@@ -220,6 +258,18 @@ async function submitForm() {
   if (!selected.value) { error.value = 'Select a cToon.'; return }
   if (!startDate.value || !startHour.value) { error.value = 'Set a start date and hour.'; return }
 
+  const count = Number(createCount.value || 1)
+  if (!Number.isInteger(count) || count < 1) { error.value = 'Create count must be at least 1.'; return }
+  if (count > maxOwned.value) { error.value = `Create count exceeds max owned (${maxOwned.value}).`; return }
+  let releaseHours = 0
+  if (count > 1) {
+    releaseHours = Number(releaseEveryHours.value || 0)
+    if (!Number.isInteger(releaseHours) || releaseHours < 1) {
+      error.value = 'Release interval must be at least 1 hour.'
+      return
+    }
+  }
+
   const startsAtUtc = chicagoLocalToUtcISO(startDate.value, startHour.value)
   const starts = new Date(startsAtUtc)
   if (starts <= new Date()) { error.value = 'Start must be in the future.'; return }
@@ -230,7 +280,9 @@ async function submitForm() {
     pricePoints: Number(price.value || 0),
     durationDays: Number(durationDays.value || 1),
     isFeatured: Boolean(isFeatured.value),
-    startsAtUtc
+    startsAtUtc,
+    createCount: count,
+    releaseEveryHours: releaseHours
   }
 
   try {

@@ -96,6 +96,23 @@ export default defineEventHandler(async (event) => {
       assetPath: c.assetPath
     }))
 
-  // 3) Merge (owned first), cap
-  return [...owned, ...stock].slice(0, LIMIT)
+  const merged = [...owned, ...stock].slice(0, LIMIT)
+  if (merged.length === 0) return []
+
+  const countRows = await prisma.userCtoon.groupBy({
+    by: ['ctoonId'],
+    where: {
+      userId: owner.id,
+      ctoonId: { in: merged.map(r => r.ctoonId) },
+      id: { notIn: Array.from(pendingSet) }
+    },
+    _count: { _all: true }
+  })
+  const countMap = new Map(countRows.map(r => [r.ctoonId, r._count._all]))
+
+  // 3) Merge (owned first), cap + attach owned count
+  return merged.map(row => ({
+    ...row,
+    ownedCount: Number(countMap.get(row.ctoonId) || 0)
+  }))
 })
