@@ -14,8 +14,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
+  const now = new Date()
   const rows = await prisma.auctionOnly.findMany({
-    orderBy: { startsAt: 'desc' },
+    where: {
+      startsAt: { gt: now },
+      isStarted: false
+    },
+    orderBy: { startsAt: 'asc' },
     include: {
       userCtoon: {
         select: {

@@ -1010,55 +1010,65 @@ async function createDailyFeaturedAuction() {
     return 50
   }
 
-  const idx = Math.floor(Math.random() * candidates.length)
-  const chosen = candidates[idx]
+  const shuffled = candidates.slice()
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+
   const now = new Date()
   const durationDays = 1
   const endAt = new Date(now.getTime() + durationDays * 86_400_000)
-  const initialBet = rarityFloor(chosen.ctoon?.rarity)
+  let createdCount = 0
 
-  const result = await prisma.$transaction(async (tx) => {
-    const existing = await tx.auction.findFirst({
-      where: { userCtoonId: chosen.id, status: "ACTIVE" },
-      select: { id: true }
-    })
-    if (existing) return null
+  for (const chosen of shuffled) {
+    if (createdCount >= 3) break
+    const initialBet = rarityFloor(chosen.ctoon?.rarity)
 
-    const created = await tx.auction.create({
-      data: {
-        userCtoonId: chosen.id,
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.auction.findFirst({
+        where: { userCtoonId: chosen.id, status: "ACTIVE" },
+        select: { id: true }
+      })
+      if (existing) return null
+
+      const created = await tx.auction.create({
+        data: {
+          userCtoonId: chosen.id,
+          initialBet,
+          duration: durationDays,
+          endAt,
+          creatorId: officialUser.id,
+          isFeatured: true
+        },
+        select: { id: true }
+      })
+
+      await tx.userCtoon.update({
+        where: { id: chosen.id },
+        data: { isTradeable: false }
+      })
+
+      return {
+        auctionId: created.id,
         initialBet,
-        duration: durationDays,
-        endAt,
-        creatorId: officialUser.id,
-        isFeatured: true
-      },
+        durationDays,
+        ctoon: chosen.ctoon,
+        mintNumber: chosen.mintNumber,
+        ctoonId: chosen.ctoonId
+      }
+    })
+
+    if (!result) continue
+    createdCount += 1
+
+    const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
+      where: { ctoonId: result.ctoonId },
       select: { id: true }
-    })
+    }))
 
-    await tx.userCtoon.update({
-      where: { id: chosen.id },
-      data: { isTradeable: false }
-    })
-
-    return {
-      auctionId: created.id,
-      initialBet,
-      durationDays,
-      ctoon: chosen.ctoon,
-      mintNumber: chosen.mintNumber,
-      ctoonId: chosen.ctoonId
-    }
-  })
-
-  if (!result) return
-
-  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-    where: { ctoonId: result.ctoonId },
-    select: { id: true }
-  }))
-
-  await sendAuctionDiscordAnnouncement(result, isHolidayItem)
+    await sendAuctionDiscordAnnouncement(result, isHolidayItem)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

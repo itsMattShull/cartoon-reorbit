@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
 
         // NEW G-toon fields
         isGtoon:    true,
+        gtoonType:  true,
         cost:       true,
         power:      true,
         abilityKey: true,

@@ -372,6 +372,7 @@ async function submitForm(){
     if (power.value<0||power.value>12) err.power='Power 0-12'
     if (err.cost || err.power) return
   }
+  const gtoonTypeValue = isGtoon.value ? gtoonType.value.trim() : ''
 
   // If a new image is selected, send multipart; else JSON.
   if (newImageFile.value){
@@ -389,7 +390,7 @@ async function submitForm(){
     fd.append('set', setField.value)
     fd.append('characters', JSON.stringify(characters.value.split(',').map(s=>s.trim()).filter(Boolean)))
     fd.append('isGtoon', isGtoon.value)
-    fd.append('gtoonType', gtoonType.value || '')
+    fd.append('gtoonType', gtoonTypeValue)
     fd.append('cost', String(cost.value))
     fd.append('power', String(power.value))
     fd.append('abilityKey', abilityKey.value || '')
@@ -431,7 +432,7 @@ async function submitForm(){
     characters:      characters.value.split(',').map(s => s.trim()),
 
     isGtoon:         isGtoon.value,
-    gtoonType:       gtoonType.value || null,
+    gtoonType:       gtoonTypeValue || null,
     cost:            cost.value,
     power:           power.value,
     abilityKey:      abilityKey.value || null,

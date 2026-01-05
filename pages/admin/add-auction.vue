@@ -120,6 +120,10 @@
             Is Featured
           </label>
         </div>
+        <p class="text-xs text-gray-500">
+          Marks the auction as featured on the auctions page. Users cannot bid if they
+          currently own 2+ of this cToon or have received 2+ in the last 30 days.
+        </p>
 
         <div class="pt-4 border-t">
           <button

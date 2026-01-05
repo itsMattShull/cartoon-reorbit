@@ -100,6 +100,10 @@
             <input id="editIsFeatured" v-model="editIsFeatured" type="checkbox" class="h-4 w-4 border-gray-300 rounded" />
             <label for="editIsFeatured" class="text-sm font-medium text-gray-700">Is Featured</label>
           </div>
+          <p class="text-xs text-gray-500">
+            Marks the auction as featured on the auctions page. Users cannot bid if they
+            currently own 2+ of this cToon or have received 2+ in the last 30 days.
+          </p>
 
           <div class="pt-3 border-t">
             <button
@@ -127,7 +131,9 @@ definePageMeta({ title: 'Admin - Manage Auctions', middleware: ['auth', 'admin']
 const auctions = ref([])
 const upcomingAuctions = computed(() => {
   const now = Date.now()
-  return auctions.value.filter(a => new Date(a.startsAt).getTime() > now)
+  return auctions.value
+    .filter(a => new Date(a.startsAt).getTime() > now)
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
 })
 const error = ref('')
 const showEdit = ref(false)
