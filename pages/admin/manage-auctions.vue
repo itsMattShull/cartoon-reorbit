@@ -28,6 +28,7 @@
             <div class="font-medium truncate">{{ a.ctoon.name }}</div>
             <div class="text-xs text-gray-500 truncate">
               {{ a.ctoon.rarity }}
+              <span v-if="a.mintNumber !== null && a.mintNumber !== undefined"> • Mint #{{ a.mintNumber }}</span>
             </div>
             <div class="text-sm text-gray-600 mt-1">
               <span class="font-medium">Starts:</span> {{ fmtCST(a.startsAt) }}

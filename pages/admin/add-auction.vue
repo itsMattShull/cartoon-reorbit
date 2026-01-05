@@ -32,17 +32,23 @@
                 <img :src="opt.assetPath" alt="preview" class="w-10 h-10 rounded object-cover border" />
                 <div class="min-w-0">
                   <div class="font-medium truncate">{{ opt.name }}</div>
-                  <div class="text-xs text-gray-500">{{ opt.rarity }}</div>
+                <div class="text-xs text-gray-500">
+                  {{ opt.rarity }}
+                  <span v-if="opt.mintNumber !== null && opt.mintNumber !== undefined"> • Mint #{{ opt.mintNumber }}</span>
                 </div>
-              </button>
-            </div>
+              </div>
+            </button>
           </div>
+        </div>
 
           <div v-if="selected" class="mt-3 flex items-center gap-3">
             <img :src="selected.assetPath" class="w-14 h-14 rounded object-cover border" />
             <div>
               <div class="font-medium">{{ selected.name }}</div>
-              <div class="text-sm text-gray-500">{{ selected.rarity }}</div>
+              <div class="text-sm text-gray-500">
+                {{ selected.rarity }}
+                <span v-if="selected.mintNumber !== null && selected.mintNumber !== undefined"> • Mint #{{ selected.mintNumber }}</span>
+              </div>
             </div>
             <button type="button" class="ml-auto text-blue-600 hover:underline text-sm" @click="clearSelected">Change</button>
           </div>

@@ -75,15 +75,25 @@ export default defineEventHandler(async (event) => {
       ctoonId,
       id: { notIn: pendingIds }
     },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true }
+    orderBy: [
+      { mintNumber: 'asc' },
+      { createdAt: 'asc' }
+    ],
+    select: { id: true, mintNumber: true, createdAt: true }
   })
 
   if (available.length < count) {
     throw createError({ statusCode: 400, statusMessage: `Not enough owned copies to create ${count} auctions` })
   }
 
-  let userCtoonIds = available.map(a => a.id)
+  const sorted = [...available].sort((a, b) => {
+    const aMint = Number.isInteger(a.mintNumber) ? a.mintNumber : Number.POSITIVE_INFINITY
+    const bMint = Number.isInteger(b.mintNumber) ? b.mintNumber : Number.POSITIVE_INFINITY
+    if (aMint !== bMint) return aMint - bMint
+    return a.createdAt.getTime() - b.createdAt.getTime()
+  })
+
+  let userCtoonIds = sorted.map(a => a.id)
   if (ucIdIn) {
     if (!userCtoonIds.includes(ucIdIn)) {
       throw createError({ statusCode: 400, statusMessage: 'Selected copy is already scheduled' })

@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
     orderBy: { startsAt: 'desc' },
     include: {
       userCtoon: {
-        include: {
+        select: {
+          mintNumber: true,
           ctoon: {
             select: { id: true, name: true, rarity: true, assetPath: true }
           }
@@ -33,6 +34,7 @@ export default defineEventHandler(async (event) => {
     startsAt: r.startsAt,
     endsAt: r.endsAt,
     isFeatured: r.isFeatured,
+    mintNumber: r.userCtoon.mintNumber,
     ctoon: r.userCtoon.ctoon
   }))
 })

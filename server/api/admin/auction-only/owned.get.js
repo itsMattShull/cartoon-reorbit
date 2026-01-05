@@ -43,7 +43,10 @@ export default defineEventHandler(async (event) => {
       id: { notIn: Array.from(pendingSet) },
       ctoon: { name: { contains: term, mode: 'insensitive' } }
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [
+      { mintNumber: 'asc' },
+      { createdAt: 'asc' }
+    ],
     take: LIMIT,
     include: {
       ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
@@ -56,7 +59,8 @@ export default defineEventHandler(async (event) => {
     ctoonId: r.ctoon.id,
     name: r.ctoon.name,
     rarity: r.ctoon.rarity,
-    assetPath: r.ctoon.assetPath
+    assetPath: r.ctoon.assetPath,
+    mintNumber: r.mintNumber
   }))
   const ownedCtoonIds = new Set(owned.map(x => x.ctoonId))
 
@@ -93,7 +97,8 @@ export default defineEventHandler(async (event) => {
       ctoonId: c.id,
       name: c.name,
       rarity: c.rarity,
-      assetPath: c.assetPath
+      assetPath: c.assetPath,
+      mintNumber: null
     }))
 
   const merged = [...owned, ...stock].slice(0, LIMIT)
