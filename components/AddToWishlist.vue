@@ -17,7 +17,7 @@
   <!-- Offer Points Modal -->
   <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
     <div class="absolute inset-0 bg-black/50" @click="closeModal"></div>
-    <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-5">
+    <div class="relative bg-white text-black rounded-lg shadow-lg w-full max-w-sm p-5">
       <h3 class="text-lg font-semibold mb-3">Offer points</h3>
 
       <label class="block text-sm mb-1">Points to offer</label>
@@ -32,7 +32,7 @@
       <p v-if="error" class="text-red-600 text-sm mt-2">{{ error }}</p>
 
       <div class="mt-4 flex justify-end gap-2">
-        <button class="px-3 py-1 border rounded" @click="closeModal">Cancel</button>
+        <button class="px-3 py-1 border rounded text-black" @click="closeModal">Cancel</button>
         <button
           class="px-3 py-1 rounded text-white"
           :class="confirmDisabled ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'"

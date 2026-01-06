@@ -50,35 +50,54 @@ function normalizeZones(czoneRow) {
 }
 
 // helper: replace the burned userCtoon in zones with the rewarded one; returns { zones, replaced }
-function replaceBurnedInZones(zones, burnedUserCtoonId, reward) {
+function replaceBurnedInZones(zones, burnedUserCtoonId, reward, sourceCtoonId = null) {
+  const applyReward = (item) => ({
+    ...item,
+    id: reward.userCtoonId,
+    userCtoonId: reward.userCtoonId,
+    ctoonId: reward.id,
+    name: reward.name,
+    series: reward.series,
+    rarity: reward.rarity,
+    set: reward.set ?? item.set,
+    releaseDate: reward.releaseDate ?? item.releaseDate,
+    quantity: reward.quantity ?? item.quantity,
+    assetPath: reward.assetPath,
+    isFirstEdition: reward.isFirstEdition ?? item.isFirstEdition,
+    mintNumber: reward.mintNumber ?? item.mintNumber
+  })
+
   let replaced = false
-  const next = zones.map((zone) => {
+  const byUserCtoon = zones.map((zone) => {
     const toons = zone.toons.map((item) => {
       const itemUserCtoonId = item?.userCtoonId || item?.id
       if (itemUserCtoonId === burnedUserCtoonId) {
         replaced = true
-        // Keep layout props and overwrite identity/metadata
-        return {
-          ...item,
-          id: reward.userCtoonId,
-          userCtoonId: reward.userCtoonId,
-          ctoonId: reward.id,
-          name: reward.name,
-          series: reward.series,
-          rarity: reward.rarity,
-          set: reward.set ?? item.set,
-          releaseDate: reward.releaseDate ?? item.releaseDate,
-          quantity: reward.quantity ?? item.quantity,
-          assetPath: reward.assetPath,
-          isFirstEdition: reward.isFirstEdition ?? item.isFirstEdition,
-          mintNumber: reward.mintNumber ?? item.mintNumber
-        }
+        return applyReward(item)
       }
       return item
     })
     return { ...zone, toons }
   })
-  return { zones: next, replaced }
+
+  if (replaced || !sourceCtoonId) return { zones: byUserCtoon, replaced }
+
+  replaced = false
+  const byCtoonId = byUserCtoon.map((zone) => {
+    const toons = zone.toons.map((item) => {
+      if (replaced) return item
+      const itemCtoonId = item?.ctoonId || null
+      const matchesLegacy = itemCtoonId === sourceCtoonId || item?.id === sourceCtoonId
+      if (matchesLegacy) {
+        replaced = true
+        return applyReward(item)
+      }
+      return item
+    })
+    return { ...zone, toons }
+  })
+
+  return { zones: byCtoonId, replaced }
 }
 
 async function getIdempotentRedemptionResponse(userId, sourceUserCtoonId) {
@@ -332,7 +351,8 @@ export default defineEventHandler(async (event) => {
         const { zones: updatedZones, replaced } = replaceBurnedInZones(
           zones,
           userCtoonId,
-          rewardPayload
+          rewardPayload,
+          source.ctoonId
         )
 
         if (replaced) {

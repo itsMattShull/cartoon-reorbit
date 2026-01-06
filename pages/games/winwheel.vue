@@ -121,8 +121,14 @@
               <template v-if="spinResult.type === 'nothing'">
                 <img src="/images/nothing1225.gif" alt="Nothing" class="max-w-full h-auto mx-auto mb-4" />
               </template>
-              <div v-if="spinResult.ctoon" class="text-center">
-                <img :src="spinResult.ctoon.assetPath" :alt="spinResult.ctoon.name" class="w-24 h-24 mx-auto mb-2" />
+            <div v-if="spinResult.ctoon" class="text-center">
+                <CtoonAsset
+                  :src="spinResult.ctoon.assetPath"
+                  :alt="spinResult.ctoon.name"
+                  :name="spinResult.ctoon.name"
+                  :ctoon-id="spinResult.ctoon.id"
+                  image-class="w-24 h-24 mx-auto mb-2"
+                />
                 <p class="font-semibold">{{ spinResult.ctoon.name }}</p>
               </div>
             </div>
@@ -190,7 +196,7 @@
                 <div
                   v-for="item in exclusivePool"
                   :key="item.id"
-                  class="relative border rounded-lg p-3 shadow-sm"
+                  class="relative border rounded-lg p-3 shadow-sm text-center"
                 >
                   <!-- Badge -->
                   <span
@@ -200,7 +206,13 @@
                     {{ item.owned ? 'Owned' : 'Unowned' }}
                   </span>
 
-                  <img :src="item.assetPath" :alt="item.name" class="w-full h-40 object-contain mb-2" />
+                  <CtoonAsset
+                    :src="item.assetPath"
+                    :alt="item.name"
+                    :name="item.name"
+                    :ctoon-id="item.id"
+                    image-class="w-full h-40 object-contain mb-2"
+                  />
                   <div class="text-sm font-semibold text-gray-800 text-center">{{ item.name }}</div>
                 </div>
               </div>
@@ -222,6 +234,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '@/composables/useAuth'
 import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
@@ -244,6 +257,11 @@ const loading = ref(true)
 // audio ref for jingle
 const spinAudio = ref(null)
 let spinSoundTimer = null
+// Web Audio buffer for rapid retrigger (Safari-friendly)
+let audioCtx = null
+let spinBuffer = null
+let spinBufferPromise = null
+const activeSpinSources = new Set()
 
 // reactive state
 const spinCost         = ref(null)
@@ -295,6 +313,7 @@ async function fetchStatus() {
     exclusivePool: pool
   } = res
 
+  const prevSoundPath     = winWheelSoundPath.value
   spinsLeft.value         = sl
   nextReset.value         = new Date(nr)
   spinCost.value          = cost
@@ -302,6 +321,10 @@ async function fetchStatus() {
   pointsWon.value         = pts
   winWheelImagePath.value = wheelPath || ''
   winWheelSoundPath.value = soundPath || ''
+  if (winWheelSoundPath.value !== prevSoundPath) {
+    spinBuffer = null
+    spinBufferPromise = null
+  }
   winWheelSoundMode.value = soundMode || 'repeat'
   exclusivePool.value     = Array.isArray(pool) ? pool : []
   updateCountdown()
@@ -395,16 +418,65 @@ function closeModal() {
   scavenger.openIfPending()
 }
 
+function ensureAudioContext() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {})
+    }
+    return audioCtx
+  }
+  const Ctx = window.AudioContext || window.webkitAudioContext
+  if (!Ctx) return null
+  audioCtx = new Ctx()
+  return audioCtx
+}
+
+function prepareSpinSoundBuffer() {
+  if (!winWheelSoundPath.value) return Promise.resolve(null)
+  if (spinBuffer) return Promise.resolve(spinBuffer)
+  if (spinBufferPromise) return spinBufferPromise
+  const ctx = ensureAudioContext()
+  if (!ctx) return Promise.resolve(null)
+  const soundPath = winWheelSoundPath.value
+  spinBufferPromise = fetch(soundPath)
+    .then(res => res.arrayBuffer())
+    .then(ab => ctx.decodeAudioData(ab))
+    .then(buf => {
+      spinBuffer = buf
+      return buf
+    })
+    .catch(err => {
+      console.warn('Failed to load spin sound buffer', err)
+      return null
+    })
+    .finally(() => {
+      spinBufferPromise = null
+    })
+  return spinBufferPromise
+}
+
+function playSpinSoundBuffer() {
+  if (!spinBuffer || !audioCtx) return false
+  const src = audioCtx.createBufferSource()
+  src.buffer = spinBuffer
+  src.connect(audioCtx.destination)
+  src.start(0)
+  activeSpinSources.add(src)
+  src.onended = () => activeSpinSources.delete(src)
+  return true
+}
+
 function playSpinSoundOnce() {
   try {
-    if (spinAudio.value) {
-      spinAudio.value.currentTime = 0
-      const playPromise = spinAudio.value.play()
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.catch(err => {
-          console.warn('Spin audio play prevented by browser:', err)
-        })
-      }
+    if (playSpinSoundBuffer()) return
+    if (!spinAudio.value) return
+    spinAudio.value.pause()
+    spinAudio.value.currentTime = 0
+    const playPromise = spinAudio.value.play()
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise.catch(err => {
+        console.warn('Spin audio play prevented by browser:', err)
+      })
     }
   } catch (e) {
     console.warn('Unable to play spin audio', e)
@@ -412,8 +484,9 @@ function playSpinSoundOnce() {
 }
 
 function startSpinSound() {
-  if (!spinAudio.value || !winWheelSoundPath.value) return
+  if (!winWheelSoundPath.value) return
   stopSpinSound()
+  void prepareSpinSoundBuffer()
   if (winWheelSoundMode.value === 'once') {
     playSpinSoundOnce()
     return
@@ -441,6 +514,14 @@ function stopSpinSound() {
   if (spinSoundTimer) {
     clearTimeout(spinSoundTimer)
     spinSoundTimer = null
+  }
+  if (activeSpinSources.size > 0) {
+    activeSpinSources.forEach(src => {
+      try {
+        src.stop(0)
+      } catch {}
+    })
+    activeSpinSources.clear()
   }
   if (spinAudio.value) {
     spinAudio.value.pause()

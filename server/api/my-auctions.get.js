@@ -22,13 +22,20 @@ export default defineEventHandler(async (event) => {
     where: { creatorId: userId },
     include: {
       userCtoon: {
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          ctoonId: true,
+          mintNumber: true,
           ctoon: {
             select: {
               assetPath: true,
               name: true,
+              rarity: true,
+              price: true,
             },
           },
+          auctions: { where: { status: 'ACTIVE' }, select: { id: true } },
         },
       },
       bids: {
@@ -48,14 +55,22 @@ export default defineEventHandler(async (event) => {
 
   // 3. Return endAt so frontend can show “In Progress” vs “Ended”
   return auctions.map(a => ({
-    id:            a.id,
-    assetPath:     a.userCtoon.ctoon.assetPath,
-    name:          a.userCtoon.ctoon.name,
-    createdAt:     a.createdAt.toISOString(),
-    endAt:         a.endAt.toISOString(),      // <— new
-    initialBid:    a.initialBet,
-    winningBid:    a.bids[0]?.amount ?? null,
-    winningBidder: a.bids[0]?.user.username ?? null,
-    bidCount:      a._count?.bids ?? 0,
+    id:               a.id,
+    status:           a.status,
+    userCtoonId:      a.userCtoonId,
+    ctoonId:          a.userCtoon?.ctoonId ?? null,
+    assetPath:        a.userCtoon?.ctoon?.assetPath ?? null,
+    name:             a.userCtoon?.ctoon?.name ?? null,
+    rarity:           a.userCtoon?.ctoon?.rarity ?? null,
+    price:            a.userCtoon?.ctoon?.price ?? 0,
+    mintNumber:       a.userCtoon?.mintNumber ?? null,
+    createdAt:        a.createdAt.toISOString(),
+    endAt:            a.endAt.toISOString(),      // <— new
+    initialBid:       a.initialBet,
+    winningBid:       a.bids[0]?.amount ?? null,
+    winningBidder:    a.bids[0]?.user.username ?? null,
+    bidCount:         a._count?.bids ?? 0,
+    isOwner:          a.userCtoon?.userId === userId,
+    hasActiveAuction: (a.userCtoon?.auctions?.length ?? 0) > 0,
   }))
 })

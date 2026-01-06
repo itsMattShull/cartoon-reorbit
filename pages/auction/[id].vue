@@ -42,10 +42,13 @@
 
       <!-- Ctoon Image Centered -->
       <div class="flex justify-center mb-6">
-        <img
+        <CtoonAsset
           :src="auction.ctoon.assetPath"
           :alt="auction.ctoon.name"
-          class="block max-w-full mx-auto rounded"
+          :name="auction.ctoon.name"
+          :ctoon-id="auction.ctoon.id"
+          :user-ctoon-id="auction.ctoon.userCtoonId"
+          image-class="block max-w-full mx-auto rounded"
         />
       </div>
 
@@ -197,6 +200,7 @@ import { useRuntimeConfig } from '#imports'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
 definePageMeta({ title: 'Auction Details', middleware: ['auth'], layout: 'default' })

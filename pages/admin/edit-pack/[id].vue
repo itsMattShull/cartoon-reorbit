@@ -327,6 +327,10 @@ watch(scheduledOffAtLocal, (value) => {
 /** assign default weights based on each cToon.inCmart flag */
 function assignDefaultWeights(rarity) {
   const ids = grouped.value[rarity] || []
+  if (ids.length === 1) {
+    weights.value[ids[0]] = 100
+    return
+  }
   const map = defaultWeightConfigs[rarity] || {}
   ids.forEach(id => {
     const c = lookup.value[id]

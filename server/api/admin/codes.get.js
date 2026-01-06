@@ -20,9 +20,13 @@ export default defineEventHandler(async (event) => {
   const searchTerm = typeof query.q === 'string' ? query.q.trim() : ''
   const hasCodeFilter = Boolean(codeFilter)
   const hasSearchTerm = Boolean(searchTerm)
+  const sort = typeof query.sort === 'string' ? query.sort : 'created'
   const page = hasCodeFilter ? 1 : Math.max(parseInt(query.page || '1', 10), 1)
   const limit = hasCodeFilter ? 1 : Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
   const skip = hasCodeFilter ? 0 : (page - 1) * limit
+  const orderBy = sort === 'expires'
+    ? [{ expiresAt: 'asc' }, { createdAt: 'desc' }]
+    : [{ createdAt: 'desc' }]
   const where = {
     showInFrontend: true,
     ...(hasCodeFilter ? { code: codeFilter } : {}),
@@ -63,7 +67,7 @@ export default defineEventHandler(async (event) => {
     prisma.claimCode.count({ where }),
     prisma.claimCode.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       skip,
       take: limit,
       select: {

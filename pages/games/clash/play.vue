@@ -1,6 +1,7 @@
 <!-- pages/games/clash/play.vue -->
  <template>
   <Nav />
+  <div class="mt-12 md:mt-8"></div> <!-- spacer for fixed nav -->
 
   <!-- Mobile-only sticky timer + instructions -->
   <div

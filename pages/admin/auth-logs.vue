@@ -29,6 +29,14 @@
 
       <!-- Duplicate Users Tab -->
       <div v-if="activeTab === 'Duplicates'">
+        <div class="mb-4">
+          <input
+            v-model="duplicateSearchTerm"
+            type="text"
+            placeholder="Search duplicate usernames…"
+            class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
         <div v-if="duplicateLoading" class="text-gray-500">
           Loading...
         </div>
@@ -287,6 +295,7 @@ const duplicateLoading = ref(false)
 const duplicatePageSize = 100
 const activeTab        = ref('Duplicates')
 const searchTerm       = ref('')
+const duplicateSearchTerm = ref('')
 
 // known users + points
 const usersLoaded     = ref(false)
@@ -331,6 +340,8 @@ async function fetchDuplicateGroups() {
       page: String(duplicatePage.value),
       limit: String(duplicatePageSize)
     })
+    const term = duplicateSearchTerm.value.trim()
+    if (term) params.set('username', term)
     const res = await fetch(`/api/admin/duplicate-users?${params.toString()}`, { credentials: 'include' })
     if (!res.ok) {
       duplicateGroups.value = []
@@ -527,6 +538,16 @@ watch(searchTerm, () => {
   searchDebounceId = setTimeout(() => {
     logsPage.value = 1
     fetchAllLogs()
+  }, 300)
+})
+
+let duplicateSearchDebounceId = null
+watch(duplicateSearchTerm, () => {
+  if (activeTab.value !== 'Duplicates') return
+  if (duplicateSearchDebounceId) clearTimeout(duplicateSearchDebounceId)
+  duplicateSearchDebounceId = setTimeout(() => {
+    duplicatePage.value = 1
+    fetchDuplicateGroups()
   }, 300)
 })
 </script>

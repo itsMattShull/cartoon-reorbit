@@ -212,7 +212,14 @@
                     </span>
 
                     <div class="flex-grow flex items-center justify-center">
-                      <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
+                      <CtoonAsset
+                        :src="auction.assetPath"
+                        :alt="auction.name"
+                        :name="auction.name"
+                        :ctoon-id="auction.ctoonId"
+                        :user-ctoon-id="auction.userCtoonId"
+                        image-class="block max-w-full mx-auto rounded mb-4"
+                      />
                     </div>
 
                     <div class="mt-4">
@@ -270,7 +277,14 @@
                 </span>
 
                 <div class="flex-grow flex items-center justify-center">
-                  <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
+                  <CtoonAsset
+                    :src="auction.assetPath"
+                    :alt="auction.name"
+                    :name="auction.name"
+                    :ctoon-id="auction.ctoonId"
+                    :user-ctoon-id="auction.userCtoonId"
+                    image-class="block max-w-full mx-auto rounded mb-4"
+                  />
                 </div>
 
                 <div class="mt-4">
@@ -348,10 +362,29 @@
                 >
                   Lost
                 </span>
+                <span
+                  v-else-if="!isEnded(bid.endAt) && bid.myBid != null && bid.highestBid != null && bid.myBid === bid.highestBid"
+                  class="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Winning
+                </span>
+                <span
+                  v-else-if="!isEnded(bid.endAt)"
+                  class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Losing
+                </span>
               </div>
 
               <div class="flex-grow flex items-center justify-center mb-4">
-                <img :src="bid.assetPath" class="max-w-full rounded" />
+                <CtoonAsset
+                  :src="bid.assetPath"
+                  :alt="bid.name"
+                  :name="bid.name"
+                  :ctoon-id="bid.ctoonId"
+                  :user-ctoon-id="bid.userCtoonId"
+                  image-class="max-w-full rounded"
+                />
               </div>
 
               <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
@@ -420,7 +453,14 @@
             </div>
 
             <div class="flex-grow flex items-center justify-center mb-4">
-              <img :src="auction.assetPath" class="max-w-full rounded" />
+              <CtoonAsset
+                :src="auction.assetPath"
+                :alt="auction.name"
+                :name="auction.name"
+                :ctoon-id="auction.ctoonId"
+                :user-ctoon-id="auction.userCtoonId"
+                image-class="max-w-full rounded"
+              />
             </div>
 
             <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
@@ -436,6 +476,22 @@
             <p v-if="auction.winningBidder" class="text-sm text-gray-600">
               Winner: {{ auction.winningBidder }}
             </p>
+            <div v-if="auction.isOwner" class="mt-4">
+              <AddToAuction
+                :userCtoon="{
+                  id: auction.userCtoonId,
+                  ctoonId: auction.ctoonId,
+                  name: auction.name,
+                  price: auction.price,
+                  rarity: auction.rarity,
+                  mintNumber: auction.mintNumber,
+                  assetPath: auction.assetPath
+                }"
+                :isOwner="auction.isOwner"
+                :hasActiveAuction="auction.hasActiveAuction"
+                @auctionCreated="loadMyAuctions"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -446,6 +502,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
+import AddToAuction from '@/components/AddToAuction.vue'
 
 definePageMeta({ title: 'Auctions', middleware: 'auth', layout: 'default' })
 
@@ -646,12 +704,9 @@ const uniqueRarities = computed(() => {
   return [...new Set(auctions.value.map(a => a.rarity).filter(Boolean))].sort()
 })
 
-const trendingIdSet = computed(() => new Set(trendingAuctions.value.map(a => a.id)))
-
 const filteredAuctions = computed(() => {
   const term = (searchQuery.value || '').toLowerCase().trim()
   return auctions.value
-    .filter(a => !trendingIdSet.value.has(a.id))
     .filter(a => {
       if (!term) return true
       const nameMatch = (a.name || '').toLowerCase().includes(term)

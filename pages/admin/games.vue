@@ -110,7 +110,7 @@
 
           <!-- Schedule UI -->
           <p class="text-sm text-gray-600 mb-2">
-            All dates and times are interpreted as <strong>Central Time (US)</strong>. Default time is 8:00 PM.
+            All dates and times are interpreted as <strong>Central Time (US)</strong>. Default time is 8:00 PM (8:00 AM on Thursdays).
           </p>
 
           <div class="mb-4">
@@ -138,8 +138,11 @@
                       </div>
                     </div>
                   </td>
-                  <td class="p-2 text-right">
-                    <button @click="removeSchedule(row)" class="px-2 py-1 rounded border">Remove</button>
+                  <td class="p-2">
+                    <div class="flex justify-end gap-2">
+                      <button @click="openEditModal(row)" class="px-2 py-1 rounded border">Edit</button>
+                      <button @click="removeSchedule(row)" class="px-2 py-1 rounded border">Remove</button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="!schedules.length">
@@ -149,7 +152,7 @@
             </table>
           </div>
 
-          <!-- Add modal (unchanged) -->
+          <!-- Add modal -->
           <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div class="bg-white rounded-lg w-full max-w-md p-4">
               <h3 class="text-lg font-semibold mb-3">Schedule Grand Prize</h3>
@@ -186,7 +189,7 @@
               <div class="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700">Date (Central)</label>
-                  <input type="date" v-model="modalDate" class="input" />
+                  <input type="date" v-model="modalDate" class="input" @change="setModalTimeFromDate" />
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700">Time (Central)</label>
@@ -197,6 +200,63 @@
                 <button @click="closeAddModal" class="px-3 py-2 rounded border">Cancel</button>
                 <button @click="createSchedule" :disabled="savingSchedule || !modalSelectedCtoon || !modalDate || !modalTime" class="px-3 py-2 rounded bg-indigo-600 text-white">
                   {{ savingSchedule ? 'Saving…' : 'Add' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Edit modal -->
+          <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div class="bg-white rounded-lg w-full max-w-md p-4">
+              <h3 class="text-lg font-semibold mb-3">Edit Grand Prize Schedule</h3>
+              <!-- selector -->
+              <div class="mb-4 relative">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+                <input
+                  type="text"
+                  v-model="editSearch"
+                  @focus="editShowDropdown = true"
+                  @input="onEditSearchInput"
+                  :placeholder="editSelectedCtoon ? editSelectedCtoon.name : 'Type a cToon name…'"
+                  class="input"
+                />
+                <ul
+                  v-if="editShowDropdown && editFiltered.length"
+                  class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                >
+                  <li
+                    v-for="c in editFiltered"
+                    :key="c.id"
+                    @mousedown.prevent="selectEditCtoon(c)"
+                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                  >
+                    <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
+                    <div>
+                      <p class="text-sm font-medium">{{ c.name }}</p>
+                      <p class="text-xs text-gray-500 capitalize">{{ c.rarity }}</p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+              <!-- date/time -->
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Date (Central)</label>
+                  <input type="date" v-model="editDate" class="input" @change="setEditTimeFromDate" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Time (Central)</label>
+                  <input type="time" v-model="editTime" class="input" />
+                </div>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button @click="closeEditModal" class="px-3 py-2 rounded border">Cancel</button>
+                <button
+                  @click="updateSchedule"
+                  :disabled="savingEditSchedule || !editSelectedCtoon || !editDate || !editTime"
+                  class="px-3 py-2 rounded bg-indigo-600 text-white"
+                >
+                  {{ savingEditSchedule ? 'Saving…' : 'Save' }}
                 </button>
               </div>
             </div>
@@ -430,6 +490,20 @@ async function loadSchedules() {
   schedules.value = res.items || []
 }
 
+const DEFAULT_WINBALL_TIME = '20:00'
+const THURSDAY_WINBALL_TIME = '08:00'
+function getDefaultWinballTime(dateStr) {
+  if (!dateStr) return DEFAULT_WINBALL_TIME
+  const date = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return DEFAULT_WINBALL_TIME
+  return date.getDay() === 4 ? THURSDAY_WINBALL_TIME : DEFAULT_WINBALL_TIME
+}
+function splitStartsAtLocal(value) {
+  if (!value || typeof value !== 'string') return { date: '', time: '' }
+  const [date, time] = value.trim().split(' ')
+  return { date: date || '', time: time || '' }
+}
+
 // modal state
 const showAddModal = ref(false)
 const savingSchedule = ref(false)
@@ -437,7 +511,16 @@ const modalSelectedCtoon = ref(null)
 const modalSearch = ref('')
 const modalShowDropdown = ref(false)
 const modalDate = ref('')
-const modalTime = ref('20:00') // default 8 PM Central
+const modalTime = ref(DEFAULT_WINBALL_TIME)
+
+const showEditModal = ref(false)
+const savingEditSchedule = ref(false)
+const editingSchedule = ref(null)
+const editSelectedCtoon = ref(null)
+const editSearch = ref('')
+const editShowDropdown = ref(false)
+const editDate = ref('')
+const editTime = ref(DEFAULT_WINBALL_TIME)
 
 const modalFiltered = computed(() => {
   const t = modalSearch.value.trim().toLowerCase()
@@ -453,6 +536,20 @@ function selectModalCtoon(c) {
   modalShowDropdown.value = false
 }
 
+const editFiltered = computed(() => {
+  const t = editSearch.value.trim().toLowerCase()
+  if (!t) return []
+  return allCtoons.value
+    .filter(c => c.name.toLowerCase().includes(t))
+    .slice(0, 8)
+})
+function onEditSearchInput() { editShowDropdown.value = !!editSearch.value.trim() }
+function selectEditCtoon(c) {
+  editSelectedCtoon.value = c
+  editSearch.value = c.name
+  editShowDropdown.value = false
+}
+
 function openAddModal() {
   modalSelectedCtoon.value = null
   modalSearch.value = ''
@@ -463,10 +560,25 @@ function openAddModal() {
   const m = String(today.getMonth() + 1).padStart(2, '0')
   const d = String(today.getDate()).padStart(2, '0')
   modalDate.value = `${y}-${m}-${d}`
-  modalTime.value = '20:00'
+  modalTime.value = getDefaultWinballTime(modalDate.value)
   showAddModal.value = true
 }
 function closeAddModal() { showAddModal.value = false }
+function setModalTimeFromDate() { modalTime.value = getDefaultWinballTime(modalDate.value) }
+
+function openEditModal(row) {
+  if (!row) return
+  editingSchedule.value = row
+  editSelectedCtoon.value = row.ctoon || null
+  editSearch.value = row.ctoon?.name || ''
+  editShowDropdown.value = false
+  const { date, time } = splitStartsAtLocal(row.startsAtLocal)
+  editDate.value = date
+  editTime.value = time || getDefaultWinballTime(date)
+  showEditModal.value = true
+}
+function closeEditModal() { showEditModal.value = false }
+function setEditTimeFromDate() { editTime.value = getDefaultWinballTime(editDate.value) }
 
 async function createSchedule() {
   if (!modalSelectedCtoon.value || !modalDate.value || !modalTime.value) return
@@ -497,6 +609,32 @@ async function createSchedule() {
     toastType.value = 'error'
   } finally {
     savingSchedule.value = false
+  }
+}
+
+async function updateSchedule() {
+  if (!editingSchedule.value?.id || !editSelectedCtoon.value || !editDate.value || !editTime.value) return
+  savingEditSchedule.value = true
+  toastMessage.value = ''
+  try {
+    const startsAtLocal = `${editDate.value} ${editTime.value}`
+    await $fetch(`/api/admin/winball-grand-prize/${editingSchedule.value.id}`, {
+      method: 'PUT',
+      body: {
+        ctoonId: editSelectedCtoon.value.id,
+        startsAtLocal
+      }
+    })
+    await loadSchedules()
+    toastMessage.value = 'Schedule updated'
+    toastType.value = 'success'
+    showEditModal.value = false
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Failed to update schedule'
+    toastType.value = 'error'
+  } finally {
+    savingEditSchedule.value = false
   }
 }
 

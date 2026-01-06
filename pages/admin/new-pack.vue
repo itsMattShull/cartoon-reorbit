@@ -491,6 +491,9 @@ const defaultWeightConfigs = {
 /** return a map of id → default weight for this rarity */
 function assignDefaultWeights(rarity) {
   const ids = grouped.value[rarity] || []
+  if (ids.length === 1) {
+    return { [ids[0]]: 100 }
+  }
   const result = {}
   const map = defaultWeightConfigs[rarity] || {}
   ids.forEach(id => {
@@ -547,7 +550,8 @@ function toggleSelect(cto) {
   searchInput.value?.blur()
 }
 function onManualWeight(rarity, id) {
-  weights.value[id] = Math.min(99, Math.max(1, Number(weights.value[id] || 0)))
+  const max = (grouped.value[rarity] || []).length === 1 ? 100 : 99
+  weights.value[id] = Math.min(max, Math.max(1, Number(weights.value[id] || 0)))
 }
 
 // 6️⃣ NEW: Set picker + bulk add by Set

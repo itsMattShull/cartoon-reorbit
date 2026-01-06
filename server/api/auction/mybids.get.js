@@ -75,6 +75,8 @@ export default defineEventHandler(async (event) => {
 
     return {
       id: a.id,
+      userCtoonId: a.userCtoon?.id ?? null,
+      ctoonId: a.userCtoon?.ctoonId ?? null,
       name: a.userCtoon?.ctoon?.name ?? 'Unknown',
       assetPath: a.userCtoon?.ctoon?.assetPath ?? '',
       endAt: endAtISO,

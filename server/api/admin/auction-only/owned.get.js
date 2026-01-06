@@ -43,7 +43,10 @@ export default defineEventHandler(async (event) => {
       id: { notIn: Array.from(pendingSet) },
       ctoon: { name: { contains: term, mode: 'insensitive' } }
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [
+      { mintNumber: 'asc' },
+      { createdAt: 'asc' }
+    ],
     take: LIMIT,
     include: {
       ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
@@ -56,7 +59,8 @@ export default defineEventHandler(async (event) => {
     ctoonId: r.ctoon.id,
     name: r.ctoon.name,
     rarity: r.ctoon.rarity,
-    assetPath: r.ctoon.assetPath
+    assetPath: r.ctoon.assetPath,
+    mintNumber: r.mintNumber
   }))
   const ownedCtoonIds = new Set(owned.map(x => x.ctoonId))
 
@@ -93,9 +97,27 @@ export default defineEventHandler(async (event) => {
       ctoonId: c.id,
       name: c.name,
       rarity: c.rarity,
-      assetPath: c.assetPath
+      assetPath: c.assetPath,
+      mintNumber: null
     }))
 
-  // 3) Merge (owned first), cap
-  return [...owned, ...stock].slice(0, LIMIT)
+  const merged = [...owned, ...stock].slice(0, LIMIT)
+  if (merged.length === 0) return []
+
+  const countRows = await prisma.userCtoon.groupBy({
+    by: ['ctoonId'],
+    where: {
+      userId: owner.id,
+      ctoonId: { in: merged.map(r => r.ctoonId) },
+      id: { notIn: Array.from(pendingSet) }
+    },
+    _count: { _all: true }
+  })
+  const countMap = new Map(countRows.map(r => [r.ctoonId, r._count._all]))
+
+  // 3) Merge (owned first), cap + attach owned count
+  return merged.map(row => ({
+    ...row,
+    ownedCount: Number(countMap.get(row.ctoonId) || 0)
+  }))
 })
