@@ -362,6 +362,18 @@
                 >
                   Lost
                 </span>
+                <span
+                  v-else-if="!isEnded(bid.endAt) && bid.myBid != null && bid.highestBid != null && bid.myBid === bid.highestBid"
+                  class="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Winning
+                </span>
+                <span
+                  v-else-if="!isEnded(bid.endAt)"
+                  class="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  Losing
+                </span>
               </div>
 
               <div class="flex-grow flex items-center justify-center mb-4">

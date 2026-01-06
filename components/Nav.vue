@@ -227,6 +227,7 @@ const adminGroups = [
         title: 'Admin — Content',
         items: [
           { label: 'Manage cToons', to: '/admin/ctoons' },
+          { label: 'Initiate Trade', to: '/admin/initiate-trade' },
           { label: 'Manage Packs', to: '/admin/packs' },
           { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
           { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
