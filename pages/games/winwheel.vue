@@ -196,7 +196,7 @@
                 <div
                   v-for="item in exclusivePool"
                   :key="item.id"
-                  class="relative border rounded-lg p-3 shadow-sm"
+                  class="relative border rounded-lg p-3 shadow-sm text-center"
                 >
                   <!-- Badge -->
                   <span

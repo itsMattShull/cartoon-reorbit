@@ -90,7 +90,7 @@
         >
           Close
         </button>
-        <div v-if="isCzoneRoute || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
+        <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
           <div v-if="canSeeHolidayReveal">
             <button
               v-if="canOpenNow"
@@ -106,7 +106,7 @@
             </div>
           </div>
           <AddToWishlist
-            v-if="isCzoneRoute && ctoon.id"
+            v-if="ctoon.id"
             :ctoon-id="ctoon.id"
             class="text-xs"
           />
@@ -140,12 +140,7 @@ const openingHoliday = ref(false)
 const revealCountdown = ref('')
 let revealTimer = null
 
-const route = useRoute()
 const isCzoneContext = computed(() => context.value?.source === 'czone')
-const isCzoneRoute = computed(() => {
-  const path = route?.path || ''
-  return typeof path === 'string' && path.startsWith('/czone/')
-})
 const canSeeHolidayReveal = computed(() => {
   return (
     isCzoneContext.value &&
