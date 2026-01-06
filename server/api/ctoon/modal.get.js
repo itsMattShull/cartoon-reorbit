@@ -75,10 +75,10 @@ export default defineEventHandler(async (event) => {
       orderBy: [{ highestBid: 'asc' }, { endAt: 'desc' }],
       select: { highestBid: true, endAt: true, userCtoon: { select: { mintNumber: true } } }
     }),
-    prisma.tradeCtoon.count({
+    prisma.tradeOffer.count({
       where: {
-        userCtoon: { ctoonId: ctoon.id },
-        trade: { confirmed: true }
+        status: 'ACCEPTED',
+        ctoons: { some: { userCtoon: { ctoonId: ctoon.id } } }
       }
     }),
     prisma.auction.findMany({
@@ -102,10 +102,10 @@ export default defineEventHandler(async (event) => {
   let userStats = null
   if (userCtoon) {
     const [tradeCount, auctions] = await Promise.all([
-      prisma.tradeCtoon.count({
+      prisma.tradeOffer.count({
         where: {
-          userCtoonId: userCtoon.id,
-          trade: { confirmed: true }
+          status: 'ACCEPTED',
+          ctoons: { some: { userCtoonId: userCtoon.id } }
         }
       }),
       prisma.auction.findMany({
