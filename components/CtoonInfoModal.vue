@@ -46,26 +46,44 @@
           <div class="rounded bg-gray-700/60 p-3">
             <div class="text-xs uppercase text-gray-300">Highest Value</div>
             <div class="font-semibold">{{ formatValue(ctoon.highestSale, ' pts') }}</div>
-            <div v-if="ctoon.highestSaleMint != null" class="text-xs text-gray-300">
-              Mint #{{ formatValue(ctoon.highestSaleMint) }}
+            <div v-if="ctoon.highestSaleMint != null || ctoon.highestSaleEndedAt" class="text-xs text-gray-300">
+              <span v-if="ctoon.highestSaleMint != null">Mint #{{ formatValue(ctoon.highestSaleMint) }}</span>
+              <span v-if="ctoon.highestSaleEndedAt"> · {{ formatDate(ctoon.highestSaleEndedAt) }}</span>
             </div>
           </div>
           <div class="rounded bg-gray-700/60 p-3">
             <div class="text-xs uppercase text-gray-300">Lowest Value</div>
             <div class="font-semibold">{{ formatValue(ctoon.lowestSale, ' pts') }}</div>
-            <div v-if="ctoon.lowestSaleMint != null" class="text-xs text-gray-300">
-              Mint #{{ formatValue(ctoon.lowestSaleMint) }}
+            <div v-if="ctoon.lowestSaleMint != null || ctoon.lowestSaleEndedAt" class="text-xs text-gray-300">
+              <span v-if="ctoon.lowestSaleMint != null">Mint #{{ formatValue(ctoon.lowestSaleMint) }}</span>
+              <span v-if="ctoon.lowestSaleEndedAt"> · {{ formatDate(ctoon.lowestSaleEndedAt) }}</span>
             </div>
+          </div>
+          <div class="rounded bg-gray-700/60 p-3">
+            <div class="text-xs uppercase text-gray-300">Times Traded</div>
+            <div class="font-semibold">{{ formatValue(ctoon.tradedCount) }}</div>
+          </div>
+          <div class="rounded bg-gray-700/60 p-3">
+            <div class="text-xs uppercase text-gray-300">Successful Auctions</div>
+            <div class="font-semibold">{{ formatValue(ctoon.successfulAuctions) }}</div>
+          </div>
+          <div class="rounded bg-gray-700/60 p-3">
+            <div class="text-xs uppercase text-gray-300">Avg Sale</div>
+            <div class="font-semibold">{{ formatValue(ctoon.avgSale, ' pts') }}</div>
+          </div>
+          <div class="rounded bg-gray-700/60 p-3">
+            <div class="text-xs uppercase text-gray-300">Median Sale</div>
+            <div class="font-semibold">{{ formatValue(ctoon.medianSale, ' pts') }}</div>
           </div>
         </div>
 
-          <div v-if="userCtoon" class="space-y-2">
-            <h4 class="text-sm uppercase tracking-wide text-gray-300">Mint #{{ formatValue(userCtoon.mintNumber) }}</h4>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div class="rounded bg-gray-700/60 p-3">
-                <div class="text-xs uppercase text-gray-300">Times Traded</div>
-                <div class="font-semibold">{{ formatValue(userCtoon.tradedCount) }}</div>
-              </div>
+        <div v-if="userCtoon" class="space-y-2">
+          <h4 class="text-sm uppercase tracking-wide text-gray-300">Mint #{{ formatValue(userCtoon.mintNumber) }}</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div class="rounded bg-gray-700/60 p-3">
+              <div class="text-xs uppercase text-gray-300">Times Traded</div>
+              <div class="font-semibold">{{ formatValue(userCtoon.tradedCount) }}</div>
+            </div>
               <div class="rounded bg-gray-700/60 p-3">
                 <div class="text-xs uppercase text-gray-300">Successful Auctions</div>
                 <div class="font-semibold">{{ formatValue(userCtoon.successfulAuctions) }}</div>
@@ -239,5 +257,16 @@ function formatValue(value, suffix = '') {
   if (value === null || value === undefined || value === '') return 'N/A'
   if (typeof value === 'number') return `${value.toLocaleString()}${suffix}`
   return `${value}${suffix}`
+}
+
+function formatDate(value) {
+  if (!value) return 'N/A'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return 'N/A'
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 }
 </script>

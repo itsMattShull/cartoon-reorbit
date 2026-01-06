@@ -60,7 +60,8 @@ function handleClick(event) {
   justify-content: center;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   cursor: pointer;
 }
 </style>

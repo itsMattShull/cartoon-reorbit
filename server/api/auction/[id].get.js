@@ -45,6 +45,8 @@ export default defineEventHandler(async (event) => {
     id: auction.id,
     isFeatured: auction.isFeatured,
     ctoon: {
+      id:         auction.userCtoon.ctoonId,
+      userCtoonId: auction.userCtoon.id,
       assetPath:  auction.userCtoon.ctoon.assetPath,
       name:       auction.userCtoon.ctoon.name,
       series:     auction.userCtoon.ctoon.series,

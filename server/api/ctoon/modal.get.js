@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
   })
   const highestMint = mintAgg._max.mintNumber ?? ctoon.totalMinted ?? 0
 
-  const [highestSale, lowestSale] = await Promise.all([
+  const [highestSale, lowestSale, overallTradeCount, overallAuctions] = await Promise.all([
     prisma.auction.findFirst({
       where: {
         userCtoon: { ctoonId: ctoon.id },
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
         winnerId: { not: null }
       },
       orderBy: [{ highestBid: 'desc' }, { endAt: 'desc' }],
-      select: { highestBid: true, userCtoon: { select: { mintNumber: true } } }
+      select: { highestBid: true, endAt: true, userCtoon: { select: { mintNumber: true } } }
     }),
     prisma.auction.findFirst({
       where: {
@@ -73,9 +73,31 @@ export default defineEventHandler(async (event) => {
         winnerId: { not: null }
       },
       orderBy: [{ highestBid: 'asc' }, { endAt: 'desc' }],
-      select: { highestBid: true, userCtoon: { select: { mintNumber: true } } }
+      select: { highestBid: true, endAt: true, userCtoon: { select: { mintNumber: true } } }
+    }),
+    prisma.tradeCtoon.count({
+      where: {
+        userCtoon: { ctoonId: ctoon.id },
+        trade: { confirmed: true }
+      }
+    }),
+    prisma.auction.findMany({
+      where: {
+        userCtoon: { ctoonId: ctoon.id },
+        status: 'CLOSED',
+        winnerId: { not: null }
+      },
+      select: { highestBid: true }
     })
   ])
+
+  const overallSales = overallAuctions
+    .map(a => a.highestBid)
+    .filter(v => typeof v === 'number')
+  const overallAvgSale = overallSales.length
+    ? Number((overallSales.reduce((sum, v) => sum + v, 0) / overallSales.length).toFixed(2))
+    : null
+  const overallMedianSale = computeMedian(overallSales)
 
   let userStats = null
   if (userCtoon) {
@@ -126,8 +148,14 @@ export default defineEventHandler(async (event) => {
       price: ctoon.price,
       highestSale: highestSale?.highestBid ?? null,
       highestSaleMint: highestSale?.userCtoon?.mintNumber ?? null,
+      highestSaleEndedAt: highestSale?.endAt ?? null,
       lowestSale: lowestSale?.highestBid ?? null,
-      lowestSaleMint: lowestSale?.userCtoon?.mintNumber ?? null
+      lowestSaleMint: lowestSale?.userCtoon?.mintNumber ?? null,
+      lowestSaleEndedAt: lowestSale?.endAt ?? null,
+      tradedCount: overallTradeCount,
+      successfulAuctions: overallSales.length,
+      avgSale: overallAvgSale,
+      medianSale: overallMedianSale
     },
     userCtoon: userStats
   }
