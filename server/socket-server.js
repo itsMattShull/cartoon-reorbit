@@ -63,9 +63,18 @@ const ASSET_BASE =
     : 'http://localhost:3000');
 
 
-const withAsset = p => (p
-  ? (p.startsWith('http') ? p : `${ASSET_BASE}${p}`)
-  : null);
+const withAsset = p => {
+  console.log('withAsset input p:', p);
+  console.log('ASSET_BASE:', ASSET_BASE);
+
+  const result = p
+    ? (p.startsWith('http') ? p : `${ASSET_BASE}${p}`)
+    : null;
+
+  console.log('withAsset output:', result);
+
+  return result;
+};
 
 const sid = v => String(v)
 
