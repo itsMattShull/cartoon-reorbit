@@ -464,6 +464,22 @@
             <p v-if="auction.winningBidder" class="text-sm text-gray-600">
               Winner: {{ auction.winningBidder }}
             </p>
+            <div v-if="auction.isOwner" class="mt-4">
+              <AddToAuction
+                :userCtoon="{
+                  id: auction.userCtoonId,
+                  ctoonId: auction.ctoonId,
+                  name: auction.name,
+                  price: auction.price,
+                  rarity: auction.rarity,
+                  mintNumber: auction.mintNumber,
+                  assetPath: auction.assetPath
+                }"
+                :isOwner="auction.isOwner"
+                :hasActiveAuction="auction.hasActiveAuction"
+                @auctionCreated="loadMyAuctions"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -475,6 +491,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
+import AddToAuction from '@/components/AddToAuction.vue'
 
 definePageMeta({ title: 'Auctions', middleware: 'auth', layout: 'default' })
 
@@ -675,12 +692,9 @@ const uniqueRarities = computed(() => {
   return [...new Set(auctions.value.map(a => a.rarity).filter(Boolean))].sort()
 })
 
-const trendingIdSet = computed(() => new Set(trendingAuctions.value.map(a => a.id)))
-
 const filteredAuctions = computed(() => {
   const term = (searchQuery.value || '').toLowerCase().trim()
   return auctions.value
-    .filter(a => !trendingIdSet.value.has(a.id))
     .filter(a => {
       if (!term) return true
       const nameMatch = (a.name || '').toLowerCase().includes(term)
