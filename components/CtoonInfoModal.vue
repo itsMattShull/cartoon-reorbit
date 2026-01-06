@@ -40,6 +40,10 @@
             <div class="font-semibold">{{ formatValue(ctoon.series) }}</div>
           </div>
           <div class="rounded bg-gray-700/60 p-3">
+            <div class="text-xs uppercase text-gray-300">Release Date</div>
+            <div class="font-semibold">{{ formatDate(ctoon.releaseDate) }}</div>
+          </div>
+          <div class="rounded bg-gray-700/60 p-3">
             <div class="text-xs uppercase text-gray-300">cMart Value</div>
             <div class="font-semibold">{{ formatValue(ctoon.price, ' pts') }}</div>
           </div>

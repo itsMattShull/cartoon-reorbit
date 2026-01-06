@@ -144,6 +144,7 @@ export default defineEventHandler(async (event) => {
       rarity: ctoon.rarity,
       set: ctoon.set,
       series: ctoon.series,
+      releaseDate: ctoon.releaseDate,
       highestMint,
       price: ctoon.price,
       highestSale: highestSale?.highestBid ?? null,
