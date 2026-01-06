@@ -64,16 +64,21 @@ const ASSET_BASE =
 
 
 const withAsset = p => {
-  console.log('withAsset input p:', p);
-  console.log('ASSET_BASE:', ASSET_BASE);
+  if (!p) return null;
 
-  const result = p
-    ? (p.startsWith('http') ? p : `${ASSET_BASE}${p}`)
-    : null;
+  // Absolute URL → swap origin
+  if (p.includes('http')) {
+    try {
+      const url = new URL(p);
+      return `${ASSET_BASE}${url.pathname}${url.search}${url.hash}`;
+    } catch {
+      // If it's a weird non-URL string, fall back safely
+      return p.replace(/^https?:\/\/[^/]+/, ASSET_BASE);
+    }
+  }
 
-  console.log('withAsset output:', result);
-
-  return result;
+  // Relative path
+  return `${ASSET_BASE}${p}`;
 };
 
 const sid = v => String(v)
