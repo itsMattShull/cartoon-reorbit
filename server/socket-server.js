@@ -57,9 +57,11 @@ const tradeRooms   = {}
 const tradeSockets = {}
 
 const ASSET_BASE =
-  process.env.NODE_ENV === 'production'
+  process.env.ASSET_BASE ||
+  (process.env.NODE_ENV === 'production'
     ? 'https://www.cartoonreorbit.com'
-    : 'http://localhost:3000';
+    : 'http://localhost:3000');
+
 
 const withAsset = p => (p
   ? (p.startsWith('http') ? p : `${ASSET_BASE}${p}`)

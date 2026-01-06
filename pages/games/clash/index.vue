@@ -1,5 +1,6 @@
 <template>
   <Nav />
+  <div class="mt-12 md:mt-8"></div> <!-- spacer for fixed nav -->
 
   <section v-if="route.path === '/games/clash'" class="mt-20 pt-10 pb-10 max-w-4xl mx-auto text-center">
     <h1 class="text-3xl font-bold mb-6">gToon Clash</h1>
