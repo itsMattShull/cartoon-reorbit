@@ -346,7 +346,13 @@
               </span>
               <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
               <div class="flex-grow flex items-center justify-center w-full mb-4">
-                <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+                <CtoonAsset
+                  :src="ctoon.assetPath"
+                  :alt="ctoon.name"
+                  :name="ctoon.name"
+                  :ctoon-id="ctoon.id"
+                  image-class="max-w-full h-auto"
+                />
               </div>
               <div class="mt-auto text-sm text-center">
                 <p>
@@ -441,7 +447,13 @@
 
             <h2 class="text-xl font-semibold mb-2 mt-6">{{ ctoon.name }}</h2>
             <div class="flex-grow flex items-center justify-center w-full mb-4">
-              <img :src="ctoon.assetPath" class="max-w-full h-auto" />
+              <CtoonAsset
+                :src="ctoon.assetPath"
+                :alt="ctoon.name"
+                :name="ctoon.name"
+                :ctoon-id="ctoon.id"
+                image-class="max-w-full h-auto"
+              />
             </div>
             <div class="mt-auto text-sm text-center">
               <p>
@@ -565,7 +577,13 @@
 
                   <!-- cToon image -->
                   <div class="w-full flex items-center justify-center mb-2 mt-6">
-                    <img :src="item.assetPath" class="max-w-full h-24 object-contain" />
+                    <CtoonAsset
+                      :src="item.assetPath"
+                      :alt="item.name"
+                      :name="item.name"
+                      :ctoon-id="item.ctoonId"
+                      image-class="max-w-full h-24 object-contain"
+                    />
                   </div>
 
                   <!-- cToon name -->
@@ -609,9 +627,12 @@
               </span>
 
               <!-- Image -->
-              <img
+              <CtoonAsset
                 :src="item.assetPath"
-                class="w-24 h-24 object-contain mb-2 mt-8"
+                :alt="item.name"
+                :name="item.name"
+                :ctoon-id="item.id"
+                image-class="w-24 h-24 object-contain mb-2 mt-8"
               />
 
               <!-- Name -->
@@ -657,6 +678,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import Toast from '@/components/Toast.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import Nav from '@/components/Nav.vue'
 import * as Sentry from '@sentry/nuxt'
 

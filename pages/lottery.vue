@@ -29,7 +29,13 @@
           <!-- Prize Display -->
           <div class="mb-4">
             <div v-if="modalCtoon" class="flex flex-col items-center gap-2">
-              <img :src="modalCtoon.assetPath" class="h-32 w-auto rounded" />
+              <CtoonAsset
+                :src="modalCtoon.assetPath"
+                :alt="modalCtoon.name"
+                :name="modalCtoon.name"
+                :ctoon-id="modalCtoon.id"
+                image-class="h-32 w-auto rounded"
+              />
               <p class="font-semibold">{{ modalCtoon.name }}</p>
             </div>
             <div v-else-if="modalVerificationCode" class="text-sm text-left space-y-2">
@@ -57,7 +63,13 @@
           :key="ctoon.id"
           class="bg-white rounded-lg shadow p-3 flex flex-col items-center text-center w-[150px]"
         >
-          <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-full h-24 object-contain mb-2" />
+          <CtoonAsset
+            :src="ctoon.assetPath"
+            :alt="ctoon.name"
+            :name="ctoon.name"
+            :ctoon-id="ctoon.id"
+            image-class="w-full h-24 object-contain mb-2"
+          />
           <p class="text-sm font-semibold flex-grow flex items-center text-gray-800">{{ ctoon.name }}</p>
           <!-- <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
           <p class="text-xs text-gray-500">
@@ -72,6 +84,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '~/composables/useAuth'
 
 definePageMeta({ title: 'Lottery', middleware: ['auth'], layout: 'default' })

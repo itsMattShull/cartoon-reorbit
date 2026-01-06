@@ -131,11 +131,13 @@
                 class="absolute"
                 :style="item.style"
               >
-                <img
+                <CtoonAsset
                   :src="item.assetPath"
                   :alt="item.name"
-                  class="object-contain cursor-pointer max-w-[initial]"
-                  @click="openSidebar(item)"
+                  :name="item.name"
+                  :ctoon-id="item.ctoonId"
+                  :user-ctoon-id="item.id"
+                  image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
             </div>
@@ -366,11 +368,13 @@
                 class="absolute"
                 :style="item.style"
               >
-                <img
+                <CtoonAsset
                   :src="item.assetPath"
                   :alt="item.name"
-                  class="object-contain cursor-pointer max-w-[initial]"
-                  @click="openSidebar(item)"
+                  :name="item.name"
+                  :ctoon-id="item.ctoonId"
+                  :user-ctoon-id="item.id"
+                  image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
             </div>
@@ -414,86 +418,6 @@
     </div>
   </div>
 
-  <!-- Overlay for Sidebar -->
-  <transition name="fade">
-    <div
-      v-if="showSidebar"
-      class="fixed inset-0 bg-black bg-opacity-50 z-40"
-      @click="showSidebar = false"
-    ></div>
-  </transition>
-
-  <!-- Sidebar with cToon Details -->
-  <transition name="slide-panel">
-    <div
-      v-if="showSidebar"
-      class="fixed top-0 right-0 h-screen w-80 bg-white shadow-lg border-l p-4 overflow-y-auto z-50"
-    >
-      <button
-        class="absolute top-2 right-2 text-gray-500 hover:text-black"
-        @click="showSidebar = false"
-      >
-        ✖
-      </button>
-      <div v-if="selectedCtoon">
-        <img
-          :src="selectedCtoon.assetPath"
-          class="max-w-full mb-4 mx-auto"
-          :alt="selectedCtoon.name"
-        />
-        <h3 class="text-xl font-bold mb-2">{{ selectedCtoon.name }}</h3>
-        <p><strong>Series:</strong> {{ selectedCtoon.series }}</p>
-        <p v-if="selectedCtoon.set"><strong>Set:</strong> {{ selectedCtoon.set }}</p>
-        <p>
-          <strong>Rarity:</strong>
-          <span class="capitalize">{{ selectedCtoon.rarity }}</span>
-        </p>
-        <p v-if="!selectedIsHolidayItem">
-          <strong>Mint #:</strong>
-          <span v-if="selectedCtoon.quantity === null">
-            {{ selectedCtoon.mintNumber }} of Unlimited
-          </span>
-          <span
-            v-else-if="
-              selectedCtoon.mintNumber !== null &&
-              selectedCtoon.quantity !== null
-            "
-          >
-            {{ selectedCtoon.mintNumber }} of {{ selectedCtoon.quantity }}
-          </span>
-          <span v-else>Unknown</span>
-        </p>
-        <p>
-          <strong>Edition:</strong>
-          {{ selectedCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-        </p>
-        <p v-if="selectedCtoon.releaseDate">
-          <strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}
-        </p>
-        <div class="mt-4">
-          <AddToWishlist :ctoon-id="selectedCtoon.ctoonId" />
-        </div>
-
-        <!-- ───── Holiday Reveal CTA (owner-only) ───── -->
-        <div v-if="canSeeHolidayReveal" class="mt-4">
-          <button
-            v-if="canOpenNow"
-            @click="openHolidayCtoon()"
-            :disabled="openingHoliday"
-            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-          >
-            {{ openingHoliday ? 'Opening…' : 'Open cToon' }}
-          </button>
-
-          <div v-else class="text-xs text-gray-600 text-center">
-            Reveal available in:
-            <span class="font-semibold">{{ revealCountdown }}</span>
-          </div>
-        </div>
-        <!-- ─────────────────────────────────────────── -->
-      </div>
-    </div>
-  </transition>
   <!-- Wishlist modal -->
   <transition name="fade">
     <div
@@ -519,7 +443,13 @@
             :key="item.ctoon.id"
             class="flex flex-col items-center border rounded p-2"
           >
-            <img :src="item.ctoon.assetPath" class="w-20 h-20 object-contain mb-2" />
+            <CtoonAsset
+              :src="item.ctoon.assetPath"
+              :alt="item.ctoon.name"
+              :name="item.ctoon.name"
+              :ctoon-id="item.ctoon.id"
+              image-class="w-20 h-20 object-contain mb-2"
+            />
             <p class="text-sm text-center">{{ item.ctoon.name }}</p>
             <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
 
@@ -583,7 +513,15 @@
                   {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
                 </span>
 
-                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-2 mt-8" />
+                <CtoonAsset
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  :name="c.name"
+                  :ctoon-id="c.ctoonId"
+                  :user-ctoon-id="c.id"
+                  image-class="w-16 h-16 object-contain mb-2 mt-8"
+                  stop-propagation
+                />
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
@@ -634,7 +572,15 @@
                   {{ targetOwnedIds.has(c.ctoonId) ? 'Owned by Owner' : 'Unowned by Owner' }}
                 </span>
 
-                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
+                <CtoonAsset
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  :name="c.name"
+                  :ctoon-id="c.ctoonId"
+                  :user-ctoon-id="c.id"
+                  image-class="w-16 h-16 object-contain mb-1 mt-8"
+                  stop-propagation
+                />
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
@@ -690,7 +636,9 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
+import { useCtoonModal } from '@/composables/useCtoonModal'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import Toast from '@/components/Toast.vue'
 import Nav from '@/components/Nav.vue'
 
@@ -711,17 +659,6 @@ function bgUrl(v) {
   const s = String(v)
   if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
   return `/backgrounds/${s}`
-}
-
-// ——— Date formatter ———
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
 }
 
 // ——— Scale logic for mobile ———
@@ -754,6 +691,7 @@ const route = useRoute()
 const router = useRouter()
 const username = ref(route.params.username)
 const { user, fetchSelf } = useAuth()
+const { setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
 
 // ——— Loading indicator ———
 const loading = ref(true)
@@ -767,13 +705,6 @@ const visitorCount = ref(0)
 const chatMessages = ref([])
 const newMessage = ref('')
 const chatContainer = ref(null)
-
-// ——— Sidebar state ———
-const showSidebar = ref(false)
-const selectedCtoon = ref(null)
-// Track which canvas item is open (so we can replace it in-place)
-const selectedZoneIndex = ref(null)
-const selectedItemIndex = ref(null)
 
 // —— Trade modal state ——
 const collectionModalVisible     = ref(false)
@@ -791,6 +722,8 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
+const isOwnerViewing = computed(() => user.value?.id === ownerId.value)
+
 watch(ownerIsBooster, (isBooster) => {
   if (typeof document === 'undefined') return
   document.body.classList.toggle('booster-bg', !!isBooster)
@@ -803,6 +736,59 @@ function displayToast(message, type = 'success') {
   setTimeout(() => {
     showToast.value = false
   }, 4000)
+}
+
+watch([isOwnerViewing, username], () => {
+  setContext({ source: 'czone', isOwner: isOwnerViewing.value, username: username.value })
+}, { immediate: true })
+
+watch(holidaySignal, async () => {
+  if (holidayRedeem.value?.reward?.name) {
+    displayToast(`Opened! You received ${holidayRedeem.value.reward.name} 🎉`, 'success')
+  }
+  await loadCzone()
+})
+
+async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
+  if (showLoading) loading.value = true
+  try {
+    const res = await $fetch(`/api/czone/${username.value}`)
+    ownerName.value = res.ownerName
+    ownerIsBooster.value = res.isBooster
+    ownerAvatar.value = res.avatar || '/avatars/default.png'
+    ownerId.value = res.ownerId
+
+    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
+      zones.value = res.cZone.zones.map(z => ({
+        background: typeof z.background === 'string' ? z.background : '',
+        toons: Array.isArray(z.toons) ? z.toons : []
+      }))
+    } else {
+      zones.value = [
+        { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
+        { background: '', toons: [] },
+        { background: '', toons: [] }
+      ]
+    }
+
+    if (awardVisit && user.value && res.ownerId !== user.value.id) {
+      await $fetch('/api/points/visit', {
+        method: 'POST',
+        body: { zoneOwnerId: res.ownerId }
+      })
+      await fetchSelf({ force: true })
+    }
+  } catch (err) {
+    console.error('Failed to fetch cZone:', err)
+    zones.value = [
+      { background: '', toons: [] },
+      { background: '', toons: [] },
+      { background: '', toons: [] }
+    ]
+    ownerAvatar.value = '/avatars/default.png'
+  } finally {
+    if (showLoading) loading.value = false
+  }
 }
 
 // —— Load someone’s collection ——
@@ -1018,28 +1004,6 @@ const socket = io(import.meta.env.PROD
   : `http://localhost:${useRuntimeConfig().public.socketPort}`
 )
 
-async function openSidebar(item) {
-  selectedCtoon.value     = item
-  selectedZoneIndex.value = item.__zoneIndex
-  selectedItemIndex.value = item.__itemIndex
-  showSidebar.value       = true
-
-  // fetch the event (even if not active) that includes this cToon
-  try {
-    selectedHolidayEvent.value = await $fetch('/api/holiday/event-for-ctoon', {
-      query: { ctoonId: item.ctoonId }
-    })
-  } catch {
-    selectedHolidayEvent.value = null
-  }
-
-  startRevealCountdown()
-}
-
-function closeSidebar() {
-  showSidebar.value = false
-  selectedCtoon.value = null
-}
 function sendMessage() {
   if (!user.value || !socket) return
   const msg = {
@@ -1117,181 +1081,13 @@ const sortedSelfCtoons = computed(() => {
   })
 })
 
-/* ──────────────────────────────────────────────────────────────
-   Holiday Reveal: owner-only CTA, countdown until minRevealAt,
-   and redeem action that burns the UserCtoon, then replaces it
-   in-place on the canvas with the minted reward.
-   ────────────────────────────────────────────────────────────── */
-const activeHoliday     = ref(null)
-const openingHoliday    = ref(false)
-const revealCountdown   = ref('')
-let   revealTimer       = null
-const selectedHolidayEvent = ref(null)
-
-const isOwnerViewing = computed(() => user.value?.id === ownerId.value)
-const selectedIsHolidayItem = computed(() => !!selectedHolidayEvent.value)
-const eventMinRevealAt = computed(() => selectedHolidayEvent.value?.minRevealAt || null)
-
-const canSeeHolidayReveal = computed(() =>
-  isOwnerViewing.value && selectedIsHolidayItem.value
-)
-
-// Allowed if minRevealAt is null or Now ≥ minRevealAt (event may be inactive)
-const canOpenNow = computed(() => {
-  if (!canSeeHolidayReveal.value) return false
-  const mra = eventMinRevealAt.value ? new Date(eventMinRevealAt.value).getTime() : null
-  return mra === null || Date.now() >= mra
-})
-
-function stopRevealCountdown () {
-  if (revealTimer) { clearInterval(revealTimer); revealTimer = null }
-}
-
-function startRevealCountdown () {
-  stopRevealCountdown()
-  if (!canSeeHolidayReveal.value) { revealCountdown.value = ''; return }
-  const mraStr = eventMinRevealAt.value
-  if (!mraStr) { revealCountdown.value = 'now'; return }
-
-  const target = new Date(mraStr).getTime()
-  const tick = () => {
-    const diff = Math.max(0, target - Date.now())
-    if (diff <= 0) {
-      revealCountdown.value = 'now'
-      stopRevealCountdown()
-      return
-    }
-    const s     = Math.floor(diff / 1000)
-    const days  = Math.floor(s / 86400)
-    const hours = Math.floor((s % 86400) / 3600)
-    const mins  = Math.floor((s % 3600) / 60)
-    const secs  = s % 60
-    revealCountdown.value = `${days}d ${hours}h ${mins}m ${secs}s`
-  }
-  tick()
-  revealTimer = setInterval(tick, 1000)
-}
-
-watch([showSidebar, selectedCtoon, selectedHolidayEvent], () => {
-  if (showSidebar.value) startRevealCountdown()
-  else stopRevealCountdown()
-})
-
-onBeforeUnmount(stopRevealCountdown)
-
-async function openHolidayCtoon () {
-  if (!canOpenNow.value || !selectedCtoon.value) return
-  openingHoliday.value = true
-  try {
-    const burnedId = selectedCtoon.value.userCtoonId || selectedCtoon.value.id
-
-    const { reward } = await $fetch('/api/holiday/redeem', {
-      method: 'POST',
-      body: { userCtoonId: burnedId }
-    })
-    if (!reward) throw new Error('No reward returned')
-
-    // replace the clicked slot in-place
-    const z = selectedZoneIndex.value
-    const i = selectedItemIndex.value
-    if (z == null || i == null) throw new Error('Could not locate canvas item')
-
-    const old = zones.value[z].toons[i]
-    const updated = {
-      ...old,
-      // identity
-      id:           reward.userCtoonId ?? old.id,
-      userCtoonId:  reward.userCtoonId ?? old.userCtoonId ?? null,
-      ctoonId:      reward.id ?? old.ctoonId,
-      // sidebar metadata (fill everything we render)
-      name:         reward.name ?? old.name,
-      series:       reward.series ?? old.series,
-      set:          reward.set ?? old.set ?? null,
-      rarity:       reward.rarity ?? old.rarity,
-      assetPath:    reward.assetPath ?? old.assetPath,
-      releaseDate:  reward.releaseDate ?? old.releaseDate ?? null,
-      quantity:     reward.quantity ?? old.quantity ?? null,
-      isFirstEdition: reward.isFirstEdition ?? old.isFirstEdition ?? false,
-      mintNumber:   reward.mintNumber ?? old.mintNumber ?? null
-    }
-
-    zones.value[z].toons.splice(i, 1, updated)
-
-    // refresh the sidebar with the new toon
-    selectedCtoon.value = {
-      ...updated,
-      __zoneIndex: z,
-      __itemIndex: i,
-      style: `top:${updated.y}px;left:${updated.x}px;width:${updated.width}px;height:${updated.height}px;`
-    }
-
-    // hide reveal CTA for the new toon
-    selectedHolidayEvent.value = null
-    stopRevealCountdown()
-
-    displayToast(`Opened! You received ${updated.name} 🎉`, 'success')
-    await fetchSelf()
-  } catch (err) {
-    displayToast(err?.data?.message || err?.message || 'Failed to open cToon.', 'error')
-  } finally {
-    openingHoliday.value = false
-  }
-}
-/* ────────────────────────────────────────────────────────────── */
-
 onMounted(async () => {
   recalcScale()
   window.addEventListener('resize', recalcScale)
 
   await fetchSelf({ force: true })
 
-  // Load active Holiday event (if any)
-  try {
-    activeHoliday.value = await $fetch('/api/holiday/active', { credentials: 'include' })
-  } catch {
-    activeHoliday.value = null
-  }
-
-  // Fetch the owner’s cZone
-  try {
-    const res = await $fetch(`/api/czone/${username.value}`)
-    ownerName.value = res.ownerName
-    ownerIsBooster.value = res.isBooster
-    ownerAvatar.value = res.avatar || '/avatars/default.png'
-    ownerId.value = res.ownerId
-
-    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
-      zones.value = res.cZone.zones.map(z => ({
-        background: typeof z.background === 'string' ? z.background : '',
-        toons: Array.isArray(z.toons) ? z.toons : []
-      }))
-    } else {
-      zones.value = [
-        { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
-        { background: '', toons: [] },
-        { background: '', toons: [] }
-      ]
-    }
-
-    // Award a visit if viewer ≠ owner
-    if (user.value && res.ownerId !== user.value.id) {
-      await $fetch('/api/points/visit', {
-        method: 'POST',
-        body: { zoneOwnerId: res.ownerId }
-      })
-      await fetchSelf({ force: true })
-    }
-  } catch (err) {
-    console.error('Failed to fetch cZone:', err)
-    zones.value = [
-      { background: '', toons: [] },
-      { background: '', toons: [] },
-      { background: '', toons: [] }
-    ]
-    ownerAvatar.value = '/avatars/default.png'
-  } finally {
-    loading.value = false
-  }
+  await loadCzone({ showLoading: true, awardVisit: true })
 
   // socket listeners
   socket.emit('join-zone', { zone: username.value })
@@ -1312,6 +1108,7 @@ onBeforeUnmount(() => {
   }
   window.removeEventListener('resize', recalcScale)
   document.body.classList.remove('booster-bg')
+  clearContext()
 })
 
 // With definePageMeta key forcing remount per username, the route-change

@@ -250,11 +250,15 @@
               >
                 <h2 class="text-xl font-semibold mb-2">{{ uc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <ProgressiveImage
+                  <CtoonAsset
                     :src="uc.assetPath"
-                    alt=""
+                    :alt="uc.name"
+                    :name="uc.name"
+                    :ctoon-id="uc.ctoonId"
+                    :user-ctoon-id="uc.id"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
+                    progressive
                   />
                 </div>
                 <div class="text-sm text-center mb-2">
@@ -341,11 +345,14 @@
                 </span>
                 <h2 class="text-xl font-semibold mb-2 mt-6">{{ wc.name }}</h2>
                 <div class="flex-grow flex items-center justify-center w-full mb-2">
-                  <ProgressiveImage
+                  <CtoonAsset
                     :src="wc.assetPath"
-                    alt=""
+                    :alt="wc.name"
+                    :name="wc.name"
+                    :ctoon-id="wc.id"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
+                    progressive
                   />
                 </div>
                 <div class="text-sm text-center mb-2">
@@ -426,11 +433,14 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <ProgressiveImage
+                    <CtoonAsset
                       :src="c.assetPath"
-                      alt=""
+                      :alt="c.name"
+                      :name="c.name"
+                      :ctoon-id="c.id"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
+                      progressive
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
@@ -519,11 +529,14 @@
                   </span>
                   <h3 class="text-lg font-semibold mb-2 mt-6">{{ c.name }}</h3>
                   <div class="flex-grow flex items-center justify-center">
-                    <ProgressiveImage
+                    <CtoonAsset
                       :src="c.assetPath"
-                      alt=""
+                      :alt="c.name"
+                      :name="c.name"
+                      :ctoon-id="c.id"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
+                      progressive
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
@@ -616,7 +629,7 @@ import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import AddToAuction from '@/components/AddToAuction.vue'
-import ProgressiveImage from '@/components/ProgressiveImage.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 
 definePageMeta({ title: 'Collection', middleware: 'auth', layout: 'default' })
 

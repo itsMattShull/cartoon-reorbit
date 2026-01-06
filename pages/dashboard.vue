@@ -226,7 +226,13 @@
                   <template v-for="c in upcoming.length > 0 ? upcoming : recent" :key="c.ctoonId">
                     <div class="flex-none rounded-lg shadow border border-[var(--reorbit-border)] p-4 flex flex-col justify-end bg-white/95">
                       <div class="flex justify-center">
-                        <img :src="c.assetPath" :alt="c.name" class="rounded-md" />
+                        <CtoonAsset
+                          :src="c.assetPath"
+                          :alt="c.name"
+                          :name="c.name"
+                          :ctoon-id="c.id || c.ctoonId"
+                          image-class="rounded-md"
+                        />
                       </div>
                       <div class="mt-2 text-sm text-slate-700">
                         <span class="font-medium">Release:</span>

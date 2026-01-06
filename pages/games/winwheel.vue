@@ -121,8 +121,14 @@
               <template v-if="spinResult.type === 'nothing'">
                 <img src="/images/nothing1225.gif" alt="Nothing" class="max-w-full h-auto mx-auto mb-4" />
               </template>
-              <div v-if="spinResult.ctoon" class="text-center">
-                <img :src="spinResult.ctoon.assetPath" :alt="spinResult.ctoon.name" class="w-24 h-24 mx-auto mb-2" />
+            <div v-if="spinResult.ctoon" class="text-center">
+                <CtoonAsset
+                  :src="spinResult.ctoon.assetPath"
+                  :alt="spinResult.ctoon.name"
+                  :name="spinResult.ctoon.name"
+                  :ctoon-id="spinResult.ctoon.id"
+                  image-class="w-24 h-24 mx-auto mb-2"
+                />
                 <p class="font-semibold">{{ spinResult.ctoon.name }}</p>
               </div>
             </div>
@@ -200,7 +206,13 @@
                     {{ item.owned ? 'Owned' : 'Unowned' }}
                   </span>
 
-                  <img :src="item.assetPath" :alt="item.name" class="w-full h-40 object-contain mb-2" />
+                  <CtoonAsset
+                    :src="item.assetPath"
+                    :alt="item.name"
+                    :name="item.name"
+                    :ctoon-id="item.id"
+                    image-class="w-full h-40 object-contain mb-2"
+                  />
                   <div class="text-sm font-semibold text-gray-800 text-center">{{ item.name }}</div>
                 </div>
               </div>
@@ -222,6 +234,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '@/composables/useAuth'
 import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'

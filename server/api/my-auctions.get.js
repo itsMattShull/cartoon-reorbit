@@ -49,6 +49,8 @@ export default defineEventHandler(async (event) => {
   // 3. Return endAt so frontend can show “In Progress” vs “Ended”
   return auctions.map(a => ({
     id:            a.id,
+    userCtoonId:   a.userCtoonId,
+    ctoonId:       a.userCtoon?.ctoonId ?? null,
     assetPath:     a.userCtoon.ctoon.assetPath,
     name:          a.userCtoon.ctoon.name,
     createdAt:     a.createdAt.toISOString(),

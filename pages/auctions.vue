@@ -212,7 +212,14 @@
                     </span>
 
                     <div class="flex-grow flex items-center justify-center">
-                      <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
+                      <CtoonAsset
+                        :src="auction.assetPath"
+                        :alt="auction.name"
+                        :name="auction.name"
+                        :ctoon-id="auction.ctoonId"
+                        :user-ctoon-id="auction.userCtoonId"
+                        image-class="block max-w-full mx-auto rounded mb-4"
+                      />
                     </div>
 
                     <div class="mt-4">
@@ -270,7 +277,14 @@
                 </span>
 
                 <div class="flex-grow flex items-center justify-center">
-                  <img :src="auction.assetPath" class="block max-w-full mx-auto rounded mb-4" />
+                  <CtoonAsset
+                    :src="auction.assetPath"
+                    :alt="auction.name"
+                    :name="auction.name"
+                    :ctoon-id="auction.ctoonId"
+                    :user-ctoon-id="auction.userCtoonId"
+                    image-class="block max-w-full mx-auto rounded mb-4"
+                  />
                 </div>
 
                 <div class="mt-4">
@@ -351,7 +365,14 @@
               </div>
 
               <div class="flex-grow flex items-center justify-center mb-4">
-                <img :src="bid.assetPath" class="max-w-full rounded" />
+                <CtoonAsset
+                  :src="bid.assetPath"
+                  :alt="bid.name"
+                  :name="bid.name"
+                  :ctoon-id="bid.ctoonId"
+                  :user-ctoon-id="bid.userCtoonId"
+                  image-class="max-w-full rounded"
+                />
               </div>
 
               <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
@@ -420,7 +441,14 @@
             </div>
 
             <div class="flex-grow flex items-center justify-center mb-4">
-              <img :src="auction.assetPath" class="max-w-full rounded" />
+              <CtoonAsset
+                :src="auction.assetPath"
+                :alt="auction.name"
+                :name="auction.name"
+                :ctoon-id="auction.ctoonId"
+                :user-ctoon-id="auction.userCtoonId"
+                image-class="max-w-full rounded"
+              />
             </div>
 
             <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
@@ -446,6 +474,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 
 definePageMeta({ title: 'Auctions', middleware: 'auth', layout: 'default' })
 

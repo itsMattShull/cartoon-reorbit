@@ -3,6 +3,7 @@
     <!-- Page content -->
     <slot />
     <Onboarding />
+    <CtoonInfoModal />
   </div>
 </template>
 

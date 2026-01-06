@@ -4,7 +4,7 @@ import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async () => {
   // Pick one qualifying username at random directly in SQL for performance.
-  // "Qualifying" = has a CZone with layoutData.zones[*].toons totaling >= 2.
+  // "Qualifying" = has a CZone with at least 1 cToon placed.
   const rows = await prisma.$queryRaw`
     SELECT u."username"
     FROM "CZone" cz
@@ -13,11 +13,17 @@ export default defineEventHandler(async () => {
       AND u."username" <> ''
       AND COALESCE(
         (
-          SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
-          FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+          CASE
+            WHEN jsonb_typeof(cz."layoutData"->'zones') = 'array' THEN (
+              SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+              FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+            )
+            WHEN jsonb_typeof(cz."layoutData") = 'array' THEN jsonb_array_length(cz."layoutData")
+            ELSE 0
+          END
         ),
         0
-      ) >= 2
+      ) >= 1
     ORDER BY random()
     LIMIT 1;
   `
@@ -25,7 +31,7 @@ export default defineEventHandler(async () => {
   if (!rows || rows.length === 0) {
     throw createError({
       statusCode: 404,
-      statusMessage: 'No qualifying users found (need at least 2 cToons placed).'
+      statusMessage: 'No qualifying users found (need at least 1 cToon placed).'
     })
   }
 

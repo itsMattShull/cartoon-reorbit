@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
     include: {
       userCtoon: {
         select: {
+          id: true,
           ctoonId: true,
           mintNumber: true,
           ctoon: { select: { name: true, series: true, rarity: true, assetPath: true, characters: true } }
@@ -90,6 +91,8 @@ export default defineEventHandler(async (event) => {
       return {
         id:           a.id,
         isFeatured:   a.isFeatured,
+        userCtoonId:  a.userCtoon.id,
+        ctoonId:      a.userCtoon.ctoonId,
         name:         a.userCtoon.ctoon.name,
         series:       a.userCtoon.ctoon.series,
         rarity:       a.userCtoon.ctoon.rarity,
