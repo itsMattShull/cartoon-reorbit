@@ -3,6 +3,7 @@
    ======================================= */
 <template>
   <Nav />
+  <div class="mt-4">&nbsp;</div>
   <section class="mt-20 max-w-3xl mx-auto px-4">
     <h1 class="text-2xl font-bold mb-4">gToons Clash Rooms</h1>
 
