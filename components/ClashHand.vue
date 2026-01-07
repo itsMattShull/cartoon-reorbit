@@ -19,18 +19,26 @@
 
     <!-- hand -->
     <div
-      class="flex justify-center gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0"
+      class="
+        flex w-full gap-2
+        overflow-x-auto overflow-y-hidden
+        justify-start md:justify-center
+        px-3 -mx-3
+        pb-2 md:pb-0
+        scroll-px-3
+        touch-pan-x
+      "
       :class="{ 'cursor-not-allowed opacity-50': cards.length === 0 || disabled }"
     >
-      <ClashCToonCard
-        v-for="(c, idx) in cards"
-        :key="idx"
-        :card="c"
-        :selected="selected === c"
-        :afford="c.cost <= remainingEnergy"
-        @select="() => { if (!disabled && c.cost <= energy) emit('select', c) }"
-        @info="emit('info',$event)"
-      />
+      <div v-for="(c, idx) in cards" :key="idx" class="shrink-0">
+        <ClashCToonCard
+          :card="c"
+          :selected="selected === c"
+          :afford="c.cost <= remainingEnergy"
+          @select="() => { if (!disabled && c.cost <= energy) emit('select', c) }"
+          @info="emit('info',$event)"
+        />
+      </div>
     </div>
     <!-- 🔹 status banner -->
     <div v-if="status" class="flex justify-center mb-2 md:mb-1">
