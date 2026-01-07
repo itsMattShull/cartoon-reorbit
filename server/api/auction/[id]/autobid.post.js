@@ -53,8 +53,17 @@ export default defineEventHandler(async (event) => {
   // --- Available points check for autobid max ---
   const up = await db.userPoints.findUnique({ where: { userId } })
   const locks = await db.lockedPoints.findMany({
-    where: { userId, status: 'ACTIVE' },
-    select: { amount: true }
+    where: {
+      userId,
+      status: 'ACTIVE',
+      NOT: {
+        AND: [
+          { contextType: 'AUCTION' },
+          { contextId: auctionId },
+        ],
+      },
+    },
+    select: { amount: true },
   })
   const totalPts   = up?.points || 0
   const lockedSum  = locks.reduce((a, r) => a + (r.amount || 0), 0)
@@ -181,8 +190,17 @@ export default defineEventHandler(async (event) => {
     // Re-check available points inside txn
     const up2 = await tx.userPoints.findUnique({ where: { userId } })
     const locks2 = await tx.lockedPoints.findMany({
-      where: { userId, status: 'ACTIVE' },
-      select: { amount: true }
+      where: {
+        userId,
+        status: 'ACTIVE',
+        NOT: {
+          AND: [
+            { contextType: 'AUCTION' },
+            { contextId: auctionId },
+          ],
+        },
+      },
+      select: { amount: true },
     })
     const totalPts2  = up2?.points || 0
     const lockedSum2 = locks2.reduce((a, r) => a + (r.amount || 0), 0)

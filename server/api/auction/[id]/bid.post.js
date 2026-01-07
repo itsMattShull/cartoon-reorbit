@@ -143,8 +143,17 @@ export default defineEventHandler(async (event) => {
     // Compute available points = total points - active locked points
     const up = await tx.userPoints.findUnique({ where: { userId } })
     const activeLocks = await tx.lockedPoints.findMany({
-      where: { userId, status: 'ACTIVE' },
-      select: { amount: true }
+      where: {
+        userId,
+        status: 'ACTIVE',
+        NOT: {
+          AND: [
+            { contextType: 'AUCTION' },
+            { contextId: auctionId },
+          ],
+        },
+      },
+      select: { amount: true },
     })
     const lockedSum = activeLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
     const totalPts  = up?.points || 0
