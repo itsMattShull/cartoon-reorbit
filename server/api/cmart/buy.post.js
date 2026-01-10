@@ -2,7 +2,7 @@
 import { prisma } from '@/server/prisma'
 import { mintQueue } from '../../utils/queues'
 import { QueueEvents } from 'bullmq'
-import { createError } from 'h3'
+import { createError, readBody } from 'h3'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -25,7 +25,82 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Missing ctoonId' })
     }
 
-    // — (all your existing pre‐checks: fetch ctoon, sold-out, wallet, per-user limit, etc.)
+    // Fetch cToon for release check (and basic availability)
+    const ctoon = await prisma.ctoon.findUnique({
+      where: { id: ctoonId },
+      select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true, price: true }
+    })
+
+    // Allow if in cMart OR part of an active holiday event
+    const now = new Date()
+    const activeHolidayItem = await prisma.holidayEventItem.findFirst({
+      where: {
+        ctoonId,
+        event: {
+          isActive: true,
+          startsAt: { lte: now },
+          endsAt:   { gte: now }
+        }
+      }
+    })
+
+    if (!ctoon || (!ctoon.inCmart && !activeHolidayItem)) {
+      throw createError({ statusCode: 404, statusMessage: 'cToon not for sale, get hacked noob.' })
+    }
+
+    // Release window gating (two-phase)
+    if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
+      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.' })
+    }
+
+    const isUnlimited = ctoon.quantity === null
+    if (!isUnlimited) {
+      // Load global settings
+      let initialPercent = 75
+      let delayHours = 12
+      try {
+        const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+        if (cfg) {
+          if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
+          if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+        }
+      } catch {}
+
+      const qty = Number(ctoon.quantity)
+      const initialCap = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+      const finalReleaseAt = ctoon.releaseDate
+        ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+        : null
+
+      const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
+      const allowedCap = beforeFinal ? initialCap : qty
+
+      // Optional: sold-out fast check before queueing (window-aware)
+      if (ctoon.totalMinted >= allowedCap) {
+        const msg = beforeFinal
+          ? 'Initial window sold out. Please wait for the final release.'
+          : 'cToon already sold out.'
+        throw createError({ statusCode: 410, statusMessage: msg })
+      }
+    }
+
+    // — Verify available points (total - active locks)
+    const [wallet, activeLocks] = await Promise.all([
+      prisma.userPoints.findUnique({
+        where: { userId },
+        select: { points: true }
+      }),
+      prisma.lockedPoints.findMany({
+        where: { userId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const totalPoints = wallet?.points ?? 0
+    const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+    const availablePoints = totalPoints - lockedSum
+    if (ctoon.price > availablePoints) {
+      throw createError({ statusCode: 400, statusMessage: 'Not enough available points.' })
+    }
 
     // — Enqueue the mint job
     const job = await mintQueue.add('mintCtoon', { userId, ctoonId })
@@ -58,6 +133,5 @@ export default defineEventHandler(async (event) => {
   } finally {
     // — Clean up
     if (queueEvents) await queueEvents.close()
-    await prisma.$disconnect()
   }
 })

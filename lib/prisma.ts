@@ -1,15 +1,7 @@
-import { PrismaClient } from '@prisma/client'
+// Re-export the centralized Prisma client with conservative pool and logging.
+// Ensures all server code shares a single configuration and connection pool.
+// Use a relative import here so TypeScript doesn't require the `@` alias mapping.
+import { prisma as serverPrisma } from '../server/prisma.js'
 
-const prismaClientSingleton = () => {
-  return new PrismaClient()
-}
-
-declare const globalThis: {
-  prismaGlobal: ReturnType<typeof prismaClientSingleton>;
-} & typeof global;
-
-const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
-
-export default prisma
-
-if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma
+export default serverPrisma
+export { serverPrisma as prisma }

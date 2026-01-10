@@ -37,15 +37,22 @@ export default defineEventHandler(async (event) => {
   }
 
   /* 3.  lookup pack & user points --------------------------------------- */
-  const [pack, userPts] = await Promise.all([
+  const [pack, userPts, activeLocks] = await Promise.all([
     db.pack.findUnique({ where: { id: packId }, select: { id: true, price: true, inCmart: true } }),
-    db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } })
+    db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } }),
+    db.lockedPoints.findMany({
+      where: { userId: me.id, status: 'ACTIVE' },
+      select: { amount: true }
+    })
   ])
   if (!pack || !pack.inCmart) {
     throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
   }
-  if ((userPts?.points || 0) < pack.price) {
-    throw createError({ statusCode: 400, statusMessage: 'Not enough points' })
+  const totalPoints = userPts?.points || 0
+  const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+  const availablePoints = totalPoints - lockedSum
+  if (availablePoints < pack.price) {
+    throw createError({ statusCode: 400, statusMessage: 'Not enough available points' })
   }
 
   /* 4.  transaction: deduct points + create sealed pack ----------------- */

@@ -2,7 +2,7 @@
   <Nav />
 
   <!-- Mobile Buttons -->
-  <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 px-4">
+  <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 md:pt-10 px-4">
     <button
       class="bg-blue-600 text-white px-4 py-2 rounded"
       @click="openPanel('ctoones')"
@@ -35,6 +35,12 @@
         </button>
       </div>
       <div v-if="tab === 'ctoones'" class="mb-4">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search name or characters"
+          class="mb-2 w-full border rounded px-2 py-1"
+        />
         <select v-model="seriesFilter" class="mb-2 w-full border rounded px-2 py-1">
           <option value="">All Series</option>
           <option v-for="s in uniqueSeries" :key="s">{{ s }}</option>
@@ -43,31 +49,31 @@
           <option value="">All Rarities</option>
           <option v-for="r in uniqueRarities" :key="r">{{ r }}</option>
         </select>
-        <div class="mb-4 flex flex-wrap gap-2 overflow-y-auto h-[500px]">
+        <div class="mt-2 mb-4 flex flex-wrap items-start content-start gap-x-2 gap-y-1 overflow-y-auto h-[500px]">
           <div
             v-for="element in filteredCtoons"
             :key="element.id"
-            class="cursor-move flex items-start justify-center min-h-[6rem] w-[48%]"
+            class="cursor-move flex items-start justify-center w-[48%]"
             draggable="true"
             @dragstart="onDragStart(element, $event)"
           >
             <img
               :src="element.assetPath"
               :alt="element.name"
-              class="object-contain"
+              class="block max-w-full h-auto object-contain"
             />
           </div>
         </div>
       </div>
-      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto h-[500px]">
+      <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto max-h-[500px] pr-1">
         <div
-          v-for="bg in backgrounds"
-          :key="bg"
+          v-for="bg in availableBackgrounds"
+          :key="bg.id"
           class="border p-1 cursor-pointer"
-          :class="{ 'border-blue-500': selectedBackground === bg }"
-          @click="selectBackground(bg)"
+          :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
+          @click="selectBackground(bg.imagePath)"
         >
-          <img :src="`/backgrounds/${bg}`" class="w-full h-auto object-cover" />
+          <img :src="bg.imagePath" class="w-full h-auto object-cover" />
         </div>
       </div>
     </div>
@@ -107,7 +113,7 @@
             v-for="(item, index) in layout"
             :key="item.id"
             class="absolute cursor-pointer"
-            :class="{ dragging: currentlyDraggingIndex === index }"
+            :class="{ dragging: currentlyDraggingIndex === index && isDragging }"
             :style="{ top: item.y + 'px', left: item.x + 'px', width: item.width + 'px', height: item.height + 'px' }"
             @contextmenu.prevent="removeItem(index)"
             @mousedown="onMouseDown($event, index)"
@@ -117,12 +123,26 @@
             @touchend="onTouchEnd"
             @touchcancel="onTouchEnd"
           >
-            <img
-              :src="item.assetPath"
-              :alt="item.name"
-              class="max-w-none object-contain border border-gray-300"
-              draggable="false"
-            />
+            <div class="relative w-full h-full">
+              <button
+                type="button"
+                class="absolute top-1 right-1 z-10 w-6 h-6 rounded-full bg-white/80 text-gray-700 shadow hover:bg-white flex items-center justify-center"
+                aria-label="Bring to front"
+                @click.stop="bringToFront(index)"
+                @mousedown.stop
+                @touchstart.stop
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+                </svg>
+              </button>
+              <img
+                :src="item.assetPath"
+                :alt="item.name"
+                class="max-w-none object-contain"
+                draggable="false"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -169,6 +189,12 @@
           </button>
         </div>
         <div v-if="panelType === 'ctoones'" class="flex flex-col gap-2">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search name or characters"
+            class="mb-2 border rounded px-2 py-1"
+          />
           <select v-model="seriesFilter" class="mb-2 border rounded px-2 py-1">
             <option value="">All Series</option>
             <option v-for="s in uniqueSeries" :key="s">{{ s }}</option>
@@ -177,30 +203,30 @@
             <option value="">All Rarities</option>
             <option v-for="r in uniqueRarities" :key="r">{{ r }}</option>
           </select>
-          <div class="flex flex-wrap gap-2 max-h-[400px] overflow-y-auto">
+          <div class="flex flex-wrap items-start content-start gap-x-2 gap-y-1 max-h-[400px] overflow-y-auto">
             <div
               v-for="ctoon in filteredCtoons"
               :key="ctoon.id"
-              class="cursor-pointer flex items-center justify-center min-h-[6rem] w-[48%] border rounded p-1"
+              class="cursor-pointer flex items-center justify-center w-[48%] border rounded p-1"
               @click="selectCtoon(ctoon)"
             >
               <img
                 :src="ctoon.assetPath"
                 :alt="ctoon.name"
-                class="max-w-none object-contain"
+                class="block max-w-full h-auto object-contain"
               />
             </div>
           </div>
         </div>
-        <div v-else class="grid grid-cols-2 gap-2 max-h-[450px] overflow-y-auto">
+        <div v-else class="grid grid-cols-2 gap-2 overflow-y-auto max-h-[500px] pr-1">
           <div
-            v-for="bg in backgrounds"
-            :key="bg"
+            v-for="bg in availableBackgrounds"
+            :key="bg.id"
             class="border p-1 cursor-pointer"
-            :class="{ 'border-blue-500': selectedBackground === bg }"
-            @click="selectBackground(bg)"
+            :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
+            @click="selectBackground(bg.imagePath)"
           >
-            <img :src="`/backgrounds/${bg}`" class="w-full h-auto object-cover" />
+            <img :src="bg.imagePath" class="w-full h-auto object-cover" />
           </div>
         </div>
       </div>
@@ -216,6 +242,7 @@ import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
 definePageMeta({
+  title: 'Edit cZone',
   middleware: 'auth',
   layout: 'default',
 })
@@ -251,6 +278,7 @@ const { user } = useAuth()
 const tab = ref('ctoones')
 const seriesFilter = ref('')
 const rarityFilter = ref('')
+const searchQuery = ref('')
 
 // Instead of a single layout/background, store three zones
 const zones = ref([
@@ -279,11 +307,10 @@ const selectedBackground = computed({
 
 // These two give us quick access in the template
 const canvasBackgroundStyle = computed(() => {
-  if (!selectedBackground.value) {
-    return { backgroundColor: 'transparent' }
-  }
+  const src = toUrl(selectedBackground.value)
+  if (!src) return { backgroundColor: 'transparent' }
   return {
-    backgroundImage: `url('/backgrounds/${selectedBackground.value}')`,
+    backgroundImage: `url('${src}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -293,11 +320,19 @@ const canvasBackgroundStyle = computed(() => {
 const toastMessage = ref('')
 const toastType = ref('error')
 const ctoons = ref([])
-const backgrounds = ref([])
+const availableBackgrounds = ref([])
+
+// helper so old saved values (e.g., "foo.png") still render nicely
+function toUrl(v) {
+  if (!v) return ''
+  return v.startsWith('/') ? v : `/backgrounds/${v}`
+}
 
 // Filter dropdown options
 const uniqueSeries = computed(() =>
-  [...new Set(ctoons.value.map((c) => c.series).filter(Boolean))]
+  [...new Set(ctoons.value.map((c) => c.series).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )
 )
 const uniqueRarities = computed(() =>
   [...new Set(ctoons.value.map((c) => c.rarity).filter(Boolean))]
@@ -309,14 +344,19 @@ const placedIds = computed(() =>
 )
 
 // Only show those cToons that the user hasn’t placed anywhere yet
-const filteredCtoons = computed(() =>
-  ctoons.value.filter(
-    (c) =>
-      (!seriesFilter.value || c.series === seriesFilter.value) &&
-      (!rarityFilter.value || c.rarity === rarityFilter.value) &&
-      !placedIds.value.has(c.id)
-  )
-)
+const filteredCtoons = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return ctoons.value.filter((c) => {
+    const matchesSeries = !seriesFilter.value || c.series === seriesFilter.value
+    const matchesRarity = !rarityFilter.value || c.rarity === rarityFilter.value
+    const matchesSearch =
+      !q ||
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (Array.isArray(c.characters) && c.characters.some((ch) => ch && ch.toLowerCase().includes(q)))
+    const notPlaced = !placedIds.value.has(c.id)
+    return matchesSeries && matchesRarity && matchesSearch && notPlaced
+  })
+})
 
 // ——— Zone paging ———
 function nextZone() {
@@ -387,6 +427,9 @@ async function onDrop(e) {
     id: draggingItem.value.id,
     name: draggingItem.value.name,
     assetPath: draggingItem.value.assetPath,
+    series: draggingItem.value.series,
+    rarity: draggingItem.value.rarity,
+    characters: Array.isArray(draggingItem.value.characters) ? draggingItem.value.characters : [],
     x,
     y,
     width: img.naturalWidth,
@@ -399,11 +442,13 @@ async function onDrop(e) {
 }
 
 const currentlyDraggingIndex = ref(null)
+const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
 function onMouseDown(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   const rect = e.target.closest('.absolute').getBoundingClientRect()
   dragOffset.value = {
     x: (e.clientX - rect.left) / scale.value,
@@ -416,6 +461,7 @@ function onMouseDown(e, idx) {
 function onTouchStart(e, idx) {
   e.preventDefault()
   currentlyDraggingIndex.value = idx
+  isDragging.value = false
   document.body.style.overflow = 'hidden'
   startLongPress(idx)
   const t = e.touches[0]
@@ -430,6 +476,9 @@ function onTouchStart(e, idx) {
 
 async function onMouseMove(e) {
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (e.clientX - canvasRect.left) / scale.value - dragOffset.value.x
   let rawY = (e.clientY - canvasRect.top) / scale.value - dragOffset.value.y
@@ -443,6 +492,9 @@ async function onTouchMove(e) {
   e.preventDefault()
   cancelLongPress()
   if (currentlyDraggingIndex.value === null) return
+  if (!isDragging.value) {
+    isDragging.value = true
+  }
   const t = e.touches[0]
   const canvasRect = document.querySelector('#czone-canvas').getBoundingClientRect()
   let rawX = (t.clientX - canvasRect.left) / scale.value - dragOffset.value.x
@@ -458,6 +510,7 @@ async function onMouseUp() {
   cancelLongPress()
   await saveZones(false)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
 }
@@ -469,6 +522,7 @@ async function onTouchEnd() {
   cancelLongPress()
   document.body.style.overflow = ''
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('touchmove', onTouchMove)
   window.removeEventListener('touchend', onTouchEnd)
 }
@@ -476,6 +530,7 @@ async function onTouchEnd() {
 async function removeItem(idx) {
   const [removed] = layout.value.splice(idx, 1)
   currentlyDraggingIndex.value = null
+  isDragging.value = false
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   await saveZones(false)
@@ -489,8 +544,21 @@ async function removeItem(idx) {
       assetPath: removed.assetPath,
       series: removed.series,
       rarity: removed.rarity,
+      characters: Array.isArray(removed.characters) ? removed.characters : [],
     })
   }
+}
+
+async function bringToFront(idx) {
+  if (idx < 0 || idx >= layout.value.length) return
+  const [item] = layout.value.splice(idx, 1)
+  layout.value.push(item)
+  if (currentlyDraggingIndex.value === idx) {
+    currentlyDraggingIndex.value = layout.value.length - 1
+  } else if (currentlyDraggingIndex.value > idx) {
+    currentlyDraggingIndex.value -= 1
+  }
+  await saveZones(false)
 }
 
 async function clearZone() {
@@ -534,8 +602,8 @@ async function saveZones(showToast = false) {
   }
 }
 
-async function selectBackground(bg) {
-  selectedBackground.value = bg
+async function selectBackground(bgPath) {
+  selectedBackground.value = bgPath
   await saveZones(false)
 }
 
@@ -548,6 +616,9 @@ async function selectCtoon(ctoon) {
     id: ctoon.id,
     name: ctoon.name,
     assetPath: ctoon.assetPath,
+    series: ctoon.series,
+    rarity: ctoon.rarity,
+    characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     x,
     y,
     width: img.naturalWidth,
@@ -583,7 +654,13 @@ onMounted(async () => {
 
   const res = await $fetch('/api/czone/edit')
   ctoons.value = res.ctoons
-  backgrounds.value = res.backgrounds
+  // NEW: load only backgrounds the user can use now (PUBLIC or unlocked)
+  try {
+    availableBackgrounds.value = await $fetch('/api/czone/backgrounds-available')
+  } catch (e) {
+    console.error('Failed to load available backgrounds', e)
+    availableBackgrounds.value = []
+  }
 
   if (
     res.zones &&
@@ -650,4 +727,3 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 </style>
-

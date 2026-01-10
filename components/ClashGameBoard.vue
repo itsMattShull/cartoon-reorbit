@@ -3,26 +3,42 @@
   <!-- scale down on mobile, back to normal on md+ -->
   <div class="transform mx-auto">
     <!-- lane container: col on mobile, row on md+ -->
-    <div class="flex flex-col md:flex-row w-full justify-center gap-4">
+    <div class="flex flex-col md:flex-row w-full justify-center gap-4 pb-28 mb-16 md:mb-0 md:pb-0">
       <div
         v-for="(lane, idx) in lanes"
         :key="idx"
-        @click="phase==='select' && place(idx)"
+        @click="onLaneClick(idx)"
         :class="[
-          /* mobile: horizontal lane; desktop: vertical lane */
+          'relative', // so we can show a small 'Full' badge
           'flex flex-row md:flex-col items-center bg-white rounded-lg shadow-lg p-4 transition',
-          /* width: full on mobile, one-third on md+ */
           'w-full md:w-1/3',
-          /* disabled / hover states */
-          phase!=='select'
+          (phase!=='select' || confirmed)
             ? 'pointer-events-none opacity-70'
-            : 'cursor-pointer hover:ring-2 hover:ring-indigo-300',
-          /* selected ring */
+            : (selected
+                ? (isLaneFull(idx)
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:ring-2 hover:ring-indigo-300')
+                : (hasPendingInLane(idx)
+                    ? 'cursor-pointer hover:ring-2 hover:ring-red-300'
+                    : 'cursor-default')),
           isLaneSelected(idx) ? 'ring-4 ring-indigo-500' : '',
-          /* reveal pulse */
           phase==='reveal' && highlightLane(idx)
         ]"
       >
+        <!-- small badge -->
+        <div
+          v-if="phase==='select' && isLaneFull(idx)"
+          class="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded bg-gray-200"
+        >
+          Full
+        </div>
+        <!-- undo hint -->
+        <div
+          v-if="phase==='select' && !selected && hasPendingInLane(idx)"
+          class="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200"
+        >
+          Tap to undo
+        </div>
         <!-- ── Player cards on the left (order-1 on mobile, order-3 on md) ── -->
         <div class="grid grid-cols-2 gap-0.5 mb-3 w-full auto-rows-[9rem] order-1 md:order-3">
           <template v-for="i in 4" :key="i">
@@ -93,7 +109,23 @@ const props = defineProps({
   selected:          { type: [Object, null], default: null },
   confirmed:         { type: Boolean, required: true }
 })
-const emit = defineEmits(['place','info'])
+
+const emit = defineEmits(['place','unplace','info'])
+
+function hasPendingInLane(idx) {
+  return props.previewPlacements.some(p => p.laneIndex === idx)
+}
+
+function onLaneClick(idx) {
+  if (props.phase !== 'select' || props.confirmed) return
+  if (props.selected) {
+    // normal place
+    if (!isLaneFull(idx)) emit('place', idx)
+  } else {
+    // no card selected → if lane has a pending preview, unplace last one
+    if (hasPendingInLane(idx)) emit('unplace', idx)
+  }
+}
 
 function place(idx) {
   emit('place', idx)
@@ -127,6 +159,14 @@ function isLaneSelected(idx) {
 
 function sumPower(cards) {
   return cards.reduce((sum, c) => sum + (c.power || 0), 0)
+}
+
+function lanePendingCount(idx) {
+  return props.previewPlacements.filter(p => p.laneIndex === idx).length
+}
+function isLaneFull(idx) {
+  const existing = props.lanes[idx].player.length
+  return existing + lanePendingCount(idx) >= 4
 }
 </script>
 

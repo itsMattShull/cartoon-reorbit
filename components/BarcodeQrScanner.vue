@@ -1,0 +1,793 @@
+<template>
+  <ClientOnly>
+    <div class="scanner">
+      <div class="controls">
+        <button
+          type="button"
+          @click="toggleScan"
+          :disabled="isProcessingFile"
+          :class="[
+            'px-8 py-4 text-xl font-semibold rounded-xl shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2',
+            isRunning
+              ? 'bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-300'
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-300'
+          ]"
+        >
+          {{ isRunning ? 'Stop Scan' : 'Start Scan' }}
+        </button>
+
+        <button
+          type="button"
+          @click="triggerFile"
+          :disabled="isProcessingFile"
+          class="px-8 py-4 text-xl font-semibold rounded-xl shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-sky-600 hover:bg-sky-700 text-white focus:ring-sky-300"
+        >
+          Upload Image
+        </button>
+
+        <button
+          v-if="showViewMonsters"
+          type="button"
+          @click="goToMonsters"
+          class="px-8 py-4 text-xl font-semibold rounded-xl shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-slate-700 hover:bg-slate-800 text-white focus:ring-slate-300"
+        >
+          View Monsters
+        </button>
+      </div>
+
+      <div :id="readerId" ref="readerEl" class="reader">
+        <div v-if="cooldownMessage" class="reader-status">
+          {{ cooldownMessage }}
+        </div>
+        <div v-else-if="pendingMatch" class="reader-status">
+          Code found — keep scanning code to confirm.
+        </div>
+      </div>
+
+      <!-- hidden file input for image uploads -->
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        @change="onFileSelected"
+        style="display: none"
+      />
+
+      <p v-if="error" class="error">{{ error }}</p>
+
+      <div v-if="scanResult" class="result-card">
+        <!-- <div class="result-meta">
+          <span class="result-code">Raw: {{ scanRawValue }}</span>
+          <span class="result-dot">•</span>
+          <span class="result-code">Normalized: {{ scanNormalizedValue }}</span>
+          <span class="result-dot">•</span>
+          <span class="result-type">{{ scanTypeLabel }}</span>
+        </div> -->
+        <div v-if="scanResult.outcome === 'NOTHING'" class="result-inner">
+          <h3 class="result-title">No luck this time</h3>
+          <p class="result-subtitle">You didn’t get an item or a monster.</p>
+        </div>
+
+        <div v-else-if="scanResult.outcome === 'LIMIT'" class="result-inner result-inner--solo">
+          <div>
+            <h3 class="result-title">Daily Scan Limit Reached</h3>
+            <p class="result-subtitle">{{ dailyLimitMessage }}</p>
+          </div>
+        </div>
+
+        <div v-else-if="scanResult.outcome === 'MONSTER'" class="result-inner">
+          <img
+            v-if="scanResult.result?.standingStillImagePath"
+            :src="scanResult.result.standingStillImagePath"
+            alt="Monster standing still"
+            class="result-image"
+          />
+          <div>
+            <h3 class="result-title">{{ scanResult.result?.name || 'New Monster' }}</h3>
+            <p class="result-subtitle">Rolled stats</p>
+            <div class="result-stats">
+              <div>HP: {{ monsterStats.hp }}</div>
+              <div>ATK: {{ monsterStats.atk }}</div>
+              <div>DEF: {{ monsterStats.def }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="scanResult.outcome === 'ITEM'" class="result-inner">
+          <img
+            v-if="scanResult.result?.image"
+            :src="scanResult.result.image"
+            alt="Item"
+            class="result-image"
+          />
+          <div>
+            <h3 class="result-title">{{ scanResult.result?.name || 'New Item' }}</h3>
+            <p class="result-subtitle">{{ itemEffectDescription }}</p>
+            <div class="result-stats">
+              <div>Power: {{ scanResult.result?.stat?.power ?? 0 }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="scanResult.outcome === 'BATTLE'" class="result-inner">
+          <div>
+            <h3 class="result-title">Battle Triggered</h3>
+            <p class="result-subtitle">Preparing your battle now…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ClientOnly>
+</template>
+
+<script setup>
+import { onMounted, onBeforeUnmount, ref, computed } from "vue";
+import { useRouter } from "vue-router";
+import { io } from "socket.io-client";
+import { useRuntimeConfig } from "#imports";
+import { useAuth } from "@/composables/useAuth";
+
+const endpointUrl = "/api/monsters/scan";
+
+const props = defineProps({
+  stopAfterSuccess: { type: Boolean, default: true },
+  showViewMonsters: { type: Boolean, default: false },
+});
+
+const readerId = `html5qr-${Math.random().toString(36).slice(2)}`;
+const isRunning = ref(false);
+const error = ref(null);
+const lastPayload = ref(null);
+const scanResult = ref(null);
+const isProcessingFile = ref(false);
+const fileInput = ref(null);
+const readerEl = ref(null);
+const router = useRouter();
+const config = useRuntimeConfig();
+const { user, fetchSelf } = useAuth();
+const pendingMatch = ref(false);
+let lastNormalized = "";
+let matchCount = 0;
+const cooldownUntil = ref(null);
+const cooldownMessage = ref("");
+const cooldownKey = ref("");
+const cooldownStatusMessage = ref("");
+const COOLDOWN_MESSAGE_VISIBLE_MS = 4000;
+let cooldownIntervalId = null;
+let cooldownMessageTimeoutId = null;
+
+let Html5Qrcode;
+let Html5QrcodeSupportedFormats;
+let scanner;
+let battleSocket;
+
+let postingLock = false;
+
+onMounted(async () => {
+  await fetchSelf();
+  // Client-only import (SSR-safe)
+  const mod = await import("html5-qrcode");
+  Html5Qrcode = mod.Html5Qrcode;
+  Html5QrcodeSupportedFormats = mod.Html5QrcodeSupportedFormats;
+
+  scanner = new Html5Qrcode(readerId, {
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.CODABAR,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.AZTEC,
+      Html5QrcodeSupportedFormats.PDF_417,
+      Html5QrcodeSupportedFormats.MAXICODE,
+      Html5QrcodeSupportedFormats.RSS_14,
+      Html5QrcodeSupportedFormats.RSS_EXPANDED,
+      Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
+    ],
+  });
+});
+
+async function postScan(payload) {
+  error.value = null;
+
+  try {
+    const res = await $fetch(endpointUrl, {
+      method: "POST",
+      body: payload,
+      // Same-origin requests generally include cookies; this makes it explicit.
+      credentials: "include",
+    });
+
+    // Store both request + response for debugging/UI
+    lastPayload.value = { ...payload, response: res };
+    scanResult.value = res;
+    if (res?.outcome === "BATTLE") {
+      await startBattleFromScan(res);
+    }
+    return res;
+  } catch (e) {
+    const retryAt = extractRetryAt(e);
+    if (retryAt) {
+      setCooldown(
+        retryAt,
+        buildCooldownKey(payload.format, payload.rawValue),
+        extractStatusMessage(e)
+      );
+      throw e;
+    }
+    const dailyLimit = extractDailyLimit(e);
+    if (dailyLimit) {
+      scanResult.value = {
+        outcome: "LIMIT",
+        message: dailyLimit.message || null,
+        resetAt: dailyLimit.resetAt || null,
+        limit: dailyLimit.limit ?? null,
+      };
+      lastPayload.value = { ...payload, response: null };
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
+      error.value = null;
+      return scanResult.value;
+    }
+    error.value =
+      e?.data?.statusMessage ||
+      e?.statusMessage ||
+      e?.message ||
+      String(e);
+    throw e;
+  }
+}
+
+function getSocketPath() {
+  return import.meta.env.PROD
+    ? "https://www.cartoonreorbit.com"
+    : `http://localhost:${config.public.socketPort}`;
+}
+
+function ensureBattleSocket() {
+  if (battleSocket) return;
+  battleSocket = io(getSocketPath(), {
+    transports: ["websocket", "polling"],
+  });
+  battleSocket.on("battle:created", ({ battleId }) => {
+    if (battleId) router.push(`/monsters/${battleId}`);
+  });
+  battleSocket.on("battle:error", ({ message }) => {
+    error.value = message || "Failed to start battle.";
+  });
+}
+
+async function startBattleFromScan(res) {
+  let monsterId = res?.battle?.monsterId || null;
+  if (!monsterId) {
+    try {
+      const selected = await $fetch("/api/monsters/selected-monster");
+      monsterId = selected?.monster?.id || null;
+    } catch {}
+  }
+  if (!monsterId) {
+    error.value = "No selected monster available for battle.";
+    return;
+  }
+  try {
+    await $fetch("/api/monsters/select", {
+      method: "POST",
+      body: { id: monsterId },
+    });
+  } catch {}
+  ensureBattleSocket();
+  battleSocket.emit("battle:create", {
+    player1UserId: user.value?.id,
+    player1MonsterId: monsterId,
+    opponent: { type: "AI" },
+  });
+}
+
+async function start() {
+  error.value = null;
+  if (!scanner || isRunning.value) return;
+
+  postingLock = false;
+
+  try {
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      () => {} // ignore per-frame decode errors
+    );
+    isRunning.value = true;
+  } catch (e) {
+    error.value = e?.message || String(e);
+  }
+}
+
+async function stop() {
+  if (!scanner || !isRunning.value) return;
+
+  try {
+    await scanner.stop();
+    await scanner.clear();
+  } catch (e) {
+    error.value = e?.message || String(e);
+  } finally {
+    isRunning.value = false;
+  }
+}
+
+async function onScanSuccess(decodedText, decodedResult) {
+  // prevent spamming endpoint due to repeated detections
+  if (postingLock) return;
+  postingLock = true;
+
+  const formatName = decodedResult?.result?.format?.formatName || "unknown";
+  const formatLower = String(formatName).toLowerCase();
+  const requiredMatches = formatLower.includes("qr") ? 1 : 3;
+  const normalized = normalizeValue(formatName, decodedText);
+  const scanKey = normalized ? `${formatLower}:${normalized}` : "";
+
+  if (cooldownUntil.value && scanKey && scanKey === cooldownKey.value) {
+    if (showCooldownMessage()) {
+      postingLock = false;
+      return;
+    }
+    clearCooldownState();
+  }
+  if (normalized && normalized === lastNormalized) {
+    matchCount += 1;
+  } else {
+    matchCount = 1;
+    lastNormalized = normalized;
+  }
+  if (matchCount < requiredMatches) {
+    pendingMatch.value = requiredMatches > 1;
+    postingLock = false;
+    return;
+  }
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
+
+  const payload = {
+    format: String(formatName).toLowerCase(),
+    rawValue: decodedText,
+  };
+
+  try {
+    await postScan(payload);
+
+    if (props.stopAfterSuccess) {
+      await stop();
+      postingLock = false;
+      return;
+    }
+
+    setTimeout(() => (postingLock = false), 500);
+  } catch {
+    // allow retry if the request failed
+    postingLock = false;
+  }
+}
+
+function toggleScan() {
+  if (isRunning.value) stop();
+  else {
+    clearResult();
+    start();
+  }
+}
+
+function triggerFile() {
+  error.value = null;
+  clearResult();
+  fileInput.value?.click();
+}
+
+async function onFileSelected(e) {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+
+  // clear the input so selecting the same file again re-triggers change
+  e.target.value = "";
+
+  await scanImageFile(file);
+}
+
+async function scanImageFile(file) {
+  if (!scanner) {
+    error.value = "Scanner not ready yet";
+    return;
+  }
+
+  // ensure live camera scan is not active
+  if (isRunning.value) {
+    await stop();
+  }
+
+  error.value = null;
+  isProcessingFile.value = true;
+  if (readerEl.value) readerEl.value.innerHTML = "";
+
+  try {
+    if (typeof scanner.scanFileV2 === "function") {
+      const r = await scanner.scanFileV2(file, true);
+      const formatName = r?.result?.format?.formatName || "unknown";
+
+      const payload = {
+        format: String(formatName).toLowerCase(),
+        rawValue: r?.decodedText ?? "",
+      };
+
+      pendingMatch.value = false;
+      matchCount = 0;
+      lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
+      await postScan(payload);
+    } else if (typeof scanner.scanFile === "function") {
+      const text = await scanner.scanFile(file, true);
+
+      const payload = {
+        format: "unknown",
+        rawValue: text ?? "",
+      };
+
+      pendingMatch.value = false;
+      matchCount = 0;
+      lastNormalized = "";
+      cooldownUntil.value = null;
+      cooldownMessage.value = "";
+      await postScan(payload);
+    } else {
+      error.value = "This browser build does not support image scanning.";
+    }
+  } catch (e) {
+    if (extractRetryAt(e)) return;
+    const msg = e?.errorMessage || e?.message || String(e);
+    error.value = msg === "No MultiFormat Readers were able to detect the code."
+      ? "No barcode or QR code was detected."
+      : msg;
+  } finally {
+    if (readerEl.value) readerEl.value.innerHTML = "";
+    isProcessingFile.value = false;
+  }
+}
+
+const monsterStats = computed(() => {
+  const stats = scanResult.value?.ownedStats || scanResult.value?.result?.baseStats || {};
+  return {
+    hp: stats.hp ?? 0,
+    atk: stats.atk ?? 0,
+    def: stats.def ?? 0,
+  };
+});
+
+const scanRawValue = computed(() => lastPayload.value?.rawValue || "");
+const scanNormalizedValue = computed(() => {
+  const key = scanResult.value?.barcodeKey || "";
+  const idx = key.indexOf(":");
+  return idx === -1 ? key : key.slice(idx + 1);
+});
+const scanTypeLabel = computed(() => {
+  const type = scanResult.value?.outcome;
+  if (type === "NOTHING") return "Nothing";
+  if (type === "ITEM") return "Item";
+  if (type === "MONSTER") return "Monster";
+  if (type === "BATTLE") return "Battle";
+  if (type === "LIMIT") return "Limit";
+  return "Unknown";
+});
+
+const itemEffectDescription = computed(() => {
+  const effect = scanResult.value?.result?.effect;
+  if (!effect) return "Effect: Unknown";
+  if (effect === "HEAL") return "Effect: Heals your monster.";
+  return `Effect: ${effect}`;
+});
+
+const dailyLimitMessage = computed(() => {
+  if (scanResult.value?.outcome !== "LIMIT") return "";
+  const limit = scanResult.value?.limit;
+  const resetAt = scanResult.value?.resetAt;
+  if (Number.isFinite(Number(limit)) && resetAt) {
+    return `You have hit the daily scan limit of ${limit}. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (resetAt) {
+    return `You have hit the daily scan limit. You can scan again at ${new Date(resetAt).toLocaleString()}.`;
+  }
+  if (scanResult.value?.message) return scanResult.value.message;
+  return "Daily scan limit reached.";
+});
+
+function clearResult() {
+  resetScanState();
+  clearCooldownState();
+}
+
+function goToMonsters() {
+  router.push("/monsters");
+}
+
+function normalizeValue(formatName, decodedText) {
+  const raw = String(decodedText || "").trim();
+  const looksNumeric = /^[0-9\s-]+$/.test(raw);
+  return looksNumeric ? raw.replace(/[^0-9]/g, "") : raw;
+}
+
+function buildCooldownKey(formatName, decodedText) {
+  const normalized = normalizeValue(formatName, decodedText);
+  if (!normalized) return "";
+  return `${String(formatName || "").toLowerCase()}:${normalized}`;
+}
+
+function extractStatusMessage(e) {
+  return (
+    e?.data?.statusMessage ||
+    e?.data?.data?.statusMessage ||
+    e?.response?._data?.statusMessage ||
+    e?.response?._data?.data?.statusMessage ||
+    e?.statusMessage ||
+    e?.message ||
+    ""
+  );
+}
+
+function extractRetryAt(e) {
+  const retryAt = e?.data?.retryAt;
+  if (retryAt) return retryAt;
+  const retryAtWrapped = e?.data?.data?.retryAt || e?.response?._data?.data?.retryAt || e?.response?._data?.retryAt;
+  if (retryAtWrapped) return retryAtWrapped;
+  const msg = e?.data?.statusMessage || e?.statusMessage || e?.message || "";
+  const match = String(msg).match(/cooldown until\s+([0-9T:\-\.Z]+)/i);
+  return match ? match[1] : null;
+}
+
+function extractDailyLimit(e) {
+  const payload = e?.data?.data || e?.data || e?.response?._data?.data || e?.response?._data || {};
+  const code = payload?.code || payload?.data?.code;
+  const statusMessage = payload?.statusMessage || e?.data?.statusMessage || e?.statusMessage || "";
+  if (code !== "DailyScanLimit" && !/daily scan limit/i.test(String(statusMessage))) return null;
+  return {
+    limit: Number.isFinite(Number(payload?.limit)) ? Number(payload.limit) : null,
+    resetAt: payload?.resetAt || null,
+    message: statusMessage || null,
+  };
+}
+
+function formatRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { hours, minutes, seconds };
+}
+
+function formatCountdown(ms) {
+  const { hours, minutes, seconds } = formatRemaining(ms);
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+  return parts.join(" ");
+}
+
+function clearCooldownTimers() {
+  if (cooldownIntervalId) {
+    clearInterval(cooldownIntervalId);
+    cooldownIntervalId = null;
+  }
+  if (cooldownMessageTimeoutId) {
+    clearTimeout(cooldownMessageTimeoutId);
+    cooldownMessageTimeoutId = null;
+  }
+}
+
+function resetScanState() {
+  scanResult.value = null;
+  lastPayload.value = null;
+  pendingMatch.value = false;
+  matchCount = 0;
+  lastNormalized = "";
+  error.value = null;
+}
+
+function clearCooldownState() {
+  cooldownUntil.value = null;
+  cooldownKey.value = "";
+  cooldownStatusMessage.value = "";
+  cooldownMessage.value = "";
+  clearCooldownTimers();
+}
+
+function cooldownLabel() {
+  const raw = cooldownStatusMessage.value || "Barcode on cooldown";
+  const trimmed = raw.replace(/\s*until\s+.*/i, "").trim();
+  return trimmed || "Barcode on cooldown";
+}
+
+function updateCooldownMessage() {
+  if (!cooldownUntil.value) return false;
+  const until = new Date(cooldownUntil.value);
+  if (!Number.isFinite(until.getTime())) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  const ms = until.getTime() - Date.now();
+  if (ms <= 0) {
+    cooldownUntil.value = null;
+    cooldownMessage.value = "";
+    return false;
+  }
+  cooldownMessage.value = `${cooldownLabel()}: ${formatCountdown(ms)} left`;
+  return true;
+}
+
+function showCooldownMessage() {
+  if (!updateCooldownMessage()) return false;
+  clearCooldownTimers();
+  cooldownIntervalId = setInterval(() => {
+    if (!updateCooldownMessage()) {
+      clearCooldownState();
+    }
+  }, 1000);
+  cooldownMessageTimeoutId = setTimeout(() => {
+    cooldownMessage.value = "";
+    if (cooldownIntervalId) {
+      clearInterval(cooldownIntervalId);
+      cooldownIntervalId = null;
+    }
+    cooldownMessageTimeoutId = null;
+  }, COOLDOWN_MESSAGE_VISIBLE_MS);
+  return true;
+}
+
+function setCooldown(retryAt, key, statusMessage) {
+  cooldownUntil.value = retryAt;
+  cooldownKey.value = key || "";
+  cooldownStatusMessage.value = statusMessage || "";
+  resetScanState();
+  showCooldownMessage();
+}
+
+onBeforeUnmount(async () => {
+  await stop();
+  clearCooldownTimers();
+  if (battleSocket) {
+    battleSocket.disconnect();
+    battleSocket = null;
+  }
+});
+</script>
+
+<style scoped>
+.scanner { width: 100%; }
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 8px;
+}
+.reader {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 16px auto 0;
+}
+.reader-status {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.error {
+  color: #c00;
+  margin-top: 8px;
+  text-align: center;
+}
+.payload {
+  margin: 12px auto 0;
+  padding: 10px;
+  background: #111;
+  color: #ddd;
+  overflow: auto;
+  max-width: 520px;
+}
+.result-card {
+  max-width: 520px;
+  margin: 16px auto 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: center;
+  word-break: break-all;
+}
+.result-code {
+  max-width: 100%;
+  white-space: normal;
+}
+.result-dot {
+  opacity: 0.6;
+}
+
+@media (max-width: 520px) {
+  .result-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .result-dot {
+    display: none;
+  }
+}
+.result-inner {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.result-inner--solo {
+  grid-template-columns: 1fr;
+}
+.result-image {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+.result-title {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+.result-subtitle {
+  color: #475569;
+  margin-top: 4px;
+}
+.result-stats {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+  color: #0f172a;
+}
+@media (max-width: 520px) {
+  .result-inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .result-image {
+    margin: 0 auto;
+  }
+  .controls button {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.95rem;
+  }
+}
+</style>

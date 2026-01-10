@@ -25,6 +25,10 @@ export default defineEventHandler(async (event) => {
     case '1y': days = 365; break
     default:   days = 30
   }
+  const TF_WEEKS = { '1m': 4, '3m': 13, '6m': 26, '1y': 52 }
+  const TF_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
+  const weeks = TF_WEEKS[timeframe] ?? 4
+  const months = TF_MONTHS[timeframe] ?? 1
 
   // — Compute turnover rate per rarity over the last N days, including accepted auctions
   const raw = await prisma.$queryRawUnsafe(`
@@ -95,6 +99,8 @@ ORDER BY
   return {
     timeframe,
     days,
+    weeks,
+    months,
     data: raw.map(r => ({
       rarity:       r.rarity,
       turnoverRate: Number(r.turnover_rate)

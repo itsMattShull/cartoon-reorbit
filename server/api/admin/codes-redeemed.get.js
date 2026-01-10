@@ -15,29 +15,51 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse & normalize timeframe (default 3m)
-  const { timeframe = '3m' } = getQuery(event)
+  // 2) Parse & normalize timeframe (default 3m) + grouping (default daily)
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
-    case '1m':
-      startDate.setMonth(startDate.getMonth() - 1)
-      break
-    case '3m':
-      startDate.setMonth(startDate.getMonth() - 3)
-      break
-    case '6m':
-      startDate.setMonth(startDate.getMonth() - 6)
-      break
-    case '1y':
-      startDate.setFullYear(startDate.getFullYear() - 1)
-      break
-    default:
-      startDate.setMonth(startDate.getMonth() - 3)
+    case '1m': startDate.setMonth(startDate.getMonth() - 1); break
+    case '3m': startDate.setMonth(startDate.getMonth() - 3); break
+    case '6m': startDate.setMonth(startDate.getMonth() - 6); break
+    case '1y': startDate.setFullYear(startDate.getFullYear() - 1); break
+    default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Aggregate codes redeemed by week
-  const codesRedeemed = await prisma.$queryRaw`
+  // 3) Aggregate codes redeemed by selected period
+  if (groupBy === 'weekly') {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('week', "claimedAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "Claim"
+      WHERE "claimedAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+    return rows
+  }
+
+  if (groupBy === 'monthly') {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('month', "claimedAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "Claim"
+      WHERE "claimedAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+    return rows
+  }
+
+  // daily (original behavior)
+  const rows = await prisma.$queryRaw`
     SELECT
       to_char(date_trunc('day', "claimedAt"), 'YYYY-MM-DD') AS period,
       COUNT(*)::int AS count
@@ -46,7 +68,5 @@ export default defineEventHandler(async (event) => {
     GROUP BY period
     ORDER BY period
   `
-
-  // 4) Return the series directly
-  return codesRedeemed
+  return rows
 })

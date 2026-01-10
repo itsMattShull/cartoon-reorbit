@@ -4,8 +4,9 @@ node_modules
 .DS_Store
 .output
 ecosystem.config.js
-public/images/*
+public/images/cToons/*
 public/cToons/*
 public/packs/*
+public/backgrounds/*
 # Sentry Config File
 .env.sentry-build-plugin

@@ -1,4 +1,4 @@
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -13,6 +13,12 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
+
+  const query = getQuery(event)
+  const page = Math.max(parseInt(query.page || '1', 10), 1)
+  const limit = Math.min(Math.max(parseInt(query.limit || '100', 10), 1), 200)
+  const skip = (page - 1) * limit
+  const searchTerm = String(query.username || '').trim().toLowerCase()
 
   // 2. Fetch all login logs with user info
   const logs = await prisma.loginLog.findMany({
@@ -58,13 +64,45 @@ export default defineEventHandler(async (event) => {
       !ipsWithAdmin.has(ip) &&
       Object.keys(nameMap).length > 1
     )
-    .map(([ip, nameMap]) => ({
-      ip,
-      aliases: Object.entries(nameMap).map(([username, ts]) => ({
+    .map(([ip, nameMap]) => {
+      const aliases = Object.entries(nameMap).map(([username, ts]) => ({
         username,
         lastLogin: new Date(ts)
       }))
-    }))
+      const lastLoginTs = Object.values(nameMap).reduce((max, ts) => Math.max(max, ts), 0)
+      return { ip, aliases, lastLogin: new Date(lastLoginTs) }
+    })
+    .sort((a, b) => b.lastLogin.getTime() - a.lastLogin.getTime())
 
-  return { groups }
+  const dedupedByAliases = new Map()
+  for (const group of groups) {
+    const key = (group.aliases || [])
+      .map((alias) => String(alias.username || '').trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join('|')
+
+    const existing = dedupedByAliases.get(key)
+    const existingTs = existing ? new Date(existing.lastLogin).getTime() : -1
+    const groupTs = new Date(group.lastLogin).getTime()
+    if (!existing || groupTs > existingTs) {
+      dedupedByAliases.set(key, group)
+    }
+  }
+
+  const dedupedGroups = Array.from(dedupedByAliases.values())
+    .sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime())
+
+  const filteredGroups = searchTerm
+    ? dedupedGroups.filter((group) =>
+      (group.aliases || []).some((alias) =>
+        String(alias.username || '').toLowerCase().includes(searchTerm)
+      )
+    )
+    : dedupedGroups
+
+  const total = filteredGroups.length
+  const paged = filteredGroups.slice(skip, skip + limit)
+
+  return { groups: paged, total, page, limit }
 })

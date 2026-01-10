@@ -10,7 +10,7 @@
       :type="t.type"
     />
 
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
       <h1 class="text-2xl font-semibold mb-4">Bulk Upload cToons</h1>
 
       <!-- STEP 1: Image Upload -->
@@ -70,11 +70,11 @@
             <label class="block mb-1 font-medium">Series</label>
             <input
               v-model="bulkSeries"
-              list="series-list"
+              list="bulk-series-list"
               required
               class="w-full border rounded p-2"
             />
-            <datalist v-if="bulkSeries.length >= 2" id="series-list">
+            <datalist v-if="bulkSeries.length >= 2" id="bulk-series-list">
               <option
                 v-for="opt in filteredBulkSeriesOptions"
                 :key="opt"
@@ -93,13 +93,30 @@
           </div>
         </div>
 
+        <!-- Release schedule preview (applies to each row based on its Total Qty) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="new Date(new Date(bulkReleaseDate).getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mt-8">Initial/Final quantities are computed per row from each Total Qty.</p>
+          </div>
+        </div>
+
         <!-- Desktop Table -->
         <div class="overflow-x-auto hidden sm:block">
           <table class="min-w-max table-auto border-separate border-spacing-0">
             <thead>
               <tr class="bg-gray-100">
                 <th class="px-4 py-2">Preview</th>
+                <th class="px-4 py-2">Duplicate</th>
                 <th class="px-4 py-2">Name</th>
+                <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
                 <th class="px-4 py-2">Characters</th>
                 <th class="px-4 py-2">Total Qty</th>
@@ -110,12 +127,56 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(f, i) in imageFiles" :key="f.nameField+'-'+i" class="border-b">
+              <tr v-for="(f, i) in imageFiles" :key="f.id" class="border-b">
                 <td class="px-4 py-2">
                   <img :src="f.preview" alt class="h-12 w-auto rounded" />
                 </td>
                 <td class="px-4 py-2">
+                  <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking...</div>
+                  <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                    {{ f.duplicateError || 'Duplicate check failed.' }}
+                  </div>
+                  <div v-else-if="f.duplicateMatch" class="text-xs">
+                    <div class="text-amber-700 font-medium">Possible duplicate</div>
+                    <div class="flex items-center gap-2 mt-1">
+                      <img
+                        v-if="f.duplicateMatch.ctoon?.assetPath"
+                        :src="f.duplicateMatch.ctoon.assetPath"
+                        alt="Possible duplicate"
+                        class="w-10 h-10 object-contain border rounded bg-white"
+                      />
+                      <div class="text-[11px] leading-tight">
+                        <div class="font-medium truncate max-w-[140px]">
+                          {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                        </div>
+                        <div class="text-gray-600">
+                          p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates</div>
+                </td>
+                <td class="px-4 py-2">
                   <input v-model="f.nameField" class="w-full border rounded p-1" />
+                </td>
+                <td class="px-4 py-2">
+                  <input
+                    v-model="f.series"
+                    :list="`row-series-list-desktop-${f.id}`"
+                    class="w-full border rounded p-1"
+                    @input="lockRowSeries(f)"
+                  />
+                  <datalist
+                    v-if="(f.series || '').length >= 2"
+                    :id="`row-series-list-desktop-${f.id}`"
+                  >
+                    <option
+                      v-for="opt in filteredSeriesOptionsFor(f.series)"
+                      :key="opt"
+                      :value="opt"
+                    />
+                  </datalist>
                 </td>
                 <td class="px-4 py-2">
                   <select v-model="f.rarity" class="w-full border rounded p-1" @change="updateDefaults(f)">
@@ -151,7 +212,7 @@
         <div class="space-y-4 block sm:hidden">
           <div
             v-for="(f, i) in imageFiles"
-            :key="`${f.nameField}-${i}`"
+            :key="f.id"
             class="bg-gray-100 rounded-lg p-4"
           >
             <!-- Image on top -->
@@ -160,6 +221,32 @@
               :alt="f.nameField"
               class="w-full h-40 object-cover rounded mb-4"
             />
+            <div class="mb-4">
+              <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking for duplicates...</div>
+              <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                {{ f.duplicateError || 'Duplicate check failed.' }}
+              </div>
+              <div v-else-if="f.duplicateMatch" class="text-xs bg-amber-50 border rounded p-2">
+                <div class="text-amber-700 font-medium">Possible duplicate found</div>
+                <div class="flex items-center gap-2 mt-2">
+                  <img
+                    v-if="f.duplicateMatch.ctoon?.assetPath"
+                    :src="f.duplicateMatch.ctoon.assetPath"
+                    alt="Possible duplicate"
+                    class="w-12 h-12 object-contain border rounded bg-white"
+                  />
+                  <div class="text-[11px] leading-tight">
+                    <div class="font-medium">
+                      {{ f.duplicateMatch.ctoon?.name || 'Unknown cToon' }}
+                    </div>
+                    <div class="text-gray-600">
+                      p: {{ f.duplicateMatch.phashDist }}, d: {{ f.duplicateMatch.dhashDist }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates found.</div>
+            </div>
 
             <!-- Fields underneath -->
             <div class="space-y-4">
@@ -173,6 +260,31 @@
                 />
                 <p class="text-sm text-gray-500">
                   The display name for this cToon.
+                </p>
+              </div>
+
+              <!-- Series -->
+              <div>
+                <label class="block mb-1 font-medium">Series</label>
+                <input
+                  v-model="f.series"
+                  :list="`row-series-list-mobile-${f.id}`"
+                  class="w-full border rounded p-2"
+                  placeholder="Enter series"
+                  @input="lockRowSeries(f)"
+                />
+                <datalist
+                  v-if="(f.series || '').length >= 2"
+                  :id="`row-series-list-mobile-${f.id}`"
+                >
+                  <option
+                    v-for="opt in filteredSeriesOptionsFor(f.series)"
+                    :key="opt"
+                    :value="opt"
+                  />
+                </datalist>
+                <p class="text-sm text-gray-500">
+                  Defaults to the bulk series unless overridden.
                 </p>
               </div>
 
@@ -302,10 +414,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
+
+definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'default' })
 
 const router = useRouter()
 const step = ref(1)
@@ -316,6 +431,8 @@ const bulkSet = ref('')
 const bulkSeries = ref('')
 const bulkReleaseDate = ref('')
 const uploading = ref(false)
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 // only allow upload once every file has a rarity AND a non-empty characters string
 const canUpload = computed(() => {
@@ -326,13 +443,25 @@ const canUpload = computed(() => {
     Boolean(bulkSet.value.trim()) &&
     Boolean(bulkSeries.value.trim()) &&
     Boolean(bulkReleaseDate.value) &&
-    // each row has rarity + non-empty characters
+    // each row has rarity + non-empty characters + series
     imageFiles.value.every(f =>
       Boolean(f.rarity) &&
-      f.characters.trim().length > 0
+      f.characters.trim().length > 0 &&
+      resolveRowSeries(f).length > 0
     )
   )
 })
+
+const RARITY_PATTERNS = [
+  { key: 'Crazy Rare', re: /crazy[\s_]*rare/i },
+  { key: 'Very Rare',  re: /very[\s_]*rare/i },
+  { key: 'Uncommon',   re: /un[\s_]*common/i },
+  { key: 'Common',     re: /common/i },
+  { key: 'Rare',       re: /rare/i },
+  { key: 'Prize Only', re: /prize[\s_]*only/i },
+  { key: 'Code Only',  re: /code[\s_]*only/i },
+  { key: 'Auction Only', re: /auction[\s_]*only/i }
+]
 
 const rarityOptions = [
   'Common',
@@ -345,6 +474,14 @@ const rarityOptions = [
   'Auction Only'
 ]
 
+const makeRowId = (() => {
+  let n = 0
+  return () =>
+    (globalThis.crypto?.randomUUID?.() ?? `row_${Date.now().toString(36)}_${n++}`)
+})()
+
+const DUPLICATE_CHECK_CONCURRENCY = 3
+
 // toast state
 const toasts = ref([])
 function showToast(message, type = 'error') {
@@ -355,47 +492,58 @@ function showToast(message, type = 'error') {
   }, 5000)
 }
 
-// apply the same defaults logic as addCtoon.vue
-function updateDefaults(f) {
-  const pricing = {
-    Common: 100,
-    Uncommon: 200,
-    Rare: 400,
-    'Very Rare': 750,
-    'Crazy Rare': 1250
+function profileFromName(basename) {
+  let working = basename
+  let detected = ''
+
+  // Detect & strip rarity (first match wins)
+  for (const { key, re } of RARITY_PATTERNS) {
+    if (re.test(working)) {
+      detected = key
+      // remove ALL instances of the matched rarity pattern
+      const rm = new RegExp(re.source, 'ig')
+      working = working.replace(rm, '')
+      break
+    }
   }
+
+  // Remove any "_pic" (before stripping underscores)
+  working = working.replace(/_pic/ig, '')
+
+  // Remove all underscores
+  working = working.replace(/_/g, ' ')
+
+  // Collapse extra spaces and trim
+  working = working.replace(/\s{2,}/g, ' ').trim()
+
+  return { name: working, rarity: detected }
+}
+
+// server-provided rarity defaults (loaded in onMounted)
+const rarityDefaults = ref(null)
+
+// apply the same defaults logic as addCtoon.vue, but sourced from global settings
+function updateDefaults(f) {
+  const d = rarityDefaults.value?.[f.rarity]
+  if (d) {
+    f.totalQuantity   = d.totalQuantity ?? null
+    f.initialQuantity = d.initialQuantity ?? null
+    f.perUserLimit    = d.perUserLimit ?? null
+    f.inCmart         = !!d.inCmart
+    f.price           = Number(d.price ?? 0)
+    return
+  }
+  // fallback hard-coded if settings unavailable
+  const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
   f.price = pricing[f.rarity] ?? 0
   f.inCmart = f.rarity !== 'Code Only'
-
   switch (f.rarity) {
-    case 'Common':
-      f.totalQuantity   = 100
-      f.initialQuantity = 100
-      f.perUserLimit    = 20
-      break
-    case 'Uncommon':
-      f.totalQuantity   = 75
-      f.initialQuantity = 75
-      f.perUserLimit    = 10
-      break
-    case 'Rare':
-      f.totalQuantity   = 50
-      f.initialQuantity = 50
-      f.perUserLimit    = 3
-      break
-    case 'Very Rare':
-      f.totalQuantity   = 35
-      f.initialQuantity = 35
-      f.perUserLimit    = 2
-      break
-    case 'Crazy Rare':
-      f.totalQuantity   = 25
-      f.initialQuantity = 25
-      f.perUserLimit    = 2
-      break
-    default:
-      // for Prize Only / Auction Only or others, leave as-is
-      break
+    case 'Common':     f.totalQuantity = 160; f.initialQuantity = 160; f.perUserLimit = 7; break
+    case 'Uncommon':   f.totalQuantity = 120; f.initialQuantity = 120; f.perUserLimit = 5; break
+    case 'Rare':       f.totalQuantity = 80;  f.initialQuantity = 80;  f.perUserLimit = 3; break
+    case 'Very Rare':  f.totalQuantity = 60;  f.initialQuantity = 60;  f.perUserLimit = 2; break
+    case 'Crazy Rare': f.totalQuantity = 40;  f.initialQuantity = 40;  f.perUserLimit = 1; break
+    default: break
   }
 }
 
@@ -414,29 +562,112 @@ const filteredBulkSeriesOptions = computed(() => {
   )
 })
 
+const filteredSeriesOptionsFor = (value = '') => {
+  const normalized = (value || '').trim()
+  if (normalized.length < 2) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(normalized.toLowerCase())
+  )
+}
+
+const resolveRowSeries = (row) => {
+  if (row?.seriesLocked) return (row.series || '').trim()
+  return (row?.series || '').trim() || bulkSeries.value.trim()
+}
+
+const lockRowSeries = (row) => {
+  if (!row?.seriesLocked) row.seriesLocked = true
+}
+
+watch(bulkSeries, (next) => {
+  const nextValue = (next || '').trim()
+  imageFiles.value.forEach((row) => {
+    if (!row.seriesLocked) row.series = nextValue
+  })
+})
+
 onMounted(async () => {
-  const [setsRes, seriesRes] = await Promise.all([
+  const [setsRes, seriesRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/sets', { credentials: 'include' }),
-    fetch('/api/admin/series', { credentials: 'include' })
+    fetch('/api/admin/series', { credentials: 'include' }),
+    fetch('/api/rarity-defaults'),
+    fetch('/api/release-settings')
   ])
   setsOptions.value = await setsRes.json()
   seriesOptions.value = await seriesRes.json()
+  try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
+  try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
 })
 
 function handleFiles(e) {
-  const files = Array.from(e.target.files)
-  imageFiles.value = files.map(file => ({
-    file,
-    preview: URL.createObjectURL(file),
-    nameField: file.name.replace(/\.[^/.]+$/, ''),
-    rarity: '',
-    characters: '',
-    totalQuantity: null,
-    initialQuantity: null,
-    perUserLimit: null,
-    inCmart: false,
-    price: 0
-  }))
+  const files = Array.from(e.target.files || [])
+  imageFiles.value = files.map((file) => {
+    const stem = file.name.replace(/\.[^/.]+$/, '')
+    const { name: cleanedName, rarity } = profileFromName?.(stem) ?? { name: stem, rarity: '' }
+
+    const row = {
+      id: makeRowId(),
+      file,
+      preview: URL.createObjectURL(file),
+      nameField: cleanedName,      // ← prefilled name
+      characters: cleanedName,     // ← prefilled to match name
+      rarity: rarity || '',
+      series: bulkSeries.value.trim(),
+      seriesLocked: false,
+      totalQuantity: null,
+      initialQuantity: null,
+      perUserLimit: null,
+      inCmart: false,
+      price: 0,
+      duplicateStatus: 'idle',
+      duplicateMatch: null,
+      duplicateError: ''
+    }
+
+    if (row.rarity) updateDefaults?.(row)
+    return row
+  })
+  runDuplicateChecks(imageFiles.value)
+}
+
+async function runDuplicateChecks(rows) {
+  const queue = rows.slice()
+  const workers = Array.from({ length: DUPLICATE_CHECK_CONCURRENCY }, () => (async () => {
+    while (queue.length) {
+      const row = queue.shift()
+      if (!row) return
+      await checkDuplicateForRow(row)
+    }
+  })())
+  await Promise.all(workers)
+}
+
+async function checkDuplicateForRow(row) {
+  if (!row?.file) return
+  row.duplicateStatus = 'checking'
+  row.duplicateMatch = null
+  row.duplicateError = ''
+  const formData = new FormData()
+  formData.append('image', row.file)
+
+  try {
+    const res = await fetch('/api/admin/ctoon-duplicate', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    })
+    if (!res.ok) {
+      row.duplicateStatus = 'error'
+      row.duplicateError = 'Duplicate check failed.'
+      return
+    }
+    const data = await res.json()
+    row.duplicateMatch = data?.duplicate ? data.match : null
+    row.duplicateStatus = 'done'
+  } catch {
+    row.duplicateStatus = 'error'
+    row.duplicateError = 'Duplicate check failed.'
+  }
 }
 
 async function uploadAll() {
@@ -450,17 +681,19 @@ async function uploadAll() {
       !f.rarity ||
       !bulkSet.value ||
       !bulkSeries.value ||
-      !bulkReleaseDate.value
+      !bulkReleaseDate.value ||
+      !resolveRowSeries(f)
     ) {
       showToast(`Missing required fields for ${f.nameField}`, 'error')
       allSuccess = false
       continue
     }
 
+    const rowSeries = resolveRowSeries(f)
     const formData = new FormData()
     formData.append('image', f.file)
     formData.append('name', f.nameField)
-    formData.append('series', bulkSeries.value)
+    formData.append('series', rowSeries)
     formData.append('type', f.file.type)
     formData.append('rarity', f.rarity)
     formData.append('set', bulkSet.value)
@@ -468,12 +701,24 @@ async function uploadAll() {
       'characters',
       JSON.stringify(f.characters.split(',').map(c => c.trim()))
     )
-    formData.append(
-      'releaseDate',
-      new Date(bulkReleaseDate.value).toISOString()
-    )
+    // Convert admin-entered CST/CDT to UTC
+    try {
+      formData.append('releaseDate', zonedTimeToUtc(bulkReleaseDate.value, 'America/Chicago').toISOString())
+    } catch {
+      formData.append('releaseDate', new Date(bulkReleaseDate.value).toISOString())
+    }
     formData.append('totalQuantity', f.totalQuantity ?? '')
     formData.append('initialQuantity', f.initialQuantity ?? '')
+    // advisory schedule fields per row
+    if (f.totalQuantity && bulkReleaseDate.value) {
+      const init = Math.max(1, Math.floor((Number(f.totalQuantity) * Number(releasePercent.value)) / 100))
+      const fin  = Math.max(0, Number(f.totalQuantity) - init)
+      const finAt = new Date(new Date(bulkReleaseDate.value).getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+      formData.append('initialReleaseAt', new Date(bulkReleaseDate.value).toISOString())
+      formData.append('finalReleaseAt', finAt.toISOString())
+      formData.append('initialReleaseQty', init)
+      formData.append('finalReleaseQty', fin)
+    }
     formData.append('perUserLimit', f.perUserLimit ?? '')
     formData.append('inCmart', f.inCmart)
     formData.append('price', f.price)
@@ -502,4 +747,3 @@ async function uploadAll() {
   }
 }
 </script>
-

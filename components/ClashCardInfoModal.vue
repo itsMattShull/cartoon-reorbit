@@ -32,6 +32,10 @@
           <dd>{{ card.cost }}</dd>
         </div>
         <div>
+          <dt class="font-medium">Type:</dt>
+          <dd>{{ card.gtoonType }}</dd>
+        </div>
+        <div>
           <dt class="font-medium">Power:</dt>
           <dd>{{ card.power }}</dd>
         </div>

@@ -25,6 +25,15 @@ export default defineEventHandler(async (event) => {
   })
 
   // 4. Determine award based on account age
+  //    Load global config for dynamic point values with safe fallbacks
+  let cfg
+  try {
+    cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: {
+      dailyLoginPoints: true, dailyNewUserPoints: true
+    } })
+  } catch {
+    cfg = null
+  }
   const userRecord = await prisma.user.findUnique({
     where: { id: userId },
     select: { createdAt: true }
@@ -35,7 +44,10 @@ export default defineEventHandler(async (event) => {
   const sevenDaysAgoUtc = sevenDaysAgoLocal.toUTC().toJSDate()
 
   // If user.createdAt is after threshold → new user → 1000, else 500
-  const awardPoints = (userRecord?.createdAt >= sevenDaysAgoUtc) ? 1000 : 500
+  const newUser = (userRecord?.createdAt >= sevenDaysAgoUtc)
+  const awardPoints = newUser
+    ? Number(cfg?.dailyNewUserPoints ?? 1000)
+    : Number(cfg?.dailyLoginPoints   ?? 500)
 
   // 5. Award points if eligible, and log
   await prisma.$transaction(async (tx) => {

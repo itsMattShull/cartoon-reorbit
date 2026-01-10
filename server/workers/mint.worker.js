@@ -9,25 +9,54 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
-  try {
     const { userId, ctoonId, isSpecial = false } = job.data
 
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
 
-    // Count how many have been minted and existing user purchases
-    const totalMinted = await prisma.userCtoon.count({ where: { ctoonId } })
-    const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
+    // ───────────────────────── Holiday window guard ─────────────────────────
+    // If this cToon is a Holiday Item in ANY event, only allow mint while an
+    // associated event is active (isActive && startsAt <= now < endsAt).
+    const now = new Date()
 
-    // Sold-out check
-    if (ctoon.quantity !== null && totalMinted >= ctoon.quantity) {
-      throw new Error('cToon sold out')
+    // Is this cToon used as a Holiday Item anywhere?
+    const holidayLinkCount = await prisma.holidayEventItem.count({
+      where: { ctoonId }
+    })
+
+    if (holidayLinkCount > 0) {
+      // Is there an active event (right now) that includes this cToon?
+      const activeEvent = await prisma.holidayEvent.findFirst({
+        where: {
+          isActive: true,
+          startsAt: { lte: now },
+          endsAt:   { gt:  now },
+          items: { some: { ctoonId } }
+        },
+        select: { id: true }
+      })
+
+      if (!activeEvent) {
+        throw new Error('This Holiday Item can only be minted while its event is active.')
+      }
     }
 
-    // Wallet balance check
-    const wallet = await prisma.userPoints.findUnique({ where: { userId } })
-    if (!isSpecial && (!wallet || wallet.points < ctoon.price)) {
+    // Count existing user purchases for limit checks
+    const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
+
+    // Wallet balance check (available = total - active locks)
+    const [wallet, activeLocks] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId }, select: { points: true } }),
+      prisma.lockedPoints.findMany({
+        where: { userId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const totalPoints = wallet?.points ?? 0
+    const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+    const availablePoints = totalPoints - lockedSum
+    if (!isSpecial && availablePoints < ctoon.price) {
       throw new Error('Insufficient points')
     }
 
@@ -50,45 +79,81 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }
 
-    // Calculate mintNumber and first-edition flag
-    const mintNumber = totalMinted + 1
-    const isFirstEdition =
-      ctoon.initialQuantity === null || mintNumber <= ctoon.initialQuantity
+    // Load global settings (for window-aware caps)
+    let initialPercent = 75
+    let delayHours = 12
+    try {
+      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+      if (cfg) {
+        if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
+        if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+      }
+    } catch {}
 
-    // Perform the minting transaction
-    if (!isSpecial) {
-      await prisma.$transaction(async (tx) => {
-        // 1) Deduct points and capture new total
+    // Mint inside a single transaction with atomic counter for mintNumber
+    await prisma.$transaction(async (tx) => {
+      // 1) Atomically increment totalMinted and use the new value as mintNumber
+      const updatedCtoon = await tx.ctoon.update({
+        where: { id: ctoonId },
+        data: { totalMinted: { increment: 1 } },
+        select: { totalMinted: true, initialQuantity: true, quantity: true, releaseDate: true }
+      })
+
+      const mintNumber = updatedCtoon.totalMinted
+      // Sold-out guard (rolls back the increment if exceeded)
+      if (updatedCtoon.quantity !== null && mintNumber > updatedCtoon.quantity) {
+        throw new Error('cToon sold out')
+      }
+
+      // Window-aware cap (non-special mints only)
+      if (!isSpecial && updatedCtoon.quantity !== null && ctoon.releaseDate) {
+        const qty = Number(updatedCtoon.quantity)
+        const initialCap = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+        const finalReleaseAt = new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+        const now = new Date()
+        const beforeFinal = now < finalReleaseAt
+        const allowedCap = beforeFinal ? initialCap : qty
+        if (mintNumber > allowedCap) {
+          throw new Error('Initial window sold out. Please wait for the final release.')
+        }
+      }
+
+      const isFirstEdition =
+        updatedCtoon.initialQuantity === null || mintNumber <= updatedCtoon.initialQuantity
+
+      // 2) If not special, deduct points + log
+      if (!isSpecial) {
         const updated = await tx.userPoints.update({
           where: { userId },
           data:  { points: { decrement: ctoon.price } }
         })
-        // 2) Log with updated total
         await tx.pointsLog.create({
           data: {
-            userId:    userId,
-            points:    ctoon.price,
-            total:     updated.points,
-            method:    'Bought cToon',
+            userId,
+            points: ctoon.price,
+            total: updated.points,
+            method: 'Bought cToon',
             direction: 'decrease'
           }
         })
-        // 3) Create the UserCtoon record
-        await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition }
-        })
+      }
+
+      // 3) Create the UserCtoon with the atomic mintNumber
+      const uc = await tx.userCtoon.create({
+        data: { userId, ctoonId, mintNumber, isFirstEdition },
+        select: { id: true, mintNumber: true }
       })
-    } else {
-      // Special mints bypass cost
-      await prisma.$transaction(async (tx) => {
-        await tx.userCtoon.create({
-          data: { userId, ctoonId, mintNumber, isFirstEdition }
-        })
+
+      // 4) Create ownership log
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId,
+          ctoonId,
+          userCtoonId: uc.id,
+          mintNumber: uc.mintNumber
+        }
       })
-    }
-  } finally {
-    await prisma.$disconnect()
-  }
+    })
 }, { connection })
 
 // Optional: logging

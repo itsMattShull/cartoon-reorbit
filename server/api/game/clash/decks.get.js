@@ -59,6 +59,7 @@ export default defineEventHandler(async (event) => {
         assetPath:  dc.ctoon.assetPath,
         cost:       dc.ctoon.cost,
         power:      dc.ctoon.power,
+        gtoonType:  dc.ctoon.gtoonType || null,
         abilityKey: dc.ctoon.abilityKey,
         deckCardId: dc.id
       }))

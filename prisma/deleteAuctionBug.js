@@ -14,7 +14,6 @@ async function main() {
     console.error('User "CartoonReOrbitOfficial" not found.');
     process.exit(1);
   }
-  console.log(`Found CartoonReOrbitOfficial userId: ${user.id}`);
 
   // 2) Find all auctions they won
   const auctions = await prisma.auction.findMany({
@@ -25,27 +24,19 @@ async function main() {
     }
   });
 
-  console.log(`Found ${auctions.length} auctions won by CartoonReOrbitOfficial.`);
-
   // 3) Filter invalid ones
   const invalidAuctions = auctions.filter(auction => {
     const winningBid = auction.bids.sort((a, b) => b.amount - a.amount)[0];
     return winningBid && !allowedAmounts.includes(winningBid.amount);
   });
 
-  console.log(`Found ${invalidAuctions.length} invalid auctions.`);
-
-  // 4) Process fixes
+  // 4) Process fixes + delete auction & its bids
   await prisma.$transaction(async (tx) => {
     for (const auction of invalidAuctions) {
       const winningBid = auction.bids.sort((a, b) => b.amount - a.amount)[0];
       if (!winningBid) continue;
 
-      console.log(
-        `Fixing auction ${auction.id} | Winning bid: ${winningBid.amount} | Creator: ${auction.creator.username}`
-      );
-
-      // 4.1 Update UserCtoon owner
+      // 4.1 Update UserCtoon owner (revert to creator)
       await tx.userCtoon.update({
         where: { id: auction.userCtoonId },
         data: { userId: auction.creator.id }
@@ -57,7 +48,7 @@ async function main() {
         data: { points: { decrement: winningBid.amount } }
       });
 
-      // 4.3 Remove points logs for same day & same amount
+      // 4.3 Remove points logs for same day & same amount (creator)
       const bidDateStart = new Date(winningBid.createdAt);
       bidDateStart.setHours(0, 0, 0, 0);
 
@@ -75,13 +66,24 @@ async function main() {
         }
       });
 
+      // 4.4 Delete all bids for this auction
+      const deletedBids = await tx.bid.deleteMany({
+        where: { auctionId: auction.id }
+      });
+
+      // 4.5 Delete the auction itself
+      await tx.auction.delete({
+        where: { id: auction.id }
+      });
+
       console.log(
-        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ${deletedLogs.count} points logs removed`
+        `✅ Auction ${auction.id} fixed — ownership reverted, ${winningBid.amount} points deducted, ` +
+        `${deletedBids.count} bid(s) deleted, auction deleted`
       );
     }
   });
 
-  console.log('🎯 All invalid auctions processed.');
+  console.log('🎯 All invalid auctions processed and deleted.');
 }
 
 main()
@@ -89,4 +91,4 @@ main()
     console.error(err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => {});

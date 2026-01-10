@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
       <h1 class="text-2xl font-semibold mb-4">Add New cToon</h1>
       <form @submit.prevent="submitForm" class="space-y-4">
         <!-- Image Upload -->
@@ -11,6 +11,28 @@
           <input type="file" accept="image/png,image/gif" @change="handleFile" required class="w-full" />
           <p class="text-sm text-gray-500">This image will represent the cToon visually. PNG or GIF only.</p>
           <p v-if="errors.image" class="text-red-600 text-sm mt-1">{{ errors.image }}</p>
+          <div v-if="duplicateStatus !== 'idle'" class="mt-2">
+            <p v-if="duplicateStatus === 'checking'" class="text-sm text-gray-500">Checking for duplicates...</p>
+            <p v-else-if="duplicateStatus === 'error'" class="text-sm text-red-600">{{ duplicateError }}</p>
+            <div v-else-if="duplicateMatch" class="border rounded p-3 bg-amber-50">
+              <p class="text-sm text-amber-700 font-medium">Possible duplicate found</p>
+              <div class="flex items-center gap-3 mt-2">
+                <img
+                  v-if="duplicateMatch.ctoon && duplicateMatch.ctoon.assetPath"
+                  :src="duplicateMatch.ctoon.assetPath"
+                  alt="Possible duplicate"
+                  class="w-20 h-20 object-contain border rounded bg-white"
+                />
+                <div class="text-sm">
+                  <p class="font-medium">{{ duplicateMatch.ctoon?.name || 'Unknown cToon' }}</p>
+                  <p class="text-gray-600">
+                    pHash distance: {{ duplicateMatch.phashDist }}, dHash distance: {{ duplicateMatch.dhashDist }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-green-600">No duplicates found.</p>
+          </div>
         </div>
 
         <!-- Type (auto-filled) -->
@@ -90,6 +112,26 @@
           </div>
         </div>
 
+        <!-- Release schedule (computed, read-only) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Initial Release Qty</label>
+            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release Qty</label>
+            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+        </div>
+
         <!-- Per User Limit -->
         <div>
           <label class="block mb-1 font-medium">Per-User Limit</label>
@@ -118,6 +160,12 @@
 
         <!-- ── G-toon-specific fields (shown only if checked) ── -->
         <div v-if="isGtoon" class="border p-4 rounded bg-indigo-50 space-y-4">
+          <!-- G-toon Type (free text, optional) -->
+          <div>
+            <label class="block mb-1 font-medium">Type (gToon)</label>
+            <input v-model="gtoonType" type="text" class="w-full border rounded p-2" placeholder="e.g. Beast, Robot, Support" />
+            <p class="text-sm text-gray-500">Optional. Leave blank if none.</p>
+          </div>
           <!-- Cost -->
           <div>
             <label class="block mb-1 font-medium">Cost <span class="text-xs text-gray-500">(1 – 6)</span></label>
@@ -197,10 +245,12 @@
 
 <script setup>
 definePageMeta({
+  title: 'Admin - Add cToon',
   middleware: ['auth', 'admin'],
   layout: 'default'
 })
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { zonedTimeToUtc } from 'date-fns-tz'
 import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
@@ -222,12 +272,16 @@ const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
 const setsOptions = ref([])
+const duplicateStatus = ref('idle')
+const duplicateMatch = ref(null)
+const duplicateError = ref('')
 /* ── NEW: G-toon state ───────────────────────────────── */
 const isGtoon     = ref(false)
 const cost        = ref(1)
 const power       = ref(1)
 const abilityKey  = ref('')
 const abilityParam = ref(null)
+const gtoonType = ref('') 
 
 const abilityKeyOptions = abilityMeta
 
@@ -259,58 +313,61 @@ const filteredSetsOptions = computed(() => {
   )
 })
 
+// rarity defaults fetched from server
+const rarityDefaults = ref(null)
+const releasePercent = ref(75)
+const delayHours = ref(12)
+
 onMounted(async () => {
-  const [seriesRes, setsRes] = await Promise.all([
+  const [seriesRes, setsRes, rarityRes, relRes] = await Promise.all([
     fetch('/api/admin/series', { credentials: 'include' }),
-    fetch('/api/admin/sets', { credentials: 'include' })
+    fetch('/api/admin/sets', { credentials: 'include' }),
+    fetch('/api/rarity-defaults'),
+    fetch('/api/release-settings')
   ])
   seriesOptions.value = await seriesRes.json()
   setsOptions.value = await setsRes.json()
+  try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
+  try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
 })
 
 watch(rarity, val => {
-  const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
-  price.value = pricing[val] || 0
+  const d = rarityDefaults.value?.[val]
+  if (d) {
+    totalQuantity.value   = d.totalQuantity ?? null
+    initialQuantity.value = d.initialQuantity ?? null
+    perUserLimit.value    = d.perUserLimit ?? null
+    inCmart.value         = !!d.inCmart
+    price.value           = Number(d.price ?? 0)
+  } else {
+    // fallback hard-coded
+    const pricing = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
+    price.value = pricing[val] || 0
+    switch (val) {
+      case 'Common':
+        initialQuantity.value = 160; totalQuantity.value = 160; perUserLimit.value = 7; inCmart.value = true; break
+      case 'Uncommon':
+        initialQuantity.value = 120; totalQuantity.value = 120; perUserLimit.value = 5; inCmart.value = true; break
+      case 'Rare':
+        initialQuantity.value = 80; totalQuantity.value = 80; perUserLimit.value = 3; inCmart.value = true; break
+      case 'Very Rare':
+        initialQuantity.value = 60; totalQuantity.value = 60; perUserLimit.value = 2; inCmart.value = true; break
+      case 'Crazy Rare':
+        initialQuantity.value = 40; totalQuantity.value = 40; perUserLimit.value = 1; inCmart.value = true; break
+      default:
+        break
+    }
+  }
   codeOnly.value = val === 'Code Only'
   if (val === 'Code Only') inCmart.value = false
-
-  switch (val) {
-    case 'Common':
-      initialQuantity.value = 100
-      totalQuantity.value = 100
-      perUserLimit.value = null
-      inCmart.value = true
-      break
-    case 'Uncommon':
-      initialQuantity.value = 75
-      totalQuantity.value = 75
-      perUserLimit.value = null
-      inCmart.value = true
-      break
-    case 'Rare':
-      initialQuantity.value = 50
-      totalQuantity.value = 50
-      perUserLimit.value = 3
-      inCmart.value = true
-      break
-    case 'Very Rare':
-      initialQuantity.value = 35
-      totalQuantity.value = 35
-      perUserLimit.value = 2
-      inCmart.value = true
-      break
-    case 'Crazy Rare':
-      initialQuantity.value = 25
-      totalQuantity.value = 25
-      perUserLimit.value = 2
-      inCmart.value = true
-      break
-  }
 })
 
 function handleFile(e) {
   const file = e.target.files[0]
   errors.image = ''
+  duplicateStatus.value = 'idle'
+  duplicateMatch.value = null
+  duplicateError.value = ''
   if (!file) {
     errors.image = 'Image is required.'
     return
@@ -321,7 +378,48 @@ function handleFile(e) {
   }
   imageFile.value = file
   type.value = file.type
+  checkDuplicate(file)
 }
+
+async function checkDuplicate(file) {
+  duplicateStatus.value = 'checking'
+  duplicateMatch.value = null
+  duplicateError.value = ''
+  const formData = new FormData()
+  formData.append('image', file)
+
+  try {
+    const res = await fetch('/api/admin/ctoon-duplicate', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    })
+    if (!res.ok) {
+      duplicateStatus.value = 'error'
+      duplicateError.value = 'Duplicate check failed.'
+      return
+    }
+    const data = await res.json()
+    duplicateMatch.value = data?.duplicate ? data.match : null
+    duplicateStatus.value = 'done'
+  } catch {
+    duplicateStatus.value = 'error'
+    duplicateError.value = 'Duplicate check failed.'
+  }
+}
+
+const schedule = computed(() => {
+  const qty = Number(totalQuantity.value)
+  const hasQty = Number.isFinite(qty) && qty > 0
+  const hasDate = Boolean(releaseDate.value)
+  if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
+  const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
+  const fin = Math.max(0, qty - init)
+  const base = new Date(releaseDate.value)
+  const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+  const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
+  return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
+})
 
 async function submitForm() {
   // Validate
@@ -339,15 +437,27 @@ async function submitForm() {
   formData.append('rarity', rarity.value)
   formData.append('set', set.value)
   formData.append('characters', JSON.stringify(characters.value.split(',').map(c => c.trim())))
-  formData.append('releaseDate', new Date(releaseDate.value).toISOString())
+  // Convert admin-entered CST/CDT time to UTC
+  try {
+    const utcIso = zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString()
+    formData.append('releaseDate', utcIso)
+  } catch {
+    formData.append('releaseDate', new Date(releaseDate.value).toISOString())
+  }
   formData.append('totalQuantity', totalQuantity.value ?? '')
   formData.append('initialQuantity', initialQuantity.value ?? '')
+  // advisory schedule fields
+  formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+  formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
+  formData.append('initialReleaseQty', schedule.value.initialQty ?? '')
+  formData.append('finalReleaseQty', schedule.value.finalQty ?? '')
   formData.append('perUserLimit', perUserLimit.value ?? '')
   formData.append('codeOnly', codeOnly.value)
   formData.append('inCmart', inCmart.value)
   formData.append('price', price.value)
   formData.append('isGtoon',      isGtoon.value)
   if (isGtoon.value) {
+    formData.append('gtoonType', gtoonType.value ?? '')
     formData.append('cost',       cost.value)
     formData.append('power',      power.value)
     formData.append('abilityKey', abilityKey.value)

@@ -31,6 +31,4 @@ main()
     console.error('✖ error shifting auctions:', err)
     process.exit(1)
   })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .finally(async () => {})

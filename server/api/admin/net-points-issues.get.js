@@ -1,5 +1,4 @@
 // server/api/admin/net-points-issues.get.js
-
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
@@ -16,102 +15,179 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse & normalize timeframe → days
-  const { timeframe = '3m' } = getQuery(event)
-  let days
-  switch (timeframe) {
-    case '1m': days = 30;  break
-    case '3m': days = 90;  break
-    case '6m': days = 180; break
-    case '1y': days = 365; break
-    default:   days = 90
+  // 2) Params
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
+
+  const TF_DAYS  = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }
+  const TF_WEEKS = { '1m':  4, '3m': 13, '6m':  26, '1y':  52 }
+  const TF_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
+
+  const days  = TF_DAYS[timeframe]  ?? 90
+  const weeks = TF_WEEKS[timeframe] ?? 13
+  const months = TF_MONTHS[timeframe] ?? 3
+
+  if (groupBy === 'weekly') {
+    // 3) Weekly series: earned, spent, net, 7-week MA(net)
+    const weekly = await prisma.$queryRawUnsafe(`
+      WITH
+        bounds AS (
+          SELECT date_trunc('week', now()::date) AS end_wk,
+                 date_trunc('week', now()::date) - INTERVAL '${weeks - 1} week' AS start_wk
+        ),
+        week_series AS (
+          SELECT generate_series((SELECT start_wk FROM bounds),
+                                 (SELECT end_wk   FROM bounds),
+                                 '1 week')::date AS period
+        ),
+        agg AS (
+          SELECT
+            date_trunc('week', "createdAt")::date AS period,
+            SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::int AS earned,
+            SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::int AS spent
+          FROM "PointsLog"
+          WHERE "createdAt" >= (SELECT start_wk FROM bounds)
+            AND "createdAt" <  (SELECT end_wk   FROM bounds) + INTERVAL '1 week'
+          GROUP BY 1
+        ),
+        joined AS (
+          SELECT ws.period,
+                 COALESCE(a.earned,0) AS earned,
+                 COALESCE(a.spent,0)  AS spent
+          FROM week_series ws
+          LEFT JOIN agg a ON a.period = ws.period
+        )
+      SELECT
+        period,
+        earned,
+        spent,
+        (earned - spent) AS net,
+        ROUND(AVG(earned - spent) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)::numeric, 2) AS net_ma7
+      FROM joined
+      ORDER BY period;
+    `)
+
+    const series = weekly.map(r => ({
+      period: r.period,
+      earned: Number(r.earned),
+      spent:  Number(r.spent),
+      net:    Number(r.net),
+      net_ma7: Number(r.net_ma7),
+      // compatibility with existing frontend
+      netPoints: Number(r.net),
+      movingAvg7Day: Number(r.net_ma7)
+    }))
+
+    return { timeframe, weeks, series }
   }
 
-  // 3a) Daily series with gaps filled
+  if (groupBy === 'monthly') {
+    // Monthly series: earned, spent, net, 7-month MA(net)
+    const monthly = await prisma.$queryRawUnsafe(`
+      WITH
+        bounds AS (
+          SELECT date_trunc('month', now()::date) AS end_mo,
+                 date_trunc('month', now()::date) - INTERVAL '${months - 1} month' AS start_mo
+        ),
+        month_series AS (
+          SELECT generate_series((SELECT start_mo FROM bounds),
+                                 (SELECT end_mo   FROM bounds),
+                                 '1 month')::date AS period
+        ),
+        agg AS (
+          SELECT
+            date_trunc('month', "createdAt")::date AS period,
+            SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::int AS earned,
+            SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::int AS spent
+          FROM "PointsLog"
+          WHERE "createdAt" >= (SELECT start_mo FROM bounds)
+            AND "createdAt" <  (SELECT end_mo   FROM bounds) + INTERVAL '1 month'
+          GROUP BY 1
+        ),
+        joined AS (
+          SELECT ms.period,
+                 COALESCE(a.earned,0) AS earned,
+                 COALESCE(a.spent,0)  AS spent
+          FROM month_series ms
+          LEFT JOIN agg a ON a.period = ms.period
+        )
+      SELECT
+        period,
+        earned,
+        spent,
+        (earned - spent) AS net,
+        ROUND(AVG(earned - spent) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)::numeric, 2) AS net_ma7
+      FROM joined
+      ORDER BY period;
+    `)
+
+    const series = monthly.map(r => ({
+      period: r.period,
+      earned: Number(r.earned),
+      spent:  Number(r.spent),
+      net:    Number(r.net),
+      net_ma7: Number(r.net_ma7),
+      // compatibility with existing frontend
+      netPoints: Number(r.net),
+      movingAvg7Day: Number(r.net_ma7)
+    }))
+
+    return { timeframe, months, series }
+  }
+
+  // 4) Daily series: earned, spent, net, 7-day MA(net)
   const daily = await prisma.$queryRawUnsafe(`
     WITH
-      day_series AS (
-        SELECT generate_series(
-          (now() - INTERVAL '${days} days')::date,
-          now()::date,
-          '1 day'
-        ) AS period
+      bounds AS (
+        SELECT (now() - INTERVAL '${days} days')::date AS start_day,
+               now()::date                            AS end_day
       ),
-      daily_agg AS (
+      day_series AS (
+        SELECT generate_series((SELECT start_day FROM bounds),
+                               (SELECT end_day   FROM bounds),
+                               '1 day')::date AS period
+      ),
+      agg AS (
         SELECT
           date_trunc('day', "createdAt")::date AS period,
-          SUM(
-            CASE WHEN "direction" = 'increase' THEN "points"
-                 ELSE -"points"
-            END
-          )::int AS net_points
+          SUM(CASE WHEN "direction"='increase' THEN "points" ELSE 0 END)::int AS earned,
+          SUM(CASE WHEN "direction"='decrease' THEN "points" ELSE 0 END)::int AS spent
         FROM "PointsLog"
-        WHERE "createdAt" >= now() - INTERVAL '${days} days'
-        GROUP BY period
+        WHERE "createdAt" >= (SELECT start_day FROM bounds)
+          AND "createdAt" <  (SELECT end_day   FROM bounds) + INTERVAL '1 day'
+        GROUP BY 1
+      ),
+      joined AS (
+        SELECT ds.period,
+               COALESCE(a.earned,0) AS earned,
+               COALESCE(a.spent,0)  AS spent
+        FROM day_series ds
+        LEFT JOIN agg a ON a.period = ds.period
       )
     SELECT
-      ds.period,
-      COALESCE(da.net_points, 0) AS net_points,
-      ROUND(
-        AVG(COALESCE(da.net_points, 0))
-          OVER (
-            ORDER BY ds.period
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
-          )
-        , 2
-      ) AS moving_avg_7day
-    FROM day_series ds
-    LEFT JOIN daily_agg da
-      ON da.period = ds.period
-    ORDER BY ds.period;
-  `)
-
-  // 3b) Weekly buckets
-  const weekly = await prisma.$queryRawUnsafe(`
-    SELECT
-      date_trunc('week', "createdAt")::date AS period,
-      SUM(
-        CASE WHEN "direction" = 'increase' THEN "points"
-             ELSE -"points"
-        END
-      )::int AS net_points
-    FROM "PointsLog"
-    WHERE "createdAt" >= now() - INTERVAL '${days} days'
-    GROUP BY period
+      period,
+      earned,
+      spent,
+      (earned - spent) AS net,
+      ROUND(AVG(earned - spent) OVER (ORDER BY period ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)::numeric, 2) AS net_ma7
+    FROM joined
     ORDER BY period;
   `)
 
-  // 3c) Monthly buckets
-  const monthly = await prisma.$queryRawUnsafe(`
-    SELECT
-      date_trunc('month', "createdAt")::date AS period,
-      SUM(
-        CASE WHEN "direction" = 'increase' THEN "points"
-             ELSE -"points"
-        END
-      )::int AS net_points
-    FROM "PointsLog"
-    WHERE "createdAt" >= now() - INTERVAL '${days} days'
-    GROUP BY period
-    ORDER BY period;
-  `)
-
-  // 4) Return everything
   return {
-    timeframe,        // e.g. '1m','3m','6m','1y'
-    days,             // numeric window length
+    timeframe,
+    days,
     daily: daily.map(r => ({
-      period:        r.period,
-      netPoints:     r.net_points,
-      movingAvg7Day: r.moving_avg_7day
-    })),
-    weekly: weekly.map(r => ({
-      period:    r.period,
-      netPoints: r.net_points
-    })),
-    monthly: monthly.map(r => ({
-      period:    r.period,
-      netPoints: r.net_points
+      period: r.period,
+      earned: Number(r.earned),
+      spent:  Number(r.spent),
+      net:    Number(r.net),
+      net_ma7: Number(r.net_ma7),
+      // compatibility with existing frontend
+      netPoints: Number(r.net),
+      movingAvg7Day: Number(r.net_ma7)
     }))
   }
 })

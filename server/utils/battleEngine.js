@@ -159,7 +159,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       const idxHand = hand.findIndex(c => c.id === sel.cardId)
       if (idxHand === -1) return
       const [orig] = hand.splice(idxHand, 1)
-      const card = { ...orig }
+      const card = { ...orig, _playedTurn: state.turn }
       state.lanes[sel.laneIndex][side].push(card)
       state[ side + 'Energy' ] -= card.cost
     })

@@ -7,7 +7,7 @@
     :type="toast.type"
   />
 
-  <section class="pt-20 flex flex-col md:flex-row max-w-6xl mx-auto">
+  <section class="mt-20 pt-10 flex flex-col md:flex-row max-w-6xl mx-auto">
     <!-- Mobile: dropdown to pick or create deck -->
     <div class="md:hidden mb-4 px-4">
       <label for="mobile-decks" class="block text-sm font-medium text-gray-700 mb-1">
@@ -71,12 +71,13 @@
     <!-- Main form & card picker -->
     <div class="flex-1 pl-0 md:pl-6">
       <div class="mb-6 text-right px-4 md:px-0">
-        <NuxtLink
-          to="/games/clash"
+        <button
+          type="button"
+          @click="goBack"
           class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
         >
           Back to Clash
-        </NuxtLink>
+        </button>
       </div>
 
       <!-- Form Skeleton -->
@@ -184,8 +185,9 @@ import { ref, computed, onMounted } from 'vue'
 import Toast from '@/components/Toast.vue'
 import abilitiesJson from '~/data/abilities.json'
 import Nav from '@/components/Nav.vue'
+import { useRouter } from 'vue-router'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Decks', middleware: 'auth', layout: 'default' })
 
 // Toast state
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
@@ -197,11 +199,22 @@ function showToast(message, type = 'success') {
   }, 4000)
 }
 
+const router = useRouter()
+
 // map ability keys to labels
 const abilityLabels = {}
 abilitiesJson.forEach(a => {
   abilityLabels[a.key] = a.label
 })
+
+function goBack() {
+  // if there's a previous history entry, go back; otherwise go to rooms
+  if (process.client && window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/games/clash/rooms')
+  }
+}
 
 const gtoons = ref([])
 const decks  = ref([])

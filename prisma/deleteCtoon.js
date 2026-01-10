@@ -14,7 +14,27 @@ async function deleteCtoonAndDependencies(ctoonId) {
     // 3. Wishlist items
     await tx.wishlistItem.deleteMany({ where: { ctoonId } })
 
-    // 4. All UserCtoons for this Ctoon
+    // 4. Win Wheel options referencing this cToon
+    await tx.winWheelOption.deleteMany({ where: { ctoonId } })
+
+    // 5. Starter set items
+    await tx.starterSetItem.deleteMany({ where: { ctoonId } })
+
+    // 6. Clash deck cards
+    await tx.clashDeckCard.deleteMany({ where: { ctoonId } })
+
+    // 7. Holiday feature relations
+    await tx.holidayEventItem.deleteMany({ where: { ctoonId } })
+    await tx.holidayEventPool.deleteMany({ where: { ctoonId } })
+    await tx.holidayRedemption.deleteMany({
+      where: { OR: [{ itemCtoonId: ctoonId }, { resultCtoonId: ctoonId }] }
+    })
+
+    // 8. Logs with nullable FK to cToon
+    await tx.wheelSpinLog.updateMany({ where: { ctoonId }, data: { ctoonId: null } })
+    await tx.ctoonOwnerLog.updateMany({ where: { ctoonId }, data: { ctoonId: null } })
+
+    // 9. All UserCtoons for this Ctoon
     const userCtoons = await tx.userCtoon.findMany({
       where: { ctoonId },
       select: { id: true }
@@ -22,30 +42,32 @@ async function deleteCtoonAndDependencies(ctoonId) {
     const ucIds = userCtoons.map(u => u.id)
 
     if (ucIds.length) {
-      // 4a. Trade-offer items
+      // 9a. Trade-offer items
       await tx.tradeOfferCtoon.deleteMany({ where: { userCtoonId: { in: ucIds } } })
-      // 4b. TradeCtoons
+
+      // 9b. TradeCtoons
       await tx.tradeCtoon.deleteMany({ where: { userCtoonId: { in: ucIds } } })
 
-      // 4c. Auctions and their bids
+      // 9c. Auctions and their bids/autobids
       const auctions = await tx.auction.findMany({
         where: { userCtoonId: { in: ucIds } },
         select: { id: true }
       })
       const aucIds = auctions.map(a => a.id)
       if (aucIds.length) {
+        await tx.auctionAutoBid.deleteMany({ where: { auctionId: { in: aucIds } } })
         await tx.bid.deleteMany({ where: { auctionId: { in: aucIds } } })
         await tx.auction.deleteMany({ where: { id: { in: aucIds } } })
       }
 
-      // 4d. Finally delete UserCtoons
+      // 9d. Finally delete UserCtoons
       await tx.userCtoon.deleteMany({ where: { id: { in: ucIds } } })
     }
 
-    // 5. Any GameConfig entries pointing to this as grand prize
+    // 10. Any GameConfig entries pointing to this as grand prize
     await tx.gameConfig.deleteMany({ where: { grandPrizeCtoonId: ctoonId } })
 
-    // 6. And now the Ctoon itself
+    // 11. And now the Ctoon itself
     await tx.ctoon.delete({ where: { id: ctoonId } })
   })
 }
@@ -75,7 +97,7 @@ async function main() {
   } catch (err) {
     console.error('Error fetching cToons to delete:', err)
   } finally {
-    await prisma.$disconnect()
+    // no explicit disconnect
   }
 }
 

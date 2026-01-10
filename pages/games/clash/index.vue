@@ -1,7 +1,8 @@
 <template>
   <Nav />
+  <div class="mt-12 md:mt-8"></div> <!-- spacer for fixed nav -->
 
-  <section v-if="route.path === '/games/clash'" class="pt-20 pb-10 max-w-4xl mx-auto text-center">
+  <section v-if="route.path === '/games/clash'" class="mt-20 pt-10 pb-10 max-w-4xl mx-auto text-center">
     <h1 class="text-3xl font-bold mb-6">gToon Clash</h1>
 
     <!-- Manage Decks Button -->
@@ -79,7 +80,7 @@ import ClashCToonCard from '@/components/ClashCToonCard.vue'
 import Nav from '@/components/Nav.vue'
 import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash', middleware: 'auth', layout: 'default' })
 
 const { socket, battleState } = useClashSocket()
 const router = useRouter()
@@ -133,7 +134,43 @@ function loadDeckFromSelection(id) {
 function startMatch() {
   if (deck.value.length !== 12) return
   starting.value = true
-  socket.emit('joinPvE', { deck: deck.value, userId: user.value.id })
+
+  // be safe: remove any previous one-off listeners
+  socket.off('gameStart')
+  socket.off('joinError')
+
+  socket.once('gameStart', state => {
+    battleState.value = state
+    starting.value = false
+    router.push('/games/clash/play')
+  })
+
+  socket.once('joinError', (err) => {
+    starting.value = false
+    console.error('joinPvE failed:', err)
+    // swap for your toast/notifier of choice
+    alert(err?.message || 'Failed to start match.')
+  })
+  // Normalize deck to what the server/engine expects
+  const base = import.meta.env.PROD
+    ? 'https://www.cartoonreorbit.com'
+    : 'http://localhost:3000'
+  const normalized = deck.value.map(d => {
+    const c = d.ctoon ?? d
+    return {
+      id: c.id,
+      name: c.name,
+      assetPath: c.assetPath
+        ? (c.assetPath.startsWith('http') ? c.assetPath : `${base}${c.assetPath}`)
+        : null,
+      cost: c.cost ?? 1,
+      power: c.power ?? 1,
+      gtoonType: c.gtoonType || null,
+      abilityKey: c.abilityKey || null,
+      abilityData: c.abilityData || null
+    }
+  }).slice(0, 12)
+  socket.emit('joinPvE', { deck: normalized, userId: user.value.id })
 }
 
 onMounted(async () => {

@@ -1,6 +1,6 @@
 <template>
   <Nav />
-  <div class="container mt-16 mx-auto p-6">
+  <div class="container mt-16 md:mt-20 mx-auto p-6">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">Live Trading Rooms</h1>
       <div class="flex items-center">
@@ -63,6 +63,7 @@
 
 <script setup>
 definePageMeta({
+  title: 'Live Trading',
   middleware: 'auth',
   layout: 'default'
 })

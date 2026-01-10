@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "ClashGame" ADD COLUMN     "player1Points" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "player2Points" INTEGER NOT NULL DEFAULT 0;

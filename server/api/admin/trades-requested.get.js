@@ -16,29 +16,52 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse & normalize timeframe (default 3m)
-  const { timeframe = '3m' } = getQuery(event)
+  // 2) Parse & normalize timeframe (default 3m) + grouping (default daily)
+  const { timeframe = '3m', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
-    case '1m':
-      startDate.setMonth(startDate.getMonth() - 1)
-      break
-    case '3m':
-      startDate.setMonth(startDate.getMonth() - 3)
-      break
-    case '6m':
-      startDate.setMonth(startDate.getMonth() - 6)
-      break
-    case '1y':
-      startDate.setFullYear(startDate.getFullYear() - 1)
-      break
-    default:
-      startDate.setMonth(startDate.getMonth() - 3)
+    case '1m': startDate.setMonth(startDate.getMonth() - 1); break
+    case '3m': startDate.setMonth(startDate.getMonth() - 3); break
+    case '6m': startDate.setMonth(startDate.getMonth() - 6); break
+    case '1y': startDate.setFullYear(startDate.getFullYear() - 1); break
+    default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Aggregate trades requested by day
-  const tradesRequested = await prisma.$queryRaw`
+  // 3) Aggregate trades requested by selected period
+  if (groupBy === 'weekly') {
+    // Week starts per Postgres date_trunc('week', ...) (Monday)
+    const rows = await prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "TradeOffer"
+      WHERE "createdAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+    return rows
+  }
+
+  if (groupBy === 'monthly') {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('month', "createdAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "TradeOffer"
+      WHERE "createdAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+    return rows
+  }
+
+  // daily (original behavior)
+  const rows = await prisma.$queryRaw`
     SELECT
       to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
       COUNT(*)::int AS count
@@ -47,7 +70,5 @@ export default defineEventHandler(async (event) => {
     GROUP BY period
     ORDER BY period
   `
-
-  // 4) Return the series directly
-  return tradesRequested
+  return rows
 })

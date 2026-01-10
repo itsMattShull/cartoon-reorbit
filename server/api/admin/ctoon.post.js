@@ -8,6 +8,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -43,7 +45,10 @@ export default defineEventHandler(async (event) => {
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
 
     /* NEW G-toon fields */
-    isGtoon, cost, power, abilityKey, abilityData
+    isGtoon, cost, power, abilityKey, abilityData, gtoonType,
+
+    /* Two-phase advisory fields (optional) */
+    initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty
   } = fields
 
   if (!name?.trim())   throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
@@ -78,6 +83,10 @@ export default defineEventHandler(async (event) => {
 
   const priceInt = price ? parseInt(price, 10) : 0
   const limitInt = perUserLimit ? parseInt(perUserLimit, 10) : null
+  const initialReleaseAtDate = initialReleaseAt ? new Date(initialReleaseAt) : null
+  const finalReleaseAtDate   = finalReleaseAt   ? new Date(finalReleaseAt)   : null
+  const initialReleaseQtyInt = initialReleaseQty == null || initialReleaseQty === '' ? null : parseInt(initialReleaseQty, 10)
+  const finalReleaseQtyInt   = finalReleaseQty   == null || finalReleaseQty   === '' ? null : parseInt(finalReleaseQty, 10)
 
   /* 3a. G-toon-specific validation --------------------------- */
   const isGtoonBool = String(isGtoon) === 'true'
@@ -96,6 +105,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Power must be between 0 and 12.' })
     }
   }
+
+  const { phash, dhash } = await computeMultiHash(imagePart.data)
+  const bucket = bucketFromHash(phash)
 
   /* 4. Save image ------------------------------------------- */
   const safeSeries = series.trim()
@@ -131,12 +143,35 @@ export default defineEventHandler(async (event) => {
 
       /* NEW columns */
       isGtoon:    isGtoonBool,
+      gtoonType:  isGtoonBool ? (gtoonType?.toString().trim() || null) : null,
       cost:       isGtoonBool ? costInt : null,
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,
       abilityData: isGtoonBool ? abilityDataObj : null
+      ,
+      // advisory schedule fields
+      initialReleaseAt: initialReleaseAtDate,
+      finalReleaseAt:   finalReleaseAtDate,
+      initialReleaseQty: initialReleaseQtyInt,
+      finalReleaseQty:   finalReleaseQtyInt,
+      imageHash: {
+        create: {
+          phash,
+          dhash,
+          bucket
+        }
+      }
     }
   })
+  try {
+    await logAdminChange(prisma, {
+      userId: me.id,
+      area: `Ctoon:${newCtoon.id}`,
+      key: 'create',
+      prevValue: null,
+      newValue: { id: newCtoon.id, name: newCtoon.name, series: newCtoon.series, rarity: newCtoon.rarity }
+    })
+  } catch {}
 
   return { ctoon: newCtoon }
 })

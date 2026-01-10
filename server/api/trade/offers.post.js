@@ -8,6 +8,7 @@ import {
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US')
   // 1) Authenticate user
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -65,6 +66,26 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 4) Verify initiator has enough AVAILABLE points (total - active locks)
+  const initiator = await prisma.user.findUnique({
+    where: { id: initiatorId },
+    select: { points: { select: { points: true } } } // UserPoints relation
+  })
+  const totalPoints = initiator?.points?.points ?? 0
+  const activeLocks = await prisma.lockedPoints.findMany({
+    where: { userId: initiatorId, status: 'ACTIVE' },
+    select: { amount: true }
+  })
+  const lockedSum = activeLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
+  const availablePoints = totalPoints - lockedSum
+
+  if (pointsOffered > availablePoints) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Insufficient points: you have ${fmt(totalPoints)} points, with ${fmt(lockedSum)} locked; tried to offer ${fmt(pointsOffered)}.`
+    })
+  }
+
   // 5) Verify ownership of requested cToons
   if (ctoonIdsRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
@@ -79,22 +100,64 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 6) Create the TradeOffer + nested C-Toon joins
-  const offer = await prisma.tradeOffer.create({
-    data: {
-      initiatorId,
-      recipientId:   recipient.id,
-      pointsOffered,
-      ctoons: {
-        create: [
-          ...ctoonIdsOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
-          ...ctoonIdsRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
-        ]
-      }
-    },
-    include: {
-      ctoons: { include: { userCtoon: true } }
+  // 5.5) Prevent trades involving cToons in active auctions
+  if (ctoonIdsOffered.length) {
+    const offeredActiveAuction = await prisma.auction.findFirst({
+      where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    if (offeredActiveAuction) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more of the cToons you offered is in an active auction.'
+      })
     }
+  }
+  if (ctoonIdsRequested.length) {
+    const requestedActiveAuction = await prisma.auction.findFirst({
+      where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    if (requestedActiveAuction) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more of the cToons you requested is in an active auction.'
+      })
+    }
+  }
+
+  // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points
+  const offer = await prisma.$transaction(async (tx) => {
+    const created = await tx.tradeOffer.create({
+      data: {
+        initiatorId,
+        recipientId:   recipient.id,
+        pointsOffered,
+        ctoons: {
+          create: [
+            ...ctoonIdsOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
+            ...ctoonIdsRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
+          ]
+        }
+      },
+      include: {
+        ctoons: { include: { userCtoon: true } }
+      }
+    })
+
+    if (pointsOffered > 0) {
+      await tx.lockedPoints.create({
+        data: {
+          userId: initiatorId,
+          amount: pointsOffered,
+          reason: 'TRADE_OFFER',
+          status: 'ACTIVE',
+          contextType: 'TRADE',
+          contextId: created.id
+        }
+      })
+    }
+    return created
   })
 
   try {

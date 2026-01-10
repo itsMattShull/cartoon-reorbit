@@ -15,8 +15,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // 2) Parse timeframe & method
-  const { timeframe = '3m', method = 'ctoon' } = getQuery(event)
+  // 2) Parse timeframe, method, and grouping
+  const { timeframe = '3m', method = 'ctoon', groupBy: rawGroupBy } = getQuery(event)
+  const groupBy = (rawGroupBy === 'daily' || rawGroupBy === 'weekly' || rawGroupBy === 'monthly')
+    ? rawGroupBy
+    : 'daily'
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -27,37 +31,59 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Query cToon purchases
-  const ctoonPurchases = await prisma.$queryRaw`
-    SELECT
-      to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
-      COUNT(*)::int AS count
-    FROM "PointsLog"
-    WHERE method LIKE '%Bought cToon%'
-      AND "createdAt" >= ${startDate}
-    GROUP BY period
-    ORDER BY period
-  `
+  // 3) Helper to run the appropriate aggregation
+  async function fetchPurchases(kind /* 'ctoon' | 'pack' */) {
+    const like = kind === 'pack' ? '%Bought Pack%' : '%Bought cToon%'
+    if (groupBy === 'weekly') {
+      return prisma.$queryRaw`
+        SELECT
+          to_char(date_trunc('week', "createdAt"), 'YYYY-MM-DD') AS period,
+          COUNT(*)::int AS count
+        FROM "PointsLog"
+        WHERE method LIKE ${like}
+          AND "createdAt" >= ${startDate}
+        GROUP BY period
+        ORDER BY period
+      `
+    }
+    if (groupBy === 'monthly') {
+      return prisma.$queryRaw`
+        SELECT
+          to_char(date_trunc('month', "createdAt"), 'YYYY-MM-DD') AS period,
+          COUNT(*)::int AS count
+        FROM "PointsLog"
+        WHERE method LIKE ${like}
+          AND "createdAt" >= ${startDate}
+        GROUP BY period
+        ORDER BY period
+      `
+    }
+    // daily (original behavior)
+    return prisma.$queryRaw`
+      SELECT
+        to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
+        COUNT(*)::int AS count
+      FROM "PointsLog"
+      WHERE method LIKE ${like}
+        AND "createdAt" >= ${startDate}
+      GROUP BY period
+      ORDER BY period
+    `
+  }
 
-  // 4) Query pack purchases
-  const packPurchases = await prisma.$queryRaw`
-    SELECT
-      to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS period,
-      COUNT(*)::int AS count
-    FROM "PointsLog"
-    WHERE method LIKE '%Bought Pack%'
-      AND "createdAt" >= ${startDate}
-    GROUP BY period
-    ORDER BY period
-  `
-
-  // 5) Return the requested series
+  // 4) Return per requested method
   if (method === 'ctoon') {
+    const ctoonPurchases = await fetchPurchases('ctoon')
     return ctoonPurchases
   } else if (method === 'pack') {
+    const packPurchases = await fetchPurchases('pack')
     return packPurchases
   } else {
-    // fallback—if someone omits method, return both
+    // fallback—if someone omits/changes method, return both
+    const [ctoonPurchases, packPurchases] = await Promise.all([
+      fetchPurchases('ctoon'),
+      fetchPurchases('pack')
+    ])
     return { ctoonPurchases, packPurchases }
   }
 })

@@ -1,0 +1,101 @@
+# .github/workflows/deploy.yml
+name: Deploy
+
+on:
+  push:
+    branches: [ master, dev ]
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy_production:
+    if: ${{ github.ref_name == 'master' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write key and known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        run: |
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -i ~/.ssh/deploy_key -p "${{ secrets.SSH_PORT }}" \
+              "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'bash -lc "
+                set -eo pipefail
+
+                # make Node/npm/npx/pm2 available
+                export NVM_DIR=\"\$HOME/.nvm\"
+                if [ -s \"\$NVM_DIR/nvm.sh\" ]; then
+                  # nvm is incompatible with set -u; do NOT enable -u
+                  . \"\$NVM_DIR/nvm.sh\"
+                  nvm install 23.10.0 >/dev/null 2>&1 || true
+                  nvm use 23.10.0 >/dev/null 2>&1 || true
+                fi
+                [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
+                command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
+
+                cd /var/www/cartoon-reorbit
+                git pull origin master
+
+                npm ci
+                npx prisma migrate deploy
+                npx prisma generate
+                npm run build
+
+                pm2 restart 0 1 2 3 4 --update-env
+              "'
+  deploy_development:
+    if: ${{ github.ref_name == 'dev' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write key and known_hosts (dev)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.DEV_SSH_PORT }}" "${{ secrets.DEV_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH (dev)
+        run: |
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -i ~/.ssh/deploy_key -p "${{ secrets.DEV_SSH_PORT }}" \
+            "${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}" bash -s <<'EOF'
+          set -eo pipefail
+
+          # Load nvm (user install or system install)
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            . "$NVM_DIR/nvm.sh"
+          elif [ -s "/usr/local/nvm/nvm.sh" ]; then
+            . "/usr/local/nvm/nvm.sh"
+          fi
+
+          if ! command -v nvm >/dev/null 2>&1; then
+            echo "ERROR: nvm not found for user: $(whoami). Install nvm or use system Node."
+            exit 1
+          fi
+
+          # Use a supported Node LTS (22.x)
+          nvm install 23.10.0 >/dev/null
+          nvm use 23.10.0 >/dev/null
+
+          cd /var/www/dev.cartoon-reorbit
+
+          # Keep repo clean between deploys
+          git fetch origin dev
+          git reset --hard origin/dev
+
+          rm -rf node_modules
+          npm install --no-audit --no-fund
+
+          npx prisma migrate deploy
+          npx prisma generate
+          npm run build
+
+          pm2 restart 6 2 3 7 8 --update-env
+          EOF

@@ -1,50 +1,45 @@
+import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const { username } = event.context.params
-
-  // 1. Find current user
-  const currentUser = await prisma.user.findUnique({
-    where: { username },
-    select: { createdAt: true }
-  })
-
-  if (!currentUser) {
+  const { username } = event.context.params || {}
+  if (!username) {
     throw createError({
-      statusCode: 404,
-      statusMessage: 'User not found'
+      statusCode: 400,
+      statusMessage: 'Missing username'
     })
   }
 
-  // 2. Find next user by createdAt
-  const nextUser = await prisma.user.findFirst({
-    where: {
-      createdAt: { gt: currentUser.createdAt },
-      username: { not: null, notIn: [''] }
-    },
-    orderBy: { createdAt: 'asc' },
-    select: { username: true }
-  })
+  const rows = await prisma.$queryRaw`
+    SELECT u."username", u."createdAt"
+    FROM "User" u
+    JOIN "CZone" cz ON cz."userId" = u."id"
+    WHERE u."username" IS NOT NULL
+      AND u."username" <> ''
+      AND COALESCE(
+        (
+          CASE
+            WHEN jsonb_typeof(cz."layoutData"->'zones') = 'array' THEN (
+              SELECT SUM(COALESCE(jsonb_array_length(z->'toons'), 0))
+              FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+            )
+            WHEN jsonb_typeof(cz."layoutData") = 'array' THEN jsonb_array_length(cz."layoutData")
+            ELSE 0
+          END
+        ),
+        0
+      ) >= 1
+    ORDER BY u."createdAt" ASC, u."username" ASC;
+  `
 
-  if (nextUser) {
-    return { username: nextUser.username }
-  }
-
-  // 3. Wrap around to earliest user if no next one
-  const firstUser = await prisma.user.findFirst({
-    where: {
-      username: { not: null, notIn: [''] }
-    },
-    orderBy: { createdAt: 'asc' },
-    select: { username: true }
-  })
-
-  if (!firstUser) {
+  if (!rows || rows.length === 0) {
     throw createError({
       statusCode: 404,
       statusMessage: 'No users found'
     })
   }
 
-  return { username: firstUser.username }
+  const idx = rows.findIndex(r => r.username === username)
+  const nextIndex = idx === -1 ? 0 : (idx + 1) % rows.length
+  return { username: rows[nextIndex].username }
 })

@@ -22,7 +22,12 @@
     <!-- CToon stacks -->
     <div class="flex justify-between gap-1">
       <div class="flex gap-0">
-        <ClashCToonCard v-for="c in lane.player" :key="c.id" :card="c" small />
+        <ClashCToonCard
+          v-for="(c, i) in lane.player"
+          :key="c.userCtoonId || c.instanceId || `${c.ctoonId || c.id}-${i}`"
+          :card="c"
+          small
+        />
       </div>
       <div class="flex gap-0">
         <ClashCToonCard v-for="c in lane.ai" :key="c.id" :card="c" small />

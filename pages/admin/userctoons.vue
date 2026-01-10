@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow p-6 mt-16">
+    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
       <!-- Page header -->
       <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-semibold">Manage User cToons</h1>
@@ -179,7 +179,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'default' })
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
 

@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <Nav />
 
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16 relative">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20 relative">
       <h1 class="text-2xl font-semibold mb-4">Edit cToon</h1>
 
       <form @submit.prevent="submitForm" class="space-y-4">
@@ -10,6 +10,18 @@
         <div>
           <label class="block mb-1 font-medium">Current Image</label>
           <img :src="assetPath" alt="cToon" class="h-32" />
+        </div>
+
+        <!-- Upload New Image -->
+        <div>
+          <label class="block mb-1 font-medium">Upload New Image (PNG or GIF)</label>
+          <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="w-full" />
+          <p class="text-sm text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
+          <p v-if="err.image" class="text-red-600 text-sm mt-1">{{ err.image }}</p>
+          <div v-if="newImagePreview" class="mt-2">
+            <label class="block mb-1 font-medium">Preview</label>
+            <img :src="newImagePreview" class="h-32" />
+          </div>
         </div>
 
         <!-- Type (read-only) -->
@@ -70,6 +82,26 @@
           </div>
         </div>
 
+        <!-- Release schedule (computed, read-only) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
+          <div>
+            <label class="block mb-1 font-medium">Initial Release %</label>
+            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Initial Release Qty</label>
+            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
+            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+          <div>
+            <label class="block mb-1 font-medium">Final Release Qty</label>
+            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
+          </div>
+        </div>
+
         <!-- In C-mart -->
         <div class="flex items-center">
           <input v-model="inCmart" type="checkbox" class="mr-2"
@@ -98,6 +130,12 @@
         </div>
 
         <div v-if="isGtoon" class="border p-4 rounded bg-indigo-50 space-y-4">
+          <!-- G-toon Type (free text, optional) -->
+          <div>
+            <label class="block mb-1 font-medium">Type (gToon)</label>
+            <input v-model="gtoonType" type="text" class="w-full border rounded p-2" placeholder="e.g. Beast, Robot, Support" />
+            <p class="text-sm text-gray-500">Optional. Leave blank if none.</p>
+          </div>
           <!-- Cost -->
           <div>
             <label class="block mb-1 font-medium">Cost <span class="text-xs">(0–6)</span></label>
@@ -154,7 +192,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware:['auth','admin'], layout:'default' })
+definePageMeta({ title: 'Admin - Edit cToon', middleware:['auth','admin'], layout:'default' })
 
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -175,11 +213,16 @@ const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
 
+/* new image refs */
+const newImageFile = ref(null)
+const newImagePreview = ref('')
+
 /* G-toon refs */
 const isGtoon = ref(false)
 const cost = ref(0); const power = ref(0)
 const abilityKey = ref('')
 const abilityParam = ref(null)
+const gtoonType = ref('')
 
 const abilityKeyOptions = abilityMeta
 
@@ -188,23 +231,57 @@ const selectedAbility = computed(() =>
 )
 
 /* validation errors */
-const err = reactive({ cost:'', power:'' })
+const err = reactive({ cost:'', power:'', image:'' })
 
 /* series + rarity lists */
 const seriesOptions = ref([])
 const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
+const releasePercent = ref(75)
+const delayHours = ref(12)
 
 /* toast helpers */
 const showToast = ref(false)
 const toastMessage = ref(''); const toastType = ref('success')
 function displayToast(msg, type='error'){ toastMessage.value = msg; toastType.value = type; showToast.value = true; setTimeout(()=>showToast.value = false, 4000) }
 
-/* date helpers */
-function toDateTimeLocal(utc){
-  const dt = new Date(utc)
-  return new Date(dt.getTime() - dt.getTimezoneOffset()*60000).toISOString().slice(0,16)
+/* date helpers (pure JS; America/Chicago) */
+function nthSundayDay(year, monthNumber) {
+  const monthIdx = monthNumber - 1
+  const first = new Date(Date.UTC(year, monthIdx, 1))
+  const firstDow = first.getUTCDay() // 0=Sun
+  const firstSunday = 1 + ((7 - firstDow) % 7)
+  if (monthNumber === 3) return firstSunday + 7 // second Sunday in March
+  if (monthNumber === 11) return firstSunday    // first Sunday in November
+  return firstSunday
 }
-const localToUtcIso = l => new Date(l).toISOString()
+function isChicagoDstLocalParts(y, m, d) {
+  if (m < 3 || m > 11) return false
+  if (m > 3 && m < 11) return true
+  if (m === 3) return d >= nthSundayDay(y, 3)
+  if (m === 11) return d < nthSundayDay(y, 11)
+  return false
+}
+function toDateTimeLocal(utc) {
+  const dt = new Date(utc)
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Chicago',
+    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(dt).map(p => [p.type, p.value]))
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+function localToUtcIso(localStr) {
+  // localStr is 'YYYY-MM-DDTHH:mm' in America/Chicago
+  const [datePart, timePart] = localStr.split('T')
+  const [y, m, d] = datePart.split('-').map(n => parseInt(n, 10))
+  const [hh, mm] = timePart.split(':').map(n => parseInt(n, 10))
+  const isDst = isChicagoDstLocalParts(y, m, d)
+  const offset = isDst ? '-05:00' : '-06:00'
+  const isoLike = `${datePart}T${timePart}:00${offset}`
+  return new Date(isoLike).toISOString()
+}
 
 /* reset param when ability cleared */
 watch(abilityKey, val => {
@@ -214,6 +291,12 @@ watch(abilityKey, val => {
 /* load data */
 onMounted(async ()=>{
   try{
+    // load staged release settings
+    try {
+      const rs = await $fetch('/api/release-settings')
+      releasePercent.value = Number(rs.initialReleasePercent ?? 75)
+      delayHours.value = Number(rs.finalReleaseDelayHours ?? 12)
+    } catch {}
     const res = await fetch(`/api/admin/ctoon/${id}`,{credentials:'include'})
     if(!res.ok) throw new Error()
     const { ctoon } = await res.json()
@@ -233,6 +316,7 @@ onMounted(async ()=>{
     characters.value = (ctoon.characters||[]).join(', ')
 
     isGtoon.value   = ctoon.isGtoon
+    gtoonType.value = ctoon.gtoonType || ''
     cost.value      = ctoon.cost ?? 0
     power.value     = ctoon.power ?? 0
     abilityKey.value= ctoon.abilityKey || ''
@@ -251,15 +335,87 @@ watch(rarity, v => {
   price.value = map[v]||0
 })
 
+function handleNewFile(e){
+  err.image = ''
+  const file = e.target.files?.[0]
+  if (!file){ newImageFile.value = null; newImagePreview.value = ''; return }
+  if (!['image/png','image/gif'].includes(file.type)){
+    err.image = 'Only PNG or GIF files allowed.'
+    return
+  }
+  newImageFile.value = file
+  type.value = file.type // reflect pending change
+  const reader = new FileReader()
+  reader.onload = () => { newImagePreview.value = reader.result }
+  reader.readAsDataURL(file)
+}
+
+// computed schedule for display + advisory persistence
+const schedule = computed(() => {
+  const qty = Number(quantity.value)
+  const hasQty = Number.isFinite(qty) && qty > 0
+  const hasDate = Boolean(releaseDate.value)
+  if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
+  const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
+  const fin = Math.max(0, qty - init)
+  const base = new Date(releaseDate.value)
+  const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+  const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
+  return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
+})
+
 /* submit */
 async function submitForm(){
   err.cost=''; err.power=''
   if (isGtoon.value) {
-    if (cost.value<0||cost.value>6)   err.cost='Cost 0-6'
+    if (cost.value<0||cost.value>6)    err.cost='Cost 0-6'
     if (power.value<0||power.value>12) err.power='Power 0-12'
     if (err.cost || err.power) return
   }
+  const gtoonTypeValue = isGtoon.value ? gtoonType.value.trim() : ''
 
+  // If a new image is selected, send multipart; else JSON.
+  if (newImageFile.value){
+    const fd = new FormData()
+    fd.append('image', newImageFile.value)
+    fd.append('name', name.value.trim())
+    fd.append('series', series.value.trim())
+    fd.append('rarity', rarity.value)
+    fd.append('price', String(price.value))
+    fd.append('releaseDate', localToUtcIso(releaseDate.value))
+    fd.append('perUserLimit', perUserLimit.value ?? '')
+    fd.append('quantity', quantity.value ?? '')
+    fd.append('initialQuantity', initialQuantity.value ?? '')
+    fd.append('inCmart', inCmart.value)
+    fd.append('set', setField.value)
+    fd.append('characters', JSON.stringify(characters.value.split(',').map(s=>s.trim()).filter(Boolean)))
+    fd.append('isGtoon', isGtoon.value)
+    fd.append('gtoonType', gtoonTypeValue)
+    fd.append('cost', String(cost.value))
+    fd.append('power', String(power.value))
+    fd.append('abilityKey', abilityKey.value || '')
+    if (abilityKey.value){
+      fd.append('abilityData', JSON.stringify({ value: abilityParam.value }))
+    }
+
+    // advisory schedule fields
+    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
+    fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
+    fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
+
+    const res = await fetch(`/api/admin/ctoon/${id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      body: fd
+    })
+    if (!res.ok) return displayToast('Update failed')
+    displayToast('Updated','success')
+    router.push('/admin/ctoons')
+    return
+  }
+
+  // JSON path (no image change)
   const body = {
     name:            name.value.trim(),
     series:          series.value.trim(),
@@ -276,12 +432,19 @@ async function submitForm(){
     characters:      characters.value.split(',').map(s => s.trim()),
 
     isGtoon:         isGtoon.value,
+    gtoonType:       gtoonTypeValue || null,
     cost:            cost.value,
-    power:          power.value,
+    power:           power.value,
     abilityKey:      abilityKey.value || null,
     abilityData:     abilityKey.value
                       ? JSON.stringify({ value: abilityParam.value })
-                      : null
+                      : null,
+
+    // advisory schedule fields
+    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
+    initialReleaseQty: schedule.value.initialQty ?? null,
+    finalReleaseQty:   schedule.value.finalQty ?? null
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {

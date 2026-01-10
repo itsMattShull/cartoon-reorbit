@@ -8,6 +8,17 @@ import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 
+function formatDuration(days, minutes) {
+  if (minutes > 0) {
+    if (minutes % 60 === 0) {
+      const hours = minutes / 60
+      return `${hours} hour${hours === 1 ? '' : 's'}`
+    }
+    return `${minutes} minute(s)`
+  }
+  return `${days} day(s)`
+}
+
 export default defineEventHandler(async (event) => {
   // 1. Authenticate
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -31,16 +42,17 @@ export default defineEventHandler(async (event) => {
     createInitialBid = false
   } = await readBody(event)
 
-  if (!userCtoonId || !initialBet ||
+  if (!userCtoonId || initialBet == null ||
       durationDays === undefined || durationMinutes === undefined) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
-  // 3. Ownership check + fetch rarity (and details we’ll reuse later)
+  // 3. Ownership check + fetch rarity
   const userCtoonRec = await prisma.userCtoon.findUnique({
     where: { id: userCtoonId },
     select: {
       userId: true,
+      ctoonId: true, // needed to check Holiday flag
       mintNumber: true,
       ctoon: { select: { rarity: true, name: true, assetPath: true } }
     }
@@ -49,7 +61,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
   }
 
-  // Helper: map rarity -> expected insta bid
+  // Helper: map rarity -> insta-bid floor (must match client)
   const rarityToExpectedBid = (rarityRaw) => {
     const r = (rarityRaw || '').trim().toLowerCase()
     switch (r) {
@@ -57,11 +69,23 @@ export default defineEventHandler(async (event) => {
       case 'uncommon': return 50
       case 'rare': return 100
       case 'very rare': return 187
-      default: return 312
+      case 'crazy rare': return 312
+      case 'code only': return 50
+      case 'prize only': return 50
+      case 'auction only': return 50
+      default: return 50
     }
   }
 
   const expectedInitialBet = rarityToExpectedBid(userCtoonRec.ctoon?.rarity)
+
+  // Enforce minimum initial bet
+  if (Number(initialBet) < expectedInitialBet) {
+    throw createError({
+      statusCode: 422,
+      statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for rarity "${userCtoonRec.ctoon?.rarity ?? 'N/A'}"`
+    })
+  }
 
   // 4. Active auction check
   const existing = await prisma.auction.findFirst({
@@ -69,6 +93,18 @@ export default defineEventHandler(async (event) => {
   })
   if (existing) {
     throw createError({ statusCode: 400, statusMessage: 'There’s already an active auction for this cToon' })
+  }
+
+  // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
+  const inPendingTrade = await prisma.tradeOfferCtoon.findFirst({
+    where: {
+      userCtoonId,
+      tradeOffer: { status: 'PENDING' }
+    },
+    select: { id: true }
+  })
+  if (inPendingTrade) {
+    throw createError({ statusCode: 400, statusMessage: 'This cToon is already in a pending trade. Please resolve the trade before auctioning it.' })
   }
 
   // 5. Compute endAt
@@ -81,21 +117,16 @@ export default defineEventHandler(async (event) => {
   const auction = await prisma.auction.create({
     data: {
       userCtoonId,
-      initialBet,
+      initialBet: Number(initialBet),
       duration: durationDays,
       endAt: endAtUtc,
       ...(userId ? { creatorId: userId } : {})
     }
   })
 
-  // 7. Optionally create initial bid — but only if the amount matches rarity mapping
+  // 7. Optionally create initial bid — only if amount matches rarity mapping
   if (createInitialBid) {
-    if (initialBet !== expectedInitialBet) {
-      // console.log(
-      //   `Skipping initial bid: expected ${expectedInitialBet} for rarity "${userCtoonRec.ctoon?.rarity}", got ${initialBet}`
-      // )
-    } else {
-      // find the special user to place the initial bid
+    if (Number(initialBet) === expectedInitialBet) {
       const initialBidder = await prisma.user.findUnique({
         where: { username: 'CartoonReOrbitOfficial' }
       })
@@ -104,13 +135,13 @@ export default defineEventHandler(async (event) => {
           data: {
             auctionId: auction.id,
             userId: initialBidder.id,
-            amount: initialBet
+            amount: expectedInitialBet
           }
         })
         await prisma.auction.update({
           where: { id: auction.id },
           data: {
-            highestBid: initialBet,
+            highestBid: expectedInitialBet,
             highestBidderId: initialBidder.id
           }
         })
@@ -124,25 +155,68 @@ export default defineEventHandler(async (event) => {
     data: { isTradeable: false }
   })
 
+  // 8.5 Holiday flag for Discord message
+  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
+    where: { ctoonId: userCtoonRec.ctoonId },
+    select: { id: true }
+  }))
+
   // 9. Send Discord notification (best effort)
   ;(async () => {
     try {
       const config     = useRuntimeConfig()
       const botToken   = process.env.BOT_TOKEN
-      const channelId  = '1401244687163068528'
+      const guildId  = process.env.DISCORD_GUILD_ID
 
-      // get base URL
+      if (!botToken || !guildId) {
+        console.error('Missing BOT_TOKEN or DISCORD_GUILD_ID env vars.')
+        return
+      }
+
+      // Ensure proper Discord auth header
+      const authHeader =
+        botToken.startsWith('Bot ') ? botToken : `${botToken}`
+
+      // 1) Look up the "cmart-alerts" channel by name
+      const channelsRes = await fetch(
+        `https://discord.com/api/v10/guilds/${guildId}/channels`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: authHeader,
+          },
+        }
+      )
+
+      if (!channelsRes.ok) {
+        console.error(
+          'Failed to fetch guild channels:',
+          channelsRes.status,
+          channelsRes.statusText
+        )
+        return
+      }
+
+      const channels = await channelsRes.json()
+      const targetChannel = channels.find(
+        (ch) => ch.type === 0 && ch.name === 'cmart-alerts' // type 0 = text channel
+      )
+
+      if (!targetChannel) {
+        console.error('No channel named "cmart-alerts" found in the guild.')
+        return
+      }
+
+      const channelId = targetChannel.id
+
       const baseUrl = config.public.baseUrl ||
         (process.env.NODE_ENV === 'production'
           ? 'https://www.cartoonreorbit.com'
           : `http://localhost:${config.public.socketPort || 3000}`)
 
-      // reuse details we already fetched
       const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
-      const mintNumber = userCtoonRec.mintNumber
-      const durationText = durationMinutes > 0
-        ? `${durationMinutes} minute(s)`
-        : `${durationDays} day(s)`
+      const mintNumber   = userCtoonRec.mintNumber
+      const durationText = formatDuration(durationDays, durationMinutes)
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
       const rawImageUrl = assetPath
@@ -150,12 +224,19 @@ export default defineEventHandler(async (event) => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
+      const lines = [
+        `**Rarity:** ${rarity ?? 'N/A'}`,
+        ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
+        `**Starting Bid:** ${initialBet} pts`,
+        `**Duration:** ${durationText}`
+      ]
+
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
         embeds: [{
           title: name ?? 'cToon',
           url: auctionLink,
-          description: `**Rarity:** ${rarity ?? 'N/A'}\n**Mint #:** ${mintNumber ?? 'N/A'}\n**Starting Bid:** ${initialBet} pts\n**Duration:** ${durationText}`,
+          description: lines.join('\n'),
           ...(imageUrl ? { image: { url: imageUrl } } : {})
         }]
       }

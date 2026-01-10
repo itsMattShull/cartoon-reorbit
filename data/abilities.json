@@ -22,5 +22,14 @@
   {
     "key": "helping_hands",
     "label": "Helping Hands: +1 power to all cards in this lane"
-  }
+  },
+  { "key": "heroine_plus", "label": "Heroine Plus: +4 to other 'Female Hero' allies in this lane" },
+  { "key": "no_hero_penalty", "label": "No Hero Here: −5 to opponent cards played this turn" },
+  { "key": "flash_boost", "label": "+5 to any Flash here" },
+  { "key": "female_villains_bonus", "label": "+3 per Female Villain in play" },
+  { "key": "ppg_allies_boost", "label": "+2 to Buttercup, Blossom, Ms. Keane, Prof. Utonium" },
+  { "key": "villains_bonus", "label": "+1 per Villain in play" },
+  { "key": "heroine_rally", "label": "+4 to other Female Heroes (your side)" },
+  { "key": "major_man_weakness", "label": "−7 if Major Man in this lane" },
+  { "key": "anti_batman", "label": "−3 to any Batman here" }
 ]

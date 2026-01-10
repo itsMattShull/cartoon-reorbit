@@ -2,7 +2,7 @@
 <template>
   <Nav />
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16">
+  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16 md:mt-20">
     <!-- 🡐 Back & title -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -78,6 +78,64 @@
             <input v-model="inCmart" type="checkbox"
               class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"/>
             <label class="select-none text-sm">List in cMart</label>
+          </div>
+
+          <!-- go live date/time -->
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label for="pack-go-live" class="text-sm font-medium">
+              Pack go live (CST)
+            </label>
+            <input
+              id="pack-go-live"
+              v-model="scheduledAtLocal"
+              type="datetime-local"
+              step="3600"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              Time must be on the hour. Leave blank to keep this pack out of cMart.
+            </p>
+          </div>
+
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label for="pack-go-dark" class="text-sm font-medium">
+              Pack remove from cMart (CST)
+            </label>
+            <input
+              id="pack-go-dark"
+              v-model="scheduledOffAtLocal"
+              type="datetime-local"
+              step="3600"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              Time must be on the hour. Leave blank to keep this pack listed.
+            </p>
+          </div>
+
+          <!-- sell-out behavior -->
+          <div class="lg:col-span-2 space-y-2">
+            <p class="text-sm font-medium">Pack sell-out behavior</p>
+            <div class="flex flex-col gap-2 text-sm text-gray-700">
+              <label class="inline-flex items-start gap-2">
+                <input
+                  v-model="sellOutBehavior"
+                  type="radio"
+                  value="REMOVE_ON_ANY_RARITY_EMPTY"
+                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+                />
+                <span>Remove pack when any rarity sells out</span>
+              </label>
+              <label class="inline-flex items-start gap-2">
+                <input
+                  v-model="sellOutBehavior"
+                  type="radio"
+                  value="KEEP_IF_SINGLE_RARITY_EMPTY"
+                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+                />
+                <span>Keep pack even if a rarity is sold out</span>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -186,7 +244,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware:['auth','admin'], layout:'default' })
+definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout:'default' })
 
 /* ---------------- imports ---------------- */
 import { ref, reactive, computed, onMounted, watch } from 'vue'
@@ -207,7 +265,10 @@ const loadedOk = computed(() => !pending.value && !error.value)
 const name        = ref('')
 const price       = ref(0)
 const description = ref('')
-const inCmart     = ref(true)
+const inCmart     = ref(false)
+const scheduledAtLocal = ref('')
+const scheduledOffAtLocal = ref('')
+const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
 
 /* ---------------- thumbnail upload ---------------- */
 const fileInput    = ref(null)
@@ -233,9 +294,43 @@ const defaultWeightConfigs = {
   'Crazy Rare':{ true:  10,   false: 90   }
 }
 
+function centralDateTimeValue(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  }).formatToParts(date)
+  const map = Object.fromEntries(parts.filter(p => p.type !== 'literal').map(p => [p.type, p.value]))
+  return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`
+}
+
+function normalizeToHour(value) {
+  if (!value) return ''
+  const [date, time] = String(value).split('T')
+  if (!date || !time) return value
+  const [hour] = time.split(':')
+  if (!hour) return value
+  return `${date}T${hour}:00`
+}
+
+watch(scheduledAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledAtLocal.value = normalized
+})
+
+watch(scheduledOffAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledOffAtLocal.value = normalized
+})
+
 /** assign default weights based on each cToon.inCmart flag */
 function assignDefaultWeights(rarity) {
   const ids = grouped.value[rarity] || []
+  if (ids.length === 1) {
+    weights.value[ids[0]] = 100
+    return
+  }
   const map = defaultWeightConfigs[rarity] || {}
   ids.forEach(id => {
     const c = lookup.value[id]
@@ -370,7 +465,10 @@ onMounted(async () => {
     price.value       = p.price
     description.value = p.description
     inCmart.value     = p.inCmart
+    sellOutBehavior.value = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
     imagePreview.value= p.imagePath
+    scheduledAtLocal.value = p.scheduledAt ? centralDateTimeValue(new Date(p.scheduledAt)) : ''
+    scheduledOffAtLocal.value = p.scheduledOffAt ? centralDateTimeValue(new Date(p.scheduledOffAt)) : ''
 
     /* rarity configs */
     p.rarityConfigs.forEach(rc => {
@@ -414,6 +512,9 @@ async function submit () {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
+    scheduledAtLocal: scheduledAtLocal.value || '',
+    scheduledOffAtLocal: scheduledOffAtLocal.value || '',
+    sellOutBehavior: sellOutBehavior.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({
       ctoonId: id,

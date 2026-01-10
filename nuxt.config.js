@@ -7,7 +7,7 @@ export default defineNuxtConfig({
   // ───────────────────────────────────────────────
   // 1)  Modules
   // ───────────────────────────────────────────────
-  modules: ['@nuxtjs/tailwindcss', '@prisma/nuxt', '@sentry/nuxt/module'],
+  modules: ['@nuxtjs/tailwindcss', '@sentry/nuxt/module'],
 
   // ───────────────────────────────────────────────
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
@@ -38,6 +38,10 @@ export default defineNuxtConfig({
     },
 
     botToken: process.env.BOT_TOKEN,
+
+    // server-only
+    socketOrigin: process.env.SOCKET_ORIGIN || 'http://localhost:3001',
+    socketPath: process.env.SOCKET_PATH || '/socket.io',
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,

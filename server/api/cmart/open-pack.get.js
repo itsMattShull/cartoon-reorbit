@@ -90,6 +90,9 @@ export default defineEventHandler(async (event) => {
     })
 
     const packId = userPack.pack.id
+    const sellOutBehavior = userPack.pack.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
+    let anyRarityEmpty = false
+    let remainingRarityCount = 0
 
     for (const rc of userPack.pack.rarityConfigs) {
       const options = await tx.packCtoonOption.findMany({
@@ -138,22 +141,37 @@ export default defineEventHandler(async (event) => {
         }
 
         // …then below you can re-sync count as before…
-        const currentRarityConfig = await tx.packRarityConfig.findUnique({
-          where: { id: rc.id }
-        })
-        if (currentRarityConfig && remaining.length < currentRarityConfig.count) {
+      }
+
+      const currentRarityConfig = await tx.packRarityConfig.findUnique({
+        where: { id: rc.id }
+      })
+      if (currentRarityConfig) {
+        const allowZeroCount = sellOutBehavior === 'KEEP_IF_SINGLE_RARITY_EMPTY'
+        const nextCount = remaining.length
+        if (nextCount < currentRarityConfig.count && (nextCount > 0 || allowZeroCount)) {
           await tx.packRarityConfig.update({
             where: { id: rc.id },
-            data:  { count: remaining.length }
+            data:  { count: nextCount }
           })
         }
       }
 
       /* 2-c if none left, unlist pack and stop looping */
       if (!remaining.length) {
-        await tx.pack.update({ where: { id: packId }, data: { inCmart: false } })
-        break
+        anyRarityEmpty = true
+      } else {
+        remainingRarityCount += 1
       }
+    }
+
+    const allRaritiesEmpty = remainingRarityCount === 0
+    const shouldUnlist = sellOutBehavior === 'KEEP_IF_SINGLE_RARITY_EMPTY'
+      ? allRaritiesEmpty
+      : anyRarityEmpty
+
+    if (shouldUnlist) {
+      await tx.pack.update({ where: { id: packId }, data: { inCmart: false } })
     }
   })
 

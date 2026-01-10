@@ -1,7 +1,7 @@
 <template>
   <Nav />
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16">
+  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16 md:mt-20">
     <!-- 🡐 Back & Title -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -114,11 +114,121 @@
             List in cMart (uncheck to save as draft).
           </label>
         </div>
+
+        <!-- Go live date/time -->
+        <div class="lg:col-span-2 flex flex-col gap-1">
+          <label for="pack-go-live" class="text-sm font-medium">
+            Pack go live (CST)
+          </label>
+          <input
+            id="pack-go-live"
+            v-model="scheduledAtLocal"
+            type="datetime-local"
+            step="3600"
+            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+          />
+          <p class="text-xs text-gray-500 ml-1">
+            Time must be on the hour. Leave blank to keep this pack out of cMart.
+          </p>
+        </div>
+
+        <!-- Go dark date/time -->
+        <div class="lg:col-span-2 flex flex-col gap-1">
+          <label for="pack-go-dark" class="text-sm font-medium">
+            Pack remove from cMart (CST)
+          </label>
+          <input
+            id="pack-go-dark"
+            v-model="scheduledOffAtLocal"
+            type="datetime-local"
+            step="3600"
+            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+          />
+          <p class="text-xs text-gray-500 ml-1">
+            Time must be on the hour. Leave blank to keep this pack listed.
+          </p>
+        </div>
+
+        <!-- Sell-out behavior -->
+        <div class="lg:col-span-2 space-y-2">
+          <p class="text-sm font-medium">Pack sell-out behavior</p>
+          <div class="flex flex-col gap-2 text-sm text-gray-700">
+            <label class="inline-flex items-start gap-2">
+              <input
+                v-model="sellOutBehavior"
+                type="radio"
+                value="REMOVE_ON_ANY_RARITY_EMPTY"
+                class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+              />
+              <span>Remove pack when any rarity sells out</span>
+            </label>
+            <label class="inline-flex items-start gap-2">
+              <input
+                v-model="sellOutBehavior"
+                type="radio"
+                value="KEEP_IF_SINGLE_RARITY_EMPTY"
+                class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
+              />
+              <span>Keep pack even if a rarity is sold out</span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <!-- 2️⃣  SEARCH / ADD CTOONS ---------------------------------------- -->
       <section class="space-y-4">
         <h2 class="text-xl font-semibold">Add cToons</h2>
+
+        <!-- NEW: Add by Set -->
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1 set-autocomplete">
+            <input
+              id="set-name-input"
+              ref="setInput"
+              v-model="setSearch"
+              type="text"
+              placeholder="Type a Set name…"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+              @focus="onSetFocus"
+              @keydown.down.prevent="setHighlightNext"
+              @keydown.up.prevent="setHighlightPrev"
+              @keydown.enter.prevent="addSetViaKeyboard"
+            />
+            <!-- dropdown -->
+            <ul
+              v-if="setSuggestionsOpen && setSuggestions.length"
+              class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg divide-y"
+            >
+              <li
+                v-for="(s, idx) in setSuggestions"
+                :key="s"
+                @mousedown.prevent="selectSetSuggestion(s)"
+                :class="[
+                  'flex items-center gap-3 px-3 py-2 cursor-pointer',
+                  idx === setHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50'
+                ]"
+              >
+                <div class="flex-1 truncate">
+                  <p class="truncate font-medium">{{ s }}</p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <button
+            type="button"
+            @click="addSetToSelection"
+            class="rounded-md px-4 py-2 font-semibold bg-blue-700 text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-blue-700"
+            :title="'Add all Common/Uncommon/Rare/Very Rare from the Set'"
+          >
+            Add Set
+          </button>
+        </div>
+        <p class="text-xs text-gray-500">
+          Only Common, Uncommon, Rare, and Very Rare are added from the Set.
+        </p>
+
+        <!-- Existing single cToon autocomplete -->
         <p class="text-xs text-gray-500">
           Leave the box empty then press <kbd>↓</kbd> / <kbd>↑</kbd> to browse all cToons.
           Already-selected cToons are hidden.
@@ -283,7 +393,7 @@
 
 <script setup>
 // Meta & imports
-definePageMeta({ middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - New Pack', middleware: ['auth','admin'], layout: 'default' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from '#app'
 
@@ -291,7 +401,29 @@ import { useRouter } from '#app'
 const name        = ref('')
 const price       = ref(900)
 const description = ref('')
-const inCmart     = ref(true)
+const inCmart     = ref(false)
+const scheduledAtLocal = ref('')
+const scheduledOffAtLocal = ref('')
+const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
+
+function normalizeToHour(value) {
+  if (!value) return ''
+  const [date, time] = String(value).split('T')
+  if (!date || !time) return value
+  const [hour] = time.split(':')
+  if (!hour) return value
+  return `${date}T${hour}:00`
+}
+
+watch(scheduledAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledAtLocal.value = normalized
+})
+
+watch(scheduledOffAtLocal, (value) => {
+  const normalized = normalizeToHour(value)
+  if (normalized !== value) scheduledOffAtLocal.value = normalized
+})
 
 // 2️⃣ Thumbnail upload
 const fileInput    = ref(null)
@@ -313,10 +445,10 @@ function onFile(e) {
 const rarities = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
 const countsByRarity = reactive({
   Common:      { count: 4, probabilityPercent: 100 },
-  Uncommon:    { count: 2, probabilityPercent:   100 },
-  Rare:        { count: 1, probabilityPercent:   100 },
-  'Very Rare': { count: 1, probabilityPercent:   25 },
-  'Crazy Rare':{ count: 1, probabilityPercent:   10 }
+  Uncommon:    { count: 2, probabilityPercent: 100 },
+  Rare:        { count: 1, probabilityPercent: 100 },
+  'Very Rare': { count: 1, probabilityPercent: 25 },
+  'Crazy Rare':{ count: 1, probabilityPercent: 10 }
 })
 const rarityConfigs = computed(() =>
   Object.entries(countsByRarity)
@@ -349,16 +481,19 @@ const grouped = computed(() => {
 
 // rarity × cToon.inCmart → static default weight map
 const defaultWeightConfigs = {
-  Common:      { true:  12,   false: 20   },
-  Uncommon:    { true:   7.5, false: 35   },
-  Rare:        { true:  18,   false: 45   },
-  'Very Rare': { true:  12.5, false: 75   },
-  'Crazy Rare':{ true:  10,   false: 90   }
+  Common:      { true: 18,  false: 28 },
+  Uncommon:    { true: 14,  false: 44 },
+  Rare:        { true: 18,  false: 45 },
+  'Very Rare': { true: 13,  false: 74 },
+  'Crazy Rare':{ true: 20,  false: 80 }
 }
 
 /** return a map of id → default weight for this rarity */
 function assignDefaultWeights(rarity) {
   const ids = grouped.value[rarity] || []
+  if (ids.length === 1) {
+    return { [ids[0]]: 100 }
+  }
   const result = {}
   const map = defaultWeightConfigs[rarity] || {}
   ids.forEach(id => {
@@ -373,7 +508,7 @@ function sumWeights(rarity) {
     .reduce((sum,id) => sum + (weights.value[id]||0), 0)
 }
 
-// 5️⃣ Autocomplete & selection
+// 5️⃣ Autocomplete & selection (single cToon)
 const suggestionsOpen = ref(false)
 const highlighted     = ref(-1)
 const suggestions = computed(() => {
@@ -415,15 +550,90 @@ function toggleSelect(cto) {
   searchInput.value?.blur()
 }
 function onManualWeight(rarity, id) {
-  weights.value[id] = Math.min(99, Math.max(1, Number(weights.value[id] || 0)))
+  const max = (grouped.value[rarity] || []).length === 1 ? 100 : 99
+  weights.value[id] = Math.min(max, Math.max(1, Number(weights.value[id] || 0)))
 }
+
+// 6️⃣ NEW: Set picker + bulk add by Set
+const sets                 = ref([])
+const setSearch            = ref('')
+const setInput             = ref(null)
+const setSuggestionsOpen   = ref(false)
+const setHighlighted       = ref(-1)
+const allowedSetRarities   = new Set(['Common','Uncommon','Rare','Very Rare'])
+
+const setSuggestions = computed(() => {
+  const term = setSearch.value.trim().toLowerCase()
+  if (term.length < 3) return []
+  const list = sets.value.filter(s => s && s.toLowerCase().includes(term))
+  return list.slice(0, 50)
+})
+function onSetFocus() { setSuggestionsOpen.value = true }
+watch(setSearch, () => { setSuggestionsOpen.value = setSearch.value.trim().length >= 3 })
+
+function setHighlightNext() {
+  if (!setSuggestions.value.length) return
+  setHighlighted.value = (setHighlighted.value + 1) % setSuggestions.value.length
+}
+function setHighlightPrev() {
+  if (!setSuggestions.value.length) return
+  setHighlighted.value =
+    (setHighlighted.value - 1 + setSuggestions.value.length) % setSuggestions.value.length
+}
+function selectSetSuggestion(s) {
+  setSearch.value = s
+  addSetToSelection()
+}
+function addSetViaKeyboard() {
+  if (setHighlighted.value >= 0) {
+    selectSetSuggestion(setSuggestions.value[setHighlighted.value])
+  } else {
+    addSetToSelection()
+  }
+}
+function addSetToSelection() {
+  const raw = setSearch.value.trim()
+  if (!raw) return
+
+  const canonical =
+    sets.value.find(s => s && s.toLowerCase() === raw.toLowerCase()) || raw
+
+  const addables = ctoons.value.filter(c =>
+    c.set === canonical &&
+    allowedSetRarities.has(c.rarity) &&
+    !selectedIds.value.includes(c.id)
+  )
+
+  if (!addables.length) {
+    alert('No eligible cToons found in that Set.')
+    return
+  }
+
+  // add ids
+  addables.forEach(c => selectedIds.value.push(c.id))
+
+  // assign weights just like single add
+  const affected = new Set(addables.map(c => c.rarity))
+  for (const r of affected) {
+    const norm = assignDefaultWeights(r)
+    Object.entries(norm).forEach(([iid, val]) => { weights.value[iid] = val })
+  }
+
+  setSuggestionsOpen.value = false
+  setHighlighted.value = -1
+  setInput.value?.blur()
+}
+
+
+// Close dropdowns on outside click
 if (process.client) {
   window.addEventListener('click', e => {
     if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
+    if (!e.target.closest('.set-autocomplete')) setSuggestionsOpen.value = false
   })
 }
 
-// 6️⃣ Validation
+// 7️⃣ Validation
 const countsValid = computed(() =>
   Object.entries(grouped.value).every(([r,ids]) =>
     !ids.length ||
@@ -444,7 +654,7 @@ const submitTooltip = computed(() => {
   return ''
 })
 
-// 7️⃣ Fetch data
+// 8️⃣ Fetch data
 onMounted(async () => {
   try {
     const data = await $fetch('/api/admin/ctoon-pool')
@@ -453,17 +663,26 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to load cToons', err)
   }
+
+  try {
+    const setNames = await $fetch('/api/admin/sets')
+    sets.value = (setNames || []).filter(Boolean).sort((a,b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    )
+  } catch (err) {
+    console.error('Failed to load Sets', err)
+  }
 })
 
-// watch for bulk changes
+// watch for bulk changes → apply default weights per rarity
 watch(selectedIds, () => {
   Object.keys(grouped.value).forEach(r => {
     const norm = assignDefaultWeights(r)
-    Object.entries(norm).forEach(([iid,val]) => weights.value[iid] = val)
+    Object.entries(norm).forEach(([iid,val]) => { weights.value[iid] = val })
   })
-})
+}, { flush: 'post' })
 
-// 8️⃣ Submit
+// 9️⃣ Submit
 const router = useRouter()
 async function submit() {
   if (!allValid.value || !countsValid.value || !imageFile.value) return
@@ -473,6 +692,9 @@ async function submit() {
     price: price.value,
     description: description.value,
     inCmart: inCmart.value,
+    scheduledAtLocal: scheduledAtLocal.value || '',
+    scheduledOffAtLocal: scheduledOffAtLocal.value || '',
+    sellOutBehavior: sellOutBehavior.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({ ctoonId: id, weight: weights.value[id] }))
   }
@@ -490,7 +712,8 @@ async function submit() {
 
 <style scoped>
 /* dropdown above modals */
-.cto-autocomplete ul {
+.cto-autocomplete ul,
+.set-autocomplete ul {
   z-index: 60;
 }
 .weight-badge {

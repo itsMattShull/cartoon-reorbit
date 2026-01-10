@@ -1,8 +1,21 @@
 <template>
     <div class="p-6 max-w-md mx-auto text-center">
-      <h2 class="text-2xl font-bold mb-4">You're Almost In!</h2>
-      <p class="mb-4">Join our Discord server, then come back and refresh the page, to unlock all features.</p>
+      <h2 class="text-2xl font-bold mb-4" v-if="!isBanned && !isInactive">You're Almost In!</h2>
+      <h2 class="text-2xl font-bold mb-4 text-red-600" v-else-if="isBanned">Account Banned</h2>
+      <h2 class="text-2xl font-bold mb-4 text-amber-600" v-else>Account Inactive</h2>
+
+      <p class="mb-4" v-if="!isBanned && !isInactive">
+        Join our Discord server, then come back and refresh the page, to unlock all features.
+      </p>
+      <p class="mb-4 text-red-600" v-else-if="isBanned">
+        Your account has been banned. If you believe this is a mistake, please contact a moderator in Discord.
+      </p>
+      <p class="mb-4 text-amber-700" v-else>
+        Your account has been marked as inactive. If you believe this is a mistake, please reach out to the admins in Discord.
+      </p>
+
       <a
+        v-if="!isBanned && !isInactive"
         :href="inviteUrl"
         target="_blank"
         rel="noopener noreferrer"
@@ -14,41 +27,55 @@
   </template>
   
   <script setup>
-  import { onMounted, onUnmounted } from 'vue'
-  import { useRouter } from 'vue-router'
-  import { useRuntimeConfig } from '#imports'
+    import { onMounted, onUnmounted, computed } from 'vue'
+    import { useRouter, useRoute } from 'vue-router'
+    import { useRuntimeConfig } from '#imports'
 
-  definePageMeta({ 
-    middleware: 'auth',
-    layout: 'default'
-  })
+    definePageMeta({
+      title: 'Join Discord',
+      middleware: 'auth',
+      layout: 'default'
+    })
 
-  const config    = useRuntimeConfig()
-  const inviteUrl = config.public.discordInvite  // now injected at runtime
-  const router    = useRouter()
-  let checkInterval = null
+    const config = useRuntimeConfig()
+    const inviteUrl = config.public.discordInvite
 
-  async function checkGuildMembership() {
-    try {
-      const res = await fetch('/api/discord/guild-check')
-      if (res.ok) {
-        const data = await res.json()
-        if (data.inGuild) {
-          clearInterval(checkInterval)
-          router.push('/dashboard')
+    const router = useRouter()
+    const route = useRoute()
+
+    // If URL has ?banned=1 or ?inactive=1, show appropriate message and stop polling.
+    const isBanned = computed(() => route.query.banned === '1')
+    const isInactive = computed(() => route.query.inactive === '1')
+
+    let checkInterval = null
+
+    async function checkGuildMembership () {
+      if (isBanned.value || isInactive.value) return // don't poll if banned or inactive
+      try {
+        const res = await fetch('/api/discord/guild-check')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.inGuild) {
+            if (checkInterval) clearInterval(checkInterval)
+            router.push('/dashboard')
+          }
         }
+      } catch (err) {
+        console.error('Guild check failed:', err)
       }
-    } catch (err) {
-      console.error('Guild check failed:', err)
     }
-  }
 
-  onMounted(() => {
-    checkGuildMembership()
-    checkInterval = setInterval(checkGuildMembership, 5000)
-  })
+    onMounted(() => {
+      checkGuildMembership()
+      if (!isBanned.value) {
+        checkInterval = setInterval(checkGuildMembership, 5000)
+      }
+    })
 
-  onUnmounted(() => {
-    clearInterval(checkInterval)
-  })
+    onUnmounted(() => {
+      if (checkInterval) clearInterval(checkInterval)
+    })
+
+    // expose to template
+    // (inviteUrl and isBanned are used directly in <template>)
   </script>

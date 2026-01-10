@@ -1,10 +1,9 @@
 // server/api/auctions.get.js
-
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  // 1. Authenticate
+  // 1) Auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -13,62 +12,71 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
   const userId = me?.id
-  if (!userId) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
+  if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
-  // 2. Fetch all active auctions with nested Ctoon data
-  //    plus the single highest bid (if any)
+  // 2) Active auctions with minimal nested data
   const auctions = await prisma.auction.findMany({
     where: { status: 'ACTIVE' },
     include: {
       userCtoon: {
         select: {
+          id: true,
           ctoonId: true,
           mintNumber: true,
-          ctoon: {
-            select: {
-              name: true,
-              series: true,
-              rarity: true,
-              assetPath: true
-            }
-          }
+          ctoon: { select: { name: true, series: true, rarity: true, assetPath: true, characters: true } }
         }
       },
-      // grab only the highest bid amount
-      bids: {
-        select: { amount: true },
-        orderBy: { amount: 'desc' },
-        take: 1
-      }
+      bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
+      _count: { select: { bids: true } }
     },
-    orderBy: { endAt: 'asc' }
+    orderBy: [
+      { isFeatured: 'desc' }, // featured first
+      { endAt: 'asc' }        // then soonest-ending
+    ]
   })
 
-  // 3. Get the set of ctoonIds this user owns
+  if (auctions.length === 0) return []
+
+  // 3) Sets for ownership and holiday membership
   const ctoonIds = auctions.map(a => a.userCtoon.ctoonId)
-  const owned = await prisma.userCtoon.findMany({
-    where: {
-      userId,
-      ctoonId: { in: ctoonIds }
-    },
-    select: { ctoonId: true }
-  })
-  const ownedSet = new Set(owned.map(u => u.ctoonId))
 
-  // 4. Map to the shape the client expects
-  return auctions.map(a => ({
-    id:          a.id,
-    name:        a.userCtoon.ctoon.name,
-    series:      a.userCtoon.ctoon.series,
-    rarity:      a.userCtoon.ctoon.rarity,
-    mintNumber:  a.userCtoon.mintNumber,
-    assetPath:   a.userCtoon.ctoon.assetPath,
-    endAt:       a.endAt.toISOString(),
-    // highestBid: the one bid.amount we fetched, or null if none
-    highestBid:  a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
-    // true if the user owns at least one of that cToon
-    isOwned:     ownedSet.has(a.userCtoon.ctoonId)
+  const [owned, holidayItems] = await Promise.all([
+    prisma.userCtoon.findMany({
+      where: { userId, ctoonId: { in: ctoonIds } },
+      select: { ctoonId: true }
+    }),
+    prisma.holidayEventItem.findMany({
+      where: { ctoonId: { in: ctoonIds } },
+      select: { ctoonId: true }
+    })
+  ])
+
+  const ownedSet = new Set(owned.map(u => u.ctoonId))
+  const holidaySet = new Set(holidayItems.map(h => h.ctoonId))
+
+  // 4) Ensure featured items are first (defensive in case DB ordering changes)
+  const ordered = auctions.slice().sort((a, b) => {
+    const fb = (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0)
+    if (fb !== 0) return fb
+    return new Date(a.endAt) - new Date(b.endAt)
+  })
+
+  // 5) Shape for client
+  return ordered.map(a => ({
+    id:           a.id,
+    isFeatured:   a.isFeatured,
+    userCtoonId:  a.userCtoon.id,
+    ctoonId:      a.userCtoon.ctoonId,
+    name:         a.userCtoon.ctoon.name,
+    series:       a.userCtoon.ctoon.series,
+    rarity:       a.userCtoon.ctoon.rarity,
+    characters:   a.userCtoon.ctoon.characters || [],
+    mintNumber:   a.userCtoon.mintNumber,
+    assetPath:    a.userCtoon.ctoon.assetPath,
+    endAt:        a.endAt.toISOString(),
+    highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
+    bidCount:     a._count?.bids ?? 0,
+    isOwned:      ownedSet.has(a.userCtoon.ctoonId),
+    isHolidayItem: holidaySet.has(a.userCtoon.ctoonId)
   }))
 })

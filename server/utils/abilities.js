@@ -16,6 +16,12 @@
 
 /** @typedef {import('../utils/battleEngine').BattleCtx} BattleCtx */
 
+const norm = s => typeof s === 'string' ? s.trim().toLowerCase() : ''
+const isType = (c, t) => norm(c?.gtoonType) === norm(t)
+const hasType = (c, sub) => norm(c?.gtoonType).includes(norm(sub))
+const nameIs = (c, ...names) => names.some(n => norm(c?.name) === norm(n))
+const nameHas = (c, token) => norm(c?.name).includes(norm(token))
+
 export const abilityRegistry = {
   /* ----------------------------------------------------------------
    *  Spreadsheet Abilities (one per g‑toon) – keys match admin UI
@@ -82,22 +88,33 @@ export const abilityRegistry = {
       game.log.push(`${card.name} replaced the location with ${lane.name}!`)
     }
   },
-
-  /** Lee Kanker – Take That */
   take_that: {
     onReveal({ game, side, laneIndex, card }) {
-      const laneArr = game.state.lanes[laneIndex][side];
+      const lane = game.state.lanes[laneIndex]
+      const laneArr = lane[side]
 
-      // buff every non-ability card in that lane once, exactly when
-      // this take_that resolves
+      // Max triggers this turn: 2 if DOUBLE_ABILITIES lane, otherwise 1
+      const maxTriggers = lane.abilityKey === 'DOUBLE_ABILITIES' ? 2 : 1
+
+      // Per-turn guard so we can't exceed maxTriggers
+      const turn = game.state.turn
+      if (card._takeThatSeenTurn !== turn) {
+        card._takeThatSeenTurn = turn
+        card._takeThatTriggers = 0
+      }
+      if (card._takeThatTriggers >= maxTriggers) return
+
+      // +2 to *non-ability* allies in THIS lane, THIS side, right now
       laneArr
-        .filter(c => !c.abilityKey)
-        .forEach(c => {
-          c.power += 2;
-        });
+        .filter(c => !c.abilityKey) // excludes ability cards (including this one)
+        .forEach(c => { c.power += 2 })
+
+      card._takeThatTriggers += 1
+
       game.log.push(
-        `${card.name} shouts “Take that!” — +2 Power to non-ability toons in ${game.state.lanes[laneIndex].name}`
-      );
+        `${card.name} shouts “Take that!” — +2 Power to non-ability allies in ${lane.name}`
+        + (maxTriggers > 1 ? ' (DOUBLE)' : '')
+      )
     }
   },
 
@@ -132,6 +149,148 @@ export const abilityRegistry = {
     }
   },
 
+  heroine_plus: {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]
+      if (!lane) return
+
+      // debug: show the played card and every card’s gtoonType in this lane
+      ;['player','ai'].forEach(who => {
+        lane[who].forEach(c => {
+          // console.log(`[HeroinePlus] lane=${lane.name} side=${who} card=${c.name} type=${JSON.stringify(c.gtoonType)}`)
+        })
+      })
+
+      const maxTriggers = lane.abilityKey === 'DOUBLE_ABILITIES' ? 2 : 1
+      card._heroinePlusCount = card._heroinePlusCount || 0
+      if (card._heroinePlusCount >= maxTriggers) return
+
+      const isFemaleHero = t =>
+        typeof t === 'string' && t.trim().toLowerCase() === 'female hero'
+
+      const allies = lane[side].filter(
+        c => c.id !== card.id && isFemaleHero(c.gtoonType)
+      )
+
+      allies.forEach(c => {
+        // console.log(`[HeroinePlus] buff +4 -> ${c.name} (type=${JSON.stringify(c.gtoonType)})`)
+        c.power += 4
+      })
+
+      card._heroinePlusCount += 1
+      if (allies.length) {
+        game.log.push(
+          `${card.name} activates Heroine Plus: +4 to Female Hero allies in ${lane.name}`
+        )
+      }
+    }
+  },
+
+  no_hero_penalty: {
+    onReveal({ game, side, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const opp = side === 'player' ? 'ai' : 'player'
+
+      // trigger only if opponent has a card whose type contains the word "hero"
+      const isHeroType = c =>
+        typeof c?.gtoonType === 'string' && /\bhero\b/i.test(c.gtoonType)
+      const oppHasHero = lane[opp].some(isHeroType)
+      if (!oppHasHero) return
+
+      const turn = game.state.turn
+      let targets = lane[opp].filter(c => c._playedTurn === turn)
+      if (!targets.length && lane[opp].length) {
+        targets = [lane[opp][lane[opp].length - 1]]
+      }
+
+      targets.forEach(t => { t.power -= 5 })
+      if (targets.length) {
+        game.log.push(`${lane.name}: opponent has a Hero → ${targets.length} card(s) −5`)
+      }
+    }
+  },
+
+  flash_boost: {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const allies = lane[side].filter(c => c !== card && nameHas(c, 'flash'))
+      allies.forEach(a => { a.power += 5 })
+      if (allies.length) game.log.push(`${card.name}: +5 to Flash ally/ies in ${lane.name}`)
+    }
+  },
+
+  female_villains_bonus: {
+    onReveal({ game, card }) {
+      const count = game.state.lanes
+        .flatMap(l => [...l.player, ...l.ai])
+        .filter(c => isType(c, 'female villain')).length
+      if (!count) return
+      card.power += 3 * count
+      game.log.push(`${card.name}: +${3*count} (Female Villains in play: ${count})`)
+    }
+  },
+
+  ppg_allies_boost: {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const patterns = [
+        /buttercup/i,
+        /blossom/i,
+        /ms\.?\s*keane/i,
+        /professor\s+utonium/i
+      ]
+      const targets = lane[side].filter(c =>
+        c !== card && patterns.some(rx => rx.test(c.name || ''))
+      )
+      targets.forEach(t => { t.power += 2 })
+      if (targets.length) game.log.push(`${card.name}: +2 to ${targets.length} PPG ally/ies in ${lane.name}`)
+    }
+  },
+
+  villains_bonus: {
+    onReveal({ game, card }) {
+      const isVillain = c =>
+        typeof c?.gtoonType === 'string' && /\bvillain\b/i.test(c.gtoonType)
+
+      const count = game.state.lanes
+        .flatMap(l => [...l.player, ...l.ai])
+        .filter(isVillain).length
+
+      if (!count) return
+      card.power += count
+      game.log.push(`${card.name}: +${count} (Villains in play: ${count})`)
+    }
+  },
+
+  heroine_rally: {
+    onReveal({ game, side, card }) {
+      const allies = game.state.lanes
+        .flatMap(l => l[side])
+        .filter(c => c !== card && isType(c, 'female hero'))
+      allies.forEach(a => { a.power += 4 })
+      if (allies.length) game.log.push(`${card.name}: +4 to ${allies.length} Female Hero ally/ies`)
+    }
+  },
+
+  major_man_weakness: {
+    onReveal({ game, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const exists = [...lane.player, ...lane.ai].some(c => nameIs(c, 'Major Man'))
+      if (!exists) return
+      card.power -= 7
+      game.log.push(`${card.name}: −7 (Major Man present in ${lane.name})`)
+    }
+  },
+
+  anti_batman: {
+    onReveal({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const targets = [...lane.player, ...lane.ai].filter(c => nameHas(c, 'batman'))
+      targets.forEach(t => { t.power -= 3 })
+      if (targets.length) game.log.push(`${lane.name}: Batman cards −3 (${targets.length})`)
+    }
+  },
+
   /* ----------------------------------------------------------------
    *  Lane effects (keys match your lanes.json “effect” field)
    * ----------------------------------------------------------------*/
@@ -142,10 +301,8 @@ export const abilityRegistry = {
       if (!card) return
       const cardDef = abilityRegistry[card.abilityKey]
       if (cardDef?.onReveal) {
-        // run twice
+        // The card already fired once in fireReveal → fire exactly one *extra* time
         cardDef.onReveal({ game, side, laneIndex, card })
-        cardDef.onReveal({ game, side, laneIndex, card })
-        // console.log(`${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`)
         game.log.push(
           `${card.name} triggers twice in ${game.state.lanes[laneIndex].name}!`
         )
@@ -290,6 +447,55 @@ export const abilityRegistry = {
       );
     }
   },
+
+  ACME_CANYON: {
+    // After both sides reveal, check if both played here; buff only cards played this turn.
+    onTurnEnd({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]
+      if (!lane?.revealed) return
+      const pend = game._pendingActions || {}
+      const bothPlayed =
+        (pend.player || []).some(s => s.laneIndex === laneIndex) &&
+        (pend.ai     || []).some(s => s.laneIndex === laneIndex)
+      if (!bothPlayed) return
+      const turn = game.state.turn
+      const playedNow = a => a.filter(c => c._playedTurn === turn)
+      const affected = [...playedNow(lane.player), ...playedNow(lane.ai)]
+      if (!affected.length) return
+      affected.forEach(c => { c.power += 3 })
+      game.log.push(`${lane.name}: both sides played → +3 to cards played this turn`)
+    }
+  },
+
+  STAR_LABS: {
+    // When a card with an ability reveals here, buff a random ally here.
+    onReveal({ game, side, laneIndex, card }) {
+      if (!side || !card?.abilityKey) return
+      const lane = game.state.lanes[laneIndex]
+      if (!lane?.revealed) return
+      const allies = lane[side].filter(c => c !== card)
+      if (!allies.length) return
+      const r = allies[Math.floor(Math.random() * allies.length)]
+      r.power += 2
+      game.log.push(`${lane.name}: ${card.name} empowers ${r.name} (+2)`)
+    }
+  },
+
+  JUMP_CITY: {
+    // End of reveal: if YOU played exactly two cards here this turn, buff those two.
+    onTurnEnd({ game, laneIndex }) {
+      const lane = game.state.lanes[laneIndex]
+      if (!lane?.revealed) return
+      const turn = game.state.turn
+      for (const side of ['player','ai']) {
+        const played = lane[side].filter(c => c._playedTurn === turn)
+        if (played.length === 2) {
+          played.forEach(c => { c.power += 2 })
+          game.log.push(`${lane.name}: ${side} played exactly two → both +2`)
+        }
+      }
+    }
+  }
 
   // Note: Tom, The Great Gazoo, Jerry & Buttercup have no abilities in the sheet → no entry needed.
 }

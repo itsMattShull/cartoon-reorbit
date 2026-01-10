@@ -78,6 +78,8 @@
 </template>
 
 <script setup>
+definePageMeta({ title: 'Privacy Policy' })
+
 // No logic needed for static policy page
 </script>
 

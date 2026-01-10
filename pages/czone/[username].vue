@@ -1,11 +1,70 @@
 <template>
-  <div v-if="ownerIsBooster" class="main"></div>
   <Nav />
+  <div v-if="ownerIsBooster" class="main"></div>
 
-  <!-- Mobile Layout Only -->
+  <!-- ───────── Mobile Layout ───────── -->
+
+  <!-- Mobile Skeleton -->
   <div
-    v-if="!loading"
-    class="lg:hidden pt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
+    v-if="loading"
+    class="lg:hidden mt-20 md:mt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6 animate-pulse"
+  >
+    <!-- Owner Section skeleton -->
+    <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4">
+      <div
+        class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
+      >
+        OWNER
+      </div>
+      <div class="w-14 h-14 rounded-full border border-blue-300 bg-gray-300"></div>
+      <div class="flex-1 h-6 bg-gray-300 rounded"></div>
+    </div>
+
+    <!-- Top toolbar skeleton (mobile, stacked) -->
+    <div class="flex flex-col gap-2 mx-4 mt-2">
+      <!-- Row 1: user cZone navigation -->
+      <div class="flex gap-2 justify-center">
+        <div class="bg-gray-300 h-8 w-28 rounded"></div>
+        <div class="bg-gray-300 h-8 w-28 rounded"></div>
+        <div class="bg-gray-300 h-8 w-28 rounded"></div>
+      </div>
+
+      <!-- Row 2: zone number arrows -->
+      <div class="flex items-center justify-center gap-2 mt-2 sm:mt-0">
+        <div class="bg-gray-300 h-8 w-10 rounded"></div>
+        <div class="bg-gray-300 h-4 w-32 rounded"></div>
+        <div class="bg-gray-300 h-8 w-10 rounded"></div>
+      </div>
+    </div>
+
+    <!-- CZone Canvas skeleton (mobile) -->
+    <div class="flex" :class="{ booster: ownerIsBooster }">
+      <!-- OUTER: controls layout size to the scaled dimensions -->
+      <div :style="outerScaleStyle" class="mb-4">
+        <!-- INNER: keeps the true 800x600, just visually scaled -->
+        <div :style="scaleStyle">
+          <div
+            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto bg-gray-200"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation and Points skeleton -->
+    <div class="flex justify-between items-center text-sm flex-wrap gap-4 mb-6 mx-4">
+      <div class="flex gap-2 flex-wrap">
+        <div class="h-8 w-32 bg-gray-300 rounded ml-2"></div>
+        <div class="h-8 w-32 bg-gray-300 rounded ml-2"></div>
+        <div class="h-8 w-32 bg-gray-300 rounded ml-2"></div>
+      </div>
+      <div class="h-8 w-32 bg-gray-300 rounded"></div>
+    </div>
+  </div>
+
+  <!-- Mobile Layout Only (real content) -->
+  <div
+    v-else
+    class="lg:hidden mt-20 md:mt-20 py-6 max-w-6xl mx-auto flex flex-col gap-6"
   >
     <!-- Owner Section -->
     <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mx-4" :class="{ booster: ownerIsBooster }">
@@ -22,49 +81,65 @@
       <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
     </div>
 
-    <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
-    <div
-          v-if="hasOtherZones"
-          class="flex justify-center items-center gap-4 mt-2"
-        >
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToPrevious"
-            :disabled="!hasPrevious"
-          >
-            ← Zone {{ currentZoneIndex + 1 }}
-          </button>
-          <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToNext"
-            :disabled="!hasNext"
-          >
-            Zone {{ currentZoneIndex + 1 }} →
-          </button>
-        </div>
+    <!-- Top toolbar (mobile, stacked) -->
+    <div class="flex flex-col gap-2 mx-4 mt-2">
+      <!-- Row 1: user cZone navigation -->
+      <div class="flex gap-2 justify-center">
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToPreviousUser">
+          Previous cZone
+        </button>
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToRandomUser">
+          Random cZone
+        </button>
+        <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToNextUser">
+          Next cZone
+        </button>
+      </div>
 
-    <!-- CZone Canvas -->
+      <!-- Row 2: zone number arrows -->
+      <div v-if="hasOtherZones" class="flex items-center justify-center gap-2 mt-2 sm:mt-0">
+        <button
+          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+          @click="goToPrevious"
+          :disabled="!hasPrevious"
+          aria-label="Previous Zone"
+        >←</button>
+        <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of {{ maxZoneNumber }}</span>
+        <button
+          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+          @click="goToNext"
+          :disabled="!hasNext"
+          aria-label="Next Zone"
+        >→</button>
+      </div>
+    </div>
+
+    <!-- CZone Canvas (mobile) -->
     <div class="flex" :class="{ booster: ownerIsBooster }">
-      <!-- scale wrapper: only on small screens -->
-      <div :style="scaleStyle">
-        <div
-          class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto mb-4"
-          :style="canvasBackgroundStyle"
-        >
-          <div class="absolute inset-0">
-            <div
-              v-for="(item, index) in cZoneItems"
-              :key="index"
-              class="absolute"
-              :style="item.style"
-            >
-              <img
-                :src="item.assetPath"
-                :alt="item.name"
-                class="object-contain cursor-pointer max-w-[initial]"
-                @click="openSidebar(item)"
-              />
+      <!-- OUTER: controls layout size to the scaled dimensions -->
+      <div :style="outerScaleStyle" class="mb-4">
+        <!-- INNER: keeps the true 800x600, just visually scaled -->
+        <div :style="scaleStyle">
+          <div
+            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
+            :style="canvasBackgroundStyle"
+          >
+            <div class="absolute inset-0">
+              <div
+                v-for="(item, index) in cZoneItems"
+                :key="index"
+                class="absolute"
+                :style="item.style"
+              >
+                <CtoonAsset
+                  :src="item.assetPath"
+                  :alt="item.name"
+                  :name="item.name"
+                  :ctoon-id="item.ctoonId"
+                  :user-ctoon-id="item.id"
+                  image-class="object-contain cursor-pointer max-w-[initial]"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -75,31 +150,17 @@
     <div class="flex justify-between items-center text-sm flex-wrap gap-4 mb-6 mx-4">
       <div class="flex gap-2 flex-wrap">
         <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToPreviousUser"
-        >
-          Previous cZone
-        </button>
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToRandomUser"
-        >
-          Random cZone
-        </button>
-        <button
-          class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          @click="goToNextUser"
-        >
-          Next cZone
-        </button>
-        <button
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openWishlist"
         >
           View Wishlist
         </button>
-        <button v-if="user?.id !== ownerId" @click="openCollection" class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2">
-          View Collection
+        <button
+          v-if="user?.id !== ownerId"
+          @click="goToOfferTrade"
+          class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+        >
+          Offer Trade
         </button>
         <button
           v-if="user?.id === ownerId"
@@ -117,10 +178,91 @@
     </div>
   </div>
 
-  <!-- Desktop Layout -->
+  <!-- ───────── Desktop Layout ───────── -->
+
+  <!-- Desktop Skeleton -->
   <div
-    v-if="!loading"
-    class="hidden lg:flex pt-20 px-4 py-6 max-w-6xl mx-auto flex gap-6"
+    v-if="loading"
+    class="hidden lg:flex mt-20 md:mt-20 pt-10 px-4 py-6 max-w-6xl mx-auto flex gap-6 animate-pulse"
+  >
+    <!-- Left Column: Chat and Visitors skeleton -->
+    <div class="w-1/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
+      <div class="relative border-2 border-blue-500 rounded p-4 flex items-center gap-4 mb-4">
+        <div
+          class="absolute -top-4 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-t"
+        >
+          OWNER
+        </div>
+        <div class="w-14 h-14 rounded-full border border-blue-300 bg-gray-300"></div>
+        <div class="flex-1 h-6 bg-gray-300 rounded"></div>
+      </div>
+      <div class="h-5 w-40 bg-gray-300 rounded mb-2"></div>
+      <div
+        class="overflow-y-auto border rounded p-2 mb-4 text-sm h-96 flex flex-col-reverse"
+      >
+        <div class="w-full space-y-2">
+          <div
+            v-for="i in 6"
+            :key="i"
+            class="mb-1 flex gap-2 text-sm items-start"
+          >
+            <div class="w-20 h-4 bg-gray-300 rounded"></div>
+            <div class="flex-1 h-4 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 items-center">
+        <div class="flex-1 h-9 bg-gray-300 rounded"></div>
+        <div class="h-9 w-20 bg-gray-300 rounded"></div>
+      </div>
+    </div>
+
+    <!-- Right Column: CZone Display skeleton -->
+    <div class="min-w-[800px] bg-white rounded-xl shadow-md">
+      <div>
+        <!-- Top toolbar (desktop) skeleton -->
+        <div class="flex items-center justify-between px-4 mt-2 mb-2">
+          <div class="flex gap-2">
+            <div class="h-8 w-28 bg-gray-300 rounded"></div>
+            <div class="h-8 w-28 bg-gray-300 rounded"></div>
+            <div class="h-8 w-28 bg-gray-300 rounded"></div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="h-8 w-10 bg-gray-300 rounded"></div>
+            <div class="h-4 w-32 bg-gray-300 rounded"></div>
+            <div class="h-8 w-10 bg-gray-300 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Fixed-size CZone canvas/display skeleton -->
+        <div class="flex justify-center overflow-hidden mb-4">
+          <div
+            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto bg-gray-200"
+          ></div>
+        </div>
+
+        <div class="flex justify-between items-start text-sm mb-6 px-4">
+          <!-- Left side: buttons skeleton -->
+          <div class="flex flex-col gap-6">
+            <div class="flex gap-2">
+              <div class="h-8 w-28 bg-gray-300 rounded"></div>
+              <div class="h-8 w-32 bg-gray-300 rounded"></div>
+              <div class="h-8 w-28 bg-gray-300 rounded"></div>
+            </div>
+          </div>
+
+          <!-- Right side: points badge skeleton -->
+          <div class="h-8 w-32 bg-gray-300 rounded"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Desktop Layout (real content) -->
+  <div
+    v-else
+    class="hidden lg:flex mt-20 md:mt-20 pt-10 px-4 py-6 max-w-6xl mx-auto flex gap-6"
   >
     <!-- Left Column: Chat and Visitors -->
     <div class="w-1/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
@@ -181,26 +323,37 @@
     <!-- Right Column: CZone Display -->
     <div class="min-w-[800px] bg-white rounded-xl shadow-md">
       <div :class="{ booster: ownerIsBooster }">
-      <!-- Zone navigation arrows, only if Zone 2 or Zone 3 have any cToons -->
-        <div
-          v-if="hasOtherZones"
-          class="flex justify-center items-center gap-4 mt-2 mb-4"
-        >
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToPrevious"
-            :disabled="!hasPrevious"
-          >
-            ← Zone {{ currentZoneIndex + 1 }}
-          </button>
-          <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of 3</span>
-          <button
-            class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
-            @click="goToNext"
-            :disabled="!hasNext"
-          >
-            Zone {{ currentZoneIndex + 1 }} →
-          </button>
+        <!-- Top toolbar (desktop) -->
+        <div class="flex items-center justify-between px-4 mt-2 mb-2">
+          <!-- Left: user cZone navigation -->
+          <div class="flex gap-2">
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToPreviousUser">
+              Previous cZone
+            </button>
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToRandomUser">
+              Random cZone
+            </button>
+            <button class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300" @click="goToNextUser">
+              Next cZone
+            </button>
+          </div>
+
+          <!-- Right: zone index arrows -->
+          <div v-if="hasOtherZones" class="flex items-center gap-2">
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+              @click="goToPrevious"
+              :disabled="!hasPrevious"
+              aria-label="Previous Zone"
+            >←</button>
+            <span class="text-sm">Zone {{ currentZoneIndex + 1 }} of {{ maxZoneNumber }}</span>
+            <button
+              class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 disabled:opacity-50"
+              @click="goToNext"
+              :disabled="!hasNext"
+              aria-label="Next Zone"
+            >→</button>
+          </div>
         </div>
         <div class="flex justify-center overflow-hidden mb-4">
           <div
@@ -215,11 +368,13 @@
                 class="absolute"
                 :style="item.style"
               >
-                <img
+                <CtoonAsset
                   :src="item.assetPath"
                   :alt="item.name"
-                  class="object-contain cursor-pointer max-w-[initial]"
-                  @click="openSidebar(item)"
+                  :name="item.name"
+                  :ctoon-id="item.ctoonId"
+                  :user-ctoon-id="item.id"
+                  image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
             </div>
@@ -229,28 +384,6 @@
         <div class="flex justify-between items-start text-sm mb-6 px-4">
           <!-- Left side: two vertical groups -->
           <div class="flex flex-col gap-6">
-            <!-- Group 1: zone nav buttons -->
-            <div class="flex gap-2">
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToPreviousUser"
-              >
-                Previous cZone
-              </button>
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToRandomUser"
-              >
-                Random cZone
-              </button>
-              <button
-                class="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-                @click="goToNextUser"
-              >
-                Next cZone
-              </button>
-            </div>
-
             <!-- Group 2: wishlist / collection / edit -->
             <div class="flex gap-2">
               <button
@@ -261,10 +394,10 @@
               </button>
               <button
                 v-if="user?.id !== ownerId"
-                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
-                @click="openCollection"
+                @click="goToOfferTrade"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
               >
-                View Collection
+                Offer Trade
               </button>
               <button
                 v-if="user?.id === ownerId"
@@ -285,82 +418,6 @@
     </div>
   </div>
 
-  <!-- Loading Skeleton -->
-  <div v-else class="pt-16 px-4 py-6 max-w-6xl mx-auto flex gap-6">
-    <div class="w-1/3 bg-white rounded-xl shadow-md p-4">
-      <div class="h-6 bg-gray-300 rounded w-32 mb-4"></div>
-      <div class="h-10 bg-gray-300 rounded w-full mb-4"></div>
-      <div class="h-48 bg-gray-200 rounded mb-4"></div>
-      <div class="h-8 bg-gray-300 rounded w-full"></div>
-    </div>
-    <div class="w-2/3 bg-white rounded-xl shadow-md p-4">
-      <div class="h-[400px] bg-gray-200 rounded mb-4"></div>
-      <div class="h-8 bg-gray-300 rounded w-full"></div>
-    </div>
-  </div>
-
-  <!-- Overlay for Sidebar -->
-  <transition name="fade">
-    <div
-      v-if="showSidebar"
-      class="fixed inset-0 bg-black bg-opacity-50 z-40"
-      @click="showSidebar = false"
-    ></div>
-  </transition>
-
-  <!-- Sidebar with cToon Details -->
-  <transition name="slide-panel">
-    <div
-      v-if="showSidebar"
-      class="fixed top-0 right-0 h-screen w-80 bg-white shadow-lg border-l p-4 overflow-y-auto z-50"
-    >
-      <button
-        class="absolute top-2 right-2 text-gray-500 hover:text-black"
-        @click="showSidebar = false"
-      >
-        ✖
-      </button>
-      <div v-if="selectedCtoon">
-        <img
-          :src="selectedCtoon.assetPath"
-          class="max-w-full mb-4 mx-auto"
-          :alt="selectedCtoon.name"
-        />
-        <h3 class="text-xl font-bold mb-2">{{ selectedCtoon.name }}</h3>
-        <p><strong>Series:</strong> {{ selectedCtoon.series }}</p>
-        <p v-if="selectedCtoon.set"><strong>Set:</strong> {{ selectedCtoon.set }}</p>
-        <p>
-          <strong>Rarity:</strong>
-          <span class="capitalize">{{ selectedCtoon.rarity }}</span>
-        </p>
-        <p>
-          <strong>Mint #:</strong>
-          <span v-if="selectedCtoon.quantity === null">
-            {{ selectedCtoon.mintNumber }} of Unlimited
-          </span>
-          <span
-            v-else-if="
-              selectedCtoon.mintNumber !== null &&
-              selectedCtoon.quantity !== null
-            "
-          >
-            {{ selectedCtoon.mintNumber }} of {{ selectedCtoon.quantity }}
-          </span>
-          <span v-else>Unknown</span>
-        </p>
-        <p>
-          <strong>Edition:</strong>
-          {{ selectedCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
-        </p>
-        <p v-if="selectedCtoon.releaseDate">
-          <strong>Release Date:</strong> {{ formatDate(selectedCtoon.releaseDate) }}
-        </p>
-        <div class="mt-4">
-          <AddToWishlist :ctoon-id="selectedCtoon.ctoonId" />
-        </div>
-      </div>
-    </div>
-  </transition>
   <!-- Wishlist modal -->
   <transition name="fade">
     <div
@@ -382,12 +439,28 @@
         </div>
         <div v-else class="grid grid-cols-2 gap-4">
           <div
-            v-for="c in wishlistCtoons"
-            :key="c.id"
-            class="flex flex-col items-center"
+            v-for="item in wishlistCtoons"
+            :key="item.ctoon.id"
+            class="flex flex-col items-center border rounded p-2"
           >
-            <img :src="c.assetPath" class="w-20 h-20 object-contain mb-2" />
-            <p class="text-sm text-center">{{ c.name }}</p>
+            <CtoonAsset
+              :src="item.ctoon.assetPath"
+              :alt="item.ctoon.name"
+              :name="item.ctoon.name"
+              :ctoon-id="item.ctoon.id"
+              image-class="w-20 h-20 object-contain mb-2"
+            />
+            <p class="text-sm text-center">{{ item.ctoon.name }}</p>
+            <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
+
+            <button
+              class="mt-2 w-full px-3 py-1 rounded text-white text-sm"
+              :class="item.hasEnough ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
+              :disabled="!item.hasEnough || isProcessingWishlistTrade"
+              @click="onClickWishlistTrade(item)"
+            >
+              Trade for {{ item.offeredPoints }} points
+            </button>
           </div>
         </div>
       </div>
@@ -440,7 +513,15 @@
                   {{ selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned' }}
                 </span>
 
-                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-2 mt-8" />
+                <CtoonAsset
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  :name="c.name"
+                  :ctoon-id="c.ctoonId"
+                  :user-ctoon-id="c.id"
+                  image-class="w-16 h-16 object-contain mb-2 mt-8"
+                  stop-propagation
+                />
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
@@ -491,7 +572,15 @@
                   {{ targetOwnedIds.has(c.ctoonId) ? 'Owned by Owner' : 'Unowned by Owner' }}
                 </span>
 
-                <img :src="c.assetPath" class="w-16 h-16 object-contain mb-1 mt-8" />
+                <CtoonAsset
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  :name="c.name"
+                  :ctoon-id="c.ctoonId"
+                  :user-ctoon-id="c.id"
+                  image-class="w-16 h-16 object-contain mb-1 mt-8"
+                  stop-propagation
+                />
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
@@ -542,39 +631,59 @@
   />
 </template>
 
-
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
+import { useCtoonModal } from '@/composables/useCtoonModal'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import CtoonAsset from '@/components/CtoonAsset.vue'
 import Toast from '@/components/Toast.vue'
+import Nav from '@/components/Nav.vue'
 
 definePageMeta({
+  title: route => {
+    const raw = route.params.username
+    const name = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw[0] : '')
+    return name ? `${name}'s cZone` : 'cZone'
+  },
   middleware: 'auth',
-  layout: 'default'
+  layout: 'default',
+  // Force a fresh instance per path to avoid reuse/flicker (stable, encoded)
+  key: route => route.path
 })
 
-// ——— Date formatter ———
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+function bgUrl(v) {
+  if (!v) return ''
+  const s = String(v)
+  if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
+  return `/backgrounds/${s}`
 }
 
 // ——— Scale logic for mobile ———
 const scale = ref(1)
 const recalcScale = () => {
-  scale.value = Math.min(1, window.innerWidth / 800)
+  const gutter = 32 // account for page padding
+  scale.value = Math.min(1, (window.innerWidth - gutter) / CANVAS_W)
 }
+const CANVAS_W = 800
+const CANVAS_H = 600
+
+const outerScaleStyle = computed(() => ({
+  width: `${CANVAS_W * scale.value}px`,
+  height: `${CANVAS_H * scale.value}px`,
+  position: 'relative',
+  overflow: 'hidden',
+  margin: '0 auto'
+}))
+
+// apply the transform to the inner wrapper, not the outer
 const scaleStyle = computed(() => ({
   transform: `scale(${scale.value})`,
-  transformOrigin: 'top left'
+  transformOrigin: 'top left',
+  width: `${CANVAS_W}px`,
+  height: `${CANVAS_H}px`
 }))
 
 // ——— Routing + Auth ———
@@ -582,6 +691,7 @@ const route = useRoute()
 const router = useRouter()
 const username = ref(route.params.username)
 const { user, fetchSelf } = useAuth()
+const { setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
 
 // ——— Loading indicator ———
 const loading = ref(true)
@@ -595,10 +705,6 @@ const visitorCount = ref(0)
 const chatMessages = ref([])
 const newMessage = ref('')
 const chatContainer = ref(null)
-
-// ——— Sidebar state ———
-const showSidebar = ref(false)
-const selectedCtoon = ref(null)
 
 // —— Trade modal state ——
 const collectionModalVisible     = ref(false)
@@ -616,6 +722,8 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
+const isOwnerViewing = computed(() => user.value?.id === ownerId.value)
+
 watch(ownerIsBooster, (isBooster) => {
   if (typeof document === 'undefined') return
   document.body.classList.toggle('booster-bg', !!isBooster)
@@ -625,10 +733,62 @@ function displayToast(message, type = 'success') {
   toastMessage.value = message
   toastType.value    = type
   showToast.value    = true
-  // auto-hide after 4s
   setTimeout(() => {
     showToast.value = false
   }, 4000)
+}
+
+watch([isOwnerViewing, username], () => {
+  setContext({ source: 'czone', isOwner: isOwnerViewing.value, username: username.value })
+}, { immediate: true })
+
+watch(holidaySignal, async () => {
+  if (holidayRedeem.value?.reward?.name) {
+    displayToast(`Opened! You received ${holidayRedeem.value.reward.name} 🎉`, 'success')
+  }
+  await loadCzone()
+})
+
+async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
+  if (showLoading) loading.value = true
+  try {
+    const res = await $fetch(`/api/czone/${username.value}`)
+    ownerName.value = res.ownerName
+    ownerIsBooster.value = res.isBooster
+    ownerAvatar.value = res.avatar || '/avatars/default.png'
+    ownerId.value = res.ownerId
+
+    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
+      zones.value = res.cZone.zones.map(z => ({
+        background: typeof z.background === 'string' ? z.background : '',
+        toons: Array.isArray(z.toons) ? z.toons : []
+      }))
+    } else {
+      zones.value = [
+        { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
+        { background: '', toons: [] },
+        { background: '', toons: [] }
+      ]
+    }
+
+    if (awardVisit && user.value && res.ownerId !== user.value.id) {
+      await $fetch('/api/points/visit', {
+        method: 'POST',
+        body: { zoneOwnerId: res.ownerId }
+      })
+      await fetchSelf({ force: true })
+    }
+  } catch (err) {
+    console.error('Failed to fetch cZone:', err)
+    zones.value = [
+      { background: '', toons: [] },
+      { background: '', toons: [] },
+      { background: '', toons: [] }
+    ]
+    ownerAvatar.value = '/avatars/default.png'
+  } finally {
+    if (showLoading) loading.value = false
+  }
 }
 
 // —— Load someone’s collection ——
@@ -649,6 +809,36 @@ function openCollection() {
 function closeCollection() {
   collectionModalVisible.value = false
   tradeStep.value              = 1
+}
+
+const isProcessingWishlistTrade = ref(false)
+
+async function onClickWishlistTrade(item) {
+  if (!item?.hasEnough || isProcessingWishlistTrade.value) return
+  isProcessingWishlistTrade.value = true
+
+  try {
+    // optimistic remove from UI
+    const prev = [...wishlistCtoons.value]
+    wishlistCtoons.value = prev.filter(w => w.id !== item.id)
+
+    await $fetch(`/api/wishlist/accept/${item.id}`, {
+      method: 'POST',
+      body: { wishlistItemId: item.id }
+    })
+
+    displayToast('Trade completed.', 'success', 4000)
+
+    // refresh viewer points and the wishlist from server
+    await fetchSelf({ force: true })
+    await loadUserWishlist()
+  } catch (err) {
+    displayToast(err?.data?.message || 'Failed to complete trade.', 'error', 5000)
+    // ensure UI is in sync with server on failure
+    await loadUserWishlist()
+  } finally {
+    isProcessingWishlistTrade.value = false
+  }
 }
 
 // —— Select/deselect target’s cToon ——
@@ -691,30 +881,13 @@ function selectInitiatorCtoon(ct) {
   else selectedInitiatorCtoons.value.push(ct)
 }
 
-// —— Send the trade offer —— 
-async function sendOffer() {
-  const payload = {
-    recipientUsername: username.value,
-    ctoonIdsRequested: selectedTargetCtoons.value.map(c => c.id),
-    ctoonIdsOffered:   selectedInitiatorCtoons.value.map(c => c.id),
-    pointsOffered:     pointsToOffer.value
-  }
-
-  try {
-    await $fetch('/api/trade/offers', {
-      method: 'POST',
-      body: payload
-    })
-    closeCollection()
-    displayToast('Trade offer sent!', 'success')
-  } catch (err) {
-    console.error('Trade offer failed', err)
-    displayToast('Failed to send trade offer. Please try again.', 'error')
-  }
+function goToOfferTrade() {
+  const uname = String(route.params.username || '').trim()
+  if (!uname) return
+  router.push(`/create-trade/${encodeURIComponent(uname)}`)
 }
 
 // ——— Zones state ———
-// Start out with three empty zones by default:
 const zones = ref([
   { background: '', toons: [] },
   { background: '', toons: [] },
@@ -739,23 +912,33 @@ function closeWishlist() {
   wishlistModalVisible.value = false
 }
 
-
 // Which zone index is currently displayed (0, 1, or 2)
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
+const maxZoneNumber = computed(() => {
+  let max = 1
+  zones.value.forEach((zone, idx) => {
+    if (Array.isArray(zone.toons) && zone.toons.length > 0) {
+      max = Math.max(max, idx + 1)
+    }
+  })
+  return max
+})
 
 // Build a list of “renderable” cToon items for the current zone
+// (Expose indices so we can update the clicked slot later)
 const cZoneItems = computed(() => {
-  return (currentZone.value.toons || []).map(item => ({
+  const zidx = currentZoneIndex.value
+  return (currentZone.value.toons || []).map((item, idx) => ({
     ...item,
-    style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`
+    style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`,
+    __zoneIndex: zidx,
+    __itemIndex: idx
   }))
 })
 
 // ——— Show arrows only if another zone (besides the current one) has ≥1 toon ———
 const hasOtherZones = computed(() => {
-  // (Uncomment to debug in console)
-
   return zones.value.some((zone, idx) => {
     return idx !== currentZoneIndex.value
       && Array.isArray(zone.toons)
@@ -821,14 +1004,6 @@ const socket = io(import.meta.env.PROD
   : `http://localhost:${useRuntimeConfig().public.socketPort}`
 )
 
-function openSidebar(item) {
-  selectedCtoon.value = item
-  showSidebar.value = true
-}
-function closeSidebar() {
-  showSidebar.value = false
-  selectedCtoon.value = null
-}
 function sendMessage() {
   if (!user.value || !socket) return
   const msg = {
@@ -878,12 +1053,10 @@ async function goToRandomUser() {
 const editPath = computed(() => `/edit`)
 
 const canvasBackgroundStyle = computed(() => {
-  const bg = currentZone.value.background
-  if (!bg || typeof bg !== 'string') {
-    return { backgroundColor: 'transparent' }
-  }
+  const src = bgUrl(currentZone.value.background)
+  if (!src) return { backgroundColor: 'transparent' }
   return {
-    backgroundImage: `url(/backgrounds/${bg})`,
+    backgroundImage: `url('${src}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat'
@@ -895,7 +1068,6 @@ const sortedCollectionCtoons = computed(() => {
   return [...collectionCtoons.value].sort((a, b) => {
     const aOwned = selfOwnedIds.value.has(a.ctoonId)
     const bOwned = selfOwnedIds.value.has(b.ctoonId)
-    // unowned (false) should come before owned (true)
     return (aOwned === bOwned) ? 0 : (aOwned ? 1 : -1)
   })
 })
@@ -905,7 +1077,6 @@ const sortedSelfCtoons = computed(() => {
   return [...selfCtoons.value].sort((a, b) => {
     const aOwnedByOwner = targetOwnedIds.value.has(a.ctoonId)
     const bOwnedByOwner = targetOwnedIds.value.has(b.ctoonId)
-    // “unowned by owner” (false) before “owned by owner” (true)
     return (aOwnedByOwner === bOwnedByOwner) ? 0 : (aOwnedByOwner ? 1 : -1)
   })
 })
@@ -914,57 +1085,11 @@ onMounted(async () => {
   recalcScale()
   window.addEventListener('resize', recalcScale)
 
-  await fetchSelf()
+  await fetchSelf({ force: true })
 
-  // 1) Fetch the owner’s cZone from your back end
-  try {
-    const res = await $fetch(`/api/czone/${username.value}`)
-    ownerName.value = res.ownerName
-    ownerIsBooster.value = res.isBooster
-    ownerAvatar.value = res.avatar || '/avatars/default.png'
-    ownerId.value = res.ownerId
+  await loadCzone({ showLoading: true, awardVisit: true })
 
-    if (
-      res.cZone?.zones &&
-      Array.isArray(res.cZone.zones) &&
-      res.cZone.zones.length === 3
-    ) {
-      // Overwrite the three‐zone array in one go
-      zones.value = res.cZone.zones.map(z => ({
-        background: typeof z.background === 'string' ? z.background : '',
-        toons: Array.isArray(z.toons) ? z.toons : []
-      }))
-    } else {
-      // Fallback to old shape if needed
-      zones.value = [
-        { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
-        { background: '', toons: [] },
-        { background: '', toons: [] }
-      ]
-    }
-
-    // Award a visit if viewer ≠ owner
-    if (user.value && res.ownerId !== user.value.id) {
-      await $fetch('/api/points/visit', {
-        method: 'POST',
-        body: { zoneOwnerId: res.ownerId }
-      })
-      await fetchSelf()
-    }
-  } catch (err) {
-    console.error('Failed to fetch cZone:', err)
-    // Clear out if something went wrong
-    zones.value = [
-      { background: '', toons: [] },
-      { background: '', toons: [] },
-      { background: '', toons: [] }
-    ]
-    ownerAvatar.value = '/avatars/default.png'
-  } finally {
-    loading.value = false
-  }
-
-  // 2) Set up socket.io listeners for chats/visitor count
+  // socket listeners
   socket.emit('join-zone', { zone: username.value })
   socket.on('visitor-count', count => {
     visitorCount.value = count
@@ -982,61 +1107,13 @@ onBeforeUnmount(() => {
     socket.emit('leave-zone', { zone: username.value })
   }
   window.removeEventListener('resize', recalcScale)
-
   document.body.classList.remove('booster-bg')
+  clearContext()
 })
 
-// 3) Watch for route changes if the user navigates to a different person’s cZone
-watch(
-  () => route.params.username,
-  async (newUsername, oldUsername) => {
-    if (socket && oldUsername) {
-      socket.emit('leave-zone', { zone: oldUsername })
-    }
-    username.value = newUsername
-    loading.value = true
-
-    try {
-      const res = await $fetch(`/api/czone/${newUsername}`)
-      ownerName.value = res.ownerName
-      ownerAvatar.value = res.avatar || '/avatars/default.png'
-      ownerId.value = res.ownerId
-
-      if (
-        res.cZone?.zones &&
-        Array.isArray(res.cZone.zones) &&
-        res.cZone.zones.length === 3
-      ) {
-        zones.value = res.cZone.zones.map(z => ({
-          background: typeof z.background === 'string' ? z.background : '',
-          toons: Array.isArray(z.toons) ? z.toons : []
-        }))
-      } else {
-        zones.value = [
-          { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
-          { background: '', toons: [] },
-          { background: '', toons: [] }
-        ]
-      }
-
-      if (socket && socket.connected) {
-        await nextTick()
-        socket.emit('join-zone', { zone: newUsername })
-      }
-    } catch (err) {
-      console.error('Failed to fetch cZone on route change:', err)
-      zones.value = [
-        { background: '', toons: [] },
-        { background: '', toons: [] },
-        { background: '', toons: [] }
-      ]
-    } finally {
-      loading.value = false
-    }
-  }
-)
+// With definePageMeta key forcing remount per username, the route-change
+// watcher is no longer needed. onMounted/onBeforeUnmount handle lifecycle.
 </script>
-
 
 <style>
 .fade-enter-active,
@@ -1088,12 +1165,12 @@ watch(
   .booster-bg .bg-indigo-500,
   .booster-bg .bg-indigo-600      { background-color: #333 !important; }
   /* Owner’s username (was text-blue-700) */
-  body.booster-bg .text-blue-700 {
+  .booster-bg .text-blue-700 {
     color: #ffffff !important;
   }
 
   /* “My Points” badge (was text-indigo-800) */
-  body.booster-bg .text-indigo-800 {
+  .booster-bg .text-indigo-800 {
     color: #ffffff !important;
   }
 
@@ -1107,7 +1184,7 @@ watch(
   }
 
   /* Animated golden glow on booster elements */
-  .booster {
+   .booster {
     position: relative;
     z-index: 1;
     border: 2px solid #ffd700 !important;
@@ -1153,4 +1230,3 @@ watch(
     }
 }
 </style>
-

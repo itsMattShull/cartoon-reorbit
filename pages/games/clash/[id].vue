@@ -1,12 +1,46 @@
 <template>
   <Nav />
-  <!-- Waiting for both players -->
-  <div v-if="!game" class="pt-20 text-center">
-    <p class="text-gray-600">Waiting for opponent...</p>
+  <!-- Pregame: deck select + ready -->
+  <div v-if="!game" class="mt-20">
+    <div class="max-w-3xl mx-auto bg-white border rounded p-4">
+      <h2 class="text-xl font-bold mb-3">gToons Clash – Pregame</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="border rounded p-3">
+          <h3 class="font-semibold mb-2">Your Deck</h3>
+          <select v-model="selectedDeckId" class="w-full border rounded px-2 py-1">
+            <option disabled value="">Select a deck…</option>
+            <option v-for="d in myDecks" :key="d.id" :value="d.id">
+              {{ d.name }} ({{ d.size }})
+            </option>
+          </select>
+
+          <!-- 🔹 Stake notice shown ABOVE the Ready button -->
+          <p v-if="roomStake > 0 && !myReady" class="mt-2 text-xs text-gray-600">
+            By clicking this button you agree to bet
+            <span class="font-semibold">{{ roomStake.toLocaleString() }}</span> points.
+          </p>
+
+          <button
+            class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50"
+            :disabled="!selectedDeckId || myReady"
+            @click="readyUp"
+          >{{ myReady ? 'Ready!' : 'Start Game' }}</button>
+        </div>
+        <div class="border rounded p-3">
+          <h3 class="font-semibold mb-2">Opponent</h3>
+          <p class="text-sm">User: <span class="font-medium">{{ oppUsername || 'Waiting…' }}</span></p>
+          <p class="text-sm">Deck: <span class="font-medium">{{ oppHasDeck ? 'Selected' : 'Not selected' }}</span></p>
+          <p class="text-sm">Ready: <span class="font-medium">{{ oppReady ? 'Yes' : 'No' }}</span></p>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500">
+        Game will start automatically when both players selected a deck and clicked <em>Start Game</em>.
+      </p>
+    </div>
   </div>
   <section
     v-else
-    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
+    class="mt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Mobile header -->
     <div
@@ -24,9 +58,6 @@
           Setup
         </template>
       </div>
-      <p class="py-1 px-4 text-center text-xs text-gray-600">
-        {{ instructionText }}
-      </p>
       <div v-if="isSelecting" class="h-2 w-full bg-gray-200 rounded">
         <div
           class="h-full bg-indigo-500 rounded"
@@ -48,12 +79,6 @@
         Setup
       </span>
     </h2>
-    <p
-      v-if="instructionText"
-      class="hidden md:block text-center text-sm text-gray-700"
-    >
-      {{ instructionText }}
-    </p>
     <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
         class="h-full bg-indigo-500 rounded"
@@ -68,6 +93,7 @@
       :priority="game.priority"
       :previewPlacements="placements"
       @place="handlePlace"
+      @unplace="handleUnplace"
       @info="showCardInfo"
       :selected="selected"
       :confirmed="confirmed"
@@ -92,9 +118,10 @@
       :cards="game.playerHand"
       :energy="game.playerEnergy"
       :selected="selected"
+      :status="instructionText"
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
-      @select="c => (selected = c)"
+      @select="selectFromHand"
       @info="showCardInfo"
     />
 
@@ -129,10 +156,7 @@
 
     <!-- Game-over modal -->
     <transition name="fade">
-      <div
-        v-if="summary"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-      >
+      <div v-if="summary" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-lg p-8 text-center w-72">
           <h3 class="text-2xl font-bold mb-4">
             {{
@@ -140,12 +164,49 @@
                 ? '🏆 You Win!'
                 : summary.winner==='ai'
                   ? 'Defeat'
-                  : 'Tie'
+                  : summary.winner==='incomplete'
+                    ? 'Game Incomplete'
+                    : 'Tie'
             }}
           </h3>
-          <p class="mb-6">
-            Lanes Won: You {{ summary.playerLanesWon }} – Opponent {{ summary.aiLanesWon }}
-          </p>
+
+          <!-- 🔸 Details block -->
+          <div class="mb-6 space-y-2">
+            <!-- Opponent left / incomplete -->
+            <template v-if="summary.winner==='incomplete'">
+              <p>
+                {{ summary.reason === 'opponent_disconnect'
+                    ? 'The other player disconnected.'
+                    : 'This game did not complete.'
+                }}
+              </p>
+              <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
+                You were awarded
+                <strong>{{ Number(summary.stakeAwarded).toLocaleString() }}</strong>
+                points from the stake.
+              </p>
+            </template>
+
+            <!-- Normal end (win/lose/tie) -->
+            <template v-else>
+              <p>
+                Lanes Won <br>
+                - You:      {{ summary.playerLanesWon }}<br>
+                - Opponent: {{ summary.aiLanesWon }}
+              </p>
+
+              <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
+                {{ summary.winner==='tie' ? 'Returned' : 'You won' }}
+                <strong>{{ Number(summary.stakeAwarded).toLocaleString() }}</strong>
+                points.
+              </p>
+
+              <p v-if="Number(summary.pointsAwarded) > 0" class="mt-1 text-sm text-gray-600">
+                (+{{ Number(summary.pointsAwarded).toLocaleString() }} bonus points)
+              </p>
+            </template>
+          </div>
+
           <NuxtLink
             to="/games/clash/rooms"
             class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded"
@@ -153,6 +214,7 @@
         </div>
       </div>
     </transition>
+
   </section>
 </template>
 
@@ -166,34 +228,23 @@ import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Match', middleware: 'auth', layout: 'default' })
 
 // — Auth & Deck Loading —
 const { user, fetchSelf } = useAuth()
 await fetchSelf()
 
-const deck = ref([])
-const loaded = ref(false)
+// Pregame state
+const myDecks = ref([])            // [{id,name,size}]
+const selectedDeckId = ref('')
+const myReady = ref(false)
+const awaitingTurn = ref(null)
+const oppReady = ref(false)
+const oppHasDeck = ref(false)
+const oppUsername = ref('')
 
-function shuffle(arr) {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
-async function loadDeck() {
-  try {
-    const all = await $fetch('/api/user/ctoons?isGtoon=true')
-    deck.value = shuffle(all).slice(0, 12)
-  } catch {
-    deck.value = []
-  } finally {
-    loaded.value = true
-  }
-}
+// 🔹 Stake for this room (sent from server via pvpLobbyState)
+const roomStake = ref(0)
 
 // — Routing & Socket Setup —
 const route = useRoute()
@@ -202,6 +253,19 @@ const roomId = route.params.id
 
 const game = ref(null)
 
+const MAX_PER_LANE = 4 // TODO: if your server exposes this, read from state instead
+
+const playerLaneCount = lane =>
+  (lane.player?.length ?? lane.playerCards?.length ?? 0)
+
+const hasOpenLane = computed(() =>
+  !!game.value?.lanes?.some(l => playerLaneCount(l) < MAX_PER_LANE)
+)
+
+const allPlayerLanesFull = computed(() =>
+  !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
+)
+
 const socket = io(
   import.meta.env.PROD
     ? undefined
@@ -209,24 +273,43 @@ const socket = io(
 )
 
 // Handle incoming events
-socket.on('gameStart', state => { game.value = state })
+socket.on('gameStart', state => { 
+  game.value = state 
+  startTimer(state.selectEndsAt)
+})
 socket.on('phaseUpdate', state => { game.value = state })
 socket.on('gameEnd', sum   => { game.value = { ...game.value, summary: sum } })
+socket.on('clashDecks', list => { myDecks.value = list || [] })
+
+socket.on('pvpLobbyState', snap => {
+  // snap = { players, usernames, haveDeck, ready, points? }
+  const me  = String(user.value.id)
+  const opp = (snap.players || []).find(p => p !== me)
+  myReady.value    = !!snap.ready?.[me]
+  oppReady.value   = !!snap.ready?.[opp]
+  oppHasDeck.value = !!snap.haveDeck?.[opp]
+  oppUsername.value = opp
+    ? (snap.usernames?.[opp] || 'Unknown')
+    : 'Waiting…'
+
+  // Accept either `points` or `stakePoints` from server
+  const raw = Number(snap.points ?? snap.stakePoints ?? 0)
+  roomStake.value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
+})
 
 onMounted(async () => {
-  await loadDeck()
-  if (deck.value.length < 12) {
-    // not enough cards—bounce back to lobby
-    router.push('/games/clash')
-    return
-  }
-  // join the PvP room with your deck
-  socket.emit('joinClashRoom', {
-    roomId,
-    userId: user.value.id,
-    deck:   deck.value
-  })
+  // 1) join the PvP room (no deck yet)
+  socket.emit('joinClashRoom', { roomId, userId: user.value.id })
+  // 2) fetch my saved decks for the dropdown
+  socket.emit('listClashDecks', { userId: user.value.id })
 })
+
+async function readyUp() {
+  if (!selectedDeckId.value) return
+  // set the deck then mark ready
+  socket.emit('setPvpDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
+  socket.emit('readyPvp',   { roomId, userId: user.value.id, ready: true })
+}
 
 // — UI State —
 const selected   = ref(null)
@@ -262,8 +345,9 @@ const progressPercent = computed(
   () => Math.max(0, Math.min(100, (secondsLeft.value/60)*100))
 )
 
-const hasPlayable = computed(
-  () => game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
+const hasPlayable = computed(() =>
+  hasOpenLane.value &&
+  game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
 )
 
 const canConfirm = computed(() =>
@@ -283,12 +367,14 @@ const instructionText = computed(() => {
   if (game.value.phase === 'setup')
     return 'Prepare your first move – select a card and place it on a lane.'
   if (game.value.phase === 'select') {
-    if (confirmed.value) return 'Waiting for opponent…'
-    if (!selected.value) return 'Click a card, then a lane to place it.'
+    if (confirmed.value)        return 'Waiting for opponent…'
+    if (allPlayerLanesFull.value)
+      return 'All your lanes are full — confirm to end your turn without placing.'
+    if (!selected.value)        return 'Click a card, then a lane to place it.'
     return 'Choose a lane and confirm your selection.'
   }
   if (game.value.phase === 'reveal')
-    return game.value.priority === 'player'
+    return game.value.priority==='player'
       ? 'You attack first – watch the reveal!'
       : 'Opponent attacks first – watch the reveal.'
   return ''
@@ -299,29 +385,77 @@ function showCardInfo(card) {
   infoCard.value = card
 }
 
+const LANE_CAP = 4
+
+function laneCountAfterPlacements(laneIdx) {
+  const existing = game.value?.lanes?.[laneIdx]?.player?.length || 0
+  const pending  = placements.value.filter(p => p.laneIndex === laneIdx).length
+  return existing + pending
+}
+
+function sameCard(a, b) {
+  if (!a || !b) return false
+  return (
+    a === b ||
+    (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId) ||
+    (a.instanceId && b.instanceId && a.instanceId === b.instanceId)
+  )
+}
+
+function selectFromHand(c) {
+  selected.value = sameCard(selected.value, c) ? null : c
+}
+
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
-  // toggle placement
-  const idx = placements.value.findIndex(p => p.card.id === selected.value.id)
+
+  const lane = game.value?.lanes?.[laneIdx]
+  if (!lane) return
+
+  const pendingInLane = placements.value.filter(p => p.laneIndex === laneIdx).length
+  if (playerLaneCount(lane) + pendingInLane >= MAX_PER_LANE) {
+    log.value.push('That lane is full.')
+    return
+  }
+
+  // toggle this exact card’s preview
+  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
-  // ensure within energy
-  if (selected.value.cost + pendingCost.value > game.value.playerEnergy) return
+
   placements.value.push({ card: selected.value, laneIndex: laneIdx })
+
+  // 🔹 hide the ability banner after placing
+  selected.value = null
+}
+
+function handleUnplace(laneIdx) {
+  if (!isSelecting.value || confirmed.value) return
+  // remove the last-added preview in this lane (LIFO)
+  for (let i = placements.value.length - 1; i >= 0; i--) {
+    if (placements.value[i].laneIndex === laneIdx) {
+      const [removed] = placements.value.splice(i, 1)
+      // reselect the card so the player can drop it elsewhere
+      selected.value = removed.card
+      break
+    }
+  }
 }
 
 function confirmSelections() {
   if (confirmed.value || !canConfirm.value) return
+
   const selections = placements.value.map(p => ({
-    cardId:    p.card.id,
+    // send a per-instance identifier (prefer userCtoonId)
+    cardId:    p.card.userCtoonId ?? p.card.instanceId ?? p.card.id ?? p.card.ctoonId,
     laneIndex: p.laneIndex
   }))
-  socket.emit('selectCards', { selections })
+
+  socket.emit('selectPvPCards', { selections })
   confirmed.value = true
-  // clear previews if desired
-  placements.value = []
+  awaitingTurn.value = game.value?.turn ?? null
 }
 
 function resetLocal() {
@@ -332,14 +466,22 @@ function resetLocal() {
 
 // — Real-time Sync —
 socket.on('phaseUpdate', state => {
+  const prevTurn = game.value?.turn ?? null
   game.value = state
-  if (isSelecting.value && !confirmed.value) {
+
+  if (state.phase === 'select') {
     startTimer(state.selectEndsAt)
+
+    if (
+      confirmed.value &&
+      awaitingTurn.value != null &&
+      state.turn > awaitingTurn.value
+    ) {
+      resetLocal()
+      awaitingTurn.value = null
+    }
   } else {
     clearInterval(timerId)
-  }
-  if ((state.phase === 'select' || state.phase === 'setup') && confirmed.value) {
-    resetLocal()
   }
 })
 
@@ -350,9 +492,15 @@ socket.on('gameEnd', sum => {
 
 // — Cleanup —
 onBeforeUnmount(() => {
+  if (roomId && user.value?.id) {
+    socket.emit('leaveClashRoom', { roomId, userId: user.value.id })
+  }
+
+  socket.emit('leaveClashRoom', { roomId, userId: user.value?.id })
   socket.off('gameStart')
   socket.off('phaseUpdate')
   socket.off('gameEnd')
+  socket.off('pvpLobbyState')
   clearInterval(timerId)
 })
 </script>

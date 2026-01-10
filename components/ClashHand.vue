@@ -10,42 +10,81 @@
       </span>
     </div>
 
+    <!-- 🔹 ability banner -->
+    <div class="flex justify-center mb-2 md:mb-1 py-1">
+      <span class="bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full px-3 py-1 border border-indigo-200">
+        {{ abilityLine }}
+      </span>
+    </div>
+
     <!-- hand -->
     <div
-      class="flex justify-center gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0"
+      class="
+        flex w-full gap-2
+        overflow-x-auto overflow-y-hidden
+        justify-start md:justify-center
+        px-3 -mx-3
+        pb-2 md:pb-0
+        scroll-px-3
+        touch-pan-x
+      "
       :class="{ 'cursor-not-allowed opacity-50': cards.length === 0 || disabled }"
     >
-      <ClashCToonCard
-        v-for="(c, idx) in cards"
-        :key="idx"                        
-        :card="c"
-        :selected="selected === c"        
-        :afford="c.cost <= remainingEnergy"
-        @select="() => emit('select', c)"
-        @info="emit('info',$event)"
-      />
+      <div v-for="(c, idx) in cards" :key="idx" class="shrink-0">
+        <ClashCToonCard
+          :card="c"
+          :selected="selected === c"
+          :afford="c.cost <= remainingEnergy"
+          @select="() => { if (!disabled && c.cost <= energy) emit('select', c) }"
+          @info="emit('info',$event)"
+        />
+      </div>
+    </div>
+    <!-- 🔹 status banner -->
+    <div v-if="status" class="flex justify-center mb-2 md:mb-1">
+      <span class="bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full px-3 py-1 mt-4 border border-indigo-200">
+        {{ status }}
+      </span>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import ClashCToonCard from '@/components/ClashCToonCard.vue'
+import abilities from '~/data/abilities.json' // remove the assert for broad compatibility
+
+// key → label map
+const ABILITY_TEXTS = Object.fromEntries(
+  (abilities || []).map(a => [a.key, a.label])
+)
 
 const props = defineProps({
   cards:    { type: Array,  default: () => [] },
   energy:   { type: Number, default: 1 },
-  selected: { type: [Object, null], default: null },
+  selected: { type: Object, default: null }, // null is fine as a default
   disabled: { type: Boolean, default: false },
   remainingEnergy: { type: Number, default: 1 },
+  status:   { type: String, default: '' },
 })
 const emit = defineEmits(['select','info'])
 
-function handleSelect (card) {
-  if (props.disabled) return
-  if (card.cost > props.energy) return       // can’t afford → ignore click
-  emit('select', card)
-}
+const abilityLine = computed(() => {
+  const c = props.selected
+  if (!c) return 'No card selected'
+  const parts = []
+  if (c.abilityKey) {
+    const key = String(c.abilityKey)
+    parts.push(ABILITY_TEXTS[key] || `Ability: ${key.replace(/_/g, ' ')}`)
+  } else {
+    parts.push('No ability')
+  }
+  const t = typeof c.gtoonType === 'string' ? c.gtoonType.trim() : ''
+  if (t) parts.push(`Type: ${t}`)
+  return parts.join(' • ')
+})
 </script>
+
 
 <style scoped>
 .flex::-webkit-scrollbar { display: none; } /* hide mobile scrollbar */

@@ -1,6 +1,7 @@
 <!-- pages/games/clash/play.vue -->
  <template>
   <Nav />
+  <div class="mt-6">&nbsp;</div> <!-- spacer for fixed nav -->
 
   <!-- Mobile-only sticky timer + instructions -->
   <div
@@ -20,11 +21,6 @@
       </template>
     </div>
 
-    <!-- Next steps instructions -->
-    <p class="py-1 px-4 text-center text-xs text-gray-600">
-      {{ instructionText }}
-    </p>
-
     <!-- Progress bar -->
     <div v-if="isSelecting" class="md:hidden h-2 w-full bg-gray-200 rounded">
       <div
@@ -35,7 +31,7 @@
   </div>
 
   <!-- No-game guard -->
-  <div v-if="!game" class="pt-20 text-center">
+  <div v-if="!game" class="mt-20 text-center">
     <p class="text-gray-600">
       No active match.
       <NuxtLink to="/games/clash" class="text-indigo-600 underline">
@@ -47,7 +43,7 @@
   <!-- Main board -->
   <section
     v-else
-    class="pt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
+    class="mt-20 pb-36 md:pb-16 max-w-5xl mx-auto flex flex-col gap-6"
   >
     <!-- Desktop header (hidden on mobile) -->
     <h2 class="hidden md:block text-xl font-bold text-center mb-2">
@@ -72,14 +68,6 @@
       </span>
     </h2>
 
-    <!-- Desktop instructions (below header) -->
-    <p
-      v-if="instructionText"
-      class="hidden md:block text-center text-sm text-gray-700"
-    >
-      {{ instructionText }}
-    </p>
-
     <!-- Progress bar -->
     <div v-if="isSelecting" class="hidden md:block h-2 w-full bg-gray-200 rounded">
       <div
@@ -96,6 +84,7 @@
       :previewPlacements="placements"
       @place="handlePlace"
       @info="showCardInfo"
+      @unplace="handleUnplace"
       :selected="selected"
       :confirmed="confirmed"
     />
@@ -116,6 +105,7 @@
     <ClashHand
       :cards="game.playerHand"
       :energy="game.playerEnergy"
+      :status="instructionText"
       :selected="selected"
       :remaining-energy="remainingEnergy"
       :disabled="!isSelecting || confirmed"
@@ -205,7 +195,7 @@ import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
 import CardInfoModal from '@/components/ClashCardInfoModal.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ title: 'gToons Clash Play', middleware: 'auth', layout: 'default' })
 
 // shared Nuxt state
 const { socket, battleState } = useClashSocket()
@@ -240,7 +230,21 @@ function startTimer(deadline) {
   }, 1000)
 }
 
+const MAX_PER_LANE = 4 // TODO: if your server exposes this, read from state instead
+
+const playerLaneCount = lane =>
+  (lane.player?.length ?? lane.playerCards?.length ?? 0)
+
+const hasOpenLane = computed(() =>
+  !!game.value?.lanes?.some(l => playerLaneCount(l) < MAX_PER_LANE)
+)
+
+const allPlayerLanesFull = computed(() =>
+  !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
+)
+
 const hasPlayable = computed(() =>
+  hasOpenLane.value &&
   game.value.playerHand.some(c => c.cost <= game.value.playerEnergy)
 )
 
@@ -276,6 +280,8 @@ const instructionText = computed(() => {
     return 'Prepare your first move – select a card and place it on a lane.'
   if (game.value.phase === 'select') {
     if (confirmed.value)        return 'Waiting for opponent…'
+    if (allPlayerLanesFull.value)
+      return 'All your lanes are full — confirm to end your turn without placing.'
     if (!selected.value)        return 'Click a card, then a lane to place it.'
     return 'Choose a lane and confirm your selection.'
   }
@@ -314,35 +320,58 @@ function wireSocket() {
 function handlePlace(laneIdx) {
   if (!isSelecting.value || confirmed.value || !selected.value) return
 
-  // try to un-place _this exact card instance_ via object identity
-  const idx = placements.value.findIndex(p => p.card === selected.value)
+  const lane = game.value?.lanes?.[laneIdx]
+  if (!lane) return
+
+  // prevent overfilling this lane, including previews this turn
+  const pendingInLane = placements.value.filter(p => p.laneIndex === laneIdx).length
+  if (playerLaneCount(lane) + pendingInLane >= MAX_PER_LANE) {
+    log.value.push('That lane is full.')
+    return
+  }
+
+  // toggle this exact card’s preview
+  const sameCard = (a, b) =>
+  !!a && !!b && (
+    a === b ||
+    (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId)
+  )
+  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
   if (idx >= 0) {
     placements.value.splice(idx, 1)
     return
   }
 
-  // otherwise push a new placement for this unique card
-  placements.value.push({
-    card:      selected.value,
-    laneIndex: laneIdx
-  })
+  placements.value.push({ card: selected.value, laneIndex: laneIdx })
+  selected.value = null
 }
+
+function handleUnplace(laneIdx) {
+   if (!isSelecting.value || confirmed.value) return
+   // remove the last-added preview in this lane (LIFO)
+   for (let i = placements.value.length - 1; i >= 0; i--) {
+     if (placements.value[i].laneIndex === laneIdx) {
+       const [removed] = placements.value.splice(i, 1)
+       // reselect the card so the player can drop it elsewhere
+       selected.value = removed.card
+       break
+     }
+   }
+ }
 
 function confirmSelections() {
   if (confirmed.value || !canConfirm.value) return
 
-  // only keep the entries that actually have a `.card`
   const good = placements.value.filter(p => p && p.card && p.laneIndex != null)
 
   const selections = good.map(p => ({
-    cardId:    p.card.id,
+    // prefer per-instance identifier
+    cardId:    p.card.userCtoonId ?? p.card.instanceId ?? p.card.id ?? p.card.ctoonId,
     laneIndex: p.laneIndex
   }))
 
   socket.emit('selectCards', { selections })
   confirmed.value = true
-
-  // clear previews if you want them to vanish immediately:
   placements.value = []
 }
 

@@ -29,7 +29,14 @@ export default defineEventHandler(async (event) => {
     config = await db.globalGameConfig.create({
       data: {
         id: 'singleton',
-        dailyPointLimit: 250
+        dailyPointLimit: 250,
+        // new fields defaults
+        dailyLoginPoints: 500,
+        dailyNewUserPoints: 1000,
+        czoneVisitPoints: 20,
+        czoneVisitMaxPerDay: 10,
+        phashDuplicateThreshold: 14,
+        dhashDuplicateThreshold: 16
       }
     })
   }

@@ -1,26 +1,38 @@
 // server/api/wishlist/users/[username].get.js
-import { PrismaClient }      from '@prisma/client'
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const username = event.context.params.username
+  const username = event.context.params?.username
   if (!username) {
     throw createError({ statusCode: 400, statusMessage: 'Missing username' })
   }
 
-  const userWithWishlist = await prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { username },
     select: {
+      points: { select: { points: true } }, // UserPoints relation
       wishlistItems: {
-        include: { ctoon: true }
+        select: {
+          id: true,
+          offeredPoints: true,
+          createdAt: true,
+          ctoon: true
+        }
       }
     }
   })
-  if (!userWithWishlist) {
+  if (!user) {
     throw createError({ statusCode: 404, statusMessage: 'User not found' })
   }
 
-  // return just the cToon objects
-  return userWithWishlist.wishlistItems.map((wi) => wi.ctoon)
+  const available = user.points?.points ?? 0
+
+  return user.wishlistItems.map(({ id, offeredPoints, createdAt, ctoon }) => ({
+    id,
+    offeredPoints,
+    createdAt,
+    hasEnough: available >= offeredPoints,
+    ctoon
+  }))
 })
