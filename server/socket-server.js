@@ -49,12 +49,24 @@ const pvpMatches = new Map();    // roomId -> { battle, recordId }
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000
+const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
+const PVP_MATCH_IDLE_MS = 15 * 60 * 1000
+const PVE_MATCH_IDLE_MS = 15 * 60 * 1000
+const MONSTER_BATTLE_IDLE_MS = 15 * 60 * 1000
+const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
 
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
 const tradeRooms   = {}
 const tradeSockets = {}
+
+const touchActivity = (obj) => {
+  if (obj) obj.lastActivity = Date.now()
+}
+
+const isIdle = (obj, now, maxMs) => (now - (obj?.lastActivity || 0)) > maxMs
 
 const ASSET_BASE =
   process.env.ASSET_BASE ||
@@ -912,7 +924,8 @@ async function startPvpMatch(roomId) {
     userSide: { [p1]: 'player', [p2]: 'ai' },
     pending:  { player: null, ai: null },
     confirmed:{ player: false, ai: false },
-    timer: null
+    timer: null,
+    lastActivity: Date.now()
   })
   pvpRooms.delete(roomId); // no longer a lobby entity
 
@@ -1245,7 +1258,8 @@ io.on('connection', socket => {
         actions: { player1: null, player2: null },
         timers: { player1: null, player2: null },
         deadlines: {},
-        disconnectTimers: { player1: null, player2: null }
+        disconnectTimers: { player1: null, player2: null },
+        lastActivity: Date.now()
       }
 
       monsterBattles.set(record.id, battle)
@@ -1275,6 +1289,7 @@ io.on('connection', socket => {
       socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
       return
     }
+    touchActivity(battle)
     const uid = userId ? sid(userId) : socket.data.userId
     const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
     if (!playerKey) {
@@ -1298,6 +1313,7 @@ io.on('connection', socket => {
       socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
       return
     }
+    touchActivity(battle)
     const uid = socket.data.userId
     const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
     if (!playerKey) {
@@ -1403,7 +1419,8 @@ io.on('connection', socket => {
       decks: {},          // set later via setPvpDeck
       ready: {},          // userId -> bool
       usernames: {},       // userId -> username
-      stakePoints: stake
+      stakePoints: stake,
+      lastActivity: Date.now()
     })
     socket.join(roomId);
     socket.data.roomId = roomId
@@ -1497,6 +1514,7 @@ io.on('connection', socket => {
       socket.emit('joinError', { message: 'Room unavailable.' });
       return;
     }
+    touchActivity(room)
     socket.join(roomId)
     socket.data.roomId = roomId
     const uid = sid(userId)
@@ -1540,6 +1558,7 @@ io.on('connection', socket => {
     const room = pvpRooms.get(roomId)
     const uid = sid(userId)
     if (!room || !room.players.includes(uid)) return
+    touchActivity(room)
 
     const deck = await db.clashDeck.findUnique({
       where: { id: deckId },
@@ -1570,6 +1589,7 @@ io.on('connection', socket => {
     const room = pvpRooms.get(roomId)
     const uid = sid(userId)
     if (!room || !room.players.includes(uid)) return
+    touchActivity(room)
     room.ready = room.ready || {}
     room.ready[uid] = !!ready
 
@@ -1582,6 +1602,7 @@ io.on('connection', socket => {
     const roomId = socket.data.roomId;
     const match  = pvpMatches.get(roomId);
     if (!match) return;
+    touchActivity(match)
 
     const uid  = socket.data.userId;
     const side = match.userSide?.[uid]; // 'player' | 'ai'
@@ -1664,7 +1685,8 @@ io.on('connection', socket => {
         aiConfirmed:     false,
         timer:           null,
         selectDeadline:  null,
-        playerUserId: userId
+        playerUserId: userId,
+        lastActivity: Date.now()
       }
 
       pveMatches.set(gameId, match)
@@ -1690,6 +1712,7 @@ io.on('connection', socket => {
       )
       return
     }
+    touchActivity(match)
     if (match.battle.state.phase !== 'select') {
       console.warn('[Server] selectCards but phase=', match.battle.state.phase)
       return
@@ -1761,11 +1784,13 @@ io.on('connection', socket => {
         spectators: new Set(),
         offers: {},
         confirmed: {},
-        finalized: {}   // track finalize-phase per user
+        finalized: {},   // track finalize-phase per user
+        lastActivity: Date.now()
       }
     }
 
     const roomData = tradeRooms[room]
+    touchActivity(roomData)
 
     if (!roomData.traderA) {
       roomData.traderA = user
@@ -1801,6 +1826,7 @@ io.on('connection', socket => {
   socket.on('become-traderB', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     if (!roomData.traderB) {
       roomData.traderB = user
@@ -1849,6 +1875,7 @@ io.on('connection', socket => {
   socket.on('add-trade-offer', async ({ room, user, ctoons }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.offers[user] = ctoons
     roomData.confirmed[user] = false
@@ -1879,6 +1906,7 @@ io.on('connection', socket => {
   socket.on('remove-all-trade-offer', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.offers[user] = []
     roomData.confirmed[user] = false
@@ -1909,6 +1937,7 @@ io.on('connection', socket => {
   socket.on('confirm-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.confirmed[user] = true
 
@@ -1938,6 +1967,7 @@ io.on('connection', socket => {
   socket.on('cancel-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
   
     // Mark this user as un-confirmed
     roomData.confirmed   = {}
@@ -1972,6 +2002,7 @@ io.on('connection', socket => {
   socket.on('finalize-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
     roomData.finalized[user] = true
 
     const a = roomData.traderA, b = roomData.traderB
@@ -2052,6 +2083,8 @@ io.on('connection', socket => {
 
 
   socket.on('trade-chat', ({ room, user, message }) => {
+    const roomData = tradeRooms[room]
+    if (roomData) touchActivity(roomData)
     io.to(room).emit('trade-chat', { user, message })
   })
 
@@ -2352,6 +2385,98 @@ io.on('connection', socket => {
   })
 })
 
+async function sweepStaleState() {
+  const now = Date.now()
+  const activeSocketIds = new Set(io.sockets.sockets.keys())
+
+  for (const socketId of Object.keys(tradeSockets)) {
+    if (!activeSocketIds.has(socketId)) delete tradeSockets[socketId]
+  }
+
+  for (const [zone, socketSet] of Object.entries(zoneSockets)) {
+    for (const socketId of Array.from(socketSet)) {
+      if (!activeSocketIds.has(socketId)) socketSet.delete(socketId)
+    }
+    if (socketSet.size === 0) {
+      delete zoneSockets[zone]
+      delete zoneVisitors[zone]
+    } else {
+      zoneVisitors[zone] = socketSet.size
+    }
+  }
+
+  for (const [roomId, room] of pvpRooms.entries()) {
+    if (roomSize(io, roomId) === 0 && isIdle(room, now, PVP_ROOM_IDLE_MS)) {
+      pvpRooms.delete(roomId)
+    }
+  }
+
+  for (const [roomId, match] of pvpMatches.entries()) {
+    if (roomSize(io, roomId) !== 0) continue
+    if (!isIdle(match, now, PVP_MATCH_IDLE_MS)) continue
+    if (match.timer) clearInterval(match.timer)
+    try {
+      await db.clashGame.update({
+        where: { id: match.recordId },
+        data: { endedAt: new Date(), outcome: 'incomplete', winnerUserId: null }
+      })
+    } catch {}
+    pvpMatches.delete(roomId)
+  }
+
+  for (const [gameId, match] of pveMatches.entries()) {
+    if (roomSize(io, gameId) !== 0) continue
+    if (!isIdle(match, now, PVE_MATCH_IDLE_MS)) continue
+    const finished = match.battle?.state?.phase === 'gameEnd' && match.battle?.state?.result
+    try {
+      if (finished) {
+        await endMatch(io, match, match.battle.state.result)
+      } else {
+        await endMatch(io, match, {
+          winner: 'incomplete',
+          playerLanesWon: 0,
+          aiLanesWon: 0,
+          reason: 'inactive'
+        })
+      }
+    } catch {
+      if (match.timer) clearInterval(match.timer)
+      pveMatches.delete(gameId)
+    }
+  }
+
+  for (const [battleId, battle] of monsterBattles.entries()) {
+    if (roomSize(io, battleId) !== 0) continue
+    if (!isIdle(battle, now, MONSTER_BATTLE_IDLE_MS)) continue
+    if (battle.state?.status === 'active') {
+      try {
+        await db.monsterBattle.update({
+          where: { id: battle.recordId },
+          data: {
+            endedAt: new Date(),
+            endReason: 'DISCONNECT',
+            winnerUserId: null,
+            winnerIsAi: false
+          }
+        })
+      } catch {}
+    }
+    cleanupMonsterBattle(battle)
+  }
+
+  for (const [roomName, roomData] of Object.entries(tradeRooms)) {
+    if (roomSize(io, roomName) !== 0) continue
+    if (!isIdle(roomData, now, TRADE_ROOM_IDLE_MS)) continue
+    delete tradeRooms[roomName]
+  }
+}
+
+setInterval(() => {
+  sweepStaleState().catch((err) => {
+    console.error('[socket] stale sweep failed:', err)
+  })
+}, SWEEP_INTERVAL_MS)
+
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
 // in your socket‐server.js (or wherever you close auctions):
@@ -2377,7 +2502,7 @@ setInterval(async () => {
       }
 
       // 1) fetch all bids placed before auction end; highest first, then earliest
-      const allBids = await db.bid.findMany({
+      const winningBid = await db.bid.findFirst({
         where: {
           auctionId: id,
           createdAt: { lte: auc.endAt }
@@ -2385,11 +2510,9 @@ setInterval(async () => {
         orderBy: [
           { amount: 'desc' },
           { createdAt: 'asc' }
-        ]
+        ],
+        select: { userId: true, amount: true }
       })
-
-      // 2) winner is the highest eligible bid (before end)
-      const winningBid = allBids[0] || null
 
       // 3) transaction
       await db.$transaction(async tx => {

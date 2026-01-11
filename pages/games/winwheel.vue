@@ -29,7 +29,7 @@
         </div>
 
         <!-- Wheel skeleton (same container as real wheel) -->
-        <div class="absolute -bottom-24 w-full overflow-hidden h-[70%]">
+        <div class="absolute -bottom-24 w-full overflow-visible h-[70%] lg:px-12 xl:px-[15rem] xl:-bottom-20">
           <div class="w-full flex justify-center">
             <div class="animate-pulse w-[70%] max-w-md aspect-square bg-gray-200 rounded-full"></div>
           </div>
@@ -78,8 +78,8 @@
           </div>
         </div>
 
-        <!-- Wheel Container: only top half visible -->
-        <div class="absolute -bottom-24 w-full overflow-hidden h-[70%]">
+        <!-- Wheel Container: allow wheel to overflow the container without scrolling -->
+        <div class="absolute -bottom-24 w-full overflow-visible h-[70%] lg:px-12 xl:px-[15rem] xl:-bottom-20">
           <img
             ref="wheel"
             :src="wheelSrc"

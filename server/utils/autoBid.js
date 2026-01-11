@@ -7,7 +7,6 @@ import { useRuntimeConfig } from '#imports'
  * The util extends to NOW + ANTI_SNIPE_MS when within the window.
  */
 export const ANTI_SNIPE_MS = 60_000
-const outbids = []  // userIds who lost the lead
 
 export function incrementFor(v) {
   if (v < 1000) return 10
@@ -47,6 +46,7 @@ function maybeExtend(endAt, antiSnipeMs = ANTI_SNIPE_MS) {
  */
 export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   const antiSnipeMs = opts.antiSnipeMs ?? ANTI_SNIPE_MS
+  const outbids = []  // userIds who lost the lead
 
   // Load auction fresh inside the transaction
   let auc = await tx.auction.findUnique({
