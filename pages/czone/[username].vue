@@ -153,7 +153,13 @@
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openWishlist"
         >
-          View Wishlist
+          View Wishlist ({{ wishlistCountText }})
+        </button>
+        <button
+          class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+          @click="openTradeList"
+        >
+          View Trade List ({{ tradeListCountText }})
         </button>
         <button
           v-if="user?.id !== ownerId"
@@ -390,7 +396,13 @@
                 class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
                 @click="openWishlist"
               >
-                View Wishlist
+                View Wishlist ({{ wishlistCountText }})
+              </button>
+              <button
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+                @click="openTradeList"
+              >
+                View Trade List ({{ tradeListCountText }})
               </button>
               <button
                 v-if="user?.id !== ownerId"
@@ -461,6 +473,46 @@
             >
               Trade for {{ item.offeredPoints }} points
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+  <!-- Trade List modal -->
+  <transition name="fade">
+    <div
+      v-if="tradeListModalVisible"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeTradeList"
+        >✕</button>
+        <h2 class="text-xl font-semibold mb-4">{{ ownerName }}’s Trade List</h2>
+
+        <div v-if="isLoadingTradeList" class="text-center py-10">
+          Loading…
+        </div>
+        <div v-else-if="tradeListCtoons.length === 0" class="text-center py-10">
+          No cToons on their trade list.
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+          <div
+            v-for="item in tradeListCtoons"
+            :key="item.userCtoonId"
+            class="flex flex-col items-center border rounded p-2"
+          >
+            <CtoonAsset
+              :src="item.assetPath"
+              :alt="item.name"
+              :name="item.name"
+              :ctoon-id="item.ctoonId"
+              :user-ctoon-id="item.userCtoonId"
+              image-class="w-20 h-20 object-contain mb-2"
+            />
+            <p class="text-sm text-center">{{ item.name }}</p>
+            <p class="text-xs text-gray-600 mt-1">Mint #{{ item.mintNumber ?? 'N/A' }}</p>
           </div>
         </div>
       </div>
@@ -897,11 +949,34 @@ const zones = ref([
 const wishlistModalVisible  = ref(false)
 const wishlistCtoons        = ref([])
 const isLoadingWishlist     = ref(false)
+const hasLoadedWishlist     = ref(false)
+const tradeListModalVisible = ref(false)
+const tradeListCtoons       = ref([])
+const isLoadingTradeList    = ref(false)
+const hasLoadedTradeList    = ref(false)
 
 async function loadUserWishlist() {
   isLoadingWishlist.value = true
-  wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
-  isLoadingWishlist.value = false
+  try {
+    wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
+  } catch (err) {
+    wishlistCtoons.value = []
+  } finally {
+    isLoadingWishlist.value = false
+    hasLoadedWishlist.value = true
+  }
+}
+
+async function loadUserTradeList() {
+  isLoadingTradeList.value = true
+  try {
+    tradeListCtoons.value = await $fetch(`/api/trade-list/users/${username.value}`)
+  } catch (err) {
+    tradeListCtoons.value = []
+  } finally {
+    isLoadingTradeList.value = false
+    hasLoadedTradeList.value = true
+  }
 }
 
 function openWishlist() {
@@ -911,6 +986,26 @@ function openWishlist() {
 function closeWishlist() {
   wishlistModalVisible.value = false
 }
+
+const wishlistCountText = computed(() => {
+  if (!hasLoadedWishlist.value && isLoadingWishlist.value) return '...'
+  if (!hasLoadedWishlist.value) return '0'
+  return String(wishlistCtoons.value.length)
+})
+
+function openTradeList() {
+  loadUserTradeList()
+  tradeListModalVisible.value = true
+}
+function closeTradeList() {
+  tradeListModalVisible.value = false
+}
+
+const tradeListCountText = computed(() => {
+  if (!hasLoadedTradeList.value && isLoadingTradeList.value) return '...'
+  if (!hasLoadedTradeList.value) return '0'
+  return String(tradeListCtoons.value.length)
+})
 
 // Which zone index is currently displayed (0, 1, or 2)
 const currentZoneIndex = ref(0)
@@ -1088,6 +1183,8 @@ onMounted(async () => {
   await fetchSelf({ force: true })
 
   await loadCzone({ showLoading: true, awardVisit: true })
+  loadUserWishlist()
+  loadUserTradeList()
 
   // socket listeners
   socket.emit('join-zone', { zone: username.value })
