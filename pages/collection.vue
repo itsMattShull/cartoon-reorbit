@@ -274,12 +274,18 @@
                     First Edition
                   </p>
                 </div>
-                <div class="mt-auto flex space-x-2">
+                <div class="mt-auto flex flex-wrap gap-2 whitespace-nowrap">
                   <AddToAuction
+                    class="flex-1 min-w-[12rem]"
                     :userCtoon="uc"
                     :isOwner="uc.userId === user.id"
                     :hasActiveAuction="uc.auctions.length > 0"
                     @auctionCreated="loadMoreUser"
+                  />
+                  <AddToTradeList
+                    class="flex-1 min-w-[12rem]"
+                    :user-ctoon-id="uc.id"
+                    :isOwner="uc.userId === user.id"
                   />
                 </div>
               </div>
@@ -594,7 +600,7 @@
   <transition name="slide-panel">
     <div
       v-if="ownersPanelVisible"
-      class="fixed top-0 right-0 h-full w-auto min-w-[450px] max-w-[85%] bg-white shadow-xl z-50 p-12 overflow-y-auto"
+      class="fixed top-0 right-0 h-full w-full max-w-full bg-white shadow-xl z-50 p-12 overflow-y-auto sm:w-auto sm:min-w-[560px] sm:max-w-[92%]"
     >
       <button
         class="absolute top-3 right-3 text-gray-500 hover:text-black"
@@ -604,19 +610,64 @@
         Owners of {{ currentOwnersCtoon?.name }}
       </h2>
       <div v-if="ownersLoading" class="text-center py-6">Loading…</div>
-      <ul v-else class="space-y-2">
+      <ul v-else class="space-y-3">
         <li
           v-for="owner in sortedOwners"
           :key="owner.userId + '-' + owner.mintNumber"
-          class="flex justify-between max-w-[250px] mx-auto"
+          class="w-full max-w-[420px] mx-auto"
         >
-          <span v-if="!owner.isHolidayItem" class="text-sm text-gray-600">Mint #{{ owner.mintNumber }}</span>
-          <NuxtLink
-            :to="`/czone/${owner.username}`"
-            class="text-indigo-600 hover:underline"
-          >
-            <span>{{ owner.username }}</span>
-          </NuxtLink>
+          <!-- mobile: stacked rows -->
+          <div class="flex flex-col gap-2 sm:hidden">
+            <div
+              v-if="!owner.isHolidayItem || owner.isTradeListItem"
+              class="flex items-center justify-between text-sm text-gray-600"
+            >
+              <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber }}</span>
+              <span v-else>&nbsp;</span>
+              <NuxtLink
+                v-if="owner.isTradeListItem"
+                :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+                class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:underline"
+              >
+                Tradeable
+              </NuxtLink>
+            </div>
+            <NuxtLink
+              :to="`/czone/${owner.username}`"
+              class="text-indigo-600 hover:underline text-sm font-semibold"
+            >
+              <span>{{ owner.username }}</span>
+            </NuxtLink>
+            <div
+              v-if="!owner.isHolidayItem || owner.isTradeListItem"
+              class="h-px w-full bg-gray-200"
+            ></div>
+          </div>
+
+          <!-- desktop: single row columns -->
+          <div class="hidden sm:grid sm:grid-cols-[auto,1fr,auto] sm:items-center sm:gap-4">
+            <span
+              v-if="!owner.isHolidayItem"
+              class="text-sm text-gray-600 whitespace-nowrap"
+            >
+              Mint #{{ owner.mintNumber }}
+            </span>
+            <span v-else class="text-sm text-gray-600">&nbsp;</span>
+            <NuxtLink
+              :to="`/czone/${owner.username}`"
+              class="text-indigo-600 hover:underline truncate"
+            >
+              <span>{{ owner.username }}</span>
+            </NuxtLink>
+            <NuxtLink
+              v-if="owner.isTradeListItem"
+              :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+              class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 whitespace-nowrap hover:underline"
+            >
+              Tradeable
+            </NuxtLink>
+            <span v-else>&nbsp;</span>
+          </div>
         </li>
       </ul>
     </div>
@@ -629,6 +680,7 @@ import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import AddToAuction from '@/components/AddToAuction.vue'
+import AddToTradeList from '@/components/AddToTradeList.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 
 definePageMeta({ title: 'Collection', middleware: 'auth', layout: 'default' })

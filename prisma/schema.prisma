@@ -175,6 +175,7 @@ model UserCtoon {
   ownerLogs                 CtoonOwnerLog[]
   holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
   auctionOnlyListings       AuctionOnly[]
+  tradeListItems            UserTradeListItem[]
 
   // Ensure only one of each mint number exists per cToon
   @@unique([ctoonId, mintNumber])
@@ -237,6 +238,7 @@ model User {
   ips                      UserIP[]
   packs                    UserPack[]
   wishlistItems            WishlistItem[]
+  tradeListItems           UserTradeListItem[]
   tradeOffersInitiated     TradeOffer[]                @relation("OfferInitiator")
   tradeOffersReceived      TradeOffer[]                @relation("OfferRecipient")
   auctionsAsHighestBid     Auction[]                   @relation("HighestBidder")
@@ -599,6 +601,20 @@ model WishlistItem {
   ctoon Ctoon @relation(fields: [ctoonId], references: [id])
 
   @@unique([userId, ctoonId])
+}
+
+model UserTradeListItem {
+  id          String   @id @default(uuid())
+  userId      String
+  userCtoonId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
+
+  @@unique([userId, userCtoonId])
+  @@index([userId])
+  @@index([userCtoonId])
 }
 
 /// A pending trade between two users

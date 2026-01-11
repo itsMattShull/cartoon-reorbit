@@ -43,7 +43,7 @@
             <div class="text-xs uppercase text-gray-300">Release Date</div>
             <div class="font-semibold">{{ formatDate(ctoon.releaseDate) }}</div>
           </div>
-          <div class="rounded bg-gray-700/60 p-3">
+          <div class="rounded bg-gray-700/60 p-3" v-if="ctoon.rarity !== 'Auction Only' && ctoon.rarity !== 'Code Only' && ctoon.rarity !== 'Prize Only'">
             <div class="text-xs uppercase text-gray-300">cMart Value</div>
             <div class="font-semibold">{{ formatValue(ctoon.price, ' pts') }}</div>
           </div>

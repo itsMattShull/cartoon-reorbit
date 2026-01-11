@@ -326,6 +326,11 @@ const route = useRoute()
 const { user, fetchSelf } = useAuth()
 
 const currentStep = ref(1) // 1 or 2
+const preselectUserCtoonId = computed(() => {
+  const val = route.query.userCtoonId
+  if (!val) return null
+  return Array.isArray(val) ? String(val[0]) : String(val)
+})
 
 // ────────────────────────────────────────────────────────────────────────────────
 // User search w/ autocomplete (3+ chars, debounced, keyboard nav)
@@ -588,6 +593,7 @@ async function bootstrapCollections() {
     ])
     otherCtoons.value = Array.isArray(other) ? other : []
     selfCtoons.value = Array.isArray(self) ? self : []
+    applyPreselectedTargetCtoon()
   } finally {
     loading.other = false
     loading.self = false
@@ -601,6 +607,16 @@ const selectedTargetCtoons = ref([])
 const selectedInitiatorCtoons = ref([])
 const selectedTargetCtoonsMap = computed(() => new Set(selectedTargetCtoons.value.map(c => c.id)))
 const selectedInitiatorCtoonsMap = computed(() => new Set(selectedInitiatorCtoons.value.map(c => c.id)))
+
+function applyPreselectedTargetCtoon() {
+  const preselectId = preselectUserCtoonId.value
+  if (!preselectId) return
+  const match = otherCtoons.value.find(c => c.id === preselectId)
+  if (!match) return
+  if (!selectedTargetCtoonsMap.value.has(match.id)) {
+    selectedTargetCtoons.value.push(match)
+  }
+}
 
 function toggleTargetCtoon(c) {
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)

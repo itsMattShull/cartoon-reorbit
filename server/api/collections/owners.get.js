@@ -25,9 +25,11 @@ export default defineEventHandler(async (event) => {
       prisma.userCtoon.findMany({
         where: { ctoonId: String(cToonId) },
         select: {
+          id: true,
           userId: true,
           mintNumber: true,
-          user: { select: { username: true } }
+          user: { select: { username: true } },
+          tradeListItems: { select: { userId: true } }
         },
         orderBy: { mintNumber: 'asc' }
       }),
@@ -41,9 +43,11 @@ export default defineEventHandler(async (event) => {
     // 4) Flatten and return
     return owners.map(o => ({
       userId:     o.userId,
+      userCtoonId: o.id,
       username:   o.user.username,
       mintNumber: o.mintNumber,
-      isHolidayItem
+      isHolidayItem,
+      isTradeListItem: o.tradeListItems.some(t => t.userId === o.userId)
     }))
   } catch (err) {
     console.error('Error fetching owners:', err)

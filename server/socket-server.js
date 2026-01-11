@@ -2027,6 +2027,9 @@ io.on('connection', socket => {
             data:   { userId: bId },
             select: { id: true, ctoonId: true, mintNumber: true }
           })
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId: c.id, userId: { not: bId } }
+          })
           logs.push({ userId: bId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
 
@@ -2035,6 +2038,9 @@ io.on('connection', socket => {
             where:  { id: c.id },
             data:   { userId: aId },
             select: { id: true, ctoonId: true, mintNumber: true }
+          })
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId: c.id, userId: { not: aId } }
           })
           logs.push({ userId: aId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
@@ -2533,6 +2539,10 @@ setInterval(async () => {
             where:  { id: userCtoonId },
             data:   { userId: winningBid.userId, isTradeable: true },
             select: { id: true, ctoonId: true, mintNumber: true }
+          })
+
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId, userId: { not: winningBid.userId } }
           })
           await tx.ctoonOwnerLog.create({
             data: {
