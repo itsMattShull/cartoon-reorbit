@@ -19,9 +19,12 @@ export default defineEventHandler(async (event) => {
   const take = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50))
   const skip = (pageNum - 1) * take
 
+  const where = { status: 'CLOSED' }
+
   const [total, auctions] = await Promise.all([
-    prisma.auction.count(),
+    prisma.auction.count({ where }),
     prisma.auction.findMany({
+      where,
       orderBy: { endAt: 'desc' },
       skip,
       take,
