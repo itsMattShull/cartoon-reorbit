@@ -1,7 +1,7 @@
 // server/utils/achievements.js
 import { prisma } from '../../server/prisma.js'
 import { mintQueue } from '../../server/utils/queues.js'
-import { announceAchievement } from '../../server/utils/discord.js'
+import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 
 function toIntOrNull(v) {
   const n = Number(v)
@@ -87,6 +87,14 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       }
     })
     if (trades < ach.tradesAcceptedGte) return false
+  }
+
+  // Accepted cToon suggestions
+  if (ach.ctoonSuggestionsAcceptedGte != null) {
+    const accepted = await db.ctoonUserSuggestion.count({
+      where: { userId, status: 'ACCEPTED' }
+    })
+    if (accepted < ach.ctoonSuggestionsAcceptedGte) return false
   }
 
   // Cumulative active days based on activity logs
@@ -216,9 +224,16 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
   // Non-transactional side-effect: announce in Discord channel when enabled.
   // console.log('[achievements] notifiyDiscord', achievement?.notifyDiscord)
+  let assignedRoleName = null
+  if (achievement?.discordRoleName) {
+    try {
+      assignedRoleName = await assignDiscordRoleByName(db, userId, achievement.discordRoleName)
+    } catch {}
+  }
+
   if (achievement?.notifyDiscord) {
     try {
-      await announceAchievement(db, userId, achievement.title, awardSummary)
+      await announceAchievement(db, userId, achievement.title, awardSummary, assignedRoleName)
     } catch {}
   }
 }

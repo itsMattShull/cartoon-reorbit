@@ -2,7 +2,12 @@
   <!-- Global toast notification -->
   <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
 
-  <button @click="openModal" :disabled="disabled" class="btn">
+  <button
+    v-bind="buttonAttrs"
+    @click="openModal"
+    :disabled="disabled"
+    :class="buttonClass"
+  >
     Add to Auction
   </button>
 
@@ -111,8 +116,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, useAttrs } from 'vue'
 import Toast from '@/components/Toast.vue'
+
+defineOptions({ inheritAttrs: false })
 
 const props = defineProps({
   userCtoon: { type: Object, required: true },
@@ -120,6 +127,13 @@ const props = defineProps({
   hasActiveAuction: { type: Boolean, required: true }
 })
 const emit = defineEmits(['auctionCreated'])
+
+const attrs = useAttrs()
+const buttonAttrs = computed(() => {
+  const { class: _class, ...rest } = attrs
+  return rest
+})
+const buttonClass = computed(() => ['btn', attrs.class])
 
 const showModal    = ref(false)
 const initialBet   = ref(props.userCtoon.price)

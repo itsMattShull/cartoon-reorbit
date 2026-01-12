@@ -103,6 +103,56 @@
           </NuxtLink>
         </div>
 
+        <div class="pt-2 border-t border-[color:var(--reorbit-border)]">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2 text-left text-sm font-semibold"
+            @click="toggle('games')"
+          >
+            <span>Games</span>
+            <span class="text-slate-400">{{ open.games || q ? '−' : '+' }}</span>
+          </button>
+
+          <div v-show="open.games || q">
+            <NuxtLink
+              v-for="item in filteredGames"
+              :key="item.to"
+              :to="item.to"
+              @click="close"
+              class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)]"
+              :class="isActive(item.to)
+                ? 'bg-[var(--reorbit-cyan-transparent)] text-[var(--reorbit-blue)] font-semibold'
+                : ''"
+            >
+              <span class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-[color:var(--reorbit-border)]">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2 text-left text-sm font-semibold"
+            @click="toggle('clash')"
+          >
+            <span>gToons Clash</span>
+            <span class="text-slate-400">{{ open.clash || q ? '−' : '+' }}</span>
+          </button>
+
+          <div v-show="open.clash || q">
+            <NuxtLink
+              v-for="item in filteredClash"
+              :key="item.to"
+              :to="item.to"
+              @click="close"
+              class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)]"
+              :class="isActive(item.to)
+                ? 'bg-[var(--reorbit-cyan-transparent)] text-[var(--reorbit-blue)] font-semibold'
+                : ''"
+            >
+              <span class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+          </div>
+        </div>
+
         <!-- admin groups -->
         <template v-if="user?.isAdmin">
           <div
@@ -193,18 +243,40 @@ const mainLinks = [
   { label: 'Live Trading', to: '/live-trading' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
+  { label: 'Settings', to: '/settings' }
+]
+
+const gamesLinks = [
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
   { label: 'Lottery', to: '/lottery' },
-  { label: 'Monsters', to: '/monsters' },
-  { label: 'gToons Clash', to: '/games/clash/rooms' }, 
-  { label: 'Settings', to: '/settings' }
+  { label: 'Monsters', to: '/monsters' }
+]
+
+const clashLinks = [
+  { label: 'Play vs AI', to: '/games/clash' },
+  { label: 'Play vs Others', to: '/games/clash/rooms' },
+  { label: 'Manage Decks', to: '/games/clash/decks' },
+  { label: 'Tournaments', to: '/games/clash/tournaments' },
+  { label: 'Leaderboards', to: '/games/clash/leaderboard' }
 ]
 
 const filteredMain = computed(() =>
   !q.value
     ? mainLinks
     : mainLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
+)
+
+const filteredGames = computed(() =>
+  !q.value
+    ? gamesLinks
+    : gamesLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
+)
+
+const filteredClash = computed(() =>
+  !q.value
+    ? clashLinks
+    : clashLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
 )
 
 /* admin grouped */
@@ -219,7 +291,9 @@ const adminGroups = [
       { label: 'Global Settings', to: '/admin/global-settings' },
       { label: 'Manage Ads', to: '/admin/manage-ads' },
       { label: 'Manage Announcements', to: '/admin/announcements' },
-      { label: 'Admin Changes', to: '/admin/admin-changes' }
+      { label: 'Admin Changes', to: '/admin/admin-changes' },
+      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
+      { label: 'Initiate Trade', to: '/admin/initiate-trade' },
     ]
   },
       {
@@ -227,15 +301,15 @@ const adminGroups = [
         title: 'Admin — Content',
         items: [
           { label: 'Manage cToons', to: '/admin/ctoons' },
-          { label: 'Initiate Trade', to: '/admin/initiate-trade' },
           { label: 'Manage Packs', to: '/admin/packs' },
           { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
           { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
           { label: 'Manage Codes', to: '/admin/codes' },
           { label: 'Manage Monsters', to: '/admin/manage-monster' },
-          { label: 'Manage Lotto', to: '/admin/manage-lotto' },
-          { label: 'Manage Games', to: '/admin/games' },
-          { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
+      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
+      { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
+      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
           { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
           { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
       { label: 'Manage Achievements', to: '/admin/achievements' }
@@ -264,6 +338,7 @@ const adminGroups = [
 /* accordion state */
 const open = ref({
   'admin-core': false,
+  clash: false,
   content: false,
   games: false,
   logs: false,

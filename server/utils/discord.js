@@ -11,6 +11,92 @@ function getAnnouncementsBotToken() {
   return process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
 }
 
+const DISCORD_API_BASE = 'https://discord.com/api/v10'
+
+function getBotAuthHeader() {
+  const token = process.env.BOT_TOKEN
+  if (!token) return null
+  return token.startsWith('Bot ') ? token : `Bot ${token}`
+}
+
+function normalizeRoleName(name) {
+  return typeof name === 'string' ? name.trim() : ''
+}
+
+async function fetchGuildRoles() {
+  const authHeader = getBotAuthHeader()
+  const guildId = process.env.DISCORD_GUILD_ID
+  if (!authHeader || !guildId) return []
+  try {
+    const res = await fetch(`${DISCORD_API_BASE}/guilds/${guildId}/roles`, {
+      headers: { Authorization: authHeader }
+    })
+    if (!res.ok) return []
+    const roles = await res.json()
+    return Array.isArray(roles) ? roles : []
+  } catch {
+    return []
+  }
+}
+
+async function createGuildRole(roleName) {
+  const authHeader = getBotAuthHeader()
+  const guildId = process.env.DISCORD_GUILD_ID
+  if (!authHeader || !guildId) return null
+  try {
+    const res = await fetch(`${DISCORD_API_BASE}/guilds/${guildId}/roles`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: roleName,
+        permissions: '0',
+        mentionable: false,
+        hoist: false
+      })
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+async function ensureGuildRoleByName(roleName) {
+  const name = normalizeRoleName(roleName)
+  if (!name) return null
+  const roles = await fetchGuildRoles()
+  const existing = roles.find(r => normalizeRoleName(r?.name) === name)
+  if (existing?.id) return existing
+  return await createGuildRole(name)
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+async function addRoleToMember(discordUserId, roleId) {
+  const authHeader = getBotAuthHeader()
+  const guildId = process.env.DISCORD_GUILD_ID
+  if (!discordUserId || !roleId || !authHeader || !guildId) return false
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(
+      `${DISCORD_API_BASE}/guilds/${guildId}/members/${discordUserId}/roles/${roleId}`,
+      { method: 'PUT', headers: { Authorization: authHeader } }
+    )
+    if (res.status === 204) return true
+    if (res.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      continue
+    }
+    return false
+  }
+  return false
+}
+
 async function openDmChannel(discordId) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN || !discordId) return null
@@ -50,6 +136,25 @@ export async function sendDiscordDMByDiscordId(discordId, content) {
   } catch {
     return false
   }
+}
+
+export async function assignDiscordRoleByName(prisma, userId, roleName) {
+  const name = normalizeRoleName(roleName)
+  if (!name) return null
+  if (!userId) return null
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { discordId: true, inGuild: true }
+  })
+  if (!user?.discordId) return null
+  if (user.inGuild === false) return null
+
+  const role = await ensureGuildRoleByName(name)
+  if (!role?.id) return null
+
+  const ok = await addRoleToMember(user.discordId, role.id)
+  return ok ? role.name : null
 }
 
 /**
@@ -196,7 +301,7 @@ function formatList(items) {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
 }
 
-export async function announceAchievement(prisma, userId, achievementTitle, rewardSummary = null) {
+export async function announceAchievement(prisma, userId, achievementTitle, rewardSummary = null, roleName = null) {
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true } })
     if (!user?.discordId) return
@@ -231,6 +336,10 @@ export async function announceAchievement(prisma, userId, achievementTitle, rewa
       if (parts.length) {
         msg += ` You received ${formatList(parts)}.`
       }
+    }
+    const trimmedRole = normalizeRoleName(roleName)
+    if (trimmedRole) {
+      msg += ` You also received the ${trimmedRole} role.`
     }
     await sendGuildChannelMessageById(channelId, msg, botToken)
   } catch {

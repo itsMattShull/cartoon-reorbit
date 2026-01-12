@@ -202,6 +202,10 @@ export default defineEventHandler(async (event) => {
           data: { userId: officialId, isTradeable: false }
         })
 
+        await tx.userTradeListItem.deleteMany({
+          where: { userCtoonId: row.id, userId: { not: officialId } }
+        })
+
         await tx.ctoonOwnerLog.create({
           data: { userId: officialId, userCtoonId: row.id, ctoonId: row.ctoon?.id ?? null, mintNumber: row.mintNumber ?? null }
         })

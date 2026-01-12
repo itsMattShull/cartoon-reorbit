@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
 import { achievementsQueue } from '../../server/utils/queues.js'
+import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -1071,6 +1072,14 @@ async function createDailyFeaturedAuction() {
   }
 }
 
+async function runTournamentCron() {
+  try {
+    await runTournamentScheduler(prisma)
+  } catch (e) {
+    // ignore in cron context
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Kickoffs
 await syncGuildMembers()
@@ -1120,3 +1129,6 @@ async function enqueueAchievementsDaily() {
 
 await enqueueAchievementsDaily()
 cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
+
+await runTournamentCron()
+cron.schedule('*/1 * * * *', runTournamentCron)

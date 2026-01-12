@@ -34,9 +34,11 @@ export default defineEventHandler(async (event) => {
     auctionsWonGte: a.auctionsWonGte,
     auctionsCreatedGte: a.auctionsCreatedGte,
     tradesAcceptedGte: a.tradesAcceptedGte,
+    ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte,
     cumulativeActiveDaysGte: a.cumulativeActiveDaysGte,
     setsRequired: a.setsRequired || [],
     userCreatedBefore: a.userCreatedBefore,
+    discordRoleName: a.discordRoleName,
     rewards: a.rewards?.[0] ? {
       points: a.rewards[0].points || 0,
       ctoons: (a.rewards[0].ctoons || []).map(rc => ({ ctoonId: rc.ctoonId, quantity: rc.quantity, name: rc.ctoon?.name || '' })),

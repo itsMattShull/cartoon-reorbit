@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
     description = ach.description,
     isActive = ach.isActive,
     notifyDiscord = ach.notifyDiscord,
+    discordRoleName = ach.discordRoleName,
     criteria = {},
     rewards = {}
   } = payload || {}
@@ -76,6 +77,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Update core fields
+  const roleName = typeof discordRoleName === 'string' ? discordRoleName.trim() : ''
   const updated = await db.achievement.update({
     where: { id },
     data: {
@@ -84,12 +86,14 @@ export default defineEventHandler(async (event) => {
       imagePath,
       isActive: !!isActive,
       notifyDiscord: !!notifyDiscord,
+      discordRoleName: roleName || null,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
       auctionsWonGte:  criteria?.auctionsWonGte  ?? null,
       auctionsCreatedGte: criteria?.auctionsCreatedGte ?? null,
       tradesAcceptedGte: criteria?.tradesAcceptedGte ?? null,
+      ctoonSuggestionsAcceptedGte: criteria?.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
