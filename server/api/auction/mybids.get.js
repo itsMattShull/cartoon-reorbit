@@ -61,6 +61,17 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  const ctoonIds = auctions
+    .map(a => a.userCtoon?.ctoonId)
+    .filter(Boolean)
+  const owned = ctoonIds.length
+    ? await prisma.userCtoon.findMany({
+      where: { userId, ctoonId: { in: ctoonIds } },
+      select: { ctoonId: true }
+    })
+    : []
+  const ownedSet = new Set(owned.map(o => o.ctoonId))
+
   const now = new Date()
 
   // 7) Shape response items
@@ -78,8 +89,14 @@ export default defineEventHandler(async (event) => {
       userCtoonId: a.userCtoon?.id ?? null,
       ctoonId: a.userCtoon?.ctoonId ?? null,
       name: a.userCtoon?.ctoon?.name ?? 'Unknown',
+      series: a.userCtoon?.ctoon?.series ?? null,
+      rarity: a.userCtoon?.ctoon?.rarity ?? null,
+      characters: a.userCtoon?.ctoon?.characters || [],
       assetPath: a.userCtoon?.ctoon?.assetPath ?? '',
+      mintNumber: a.userCtoon?.mintNumber ?? null,
       endAt: endAtISO,
+      isFeatured: !!a.isFeatured,
+      isOwned: ownedSet.has(a.userCtoon?.ctoonId),
       myBid,
       highestBid,
       bidCount,

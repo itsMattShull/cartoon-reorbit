@@ -46,6 +46,10 @@
                 <input type="checkbox" v-model="form.notifyDiscord" id="notifyDiscord" />
                 <label for="notifyDiscord">Announce in Discord</label>
               </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium">Discord Role Name (optional)</label>
+                <input v-model="form.discordRoleName" class="w-full border rounded px-2 py-1" placeholder="Role name to grant on achievement" />
+              </div>
             </div>
 
             <h3 class="text-lg font-semibold mt-6">Criteria</h3>
@@ -73,6 +77,10 @@
               <div>
                 <label class="block text-sm">Accepted Trades ≥</label>
                 <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-sm">Accepted cToon Suggestions ≥</label>
+                <input v-model.number="form.criteria.ctoonSuggestionsAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
               </div>
               <div>
                 <label class="block text-sm">Cumulative Active Days ≥</label>
@@ -229,7 +237,7 @@ const bgSelection = ref([])
 const ctoonSelection = ref({ name: '', qty: 1 })
 
 const emptyForm = () => ({
-  title: '', slug: '', description: '', isActive: true, notifyDiscord: false,
+  title: '', slug: '', description: '', isActive: true, notifyDiscord: false, discordRoleName: '',
   criteria: {
     pointsGte: null,
     totalCtoonsGte: null,
@@ -237,6 +245,7 @@ const emptyForm = () => ({
     auctionsWonGte: null,
     auctionsCreatedGte: null,
     tradesAcceptedGte: null,
+    ctoonSuggestionsAcceptedGte: null,
     cumulativeActiveDaysGte: null,
     setsRequired: [],
     userCreatedBefore: null
@@ -358,6 +367,7 @@ function startEdit(a) {
     description: a.description || '',
     isActive: !!a.isActive,
     notifyDiscord: !!a.notifyDiscord,
+    discordRoleName: a.discordRoleName || '',
     criteria: {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,
@@ -365,6 +375,7 @@ function startEdit(a) {
       auctionsWonGte: a.auctionsWonGte ?? null,
       auctionsCreatedGte: a.auctionsCreatedGte ?? null,
       tradesAcceptedGte: a.tradesAcceptedGte ?? null,
+      ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null

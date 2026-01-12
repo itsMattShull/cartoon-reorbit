@@ -47,6 +47,12 @@ enum LottoOutcome {
   CTOON
 }
 
+enum CtoonSuggestionStatus {
+  IN_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -130,6 +136,7 @@ model Ctoon {
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
   imageHash                  CtoonImageHash?
+  userSuggestions            CtoonUserSuggestion[]
 
   // Scavenger Hunt relations
   scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
@@ -250,6 +257,12 @@ model User {
   clashGamesAsPlayer2      ClashGame[]                 @relation("ClashGamePlayer2")
   clashGamesWhoLeft        ClashGame[]                 @relation("ClashGameWhoLeft")
   clashGamesAsWinner       ClashGame[]                 @relation("ClashGameWinner")
+  gtoonTournamentsWon      GtoonTournament[]           @relation("GtoonTournamentWinner")
+  gtoonTournamentOptIns    GtoonTournamentOptIn[]
+  gtoonTournamentMatchesAsA GtoonTournamentMatch[]     @relation("GtoonTournamentMatchPlayerA")
+  gtoonTournamentMatchesAsB GtoonTournamentMatch[]     @relation("GtoonTournamentMatchPlayerB")
+  gtoonTournamentMatchesWon GtoonTournamentMatch[]     @relation("GtoonTournamentMatchWinner")
+  gtoonTournamentRecords   GtoonTournamentPlayerRecord[]
   monsterBattlesAsPlayer1  MonsterBattle[]             @relation("MonsterBattlePlayer1")
   monsterBattlesAsPlayer2  MonsterBattle[]             @relation("MonsterBattlePlayer2")
   monsterBattlesAsWinner   MonsterBattle[]             @relation("MonsterBattleWinner")
@@ -278,12 +291,32 @@ model User {
   achievements    AchievementUser[]
   dailyActivities UserDailyActivity[]
 
+  ctoonSuggestions CtoonUserSuggestion[]
+
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
   userMonsterItems UserMonsterItem[]
   scanEvents       UserScan[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
+}
+
+model CtoonUserSuggestion {
+  id        String                @id @default(uuid())
+  ctoonId   String
+  userId    String
+  status    CtoonSuggestionStatus @default(IN_REVIEW)
+  oldValues Json
+  newValues Json
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([ctoonId])
+  @@index([userId, createdAt])
 }
 
 // ── Ban/Unban auditing ─────────────────────────────────────────────
@@ -659,6 +692,49 @@ enum AuctionStatus {
   CANCELLED
 }
 
+enum GtoonTournamentStatus {
+  DRAFT
+  OPT_IN_OPEN
+  OPT_IN_CLOSED
+  SWISS_ACTIVE
+  BRACKET_ACTIVE
+  COMPLETE
+  CANCELLED
+}
+
+enum GtoonTournamentStage {
+  SWISS
+  BRACKET
+}
+
+enum GtoonTournamentFormat {
+  BRACKET_8_OR_LESS
+  SWISS_THEN_TOP8
+}
+
+enum GtoonTournamentMatchStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETE
+  BYE
+}
+
+enum GtoonTournamentMatchOutcome {
+  A_WIN
+  B_WIN
+  TIE
+}
+
+enum GtoonTournamentTiebreakMethod {
+  NONE
+  SUDDEN_DEATH
+  ADMIN_SELECT
+}
+
+enum GtoonTournamentResolutionPolicy {
+  FIRST_GAMES_AFTER_PAIRING
+}
+
 model Auction {
   id                 String        @id @default(uuid())
   userCtoonId        String
@@ -804,6 +880,140 @@ model ClashDeckCard {
 
   deck  ClashDeck @relation(fields: [deckId], references: [id])
   ctoon Ctoon     @relation(fields: [ctoonId], references: [id])
+}
+
+model GtoonTournament {
+  id       String               @id @default(uuid())
+  name     String
+  status   GtoonTournamentStatus @default(DRAFT)
+  optInStartAt DateTime
+  optInEndAt   DateTime
+  format       GtoonTournamentFormat?
+  swissRounds  Int               @default(4)
+  bestOf       Int               @default(3)
+  maxSuddenDeathGames Int         @default(10)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  announcementChannelId String
+  lastAnnouncementAt DateTime?
+  nextAnnouncementAt DateTime?
+  finalOptInMidnightAnnouncementSent Boolean @default(false)
+
+  finalizedAt DateTime?
+  finalPlacementsJson Json?
+  winnerUserId String?
+  tournamentCompletedAt DateTime?
+
+  winner User? @relation("GtoonTournamentWinner", fields: [winnerUserId], references: [id])
+
+  optIns        GtoonTournamentOptIn[]
+  rounds        GtoonTournamentRound[]
+  matches       GtoonTournamentMatch[]
+  playerRecords GtoonTournamentPlayerRecord[]
+
+  @@index([status])
+  @@index([optInEndAt])
+  @@index([optInStartAt])
+}
+
+model GtoonTournamentOptIn {
+  id           String   @id @default(uuid())
+  tournamentId String
+  userId       String
+  optedInAt    DateTime @default(now())
+  isActive     Boolean  @default(true)
+
+  tournament GtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User           @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, isActive])
+}
+
+model GtoonTournamentRound {
+  id           String               @id @default(uuid())
+  tournamentId String
+  stage        GtoonTournamentStage
+  roundNumber  Int
+  createdAt    DateTime             @default(now())
+
+  tournament GtoonTournament @relation(fields: [tournamentId], references: [id])
+  matches    GtoonTournamentMatch[]
+
+  @@unique([tournamentId, stage, roundNumber])
+  @@index([tournamentId, stage])
+}
+
+model GtoonTournamentMatch {
+  id           String               @id @default(uuid())
+  tournamentId String
+  roundId      String
+  stage        GtoonTournamentStage
+  roundNumber  Int
+  tableNumber  Int?
+  playerAUserId String
+  playerBUserId String
+
+  status       GtoonTournamentMatchStatus @default(PENDING)
+  bestOf       Int                        @default(3)
+  winsA        Int                        @default(0)
+  winsB        Int                        @default(0)
+  ties         Int                        @default(0)
+  gamesCounted Int                        @default(0)
+  outcome      GtoonTournamentMatchOutcome?
+  winnerUserId String?
+
+  pairedAt     DateTime                  @default(now())
+  lockedAt     DateTime?
+  completedAt  DateTime?
+
+  sourceBattleIdsJson Json?
+  resolutionPolicy    GtoonTournamentResolutionPolicy @default(FIRST_GAMES_AFTER_PAIRING)
+  requiresWinner      Boolean                        @default(false)
+  tiebreakMethod      GtoonTournamentTiebreakMethod?
+  tiebreakResolvedAt  DateTime?
+  tiebreakNotes       String?
+  suddenDeathGamesCounted Int                         @default(0)
+  seedA Int?
+  seedB Int?
+
+  tournament GtoonTournament @relation(fields: [tournamentId], references: [id])
+  round      GtoonTournamentRound @relation(fields: [roundId], references: [id])
+  playerA    User @relation("GtoonTournamentMatchPlayerA", fields: [playerAUserId], references: [id])
+  playerB    User @relation("GtoonTournamentMatchPlayerB", fields: [playerBUserId], references: [id])
+  winner     User? @relation("GtoonTournamentMatchWinner", fields: [winnerUserId], references: [id])
+
+  @@index([tournamentId, stage, roundNumber])
+  @@index([tournamentId, status])
+  @@index([tournamentId, outcome])
+  @@index([playerAUserId])
+  @@index([playerBUserId])
+}
+
+model GtoonTournamentPlayerRecord {
+  id              String   @id @default(uuid())
+  tournamentId    String
+  userId          String
+  swissWins       Int      @default(0)
+  swissLosses     Int      @default(0)
+  swissTies       Int      @default(0)
+  swissByes       Int      @default(0)
+  bracketWins     Int      @default(0)
+  bracketLosses   Int      @default(0)
+  points          Int      @default(0)
+  swissGameWins   Int      @default(0)
+  swissGameLosses Int      @default(0)
+  swissGameTies   Int      @default(0)
+  opponentMatchWinPct Float @default(0)
+  gameWinPct      Float    @default(0)
+  lastUpdatedAt   DateTime @default(now())
+
+  tournament GtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User           @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, points])
 }
 
 // ── Add enum ──────────────────────────────────────────────────────────
@@ -1253,7 +1463,6 @@ model LottoPoolCtoon {
 }
 
 // ── Achievements ─────────────────────────────────────────────────────────────
-
 model Achievement {
   id              String   @id @default(uuid())
   slug            String   @unique
@@ -1269,9 +1478,11 @@ model Achievement {
   auctionsWonGte  Int?
   auctionsCreatedGte Int?
   tradesAcceptedGte Int?
+  ctoonSuggestionsAcceptedGte Int?
   cumulativeActiveDaysGte Int?
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
+  discordRoleName String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     description = null,
     isActive = true,
     notifyDiscord = false,
+    discordRoleName = '',
     criteria = {},
     rewards = {}
   } = payload || {}
@@ -68,6 +69,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Create core
+  const roleName = typeof discordRoleName === 'string' ? discordRoleName.trim() : ''
   const created = await db.achievement.create({
     data: {
       slug,
@@ -76,12 +78,14 @@ export default defineEventHandler(async (event) => {
       imagePath,
       isActive: !!isActive,
       notifyDiscord: !!notifyDiscord,
+      discordRoleName: roleName || null,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
       auctionsWonGte:  criteria?.auctionsWonGte  ?? null,
       auctionsCreatedGte: criteria?.auctionsCreatedGte ?? null,
       tradesAcceptedGte: criteria?.tradesAcceptedGte ?? null,
+      ctoonSuggestionsAcceptedGte: criteria?.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
