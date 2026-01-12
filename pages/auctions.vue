@@ -955,7 +955,9 @@ const filteredAuctions = computed(() => {
 
 const filteredTrendingAuctions = computed(() => applyCommonFilters(trendingAuctions.value))
 const filteredMyAuctions = computed(() => applyCommonFilters(myAuctions.value))
-const filteredAllAuctions = computed(() => applyCommonFilters(allAuctions.value))
+const filteredAllAuctions = computed(() => {
+  return applyCommonFilters(allAuctions.value).filter(auction => isEnded(auction.endAt))
+})
 const filteredMyBids = computed(() => applyCommonFilters(myBids.value))
 
 /**
