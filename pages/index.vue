@@ -99,6 +99,47 @@
       </div>
     </section>
 
+    <!-- Community stats -->
+    <section class="py-12 bg-white">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">Community stats</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+            <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Users</div>
+            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+              {{ formatNumber(stats?.users) }}
+            </div>
+          </div>
+          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+            <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Active last month</div>
+            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+              {{ formatNumber(stats?.activeUsers) }}
+            </div>
+          </div>
+          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+            <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">cToons sold</div>
+            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+              {{ formatNumber(stats?.ctoonsSold) }}
+            </div>
+          </div>
+          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+            <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Active auctions</div>
+            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+              {{ formatNumber(stats?.activeAuctions) }}
+            </div>
+          </div>
+          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+            <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Trades all time</div>
+            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+              {{ formatNumber(stats?.tradesAllTime) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- How it works -->
     <section id="how" class="py-20 bg-[var(--reorbit-tint)]">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -206,6 +247,14 @@ const topLeftSrc     = computed(() => hp.value?.topLeftImagePath     || '/images
 const bottomLeftSrc  = computed(() => hp.value?.bottomLeftImagePath  || '/images/gtoonsbanner.png')
 const topRightSrc    = computed(() => hp.value?.topRightImagePath    || '/images/posterOct25.png')
 const bottomRightSrc = computed(() => hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png')
+
+const { data: stats } = await useAsyncData('homepage-stats', () => $fetch('/api/homepage/stats'))
+
+function formatNumber(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '0'
+  return num.toLocaleString()
+}
 
 /* ── Ad logo rotation (new) ───────────────────────────────────
    - Uses /api/ads to get image list

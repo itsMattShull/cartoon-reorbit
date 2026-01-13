@@ -6,7 +6,7 @@
     <h1 class="text-3xl font-bold mb-6">Auctions</h1>
 
     <!-- Tabs -->
-    <div class="mb-6 flex border-b">
+    <div class="mb-6 flex flex-nowrap border-b overflow-x-auto overflow-y-hidden whitespace-nowrap no-scrollbar">
       <button
         :class="[
           'px-4 py-2 -mb-px font-semibold',
@@ -1106,4 +1106,7 @@ const sortedMyBids = computed(() => {
 /* scrollbar tweaks for filter lists */
 ::-webkit-scrollbar { width: 6px }
 ::-webkit-scrollbar-thumb { background-color: rgba(107,114,128,0.5); border-radius:3px }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>

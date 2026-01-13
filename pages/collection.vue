@@ -5,8 +5,8 @@
     <h1 class="text-3xl font-bold mb-6">My Collections</h1>
 
     <!-- ─────────────────── TABS ─────────────────── -->
-    <div class="mb-6 flex items-center border-b border-gray-300">
-      <div class="flex space-x-4">
+    <div class="mb-6 flex items-center border-b border-gray-300 overflow-x-auto overflow-y-hidden no-scrollbar">
+      <div class="flex flex-nowrap space-x-4 whitespace-nowrap">
         <button
           @click="switchTab('MyCollection')"
           :class="activeTab === 'MyCollection'
@@ -1331,4 +1331,7 @@ function nextAllPage () {
 <style scoped>
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background-color: rgba(107,114,128,0.5); border-radius: 3px; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
