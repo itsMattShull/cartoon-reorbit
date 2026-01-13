@@ -60,19 +60,23 @@ function buildPairingMessage({ tournamentName, stageLabel, opponentName, bestOf,
     `🏆 ${tournamentName} pairing`,
     `You have been paired with ${opponentName} for ${stageLabel}.`
   ]
-  if (tableNumber != null) lines.push(`• Table: ${tableNumber}`)
   lines.push(`• Best of: ${bestOf}`)
-  lines.push(`• View tournament: ${link}`)
+  lines.push(`• Create a room or join them here: https://www.cartoonreorbit.com/games/clash/rooms`)
   return lines.join('\n')
 }
 
 async function sendTournamentPairingDMs(db, tournament, matchRows) {
-  if (!tournament || !Array.isArray(matchRows) || !matchRows.length) return
+  if (!tournament) return
+  if (!Array.isArray(matchRows) || !matchRows.length) return
 
   const userIds = new Set()
   for (const match of matchRows) {
-    if (!match?.playerAUserId || !match?.playerBUserId) continue
-    if (match.playerAUserId === match.playerBUserId) continue
+    if (!match?.playerAUserId || !match?.playerBUserId) {
+      continue
+    }
+    if (match.playerAUserId === match.playerBUserId) {
+      continue
+    }
     userIds.add(match.playerAUserId)
     userIds.add(match.playerBUserId)
   }

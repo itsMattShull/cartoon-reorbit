@@ -101,19 +101,31 @@ async function openDmChannel(discordId) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN || !discordId) return null
 
-  try {
-    const dmChannel = await $fetch('https://discord.com/api/v10/users/@me/channels', {
-      method: 'POST',
-      headers: {
-        'Authorization': `${BOT_TOKEN}`,   // keeping consistent with your existing code
-        'Content-Type': 'application/json'
-      },
-      body: { recipient_id: discordId }
-    })
-    return dmChannel?.id || null
-  } catch {
-    return null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(`${DISCORD_API_BASE}/users/@me/channels`, {
+        method: 'POST',
+        headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_id: discordId })
+      })
+      if (res.status === 429) {
+        let body = { retry_after: 5 }
+        try { body = await res.json() } catch {}
+        const waitMs = Math.ceil((body.retry_after || 5) * 1000)
+        await sleep(waitMs)
+        continue
+      }
+      if (!res.ok) {
+        return null
+      }
+      const dmChannel = await res.json()
+      return dmChannel?.id || null
+    } catch (err) {
+      return null
+    }
   }
+
+  return null
 }
 
 export async function sendDiscordDMByDiscordId(discordId, content) {
@@ -123,19 +135,30 @@ export async function sendDiscordDMByDiscordId(discordId, content) {
   const channelId = await openDmChannel(discordId)
   if (!channelId) return false
 
-  try {
-    await $fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `${BOT_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: { content }
-    })
-    return true
-  } catch {
-    return false
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      })
+      if (res.status === 429) {
+        let body = { retry_after: 5 }
+        try { body = await res.json() } catch {}
+        const waitMs = Math.ceil((body.retry_after || 5) * 1000)
+        await sleep(waitMs)
+        continue
+      }
+      if (!res.ok) {
+        return false
+      }
+      return true
+    } catch (err) {
+      return false
+    }
   }
+
+  return false
 }
 
 export async function assignDiscordRoleByName(prisma, userId, roleName) {
