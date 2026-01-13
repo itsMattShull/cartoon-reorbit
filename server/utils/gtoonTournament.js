@@ -92,7 +92,6 @@ async function sendTournamentPairingDMs(db, tournament, matchRows) {
     if (match.playerAUserId === match.playerBUserId) continue
     const userA = userMap.get(match.playerAUserId)
     const userB = userMap.get(match.playerBUserId)
-    if (!userA || !userB) continue
 
     const stageLabel = formatStageLabel(match.stage, match.roundNumber)
     const bestOf = Math.max(1, Number(match.bestOf || tournament.bestOf || 3))
@@ -114,10 +113,10 @@ async function sendTournamentPairingDMs(db, tournament, matchRows) {
       link
     })
 
-    if (userA.discordId) {
+    if (userA?.discordId) {
       await sendDiscordDMByDiscordId(userA.discordId, messageA)
     }
-    if (userB.discordId) {
+    if (userB?.discordId) {
       await sendDiscordDMByDiscordId(userB.discordId, messageB)
     }
   }
