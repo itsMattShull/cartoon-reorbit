@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { sendGuildChannelMessageById } from './discord.js'
+import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 
 const CENTRAL_TZ = 'America/Chicago'
 const ANNOUNCE_INTERVAL_MS = 2 * 24 * 60 * 60 * 1000
@@ -39,6 +39,88 @@ function sortSwissRecords(a, b) {
     (b.gameWinPct - a.gameWinPct) ||
     String(a.userId).localeCompare(String(b.userId))
   )
+}
+
+function formatStageLabel(stage, roundNumber) {
+  const stageName = stage === 'SWISS'
+    ? 'Swiss'
+    : stage === 'BRACKET'
+      ? 'Bracket'
+      : String(stage || 'Round')
+  return roundNumber ? `${stageName} Round ${roundNumber}` : stageName
+}
+
+function formatOpponentName(user) {
+  if (!user) return 'Unknown opponent'
+  return user.username || user.discordTag || user.id || 'Unknown opponent'
+}
+
+function buildPairingMessage({ tournamentName, stageLabel, opponentName, bestOf, tableNumber, link }) {
+  const lines = [
+    `🏆 ${tournamentName} pairing`,
+    `You have been paired with ${opponentName} for ${stageLabel}.`
+  ]
+  if (tableNumber != null) lines.push(`• Table: ${tableNumber}`)
+  lines.push(`• Best of: ${bestOf}`)
+  lines.push(`• View tournament: ${link}`)
+  return lines.join('\n')
+}
+
+async function sendTournamentPairingDMs(db, tournament, matchRows) {
+  if (!tournament || !Array.isArray(matchRows) || !matchRows.length) return
+
+  const userIds = new Set()
+  for (const match of matchRows) {
+    if (!match?.playerAUserId || !match?.playerBUserId) continue
+    if (match.playerAUserId === match.playerBUserId) continue
+    userIds.add(match.playerAUserId)
+    userIds.add(match.playerBUserId)
+  }
+
+  if (!userIds.size) return
+
+  const users = await db.user.findMany({
+    where: { id: { in: Array.from(userIds) } },
+    select: { id: true, username: true, discordId: true, discordTag: true }
+  })
+  const userMap = new Map(users.map(user => [user.id, user]))
+  const link = getTournamentUrl(tournament.id)
+  const tournamentName = tournament?.name || 'gToons Clash Tournament'
+
+  for (const match of matchRows) {
+    if (!match?.playerAUserId || !match?.playerBUserId) continue
+    if (match.playerAUserId === match.playerBUserId) continue
+    const userA = userMap.get(match.playerAUserId)
+    const userB = userMap.get(match.playerBUserId)
+    if (!userA || !userB) continue
+
+    const stageLabel = formatStageLabel(match.stage, match.roundNumber)
+    const bestOf = Math.max(1, Number(match.bestOf || tournament.bestOf || 3))
+    const tableNumber = match.tableNumber ?? null
+    const messageA = buildPairingMessage({
+      tournamentName,
+      stageLabel,
+      opponentName: formatOpponentName(userB),
+      bestOf,
+      tableNumber,
+      link
+    })
+    const messageB = buildPairingMessage({
+      tournamentName,
+      stageLabel,
+      opponentName: formatOpponentName(userA),
+      bestOf,
+      tableNumber,
+      link
+    })
+
+    if (userA.discordId) {
+      await sendDiscordDMByDiscordId(userA.discordId, messageA)
+    }
+    if (userB.discordId) {
+      await sendDiscordDMByDiscordId(userB.discordId, messageB)
+    }
+  }
 }
 
 export async function sendTournamentAnnouncement(db, tournament) {
@@ -598,6 +680,8 @@ async function createSwissRound(db, tournament, roundNumber) {
   if (matchRows.length) {
     await db.gtoonTournamentMatch.createMany({ data: matchRows })
   }
+
+  return matchRows
 }
 
 function buildBracketSeedPairs(bracketSize) {
@@ -674,6 +758,8 @@ async function createBracketRound(db, tournament, roundNumber, pairs, seedMap) {
   if (matchRows.length) {
     await db.gtoonTournamentMatch.createMany({ data: matchRows })
   }
+
+  return matchRows
 }
 
 async function createBracketForOptIns(db, tournament, optIns) {
@@ -691,7 +777,7 @@ async function createBracketForOptIns(db, tournament, optIns) {
   })
 
   const pairs = buildBracketSeedPairs(bracketSize)
-  await createBracketRound(db, tournament, 1, pairs, seedMap)
+  return await createBracketRound(db, tournament, 1, pairs, seedMap)
 }
 
 async function createTop8Bracket(db, tournament) {
@@ -700,7 +786,7 @@ async function createTop8Bracket(db, tournament) {
   })
   const sorted = records.slice().sort(sortSwissRecords)
   const top8 = sorted.slice(0, 8)
-  if (top8.length < 2) return
+  if (top8.length < 2) return []
 
   const seedMap = new Map()
   top8.forEach((rec, idx) => {
@@ -708,7 +794,7 @@ async function createTop8Bracket(db, tournament) {
   })
 
   const pairs = buildBracketSeedPairs(8)
-  await createBracketRound(db, tournament, 1, pairs, seedMap)
+  return await createBracketRound(db, tournament, 1, pairs, seedMap)
 }
 
 export async function processTournamentStateTransitions(db, now = new Date()) {
@@ -739,6 +825,7 @@ export async function processTournamentStateTransitions(db, now = new Date()) {
   })
 
   for (const tournament of toClose) {
+    let pairingMatches = []
     await db.$transaction(async (tx) => {
       const closed = await tx.gtoonTournament.updateMany({
         where: { id: tournament.id, status: 'OPT_IN_OPEN' },
@@ -774,7 +861,7 @@ export async function processTournamentStateTransitions(db, now = new Date()) {
             format: 'BRACKET_8_OR_LESS'
           }
         })
-        await createBracketForOptIns(tx, tournament, optIns)
+        pairingMatches = await createBracketForOptIns(tx, tournament, optIns)
       } else {
         await tx.gtoonTournament.update({
           where: { id: tournament.id },
@@ -788,10 +875,13 @@ export async function processTournamentStateTransitions(db, now = new Date()) {
           select: { id: true }
         })
         if (!existingRound) {
-          await createSwissRound(tx, tournament, 1)
+          pairingMatches = await createSwissRound(tx, tournament, 1)
         }
       }
     })
+    if (pairingMatches.length) {
+      await sendTournamentPairingDMs(db, tournament, pairingMatches)
+    }
   }
 }
 
@@ -825,13 +915,17 @@ export async function advanceSwissRounds(db, { tournamentId } = {}) {
         where: { tournamentId: tournament.id, stage: 'BRACKET' }
       })
       if (!existingBracket) {
+        let pairingMatches = []
         await db.$transaction(async (tx) => {
           await tx.gtoonTournament.update({
             where: { id: tournament.id },
             data: { status: 'BRACKET_ACTIVE' }
           })
-          await createTop8Bracket(tx, tournament)
+          pairingMatches = await createTop8Bracket(tx, tournament)
         })
+        if (pairingMatches.length) {
+          await sendTournamentPairingDMs(db, tournament, pairingMatches)
+        }
       }
       continue
     }
@@ -845,7 +939,10 @@ export async function advanceSwissRounds(db, { tournamentId } = {}) {
       }
     })
     if (!existingNext) {
-      await createSwissRound(db, tournament, nextRoundNumber)
+      const pairingMatches = await createSwissRound(db, tournament, nextRoundNumber)
+      if (pairingMatches.length) {
+        await sendTournamentPairingDMs(db, tournament, pairingMatches)
+      }
     }
   }
 }
@@ -1066,6 +1163,7 @@ export async function advanceBracketRounds(db, { tournamentId } = {}) {
 
     if (matchRows.length) {
       await db.gtoonTournamentMatch.createMany({ data: matchRows })
+      await sendTournamentPairingDMs(db, tournament, matchRows)
     }
   }
 }

@@ -1,6 +1,7 @@
 <template>
   <Nav />
   <!-- Pregame: deck select + ready -->
+   <div class="mt-6">&nbsp;</div>
   <div v-if="!game" class="mt-20">
     <div class="max-w-3xl mx-auto bg-white border rounded p-4">
       <h2 class="text-xl font-bold mb-3">gToons Clash – Pregame</h2>
