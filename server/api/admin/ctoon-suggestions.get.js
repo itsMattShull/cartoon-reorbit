@@ -7,27 +7,45 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
 
   const query = getQuery(event)
-  const status = typeof query.status === 'string' && query.status.trim()
-    ? query.status.trim()
+  const statusQuery = typeof query.status === 'string' && query.status.trim()
+    ? query.status.trim().toUpperCase()
     : 'IN_REVIEW'
+  const where = statusQuery === 'HISTORY'
+    ? { status: { in: ['ACCEPTED', 'REJECTED'] } }
+    : { status: statusQuery }
 
-  const suggestions = await prisma.ctoonUserSuggestion.findMany({
-    where: { status },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      user: { select: { id: true, username: true, discordTag: true } },
-      ctoon: { select: { id: true, name: true, assetPath: true, series: true, set: true, characters: true } }
-    }
-  })
+  const page = Math.max(parseInt(query.page || '1', 10), 1)
+  const limit = Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 100)
+  const skip = (page - 1) * limit
 
-  return suggestions.map(s => ({
-    id: s.id,
-    status: s.status,
-    oldValues: s.oldValues,
-    newValues: s.newValues,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-    user: s.user,
-    ctoon: s.ctoon
-  }))
+  const [total, suggestions] = await Promise.all([
+    prisma.ctoonUserSuggestion.count({ where }),
+    prisma.ctoonUserSuggestion.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, username: true, discordTag: true } },
+        ctoon: { select: { id: true, name: true, assetPath: true, series: true, set: true, characters: true } }
+      },
+      skip,
+      take: limit
+    })
+  ])
+
+  return {
+    items: suggestions.map(s => ({
+      id: s.id,
+      status: s.status,
+      oldValues: s.oldValues,
+      newValues: s.newValues,
+      rejectionReason: s.rejectionReason,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      user: s.user,
+      ctoon: s.ctoon
+    })),
+    total,
+    page,
+    limit
+  }
 })

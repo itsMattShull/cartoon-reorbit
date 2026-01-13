@@ -308,6 +308,7 @@ model CtoonUserSuggestion {
   status    CtoonSuggestionStatus @default(IN_REVIEW)
   oldValues Json
   newValues Json
+  rejectionReason String?
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 

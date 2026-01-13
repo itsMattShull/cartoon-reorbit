@@ -143,7 +143,7 @@
           <div v-else-if="error" class="text-sm text-red-300">
             Failed to load cToon details.
           </div>
-          <form v-else class="space-y-4" @submit.prevent="submitSuggestion">
+          <form v-else id="ctoon-suggestion-form" class="space-y-4" @submit.prevent="submitSuggestion">
             <div>
               <label class="text-xs uppercase text-gray-300">cToon Name</label>
               <input
@@ -198,46 +198,51 @@
               <p v-if="!hasSuggestionChanges" class="text-xs text-gray-400">
                 Make a change to submit a suggestion.
               </p>
-              <button
-                type="submit"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-                :disabled="suggestionDisabled"
-              >
-                {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
-              </button>
             </div>
           </form>
         </template>
       </div>
 
       <div class="pt-4 border-t border-white/10 flex items-center justify-between gap-4 shrink-0">
-        <button
-          class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-          @click="close"
-        >
-          Close
-        </button>
-        <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
-          <div v-if="canSeeHolidayReveal">
-            <button
-              v-if="canOpenNow"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-              :disabled="openingHoliday"
-              @click="openHolidayCtoon"
-            >
-              {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
-            </button>
-            <div v-else class="text-xs text-gray-300">
-              Reveal available in:
-              <span class="font-semibold">{{ revealCountdown }}</span>
+        <template v-if="activeTab === 'suggest'">
+          <button
+            type="submit"
+            form="ctoon-suggestion-form"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm ml-auto"
+            :disabled="suggestionDisabled"
+          >
+            {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
+          </button>
+        </template>
+        <template v-else>
+          <button
+            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+            @click="close"
+          >
+            Close
+          </button>
+          <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
+            <div v-if="canSeeHolidayReveal">
+              <button
+                v-if="canOpenNow"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
+                :disabled="openingHoliday"
+                @click="openHolidayCtoon"
+              >
+                {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
+              </button>
+              <div v-else class="text-xs text-gray-300">
+                Reveal available in:
+                <span class="font-semibold">{{ revealCountdown }}</span>
+              </div>
             </div>
+            <AddToWishlist
+              v-if="ctoon.id"
+              :ctoon-id="ctoon.id"
+              class="text-xs"
+            />
           </div>
-          <AddToWishlist
-            v-if="ctoon.id"
-            :ctoon-id="ctoon.id"
-            class="text-xs"
-          />
-        </div>
+        </template>
       </div>
     </div>
   </Modal>
