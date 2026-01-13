@@ -11,54 +11,131 @@
 
     <!-- Step 0: Pick a user -->
     <section class="bg-white rounded-xl shadow-md p-4 mb-6">
-      <label class="block text-sm font-medium mb-2">Find a user to trade with</label>
-      <div class="relative">
-        <input
-          ref="userInputRef"
-          v-model.trim="userQuery"
-          @input="onUserQueryInput"
-          @keydown="onUserKeydown"
-          type="text"
-          placeholder="Type a username…"
-          autocomplete="off"
-          role="combobox"
-          aria-expanded="showUserSuggest"
-          aria-controls="user-suggest-listbox"
-          aria-autocomplete="list"
-          class="w-full border rounded px-3 py-2"
-        />
-        <!-- suggestions -->
-        <div
-          v-if="showUserSuggest"
-          ref="userSuggestRef"
-          id="user-suggest-listbox"
-          class="absolute z-20 bg-white border rounded w-full mt-1 max-h-64 overflow-auto"
-          role="listbox"
+      <div class="flex items-center gap-2 mb-4">
+        <button
+          type="button"
+          class="px-3 py-1.5 text-sm font-semibold rounded-full border"
+          :class="findTab === 'user' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-gray-700 hover:bg-gray-50'"
+          @click="setFindTab('user')"
         >
-          <div v-if="isSearching" class="px-3 py-2 text-sm text-gray-600">Searching…</div>
+          Find User
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1.5 text-sm font-semibold rounded-full border"
+          :class="findTab === 'ctoon' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-gray-700 hover:bg-gray-50'"
+          @click="setFindTab('ctoon')"
+        >
+          Find cToon
+        </button>
+      </div>
 
-          <template v-else-if="userResults.length">
-            <button
-              v-for="(u, idx) in userResults"
-              :key="u.username"
-              :class="[
-                'w-full text-left px-3 py-2 flex items-center gap-2',
-                highlightedIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
-              ]"
-              role="option"
-              :aria-selected="highlightedIndex === idx"
-              @mouseenter="highlightedIndex = idx"
-              @click="selectTargetUser(u)"
-            >
-              <img :src="`/avatars/${u.avatar || 'default.png'}`" class="w-6 h-6 rounded-full border" />
-              <span class="font-medium">{{ u.username }}</span>
-              <span v-if="u.isBooster" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Booster</span>
-            </button>
-          </template>
+      <div v-if="findTab === 'user'">
+        <label class="block text-sm font-medium mb-2">Find a user to trade with</label>
+        <div class="relative">
+          <input
+            ref="userInputRef"
+            v-model.trim="userQuery"
+            @input="onUserQueryInput"
+            @keydown="onUserKeydown"
+            type="text"
+            placeholder="Type a username…"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="showUserSuggest"
+            aria-controls="user-suggest-listbox"
+            aria-autocomplete="list"
+            class="w-full border rounded px-3 py-2"
+          />
+          <!-- suggestions -->
+          <div
+            v-if="showUserSuggest"
+            ref="userSuggestRef"
+            id="user-suggest-listbox"
+            class="absolute z-20 bg-white border rounded w-full mt-1 max-h-64 overflow-auto"
+            role="listbox"
+          >
+            <div v-if="isSearching" class="px-3 py-2 text-sm text-gray-600">Searching…</div>
 
-          <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+            <template v-else-if="userResults.length">
+              <button
+                v-for="(u, idx) in userResults"
+                :key="u.username"
+                :class="[
+                  'w-full text-left px-3 py-2 flex items-center gap-2',
+                  highlightedIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
+                ]"
+                role="option"
+                :aria-selected="highlightedIndex === idx"
+                @mouseenter="highlightedIndex = idx"
+                @click="selectTargetUser(u)"
+              >
+                <img :src="`/avatars/${u.avatar || 'default.png'}`" class="w-6 h-6 rounded-full border" />
+                <span class="font-medium">{{ u.username }}</span>
+                <span v-if="u.isBooster" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Booster</span>
+              </button>
+            </template>
+
+            <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+          </div>
         </div>
       </div>
+
+      <div v-else>
+        <label class="block text-sm font-medium mb-2">Find a cToon to trade for</label>
+        <div class="relative">
+          <input
+            ref="ctoonInputRef"
+            v-model.trim="ctoonQuery"
+            @input="onCtoonQueryInput"
+            @keydown="onCtoonKeydown"
+            type="text"
+            placeholder="Type a cToon name or character…"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="showCtoonSuggest"
+            aria-controls="ctoon-suggest-listbox"
+            aria-autocomplete="list"
+            class="w-full border rounded px-3 py-2"
+          />
+          <!-- suggestions -->
+          <div
+            v-if="showCtoonSuggest"
+            ref="ctoonSuggestRef"
+            id="ctoon-suggest-listbox"
+            class="absolute z-20 bg-white border rounded w-full mt-1 max-h-72 overflow-auto"
+            role="listbox"
+          >
+            <div v-if="isSearchingCtoon" class="px-3 py-2 text-sm text-gray-600">Searching…</div>
+
+            <template v-else-if="ctoonResults.length">
+              <button
+                v-for="(c, idx) in ctoonResults"
+                :key="c.userCtoonId"
+                :class="[
+                  'w-full text-left px-3 py-2 flex items-center gap-3',
+                  highlightedCtoonIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
+                ]"
+                role="option"
+                :aria-selected="highlightedCtoonIndex === idx"
+                @mouseenter="highlightedCtoonIndex = idx"
+                @click="selectCtoonResult(c)"
+              >
+                <img :src="c.assetPath" :alt="c.name" class="w-10 h-10 rounded border object-contain bg-white" />
+                <div class="min-w-0">
+                  <div class="font-medium truncate">{{ c.name }}</div>
+                  <div class="text-xs text-gray-600">
+                    Mint #{{ c.mintNumber ?? '—' }} · {{ c.ownerUsername }}
+                  </div>
+                </div>
+              </button>
+            </template>
+
+            <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+          </div>
+        </div>
+      </div>
+
       <p v-if="targetError" class="mt-2 text-sm text-red-600">{{ targetError }}</p>
 
       <div v-if="targetUser" class="mt-4 flex items-center gap-3">
@@ -326,11 +403,13 @@ const route = useRoute()
 const { user, fetchSelf } = useAuth()
 
 const currentStep = ref(1) // 1 or 2
+const findTab = ref('user')
 const preselectUserCtoonId = computed(() => {
   const val = route.query.userCtoonId
   if (!val) return null
   return Array.isArray(val) ? String(val[0]) : String(val)
 })
+const manualPreselectUserCtoonId = ref(null)
 
 // ────────────────────────────────────────────────────────────────────────────────
 // User search w/ autocomplete (3+ chars, debounced, keyboard nav)
@@ -349,8 +428,44 @@ const targetError = ref('')
 const userInputRef = ref(null)
 const userSuggestRef = ref(null)
 
+const ctoonQuery = ref('')
+const ctoonResults = ref([])
+const showCtoonSuggest = ref(false)
+const isSearchingCtoon = ref(false)
+const highlightedCtoonIndex = ref(-1)
+const ctoonInputRef = ref(null)
+const ctoonSuggestRef = ref(null)
+
+let ctoonSearchTimer
+const ctoonSearchCache = new Map()
+
 let userSearchTimer
 const userSearchCache = new Map() // simple in-memory cache by query string
+
+async function setFindTab(tab) {
+  if (findTab.value === tab) return
+  findTab.value = tab
+  targetError.value = ''
+  showUserSuggest.value = false
+  showCtoonSuggest.value = false
+  highlightedIndex.value = -1
+  highlightedCtoonIndex.value = -1
+  await nextTick()
+  if (tab === 'user') userInputRef.value?.focus()
+  if (tab === 'ctoon') ctoonInputRef.value?.focus()
+}
+
+async function ensureSelfLoaded() {
+  if (user.value?.username) return
+  try {
+    await fetchSelf()
+  } catch {}
+}
+
+function isSelfUsername(name) {
+  const me = (user.value?.username || '').toLowerCase()
+  return !!me && String(name || '').toLowerCase() === me
+}
 
 // add rarity to both sides
 const filters = reactive({
@@ -386,15 +501,26 @@ const rarityOptionsSelf  = computed(() => buildRarityOptions(selfCtoons.value))
 
 async function initFromRoute() {
   const param = route.params.username
-  if (!param) return
-  const uname = String(param).trim()
-  if (!uname) return
+  const raw = Array.isArray(param) ? param[0] : param
+  if (!raw) {
+    await nextTick()
+    userInputRef.value?.focus()
+    return
+  }
+  const uname = String(raw).trim()
+  if (!uname) {
+    await nextTick()
+    userInputRef.value?.focus()
+    return
+  }
+
+  await ensureSelfLoaded()
 
   // Prefill the input
   userQuery.value = uname
 
   // If it’s you, don’t auto-select
-  if (user.value?.username && user.value.username.toLowerCase() === uname.toLowerCase()) {
+  if (isSelfUsername(uname)) {
     targetError.value = "You can't trade with yourself."
     targetUser.value = null
     currentStep.value = 1
@@ -410,7 +536,7 @@ async function initFromRoute() {
     const match = items.find(u => u.username?.toLowerCase() === uname.toLowerCase())
 
     if (match) {
-      selectTargetUser(match)
+      await selectTargetUser(match)
     } else {
       // No exact match: open suggestions with whatever is typed
       showUserSuggest.value = true
@@ -466,8 +592,7 @@ function onUserQueryInput() {
 }
 
 function filterOutSelf(items) {
-  const me = user.value?.username
-  return (items || []).filter(r => r.username && r.username !== me)
+  return (items || []).filter(r => r.username && !isSelfUsername(r.username))
 }
 
 function onUserKeydown(e) {
@@ -489,31 +614,112 @@ function onUserKeydown(e) {
   }
 }
 
-function selectTargetUser(u) {
-  if (u.username === user.value?.username) {
+async function selectTargetUser(u, options = {}) {
+  await ensureSelfLoaded()
+  if (isSelfUsername(u.username)) {
     targetError.value = "You can't trade with yourself."
     return
   }
+  if (!options.keepPreselect) manualPreselectUserCtoonId.value = null
   targetUser.value = u
   userQuery.value = u.username
   showUserSuggest.value = false
+  showCtoonSuggest.value = false
   highlightedIndex.value = -1
   currentStep.value = 1              // start at Step 1
   bootstrapCollections()
   loadTargetWishlist()
 }
 
+function onCtoonQueryInput() {
+  targetError.value = ''
+  showCtoonSuggest.value = true
+  highlightedCtoonIndex.value = -1
+  clearTimeout(ctoonSearchTimer)
+
+  const q = ctoonQuery.value || ''
+  if (q.length < MIN_CHARS) {
+    ctoonResults.value = []
+    isSearchingCtoon.value = false
+    return
+  }
+
+  ctoonSearchTimer = setTimeout(async () => {
+    const key = q.toLowerCase()
+    try {
+      isSearchingCtoon.value = true
+      if (ctoonSearchCache.has(key)) {
+        ctoonResults.value = ctoonSearchCache.get(key)
+        isSearchingCtoon.value = false
+        return
+      }
+
+      const res = await $fetch('/api/trade/search-ctoons', { params: { q, limit: 12 } })
+      const items = Array.isArray(res) ? res : (res?.items || [])
+      const filtered = items.filter(i => !isSelfUsername(i.ownerUsername))
+      ctoonSearchCache.set(key, filtered)
+      ctoonResults.value = filtered
+    } catch (e) {
+      ctoonResults.value = []
+    } finally {
+      isSearchingCtoon.value = false
+    }
+  }, DEBOUNCE_MS)
+}
+
+function onCtoonKeydown(e) {
+  if (!showCtoonSuggest.value) return
+  const max = ctoonResults.value.length - 1
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    highlightedCtoonIndex.value = highlightedCtoonIndex.value < max ? highlightedCtoonIndex.value + 1 : 0
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    highlightedCtoonIndex.value = highlightedCtoonIndex.value > 0 ? highlightedCtoonIndex.value - 1 : max
+  } else if (e.key === 'Enter') {
+    if (highlightedCtoonIndex.value >= 0 && highlightedCtoonIndex.value <= max) {
+      e.preventDefault()
+      selectCtoonResult(ctoonResults.value[highlightedCtoonIndex.value])
+    }
+  } else if (e.key === 'Escape') {
+    showCtoonSuggest.value = false
+  }
+}
+
+async function selectCtoonResult(item) {
+  await ensureSelfLoaded()
+  if (!item?.ownerUsername) return
+  if (isSelfUsername(item.ownerUsername)) {
+    targetError.value = "You can't trade with yourself."
+    return
+  }
+
+  await clearTarget(false)
+  manualPreselectUserCtoonId.value = item.userCtoonId
+  ctoonQuery.value = item.name || ctoonQuery.value
+  showCtoonSuggest.value = false
+  highlightedCtoonIndex.value = -1
+  await selectTargetUser({ username: item.ownerUsername, avatar: item.ownerAvatar }, { keepPreselect: true })
+}
+
 /**
- * Clear everything and (optionally) focus the username input
+ * Clear everything and (optionally) focus the active tab input
  */
 async function clearTarget(focusInput = false) {
   targetUser.value = null
   currentStep.value = 1
+  targetError.value = ''
   userQuery.value = ''
   userResults.value = []
   highlightedIndex.value = -1
   showUserSuggest.value = false
   isSearching.value = false
+  ctoonQuery.value = ''
+  ctoonResults.value = []
+  highlightedCtoonIndex.value = -1
+  showCtoonSuggest.value = false
+  isSearchingCtoon.value = false
+  manualPreselectUserCtoonId.value = null
   selectedTargetCtoons.value = []
   selectedInitiatorCtoons.value = []
   pointsToOffer.value = 0
@@ -528,23 +734,31 @@ async function clearTarget(focusInput = false) {
 
   if (focusInput) {
     await nextTick()
-    userInputRef.value?.focus()
+    if (findTab.value === 'ctoon') ctoonInputRef.value?.focus()
+    else userInputRef.value?.focus()
   }
 }
 
 // close suggest on outside click (but not when clicking inside the list)
 function onGlobalClick(e) {
-  const inputEl = userInputRef.value
-  const boxEl = userSuggestRef.value
-  if (!inputEl) return
   const target = e.target
-  if (inputEl.contains(target) || (boxEl && boxEl.contains(target))) return
-  showUserSuggest.value = false
+  const userInputEl = userInputRef.value
+  const userBoxEl = userSuggestRef.value
+  const ctoonInputEl = ctoonInputRef.value
+  const ctoonBoxEl = ctoonSuggestRef.value
+  const inUser =
+    (userInputEl && userInputEl.contains(target)) ||
+    (userBoxEl && userBoxEl.contains(target))
+  const inCtoon =
+    (ctoonInputEl && ctoonInputEl.contains(target)) ||
+    (ctoonBoxEl && ctoonBoxEl.contains(target))
+  if (!inUser) showUserSuggest.value = false
+  if (!inCtoon) showCtoonSuggest.value = false
 }
 
 onMounted(async () => {
   if (process.client) window.addEventListener('click', onGlobalClick)
-  // Autofill from /create-trade/[username]
+  // Autofill from /create-trade/:username (optional)
   await initFromRoute()
 })
 onBeforeUnmount(() => {
@@ -609,7 +823,7 @@ const selectedTargetCtoonsMap = computed(() => new Set(selectedTargetCtoons.valu
 const selectedInitiatorCtoonsMap = computed(() => new Set(selectedInitiatorCtoons.value.map(c => c.id)))
 
 function applyPreselectedTargetCtoon() {
-  const preselectId = preselectUserCtoonId.value
+  const preselectId = manualPreselectUserCtoonId.value || preselectUserCtoonId.value
   if (!preselectId) return
   const match = otherCtoons.value.find(c => c.id === preselectId)
   if (!match) return

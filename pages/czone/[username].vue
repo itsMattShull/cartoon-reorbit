@@ -297,11 +297,11 @@
         >
           <NuxtLink
             :to="`/czone/${msg.user}`"
-            class="font-bold text-indigo-700 min-w-[80px] hover:underline-none no-underline"
+            class="czone-chat-user font-bold hover:no-underline no-underline"
           >
             {{ msg.user }}
           </NuxtLink>
-          <div class="flex-1 break-words">{{ msg.message }}</div>
+          <div class="czone-chat-message flex-1 break-words">{{ msg.message }}</div>
         </div>
       </div>
       <ClientOnly>
@@ -1242,6 +1242,19 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 
+/* Chat text colors */
+.czone-chat-user {
+  color: #4338ca;
+  display: inline-block;
+  width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.czone-chat-message {
+  color: #1f2937;
+}
+
 /* Dark‐mode overrides when ownerIsBooster toggles body.booster-bg */
   .booster-bg {
     background-color: #121212;
@@ -1261,6 +1274,13 @@ onBeforeUnmount(() => {
   .booster-bg .bg-indigo-100      { background-color: #222 !important; }
   .booster-bg .bg-indigo-500,
   .booster-bg .bg-indigo-600      { background-color: #333 !important; }
+
+  .booster-bg .czone-chat-user {
+    color: #c7d2fe;
+  }
+  .booster-bg .czone-chat-message {
+    color: #e5e7eb;
+  }
   /* Owner’s username (was text-blue-700) */
   .booster-bg .text-blue-700 {
     color: #ffffff !important;

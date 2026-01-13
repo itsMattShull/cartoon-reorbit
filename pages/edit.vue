@@ -1,6 +1,6 @@
 <template>
   <Nav />
-
+  <div class="mt-1">&nbsp;</div>
   <!-- Mobile Buttons -->
   <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 md:pt-10 px-4">
     <button
@@ -17,9 +17,9 @@
     </button>
   </div>
 
-  <div class="px-0 md:px-4 py-6 mx-auto flex gap-6 md:mt-20 max-w-[800px]">
+  <div class="px-0 md:px-4 py-6 mx-auto flex gap-6 md:mt-20 w-full max-w-[1200px] justify-center items-start">
     <!-- Left Panel -->
-    <div class="hidden lg:block w-2/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
+    <div class="hidden lg:block lg:w-[360px] lg:flex-shrink-0 bg-white rounded-xl shadow-md p-4 flex flex-col">
       <div class="flex gap-2 mb-4">
         <button
           :class="tab === 'ctoones' ? activeTab : tabClass"
@@ -79,7 +79,7 @@
     </div>
 
     <!-- Right Canvas Panel -->
-    <div class="bg-white max-w-full">
+    <div class="bg-white w-full lg:w-[800px] lg:flex-shrink-0">
       <!-- Zone pager controls -->
       <div class="flex justify-between items-center mb-2 px-4">
         <button
@@ -87,7 +87,7 @@
           @click="prevZone"
           :disabled="currentZoneIndex === 0"
         >
-          ← Zone {{ currentZoneIndex + 1 }}
+          ← Zone {{ currentZoneIndex }}
         </button>
         <div class="text-sm font-medium">
           Zone {{ currentZoneIndex + 1 }} of 3
@@ -97,7 +97,7 @@
           @click="nextZone"
           :disabled="currentZoneIndex === 2"
         >
-          Zone {{ currentZoneIndex + 1 }} →
+          Zone {{ currentZoneIndex + 2 }} →
         </button>
       </div>
 
