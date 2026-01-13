@@ -46,7 +46,7 @@
       </a>
 
       <div
-        class="hidden md:block ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
+        class="nav-pill hidden md:block ml-auto inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
               bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
         aria-label="Sign in with Discord"
       >
@@ -547,4 +547,12 @@ onBeforeUnmount(() => {
 
 /* keep link colors consistent */
 #nav-drawer a, #nav-drawer button { color: inherit !important; }
+
+#nav-root button,
+#nav-drawer button {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.nav-pill { border-radius: 0.75rem; }
 </style>

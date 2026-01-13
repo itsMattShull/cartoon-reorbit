@@ -62,6 +62,7 @@ export default defineEventHandler(async (event) => {
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
   const wishlistOnly = isTruthy(query.wishlist)
+  const hasBidsOnly = isTruthy(query.hasBids)
 
   let ownedIds = null
   let ownedSet = null
@@ -122,6 +123,7 @@ export default defineEventHandler(async (event) => {
 
   const where = { status: 'CLOSED' }
   if (featuredOnly) where.isFeatured = true
+  if (hasBidsOnly) where.bids = { some: {} }
   if (Object.keys(ctoonWhere).length) where.userCtoon = { ctoon: ctoonWhere }
 
   const [total, auctions] = await Promise.all([

@@ -173,6 +173,14 @@
             />
             <span class="ml-2">On My Wishlist</span>
           </label>
+          <label class="flex items-center text-sm mt-2">
+            <input
+              type="checkbox"
+              v-model="hasBidsOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">Has 1+ Bids</span>
+          </label>
           <p v-if="wishlistOnly && isLoadingWishlist" class="mt-2 text-xs text-gray-500">
             Loading wishlist...
           </p>
@@ -724,6 +732,7 @@ const sortBy = ref('endAsc')
 const showFilters = ref(false)
 const featuredOnly = ref(false)
 const wishlistOnly = ref(false)
+const hasBidsOnly = ref(false)
 const wishlistCtoonIds = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
@@ -759,6 +768,9 @@ function updateUrlQueryFromFilters() {
   if (wishlistOnly.value) newQuery.wishlist = '1'
   else delete newQuery.wishlist
 
+  if (hasBidsOnly.value) newQuery.hasBids = '1'
+  else delete newQuery.hasBids
+
   if (sortBy.value && sortBy.value !== 'endAsc') newQuery.sort = sortBy.value
   else delete newQuery.sort
 
@@ -784,6 +796,7 @@ onMounted(() => {
   const tabParam    = typeof route.query.tab === 'string' ? route.query.tab : ''
   const featuredParam = typeof route.query.featured === 'string' ? route.query.featured : ''
   const wishlistParam = typeof route.query.wishlist === 'string' ? route.query.wishlist : ''
+  const hasBidsParam = typeof route.query.hasBids === 'string' ? route.query.hasBids : ''
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
   const initSeries   = normalizeListParam(seriesParam)
@@ -800,6 +813,7 @@ onMounted(() => {
 
   if (['1','true','yes'].includes(featuredParam.toLowerCase())) featuredOnly.value = true
   if (['1','true','yes'].includes(wishlistParam.toLowerCase())) wishlistOnly.value = true
+  if (['1','true','yes'].includes(hasBidsParam.toLowerCase())) hasBidsOnly.value = true
 
   // Normalize URL based on initialized values
   updateUrlQueryFromFilters()
@@ -816,9 +830,18 @@ onUnmounted(() => {
   clearInterval(timer)
 })
 
+function buildCurrentParams() {
+  const params = new URLSearchParams()
+  if (hasBidsOnly.value) params.set('hasBids', '1')
+  return params
+}
+
 function loadAuctions() {
   isLoading.value = true
-  $fetch('/api/auctions')
+  const params = buildCurrentParams()
+  const query = params.toString()
+  const url = query ? `/api/auctions?${query}` : '/api/auctions'
+  $fetch(url)
     .then(data => {
       auctions.value = data
     })
@@ -827,10 +850,13 @@ function loadAuctions() {
     })
 }
 
-function loadTrendingAuctions() {
-  if (hasLoadedTrending.value) return
+function loadTrendingAuctions({ force = false } = {}) {
+  if (hasLoadedTrending.value && !force) return
   isLoadingTrending.value = true
-  $fetch('/api/auctions/trending')
+  const params = buildCurrentParams()
+  const query = params.toString()
+  const url = query ? `/api/auctions/trending?${query}` : '/api/auctions/trending'
+  $fetch(url)
     .then(data => {
       trendingAuctions.value = Array.isArray(data) ? data : []
     })
@@ -863,6 +889,7 @@ function buildFilterParams() {
   if (selectedOwned.value && selectedOwned.value !== 'all') params.set('owned', selectedOwned.value)
   if (featuredOnly.value) params.set('featured', '1')
   if (wishlistOnly.value) params.set('wishlist', '1')
+  if (hasBidsOnly.value) params.set('hasBids', '1')
   return params
 }
 
@@ -929,7 +956,7 @@ watch(activeTab, newTab => {
 })
 
 // Keep URL in sync when filters change
-watch([searchQuery, selectedSeries, selectedRarities, selectedOwned, featuredOnly, wishlistOnly], () => {
+watch([searchQuery, selectedSeries, selectedRarities, selectedOwned, featuredOnly, wishlistOnly, hasBidsOnly], () => {
   updateUrlQueryFromFilters()
   const isAll = activeTab.value === 'all'
   const isMine = activeTab.value === 'mine'
@@ -966,6 +993,11 @@ watch(wishlistOnly, value => {
   if (value) loadWishlist()
 })
 
+watch(hasBidsOnly, () => {
+  loadAuctions()
+  loadTrendingAuctions({ force: true })
+})
+
 function isEnded(endAt) {
   return new Date(endAt) <= now.value
 }
@@ -994,7 +1026,8 @@ const hasActiveFilters = computed(() => {
     selectedRarities.value.length ||
     (selectedOwned.value && selectedOwned.value !== 'all') ||
     featuredOnly.value ||
-    wishlistOnly.value
+    wishlistOnly.value ||
+    hasBidsOnly.value
   )
 })
 const filterSources = computed(() => [
@@ -1012,6 +1045,7 @@ function applyCommonFilters(items) {
   const ownedFilter = selectedOwned.value
   const requireFeatured = featuredOnly.value
   const requireWishlist = wishlistOnly.value
+  const requireBids = hasBidsOnly.value
   const wishlistSet = wishlistCtoonIdSet.value
 
   return (Array.isArray(items) ? items : []).filter(item => {
@@ -1030,6 +1064,10 @@ function applyCommonFilters(items) {
     if (requireWishlist) {
       if (!hasLoadedWishlist.value) return false
       if (!wishlistSet.has(item.ctoonId)) return false
+    }
+    if (requireBids) {
+      const bidCount = Number(item.bidCount ?? 0)
+      if (bidCount < 1) return false
     }
     return true
   })
@@ -1057,9 +1095,18 @@ const filteredAuctions = computed(() => {
 })
 
 const filteredTrendingAuctions = computed(() => applyCommonFilters(trendingAuctions.value))
-const filteredMyAuctions = computed(() => myAuctions.value)
-const filteredAllAuctions = computed(() => allAuctions.value)
-const filteredMyBids = computed(() => myBids.value)
+const filteredMyAuctions = computed(() => {
+  if (!hasBidsOnly.value) return myAuctions.value
+  return myAuctions.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
+})
+const filteredAllAuctions = computed(() => {
+  if (!hasBidsOnly.value) return allAuctions.value
+  return allAuctions.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
+})
+const filteredMyBids = computed(() => {
+  if (!hasBidsOnly.value) return myBids.value
+  return myBids.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
+})
 
 /**
  * My Bids sorting:

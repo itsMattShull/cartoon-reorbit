@@ -1,5 +1,5 @@
 // server/api/auctions.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -14,9 +14,15 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
+  const query = getQuery(event)
+  const hasBidsOnly = ['1', 'true', 'yes'].includes(String(query.hasBids || '').toLowerCase())
+
   // 2) Active auctions with minimal nested data
+  const where = { status: 'ACTIVE' }
+  if (hasBidsOnly) where.bids = { some: {} }
+
   const auctions = await prisma.auction.findMany({
-    where: { status: 'ACTIVE' },
+    where,
     include: {
       userCtoon: {
         select: {

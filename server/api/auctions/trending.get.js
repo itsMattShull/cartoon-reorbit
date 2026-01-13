@@ -1,5 +1,5 @@
 // server/api/auctions/trending.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -16,9 +16,15 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
+  const query = getQuery(event)
+  const hasBidsOnly = ['1', 'true', 'yes'].includes(String(query.hasBids || '').toLowerCase())
+
   // 2) Active auctions (ids only for ranking)
   const active = await prisma.auction.findMany({
-    where: { status: 'ACTIVE' },
+    where: {
+      status: 'ACTIVE',
+      ...(hasBidsOnly ? { bids: { some: {} } } : {})
+    },
     select: { id: true, endAt: true }
   })
   if (!active.length) return []

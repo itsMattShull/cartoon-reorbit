@@ -22,6 +22,7 @@ function applyAuctionFilters(items, filters) {
   const rarityFilter = filters.rarities || []
   const ownedFilter = filters.owned || ''
   const requireFeatured = filters.featuredOnly
+  const requireBids = filters.hasBidsOnly
   const wishlistSet = filters.wishlistSet || null
 
   return items.filter(item => {
@@ -38,6 +39,7 @@ function applyAuctionFilters(items, filters) {
     if (ownedFilter === 'owned' && !item.isOwned) return false
     if (ownedFilter === 'unowned' && item.isOwned) return false
     if (wishlistSet && !wishlistSet.has(item.ctoonId)) return false
+    if (requireBids && Number(item.bidCount ?? 0) < 1) return false
     return true
   })
 }
@@ -106,6 +108,7 @@ export default defineEventHandler(async (event) => {
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
   const wishlistOnly = isTruthy(query.wishlist)
+  const hasBidsOnly = isTruthy(query.hasBids)
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
   const validSorts = ['recentDesc', 'recentAsc', 'biggestBid', 'recentlyWon', 'recentlyLost']
   const effectiveSort = validSorts.includes(sortKey) ? sortKey : 'recentDesc'
@@ -219,7 +222,8 @@ export default defineEventHandler(async (event) => {
     rarities,
     owned: ownedFilter,
     featuredOnly,
-    wishlistSet
+    wishlistSet,
+    hasBidsOnly
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)
