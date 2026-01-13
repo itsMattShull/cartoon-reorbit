@@ -90,7 +90,7 @@
         </div>
         <p>
           This is a featured auction. You’ll only be allowed to bid if you
-          haven’t owned more than one copy of this cToon in the last 30 days.
+          haven’t owned 2 mints of this cToon in the last 30 days.
         </p>
       </div>
 
