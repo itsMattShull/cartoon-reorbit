@@ -12,11 +12,34 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse & validate body
-  // Expecting body: { zones: [ { background: string, toons: [ { id, x, y } ] }, { … }, { … } ] }
+  // Expecting body: { zones: [ { background: string, toons: [ { id, x, y } ] }, ... ] }
   const { zones } = await readBody(event)
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { czoneCount: true }
+  })
+  const userRecord = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { additionalCzones: true }
+  })
+  const baseCount = Number(config?.czoneCount ?? 3)
+  const extraCount = Math.max(0, Number(userRecord?.additionalCzones ?? 0))
+  let maxZones = Math.max(1, baseCount + extraCount)
+  const existing = await prisma.cZone.findUnique({
+    where: { userId: user.id },
+    select: { layoutData: true }
+  })
+  if (
+    existing?.layoutData &&
+    typeof existing.layoutData === 'object' &&
+    Array.isArray(existing.layoutData.zones)
+  ) {
+    maxZones = Math.max(maxZones, existing.layoutData.zones.length)
+  }
   if (
     !Array.isArray(zones) ||
-    zones.length !== 3 ||
+    zones.length < 1 ||
+    zones.length > maxZones ||
     !zones.every(
       (z) =>
         typeof z === 'object' &&
@@ -27,7 +50,7 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage:
-        'Invalid request body: must provide `zones` as an array of 3 objects, each with a string `background` and array `toons`.',
+        'Invalid request body: must provide `zones` as an array of objects (1..max), each with a string `background` and array `toons`.',
     })
   }
 
@@ -74,11 +97,11 @@ export default defineEventHandler(async (event) => {
     ])
   )
 
-  // 4. Enrich & dedupe across all three zones
+  // 4. Enrich & dedupe across all zones
   const seenCtoonIds = new Set()
   const enrichedZones = []
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < zones.length; i++) {
     const zone = zones[i]
     const enrichedToons = []
 
@@ -129,6 +152,9 @@ export default defineEventHandler(async (event) => {
       background: zone.background,
       toons: enrichedToons,
     })
+  }
+  while (enrichedZones.length < maxZones) {
+    enrichedZones.push({ background: '', toons: [] })
   }
 
   // 5. Upsert the CZone

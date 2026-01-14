@@ -810,7 +810,7 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
 
-    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
+    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
       zones.value = res.cZone.zones.map(z => ({
         background: typeof z.background === 'string' ? z.background : '',
         toons: Array.isArray(z.toons) ? z.toons : []
@@ -821,6 +821,10 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
         { background: '', toons: [] },
         { background: '', toons: [] }
       ]
+    }
+
+    if (currentZoneIndex.value > zones.value.length - 1) {
+      currentZoneIndex.value = zones.value.length - 1
     }
 
     if (awardVisit && user.value && res.ownerId !== user.value.id) {
@@ -1007,7 +1011,7 @@ const tradeListCountText = computed(() => {
   return String(tradeListCtoons.value.length)
 })
 
-// Which zone index is currently displayed (0, 1, or 2)
+// Which zone index is currently displayed
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
 const maxZoneNumber = computed(() => {
@@ -1043,7 +1047,7 @@ const hasOtherZones = computed(() => {
 
 // Helper booleans for “Next” / “Previous” arrow enable/disable
 const hasNext = computed(() => {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) return true
   }
   return false
@@ -1057,7 +1061,7 @@ const hasPrevious = computed(() => {
 
 // Functions to advance to the next/previous non‐empty zone
 function goToNext() {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) {
       currentZoneIndex.value = i
       return

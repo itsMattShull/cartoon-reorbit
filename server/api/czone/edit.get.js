@@ -44,29 +44,44 @@ export default defineEventHandler(async (event) => {
     where: { userId: user.id }
   })
 
-  // 4) If we already have layoutData.zones[] (length 3), return that directly
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { czoneCount: true }
+  })
+  const userRecord = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { additionalCzones: true }
+  })
+  const baseCount = Number(config?.czoneCount ?? 3)
+  const extraCount = Math.max(0, Number(userRecord?.additionalCzones ?? 0))
+  let targetCount = Math.max(1, baseCount + extraCount)
+
+  // 4) If we already have layoutData.zones[] (any length), return that directly
   if (
     zone?.layoutData &&
     typeof zone.layoutData === 'object' &&
     Array.isArray(zone.layoutData.zones) &&
-    zone.layoutData.zones.length === 3 &&
     zone.layoutData.zones.every(
       (z) =>
         typeof z.background === 'string' &&
         Array.isArray(z.toons)
     )
   ) {
-
+    const existingCount = zone.layoutData.zones.length
+    targetCount = Math.max(targetCount, existingCount)
+    const padded = [...zone.layoutData.zones]
+    while (padded.length < targetCount) {
+      padded.push({ background: '', toons: [] })
+    }
     return {
       ctoons,
       backgrounds,
-      zones: zone.layoutData.zones
+      zones: padded
     }
   }
 
-  // 5) Otherwise, we need to wrap the old single‐zone into a 3‐zone array.
-  //    If `zone.layoutData` was an array of items, put that array into the first sub‐zone,
-  //    and leave the other two empty.
+  // 5) Otherwise, wrap the old single‐zone into a multi-zone array.
+  //    If `zone.layoutData` was an array of items, put that array into the first sub‐zone.
 
   const singleLayout = Array.isArray(zone?.layoutData)
     ? zone.layoutData
@@ -75,11 +90,10 @@ export default defineEventHandler(async (event) => {
     ? zone.background
     : ''
 
-  const emptyZones = [
-    { background: singleBg, toons: singleLayout },
-    { background: '',     toons: [] },
-    { background: '',     toons: [] }
-  ]
+  const emptyZones = [{ background: singleBg, toons: singleLayout }]
+  while (emptyZones.length < targetCount) {
+    emptyZones.push({ background: '', toons: [] })
+  }
 
   return {
     ctoons,

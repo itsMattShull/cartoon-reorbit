@@ -23,30 +23,33 @@ function pickWeighted(items) {
   return items[items.length - 1] || null
 }
 
-// helper: normalize any legacy/single-zone layout into { zones: [ {background,toons:[]} x3 ] }
-function normalizeZones(czoneRow) {
+// helper: normalize any legacy/single-zone layout into { zones: [ {background,toons:[]} xN ] }
+function normalizeZones(czoneRow, targetCount = 3) {
   const z = czoneRow?.layoutData
   // new shape already
   if (
     z &&
     typeof z === 'object' &&
     Array.isArray(z.zones) &&
-    z.zones.length === 3 &&
     z.zones.every((zz) => zz && typeof zz.background === 'string' && Array.isArray(zz.toons))
   ) {
     // deep clone to avoid mutating Prisma's cached object
-    return JSON.parse(JSON.stringify(z.zones))
+    const zones = JSON.parse(JSON.stringify(z.zones))
+    while (zones.length < targetCount) {
+      zones.push({ background: '', toons: [] })
+    }
+    return zones
   }
 
   // legacy single-zone array in layoutData
   const single = Array.isArray(z) ? z : []
   const bg0 = typeof czoneRow?.background === 'string' ? czoneRow.background : ''
 
-  return [
-    { background: bg0, toons: JSON.parse(JSON.stringify(single)) },
-    { background: '',  toons: [] },
-    { background: '',  toons: [] }
-  ]
+  const zones = [{ background: bg0, toons: JSON.parse(JSON.stringify(single)) }]
+  while (zones.length < targetCount) {
+    zones.push({ background: '', toons: [] })
+  }
+  return zones
 }
 
 // helper: replace the burned userCtoon in zones with the rewarded one; returns { zones, replaced }
@@ -327,7 +330,27 @@ export default defineEventHandler(async (event) => {
     try {
       const czoneRow = await prisma.cZone.findFirst({ where: { userId } })
       if (czoneRow) {
-        const zones = normalizeZones(czoneRow)
+        const [config, userRecord] = await Promise.all([
+          prisma.globalGameConfig.findUnique({
+            where: { id: 'singleton' },
+            select: { czoneCount: true }
+          }),
+          prisma.user.findUnique({
+            where: { id: userId },
+            select: { additionalCzones: true }
+          })
+        ])
+        const baseCount = Number(config?.czoneCount ?? 3)
+        const extraCount = Math.max(0, Number(userRecord?.additionalCzones ?? 0))
+        let targetCount = Math.max(1, baseCount + extraCount)
+        if (
+          czoneRow.layoutData &&
+          typeof czoneRow.layoutData === 'object' &&
+          Array.isArray(czoneRow.layoutData.zones)
+        ) {
+          targetCount = Math.max(targetCount, czoneRow.layoutData.zones.length)
+        }
+        const zones = normalizeZones(czoneRow, targetCount)
 
         const rewardPayload = rewardUC
           ? {

@@ -105,33 +105,74 @@
             id="ctoon-suggest-listbox"
             class="absolute z-20 bg-white border rounded w-full mt-1 max-h-72 overflow-auto"
             role="listbox"
+            @click.stop
           >
             <div v-if="isSearchingCtoon" class="px-3 py-2 text-sm text-gray-600">Searching…</div>
-
-            <template v-else-if="ctoonResults.length">
-              <button
-                v-for="(c, idx) in ctoonResults"
-                :key="c.userCtoonId"
-                :class="[
-                  'w-full text-left px-3 py-2 flex items-center gap-3',
-                  highlightedCtoonIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
-                ]"
-                role="option"
-                :aria-selected="highlightedCtoonIndex === idx"
-                @mouseenter="highlightedCtoonIndex = idx"
-                @click="selectCtoonResult(c)"
+            <template v-else>
+              <div
+                v-if="ctoonMode === 'mint'"
+                class="px-3 py-2 border-b flex items-center justify-between gap-2"
               >
-                <img :src="c.assetPath" :alt="c.name" class="w-10 h-10 rounded border object-contain bg-white" />
-                <div class="min-w-0">
-                  <div class="font-medium truncate">{{ c.name }}</div>
-                  <div class="text-xs text-gray-600">
-                    Mint #{{ c.mintNumber ?? '—' }} · {{ c.ownerUsername }}
-                  </div>
-                </div>
-              </button>
-            </template>
+                <button
+                  type="button"
+                  class="text-xs text-indigo-600 hover:underline"
+                  @click="resetCtoonMode"
+                >
+                  Back to results
+                </button>
+                <span class="text-xs text-gray-600 truncate">
+                  Mints for {{ activeCtoon?.name || 'cToon' }}
+                </span>
+              </div>
 
-            <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+              <template v-if="ctoonMode === 'ctoon' && ctoonResults.length">
+                <button
+                  v-for="(c, idx) in ctoonResults"
+                  :key="c.ctoonId"
+                  :class="[
+                    'w-full text-left px-3 py-2 flex items-center gap-3',
+                    highlightedCtoonIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
+                  ]"
+                  role="option"
+                  :aria-selected="highlightedCtoonIndex === idx"
+                  @mouseenter="highlightedCtoonIndex = idx"
+                  @click="selectCtoonSummary(c)"
+                >
+                  <img :src="c.assetPath" :alt="c.name" class="w-10 h-10 rounded border object-contain bg-white" />
+                  <div class="min-w-0">
+                    <div class="font-medium truncate">{{ c.name }}</div>
+                    <div class="text-xs text-gray-600">
+                      Highest Mint #{{ c.highestMint ?? '—' }}
+                    </div>
+                  </div>
+                </button>
+              </template>
+
+              <template v-else-if="ctoonMode === 'mint' && ctoonMintResults.length">
+                <button
+                  v-for="(c, idx) in ctoonMintResults"
+                  :key="c.userCtoonId"
+                  :class="[
+                    'w-full text-left px-3 py-2 flex items-center gap-3',
+                    highlightedCtoonIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
+                  ]"
+                  role="option"
+                  :aria-selected="highlightedCtoonIndex === idx"
+                  @mouseenter="highlightedCtoonIndex = idx"
+                  @click="selectCtoonMint(c)"
+                >
+                  <img :src="c.assetPath" :alt="c.name" class="w-10 h-10 rounded border object-contain bg-white" />
+                  <div class="min-w-0">
+                    <div class="font-medium truncate">Mint #{{ c.mintNumber ?? '—' }}</div>
+                    <div class="text-xs text-gray-600">
+                      {{ c.ownerUsername }}
+                    </div>
+                  </div>
+                </button>
+              </template>
+
+              <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+            </template>
           </div>
         </div>
       </div>
@@ -188,17 +229,59 @@
         <div v-if="loading.other" class="py-16 text-center text-gray-500">Loading…</div>
         <div v-else>
           <EmptyState v-if="!filteredOther.length" label="No cToons match your filters" />
-          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            <CtoonCard
-              v-for="c in filteredOther"
-              :key="c.id"
-              :ctoon="c"
-              :selected="selectedTargetCtoonsMap.has(c.id)"
-              :badge="selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned'"
-              badge-class-owned="bg-green-100 text-green-800"
-              badge-class-unowned="bg-gray-200 text-gray-600"
-              @toggle="toggleTargetCtoon(c)"
-            />
+          <div v-else>
+            <div ref="otherListTopRef" class="flex flex-wrap items-center justify-between gap-3 text-sm mb-3">
+              <span class="text-gray-600">Showing {{ otherShowingRange }}</span>
+              <div class="flex items-center gap-3">
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageOther === 1"
+                  @click="prevOtherPage"
+                >
+                  Prev
+                </button>
+                <span>Page {{ pageOther }} of {{ totalPagesOther }}</span>
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageOther === totalPagesOther"
+                  @click="nextOtherPage"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              <CtoonCard
+                v-for="c in pagedOther"
+                :key="c.id"
+                :ctoon="c"
+                :selected="selectedTargetCtoonsMap.has(c.id)"
+                :badge="selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned'"
+                badge-class-owned="bg-green-100 text-green-800"
+                badge-class-unowned="bg-gray-200 text-gray-600"
+                @toggle="toggleTargetCtoon(c)"
+              />
+            </div>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span class="text-gray-600">Showing {{ otherShowingRange }}</span>
+              <div class="flex items-center gap-3">
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageOther === 1"
+                  @click="prevOtherPage"
+                >
+                  Prev
+                </button>
+                <span>Page {{ pageOther }} of {{ totalPagesOther }}</span>
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageOther === totalPagesOther"
+                  @click="nextOtherPage"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -289,17 +372,59 @@
               ? `No cToons from ${targetUser?.username ?? 'user'}’s Wishlist in your collection`
               : 'No cToons match your filters'"
           />
-          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            <CtoonCard
-              v-for="c in filteredSelf"
-              :key="c.id"
-              :ctoon="c"
-              :selected="selectedInitiatorCtoonsMap.has(c.id)"
-              :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
-              badge-class-owned="bg-blue-100 text-blue-800"
-              badge-class-unowned="bg-gray-200 text-gray-600"
-              @toggle="toggleInitiatorCtoon(c)"
-            />
+          <div v-else>
+            <div ref="selfListTopRef" class="flex flex-wrap items-center justify-between gap-3 text-sm mb-3">
+              <span class="text-gray-600">Showing {{ selfShowingRange }}</span>
+              <div class="flex items-center gap-3">
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageSelf === 1"
+                  @click="prevSelfPage"
+                >
+                  Prev
+                </button>
+                <span>Page {{ pageSelf }} of {{ totalPagesSelf }}</span>
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageSelf === totalPagesSelf"
+                  @click="nextSelfPage"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              <CtoonCard
+                v-for="c in pagedSelf"
+                :key="c.id"
+                :ctoon="c"
+                :selected="selectedInitiatorCtoonsMap.has(c.id)"
+                :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
+                badge-class-owned="bg-blue-100 text-blue-800"
+                badge-class-unowned="bg-gray-200 text-gray-600"
+                @toggle="toggleInitiatorCtoon(c)"
+              />
+            </div>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span class="text-gray-600">Showing {{ selfShowingRange }}</span>
+              <div class="flex items-center gap-3">
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageSelf === 1"
+                  @click="prevSelfPage"
+                >
+                  Prev
+                </button>
+                <span>Page {{ pageSelf }} of {{ totalPagesSelf }}</span>
+                <button
+                  class="bg-white border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                  :disabled="pageSelf === totalPagesSelf"
+                  @click="nextSelfPage"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -416,6 +541,7 @@ const manualPreselectUserCtoonId = ref(null)
 // ────────────────────────────────────────────────────────────────────────────────
 const MIN_CHARS = 3
 const DEBOUNCE_MS = 250
+const PAGE_SIZE = 50
 
 const userQuery = ref('')
 const userResults = ref([])
@@ -430,14 +556,21 @@ const userSuggestRef = ref(null)
 
 const ctoonQuery = ref('')
 const ctoonResults = ref([])
+const ctoonMintResults = ref([])
+const ctoonMode = ref('ctoon')
+const activeCtoon = ref(null)
 const showCtoonSuggest = ref(false)
 const isSearchingCtoon = ref(false)
 const highlightedCtoonIndex = ref(-1)
 const ctoonInputRef = ref(null)
 const ctoonSuggestRef = ref(null)
+const otherListTopRef = ref(null)
+const selfListTopRef = ref(null)
+const suppressCtoonInput = ref(false)
 
 let ctoonSearchTimer
 const ctoonSearchCache = new Map()
+const ctoonMintCache = new Map()
 
 let userSearchTimer
 const userSearchCache = new Map() // simple in-memory cache by query string
@@ -472,6 +605,9 @@ const filters = reactive({
   other: { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' },
   self:  { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
 })
+
+const pageOther = ref(1)
+const pageSelf = ref(1)
 
 // compute which ctoonIds are duplicates for each list
 const dupIdsOther = computed(() => {
@@ -622,6 +758,8 @@ async function selectTargetUser(u, options = {}) {
   }
   if (!options.keepPreselect) manualPreselectUserCtoonId.value = null
   targetUser.value = u
+  pageOther.value = 1
+  pageSelf.value = 1
   userQuery.value = u.username
   showUserSuggest.value = false
   showCtoonSuggest.value = false
@@ -632,9 +770,13 @@ async function selectTargetUser(u, options = {}) {
 }
 
 function onCtoonQueryInput() {
+  if (suppressCtoonInput.value) {
+    suppressCtoonInput.value = false
+    return
+  }
   targetError.value = ''
   showCtoonSuggest.value = true
-  highlightedCtoonIndex.value = -1
+  resetCtoonMode()
   clearTimeout(ctoonSearchTimer)
 
   const q = ctoonQuery.value || ''
@@ -654,11 +796,10 @@ function onCtoonQueryInput() {
         return
       }
 
-      const res = await $fetch('/api/trade/search-ctoons', { params: { q, limit: 12 } })
+      const res = await $fetch('/api/trade/search-ctoons', { params: { q, limit: 50 } })
       const items = Array.isArray(res) ? res : (res?.items || [])
-      const filtered = items.filter(i => !isSelfUsername(i.ownerUsername))
-      ctoonSearchCache.set(key, filtered)
-      ctoonResults.value = filtered
+      ctoonSearchCache.set(key, items)
+      ctoonResults.value = items
     } catch (e) {
       ctoonResults.value = []
     } finally {
@@ -669,7 +810,8 @@ function onCtoonQueryInput() {
 
 function onCtoonKeydown(e) {
   if (!showCtoonSuggest.value) return
-  const max = ctoonResults.value.length - 1
+  const list = ctoonMode.value === 'mint' ? ctoonMintResults.value : ctoonResults.value
+  const max = list.length - 1
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     highlightedCtoonIndex.value = highlightedCtoonIndex.value < max ? highlightedCtoonIndex.value + 1 : 0
@@ -677,16 +819,62 @@ function onCtoonKeydown(e) {
     e.preventDefault()
     highlightedCtoonIndex.value = highlightedCtoonIndex.value > 0 ? highlightedCtoonIndex.value - 1 : max
   } else if (e.key === 'Enter') {
+    if (highlightedCtoonIndex.value === -1 && list.length) {
+      e.preventDefault()
+      const item = list[0]
+      if (ctoonMode.value === 'mint') selectCtoonMint(item)
+      else selectCtoonSummary(item)
+      return
+    }
     if (highlightedCtoonIndex.value >= 0 && highlightedCtoonIndex.value <= max) {
       e.preventDefault()
-      selectCtoonResult(ctoonResults.value[highlightedCtoonIndex.value])
+      const item = list[highlightedCtoonIndex.value]
+      if (ctoonMode.value === 'mint') selectCtoonMint(item)
+      else selectCtoonSummary(item)
     }
   } else if (e.key === 'Escape') {
     showCtoonSuggest.value = false
   }
 }
 
-async function selectCtoonResult(item) {
+function resetCtoonMode() {
+  ctoonMode.value = 'ctoon'
+  activeCtoon.value = null
+  ctoonMintResults.value = []
+  highlightedCtoonIndex.value = -1
+}
+
+async function selectCtoonSummary(item) {
+  if (!item?.ctoonId) return
+  ctoonMode.value = 'mint'
+  activeCtoon.value = { ctoonId: item.ctoonId, name: item.name, assetPath: item.assetPath }
+  suppressCtoonInput.value = true
+  ctoonQuery.value = item.name || ctoonQuery.value
+  setTimeout(() => { suppressCtoonInput.value = false }, 0)
+  highlightedCtoonIndex.value = -1
+  showCtoonSuggest.value = true
+
+  const key = String(item.ctoonId)
+  try {
+    isSearchingCtoon.value = true
+    if (ctoonMintCache.has(key)) {
+      ctoonMintResults.value = sortMintResults(ctoonMintCache.get(key))
+      return
+    }
+
+    const res = await $fetch('/api/trade/search-ctoons', { params: { ctoonId: item.ctoonId } })
+    const items = Array.isArray(res) ? res : (res?.items || [])
+    const sorted = sortMintResults(items)
+    ctoonMintCache.set(key, sorted)
+    ctoonMintResults.value = sorted
+  } catch (e) {
+    ctoonMintResults.value = []
+  } finally {
+    isSearchingCtoon.value = false
+  }
+}
+
+async function selectCtoonMint(item) {
   await ensureSelfLoaded()
   if (!item?.ownerUsername) return
   if (isSelfUsername(item.ownerUsername)) {
@@ -716,6 +904,9 @@ async function clearTarget(focusInput = false) {
   isSearching.value = false
   ctoonQuery.value = ''
   ctoonResults.value = []
+  ctoonMintResults.value = []
+  ctoonMode.value = 'ctoon'
+  activeCtoon.value = null
   highlightedCtoonIndex.value = -1
   showCtoonSuggest.value = false
   isSearchingCtoon.value = false
@@ -725,6 +916,8 @@ async function clearTarget(focusInput = false) {
   pointsToOffer.value = 0
   otherCtoons.value = []
   selfCtoons.value = []
+  pageOther.value = 1
+  pageSelf.value = 1
   filters.other = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
   filters.self  = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
 
@@ -921,6 +1114,89 @@ const filteredSelf = computed(() => {
   }
   return list
 })
+
+const totalPagesOther = computed(() => Math.max(1, Math.ceil(filteredOther.value.length / PAGE_SIZE)))
+const totalPagesSelf = computed(() => Math.max(1, Math.ceil(filteredSelf.value.length / PAGE_SIZE)))
+
+const pagedOther = computed(() => {
+  const start = (pageOther.value - 1) * PAGE_SIZE
+  return filteredOther.value.slice(start, start + PAGE_SIZE)
+})
+const pagedSelf = computed(() => {
+  const start = (pageSelf.value - 1) * PAGE_SIZE
+  return filteredSelf.value.slice(start, start + PAGE_SIZE)
+})
+
+const otherShowingRange = computed(() => {
+  const total = filteredOther.value.length
+  if (!total) return '0-0 of 0'
+  const start = (pageOther.value - 1) * PAGE_SIZE + 1
+  const end = Math.min(pageOther.value * PAGE_SIZE, total)
+  return `${start}-${end} of ${total}`
+})
+const selfShowingRange = computed(() => {
+  const total = filteredSelf.value.length
+  if (!total) return '0-0 of 0'
+  const start = (pageSelf.value - 1) * PAGE_SIZE + 1
+  const end = Math.min(pageSelf.value * PAGE_SIZE, total)
+  return `${start}-${end} of ${total}`
+})
+
+watch(() => filters.other, () => {
+  pageOther.value = 1
+}, { deep: true })
+watch(() => filters.self, () => {
+  pageSelf.value = 1
+}, { deep: true })
+
+watch(totalPagesOther, (total) => {
+  if (pageOther.value > total) pageOther.value = total
+})
+watch(totalPagesSelf, (total) => {
+  if (pageSelf.value > total) pageSelf.value = total
+})
+
+function prevOtherPage() {
+  if (pageOther.value > 1) {
+    pageOther.value -= 1
+    scrollToListTop('other')
+  }
+}
+function nextOtherPage() {
+  if (pageOther.value < totalPagesOther.value) {
+    pageOther.value += 1
+    scrollToListTop('other')
+  }
+}
+function prevSelfPage() {
+  if (pageSelf.value > 1) {
+    pageSelf.value -= 1
+    scrollToListTop('self')
+  }
+}
+function nextSelfPage() {
+  if (pageSelf.value < totalPagesSelf.value) {
+    pageSelf.value += 1
+    scrollToListTop('self')
+  }
+}
+
+function scrollToListTop(which) {
+  const el = which === 'self' ? selfListTopRef.value : otherListTopRef.value
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function sortMintResults(list) {
+  return [...(list || [])].sort((a, b) => {
+    const aMint = a?.mintNumber ?? Number.POSITIVE_INFINITY
+    const bMint = b?.mintNumber ?? Number.POSITIVE_INFINITY
+    if (aMint !== bMint) return aMint - bMint
+    const aOwner = (a?.ownerUsername || '').toString()
+    const bOwner = (b?.ownerUsername || '').toString()
+    return aOwner.localeCompare(bOwner, undefined, { sensitivity: 'base' })
+  })
+}
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Offer

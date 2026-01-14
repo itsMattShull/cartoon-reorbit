@@ -90,12 +90,12 @@
           ← Zone {{ currentZoneIndex }}
         </button>
         <div class="text-sm font-medium">
-          Zone {{ currentZoneIndex + 1 }} of 3
+          Zone {{ currentZoneIndex + 1 }} of {{ zoneCount }}
         </div>
         <button
           class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 disabled:opacity-50"
           @click="nextZone"
-          :disabled="currentZoneIndex === 2"
+          :disabled="currentZoneIndex === zoneCount - 1"
         >
           Zone {{ currentZoneIndex + 2 }} →
         </button>
@@ -280,16 +280,17 @@ const seriesFilter = ref('')
 const rarityFilter = ref('')
 const searchQuery = ref('')
 
-// Instead of a single layout/background, store three zones
+// Instead of a single layout/background, store multiple zones
 const zones = ref([
   { layout: [], background: '' },
   { layout: [], background: '' },
   { layout: [], background: '' },
 ])
 
-// Which zone is currently active (0, 1 or 2)
+// Which zone is currently active
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
+const zoneCount = computed(() => Math.max(1, zones.value.length))
 
 // Computed getter/setter so template can do “layout” → currentZone.layout
 const layout = computed({
@@ -338,7 +339,7 @@ const uniqueRarities = computed(() =>
   [...new Set(ctoons.value.map((c) => c.rarity).filter(Boolean))]
 )
 
-// Keep track of every cToon already placed in any of the three zones
+// Keep track of every cToon already placed in any zone
 const placedIds = computed(() =>
   new Set(zones.value.flatMap((z) => z.layout.map((item) => item.id)))
 )
@@ -360,7 +361,7 @@ const filteredCtoons = computed(() => {
 
 // ——— Zone paging ———
 function nextZone() {
-  if (currentZoneIndex.value < 2) {
+  if (currentZoneIndex.value < zoneCount.value - 1) {
     currentZoneIndex.value += 1
   }
 }
@@ -665,7 +666,7 @@ onMounted(async () => {
   if (
     res.zones &&
     Array.isArray(res.zones) &&
-    res.zones.length === 3 &&
+    res.zones.length >= 1 &&
     res.zones.every((z) => typeof z.background === 'string' && Array.isArray(z.toons))
   ) {
     zones.value = res.zones.map((z) => ({
@@ -673,14 +674,13 @@ onMounted(async () => {
       background: typeof z.background === 'string' ? z.background : '',
     }))
   } else {
-    zones.value = [
-      {
-        layout: Array.isArray(res.layout) ? [...res.layout] : [],
-        background: typeof res.background === 'string' ? res.background : '',
-      },
-      { layout: [], background: '' },
-      { layout: [], background: '' },
-    ]
+    zones.value = [{
+      layout: Array.isArray(res.layout) ? [...res.layout] : [],
+      background: typeof res.background === 'string' ? res.background : '',
+    }]
+  }
+  if (currentZoneIndex.value > zones.value.length - 1) {
+    currentZoneIndex.value = zones.value.length - 1
   }
 
   // Assign width/height to every loaded cToon

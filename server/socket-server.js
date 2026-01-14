@@ -2050,18 +2050,58 @@ io.on('connection', socket => {
 
       // CZone cleanup
       try {
+        const offerIdsA = new Set(offersA.map(ct => ct.id))
         const aZone = await db.cZone.findUnique({ where: { userId: aId } })
-        if (aZone && Array.isArray(aZone.layoutData)) {
-          const filtered = aZone.layoutData.filter(id => !offersA.some(ct => ct.id === id))
-          await db.cZone.update({ where: { userId: aId }, data: { layoutData: filtered } })
+        if (aZone) {
+          let changed = false
+          let nextLayoutData = aZone.layoutData
+          if (Array.isArray(aZone.layoutData)) {
+            const filtered = aZone.layoutData.filter(id => !offerIdsA.has(id))
+            changed = filtered.length !== aZone.layoutData.length
+            nextLayoutData = filtered
+          } else if (aZone.layoutData && typeof aZone.layoutData === 'object' && Array.isArray(aZone.layoutData.zones)) {
+            const nextZones = aZone.layoutData.zones.map((zone) => {
+              if (!Array.isArray(zone?.toons)) return zone
+              const filteredToons = zone.toons.filter((item) => {
+                const itemId = item?.userCtoonId || item?.id
+                return !offerIdsA.has(itemId)
+              })
+              if (filteredToons.length !== zone.toons.length) changed = true
+              return { ...zone, toons: filteredToons }
+            })
+            nextLayoutData = { ...aZone.layoutData, zones: nextZones }
+          }
+          if (changed) {
+            await db.cZone.update({ where: { userId: aId }, data: { layoutData: nextLayoutData } })
+          }
         }
       } catch (e) { console.error('CZone A update failed:', e) }
 
       try {
+        const offerIdsB = new Set(offersB.map(ct => ct.id))
         const bZone = await db.cZone.findUnique({ where: { userId: bId } })
-        if (bZone && Array.isArray(bZone.layoutData)) {
-          const filtered = bZone.layoutData.filter(id => !offersB.some(ct => ct.id === id))
-          await db.cZone.update({ where: { userId: bId }, data: { layoutData: filtered } })
+        if (bZone) {
+          let changed = false
+          let nextLayoutData = bZone.layoutData
+          if (Array.isArray(bZone.layoutData)) {
+            const filtered = bZone.layoutData.filter(id => !offerIdsB.has(id))
+            changed = filtered.length !== bZone.layoutData.length
+            nextLayoutData = filtered
+          } else if (bZone.layoutData && typeof bZone.layoutData === 'object' && Array.isArray(bZone.layoutData.zones)) {
+            const nextZones = bZone.layoutData.zones.map((zone) => {
+              if (!Array.isArray(zone?.toons)) return zone
+              const filteredToons = zone.toons.filter((item) => {
+                const itemId = item?.userCtoonId || item?.id
+                return !offerIdsB.has(itemId)
+              })
+              if (filteredToons.length !== zone.toons.length) changed = true
+              return { ...zone, toons: filteredToons }
+            })
+            nextLayoutData = { ...bZone.layoutData, zones: nextZones }
+          }
+          if (changed) {
+            await db.cZone.update({ where: { userId: bId }, data: { layoutData: nextLayoutData } })
+          }
         }
       } catch (e) { console.error('CZone B update failed:', e) }
 

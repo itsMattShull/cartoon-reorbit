@@ -66,6 +66,7 @@
             >
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
+              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
               <button
                 v-if="!u.isAdmin && !u.banned"
                 class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
@@ -250,6 +251,39 @@
 
       <div class="mt-4 flex items-center justify-end">
         <button class="px-3 py-1 text-sm border rounded-md" @click="closeLockedModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Additional cZones modal -->
+  <div v-if="showAdditionalZonesModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeAdditionalZonesModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <h3 class="text-lg font-semibold">Additional cZones — {{ additionalZonesTarget?.username || additionalZonesTarget?.discordTag || 'user' }}</h3>
+      <p class="mt-2 text-sm text-gray-600">Set how many extra cZones this user can have.</p>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700">Additional cZones</label>
+        <input
+          v-model.number="additionalZonesValue"
+          type="number"
+          min="0"
+          class="mt-2 w-full border rounded-md px-3 py-2 text-sm"
+        />
+      </div>
+
+      <div v-if="additionalZonesError" class="mt-2 text-sm text-red-600">{{ additionalZonesError }}</div>
+
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeAdditionalZonesModal()" :disabled="additionalZonesWorking">Cancel</button>
+        <button
+          class="px-3 py-1 text-sm rounded-md text-white"
+          :class="additionalZonesCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+          :disabled="!additionalZonesCanSave || additionalZonesWorking"
+          @click="saveAdditionalZones"
+        >
+          {{ additionalZonesWorking ? 'Saving…' : 'Save' }}
+        </button>
       </div>
     </div>
   </div>
@@ -580,6 +614,49 @@ async function unlockLock(lock) {
     lockedError.value = e?.data?.statusMessage || e?.message || 'Failed to unlock points.'
   } finally {
     unlockWorking.value = null
+  }
+}
+
+// Additional cZones state
+const showAdditionalZonesModal = ref(false)
+const additionalZonesTarget = ref(null)
+const additionalZonesValue = ref(0)
+const additionalZonesError = ref('')
+const additionalZonesWorking = ref(false)
+const additionalZonesCanSave = computed(() => Number.isInteger(additionalZonesValue.value) && additionalZonesValue.value >= 0)
+
+function openAdditionalZones(u) {
+  additionalZonesTarget.value = u
+  additionalZonesValue.value = Number(u.additionalCzones ?? 0)
+  additionalZonesError.value = ''
+  additionalZonesWorking.value = false
+  showAdditionalZonesModal.value = true
+}
+function closeAdditionalZonesModal() {
+  showAdditionalZonesModal.value = false
+  additionalZonesTarget.value = null
+  additionalZonesValue.value = 0
+  additionalZonesError.value = ''
+  additionalZonesWorking.value = false
+}
+async function saveAdditionalZones() {
+  if (!additionalZonesTarget.value || !additionalZonesCanSave.value) return
+  additionalZonesWorking.value = true
+  additionalZonesError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${additionalZonesTarget.value.id}/additional-czones`, {
+      method: 'POST',
+      body: { additionalCzones: additionalZonesValue.value }
+    })
+    const idx = users.value.findIndex(x => x.id === additionalZonesTarget.value.id)
+    if (idx !== -1) {
+      users.value[idx] = { ...users.value[idx], additionalCzones: res?.additionalCzones ?? additionalZonesValue.value }
+    }
+    closeAdditionalZonesModal()
+  } catch (e) {
+    additionalZonesError.value = e?.data?.statusMessage || e?.message || 'Failed to update additional cZones.'
+  } finally {
+    additionalZonesWorking.value = false
   }
 }
 

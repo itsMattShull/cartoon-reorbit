@@ -225,6 +225,7 @@ model User {
   warning180                        Boolean   @default(false)
   warning210                        Boolean   @default(false)
   warning240                        Boolean   @default(false)
+  additionalCzones                  Int       @default(0)
 
   cZones                   CZone[]
   clashDecks               ClashDeck[]
@@ -610,6 +611,7 @@ model GlobalGameConfig {
   dailyNewUserPoints     Int      @default(1000)
   czoneVisitPoints       Int      @default(20)
   czoneVisitMaxPerDay    Int      @default(10)
+  czoneCount             Int      @default(3)
   phashDuplicateThreshold Int     @default(14)
   dhashDuplicateThreshold Int     @default(16)
   rarityDefaults         Json?
