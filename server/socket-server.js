@@ -32,6 +32,7 @@ const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
  *  HTTP + Socket.IO bootstrap
  * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
+const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 const io = new Server(httpServer, { cors: { origin: '*' } })
 
@@ -56,6 +57,11 @@ const PVE_MATCH_IDLE_MS = 15 * 60 * 1000
 const MONSTER_BATTLE_IDLE_MS = 15 * 60 * 1000
 const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
 
+const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
+const METRICS_HISTORY_LIMIT = Number(process.env.SOCKET_METRICS_HISTORY_LIMIT || 1440)
+const METRICS_TOKEN = process.env.SOCKET_METRICS_TOKEN || ''
+const metricsHistory = []
+
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
@@ -67,6 +73,91 @@ const touchActivity = (obj) => {
 }
 
 const isIdle = (obj, now, maxMs) => (now - (obj?.lastActivity || 0)) > maxMs
+
+function getSocketMetricsSnapshot() {
+  const zoneNames = Object.keys(zoneSockets)
+  let zoneSocketRefs = 0
+  for (const zone of zoneNames) {
+    const set = zoneSockets[zone]
+    zoneSocketRefs += set ? set.size : 0
+  }
+
+  const tradeRoomNames = Object.keys(tradeRooms)
+  let tradeSpectators = 0
+  for (const roomName of tradeRoomNames) {
+    const room = tradeRooms[roomName]
+    tradeSpectators += room?.spectators?.size || 0
+  }
+
+  const mem = process.memoryUsage()
+
+  return {
+    ts: Date.now(),
+    activeSockets: io.sockets.sockets.size,
+    zoneCount: zoneNames.length,
+    zoneSocketRefs,
+    zoneVisitorCount: Object.values(zoneVisitors).reduce((sum, count) => sum + Number(count || 0), 0),
+    tradeRoomCount: tradeRoomNames.length,
+    tradeSpectators,
+    tradeSocketsCount: Object.keys(tradeSockets).length,
+    pvpRoomCount: pvpRooms.size,
+    pvpMatchCount: pvpMatches.size,
+    pveMatchCount: pveMatches.size,
+    monsterBattleCount: monsterBattles.size,
+    rssMb: Math.round(mem.rss / 1024 / 1024),
+    heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024)
+  }
+}
+
+function recordSocketMetrics() {
+  const sample = getSocketMetricsSnapshot()
+  metricsHistory.push(sample)
+  if (metricsHistory.length > METRICS_HISTORY_LIMIT) {
+    metricsHistory.splice(0, metricsHistory.length - METRICS_HISTORY_LIMIT)
+  }
+  return sample
+}
+
+httpServer.on('request', (req, res) => {
+  if (!req?.url) return
+  const host = req.headers.host || 'localhost'
+  const url = new URL(req.url, `http://${host}`)
+  if (url.pathname.startsWith(SOCKET_PATH)) return
+
+  if (url.pathname === '/metrics/socket') {
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, x-metrics-token'
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, headers)
+      res.end()
+      return
+    }
+
+    const token = Array.isArray(req.headers['x-metrics-token'])
+      ? req.headers['x-metrics-token'][0]
+      : req.headers['x-metrics-token']
+    if (METRICS_TOKEN && token !== METRICS_TOKEN) {
+      res.writeHead(401, headers)
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
+
+    if (!metricsHistory.length) recordSocketMetrics()
+    const limit = Number(url.searchParams.get('limit') || METRICS_HISTORY_LIMIT)
+    const samples = metricsHistory.slice(-limit)
+    const latest = samples[samples.length - 1] || metricsHistory[metricsHistory.length - 1] || getSocketMetricsSnapshot()
+
+    res.writeHead(200, { ...headers, 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ intervalMs: METRICS_SAMPLE_MS, latest, samples }))
+    return
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' })
+  res.end('Not Found')
+})
 
 const ASSET_BASE =
   process.env.ASSET_BASE ||
@@ -800,8 +891,11 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
   const lobby = pvpRooms.get(roomId)
   if (lobby) {
     if (userId) {
-      lobby.players = lobby.players.filter(id => id !== String(userId))
-      if (lobby.decks) delete lobby.decks[String(userId)]
+      const uid = String(userId)
+      lobby.players = lobby.players.filter(id => id !== uid)
+      if (lobby.decks) delete lobby.decks[uid]
+      if (lobby.ready) delete lobby.ready[uid]
+      if (lobby.usernames) delete lobby.usernames[uid]
     }
 
     // recompute future size after this socket leaves
@@ -1758,6 +1852,23 @@ io.on('connection', socket => {
   })
 
   socket.on('join-zone', ({ zone }) => {
+    const prevZone = socket.zone
+    if (prevZone && prevZone !== zone) {
+      socket.leave(prevZone)
+      if (zoneSockets[prevZone]) {
+        zoneSockets[prevZone].delete(socket.id)
+      }
+      if (zoneVisitors[prevZone]) {
+        zoneVisitors[prevZone] = Math.max(zoneVisitors[prevZone] - 1, 0)
+        if (zoneVisitors[prevZone] === 0) {
+          delete zoneVisitors[prevZone]
+          delete zoneSockets[prevZone]
+        } else {
+          io.to(prevZone).emit('visitor-count', zoneVisitors[prevZone])
+        }
+      }
+    }
+
     socket.zone = zone
     socket.join(zone)
 
@@ -2135,6 +2246,12 @@ io.on('connection', socket => {
   })
 
   socket.on('leave-zone', ({ zone }) => {
+    if (zone) {
+      socket.leave(zone)
+      if (socket.zone === zone) {
+        socket.zone = null
+      }
+    }
     if (zone && zoneVisitors[zone]) {
       zoneVisitors[zone]--
       if (zoneSockets[zone]) {
@@ -2511,11 +2628,21 @@ async function sweepStaleState() {
   }
 
   for (const [roomName, roomData] of Object.entries(tradeRooms)) {
+    if (roomData?.spectators?.size) {
+      for (const socketId of Array.from(roomData.spectators)) {
+        if (!activeSocketIds.has(socketId)) roomData.spectators.delete(socketId)
+      }
+    }
     if (roomSize(io, roomName) !== 0) continue
     if (!isIdle(roomData, now, TRADE_ROOM_IDLE_MS)) continue
     delete tradeRooms[roomName]
   }
 }
+
+recordSocketMetrics()
+setInterval(() => {
+  recordSocketMetrics()
+}, METRICS_SAMPLE_MS)
 
 setInterval(() => {
   sweepStaleState().catch((err) => {
