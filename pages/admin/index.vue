@@ -121,6 +121,9 @@
         <p class="text-sm text-gray-600 mb-2">
           {{ leakRiskSummary }}
         </p>
+        <p class="text-xs text-gray-500 mb-2">
+          RSS MB is resident set size: the total memory the socket server process holds in RAM (heap + native).
+        </p>
         <p v-if="socketMetricsUpdatedAt" class="text-xs text-gray-500 mb-3">
           Last sample: {{ formatSocketTime(socketMetricsUpdatedAt) }} · Samples: {{ socketMetricsSeries.length }}
         </p>
@@ -471,7 +474,9 @@ const colors = {
   socketZoneRefs: '#2563EB',
   socketTradeSockets: '#10B981',
   socketTradeSpectators: '#F97316',
-  socketRooms: '#8B5CF6',
+  socketAuction: '#14B8A6',
+  socketMonster: '#8B5CF6',
+  socketClash: '#0EA5E9',
   socketRss: '#9CA3AF'
 }
 colors.turnover = {
@@ -833,21 +838,14 @@ async function fetchSocketMetrics() {
   socketMetricsUpdatedAt.value = latest ? new Date(latest.ts) : null
 
   const series = (key) => samples.map(s => ({ x: s.ts, y: s[key] ?? 0 }))
-  const roomTotals = samples.map((s) => ({
-    x: s.ts,
-    y: (s.tradeRoomCount || 0) +
-      (s.pvpRoomCount || 0) +
-      (s.pvpMatchCount || 0) +
-      (s.pveMatchCount || 0) +
-      (s.monsterBattleCount || 0)
-  }))
-
   socketMetricsChart.data.datasets[0].data = series('activeSockets')
   socketMetricsChart.data.datasets[1].data = series('zoneSocketRefs')
   socketMetricsChart.data.datasets[2].data = series('tradeSocketsCount')
   socketMetricsChart.data.datasets[3].data = series('tradeSpectators')
-  socketMetricsChart.data.datasets[4].data = roomTotals
-  socketMetricsChart.data.datasets[5].data = series('rssMb')
+  socketMetricsChart.data.datasets[4].data = series('auctionSocketMembers')
+  socketMetricsChart.data.datasets[5].data = series('monsterSocketMembers')
+  socketMetricsChart.data.datasets[6].data = series('clashSocketMembers')
+  socketMetricsChart.data.datasets[7].data = series('rssMb')
   socketMetricsChart.update()
 
   computeLeakRisk(samples, socketMetricsIntervalMs.value)
@@ -1202,7 +1200,9 @@ onMounted(async () => {
         { label: 'Zone socket refs', data: [], borderColor: colors.socketZoneRefs, backgroundColor: colors.socketZoneRefs, borderWidth: 2, fill: false, tension: 0.2 },
         { label: 'Trade sockets', data: [], borderColor: colors.socketTradeSockets, backgroundColor: colors.socketTradeSockets, borderWidth: 2, fill: false, tension: 0.2, borderDash: [4, 3] },
         { label: 'Trade spectators', data: [], borderColor: colors.socketTradeSpectators, backgroundColor: colors.socketTradeSpectators, borderWidth: 2, fill: false, tension: 0.2 },
-        { label: 'Room totals', data: [], borderColor: colors.socketRooms, backgroundColor: colors.socketRooms, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Auction sockets', data: [], borderColor: colors.socketAuction, backgroundColor: colors.socketAuction, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Monster sockets', data: [], borderColor: colors.socketMonster, backgroundColor: colors.socketMonster, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Clash sockets', data: [], borderColor: colors.socketClash, backgroundColor: colors.socketClash, borderWidth: 2, fill: false, tension: 0.2 },
         { label: 'RSS MB', data: [], borderColor: colors.socketRss, backgroundColor: colors.socketRss, borderWidth: 2, fill: false, tension: 0.2, yAxisID: 'y2' }
       ]
     },

@@ -89,6 +89,33 @@ function getSocketMetricsSnapshot() {
     tradeSpectators += room?.spectators?.size || 0
   }
 
+  const adapterRooms = io.sockets.adapter.rooms
+  const socketIds = new Set(io.sockets.sockets.keys())
+  let auctionSocketMembers = 0
+
+  for (const [roomName, members] of adapterRooms) {
+    if (socketIds.has(roomName)) continue
+    if (roomName.startsWith('auction_')) {
+      auctionSocketMembers += members?.size || 0
+    }
+  }
+
+  let monsterSocketMembers = 0
+  for (const battleId of monsterBattles.keys()) {
+    monsterSocketMembers += roomSize(io, battleId)
+  }
+
+  let clashSocketMembers = 0
+  for (const roomId of pvpRooms.keys()) {
+    clashSocketMembers += roomSize(io, roomId)
+  }
+  for (const roomId of pvpMatches.keys()) {
+    clashSocketMembers += roomSize(io, roomId)
+  }
+  for (const gameId of pveMatches.keys()) {
+    clashSocketMembers += roomSize(io, gameId)
+  }
+
   const mem = process.memoryUsage()
 
   return {
@@ -100,6 +127,9 @@ function getSocketMetricsSnapshot() {
     tradeRoomCount: tradeRoomNames.length,
     tradeSpectators,
     tradeSocketsCount: Object.keys(tradeSockets).length,
+    auctionSocketMembers,
+    monsterSocketMembers,
+    clashSocketMembers,
     pvpRoomCount: pvpRooms.size,
     pvpMatchCount: pvpMatches.size,
     pveMatchCount: pveMatches.size,
