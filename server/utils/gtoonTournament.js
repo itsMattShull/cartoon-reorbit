@@ -237,7 +237,19 @@ function computeMatchFromBattles(match, battles, maxSuddenDeathGames) {
     outcome = 'B_WIN'
     winnerUserId = match.playerBUserId
   } else if (baseCount >= bestOf) {
-    outcome = 'TIE'
+    if (match.stage === 'SWISS') {
+      if (winsA > winsB) {
+        outcome = 'A_WIN'
+        winnerUserId = match.playerAUserId
+      } else if (winsB > winsA) {
+        outcome = 'B_WIN'
+        winnerUserId = match.playerBUserId
+      } else {
+        outcome = 'TIE'
+      }
+    } else {
+      outcome = 'TIE'
+    }
   }
 
   const needsSuddenDeath =
