@@ -53,6 +53,7 @@ enum CtoonSuggestionStatus {
   REJECTED
 }
 
+
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
 /// `loackedPoints` per project naming preference.
@@ -659,7 +660,7 @@ model TradeOffer {
   initiatorId   String // who is making the offer
   recipientId   String // who will receive the offer
   pointsOffered Int      @default(0)
-  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED
+  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

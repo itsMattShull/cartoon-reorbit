@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
     series: item.userCtoon.ctoon.series?.trim() || null,
     set: item.userCtoon.ctoon.set?.trim() || null,
     rarity: item.userCtoon.ctoon.rarity?.trim() || null,
+    isGtoon: item.userCtoon.ctoon.isGtoon,
     mintNumber: item.userCtoon.mintNumber
   }))
 

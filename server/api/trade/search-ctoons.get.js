@@ -25,8 +25,10 @@ export default defineEventHandler(async (event) => {
       ],
       select: {
         id: true,
+        userId: true,
         mintNumber: true,
         user: { select: { username: true, avatar: true } },
+        tradeListItems: { select: { userId: true } },
         ctoon: { select: { id: true, name: true, assetPath: true } }
       }
     })
@@ -38,7 +40,8 @@ export default defineEventHandler(async (event) => {
       assetPath: row.ctoon.assetPath,
       mintNumber: row.mintNumber,
       ownerUsername: row.user.username,
-      ownerAvatar: row.user.avatar
+      ownerAvatar: row.user.avatar,
+      isTradeListItem: row.tradeListItems.some(item => item.userId === row.userId)
     }))
   }
 

@@ -18,6 +18,8 @@ function isTruthy(value) {
 
 function applyAuctionFilters(items, filters) {
   const term = (filters.search || '').toLowerCase().trim()
+  const setFilter = filters.sets || []
+  const requireGtoons = filters.gtoonsOnly
   const seriesFilter = filters.series || []
   const rarityFilter = filters.rarities || []
   const ownedFilter = filters.owned || ''
@@ -33,6 +35,8 @@ function applyAuctionFilters(items, filters) {
       const charMatch = chars.some(ch => String(ch || '').toLowerCase().includes(term))
       if (!nameMatch && !charMatch) return false
     }
+    if (setFilter.length && !setFilter.includes(item.set)) return false
+    if (requireGtoons && !item.isGtoon) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
@@ -103,12 +107,14 @@ export default defineEventHandler(async (event) => {
   const skip = (pageNum - 1) * take
 
   const search = typeof query.q === 'string' ? query.q.trim() : ''
+  const sets = normalizeListParam(query.set)
   const series = normalizeListParam(query.series)
   const rarities = normalizeListParam(query.rarity)
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
+  const gtoonsOnly = isTruthy(query.gtoon)
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
   const validSorts = ['recentDesc', 'recentAsc', 'biggestBid', 'recentlyWon', 'recentlyLost']
   const effectiveSort = validSorts.includes(sortKey) ? sortKey : 'recentDesc'
@@ -201,11 +207,14 @@ export default defineEventHandler(async (event) => {
       userCtoonId: a.userCtoon?.id ?? null,
       ctoonId: a.userCtoon?.ctoonId ?? null,
       name: a.userCtoon?.ctoon?.name ?? 'Unknown',
+      set: a.userCtoon?.ctoon?.set ?? null,
       series: a.userCtoon?.ctoon?.series ?? null,
       rarity: a.userCtoon?.ctoon?.rarity ?? null,
+      isGtoon: a.userCtoon?.ctoon?.isGtoon ?? false,
       characters: a.userCtoon?.ctoon?.characters || [],
       assetPath: a.userCtoon?.ctoon?.assetPath ?? '',
       mintNumber: a.userCtoon?.mintNumber ?? null,
+      initialBid: a.initialBet ?? null,
       endAt: endAtISO,
       isFeatured: !!a.isFeatured,
       isOwned: ownedSet.has(a.userCtoon?.ctoonId),
@@ -218,12 +227,14 @@ export default defineEventHandler(async (event) => {
 
   const filtered = applyAuctionFilters(items, {
     search,
+    sets,
     series,
     rarities,
     owned: ownedFilter,
     featuredOnly,
     wishlistSet,
-    hasBidsOnly
+    hasBidsOnly,
+    gtoonsOnly
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)

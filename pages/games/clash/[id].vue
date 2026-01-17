@@ -46,7 +46,7 @@
     <!-- Mobile header -->
     <div
       v-if="game"
-      class="md:hidden sticky top-14 z-30 bg-white border-b border-gray-200"
+      class="md:hidden sticky top-[70px] z-30 bg-white border-b border-gray-200"
     >
       <div class="py-2 text-center text-sm text-gray-700">
         <template v-if="isSelecting">
@@ -181,6 +181,19 @@
                     : 'This game did not complete.'
                 }}
               </p>
+              <div v-if="laneScores.length" class="mt-3 text-left text-sm">
+                <p class="text-center font-medium text-gray-700 mb-2">Lane Scores</p>
+                <div class="space-y-1">
+                  <div
+                    v-for="(lane, index) in laneScores"
+                    :key="`${lane.name}-${index}`"
+                    class="flex items-center justify-between gap-3"
+                  >
+                    <span class="font-medium text-gray-700">{{ lane.name }}</span>
+                    <span class="text-gray-700">You {{ lane.playerScore }} - Opponent {{ lane.aiScore }}</span>
+                  </div>
+                </div>
+              </div>
               <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
                 You were awarded
                 <strong>{{ Number(summary.stakeAwarded).toLocaleString() }}</strong>
@@ -195,6 +208,19 @@
                 - You:      {{ summary.playerLanesWon }}<br>
                 - Opponent: {{ summary.aiLanesWon }}
               </p>
+              <div v-if="laneScores.length" class="mt-3 text-left text-sm">
+                <p class="text-center font-medium text-gray-700 mb-2">Lane Scores</p>
+                <div class="space-y-1">
+                  <div
+                    v-for="(lane, index) in laneScores"
+                    :key="`${lane.name}-${index}`"
+                    class="flex items-center justify-between gap-3"
+                  >
+                    <span class="font-medium text-gray-700">{{ lane.name }}</span>
+                    <span class="text-gray-700">You {{ lane.playerScore }} - Opponent {{ lane.aiScore }}</span>
+                  </div>
+                </div>
+              </div>
 
               <p v-if="Number(summary.stakeAwarded) > 0" class="mt-1">
                 {{ summary.winner==='tie' ? 'Returned' : 'You won' }}
@@ -379,6 +405,19 @@ const instructionText = computed(() => {
       ? 'You attack first – watch the reveal!'
       : 'Opponent attacks first – watch the reveal.'
   return ''
+})
+
+const laneScores = computed(() => {
+  if (!game.value?.lanes?.length) return []
+  return game.value.lanes.map((lane, index) => {
+    const playerScore = (lane.player || []).reduce((sum, card) => sum + (card.power || 0), 0)
+    const aiScore = (lane.ai || []).reduce((sum, card) => sum + (card.power || 0), 0)
+    return {
+      name: lane.name || `Lane ${index + 1}`,
+      playerScore,
+      aiScore
+    }
+  })
 })
 
 // — UI Actions —

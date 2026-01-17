@@ -6,7 +6,7 @@
   <!-- Mobile-only sticky timer + instructions -->
   <div
     v-if="game"
-    class="md:hidden sticky top-14 z-30 bg-white border-b border-gray-200"
+    class="md:hidden sticky top-[70px] z-30 bg-white border-b border-gray-200"
   >
     <!-- Timer -->
     <div class="py-2 text-center text-sm text-gray-700">
@@ -170,6 +170,19 @@
             Lanes Won: You {{ summary.playerLanesWon }} – AI
             {{ summary.aiLanesWon }}
           </p>
+          <div v-if="laneScores.length" class="mb-6 text-left text-sm">
+            <p class="text-center font-medium text-gray-700 mb-2">Lane Scores</p>
+            <div class="space-y-1">
+              <div
+                v-for="(lane, index) in laneScores"
+                :key="`${lane.name}-${index}`"
+                class="flex items-center justify-between gap-3"
+              >
+                <span class="font-medium text-gray-700">{{ lane.name }}</span>
+                <span class="text-gray-700">You {{ lane.playerScore }} - AI {{ lane.aiScore }}</span>
+              </div>
+            </div>
+          </div>
           <p v-if="summary.winner === 'player'" class="mb-4 text-indigo-600 font-medium">
             You earned {{ summary.pointsAwarded }} point
             <span v-if="summary.pointsAwarded > 1">s</span>!
@@ -290,6 +303,19 @@ const instructionText = computed(() => {
       ? 'You attack first – watch the reveal!'
       : 'Opponent attacks first – watch the reveal.'
   return ''
+})
+
+const laneScores = computed(() => {
+  if (!game.value?.lanes?.length) return []
+  return game.value.lanes.map((lane, index) => {
+    const playerScore = (lane.player || []).reduce((sum, card) => sum + (card.power || 0), 0)
+    const aiScore = (lane.ai || []).reduce((sum, card) => sum + (card.power || 0), 0)
+    return {
+      name: lane.name || `Lane ${index + 1}`,
+      playerScore,
+      aiScore
+    }
+  })
 })
 
 // socket handlers

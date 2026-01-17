@@ -57,10 +57,12 @@ export default defineEventHandler(async (event) => {
   const skip = (pageNum - 1) * take
 
   const search = typeof query.q === 'string' ? query.q.trim() : ''
+  const sets = normalizeListParam(query.set)
   const series = normalizeListParam(query.series)
   const rarities = normalizeListParam(query.rarity)
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
+  const gtoonsOnly = isTruthy(query.gtoon)
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
 
@@ -109,6 +111,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const ctoonWhere = {}
+  if (sets.length) ctoonWhere.set = { in: sets }
+  if (gtoonsOnly) ctoonWhere.isGtoon = true
   if (series.length) ctoonWhere.series = { in: series }
   if (rarities.length) ctoonWhere.rarity = { in: rarities }
   if (search) {
@@ -144,7 +148,9 @@ export default defineEventHandler(async (event) => {
                 assetPath: true,
                 name: true,
                 rarity: true,
+                isGtoon: true,
                 series: true,
+                set: true,
                 characters: true,
                 price: true,
               },
@@ -191,8 +197,10 @@ export default defineEventHandler(async (event) => {
       ctoonId: a.userCtoon?.ctoonId ?? null,
       assetPath: a.userCtoon?.ctoon?.assetPath ?? null,
       name: a.userCtoon?.ctoon?.name ?? null,
+      set: a.userCtoon?.ctoon?.set ?? null,
       series: a.userCtoon?.ctoon?.series ?? null,
       rarity: a.userCtoon?.ctoon?.rarity ?? null,
+      isGtoon: a.userCtoon?.ctoon?.isGtoon ?? false,
       characters: a.userCtoon?.ctoon?.characters || [],
       price: a.userCtoon?.ctoon?.price ?? 0,
       mintNumber: a.userCtoon?.mintNumber ?? null,

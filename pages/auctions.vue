@@ -86,6 +86,29 @@
             placeholder="Type a name or character…"
             class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           />
+          <button
+            type="button"
+            class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            @click="resetFilters"
+          >
+            Reset Filters
+          </button>
+        </div>
+
+        <!-- Filter by Set -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Set</p>
+          <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
+            <label v-for="(setName, i) in uniqueSets" :key="setName + i" class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                :value="setName"
+                v-model="selectedSets"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ setName }}</span>
+            </label>
+          </div>
         </div>
 
         <!-- Filter by Series -->
@@ -181,6 +204,14 @@
             />
             <span class="ml-2">Has 1+ Bids</span>
           </label>
+          <label class="flex items-center text-sm mt-2">
+            <input
+              type="checkbox"
+              v-model="gtoonsOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">gToons Only</span>
+          </label>
           <p v-if="wishlistOnly && isLoadingWishlist" class="mt-2 text-xs text-gray-500">
             Loading wishlist...
           </p>
@@ -259,6 +290,9 @@
                         Mint #{{ auction.mintNumber ?? 'N/A' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
+                        Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
+                      </p>
+                      <p class="text-sm text-gray-600 mb-1">
                         Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
@@ -322,6 +356,9 @@
                   <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
                   <p v-if="!auction.isHolidayItem" class="text-sm text-gray-600 mb-1">
                     Mint #{{ auction.mintNumber ?? 'N/A' }}
+                  </p>
+                  <p class="text-sm text-gray-600 mb-1">
+                    Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
                     Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
@@ -423,6 +460,9 @@
               <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
               <p class="text-sm text-gray-600 mb-1">
                 Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">
+                Starting Bid: {{ bid.initialBid != null ? bid.initialBid + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
@@ -725,6 +765,7 @@ let timer = null
 
 // Filters & sorting (Current Auctions)
 const searchQuery = ref('')
+const selectedSets = ref([])
 const selectedSeries = ref([])
 const selectedRarities = ref([])
 const selectedOwned = ref('all')
@@ -733,6 +774,7 @@ const showFilters = ref(false)
 const featuredOnly = ref(false)
 const wishlistOnly = ref(false)
 const hasBidsOnly = ref(false)
+const gtoonsOnly = ref(false)
 const wishlistCtoonIds = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
@@ -753,6 +795,9 @@ function updateUrlQueryFromFilters() {
   const q = String(searchQuery.value || '').trim()
   if (q) newQuery.q = q; else delete newQuery.q
 
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
+
   if (selectedSeries.value.length) newQuery.series = selectedSeries.value
   else delete newQuery.series
 
@@ -770,6 +815,9 @@ function updateUrlQueryFromFilters() {
 
   if (hasBidsOnly.value) newQuery.hasBids = '1'
   else delete newQuery.hasBids
+
+  if (gtoonsOnly.value) newQuery.gtoon = '1'
+  else delete newQuery.gtoon
 
   if (sortBy.value && sortBy.value !== 'endAsc') newQuery.sort = sortBy.value
   else delete newQuery.sort
@@ -789,6 +837,7 @@ onMounted(() => {
 
   // Initialize from URL query
   const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set ?? route.query.sets
   const seriesParam = route.query.series
   const rarityParam = route.query.rarity
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
@@ -797,10 +846,13 @@ onMounted(() => {
   const featuredParam = typeof route.query.featured === 'string' ? route.query.featured : ''
   const wishlistParam = typeof route.query.wishlist === 'string' ? route.query.wishlist : ''
   const hasBidsParam = typeof route.query.hasBids === 'string' ? route.query.hasBids : ''
+  const gtoonParam = typeof route.query.gtoon === 'string' ? route.query.gtoon : ''
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
+  const initSets     = normalizeListParam(setParam)
   const initSeries   = normalizeListParam(seriesParam)
   const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
   if (initSeries.length)   selectedSeries.value = initSeries
   if (initRarities.length) selectedRarities.value = initRarities
   if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
@@ -814,6 +866,7 @@ onMounted(() => {
   if (['1','true','yes'].includes(featuredParam.toLowerCase())) featuredOnly.value = true
   if (['1','true','yes'].includes(wishlistParam.toLowerCase())) wishlistOnly.value = true
   if (['1','true','yes'].includes(hasBidsParam.toLowerCase())) hasBidsOnly.value = true
+  if (['1','true','yes'].includes(gtoonParam.toLowerCase())) gtoonsOnly.value = true
 
   // Normalize URL based on initialized values
   updateUrlQueryFromFilters()
@@ -884,12 +937,14 @@ function buildFilterParams() {
   const params = new URLSearchParams()
   const q = String(searchQuery.value || '').trim()
   if (q) params.set('q', q)
+  if (selectedSets.value.length) params.set('set', selectedSets.value.join(','))
   if (selectedSeries.value.length) params.set('series', selectedSeries.value.join(','))
   if (selectedRarities.value.length) params.set('rarity', selectedRarities.value.join(','))
   if (selectedOwned.value && selectedOwned.value !== 'all') params.set('owned', selectedOwned.value)
   if (featuredOnly.value) params.set('featured', '1')
   if (wishlistOnly.value) params.set('wishlist', '1')
   if (hasBidsOnly.value) params.set('hasBids', '1')
+  if (gtoonsOnly.value) params.set('gtoon', '1')
   return params
 }
 
@@ -917,7 +972,7 @@ function loadMyBids() {
   $fetch(`/api/auction/mybids?${params.toString()}`)
     .then(data => {
       // Expect each item to include at least:
-      // { id, name, assetPath, endAt, myBid, highestBid, bidCount, didWin }
+      // { id, name, assetPath, endAt, myBid, highestBid, initialBid, bidCount, didWin }
       myBids.value = Array.isArray(data?.items) ? data.items : []
       myBidsTotalPages.value = data?.totalPages ?? 1
     })
@@ -956,7 +1011,7 @@ watch(activeTab, newTab => {
 })
 
 // Keep URL in sync when filters change
-watch([searchQuery, selectedSeries, selectedRarities, selectedOwned, featuredOnly, wishlistOnly, hasBidsOnly], () => {
+watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned, featuredOnly, wishlistOnly, hasBidsOnly, gtoonsOnly], () => {
   updateUrlQueryFromFilters()
   const isAll = activeTab.value === 'all'
   const isMine = activeTab.value === 'mine'
@@ -998,6 +1053,18 @@ watch(hasBidsOnly, () => {
   loadTrendingAuctions({ force: true })
 })
 
+function resetFilters() {
+  searchQuery.value = ''
+  selectedSets.value = []
+  selectedSeries.value = []
+  selectedRarities.value = []
+  selectedOwned.value = 'all'
+  featuredOnly.value = false
+  wishlistOnly.value = false
+  hasBidsOnly.value = false
+  gtoonsOnly.value = false
+}
+
 function isEnded(endAt) {
   return new Date(endAt) <= now.value
 }
@@ -1022,12 +1089,14 @@ const normalizedSearch = computed(() => (searchQuery.value || '').toLowerCase().
 const hasActiveFilters = computed(() => {
   return Boolean(
     normalizedSearch.value ||
+    selectedSets.value.length ||
     selectedSeries.value.length ||
     selectedRarities.value.length ||
     (selectedOwned.value && selectedOwned.value !== 'all') ||
     featuredOnly.value ||
     wishlistOnly.value ||
-    hasBidsOnly.value
+    hasBidsOnly.value ||
+    gtoonsOnly.value
   )
 })
 const filterSources = computed(() => [
@@ -1040,12 +1109,14 @@ const filterSources = computed(() => [
 
 function applyCommonFilters(items) {
   const term = normalizedSearch.value
+  const setFilter = selectedSets.value
   const seriesFilter = selectedSeries.value
   const rarityFilter = selectedRarities.value
   const ownedFilter = selectedOwned.value
   const requireFeatured = featuredOnly.value
   const requireWishlist = wishlistOnly.value
   const requireBids = hasBidsOnly.value
+  const requireGtoons = gtoonsOnly.value
   const wishlistSet = wishlistCtoonIdSet.value
 
   return (Array.isArray(items) ? items : []).filter(item => {
@@ -1056,6 +1127,7 @@ function applyCommonFilters(items) {
       const charMatch = chars.some(ch => String(ch || '').toLowerCase().includes(term))
       if (!nameMatch && !charMatch) return false
     }
+    if (setFilter.length && !setFilter.includes(item.set)) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
@@ -1069,10 +1141,14 @@ function applyCommonFilters(items) {
       const bidCount = Number(item.bidCount ?? 0)
       if (bidCount < 1) return false
     }
+    if (requireGtoons && !item.isGtoon) return false
     return true
   })
 }
 
+const uniqueSets = computed(() => {
+  return [...new Set(filterSources.value.map(a => a.set).filter(Boolean))].sort()
+})
 const uniqueSeries = computed(() => {
   return [...new Set(filterSources.value.map(a => a.series).filter(Boolean))].sort()
 })

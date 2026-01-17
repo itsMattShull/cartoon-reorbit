@@ -168,6 +168,12 @@
                       {{ c.ownerUsername }}
                     </div>
                   </div>
+                  <span
+                    v-if="c.isTradeListItem"
+                    class="ml-auto shrink-0 rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700"
+                  >
+                    Tradeable
+                  </span>
                 </button>
               </template>
 
@@ -916,6 +922,8 @@ async function clearTarget(focusInput = false) {
   pointsToOffer.value = 0
   otherCtoons.value = []
   selfCtoons.value = []
+  otherTradeList.value = []
+  selfTradeList.value = []
   pageOther.value = 1
   pageSelf.value = 1
   filters.other = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
@@ -966,6 +974,16 @@ const otherCtoons = ref([])
 const selfCtoons = ref([])
 const targetOwnedIds = computed(() => new Set(otherCtoons.value.map(c => c.ctoonId)))
 const selfOwnedIds = computed(() => new Set(selfCtoons.value.map(c => c.ctoonId)))
+const otherTradeList = ref([])
+const selfTradeList = ref([])
+const otherTradeListIds = computed(() => {
+  const ids = otherTradeList.value.map(item => item?.userCtoonId).filter(Boolean)
+  return new Set(ids)
+})
+const selfTradeListIds = computed(() => {
+  const ids = selfTradeList.value.map(item => item?.userCtoonId).filter(Boolean)
+  return new Set(ids)
+})
 
 // Target user's wishlist
 const targetWishlist = ref([]) // [{ id, offeredPoints, createdAt, hasEnough, ctoon }]
@@ -994,12 +1012,16 @@ async function bootstrapCollections() {
   loading.self = true
   try {
     await fetchSelf()
-    const [other, self] = await Promise.all([
+    const [other, self, otherTrade, selfTrade] = await Promise.all([
       $fetch(`/api/collection/${targetUser.value.username}`),
-      $fetch(`/api/collection/${user.value.username}`)
+      $fetch(`/api/collection/${user.value.username}`),
+      $fetch(`/api/trade-list/users/${targetUser.value.username}`).catch(() => []),
+      $fetch('/api/trade-list').catch(() => [])
     ])
     otherCtoons.value = Array.isArray(other) ? other : []
     selfCtoons.value = Array.isArray(self) ? self : []
+    otherTradeList.value = Array.isArray(otherTrade) ? otherTrade : []
+    selfTradeList.value = Array.isArray(selfTrade) ? selfTrade : []
     applyPreselectedTargetCtoon()
   } finally {
     loading.other = false
@@ -1088,6 +1110,7 @@ function applyFilters(items, f, ctx) {
     if (f.series && f.series !== 'All' && c.series !== f.series) return false
     if (f.rarity && f.rarity !== 'All' && c.rarity !== f.rarity) return false
     if (f.duplicates === 'dups' && !ctx.dupIds.has(c.ctoonId)) return false
+    if (f.duplicates === 'trade-list' && !ctx.tradeListIds.has(c.id)) return false
 
     const isOwned = ctx.ownedPredicate(c)
     if (f.owned === 'owned' && !isOwned) return false
@@ -1102,12 +1125,14 @@ function applyFilters(items, f, ctx) {
 
 const filteredOther = computed(() => applyFilters(otherCtoons.value, filters.other, {
   ownedPredicate: (c) => selfOwnedIds.value.has(c.ctoonId),
-  dupIds: dupIdsOther.value
+  dupIds: dupIdsOther.value,
+  tradeListIds: otherTradeListIds.value
 }))
 const filteredSelf = computed(() => {
   let list = applyFilters(selfCtoons.value, filters.self, {
     ownedPredicate: (c) => targetOwnedIds.value.has(c.ctoonId),
-    dupIds: dupIdsSelf.value
+    dupIds: dupIdsSelf.value,
+    tradeListIds: selfTradeListIds.value
   })
   if (filters.self.wishlistOnly) {
     list = list.filter(c => targetWishlistIds.value.has(c.ctoonId))

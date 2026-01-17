@@ -91,6 +91,13 @@
             placeholder="Type a name…"
             class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           />
+          <button
+            type="button"
+            class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            @click="resetFilters"
+          >
+            Reset Filters
+          </button>
         </div>
 
         <!-- Filter by Set -->
@@ -187,17 +194,27 @@
           </div>
         </div>
 
-        <!-- Duplicates Only (applies to My Collection) -->
+        <!-- Other Filters -->
         <div class="mb-4">
-          <p class="text-sm font-medium text-gray-700 mb-2">Duplicates</p>
-          <label class="flex items-center text-sm">
-            <input
-              type="checkbox"
-              v-model="duplicatesOnly"
-              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-            />
-            <span class="ml-2">Show duplicates only</span>
-          </label>
+          <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
+          <div class="space-y-1">
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                v-model="duplicatesOnly"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Show duplicates only</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                v-model="gtoonsOnly"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">gToons Only</span>
+            </label>
+          </div>
         </div>
 
         <!-- Sort -->
@@ -276,16 +293,45 @@
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
-                    <span class="capitalize">{{ uc.series }}</span> •
-                    <span class="capitalize">{{ uc.rarity }}</span> •
-                    <span class="capitalize">{{ uc.set }}</span>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', uc.series)"
+                    >
+                      {{ uc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', uc.rarity)"
+                    >
+                      {{ uc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', uc.set)"
+                    >
+                      {{ uc.set }}
+                    </button>
                   </p>
                 </div>
                 <div class="mt-auto text-sm text-center">
-                  <p v-if="!uc.isHolidayItem">Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
-                  <p v-if="uc.isFirstEdition" class="text-indigo-600 font-semibold">
-                    First Edition
-                  </p>
+                  <template v-if="showUnique">
+                    <p>Mints Owned: {{ uc.mintCount }}</p>
+                    <p v-if="uc.earliestMint != null && uc.latestMint != null">
+                      Mint Range (Earliest-Latest): #{{ uc.earliestMint }} - #{{ uc.latestMint }}
+                    </p>
+                    <p v-else>Mint Range: N/A</p>
+                  </template>
+                  <template v-else>
+                    <p v-if="!uc.isHolidayItem">Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
+                    <p v-if="uc.isFirstEdition" class="text-indigo-600 font-semibold">
+                      First Edition
+                    </p>
+                  </template>
                 </div>
                 <div class="mt-auto flex flex-wrap gap-2 whitespace-nowrap">
                   <AddToAuction
@@ -376,9 +422,29 @@
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
-                    <span class="capitalize">{{ wc.series }}</span> •
-                    <span class="capitalize">{{ wc.rarity }}</span> •
-                    <span class="capitalize">{{ wc.set }}</span>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', wc.series)"
+                    >
+                      {{ wc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', wc.rarity)"
+                    >
+                      {{ wc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', wc.set)"
+                    >
+                      {{ wc.set }}
+                    </button>
                   </p>
                 </div>
                 <AddToWishlist :ctoon-id="wc.id" class="mt-auto" />
@@ -445,9 +511,29 @@
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
-                    <span class="capitalize">{{ tc.series }}</span> •
-                    <span class="capitalize">{{ tc.rarity }}</span> •
-                    <span class="capitalize">{{ tc.set }}</span>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', tc.series)"
+                    >
+                      {{ tc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', tc.rarity)"
+                    >
+                      {{ tc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', tc.set)"
+                    >
+                      {{ tc.set }}
+                    </button>
                   </p>
                   <p class="text-xs text-gray-600 mt-1">Mint #{{ tc.mintNumber ?? 'N/A' }}</p>
                 </div>
@@ -533,7 +619,21 @@
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
-                    {{ c.series }} • {{ c.rarity }}
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', c.series)"
+                    >
+                      {{ c.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', c.rarity)"
+                    >
+                      {{ c.rarity }}
+                    </button>
                     <span class="block">
                       Highest Mint #: {{ c.highestMint }}
                     </span>
@@ -629,7 +729,21 @@
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
-                    {{ c.set }} • {{ c.rarity }}
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', c.set)"
+                    >
+                      {{ c.set }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', c.rarity)"
+                    >
+                      {{ c.rarity }}
+                    </button>
                     <span class="block">
                       Highest Mint #: {{ c.highestMint }}
                     </span>
@@ -782,6 +896,7 @@ const selectedRarities = ref([])
 const selectedOwned  = ref('all')
 const sortBy         = ref(defaultSortForTab(activeTab.value))
 const duplicatesOnly = ref(false)  // My Collection: only show duplicate holdings
+const gtoonsOnly     = ref(false)
 
 const filterMeta       = ref({ sets: [], series: [], rarities: [] })
 
@@ -854,9 +969,36 @@ function updateUrlQueryFromFilters() {
   // My Collection: duplicates-only toggle
   if (duplicatesOnly.value) newQuery.dupes = '1'; else delete newQuery.dupes
 
+  if (gtoonsOnly.value) newQuery.gtoon = 'true'; else delete newQuery.gtoon
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedSets.value = []
+  selectedSeries.value = []
+  selectedRarities.value = []
+  selectedOwned.value = 'all'
+  showUnique.value = false
+  duplicatesOnly.value = false
+  gtoonsOnly.value = false
+  sortBy.value = defaultSortForTab(activeTab.value)
+  pageUser.value = 1
+  pageAll.value = 1
+  pageWishlist.value = 1
+  pageTradeList.value = 1
+  updateUrlQueryFromFilters()
+}
+
+function applyFilterFromCard(type, value) {
+  const next = String(value || '').trim()
+  if (!next) return
+  if (type === 'set') selectedSets.value = [next]
+  if (type === 'series') selectedSeries.value = [next]
+  if (type === 'rarity') selectedRarities.value = [next]
 }
 
 // collections.vue <script setup> — add helpers near top of sort code
@@ -948,7 +1090,8 @@ const filteredAllCtoons = computed(() => {
       : selectedOwned.value === 'owned'
         ? c.isOwned
         : !c.isOwned
-    return nm && sm && se && r && o
+    const g = !gtoonsOnly.value || c.isGtoon
+    return nm && sm && se && r && o && g
   })
 })
 const sortedAll = computed(() =>
@@ -985,12 +1128,48 @@ const filteredUserCtoons = computed(() =>
     const sm = !selectedSets.value.length || selectedSets.value.includes(uc.set)
     const se = !selectedSeries.value.length || selectedSeries.value.includes(uc.series)
     const r  = !selectedRarities.value.length || selectedRarities.value.includes(uc.rarity)
-    return nm && sm && se && r
+    const g  = !gtoonsOnly.value || uc.isGtoon
+    return nm && sm && se && r && g
   })
 )
-const sortedUserAll = computed(() =>
-  filteredUserCtoons.value.slice().sort((a, b) => sortCmp(a, b, { useMintTie: true }))
-)
+const uniqueUserCtoons = computed(() => {
+  const grouped = new Map()
+  for (const uc of filteredUserCtoons.value) {
+    const key = uc.ctoonId
+    let entry = grouped.get(key)
+    if (!entry) {
+      entry = {
+        ...uc,
+        mintCount: 0,
+        earliestMint: null,
+        latestMint: null
+      }
+      grouped.set(key, entry)
+    }
+    entry.mintCount += 1
+    if (uc.isHolidayItem) entry.isHolidayItem = true
+    if (uc.isFirstEdition) entry.isFirstEdition = true
+    if (uc.acquiredAt) {
+      const next = new Date(uc.acquiredAt).getTime()
+      const current = entry.acquiredAt ? new Date(entry.acquiredAt).getTime() : 0
+      if (!current || next > current) entry.acquiredAt = uc.acquiredAt
+    }
+    if (typeof uc.mintNumber === 'number') {
+      entry.earliestMint = entry.earliestMint === null
+        ? uc.mintNumber
+        : Math.min(entry.earliestMint, uc.mintNumber)
+      entry.latestMint = entry.latestMint === null
+        ? uc.mintNumber
+        : Math.max(entry.latestMint, uc.mintNumber)
+    }
+  }
+  return Array.from(grouped.values())
+})
+
+const sortedUserAll = computed(() => {
+  const list = (showUnique.value ? uniqueUserCtoons.value : filteredUserCtoons.value).slice()
+  return list.sort((a, b) => sortCmp(a, b, { useMintTie: !showUnique.value }))
+})
 const totalPagesUser = computed(() =>
   Math.max(1, Math.ceil(sortedUserAll.value.length / PAGE_SIZE))
 )
@@ -1006,7 +1185,8 @@ const filteredWishlistCtoons = computed(() =>
     const sm = !selectedSets.value.length || selectedSets.value.includes(wc.set)
     const se = !selectedSeries.value.length || selectedSeries.value.includes(wc.series)
     const r  = !selectedRarities.value.length || selectedRarities.value.includes(wc.rarity)
-    return nm && sm && se && r
+    const g  = !gtoonsOnly.value || wc.isGtoon
+    return nm && sm && se && r && g
   })
 )
 const filteredAndSortedWishlistCtoons = computed(() =>
@@ -1018,7 +1198,8 @@ const filteredTradeListCtoons = computed(() =>
     const sm = !selectedSets.value.length || selectedSets.value.includes(tc.set)
     const se = !selectedSeries.value.length || selectedSeries.value.includes(tc.series)
     const r  = !selectedRarities.value.length || selectedRarities.value.includes(tc.rarity)
-    return nm && sm && se && r
+    const g  = !gtoonsOnly.value || tc.isGtoon
+    return nm && sm && se && r && g
   })
 )
 const filteredAndSortedTradeListCtoons = computed(() =>
@@ -1215,7 +1396,7 @@ async function loadTradeList() {
 }
 
 // Reset page when filters or sort change
-watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned], () => {
+watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned, gtoonsOnly, showUnique], () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
   if (activeTab.value === 'MyTradeList') pageTradeList.value = 1
@@ -1254,6 +1435,7 @@ onMounted(async () => {
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
   const dupesParam  = typeof route.query.dupes === 'string' ? route.query.dupes : ''
+  const gtoonParam  = route.query.gtoon
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
 
@@ -1282,6 +1464,9 @@ onMounted(async () => {
 
   if (['1', 'true'].includes(dupesParam.toLowerCase ? dupesParam.toLowerCase() : dupesParam)) {
     duplicatesOnly.value = true
+  }
+  if (['1', 'true'].includes(gtoonParam?.toLowerCase?.() || gtoonParam)) {
+    gtoonsOnly.value = true
   }
 
   // Normalize URL now to reflect initialized values
