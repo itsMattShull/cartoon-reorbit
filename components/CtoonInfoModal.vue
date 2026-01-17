@@ -52,7 +52,7 @@
           Suggest Updates
         </button>
       </div>
-
+ 
       <div class="flex-1 overflow-y-auto py-4 space-y-4">
         <template v-if="activeTab === 'info'">
           <div v-if="loading" class="space-y-4 animate-pulse">
