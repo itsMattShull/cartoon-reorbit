@@ -39,6 +39,7 @@ jobs:
                 [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
                 command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
+                pm2 stop 0 1 2 3 4
                 cd /var/www/cartoon-reorbit
                 git pull origin master
 
@@ -83,6 +84,8 @@ jobs:
           # Use a supported Node LTS (22.x)
           nvm install 23.10.0 >/dev/null
           nvm use 23.10.0 >/dev/null
+
+          pm2 stop 6 2 3 7 8
 
           cd /var/www/dev.cartoon-reorbit
 

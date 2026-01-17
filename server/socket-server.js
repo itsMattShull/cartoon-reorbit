@@ -5,6 +5,8 @@ import { createServer }  from 'http'
 import { Server }        from 'socket.io'
 import { prisma as db }  from './prisma.js'
 import { DateTime } from 'luxon'
+import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
+import { startDiagnostics } from './diagnostics/telemetry.mjs'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -12,6 +14,10 @@ import { dirname }        from 'node:path'
 import { fileURLToPath }  from 'node:url'
 import { randomUUID }     from 'crypto'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
+
+startDiagnostics().catch((err) => {
+  console.error('[Diagnostics] failed to start (socket server):', err)
+})
 
 /* ── Clash engine & helpers ────────────────────────────────── */
 import { createBattle }   from './utils/battleEngine.js'
@@ -35,6 +41,7 @@ const PORT = process.env.SOCKET_PORT || 3001
 const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 const io = new Server(httpServer, { cors: { origin: '*' } })
+attachSocketIoMetrics(io)
 
 /* ────────────────────────────────────────────────────────────
  *  cZone visitors & chat (unchanged)

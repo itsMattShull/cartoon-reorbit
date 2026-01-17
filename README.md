@@ -260,3 +260,75 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 - Database schema is under `prisma/schema.prisma`
 - API is under `server/api`
 - Pages are under `pages/`
+
+### Production diagnostics (memory telemetry)
+These diagnostics are optional and safe to run in production. They emit JSONL telemetry from the Nitro server runtime and support on-demand snapshots via signals.
+
+#### Enable via environment
+```env
+DIAG_ENABLED=1
+DIAG_DIR=/var/www/log/cartoon-reorbit/diagnostics
+DIAG_INTERVAL_SEC=60
+DIAG_LOG_MAX_MB=200
+DIAG_HEAPSNAP_ON_SIGNAL=1
+DIAG_REPORT_ON_SIGNAL=1
+DIAG_ACTIVE_HANDLES=1
+DIAG_REQ_METRICS=1
+DIAG_WS_METRICS=1
+```
+
+#### Log output and rotation
+- Telemetry files are JSONL and rotate when they exceed `DIAG_LOG_MAX_MB`.
+- File names:
+  - `telemetry-<pid>-<start-timestamp>.jsonl`
+  - `heap-<pid>-<timestamp>.heapsnapshot`
+  - `report-<pid>-<timestamp>.json`
+  - `active-<pid>-<timestamp>.json`
+- Clean up old logs by deleting files in `DIAG_DIR`, or use logrotate/cron.
+
+#### Signals (manual triggers)
+```bash
+kill -USR2 <pid>  # heap snapshot
+kill -USR1 <pid>  # Node report + active handles/requests summary
+```
+
+#### Finding the right PID (PM2)
+- `pm2 pid <app-name>` shows Node PIDs for the app.
+- `pm2 describe <app-name>` includes the `pm_pid`.
+- If needed: `ps -o pid,ppid,cmd -C node | rg 'server/index.mjs'`
+
+#### Disable diagnostics
+- Unset `DIAG_ENABLED` or set `DIAG_ENABLED=0`.
+
+#### PM2 ecosystem example
+```js
+module.exports = {
+  apps: [
+    {
+      name: 'cartoon-reorbit',
+      script: '.output/server/index.mjs',
+      node_args: '--max-old-space-size=2048',
+      max_memory_restart: '2G',
+      env: {
+        NODE_ENV: 'production',
+        DIAG_ENABLED: '1',
+        DIAG_DIR: '/var/www/log/cartoon-reorbit/diagnostics',
+        DIAG_INTERVAL_SEC: '60',
+        DIAG_LOG_MAX_MB: '200',
+        DIAG_HEAPSNAP_ON_SIGNAL: '1',
+        DIAG_REPORT_ON_SIGNAL: '1',
+        DIAG_ACTIVE_HANDLES: '1',
+        DIAG_REQ_METRICS: '1',
+        DIAG_WS_METRICS: '1'
+      }
+    }
+  ]
+}
+```
+`--max-old-space-size` and `max_memory_restart` are temporary safety valves; restarts can hide slow leaks.
+
+#### 24-hour runbook (what to look at)
+- First 1-2 hours: confirm telemetry is writing once per minute and RSS trends are visible.
+- If RSS keeps climbing, trigger heap snapshots at ~4h, ~12h, and ~24h.
+- Inspect in order: RSS vs heapUsed vs external/arrayBuffers, then active handles/requests, then event loop delay.
+- Heap growth suggests JS retention; external growth points to buffers/native; handle counts indicate leaked sockets/timers/listeners; route or WS spikes suggest workload-driven caching.
