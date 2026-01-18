@@ -57,11 +57,18 @@
             draggable="true"
             @dragstart="onDragStart(element, $event)"
           >
-            <img
-              :src="element.assetPath"
-              :alt="element.name"
-              class="block max-w-full h-auto object-contain"
-            />
+            <div class="relative inline-flex items-center justify-center">
+              <img
+                :src="element.assetPath"
+                :alt="element.name"
+                class="block max-w-full h-auto object-contain"
+              />
+              <GtoonOverlay
+                v-if="element.isGtoon"
+                :power="element.power"
+                :cost="element.cost"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -142,6 +149,11 @@
                 class="max-w-none object-contain"
                 draggable="false"
               />
+              <GtoonOverlay
+                v-if="item.isGtoon"
+                :power="item.power"
+                :cost="item.cost"
+              />
             </div>
           </div>
         </div>
@@ -210,11 +222,18 @@
               class="cursor-pointer flex items-center justify-center w-[48%] border rounded p-1"
               @click="selectCtoon(ctoon)"
             >
-              <img
-                :src="ctoon.assetPath"
-                :alt="ctoon.name"
-                class="block max-w-full h-auto object-contain"
-              />
+              <div class="relative inline-flex items-center justify-center">
+                <img
+                  :src="ctoon.assetPath"
+                  :alt="ctoon.name"
+                  class="block max-w-full h-auto object-contain"
+                />
+                <GtoonOverlay
+                  v-if="ctoon.isGtoon"
+                  :power="ctoon.power"
+                  :cost="ctoon.cost"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -238,6 +257,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { navigateTo, useHead } from '#app'
+import GtoonOverlay from '@/components/GtoonOverlay.vue'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
@@ -430,6 +450,9 @@ async function onDrop(e) {
     assetPath: draggingItem.value.assetPath,
     series: draggingItem.value.series,
     rarity: draggingItem.value.rarity,
+    isGtoon: draggingItem.value.isGtoon,
+    cost: draggingItem.value.cost,
+    power: draggingItem.value.power,
     characters: Array.isArray(draggingItem.value.characters) ? draggingItem.value.characters : [],
     x,
     y,
@@ -619,6 +642,9 @@ async function selectCtoon(ctoon) {
     assetPath: ctoon.assetPath,
     series: ctoon.series,
     rarity: ctoon.rarity,
+    isGtoon: ctoon.isGtoon,
+    cost: ctoon.cost,
+    power: ctoon.power,
     characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     x,
     y,

@@ -41,6 +41,9 @@ export default defineEventHandler(async (event) => {
       price: true,
       quantity: true,      // null = unlimited
       inCmart: true,
+      isGtoon: true,
+      cost: true,
+      power: true,
       totalMinted: true // minted so far
     },
     orderBy: { name: 'asc' }
@@ -55,7 +58,10 @@ export default defineEventHandler(async (event) => {
     price: c.price,
     quantity: c.quantity,
     minted: c.totalMinted ?? 0,
-    inCmart: c.inCmart
+    inCmart: c.inCmart,
+    isGtoon: c.isGtoon,
+    cost: c.cost,
+    power: c.power
   }))
 
   // 4) Shape response

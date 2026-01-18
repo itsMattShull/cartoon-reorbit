@@ -279,6 +279,9 @@
                         :name="auction.name"
                         :ctoon-id="auction.ctoonId"
                         :user-ctoon-id="auction.userCtoonId"
+                        :is-gtoon="auction.isGtoon"
+                        :power="auction.power"
+                        :cost="auction.cost"
                         image-class="block max-w-full mx-auto rounded mb-4"
                       />
                     </div>
@@ -347,6 +350,9 @@
                     :name="auction.name"
                     :ctoon-id="auction.ctoonId"
                     :user-ctoon-id="auction.userCtoonId"
+                    :is-gtoon="auction.isGtoon"
+                    :power="auction.power"
+                    :cost="auction.cost"
                     image-class="block max-w-full mx-auto rounded mb-4"
                   />
                 </div>
@@ -453,6 +459,9 @@
                   :name="bid.name"
                   :ctoon-id="bid.ctoonId"
                   :user-ctoon-id="bid.userCtoonId"
+                  :is-gtoon="bid.isGtoon"
+                  :power="bid.power"
+                  :cost="bid.cost"
                   image-class="max-w-full rounded"
                 />
               </div>
@@ -558,6 +567,9 @@
                   :name="auction.name"
                   :ctoon-id="auction.ctoonId"
                   :user-ctoon-id="auction.userCtoonId"
+                  :is-gtoon="auction.isGtoon"
+                  :power="auction.power"
+                  :cost="auction.cost"
                   image-class="max-w-full rounded"
                 />
               </div>
@@ -656,14 +668,17 @@
                   </div>
 
                   <div class="flex-grow flex items-center justify-center mb-4">
-                    <CtoonAsset
-                      :src="auction.assetPath"
-                      :alt="auction.name"
-                      :name="auction.name"
-                      :ctoon-id="auction.ctoonId"
-                      :user-ctoon-id="auction.userCtoonId"
-                      image-class="max-w-full rounded"
-                    />
+                  <CtoonAsset
+                    :src="auction.assetPath"
+                    :alt="auction.name"
+                    :name="auction.name"
+                    :ctoon-id="auction.ctoonId"
+                    :user-ctoon-id="auction.userCtoonId"
+                    :is-gtoon="auction.isGtoon"
+                    :power="auction.power"
+                    :cost="auction.cost"
+                    image-class="max-w-full rounded"
+                  />
                   </div>
 
                   <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>

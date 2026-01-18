@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
   })
   const ctoons = owned.map((uc) => ({
     id: uc.id,
+    ctoonId: uc.ctoon.id,
     name: uc.ctoon.name,
     series: uc.ctoon.series,
     rarity: uc.ctoon.rarity,
@@ -29,8 +30,34 @@ export default defineEventHandler(async (event) => {
     isFirstEdition: uc.isFirstEdition,
     releaseDate: uc.ctoon.releaseDate,
     assetPath: uc.ctoon.assetPath,
+    isGtoon: uc.ctoon.isGtoon,
+    cost: uc.ctoon.cost,
+    power: uc.ctoon.power,
     characters: Array.isArray(uc.ctoon.characters) ? uc.ctoon.characters : []
   }))
+
+  const ctoonMeta = new Map(
+    owned.map((uc) => [
+      uc.id,
+      {
+        ctoonId: uc.ctoon.id,
+        isGtoon: uc.ctoon.isGtoon,
+        cost: uc.ctoon.cost,
+        power: uc.ctoon.power
+      }
+    ])
+  )
+
+  const enrichZones = (zones) =>
+    zones.map((z) => ({
+      background: typeof z.background === 'string' ? z.background : '',
+      toons: Array.isArray(z.toons)
+        ? z.toons.map((item) => ({
+          ...item,
+          ...(ctoonMeta.get(item.id) || {})
+        }))
+        : []
+    }))
 
   // 2) List all background filenames
   const backgroundsDir = path.join(process.cwd(), 'public', 'backgrounds')
@@ -76,7 +103,7 @@ export default defineEventHandler(async (event) => {
     return {
       ctoons,
       backgrounds,
-      zones: padded
+      zones: enrichZones(padded)
     }
   }
 
@@ -98,6 +125,6 @@ export default defineEventHandler(async (event) => {
   return {
     ctoons,
     backgrounds,
-    zones: emptyZones
+    zones: enrichZones(emptyZones)
   }
 })

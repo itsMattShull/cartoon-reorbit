@@ -20,6 +20,8 @@ export default defineEventHandler(async (event) => {
         id: true, name: true, assetPath: true, releaseDate: true,
         set: true, series: true, rarity: true, price: true,
         isGtoon: true,
+        cost: true,
+        power: true,
         totalMinted: true, // ← use aggregate stored on Ctoon
       }
     })

@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
         select: {
           weight:  true,
           ctoonId: true,
-          ctoon:   { select: { name: true, rarity: true, assetPath: true } }
+          ctoon:   { select: { name: true, rarity: true, assetPath: true, isGtoon: true, cost: true, power: true } }
         }
       }
     }
@@ -69,6 +69,9 @@ export default defineEventHandler(async (event) => {
     name:    o.ctoon.name,
     assetPath:o.ctoon.assetPath,
     rarity:  o.ctoon.rarity,
+    isGtoon: o.ctoon.isGtoon,
+    cost:    o.ctoon.cost,
+    power:   o.ctoon.power,
     weight:  o.weight
   }))
 

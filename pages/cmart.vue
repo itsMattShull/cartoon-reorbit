@@ -370,6 +370,9 @@
                   :alt="ctoon.name"
                   :name="ctoon.name"
                   :ctoon-id="ctoon.id"
+                  :is-gtoon="ctoon.isGtoon"
+                  :power="ctoon.power"
+                  :cost="ctoon.cost"
                   image-class="max-w-full h-auto"
                 />
               </div>
@@ -471,6 +474,9 @@
                 :alt="ctoon.name"
                 :name="ctoon.name"
                 :ctoon-id="ctoon.id"
+                :is-gtoon="ctoon.isGtoon"
+                :power="ctoon.power"
+                :cost="ctoon.cost"
                 image-class="max-w-full h-auto"
               />
             </div>
@@ -606,6 +612,9 @@
                       :alt="item.name"
                       :name="item.name"
                       :ctoon-id="item.ctoonId"
+                      :is-gtoon="item.isGtoon"
+                      :power="item.power"
+                      :cost="item.cost"
                       image-class="max-w-full h-24 object-contain"
                     />
                   </div>
@@ -656,6 +665,9 @@
                 :alt="item.name"
                 :name="item.name"
                 :ctoon-id="item.id"
+                :is-gtoon="item.isGtoon"
+                :power="item.power"
+                :cost="item.cost"
                 image-class="w-24 h-24 object-contain mb-2 mt-8"
               />
 
@@ -1085,6 +1097,8 @@ onMounted(async () => {
       releaseDate: c.releaseDate,
       quantity:    c.quantity,
       isGtoon:     c.isGtoon,
+      cost:        c.cost,
+      power:       c.power,
       owners:      c.owners,
       characters:  c.characters,
       minted:      c.totalMinted ?? 0,

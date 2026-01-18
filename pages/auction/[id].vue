@@ -57,6 +57,9 @@
           :name="auction.ctoon.name"
           :ctoon-id="auction.ctoon.id"
           :user-ctoon-id="auction.ctoon.userCtoonId"
+          :is-gtoon="auction.ctoon.isGtoon"
+          :power="auction.ctoon.power"
+          :cost="auction.ctoon.cost"
           image-class="block max-w-full mx-auto rounded"
         />
       </div>

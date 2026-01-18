@@ -286,6 +286,9 @@
                     :name="uc.name"
                     :ctoon-id="uc.ctoonId"
                     :user-ctoon-id="uc.id"
+                    :is-gtoon="uc.isGtoon"
+                    :power="uc.power"
+                    :cost="uc.cost"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
                     progressive
@@ -415,6 +418,9 @@
                     :alt="wc.name"
                     :name="wc.name"
                     :ctoon-id="wc.id"
+                    :is-gtoon="wc.isGtoon"
+                    :power="wc.power"
+                    :cost="wc.cost"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
                     progressive
@@ -504,6 +510,9 @@
                     :name="tc.name"
                     :ctoon-id="tc.ctoonId"
                     :user-ctoon-id="tc.userCtoonId"
+                    :is-gtoon="tc.isGtoon"
+                    :power="tc.power"
+                    :cost="tc.cost"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
                     progressive
@@ -613,6 +622,9 @@
                       :alt="c.name"
                       :name="c.name"
                       :ctoon-id="c.id"
+                      :is-gtoon="c.isGtoon"
+                      :power="c.power"
+                      :cost="c.cost"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
                       progressive
@@ -723,6 +735,9 @@
                       :alt="c.name"
                       :name="c.name"
                       :ctoon-id="c.id"
+                      :is-gtoon="c.isGtoon"
+                      :power="c.power"
+                      :cost="c.cost"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
                       progressive

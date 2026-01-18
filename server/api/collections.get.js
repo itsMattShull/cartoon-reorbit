@@ -73,6 +73,8 @@ export default defineEventHandler(async (event) => {
     rarity: uc.ctoon.rarity,
     set: uc.ctoon.set,
     isGtoon: uc.ctoon.isGtoon,
+    cost: uc.ctoon.cost,
+    power: uc.ctoon.power,
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,

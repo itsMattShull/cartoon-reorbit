@@ -137,6 +137,9 @@
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -380,6 +383,9 @@
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -460,6 +466,9 @@
               :alt="item.ctoon.name"
               :name="item.ctoon.name"
               :ctoon-id="item.ctoon.id"
+              :is-gtoon="item.ctoon.isGtoon"
+              :power="item.ctoon.power"
+              :cost="item.ctoon.cost"
               image-class="w-20 h-20 object-contain mb-2"
             />
             <p class="text-sm text-center">{{ item.ctoon.name }}</p>
@@ -509,6 +518,9 @@
               :name="item.name"
               :ctoon-id="item.ctoonId"
               :user-ctoon-id="item.userCtoonId"
+              :is-gtoon="item.isGtoon"
+              :power="item.power"
+              :cost="item.cost"
               image-class="w-20 h-20 object-contain mb-2"
             />
             <p class="text-sm text-center">{{ item.name }}</p>
@@ -571,6 +583,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-2 mt-8"
                   stop-propagation
                 />
@@ -630,6 +645,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-1 mt-8"
                   stop-propagation
                 />

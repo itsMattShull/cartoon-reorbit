@@ -211,6 +211,8 @@ export default defineEventHandler(async (event) => {
       series: a.userCtoon?.ctoon?.series ?? null,
       rarity: a.userCtoon?.ctoon?.rarity ?? null,
       isGtoon: a.userCtoon?.ctoon?.isGtoon ?? false,
+      cost: a.userCtoon?.ctoon?.cost ?? null,
+      power: a.userCtoon?.ctoon?.power ?? null,
       characters: a.userCtoon?.ctoon?.characters || [],
       assetPath: a.userCtoon?.ctoon?.assetPath ?? '',
       mintNumber: a.userCtoon?.mintNumber ?? null,

@@ -126,11 +126,18 @@
                 : 'hover:scale-105'
             ]"
           >
-            <img
-              :src="c.assetPath"
-              :alt="c.name"
-              class="w-20 h-20 object-contain mb-2"
-            />
+            <div class="relative inline-flex items-center justify-center mb-2">
+              <img
+                :src="c.assetPath"
+                :alt="c.name"
+                class="object-contain"
+              />
+              <GtoonOverlay
+                v-if="c.isGtoon"
+                :power="c.power"
+                :cost="c.cost"
+              />
+            </div>
             <p class="text-sm font-semibold mb-1">{{ c.name }}</p>
             <p class="text-xs mb-1">Power: {{ c.power }}</p>
             <p class="text-xs mb-1">Cost: {{ c.cost }}</p>
@@ -185,6 +192,7 @@ import { ref, computed, onMounted } from 'vue'
 import Toast from '@/components/Toast.vue'
 import abilitiesJson from '~/data/abilities.json'
 import Nav from '@/components/Nav.vue'
+import GtoonOverlay from '@/components/GtoonOverlay.vue'
 import { useRouter } from 'vue-router'
 
 definePageMeta({ title: 'gToons Clash Decks', middleware: 'auth', layout: 'default' })

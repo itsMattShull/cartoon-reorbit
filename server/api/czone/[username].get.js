@@ -99,7 +99,10 @@ export default defineEventHandler(async (event) => {
       series: uc.ctoon.series,
       rarity: uc.ctoon.rarity,
       isFirstEdition: uc.isFirstEdition,
-      ctoonId: uc.ctoon.id
+      ctoonId: uc.ctoon.id,
+      isGtoon: uc.ctoon.isGtoon,
+      cost: uc.ctoon.cost,
+      power: uc.ctoon.power
     }
   }
 
@@ -180,7 +183,10 @@ export default defineEventHandler(async (event) => {
         series: meta.series ?? null,
         rarity: meta.rarity ?? null,
         isFirstEdition: meta.isFirstEdition ?? null,
-        ctoonId: meta.ctoonId ?? null
+        ctoonId: meta.ctoonId ?? null,
+        isGtoon: meta.isGtoon ?? null,
+        cost: meta.cost ?? null,
+        power: meta.power ?? null
       }
     })
     return {

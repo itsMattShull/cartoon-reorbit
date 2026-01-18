@@ -5,20 +5,28 @@
     :aria-label="ariaLabel"
     @click="handleClick"
   >
-    <ProgressiveImage
-      v-if="progressive"
-      :src="src"
-      :alt="alt"
-      :image-class="imageClass"
-      :placeholder-height="placeholderHeight"
-    />
-    <img v-else :src="src" :alt="alt" :class="imageClass" />
+    <div class="relative inline-flex items-center justify-center">
+      <ProgressiveImage
+        v-if="progressive"
+        :src="src"
+        :alt="alt"
+        :image-class="imageClass"
+        :placeholder-height="placeholderHeight"
+      />
+      <img v-else :src="src" :alt="alt" :class="imageClass" />
+      <GtoonOverlay
+        v-if="showGtoonOverlay"
+        :power="power"
+        :cost="cost"
+      />
+    </div>
   </button>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import ProgressiveImage from '@/components/ProgressiveImage.vue'
+import GtoonOverlay from '@/components/GtoonOverlay.vue'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 
 const props = defineProps({
@@ -31,7 +39,10 @@ const props = defineProps({
   buttonClass: { type: String, default: '' },
   progressive: { type: Boolean, default: false },
   placeholderHeight: { type: String, default: '8rem' },
-  stopPropagation: { type: Boolean, default: false }
+  stopPropagation: { type: Boolean, default: false },
+  isGtoon: { type: Boolean, default: false },
+  power: { type: [Number, String], default: null },
+  cost: { type: [Number, String], default: null }
 })
 
 const emit = defineEmits(['click'])
@@ -39,6 +50,9 @@ const { open } = useCtoonModal()
 
 const ariaLabel = computed(() => props.alt || props.name || 'View cToon details')
 const canOpen = computed(() => !!(props.ctoonId || props.userCtoonId))
+const showGtoonOverlay = computed(() =>
+  props.isGtoon && props.power != null && props.cost != null
+)
 
 function handleClick(event) {
   if (props.stopPropagation) event.stopPropagation()

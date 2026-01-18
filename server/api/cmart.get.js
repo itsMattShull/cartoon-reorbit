@@ -39,6 +39,8 @@ export default defineEventHandler(async () => {
       quantity: true,
       totalMinted: true,
       isGtoon: true,
+      cost: true,
+      power: true,
       characters: true,
       // advisory fields (optional)
       initialReleaseAt: true,
