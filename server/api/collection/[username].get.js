@@ -3,6 +3,11 @@ import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
+  const requesterId = event.context.userId
+  if (!requesterId) {
+    throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
+  }
+
   const { username } = event.context.params
   const { filter } = getQuery(event)
 

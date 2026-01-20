@@ -67,20 +67,9 @@ export default defineEventHandler(async (event) => {
         skip,
         orderBy: [{ isBooster: 'desc' }, { username: 'asc' }],
         select: {
-          id: true,
           username: true,
-          discordId: true,
-          discordTag: true,
-          discordAvatar: true,
           avatar: true,
-          roles: true,
-          isAdmin: true,
-          inGuild: true,
-          isBooster: true,
-          boosterSince: true,
-          createdAt: true,
-          lastLogin: true,
-          points: { select: { points: true } } // UserPoints relation
+          isBooster: true
         }
       }),
       prisma.user.count({ where })
@@ -88,20 +77,9 @@ export default defineEventHandler(async (event) => {
 
     /* 5. Shape response ------------------------------------------ */
     const items = rows.map(u => ({
-      id: u.id,
       username: u.username,
-      discordId: u.discordId,
-      discordTag: u.discordTag,
-      discordAvatar: u.discordAvatar,
       avatar: u.avatar,
-      roles: u.roles,
-      isAdmin: u.isAdmin,
-      inGuild: u.inGuild,
-      isBooster: u.isBooster,
-      boosterSince: u.boosterSince,
-      createdAt: u.createdAt,
-      lastLogin: u.lastLogin,
-      points: u.points?.points ?? 0
+      isBooster: u.isBooster
     }))
 
     return {
