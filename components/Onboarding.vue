@@ -172,7 +172,7 @@ const items = computed(() => {
     {
       id: 'games',
       done: Boolean(st.gamePointsComplete),
-      text: `Play Winball or gToons Clash to win up to ${dailyPointLimit} points.`
+      text: `Play Winball, gToons Clash, or scan for Monsters to win up to ${dailyPointLimit} points.`
     },
     {
       id: 'winwheel',
@@ -183,11 +183,6 @@ const items = computed(() => {
       id: 'lotto',
       done: Boolean(st.lottoComplete),
       text: lottoText
-    },
-    {
-      id: 'scan',
-      done: Boolean(st.monsterScanComplete),
-      text: `Scan ${pluralize(scanLimit, 'barcode')} and QR codes in Monsters to gain ${scanTotal} points.`
     }
   ]
 })
