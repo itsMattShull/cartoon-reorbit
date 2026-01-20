@@ -57,6 +57,9 @@ export default defineNuxtConfig({
   ],
 
   sentry: {
+    client: { enabled: false },
+    server: { enabled: false },
+    enabled: false,
     sourceMapsUploadOptions: {
       org: 'matt-shull-m0',
       project: 'javascript-nuxt'

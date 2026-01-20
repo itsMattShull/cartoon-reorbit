@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
       orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { id: true, username: true, discordTag: true } },
-        ctoon: { select: { id: true, name: true, assetPath: true, series: true, set: true, characters: true } }
+        ctoon: { select: { id: true, name: true, assetPath: true, series: true, set: true, characters: true, description: true } }
       },
       skip,
       take: limit

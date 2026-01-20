@@ -27,6 +27,11 @@ export default defineEventHandler(async (event) => {
   const series = asString(body?.series)
   const set = asString(body?.set)
   const characters = normalizeCharacters(body?.characters)
+  const descriptionProvided = Object.prototype.hasOwnProperty.call(body || {}, 'description')
+  const descriptionValue = descriptionProvided && typeof body?.description === 'string'
+    ? body.description.trim()
+    : null
+  const description = descriptionProvided ? (descriptionValue || null) : undefined
 
   if (!ctoonId) throw createError({ statusCode: 400, statusMessage: 'ctoonId required.' })
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name required.' })
@@ -36,7 +41,7 @@ export default defineEventHandler(async (event) => {
 
   const ctoon = await prisma.ctoon.findUnique({
     where: { id: ctoonId },
-    select: { id: true, name: true, series: true, set: true, characters: true }
+    select: { id: true, name: true, series: true, set: true, characters: true, description: true }
   })
   if (!ctoon) throw createError({ statusCode: 404, statusMessage: 'cToon not found.' })
 
@@ -44,9 +49,12 @@ export default defineEventHandler(async (event) => {
     name: ctoon.name,
     series: ctoon.series,
     set: ctoon.set,
-    characters: ctoon.characters || []
+    characters: ctoon.characters || [],
+    description: ctoon.description ?? null
   }
-  const newValues = { name, series, set, characters }
+  const newValues = descriptionProvided
+    ? { name, series, set, characters, description }
+    : { name, series, set, characters }
 
   const suggestion = await prisma.ctoonUserSuggestion.create({
     data: {

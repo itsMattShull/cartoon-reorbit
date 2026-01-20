@@ -38,15 +38,23 @@ export default defineEventHandler(async (event) => {
   const series = normalizeString(newValues.series)
   const set = normalizeString(newValues.set)
   const characters = normalizeCharacters(newValues.characters)
+  const descriptionProvided = Object.prototype.hasOwnProperty.call(newValues, 'description')
+  const descriptionValue = descriptionProvided && typeof newValues.description === 'string'
+    ? newValues.description.trim()
+    : ''
+  const description = descriptionProvided ? (descriptionValue || null) : null
 
   if (!name || !series || !set || !characters.length) {
     throw createError({ statusCode: 400, statusMessage: 'Suggestion data incomplete' })
   }
 
+  const updateData = { name, series, set, characters }
+  if (descriptionProvided) updateData.description = description
+
   const [updatedCtoon] = await prisma.$transaction([
     prisma.ctoon.update({
       where: { id: suggestion.ctoonId },
-      data: { name, series, set, characters }
+      data: updateData
     }),
     prisma.ctoonUserSuggestion.update({
       where: { id: suggestion.id },

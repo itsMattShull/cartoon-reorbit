@@ -89,6 +89,7 @@ model Ctoon {
   id              String    @id @default(uuid())
   name            String
   series          String?
+  description     String?
   type            String
   rarity          String
   assetPath       String
