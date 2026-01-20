@@ -1251,7 +1251,11 @@ async function sendOffer() {
 
     await router.push(`/czone/${encodeURIComponent(recipient)}`)
   } catch (e) {
-    toast.message = 'Failed to send offer. Please try again.'
+    const statusMessage = e?.data?.statusMessage || e?.statusMessage
+    const reason = statusMessage || (e?.message?.includes('Failed to fetch')
+      ? 'Network error. Please check your connection and try again.'
+      : e?.message) || 'Please try again.'
+    toast.message = `Failed to send offer: ${reason}`
     toast.show = true
     setTimeout(() => (toast.show = false), 3500)
   } finally {
