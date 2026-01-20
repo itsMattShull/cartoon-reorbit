@@ -51,6 +51,9 @@ export default defineEventHandler(async (event) => {
       name:       auction.userCtoon.ctoon.name,
       series:     auction.userCtoon.ctoon.series,
       rarity:     auction.userCtoon.ctoon.rarity,
+      isGtoon:    auction.userCtoon.ctoon.isGtoon,
+      cost:       auction.userCtoon.ctoon.cost,
+      power:      auction.userCtoon.ctoon.power,
       mintNumber: auction.userCtoon.mintNumber
     },
     isHolidayItem, // ← added

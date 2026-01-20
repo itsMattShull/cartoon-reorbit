@@ -57,6 +57,9 @@
           :name="auction.ctoon.name"
           :ctoon-id="auction.ctoon.id"
           :user-ctoon-id="auction.ctoon.userCtoonId"
+          :is-gtoon="auction.ctoon.isGtoon"
+          :power="auction.ctoon.power"
+          :cost="auction.ctoon.cost"
           image-class="block max-w-full mx-auto rounded"
         />
       </div>
@@ -90,7 +93,7 @@
         </div>
         <p>
           This is a featured auction. You’ll only be allowed to bid if you
-          haven’t owned more than one copy of this cToon in the last 30 days.
+          haven’t owned 2 mints of this cToon in the last 30 days.
         </p>
       </div>
 

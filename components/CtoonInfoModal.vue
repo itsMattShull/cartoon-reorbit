@@ -5,7 +5,7 @@
         v-if="activeTab === 'info' && statusImage"
         :src="statusImage"
         :alt="statusImageAlt"
-        class="absolute -top-16 -right-4 w-48 h-48 object-contain rotate-[20deg] translate-x-2 pointer-events-none"
+        class="absolute -top-20 -right-8 w-32 h-32 object-contain rotate-[20deg] translate-x-3 pointer-events-none sm:-top-16 sm:-right-4 sm:w-48 sm:h-48 sm:translate-x-2"
       />
       <div class="flex items-start gap-4 pb-4 border-b border-white/10 shrink-0">
         <img
@@ -29,6 +29,22 @@
           Info
         </button>
         <button
+          v-if="hasGtoon"
+          class="px-3 py-1.5 rounded text-sm font-medium transition"
+          :class="activeTab === 'gtoon' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
+          @click="activeTab = 'gtoon'"
+        >
+          gToon
+        </button>
+        <button
+          v-if="ctoon.id"
+          class="px-3 py-1.5 rounded text-sm font-medium transition"
+          :class="activeTab === 'owners' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
+          @click="activeTab = 'owners'"
+        >
+          Owners
+        </button>
+        <button
           class="px-3 py-1.5 rounded text-sm font-medium transition"
           :class="activeTab === 'suggest' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
           @click="activeTab = 'suggest'"
@@ -36,11 +52,26 @@
           Suggest Updates
         </button>
       </div>
-
+ 
       <div class="flex-1 overflow-y-auto py-4 space-y-4">
         <template v-if="activeTab === 'info'">
-          <div v-if="loading" class="text-sm text-gray-300">
-            Loading details...
+          <div v-if="loading" class="space-y-4 animate-pulse">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div v-for="i in 6" :key="`info-skel-${i}`" class="rounded bg-gray-700/60 p-3">
+                <div class="h-3 w-24 bg-gray-600/70 rounded"></div>
+                <div class="mt-2 h-4 w-32 bg-gray-600/70 rounded"></div>
+                <div class="mt-2 h-3 w-20 bg-gray-600/70 rounded"></div>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <div class="h-3 w-40 bg-gray-600/70 rounded"></div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div v-for="i in 4" :key="`info-mint-skel-${i}`" class="rounded bg-gray-700/60 p-3">
+                  <div class="h-3 w-24 bg-gray-600/70 rounded"></div>
+                  <div class="mt-2 h-4 w-28 bg-gray-600/70 rounded"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div v-else-if="error" class="text-sm text-red-300">
             Failed to load cToon details.
@@ -133,17 +164,106 @@
           </div>
         </template>
 
-        <template v-else>
-          <div class="text-sm text-gray-300">
-            Suggest updates to this cToon. Your submission will be reviewed by the admin team.
-          </div>
-          <div v-if="loading" class="text-sm text-gray-300">
-            Loading details...
+        <template v-else-if="activeTab === 'gtoon' && hasGtoon">
+          <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm animate-pulse">
+            <div v-for="i in 4" :key="`gtoon-skel-${i}`" class="rounded bg-gray-700/60 p-3">
+              <div class="h-3 w-20 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-4 w-24 bg-gray-600/70 rounded"></div>
+            </div>
           </div>
           <div v-else-if="error" class="text-sm text-red-300">
             Failed to load cToon details.
           </div>
-          <form v-else class="space-y-4" @submit.prevent="submitSuggestion">
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div class="rounded bg-gray-700/60 p-3">
+              <div class="text-xs uppercase text-gray-300">Cost</div>
+              <div class="font-semibold">{{ formatValue(ctoon.cost) }}</div>
+            </div>
+            <div class="rounded bg-gray-700/60 p-3">
+              <div class="text-xs uppercase text-gray-300">Power</div>
+              <div class="font-semibold">{{ formatValue(ctoon.power) }}</div>
+            </div>
+            <div class="rounded bg-gray-700/60 p-3 sm:col-span-2">
+              <div class="text-xs uppercase text-gray-300">Type</div>
+              <div class="font-semibold">{{ formatValue(ctoon.gtoonType) }}</div>
+            </div>
+            <div class="rounded bg-gray-700/60 p-3 sm:col-span-2">
+              <div class="text-xs uppercase text-gray-300">Ability</div>
+              <div class="font-semibold">{{ abilityLabel(ctoon.abilityKey) }}</div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else-if="activeTab === 'owners'">
+          <div v-if="ownersLoading" class="space-y-2 animate-pulse">
+            <div v-for="i in 6" :key="`owners-skel-${i}`" class="rounded bg-gray-700/60 px-3 py-2">
+              <div class="flex items-center justify-between gap-3">
+                <div class="h-3 w-20 bg-gray-600/70 rounded"></div>
+                <div class="h-3 w-28 bg-gray-600/70 rounded"></div>
+                <div class="h-4 w-16 bg-gray-600/70 rounded"></div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="ownersError" class="text-sm text-red-300">
+            {{ ownersError }}
+          </div>
+          <div v-else-if="!sortedOwners.length" class="text-sm text-gray-300">
+            No owners found.
+          </div>
+          <ul v-else class="space-y-2 text-sm">
+            <li
+              v-for="owner in sortedOwners"
+              :key="owner.userId + '-' + owner.mintNumber"
+              class="grid grid-cols-[auto,1fr,auto] items-center gap-3 rounded bg-gray-800/60 px-3 py-2"
+            >
+              <span class="text-gray-300 whitespace-nowrap">
+                <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber ?? 'N/A' }}</span>
+                <span v-else>&nbsp;</span>
+              </span>
+              <NuxtLink
+                :to="`/czone/${owner.username}`"
+                class="text-indigo-300 hover:text-indigo-200 hover:underline truncate text-left"
+              >
+                {{ owner.username }}
+              </NuxtLink>
+              <NuxtLink
+                v-if="owner.isTradeListItem"
+                :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+                class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 whitespace-nowrap hover:underline"
+              >
+                Tradeable
+              </NuxtLink>
+              <span v-else class="text-xs text-gray-500 whitespace-nowrap w-16">&nbsp;</span>
+            </li>
+          </ul>
+        </template>
+
+        <template v-else>
+          <div class="text-sm text-gray-300">
+            Suggest updates to this cToon. Your submission will be reviewed by the admin team.
+          </div>
+          <div v-if="loading" class="space-y-4 animate-pulse">
+            <div>
+              <div class="h-3 w-24 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-9 w-full bg-gray-700/60 rounded"></div>
+            </div>
+            <div>
+              <div class="h-3 w-16 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-9 w-full bg-gray-700/60 rounded"></div>
+            </div>
+            <div>
+              <div class="h-3 w-16 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-9 w-full bg-gray-700/60 rounded"></div>
+            </div>
+            <div>
+              <div class="h-3 w-40 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-16 w-full bg-gray-700/60 rounded"></div>
+            </div>
+          </div>
+          <div v-else-if="error" class="text-sm text-red-300">
+            Failed to load cToon details.
+          </div>
+          <form v-else id="ctoon-suggestion-form" class="space-y-4" @submit.prevent="submitSuggestion">
             <div>
               <label class="text-xs uppercase text-gray-300">cToon Name</label>
               <input
@@ -198,46 +318,51 @@
               <p v-if="!hasSuggestionChanges" class="text-xs text-gray-400">
                 Make a change to submit a suggestion.
               </p>
-              <button
-                type="submit"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-                :disabled="suggestionDisabled"
-              >
-                {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
-              </button>
             </div>
           </form>
         </template>
       </div>
 
       <div class="pt-4 border-t border-white/10 flex items-center justify-between gap-4 shrink-0">
-        <button
-          class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-          @click="close"
-        >
-          Close
-        </button>
-        <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
-          <div v-if="canSeeHolidayReveal">
-            <button
-              v-if="canOpenNow"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-              :disabled="openingHoliday"
-              @click="openHolidayCtoon"
-            >
-              {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
-            </button>
-            <div v-else class="text-xs text-gray-300">
-              Reveal available in:
-              <span class="font-semibold">{{ revealCountdown }}</span>
+        <template v-if="activeTab === 'suggest'">
+          <button
+            type="submit"
+            form="ctoon-suggestion-form"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm ml-auto"
+            :disabled="suggestionDisabled"
+          >
+            {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
+          </button>
+        </template>
+        <template v-else>
+          <button
+            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+            @click="close"
+          >
+            Close
+          </button>
+          <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
+            <div v-if="canSeeHolidayReveal">
+              <button
+                v-if="canOpenNow"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
+                :disabled="openingHoliday"
+                @click="openHolidayCtoon"
+              >
+                {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
+              </button>
+              <div v-else class="text-xs text-gray-300">
+                Reveal available in:
+                <span class="font-semibold">{{ revealCountdown }}</span>
+              </div>
             </div>
+            <AddToWishlist
+              v-if="ctoon.id"
+              :ctoon-id="ctoon.id"
+              class="text-xs"
+            />
           </div>
-          <AddToWishlist
-            v-if="ctoon.id"
-            :ctoon-id="ctoon.id"
-            class="text-xs"
-          />
-        </div>
+        </template>
       </div>
     </div>
   </Modal>
@@ -247,6 +372,7 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import Modal from '@/components/Modal.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 
 const {
@@ -261,12 +387,22 @@ const {
 
 const ctoon = computed(() => data.value?.ctoon || {})
 const userCtoon = computed(() => data.value?.userCtoon || null)
+const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => {
   const quantity = ctoon.value?.quantity
   if (quantity === null || quantity === undefined) return 'Unlimited'
   return formatValue(quantity)
 })
 const statusImage = computed(() => {
+  const totalQuantity = ctoon.value?.quantity
+  const highestMint = ctoon.value?.highestMint
+  const isSoldOut =
+    typeof totalQuantity === 'number' &&
+    typeof highestMint === 'number' &&
+    totalQuantity === highestMint
+
+  if (isSoldOut) return '/images/soldout.png'
+
   const releaseDate = ctoon.value?.releaseDate
   if (releaseDate) {
     const releaseTime = new Date(releaseDate).getTime()
@@ -279,10 +415,7 @@ const statusImage = computed(() => {
   }
 
   if (!ctoon.value?.inCmart) return null
-  const totalQuantity = ctoon.value?.quantity
-  const highestMint = ctoon.value?.highestMint
   if (typeof totalQuantity === 'number' && typeof highestMint === 'number') {
-    if (totalQuantity === highestMint) return '/images/soldout.png'
     if (totalQuantity - highestMint <= 10) return '/images/goingfast.png'
   }
   return null
@@ -316,6 +449,10 @@ const formTouched = ref(false)
 let suppressTouch = false
 let seriesSuggestTimer = null
 let setSuggestTimer = null
+const ownersLoading = ref(false)
+const ownersError = ref('')
+const ownersList = ref([])
+const lastOwnersCtoonId = ref(null)
 
 const holidayEvent = ref(null)
 const openingHoliday = ref(false)
@@ -353,6 +490,12 @@ function normalizeCharsText(value) {
 function arraysEqual(a, b) {
   if (a.length !== b.length) return false
   return a.every((item, index) => item === b[index])
+}
+
+function abilityLabel(key) {
+  if (!key) return 'None'
+  const entry = abilities.find(a => a.key === key)
+  return entry?.label ?? key
 }
 
 const suggestionCharacters = computed(() => normalizeCharsText(suggestCharacters.value))
@@ -445,6 +588,16 @@ function startRevealCountdown() {
   revealTimer = setInterval(tick, 1000)
 }
 
+const sortedOwners = computed(() => {
+  return ownersList.value
+    .slice()
+    .sort((a, b) => {
+      const aMint = a.mintNumber ?? Number.POSITIVE_INFINITY
+      const bMint = b.mintNumber ?? Number.POSITIVE_INFINITY
+      return aMint - bMint
+    })
+})
+
 watch(isOpen, (open) => {
   if (!open) {
     submitError.value = ''
@@ -452,10 +605,31 @@ watch(isOpen, (open) => {
     seriesSuggestions.value = []
     setSuggestions.value = []
     formTouched.value = false
+    ownersLoading.value = false
+    ownersError.value = ''
+    ownersList.value = []
+    lastOwnersCtoonId.value = null
     return
   }
   activeTab.value = 'info'
   if (!loading.value && ctoon.value?.id) syncSuggestionForm(ctoon.value)
+})
+
+watch([isOpen, hasGtoon], ([open, isGtoon]) => {
+  if (!open) return
+  if (!isGtoon && activeTab.value === 'gtoon') activeTab.value = 'info'
+})
+
+watch([isOpen, activeTab, () => ctoon.value?.id], ([open, tab, ctoonId]) => {
+  if (!open) return
+  if (tab !== 'owners') return
+  if (!ctoonId) {
+    ownersList.value = []
+    ownersError.value = ''
+    return
+  }
+  if (lastOwnersCtoonId.value === ctoonId && ownersList.value.length) return
+  loadOwners(ctoonId)
 })
 
 watch([isOpen, loading], ([open, isLoading]) => {
@@ -531,6 +705,23 @@ onBeforeUnmount(() => {
   if (seriesSuggestTimer) clearTimeout(seriesSuggestTimer)
   if (setSuggestTimer) clearTimeout(setSuggestTimer)
 })
+
+async function loadOwners(ctoonId) {
+  ownersLoading.value = true
+  ownersError.value = ''
+  try {
+    const res = await $fetch('/api/collections/owners', {
+      query: { cToonId: ctoonId }
+    })
+    ownersList.value = Array.isArray(res) ? res : []
+    lastOwnersCtoonId.value = ctoonId
+  } catch (err) {
+    ownersError.value = 'Failed to load owners.'
+    ownersList.value = []
+  } finally {
+    ownersLoading.value = false
+  }
+}
 
 async function openHolidayCtoon() {
   if (!canOpenNow.value || openingHoliday.value) return

@@ -127,7 +127,7 @@
                   :alt="spinResult.ctoon.name"
                   :name="spinResult.ctoon.name"
                   :ctoon-id="spinResult.ctoon.id"
-                  image-class="w-24 h-24 mx-auto mb-2"
+                  image-class="w-24 h-24 object-contain mx-auto mb-2"
                 />
                 <p class="font-semibold">{{ spinResult.ctoon.name }}</p>
               </div>

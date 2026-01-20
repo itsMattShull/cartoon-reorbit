@@ -193,6 +193,9 @@ export default defineEventHandler(async (event) => {
     name:       c.name,
     assetPath:  c.assetPath,
     rarity:     c.rarity,
+    isGtoon:    c.isGtoon,
+    cost:       c.cost,
+    power:      c.power,
     mintNumber: mintNumbers[c.id],
     inCmart:    inCmartFlags[c.id]
   }))

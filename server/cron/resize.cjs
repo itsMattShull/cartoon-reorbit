@@ -121,10 +121,10 @@ function schedule(label, cronExpr, job) {
 }
 
 // Mon 20:00 upsize
-schedule('Mon 20:00 upsize', '0 20 * * 1', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
+schedule('Mon 20:00 upsize', '20 20 * * 1', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
 // Tue 00:00 downsize
 schedule('Tue 00:00 downsize', '0 0 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
 // Tue 08:00 upsize
-schedule('Tue 08:00 upsize', '0 8 * * 2', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
+schedule('Tue 08:00 upsize', '0 8 * * 4', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
 // Tue 12:00 downsize
-schedule('Tue 12:00 downsize', '0 12 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
+schedule('Tue 12:00 downsize', '0 12 * * 4', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));

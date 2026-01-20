@@ -107,6 +107,31 @@
         </div>
       </div>
 
+      <!-- Socket State / Leak Signals -->
+      <div class="lg:col-span-2">
+        <h2 class="text-xl font-semibold mb-2 flex items-center">
+          Socket State Signals
+          <span
+            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            :class="leakRiskBadgeClass"
+          >
+            {{ leakRiskBadgeText }}
+          </span>
+        </h2>
+        <p class="text-sm text-gray-600 mb-2">
+          {{ leakRiskSummary }}
+        </p>
+        <p class="text-xs text-gray-500 mb-2">
+          RSS MB is resident set size: the total memory the socket server process holds in RAM (heap + native).
+        </p>
+        <p v-if="socketMetricsUpdatedAt" class="text-xs text-gray-500 mb-3">
+          Last sample: {{ formatSocketTime(socketMetricsUpdatedAt) }} · Samples: {{ socketMetricsSeries.length }}
+        </p>
+        <div class="chart-container">
+          <canvas ref="socketMetricsCanvas"></canvas>
+        </div>
+      </div>
+
       <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
         <div class="flex flex-wrap items-center justify-between gap-4 mb-2">
@@ -230,7 +255,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import {
   Chart,
   LineController, LineElement, PointElement,
@@ -339,6 +364,7 @@ const ptsDistCanvas = ref(null)
 const ratioCanvas   = ref(null)
 const turnoverCanvas= ref(null)
 const monsterScansCanvas = ref(null)
+const socketMetricsCanvas = ref(null)
 
 // window counts
 const netWindowCount      = ref(0)
@@ -348,6 +374,12 @@ const turnoverWindowCount = ref(0)
 const clashTotal       = ref(0)
 const clashFinished    = ref(0)
 const clashPctFinished = ref(0)
+
+const socketMetricsSeries = ref([])
+const socketMetricsIntervalMs = ref(60_000)
+const socketMetricsUpdatedAt = ref(null)
+const leakRiskLevel = ref('low')
+const leakRiskSummary = ref('Waiting for socket metrics...')
 
 // rarity turnover state/badges
 const turnoverStatus      = ref('good')
@@ -405,10 +437,23 @@ const ratioBadgeText = computed(() => ({
   danger:  'Danger'
 })[ratioStatus.value])
 
+const leakRiskBadgeClass = computed(() => ({
+  low:    'bg-green-100 text-green-800',
+  medium: 'bg-yellow-100 text-yellow-800',
+  high:   'bg-red-100 text-red-800'
+}[leakRiskLevel.value]))
+
+const leakRiskBadgeText = computed(() => ({
+  low:    'Low impact',
+  medium: 'Medium impact',
+  high:   'High impact'
+}[leakRiskLevel.value]))
+
 // Chart instances
 let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
-    netChart, ratioChart, turnoverChart, monsterScansChart
+    netChart, ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
+let socketMetricsTimer
 
 // --- color palette ---
 const colors = {
@@ -424,7 +469,15 @@ const colors = {
   netLine:   '#111827', // Slate-900
   maLine:    '#FACC15', // Yellow
   scanBar:   '#F97316', // Orange
-  scanLine:  '#0EA5E9'  // Sky
+  scanLine:  '#0EA5E9', // Sky
+  socketActive: '#111827',
+  socketZoneRefs: '#2563EB',
+  socketTradeSockets: '#10B981',
+  socketTradeSpectators: '#F97316',
+  socketAuction: '#14B8A6',
+  socketMonster: '#8B5CF6',
+  socketClash: '#0EA5E9',
+  socketRss: '#9CA3AF'
 }
 colors.turnover = {
   Common:    '#9CA3AF',
@@ -582,6 +635,18 @@ const monsterScansOptions = {
   plugins: { legend: { position: 'top' } }
 }
 
+const socketMetricsOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  spanGaps: true,
+  scales: {
+    x: { type: 'time', time: { unit: 'hour', tooltipFormat: 'PP p' }, title: { color: '#000', display: true, text: 'Time' }, ticks: { color: '#000' } },
+    y: { title: { color: '#000', display: true, text: 'Count' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
+    y2: { position: 'right', title: { color: '#000', display: true, text: 'MB' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
+  },
+  plugins: { legend: { position: 'top' }, datalabels: { display: false } }
+}
+
 // cumulative users
 const cumOptions = {
   responsive: true,
@@ -639,6 +704,10 @@ const histOptions = {
 
 // --- helpers ---
 const dateOf = (d) => new Date(d.period || d.day || d.week || d.month || d.date)
+const formatSocketTime = (value) => {
+  const date = value instanceof Date ? value : new Date(value)
+  return date.toLocaleString()
+}
 
 function applyTimeUnit () {
   const unit  = groupUnit.value
@@ -717,6 +786,69 @@ async function fetchPointsDistribution () {
   }]
   ptsHistChart.update()
   resetPointsZoom()
+}
+
+function computeLeakRisk(samples, intervalMs) {
+  if (!samples.length) {
+    leakRiskLevel.value = 'low'
+    leakRiskSummary.value = 'No socket metrics yet.'
+    return
+  }
+  const latest = samples[samples.length - 1]
+  const interval = Math.max(1, Number(intervalMs || 60_000))
+  const windowSize = Math.max(1, Math.floor((60 * 60 * 1000) / interval))
+  const base = samples[Math.max(0, samples.length - windowSize - 1)] || latest
+
+  const zoneOrphans = Math.max(0, (latest.zoneSocketRefs || 0) - (latest.activeSockets || 0))
+  const tradeOrphans = Math.max(0, (latest.tradeSpectators || 0) - (latest.tradeSocketsCount || 0))
+  const zoneDelta = (latest.zoneSocketRefs || 0) - (base.zoneSocketRefs || 0)
+  const tradeDelta = (latest.tradeSpectators || 0) - (base.tradeSpectators || 0)
+
+  let level = 'low'
+  if (zoneOrphans > 50 || tradeOrphans > 50 || zoneDelta > 50 || tradeDelta > 50) {
+    level = 'high'
+  } else if (zoneOrphans > 10 || tradeOrphans > 10 || zoneDelta > 10 || tradeDelta > 10) {
+    level = 'medium'
+  }
+  leakRiskLevel.value = level
+
+  const label = level === 'high' ? 'High impact' : level === 'medium' ? 'Medium impact' : 'Low impact'
+  const zoneGap = zoneOrphans
+    ? `zone orphan refs ${zoneOrphans}`
+    : 'zone refs track active sockets'
+  const tradeGap = tradeOrphans
+    ? `trade orphan refs ${tradeOrphans}`
+    : 'trade refs track active sockets'
+  const trend = (zoneDelta > 0 || tradeDelta > 0)
+    ? `1h delta zone ${zoneDelta >= 0 ? '+' : ''}${zoneDelta}, trade ${tradeDelta >= 0 ? '+' : ''}${tradeDelta}.`
+    : 'No upward drift in the last hour.'
+
+  leakRiskSummary.value = `${label}: ${zoneGap}; ${tradeGap}. ${trend}`
+}
+
+async function fetchSocketMetrics() {
+  if (!socketMetricsChart) return
+  const res = await fetch('/api/admin/socket-metrics?limit=1440', { credentials: 'include' })
+  if (!res.ok) return
+  const payload = await res.json()
+  const samples = Array.isArray(payload.samples) ? payload.samples : []
+  socketMetricsIntervalMs.value = Number(payload.intervalMs || 60_000)
+  socketMetricsSeries.value = samples
+  const latest = samples[samples.length - 1]
+  socketMetricsUpdatedAt.value = latest ? new Date(latest.ts) : null
+
+  const series = (key) => samples.map(s => ({ x: s.ts, y: s[key] ?? 0 }))
+  socketMetricsChart.data.datasets[0].data = series('activeSockets')
+  socketMetricsChart.data.datasets[1].data = series('zoneSocketRefs')
+  socketMetricsChart.data.datasets[2].data = series('tradeSocketsCount')
+  socketMetricsChart.data.datasets[3].data = series('tradeSpectators')
+  socketMetricsChart.data.datasets[4].data = series('auctionSocketMembers')
+  socketMetricsChart.data.datasets[5].data = series('monsterSocketMembers')
+  socketMetricsChart.data.datasets[6].data = series('clashSocketMembers')
+  socketMetricsChart.data.datasets[7].data = series('rssMb')
+  socketMetricsChart.update()
+
+  computeLeakRisk(samples, socketMetricsIntervalMs.value)
 }
 
 // --- fetch & populate ---
@@ -1060,6 +1192,22 @@ onMounted(async () => {
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
   monsterScansChart = new Chart(monsterScansCanvas.value.getContext('2d'), { data: { labels: [], datasets: [] }, options: monsterScansOptions })
+  socketMetricsChart = new Chart(socketMetricsCanvas.value.getContext('2d'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { label: 'Active sockets', data: [], borderColor: colors.socketActive, backgroundColor: colors.socketActive, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Zone socket refs', data: [], borderColor: colors.socketZoneRefs, backgroundColor: colors.socketZoneRefs, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Trade sockets', data: [], borderColor: colors.socketTradeSockets, backgroundColor: colors.socketTradeSockets, borderWidth: 2, fill: false, tension: 0.2, borderDash: [4, 3] },
+        { label: 'Trade spectators', data: [], borderColor: colors.socketTradeSpectators, backgroundColor: colors.socketTradeSpectators, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Auction sockets', data: [], borderColor: colors.socketAuction, backgroundColor: colors.socketAuction, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Monster sockets', data: [], borderColor: colors.socketMonster, backgroundColor: colors.socketMonster, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Clash sockets', data: [], borderColor: colors.socketClash, backgroundColor: colors.socketClash, borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'RSS MB', data: [], borderColor: colors.socketRss, backgroundColor: colors.socketRss, borderWidth: 2, fill: false, tension: 0.2, yAxisID: 'y2' }
+      ]
+    },
+    options: socketMetricsOptions
+  })
 
   // spend/earn ratio chart
   ratioChart = new Chart(ratioCanvas.value.getContext('2d'), {
@@ -1142,6 +1290,12 @@ onMounted(async () => {
   // fetch
   await nextTick()
   await fetchData()
+  await fetchSocketMetrics()
+  socketMetricsTimer = setInterval(fetchSocketMetrics, socketMetricsIntervalMs.value)
+})
+
+onBeforeUnmount(() => {
+  if (socketMetricsTimer) clearInterval(socketMetricsTimer)
 })
 
 // re-fetch on changes

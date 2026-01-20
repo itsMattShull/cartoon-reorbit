@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
     dailyNewUserPoints,
     czoneVisitPoints,
     czoneVisitMaxPerDay,
+    czoneCount,
     phashDuplicateThreshold,
     dhashDuplicateThreshold
   } = body
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
     dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
     czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined,
     czoneVisitMaxPerDay:(typeof czoneVisitMaxPerDay=== 'number') ? Number(czoneVisitMaxPerDay): undefined,
+    czoneCount:         (typeof czoneCount         === 'number') ? Number(czoneCount)         : undefined,
     phashDuplicateThreshold: (typeof phashDuplicateThreshold === 'number') ? Number(phashDuplicateThreshold) : undefined,
     dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined
   }
@@ -64,6 +66,7 @@ export default defineEventHandler(async (event) => {
         dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
         czoneVisitPoints:   payload.czoneVisitPoints   ?? 20,
         czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay ?? 10,
+        czoneCount: payload.czoneCount ?? 3,
         phashDuplicateThreshold: payload.phashDuplicateThreshold ?? 14,
         dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16
       },
@@ -74,6 +77,7 @@ export default defineEventHandler(async (event) => {
         ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
         ...(payload.czoneVisitPoints    !== undefined ? { czoneVisitPoints:    payload.czoneVisitPoints }    : {}),
         ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {}),
+        ...(payload.czoneCount          !== undefined ? { czoneCount:          payload.czoneCount }          : {}),
         ...(payload.phashDuplicateThreshold !== undefined ? { phashDuplicateThreshold: payload.phashDuplicateThreshold } : {}),
         ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {})
       }
@@ -85,6 +89,7 @@ export default defineEventHandler(async (event) => {
       'dailyNewUserPoints',
       'czoneVisitPoints',
       'czoneVisitMaxPerDay',
+      'czoneCount',
       'phashDuplicateThreshold',
       'dhashDuplicateThreshold'
     ]

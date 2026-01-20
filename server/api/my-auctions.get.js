@@ -19,10 +19,13 @@ function isTruthy(value) {
 
 function applyAuctionFilters(items, filters) {
   const term = (filters.search || '').toLowerCase().trim()
+  const setFilter = filters.sets || []
+  const requireGtoons = filters.gtoonsOnly
   const seriesFilter = filters.series || []
   const rarityFilter = filters.rarities || []
   const ownedFilter = filters.owned || ''
   const requireFeatured = filters.featuredOnly
+  const requireBids = filters.hasBidsOnly
   const wishlistSet = filters.wishlistSet || null
 
   return items.filter(item => {
@@ -33,12 +36,15 @@ function applyAuctionFilters(items, filters) {
       const charMatch = chars.some(ch => String(ch || '').toLowerCase().includes(term))
       if (!nameMatch && !charMatch) return false
     }
+    if (setFilter.length && !setFilter.includes(item.set)) return false
+    if (requireGtoons && !item.isGtoon) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
     if (ownedFilter === 'owned' && !item.isOwned) return false
     if (ownedFilter === 'unowned' && item.isOwned) return false
     if (wishlistSet && !wishlistSet.has(item.ctoonId)) return false
+    if (requireBids && Number(item.bidCount ?? 0) < 1) return false
     return true
   })
 }
@@ -64,11 +70,14 @@ export default defineEventHandler(async (event) => {
   const skip = (pageNum - 1) * take
 
   const search = typeof query.q === 'string' ? query.q.trim() : ''
+  const sets = normalizeListParam(query.set)
   const series = normalizeListParam(query.series)
   const rarities = normalizeListParam(query.rarity)
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
   const wishlistOnly = isTruthy(query.wishlist)
+  const hasBidsOnly = isTruthy(query.hasBids)
+  const gtoonsOnly = isTruthy(query.gtoon)
 
   let wishlistSet = null
   if (wishlistOnly) {
@@ -99,6 +108,10 @@ export default defineEventHandler(async (event) => {
               name: true,
               rarity: true,
               series: true,
+              set: true,
+              isGtoon: true,
+              cost: true,
+              power: true,
               characters: true,
               price: true,
             },
@@ -129,8 +142,12 @@ export default defineEventHandler(async (event) => {
     ctoonId:          a.userCtoon?.ctoonId ?? null,
     assetPath:        a.userCtoon?.ctoon?.assetPath ?? null,
     name:             a.userCtoon?.ctoon?.name ?? null,
+    set:              a.userCtoon?.ctoon?.set ?? null,
     series:           a.userCtoon?.ctoon?.series ?? null,
     rarity:           a.userCtoon?.ctoon?.rarity ?? null,
+    isGtoon:          a.userCtoon?.ctoon?.isGtoon ?? false,
+    cost:             a.userCtoon?.ctoon?.cost ?? null,
+    power:            a.userCtoon?.ctoon?.power ?? null,
     characters:       a.userCtoon?.ctoon?.characters || [],
     price:            a.userCtoon?.ctoon?.price ?? 0,
     mintNumber:       a.userCtoon?.mintNumber ?? null,
@@ -147,11 +164,14 @@ export default defineEventHandler(async (event) => {
 
   const filtered = applyAuctionFilters(items, {
     search,
+    sets,
     series,
     rarities,
     owned: ownedFilter,
     featuredOnly,
-    wishlistSet
+    wishlistSet,
+    hasBidsOnly,
+    gtoonsOnly
   })
 
   const total = filtered.length

@@ -32,8 +32,21 @@ export default defineEventHandler(async (event) => {
   const bg = await db.background.findUnique({ where: { id } })
   if (!bg) throw createError({ statusCode: 404, statusMessage: 'Background not found' })
 
-  // block delete if any zone uses this exact imagePath
-  const used = await db.cZone.count({ where: { background: bg.imagePath } })
+  // block delete if any zone uses this exact imagePath (legacy background column or layoutData.zones)
+  const usedRows = await db.$queryRaw`
+    SELECT COUNT(*)::int AS count
+    FROM "CZone" cz
+    WHERE cz."background" = ${bg.imagePath}
+      OR (
+        jsonb_typeof(cz."layoutData"->'zones') = 'array'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(cz."layoutData"->'zones') AS z
+          WHERE z->>'background' = ${bg.imagePath}
+        )
+      );
+  `
+  const used = Number(usedRows?.[0]?.count ?? 0)
   if (used > 0) throw createError({ statusCode: 409, statusMessage: 'In use by some cZones' })
 
   try { await unlink(fsPathFromFilename(bg.filename)) } catch {}

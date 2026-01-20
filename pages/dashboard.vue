@@ -526,10 +526,12 @@ const upcoming = computed(() => {
 const recent = computed(() => {
   const now = new Date()
   const fourWeeksAgo = new Date(now); fourWeeksAgo.setDate(now.getDate() - 28)
-  return allCToons.value.filter(c => {
-    const d = new Date(c.releaseDate)
-    return d <= now && d >= fourWeeksAgo
-  })
+  return allCToons.value
+    .filter(c => {
+      const d = new Date(c.releaseDate)
+      return d <= now && d >= fourWeeksAgo
+    })
+    .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
 })
 const fetchCToons = async () => {
   try {

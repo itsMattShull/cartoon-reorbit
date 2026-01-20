@@ -4,6 +4,31 @@ import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
 
+function normalizeZones(layoutData, background, targetCount) {
+  let zones = []
+  if (layoutData && typeof layoutData === 'object' && Array.isArray(layoutData.zones)) {
+    zones = layoutData.zones.map((subZone) => ({
+      background: typeof subZone?.background === 'string' ? subZone.background : '',
+      toons: Array.isArray(subZone?.toons) ? subZone.toons : []
+    }))
+  } else if (Array.isArray(layoutData)) {
+    zones = [{
+      background: typeof background === 'string' ? background : '',
+      toons: layoutData
+    }]
+  } else {
+    zones = [{
+      background: typeof background === 'string' ? background : '',
+      toons: []
+    }]
+  }
+
+  while (zones.length < targetCount) {
+    zones.push({ background: '', toons: [] })
+  }
+  return zones
+}
+
 export default defineEventHandler(async (event) => {
   const { username } = event.context.params
 
@@ -23,6 +48,14 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { czoneCount: true }
+  })
+  const baseCount = Number(config?.czoneCount ?? 3)
+  const extraCount = Math.max(0, Number(user.additionalCzones ?? 0))
+  let targetCount = Math.max(1, baseCount + extraCount)
+
   // 3) Build a set of all userCtoon IDs the user still owns
   const allCZoneToonIds = new Set()
   for (const zone of user.cZones) {
@@ -36,6 +69,12 @@ export default defineEventHandler(async (event) => {
           if (item.id) {
             allCZoneToonIds.add(item.id)
           }
+        }
+      }
+    } else if (Array.isArray(zone.layoutData)) {
+      for (const item of zone.layoutData) {
+        if (item?.id) {
+          allCZoneToonIds.add(item.id)
         }
       }
     }
@@ -60,7 +99,10 @@ export default defineEventHandler(async (event) => {
       series: uc.ctoon.series,
       rarity: uc.ctoon.rarity,
       isFirstEdition: uc.isFirstEdition,
-      ctoonId: uc.ctoon.id
+      ctoonId: uc.ctoon.id,
+      isGtoon: uc.ctoon.isGtoon,
+      cost: uc.ctoon.cost,
+      power: uc.ctoon.power
     }
   }
 
@@ -97,6 +139,15 @@ export default defineEventHandler(async (event) => {
         // Also update the in-memory copy
         z.layoutData = { zones: cleanedZones }
       }
+    } else if (Array.isArray(z.layoutData)) {
+      const kept = z.layoutData.filter((item) => ownedSet.has(item?.id))
+      if (kept.length !== z.layoutData.length) {
+        await prisma.cZone.update({
+          where: { id: z.id },
+          data: { layoutData: kept }
+        })
+        z.layoutData = kept
+      }
     }
   }
 
@@ -105,22 +156,24 @@ export default defineEventHandler(async (event) => {
   if (user.cZones.length > 0) {
     chosenZone = user.cZones[0]
   } else {
-    // No existing cZone → return a blank 3-zone structure
+    // No existing cZone → return a blank zone structure
     chosenZone = {
       id: null,
       layoutData: {
-        zones: [
-          { background: '', toons: [] },
-          { background: '', toons: [] },
-          { background: '', toons: [] }
-        ]
+        zones: [{ background: '', toons: [] }]
       },
       isPublic: true
     }
   }
 
+  const normalizedZones = normalizeZones(
+    chosenZone.layoutData,
+    chosenZone.background,
+    targetCount
+  )
+
   // 6) Enrich each sub-zone’s toons with metadata
-  const enrichedZones = (chosenZone.layoutData.zones || []).map((subZone) => {
+  const enrichedZones = normalizedZones.map((subZone) => {
     const enrichedToons = (subZone.toons || []).map((item) => {
       const meta = ctoonMeta[item.id] || {}
       return {
@@ -130,7 +183,10 @@ export default defineEventHandler(async (event) => {
         series: meta.series ?? null,
         rarity: meta.rarity ?? null,
         isFirstEdition: meta.isFirstEdition ?? null,
-        ctoonId: meta.ctoonId ?? null
+        ctoonId: meta.ctoonId ?? null,
+        isGtoon: meta.isGtoon ?? null,
+        cost: meta.cost ?? null,
+        power: meta.power ?? null
       }
     })
     return {

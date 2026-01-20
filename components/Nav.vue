@@ -46,11 +46,11 @@
       </a>
 
       <div
-        class="hidden md:block ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
+        class="nav-pill hidden md:block ml-auto inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
               bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
         aria-label="Sign in with Discord"
       >
-        Points: {{ user?.points ?? 0 }}
+        Points: {{ formattedPoints }}
       </div>
     </div>
   </header>
@@ -77,6 +77,11 @@
 
       <!-- links -->
       <nav class="flex-1 overflow-y-auto py-2 space-y-4">
+        <div class="px-5 text-center">
+          <div class="text-xs font-semibold text-slate-500">
+            Points: <span class="text-slate-700">{{ formattedPoints }}</span>
+          </div>
+        </div>
         <!-- main -->
         <div>
           <NuxtLink
@@ -211,7 +216,14 @@ const handleLogout = async () => { await logout(); close() }
 
 const route = useRoute()
 const isOnTradeOffersPage = computed(() => route.path === '/trade-offers')
-const isActive = (to) => route.path === to
+const formattedPoints = computed(() => {
+  const value = user.value?.points ?? 0
+  return Number(value).toLocaleString('en-US')
+})
+const isActive = (to) => {
+  if (to === '/create-trade') return route.path.startsWith('/create-trade')
+  return route.path === to
+}
 
 const pendingCount = ref(0)
 const activeCount  = ref(0)
@@ -228,6 +240,11 @@ onMounted(async () => {
     } catch {}
   }
 })
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === 'visible') {
+    await fetchSelf().catch(() => {})
+  }
+}
 
 /* search */
 const q = ref('')
@@ -240,7 +257,7 @@ const mainLinks = [
   { label: 'Achievements', to: '/achievements' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Auctions', to: '/auctions' },
-  { label: 'Live Trading', to: '/live-trading' },
+  { label: 'Create Trade', to: '/create-trade' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
   { label: 'Settings', to: '/settings' }
@@ -512,10 +529,14 @@ async function initAds() {
   }
 }
 
-onMounted(() => { initAds() })
+onMounted(() => {
+  initAds()
+  if (process.client) document.addEventListener('visibilitychange', handleVisibilityChange)
+})
 onBeforeUnmount(() => {
   clearTimeout(timer)
   abortCtrl.abort()
+  if (process.client) document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -547,4 +568,12 @@ onBeforeUnmount(() => {
 
 /* keep link colors consistent */
 #nav-drawer a, #nav-drawer button { color: inherit !important; }
+
+#nav-root button,
+#nav-drawer button {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.nav-pill { border-radius: 0.75rem; }
 </style>

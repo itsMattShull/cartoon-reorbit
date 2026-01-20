@@ -137,6 +137,9 @@
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -297,11 +300,11 @@
         >
           <NuxtLink
             :to="`/czone/${msg.user}`"
-            class="font-bold text-indigo-700 min-w-[80px] hover:underline-none no-underline"
+            class="czone-chat-user font-bold hover:no-underline no-underline"
           >
             {{ msg.user }}
           </NuxtLink>
-          <div class="flex-1 break-words">{{ msg.message }}</div>
+          <div class="czone-chat-message flex-1 break-words">{{ msg.message }}</div>
         </div>
       </div>
       <ClientOnly>
@@ -380,6 +383,9 @@
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -460,6 +466,9 @@
               :alt="item.ctoon.name"
               :name="item.ctoon.name"
               :ctoon-id="item.ctoon.id"
+              :is-gtoon="item.ctoon.isGtoon"
+              :power="item.ctoon.power"
+              :cost="item.ctoon.cost"
               image-class="w-20 h-20 object-contain mb-2"
             />
             <p class="text-sm text-center">{{ item.ctoon.name }}</p>
@@ -509,6 +518,9 @@
               :name="item.name"
               :ctoon-id="item.ctoonId"
               :user-ctoon-id="item.userCtoonId"
+              :is-gtoon="item.isGtoon"
+              :power="item.power"
+              :cost="item.cost"
               image-class="w-20 h-20 object-contain mb-2"
             />
             <p class="text-sm text-center">{{ item.name }}</p>
@@ -571,6 +583,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-2 mt-8"
                   stop-propagation
                 />
@@ -630,6 +645,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-1 mt-8"
                   stop-propagation
                 />
@@ -810,7 +828,7 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
 
-    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
+    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
       zones.value = res.cZone.zones.map(z => ({
         background: typeof z.background === 'string' ? z.background : '',
         toons: Array.isArray(z.toons) ? z.toons : []
@@ -821,6 +839,10 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
         { background: '', toons: [] },
         { background: '', toons: [] }
       ]
+    }
+
+    if (currentZoneIndex.value > zones.value.length - 1) {
+      currentZoneIndex.value = zones.value.length - 1
     }
 
     if (awardVisit && user.value && res.ownerId !== user.value.id) {
@@ -1007,7 +1029,7 @@ const tradeListCountText = computed(() => {
   return String(tradeListCtoons.value.length)
 })
 
-// Which zone index is currently displayed (0, 1, or 2)
+// Which zone index is currently displayed
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
 const maxZoneNumber = computed(() => {
@@ -1043,7 +1065,7 @@ const hasOtherZones = computed(() => {
 
 // Helper booleans for “Next” / “Previous” arrow enable/disable
 const hasNext = computed(() => {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) return true
   }
   return false
@@ -1057,7 +1079,7 @@ const hasPrevious = computed(() => {
 
 // Functions to advance to the next/previous non‐empty zone
 function goToNext() {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) {
       currentZoneIndex.value = i
       return
@@ -1242,6 +1264,19 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 
+/* Chat text colors */
+.czone-chat-user {
+  color: #4338ca;
+  display: inline-block;
+  width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.czone-chat-message {
+  color: #1f2937;
+}
+
 /* Dark‐mode overrides when ownerIsBooster toggles body.booster-bg */
   .booster-bg {
     background-color: #121212;
@@ -1261,6 +1296,13 @@ onBeforeUnmount(() => {
   .booster-bg .bg-indigo-100      { background-color: #222 !important; }
   .booster-bg .bg-indigo-500,
   .booster-bg .bg-indigo-600      { background-color: #333 !important; }
+
+  .booster-bg .czone-chat-user {
+    color: #c7d2fe;
+  }
+  .booster-bg .czone-chat-message {
+    color: #e5e7eb;
+  }
   /* Owner’s username (was text-blue-700) */
   .booster-bg .text-blue-700 {
     color: #ffffff !important;

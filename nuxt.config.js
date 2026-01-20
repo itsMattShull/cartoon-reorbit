@@ -42,6 +42,7 @@ export default defineNuxtConfig({
     // server-only
     socketOrigin: process.env.SOCKET_ORIGIN || 'http://localhost:3001',
     socketPath: process.env.SOCKET_PATH || '/socket.io',
+    socketMetricsToken: process.env.SOCKET_METRICS_TOKEN,
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,
