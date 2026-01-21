@@ -173,6 +173,7 @@
                 <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.ctoon?.series) }}</div>
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.ctoon?.set) }}</div>
                 <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.ctoon?.characters) }}</div>
+                <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.ctoon?.description) }}</div>
               </div>
             </div>
 
@@ -183,6 +184,7 @@
                 <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.newValues?.series) }}</div>
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.newValues?.set) }}</div>
                 <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.newValues?.characters) }}</div>
+                <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.newValues?.description) }}</div>
               </div>
             </div>
           </div>

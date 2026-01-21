@@ -53,6 +53,11 @@ enum CtoonSuggestionStatus {
   REJECTED
 }
 
+enum CZoneSearchCollectionType {
+  ONCE
+  MULTIPLE
+}
+
 
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
@@ -85,10 +90,81 @@ model CZone {
   updatedAt  DateTime @updatedAt
 }
 
+model CZoneSearch {
+  id                     String                    @id @default(uuid())
+  name                   String                    @default("")
+  startAt                DateTime
+  endAt                  DateTime
+  appearanceRatePercent  Float                     @default(0)
+  cooldownHours          Int                       @default(0)
+  collectionType         CZoneSearchCollectionType @default(MULTIPLE)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  prizePool    CZoneSearchPrize[]
+  appearances  CZoneSearchAppearance[]
+  captures     CZoneSearchCapture[]
+
+  @@index([startAt])
+  @@index([endAt])
+}
+
+model CZoneSearchPrize {
+  id          String       @id @default(uuid())
+  cZoneSearchId String
+  ctoonId     String
+  chancePercent Float      @default(0)
+
+  cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id])
+
+  @@unique([cZoneSearchId, ctoonId])
+  @@index([ctoonId])
+}
+
+model CZoneSearchAppearance {
+  id            String   @id @default(uuid())
+  cZoneSearchId String
+  userId        String
+  ctoonId       String
+  zoneOwnerId   String?
+  createdAt     DateTime @default(now())
+
+  cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id])
+  zoneOwner   User?       @relation("CZoneSearchZoneOwner", fields: [zoneOwnerId], references: [id], onDelete: SetNull)
+
+  capture     CZoneSearchCapture?
+
+  @@index([userId, cZoneSearchId, createdAt])
+  @@index([cZoneSearchId, createdAt])
+  @@index([zoneOwnerId, createdAt])
+}
+
+model CZoneSearchCapture {
+  id            String   @id @default(uuid())
+  appearanceId  String   @unique
+  cZoneSearchId String
+  userId        String
+  ctoonId       String
+  createdAt     DateTime @default(now())
+
+  appearance  CZoneSearchAppearance @relation(fields: [appearanceId], references: [id], onDelete: Cascade)
+  cZoneSearch CZoneSearch           @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon                 @relation(fields: [ctoonId], references: [id])
+
+  @@index([userId, cZoneSearchId, createdAt])
+  @@index([cZoneSearchId, createdAt])
+  @@index([ctoonId, createdAt])
+}
+
 model Ctoon {
   id              String    @id @default(uuid())
   name            String
   series          String?
+  description     String?
   type            String
   rarity          String
   assetPath       String
@@ -144,6 +220,10 @@ model Ctoon {
   scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
   // Achievements back‑relation
   achievementRewardCtoons    AchievementRewardCtoon[]
+
+  cZoneSearchPrizeRows  CZoneSearchPrize[]
+  cZoneSearchAppearances CZoneSearchAppearance[]
+  cZoneSearchCaptures   CZoneSearchCapture[]
 }
 
 model CtoonImageHash {
@@ -284,6 +364,10 @@ model User {
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
   scavengerTriggerLogs ScavengerTriggerLog[]
+
+  cZoneSearchAppearances     CZoneSearchAppearance[]
+  cZoneSearchZoneOwnerAppearances CZoneSearchAppearance[] @relation("CZoneSearchZoneOwner")
+  cZoneSearchCaptures        CZoneSearchCapture[]
 
   // Admin change logs (inverse)
   adminChangeLogs AdminChangeLog[]

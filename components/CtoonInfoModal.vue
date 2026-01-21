@@ -77,6 +77,9 @@
             Failed to load cToon details.
           </div>
           <div v-else class="space-y-4">
+            <div v-if="ctoonDescription" class="rounded bg-gray-700/60 p-3 text-sm">
+              <p class="text-gray-100 whitespace-pre-line">{{ ctoonDescription }}</p>
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div class="rounded bg-gray-700/60 p-3">
                 <div class="text-xs uppercase text-gray-300">Highest Mint</div>
@@ -308,6 +311,14 @@
                 required
               ></textarea>
             </div>
+            <div>
+              <label class="text-xs uppercase text-gray-300">Description</label>
+              <textarea
+                v-model="suggestDescription"
+                rows="3"
+                class="mt-1 w-full rounded bg-gray-800/70 border border-white/10 px-3 py-2 text-sm text-white"
+              ></textarea>
+            </div>
             <div v-if="submitError" class="text-sm text-red-300">
               {{ submitError }}
             </div>
@@ -386,6 +397,7 @@ const {
 } = useCtoonModal()
 
 const ctoon = computed(() => data.value?.ctoon || {})
+const ctoonDescription = computed(() => String(ctoon.value?.description || '').trim())
 const userCtoon = computed(() => data.value?.userCtoon || null)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => {
@@ -440,6 +452,7 @@ const suggestName = ref('')
 const suggestSeries = ref('')
 const suggestSet = ref('')
 const suggestCharacters = ref('')
+const suggestDescription = ref('')
 const seriesSuggestions = ref([])
 const setSuggestions = ref([])
 const submittingSuggestion = ref(false)
@@ -513,16 +526,19 @@ const hasSuggestionChanges = computed(() => {
   const oldSeries = String(ctoon.value?.series || '').trim()
   const oldSet = String(ctoon.value?.set || '').trim()
   const oldChars = normalizeCharsList(ctoon.value?.characters || [])
+  const oldDescription = String(ctoon.value?.description || '').trim()
   const newName = suggestName.value.trim()
   const newSeries = suggestSeries.value.trim()
   const newSet = suggestSet.value.trim()
   const newChars = normalizeCharsList(suggestionCharacters.value)
+  const newDescription = String(suggestDescription.value || '').trim()
 
   return (
     newName !== oldName ||
     newSeries !== oldSeries ||
     newSet !== oldSet ||
-    !arraysEqual(newChars, oldChars)
+    !arraysEqual(newChars, oldChars) ||
+    newDescription !== oldDescription
   )
 })
 const suggestionDisabled = computed(() => {
@@ -544,6 +560,7 @@ function syncSuggestionForm(nextCtoon) {
   suggestCharacters.value = Array.isArray(nextCtoon.characters)
     ? nextCtoon.characters.join(', ')
     : ''
+  suggestDescription.value = nextCtoon.description || ''
   submitError.value = ''
   submitSuccess.value = false
   formTouched.value = false
@@ -637,7 +654,7 @@ watch([isOpen, loading], ([open, isLoading]) => {
   if (!formTouched.value) syncSuggestionForm(ctoon.value)
 })
 
-watch([suggestName, suggestSeries, suggestSet, suggestCharacters], () => {
+watch([suggestName, suggestSeries, suggestSet, suggestCharacters, suggestDescription], () => {
   if (suppressTouch) return
   formTouched.value = true
   if (submitSuccess.value) submitSuccess.value = false
@@ -756,7 +773,8 @@ async function submitSuggestion() {
         name: suggestName.value.trim(),
         series: suggestSeries.value.trim(),
         set: suggestSet.value.trim(),
-        characters: suggestionCharacters.value
+        characters: suggestionCharacters.value,
+        description: suggestDescription.value.trim()
       }
     })
     submitSuccess.value = true

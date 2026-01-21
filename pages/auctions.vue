@@ -589,7 +589,7 @@
               <p v-if="auction.winningBidder" class="text-sm text-gray-600">
                 Winner: {{ auction.winningBidder }}
               </p>
-              <div v-if="auction.isOwner" class="mt-4">
+              <div v-if="auction.isOwner" class="mt-4 flex flex-col items-start gap-2">
                 <AddToAuction
                   :userCtoon="{
                     id: auction.userCtoonId,
@@ -604,6 +604,12 @@
                   :hasActiveAuction="auction.hasActiveAuction"
                   @auctionCreated="loadMyAuctions"
                 />
+                <NuxtLink
+                  :to="`/auction/${auction.id}`"
+                  class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  View Auction
+                </NuxtLink>
               </div>
             </div>
           </div>
