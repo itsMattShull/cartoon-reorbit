@@ -71,9 +71,6 @@
                 <p class="capitalize">
                   {{ item.rarity || '—' }}<span v-if="item.set"> • {{ item.set }}</span>
                 </p>
-                <p class="text-gray-500">
-                  Mint #{{ item.mintNumber }}<span v-if="item.isFirstEdition"> • 1st Ed</span>
-                </p>
               </div>
             </div>
           </div>

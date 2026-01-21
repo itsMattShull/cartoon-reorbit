@@ -127,11 +127,21 @@
             <div class="absolute inset-0">
               <div
                 v-for="(item, index) in cZoneItems"
-                :key="index"
+                :key="item.key || index"
                 class="absolute"
                 :style="item.style"
               >
+                <button
+                  v-if="item.isSearch"
+                  type="button"
+                  class="czone-search-ctoon"
+                  :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
+                  @click="captureCzoneSearchItem(item)"
+                >
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                </button>
                 <CtoonAsset
+                  v-else
                   :src="item.assetPath"
                   :alt="item.name"
                   :name="item.name"
@@ -373,11 +383,21 @@
             <div class="absolute top-0 left-0">
               <div
                 v-for="(item, index) in cZoneItems"
-                :key="index"
+                :key="item.key || index"
                 class="absolute"
                 :style="item.style"
               >
+                <button
+                  v-if="item.isSearch"
+                  type="button"
+                  class="czone-search-ctoon"
+                  :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
+                  @click="captureCzoneSearchItem(item)"
+                >
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                </button>
                 <CtoonAsset
+                  v-else
                   :src="item.assetPath"
                   :alt="item.name"
                   :name="item.name"
@@ -693,6 +713,40 @@
     </div>
   </transition>
 
+  <!-- Capture modal -->
+  <transition name="fade">
+    <div
+      v-if="captureModalVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="closeCaptureModal"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+        <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-lg font-semibold">cToon Captured</h2>
+          <button class="text-gray-500 hover:text-black" @click="closeCaptureModal">✕</button>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1">
+          <div v-if="capturedCtoon" class="space-y-4">
+            <img
+              :src="capturedCtoon.assetPath"
+              :alt="capturedCtoon.name || 'Captured cToon'"
+              class="w-full max-h-56 object-contain rounded"
+            />
+            <div class="space-y-1 text-sm">
+              <div><span class="text-gray-500">Name:</span> <span class="font-medium">{{ capturedCtoon.name || '—' }}</span></div>
+              <div><span class="text-gray-500">Rarity:</span> <span class="font-medium">{{ capturedCtoon.rarity || '—' }}</span></div>
+              <div><span class="text-gray-500">Series:</span> <span class="font-medium">{{ capturedCtoon.series || '—' }}</span></div>
+              <div><span class="text-gray-500">Set:</span> <span class="font-medium">{{ capturedCtoon.set || '—' }}</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="px-4 py-3 border-t flex justify-end gap-2 flex-shrink-0">
+          <button class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700" @click="closeCaptureModal">Close</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- Toast -->
   <Toast
     v-if="showToast"
@@ -792,6 +846,9 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
+const captureModalVisible = ref(false)
+const capturedCtoon = ref(null)
+
 const isOwnerViewing = computed(() => user.value?.id === ownerId.value)
 
 watch(ownerIsBooster, (isBooster) => {
@@ -806,6 +863,11 @@ function displayToast(message, type = 'success') {
   setTimeout(() => {
     showToast.value = false
   }, 4000)
+}
+
+function closeCaptureModal() {
+  captureModalVisible.value = false
+  capturedCtoon.value = null
 }
 
 watch([isOwnerViewing, username], () => {
@@ -968,6 +1030,9 @@ const zones = ref([
   { background: '', toons: [] }
 ])
 
+const czoneSearchItems = ref([])
+const SEARCH_TOON_SIZE = 140
+
 const wishlistModalVisible  = ref(false)
 const wishlistCtoons        = ref([])
 const isLoadingWishlist     = ref(false)
@@ -1042,16 +1107,98 @@ const maxZoneNumber = computed(() => {
   return max
 })
 
+function randomSearchPosition(size) {
+  const maxX = Math.max(0, CANVAS_W - size)
+  const maxY = Math.max(0, CANVAS_H - size)
+  return {
+    x: Math.floor(Math.random() * (maxX + 1)),
+    y: Math.floor(Math.random() * (maxY + 1))
+  }
+}
+
+function buildSearchItems(items) {
+  return items.map((entry) => {
+    const size = SEARCH_TOON_SIZE
+    const pos = randomSearchPosition(size)
+    return {
+      appearanceId: entry.appearanceId,
+      cZoneSearchId: entry.cZoneSearchId,
+      ctoonId: entry.ctoon?.id,
+      name: entry.ctoon?.name || 'cToon',
+      assetPath: entry.ctoon?.assetPath,
+      rarity: entry.ctoon?.rarity,
+      x: pos.x,
+      y: pos.y,
+      size,
+      isCapturing: false,
+      key: `search-${entry.appearanceId}`
+    }
+  }).filter(item => item.ctoonId && item.assetPath)
+}
+
+async function loadCzoneSearchItems() {
+  czoneSearchItems.value = []
+  if (!user.value?.id || !ownerId.value) return
+  if (user.value.id === ownerId.value) return
+  try {
+    const res = await $fetch(`/api/czone/${username.value}/searches`)
+    const items = Array.isArray(res?.items) ? res.items : []
+    czoneSearchItems.value = buildSearchItems(items)
+  } catch (err) {
+    console.error('Failed to load cZone Search items', err)
+    czoneSearchItems.value = []
+  }
+}
+
+async function captureCzoneSearchItem(item) {
+  if (!item || item.isCapturing) return
+  item.isCapturing = true
+  try {
+    const res = await $fetch('/api/czone/searches/capture', {
+      method: 'POST',
+      body: { appearanceId: item.appearanceId }
+    })
+    const name = res?.ctoon?.name || item.name
+    displayToast(`Captured ${name}!`, 'success')
+    capturedCtoon.value = res?.ctoon ? { ...res.ctoon } : {
+      name: item.name,
+      assetPath: item.assetPath,
+      rarity: item.rarity,
+      series: item.series,
+      set: item.set
+    }
+    captureModalVisible.value = true
+    czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+  } catch (err) {
+    const message = err?.data?.statusMessage || 'Failed to capture cToon.'
+    displayToast(message, 'error')
+    if (String(message).toLowerCase().includes('already')) {
+      czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+      return
+    }
+    item.isCapturing = false
+  }
+}
+
 // Build a list of “renderable” cToon items for the current zone
 // (Expose indices so we can update the clicked slot later)
 const cZoneItems = computed(() => {
   const zidx = currentZoneIndex.value
-  return (currentZone.value.toons || []).map((item, idx) => ({
+  const baseItems = (currentZone.value.toons || []).map((item, idx) => ({
     ...item,
     style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`,
     __zoneIndex: zidx,
     __itemIndex: idx
   }))
+  if (zidx !== 0 || !czoneSearchItems.value.length) return baseItems
+  const searchItems = czoneSearchItems.value.map((item, idx) => ({
+    ...item,
+    isSearch: true,
+    style: `top: ${item.y}px; left: ${item.x}px; width: ${item.size}px; height: ${item.size}px; z-index: 60;`,
+    __zoneIndex: zidx,
+    __itemIndex: idx
+  }))
+  return [...baseItems, ...searchItems]
 })
 
 // ——— Show arrows only if another zone (besides the current one) has ≥1 toon ———
@@ -1205,6 +1352,7 @@ onMounted(async () => {
   await fetchSelf({ force: true })
 
   await loadCzone({ showLoading: true, awardVisit: true })
+  await loadCzoneSearchItems()
   loadUserWishlist()
   loadUserTradeList()
 
@@ -1275,6 +1423,43 @@ onBeforeUnmount(() => {
 }
 .czone-chat-message {
   color: #1f2937;
+}
+
+.czone-search-ctoon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.czone-search-ctoon::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.75) 0%, rgba(255, 215, 0, 0.15) 55%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: czone-search-pulse 2.6s ease-in-out infinite;
+  z-index: 0;
+}
+.czone-search-image {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+
+@keyframes czone-search-pulse {
+  0% { transform: scale(0.9); opacity: 0.65; }
+  50% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.65; }
 }
 
 /* Dark‐mode overrides when ownerIsBooster toggles body.booster-bg */
