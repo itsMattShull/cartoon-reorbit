@@ -931,6 +931,7 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
       const uid = String(userId)
       lobby.players = lobby.players.filter(id => id !== uid)
       if (lobby.decks) delete lobby.decks[uid]
+      if (lobby.deckSnapshots) delete lobby.deckSnapshots[uid]
       if (lobby.ready) delete lobby.ready[uid]
       if (lobby.usernames) delete lobby.usernames[uid]
     }
@@ -971,6 +972,41 @@ function lobbySnapshot(room) {
   }
 }
 
+function buildDeckSnapshotFromCards(cards = [], meta = {}) {
+  if (!Array.isArray(cards) || !cards.length) return null
+  const counts = new Map()
+  for (const raw of cards) {
+    const c = raw?.ctoon ?? raw
+    if (!c?.id) continue
+    const existing = counts.get(c.id)
+    if (existing) {
+      existing.quantity += 1
+      continue
+    }
+    counts.set(c.id, {
+      ctoonId: c.id,
+      name: c.name || null,
+      gtoonType: c.gtoonType || null,
+      cost: Number.isFinite(c.cost) ? c.cost : null,
+      power: Number.isFinite(c.power) ? c.power : null,
+      quantity: 1
+    })
+  }
+  const list = Array.from(counts.values())
+    .sort((a, b) => (b.quantity - a.quantity) || String(a.name || '').localeCompare(String(b.name || '')))
+  return {
+    deckId: meta.deckId || null,
+    deckName: meta.deckName || null,
+    totalCards: cards.length,
+    cards: list
+  }
+}
+
+function buildDeckSnapshot(deck) {
+  if (!deck) return null
+  return buildDeckSnapshotFromCards(deck.cards || [], { deckId: deck.id, deckName: deck.name })
+}
+
 async function startPvpMatch(roomId) {
   const room = pvpRooms.get(roomId)
   if (!room || pvpMatches.has(roomId)) return
@@ -978,6 +1014,9 @@ async function startPvpMatch(roomId) {
   if (!room.decks?.[p1] || !room.decks?.[p2]) return
   if (!room.ready?.[p1] || !room.ready?.[p2]) return
   const stake = Math.max(0, Math.floor(Number(room.stakePoints || 0)))
+  const deckSnap1 = room.deckSnapshots?.[p1] || buildDeckSnapshotFromCards(room.decks?.[p1] || [])
+  const deckSnap2 = room.deckSnapshots?.[p2] || buildDeckSnapshotFromCards(room.decks?.[p2] || [])
+  const startedAt = new Date()
 
   const battleId = randomUUID()
   const battle = createBattle({
@@ -1023,6 +1062,18 @@ async function startPvpMatch(roomId) {
         })
       }
 
+      const tournamentMatch = await tx.gtoonTournamentMatch.findFirst({
+        where: {
+          lockedAt: null,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+          pairedAt: { lte: startedAt },
+          OR: [
+            { playerAUserId: p1, playerBUserId: p2 },
+            { playerAUserId: p2, playerBUserId: p1 }
+          ]
+        }
+      })
+
       // Create the ClashGame with the stake on both sides
       const rec = await tx.clashGame.create({
         data: {
@@ -1030,7 +1081,10 @@ async function startPvpMatch(roomId) {
           player2UserId: p2,
           player1Points: stake,     // 👈 NEW
           player2Points: stake,     // 👈 NEW
-          startedAt:     new Date()
+          player1DeckSnapshot: deckSnap1,
+          player2DeckSnapshot: deckSnap2,
+          isTournament: Boolean(tournamentMatch),
+          startedAt
         }
       })
       return rec
@@ -1548,6 +1602,7 @@ io.on('connection', socket => {
     pvpRooms.set(roomId, {
       players: [uid],
       decks: {},          // set later via setPvpDeck
+      deckSnapshots: {},
       ready: {},          // userId -> bool
       usernames: {},       // userId -> username
       stakePoints: stake,
@@ -1711,6 +1766,7 @@ io.on('connection', socket => {
       gtoonType: c.gtoonType || null,
       abilityData: c.abilityData || null
     }))
+    room.deckSnapshots[uid] = buildDeckSnapshot(deck)
 
     io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
     await startPvpMatch(roomId)

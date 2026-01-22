@@ -13,6 +13,12 @@
       >
         Manage Decks
       </NuxtLink>
+      <NuxtLink
+        to="/games/clash/meta"
+        class="inline-block bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded ml-2"
+      >
+        Meta
+      </NuxtLink>
     </div>
 
     <!-- Deck selector -->
