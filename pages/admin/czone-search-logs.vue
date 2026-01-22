@@ -101,90 +101,56 @@
         </div>
       </section>
 
-      <!-- Recent appearances -->
+      <!-- Appearance + capture breakdown -->
       <section>
-        <h2 class="text-xl font-semibold mb-2">Recent Appearances</h2>
+        <h2 class="text-xl font-semibold mb-2">cToon Appearance & Capture Breakdown</h2>
+        <div class="text-xs text-gray-500 mb-3">
+          Total appearances: {{ breakdown.totals.appearances }} · Total captures: {{ breakdown.totals.captures }}
+        </div>
         <div class="sm:hidden space-y-3">
-          <div v-for="row in events.appearances" :key="row.id" class="border rounded bg-white p-3">
+          <div v-for="row in breakdown.rows" :key="row.ctoonId" class="border rounded bg-white p-3">
             <div class="flex items-center justify-between text-xs text-gray-500">
-              <span>{{ fmt(row.createdAt) }}</span>
-              <span>{{ row.ctoon?.rarity }}</span>
+              <span>{{ row.ctoon?.rarity || '—' }}</span>
+              <span>{{ formatPercent(row.captureRate) }} capture rate</span>
             </div>
             <div class="mt-1 text-sm font-medium">{{ row.ctoon?.name || 'Unknown cToon' }}</div>
             <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div><span class="text-gray-500">Viewer:</span> {{ row.user?.username || row.user?.id }}</div>
-              <div><span class="text-gray-500">Owner:</span> {{ row.zoneOwner?.username || row.zoneOwner?.id || '—' }}</div>
+              <div>
+                <span class="text-gray-500">Appearances:</span>
+                {{ row.appearances }}
+                <span class="text-gray-400">({{ formatPercent(row.appearancePercent) }})</span>
+              </div>
+              <div><span class="text-gray-500">Captures:</span> {{ row.captures }}</div>
+              <div><span class="text-gray-500">Capture Rate:</span> {{ formatPercent(row.captureRate) }}</div>
             </div>
           </div>
-          <div v-if="!events.appearances.length" class="text-sm text-gray-500">No appearances found.</div>
+          <div v-if="!breakdown.rows.length" class="text-sm text-gray-500">No appearances found.</div>
         </div>
 
         <div class="hidden sm:block overflow-auto">
-          <table class="min-w-[760px] w-full border rounded">
+          <table class="min-w-[720px] w-full border rounded">
             <thead class="bg-gray-50 text-left text-sm">
               <tr>
-                <th class="px-3 py-2 border-b">Time</th>
-                <th class="px-3 py-2 border-b">Viewer</th>
-                <th class="px-3 py-2 border-b">Owner</th>
                 <th class="px-3 py-2 border-b">cToon</th>
                 <th class="px-3 py-2 border-b">Rarity</th>
+                <th class="px-3 py-2 border-b">Appearances</th>
+                <th class="px-3 py-2 border-b">Captures</th>
+                <th class="px-3 py-2 border-b">Capture Rate</th>
               </tr>
             </thead>
             <tbody class="text-sm">
-              <tr v-for="row in events.appearances" :key="row.id" class="border-b">
-                <td class="px-3 py-2 whitespace-nowrap">{{ fmt(row.createdAt) }}</td>
-                <td class="px-3 py-2">{{ row.user?.username || row.user?.id }}</td>
-                <td class="px-3 py-2">{{ row.zoneOwner?.username || row.zoneOwner?.id || '—' }}</td>
+              <tr v-for="row in breakdown.rows" :key="row.ctoonId" class="border-b">
                 <td class="px-3 py-2">{{ row.ctoon?.name || '—' }}</td>
                 <td class="px-3 py-2">{{ row.ctoon?.rarity || '—' }}</td>
+                <td class="px-3 py-2">
+                  {{ row.appearances }}
+                  <span class="text-xs text-gray-500">({{ formatPercent(row.appearancePercent) }})</span>
+                </td>
+                <td class="px-3 py-2">{{ row.captures }}</td>
+                <td class="px-3 py-2">{{ formatPercent(row.captureRate) }}</td>
               </tr>
-              <tr v-if="!events.appearances.length">
+              <tr v-if="!breakdown.rows.length">
                 <td class="px-3 py-2 text-gray-500" colspan="5">No appearances found.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Recent captures -->
-      <section>
-        <h2 class="text-xl font-semibold mb-2">Recent Captures</h2>
-        <div class="sm:hidden space-y-3">
-          <div v-for="row in events.captures" :key="row.id" class="border rounded bg-white p-3">
-            <div class="flex items-center justify-between text-xs text-gray-500">
-              <span>{{ fmt(row.createdAt) }}</span>
-              <span>{{ row.ctoon?.rarity }}</span>
-            </div>
-            <div class="mt-1 text-sm font-medium">{{ row.ctoon?.name || 'Unknown cToon' }}</div>
-            <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div><span class="text-gray-500">Viewer:</span> {{ row.user?.username || row.user?.id }}</div>
-              <div><span class="text-gray-500">Search:</span> {{ formatCentral(row.cZoneSearch?.startAt) }}</div>
-            </div>
-          </div>
-          <div v-if="!events.captures.length" class="text-sm text-gray-500">No captures found.</div>
-        </div>
-
-        <div class="hidden sm:block overflow-auto">
-          <table class="min-w-[760px] w-full border rounded">
-            <thead class="bg-gray-50 text-left text-sm">
-              <tr>
-                <th class="px-3 py-2 border-b">Time</th>
-                <th class="px-3 py-2 border-b">Viewer</th>
-                <th class="px-3 py-2 border-b">cToon</th>
-                <th class="px-3 py-2 border-b">Rarity</th>
-                <th class="px-3 py-2 border-b">Search Start</th>
-              </tr>
-            </thead>
-            <tbody class="text-sm">
-              <tr v-for="row in events.captures" :key="row.id" class="border-b">
-                <td class="px-3 py-2 whitespace-nowrap">{{ fmt(row.createdAt) }}</td>
-                <td class="px-3 py-2">{{ row.user?.username || row.user?.id }}</td>
-                <td class="px-3 py-2">{{ row.ctoon?.name || '—' }}</td>
-                <td class="px-3 py-2">{{ row.ctoon?.rarity || '—' }}</td>
-                <td class="px-3 py-2">{{ formatCentral(row.cZoneSearch?.startAt) }}</td>
-              </tr>
-              <tr v-if="!events.captures.length">
-                <td class="px-3 py-2 text-gray-500" colspan="5">No captures found.</td>
               </tr>
             </tbody>
           </table>
@@ -208,7 +174,7 @@ const analytics = ref({
   totals: { appearances: 0, captures: 0, uniqueViewers: 0, uniqueCaptures: 0, captureRate: 0 },
   searches: []
 })
-const events = ref({ appearances: [], captures: [] })
+const breakdown = ref({ rows: [], totals: { appearances: 0, captures: 0 } })
 const searchOptions = ref([])
 
 function collectionLabel(value) {
@@ -234,9 +200,7 @@ function displayName(name) {
   return cleaned || 'Untitled'
 }
 
-function fmt(dt) {
-  return new Date(dt).toLocaleString()
-}
+const formatPercent = (value) => `${Number(value || 0).toFixed(1)}%`
 
 async function loadSearchOptions() {
   try {
@@ -257,10 +221,10 @@ async function loadAll() {
     if (selectedSearchId.value) query.searchId = selectedSearchId.value
     const [an, ev] = await Promise.all([
       $fetch('/api/admin/czone-search-logs/analytics', { query }),
-      $fetch('/api/admin/czone-search-logs/events', { query: { ...query, limit: 100 } })
+      $fetch('/api/admin/czone-search-logs/events', { query })
     ])
     analytics.value = an
-    events.value = ev
+    breakdown.value = ev
   } finally {
     loading.value = false
   }
