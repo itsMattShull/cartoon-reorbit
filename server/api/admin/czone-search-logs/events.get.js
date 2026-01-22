@@ -7,12 +7,6 @@ function clampDays(value) {
   return Math.max(1, Math.min(365, Math.floor(num)))
 }
 
-function clampLimit(value) {
-  const num = Number(value)
-  if (!Number.isFinite(num)) return 100
-  return Math.max(1, Math.min(500, Math.floor(num)))
-}
-
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -27,7 +21,6 @@ export default defineEventHandler(async (event) => {
 
   const q = getQuery(event)
   const days = clampDays(q.days)
-  const limit = clampLimit(q.limit)
   const searchId = typeof q.searchId === 'string' ? q.searchId : ''
   const to = new Date()
   const from = new Date(Date.now() - days * 24 * 3600 * 1000)
@@ -37,29 +30,57 @@ export default defineEventHandler(async (event) => {
     ...(searchId ? { cZoneSearchId: searchId } : {})
   }
 
-  const [appearances, captures] = await Promise.all([
-    db.cZoneSearchAppearance.findMany({
+  const [appearanceCounts, captureCounts] = await Promise.all([
+    db.cZoneSearchAppearance.groupBy({
+      by: ['ctoonId'],
       where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      include: {
-        user: { select: { id: true, username: true } },
-        zoneOwner: { select: { id: true, username: true } },
-        ctoon: { select: { id: true, name: true, rarity: true } },
-        cZoneSearch: { select: { id: true, startAt: true, endAt: true } }
-      }
+      _count: { _all: true }
     }),
-    db.cZoneSearchCapture.findMany({
+    db.cZoneSearchCapture.groupBy({
+      by: ['ctoonId'],
       where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      include: {
-        user: { select: { id: true, username: true } },
-        ctoon: { select: { id: true, name: true, rarity: true } },
-        cZoneSearch: { select: { id: true, startAt: true, endAt: true } }
-      }
+      _count: { _all: true }
     })
   ])
 
-  return { appearances, captures }
+  const ctoonIds = new Set([
+    ...appearanceCounts.map((row) => row.ctoonId),
+    ...captureCounts.map((row) => row.ctoonId)
+  ])
+
+  const ctoons = ctoonIds.size
+    ? await db.ctoon.findMany({
+      where: { id: { in: Array.from(ctoonIds) } },
+      select: { id: true, name: true, rarity: true }
+    })
+    : []
+
+  const ctoonMap = new Map(ctoons.map((ctoon) => [ctoon.id, ctoon]))
+  const appearanceCountMap = new Map(appearanceCounts.map((row) => [row.ctoonId, row._count._all || 0]))
+  const captureCountMap = new Map(captureCounts.map((row) => [row.ctoonId, row._count._all || 0]))
+
+  const totalAppearances = appearanceCounts.reduce((sum, row) => sum + (row._count._all || 0), 0)
+  const totalCaptures = captureCounts.reduce((sum, row) => sum + (row._count._all || 0), 0)
+
+  const rows = Array.from(ctoonIds)
+    .map((ctoonId) => {
+      const appearances = appearanceCountMap.get(ctoonId) || 0
+      const captures = captureCountMap.get(ctoonId) || 0
+      const appearancePercent = totalAppearances ? (appearances / totalAppearances) * 100 : 0
+      const captureRate = appearances ? (captures / appearances) * 100 : 0
+      return {
+        ctoonId,
+        appearances,
+        captures,
+        appearancePercent,
+        captureRate,
+        ctoon: ctoonMap.get(ctoonId) || null
+      }
+    })
+    .sort((a, b) => (b.appearancePercent - a.appearancePercent) || (b.appearances - a.appearances))
+
+  return {
+    totals: { appearances: totalAppearances, captures: totalCaptures },
+    rows
+  }
 })
