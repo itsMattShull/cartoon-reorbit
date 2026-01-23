@@ -17,6 +17,17 @@ import { abilityRegistry } from './abilities.js'
 
 const MAX_ENERGY    = 6
 const ENERGY_PER_TURN = 1
+const isHeroType = c =>
+  typeof c?.gtoonType === 'string' && /\bhero\b/i.test(c.gtoonType)
+const isAbilitySuppressed = (lane, side, card) => {
+  if (!lane || !side || !card) return false
+  if (card._abilityDisabled) return true
+  if (!isHeroType(card)) return false
+  const enemy = side === 'player' ? 'ai' : 'player'
+  return lane[enemy].some(
+    c => c.abilityKey === 'dont_think_so' && c._dontThinkSoActive
+  )
+}
 
 export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   /* ───────────── config ───────────── */
@@ -190,7 +201,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
 
       // 1) Card’s own ability
       const cardDef = abilityRegistry[card.abilityKey]
-      if (cardDef?.onReveal) {
+      if (cardDef?.onReveal && !isAbilitySuppressed(lane, side, card)) {
         cardDef.onReveal({ game: battle, side, laneIndex, card })
       }
 
@@ -215,6 +226,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
             card.abilityKey === 'watchful_eye' &&
             card._watchfulRevealTurn === state.turn - 1
           ) {
+            if (isAbilitySuppressed(lane, side, card)) return
             // ← new guard: did any OTHER card (not this one) land here this turn?
             const playedThisTurn =
               (_pending.player  || []).some(s => s.laneIndex === laneIndex && s.cardId !== card.id) ||
@@ -266,11 +278,15 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     state.lanes.forEach((lane, i) => {
       lane.player.forEach(card => {
         const def = abilityRegistry[card.abilityKey]
-        def?.onTurnEnd?.({ game: battle, side: 'player', laneIndex: i, card })
+        if (!isAbilitySuppressed(lane, 'player', card)) {
+          def?.onTurnEnd?.({ game: battle, side: 'player', laneIndex: i, card })
+        }
       })
       lane.ai.forEach(card => {
         const def = abilityRegistry[card.abilityKey]
-        def?.onTurnEnd?.({ game: battle, side: 'ai', laneIndex: i, card })
+        if (!isAbilitySuppressed(lane, 'ai', card)) {
+          def?.onTurnEnd?.({ game: battle, side: 'ai', laneIndex: i, card })
+        }
       })
     })
 
@@ -297,12 +313,14 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       for (const side of ['player','ai']) {
         lane[side].forEach(card => {
           const def = abilityRegistry[card.abilityKey]
-          def?.onTurnStart?.({
-            game: battle,
-            side,
-            laneIndex,
-            card
-          })
+          if (!isAbilitySuppressed(lane, side, card)) {
+            def?.onTurnStart?.({
+              game: battle,
+              side,
+              laneIndex,
+              card
+            })
+          }
         })
       }
     })
@@ -331,22 +349,26 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       // player-side
       lane.player.forEach(card => {
         const def = abilityRegistry[card.abilityKey]
-        def?.onTurnStart?.({
-          game: battle,
-          side: 'player',
-          laneIndex,
-          card
-        })
+        if (!isAbilitySuppressed(lane, 'player', card)) {
+          def?.onTurnStart?.({
+            game: battle,
+            side: 'player',
+            laneIndex,
+            card
+          })
+        }
       })
       // ai-side
       lane.ai.forEach(card => {
         const def = abilityRegistry[card.abilityKey]
-        def?.onTurnStart?.({
-          game: battle,
-          side: 'ai',
-          laneIndex,
-          card
-        })
+        if (!isAbilitySuppressed(lane, 'ai', card)) {
+          def?.onTurnStart?.({
+            game: battle,
+            side: 'ai',
+            laneIndex,
+            card
+          })
+        }
       })
     })
 
