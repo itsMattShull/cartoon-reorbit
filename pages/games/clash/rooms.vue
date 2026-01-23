@@ -17,6 +17,9 @@
       <button @click="$router.push('/games/clash/leaderboard')" class="px-4 py-2 bg-indigo-500 text-white rounded">
         Leaderboards
       </button>
+      <button @click="$router.push('/games/clash/meta')" class="px-4 py-2 bg-indigo-500 text-white rounded">
+        Meta
+      </button>
       <button @click="$router.push('/games/clash/decks')" class="px-4 py-2 bg-indigo-500 text-white rounded">
         Manage Decks
       </button>

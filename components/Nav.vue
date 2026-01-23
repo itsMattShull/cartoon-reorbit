@@ -275,7 +275,8 @@ const clashLinks = [
   { label: 'Play vs Others', to: '/games/clash/rooms' },
   { label: 'Manage Decks', to: '/games/clash/decks' },
   { label: 'Tournaments', to: '/games/clash/tournaments' },
-  { label: 'Leaderboards', to: '/games/clash/leaderboard' }
+  { label: 'Leaderboards', to: '/games/clash/leaderboard' },
+  { label: 'Meta', to: '/games/clash/meta' }
 ]
 
 const filteredMain = computed(() =>

@@ -116,7 +116,7 @@ model CZoneSearchPrize {
   chancePercent Float      @default(0)
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
-  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id])
+  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@unique([cZoneSearchId, ctoonId])
   @@index([ctoonId])
@@ -132,7 +132,7 @@ model CZoneSearchAppearance {
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id])
+  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
   zoneOwner   User?       @relation("CZoneSearchZoneOwner", fields: [zoneOwnerId], references: [id], onDelete: SetNull)
 
   capture     CZoneSearchCapture?
@@ -153,7 +153,7 @@ model CZoneSearchCapture {
   appearance  CZoneSearchAppearance @relation(fields: [appearanceId], references: [id], onDelete: Cascade)
   cZoneSearch CZoneSearch           @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ctoon       Ctoon                 @relation(fields: [ctoonId], references: [id])
+  ctoon       Ctoon                 @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@index([userId, cZoneSearchId, createdAt])
   @@index([cZoneSearchId, createdAt])
@@ -867,6 +867,9 @@ model ClashGame {
   player2UserId String? // null for AI
   player1Points Int     @default(0) // staked by P1
   player2Points Int     @default(0) // staked by P2
+  player1DeckSnapshot Json?
+  player2DeckSnapshot Json?
+  isTournament Boolean @default(false)
 
   winnerUserId  String? // null if AI won or tie
   outcome       String? // 'player' | 'ai' | 'tie' | 'incomplete'
