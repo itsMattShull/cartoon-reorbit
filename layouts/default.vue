@@ -10,7 +10,9 @@
 const route = useRoute()
 const siteName = 'Cartoon ReOrbit'
 
-const showOnboarding = computed(() => !route.path.startsWith('/games/clash'))
+const showOnboarding = computed(() => {
+  return !route.path.startsWith('/games/clash') && !route.path.startsWith('/admin')
+})
 
 useHead(() => {
   const metaTitle = route.meta.title

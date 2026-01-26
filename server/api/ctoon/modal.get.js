@@ -15,9 +15,13 @@ function computeMedian(values) {
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
+  let me
   try {
-    await $fetch('/api/auth/me', { headers: { cookie } })
+    me = await $fetch('/api/auth/me', { headers: { cookie } })
   } catch {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+  if (!me?.id) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
@@ -56,7 +60,7 @@ export default defineEventHandler(async (event) => {
   })
   const highestMint = mintAgg._max.mintNumber ?? ctoon.totalMinted ?? 0
 
-  const [highestSale, lowestSale, overallTradeCount, overallAuctions] = await Promise.all([
+  const [highestSale, lowestSale, overallTradeCount, overallAuctions, ownedCount] = await Promise.all([
     prisma.auction.findFirst({
       where: {
         userCtoon: { ctoonId: ctoon.id },
@@ -88,6 +92,9 @@ export default defineEventHandler(async (event) => {
         winnerId: { not: null }
       },
       select: { highestBid: true }
+    }),
+    prisma.userCtoon.count({
+      where: { userId: me.id, ctoonId: ctoon.id }
     })
   ])
 
@@ -168,6 +175,7 @@ export default defineEventHandler(async (event) => {
       avgSale: overallAvgSale,
       medianSale: overallMedianSale
     },
-    userCtoon: userStats
+    userCtoon: userStats,
+    ownedCount
   }
 })

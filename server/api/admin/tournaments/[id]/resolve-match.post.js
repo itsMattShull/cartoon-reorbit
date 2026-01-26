@@ -14,11 +14,13 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody(event)
   const matchId = String(body?.matchId || '')
-  const winnerUserId = String(body?.winnerUserId || '')
+  const winnerUserIdInput = body?.winnerUserId ? String(body.winnerUserId) : ''
+  const outcomeOverride = String(body?.outcome || '')
   const notes = String(body?.notes || '')
+  const wantsTie = outcomeOverride === 'TIE' || winnerUserIdInput === 'TIE'
 
-  if (!matchId || !winnerUserId) {
-    throw createError({ statusCode: 400, statusMessage: 'matchId and winnerUserId are required' })
+  if (!matchId || (!winnerUserIdInput && !wantsTie)) {
+    throw createError({ statusCode: 400, statusMessage: 'matchId and winnerUserId (or outcome) are required' })
   }
 
   const match = await prisma.gtoonTournamentMatch.findUnique({
@@ -42,15 +44,25 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Match already locked' })
   }
 
-  if (!match.requiresWinner || match.stage !== 'BRACKET') {
+  const isSwiss = match.stage === 'SWISS'
+  const isBracket = match.stage === 'BRACKET'
+
+  if (!isSwiss && !(isBracket && match.requiresWinner)) {
     throw createError({ statusCode: 400, statusMessage: 'Match does not require admin resolution' })
   }
 
-  if (![match.playerAUserId, match.playerBUserId].includes(winnerUserId)) {
+  if (wantsTie && !isSwiss) {
+    throw createError({ statusCode: 400, statusMessage: 'Bracket matches cannot end in a tie' })
+  }
+
+  if (!wantsTie && ![match.playerAUserId, match.playerBUserId].includes(winnerUserIdInput)) {
     throw createError({ statusCode: 400, statusMessage: 'Winner must be one of the match players' })
   }
 
-  const outcome = winnerUserId === match.playerAUserId ? 'A_WIN' : 'B_WIN'
+  const winnerUserId = wantsTie ? null : winnerUserIdInput
+  const outcome = wantsTie
+    ? 'TIE'
+    : (winnerUserIdInput === match.playerAUserId ? 'A_WIN' : 'B_WIN')
   const now = new Date()
 
   await prisma.gtoonTournamentMatch.update({
