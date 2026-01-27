@@ -85,7 +85,7 @@ jobs:
           nvm install 23.10.0 >/dev/null
           nvm use 23.10.0 >/dev/null
 
-          pm2 stop 6 4 2 9 3 5
+          pm2 stop 6 4 2 7 3 5
 
           cd /var/www/dev.cartoon-reorbit
 
