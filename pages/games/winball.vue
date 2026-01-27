@@ -645,7 +645,7 @@ bumperXs.forEach((bx) => {
               if (result.grandPrizeCtoon) {
                 showModal({
                   title: 'Winner',
-                  message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
+                  message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".\n\nYou have ${result.pointsRemainingToday} points remaining today.`,
                   imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
                 })
                 await scavenger.maybeTrigger('winball_win', { open: false })
@@ -653,7 +653,7 @@ bumperXs.forEach((bx) => {
               } else {
                 showModal({
                   title: 'Winner',
-                  message: `You won ${result.pointsAwarded} points.`
+                  message: `You won ${result.pointsAwarded} points.\n\nYou have ${result.pointsRemainingToday} points remaining today.`
                 })
                 await scavenger.maybeTrigger('winball_win', { open: false })
                 resetBall()
@@ -833,7 +833,7 @@ bumperXs.forEach((bx) => {
               )
               showModal({
                 title: 'Winner',
-                message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".`,
+                message: `You won ${result.pointsAwarded} points and a grand prize cToon: "${result.grandPrizeCtoon}".\n\nYou have ${result.pointsRemainingToday} points remaining today.`,
                 imageUrl: result.grandPrizeCtoonImage || ''   // uses API field added above
               })
               await scavenger.maybeTrigger('winball_win', { open: false })
@@ -841,7 +841,7 @@ bumperXs.forEach((bx) => {
             } else {
               showModal({
                 title: 'Winner',
-                message: `You won ${result.pointsAwarded} points.`
+                message: `You won ${result.pointsAwarded} points.\n\nYou have ${result.pointsRemainingToday} points remaining today.`
               })
               await scavenger.maybeTrigger('winball_win', { open: false })
               resetBall()
@@ -1034,7 +1034,7 @@ bumperXs.forEach((bx) => {
   max-width: 92vw;          /* same cap as modal */
 }
 .modal-title { font: 600 20px/1.2 system-ui; margin: 0 0 8px; }
-.modal-msg { font: 400 16px/1.5 system-ui; margin: 0 0 12px; }
+.modal-msg { font: 400 16px/1.5 system-ui; margin: 0 0 12px; white-space: pre-line; }
 .modal-btn { padding: 8px 14px; border: 0; border-radius: 6px; background: #fff; color: #000; cursor: pointer; }
 .modal-btn:hover { background: #e6e6e6; }
 </style>

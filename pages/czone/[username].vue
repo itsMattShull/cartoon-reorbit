@@ -163,12 +163,14 @@
     <div class="flex justify-between items-center text-sm flex-wrap gap-4 mb-6 mx-4">
       <div class="flex gap-2 flex-wrap">
         <button
+          v-if="user?.id !== ownerId"
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openWishlist"
         >
           View Wishlist ({{ wishlistCountText }})
         </button>
         <button
+          v-if="user?.id !== ownerId"
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openTradeList"
         >
@@ -419,12 +421,14 @@
             <!-- Group 2: wishlist / collection / edit -->
             <div class="flex gap-2">
               <button
+                v-if="user?.id !== ownerId"
                 class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
                 @click="openWishlist"
               >
                 View Wishlist ({{ wishlistCountText }})
               </button>
               <button
+                v-if="user?.id !== ownerId"
                 class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
                 @click="openTradeList"
               >
@@ -462,7 +466,7 @@
       v-if="wishlistModalVisible"
       class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
     >
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <button
           class="absolute top-3 right-3 text-gray-500 hover:text-black"
           @click="closeWishlist"
@@ -475,7 +479,7 @@
         <div v-else-if="wishlistCtoons.length === 0" class="text-center py-10">
           No cToons on their wishlist.
         </div>
-        <div v-else class="grid grid-cols-2 gap-4">
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
             v-for="item in wishlistCtoons"
             :key="item.ctoon.id"
@@ -493,11 +497,32 @@
             />
             <p class="text-sm text-center">{{ item.ctoon.name }}</p>
             <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
+            <p class="text-xs text-gray-600 mt-1">
+              You own: {{ item.viewerOwnedCount || 0 }} {{ (item.viewerOwnedCount || 0) === 1 ? 'copy' : 'copies' }}
+            </p>
+            <p
+              v-if="(item.viewerOwnedCount || 0) > 0 && item.viewerTradeMintNumber !== null && item.viewerTradeMintNumber !== undefined"
+              class="text-xs text-gray-600"
+            >
+              Send your highest mint: #{{ item.viewerTradeMintNumber }}
+            </p>
+            <p
+              v-else-if="(item.viewerOwnedCount || 0) > 0"
+              class="text-xs text-gray-600"
+            >
+              Highest mint to trade: none (no mint #, newest copy traded)
+            </p>
+            <p
+              v-else
+              class="text-xs text-gray-600"
+            >
+              Trade disabled: you do not own this cToon.
+            </p>
 
             <button
               class="mt-2 w-full px-3 py-1 rounded text-white text-sm"
-              :class="item.hasEnough ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
-              :disabled="!item.hasEnough || isProcessingWishlistTrade"
+              :class="item.hasEnough && (item.viewerOwnedCount || 0) > 0 ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
+              :disabled="!item.hasEnough || (item.viewerOwnedCount || 0) === 0 || isProcessingWishlistTrade"
               @click="onClickWishlistTrade(item)"
             >
               Trade for {{ item.offeredPoints }} points
@@ -950,7 +975,7 @@ function closeCollection() {
 const isProcessingWishlistTrade = ref(false)
 
 async function onClickWishlistTrade(item) {
-  if (!item?.hasEnough || isProcessingWishlistTrade.value) return
+  if (!item?.hasEnough || (item?.viewerOwnedCount || 0) === 0 || isProcessingWishlistTrade.value) return
   isProcessingWishlistTrade.value = true
 
   try {
@@ -1037,6 +1062,9 @@ const wishlistModalVisible  = ref(false)
 const wishlistCtoons        = ref([])
 const isLoadingWishlist     = ref(false)
 const hasLoadedWishlist     = ref(false)
+const wishlistCount         = ref(0)
+const isLoadingWishlistCount = ref(false)
+const hasLoadedWishlistCount = ref(false)
 const tradeListModalVisible = ref(false)
 const tradeListCtoons       = ref([])
 const isLoadingTradeList    = ref(false)
@@ -1046,11 +1074,27 @@ async function loadUserWishlist() {
   isLoadingWishlist.value = true
   try {
     wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
+    wishlistCount.value = Array.isArray(wishlistCtoons.value) ? wishlistCtoons.value.length : 0
+    hasLoadedWishlistCount.value = true
   } catch (err) {
     wishlistCtoons.value = []
+    wishlistCount.value = 0
   } finally {
     isLoadingWishlist.value = false
     hasLoadedWishlist.value = true
+  }
+}
+
+async function loadUserWishlistCount() {
+  isLoadingWishlistCount.value = true
+  try {
+    const res = await $fetch(`/api/wishlist/users/${username.value}/count`)
+    wishlistCount.value = Number(res?.count ?? 0)
+  } catch (err) {
+    wishlistCount.value = 0
+  } finally {
+    isLoadingWishlistCount.value = false
+    hasLoadedWishlistCount.value = true
   }
 }
 
@@ -1076,8 +1120,10 @@ function closeWishlist() {
 
 const wishlistCountText = computed(() => {
   if (!hasLoadedWishlist.value && isLoadingWishlist.value) return '...'
-  if (!hasLoadedWishlist.value) return '0'
-  return String(wishlistCtoons.value.length)
+  if (hasLoadedWishlist.value) return String(wishlistCtoons.value.length)
+  if (!hasLoadedWishlistCount.value && isLoadingWishlistCount.value) return '...'
+  if (hasLoadedWishlistCount.value) return String(wishlistCount.value)
+  return '0'
 })
 
 function openTradeList() {
@@ -1353,7 +1399,7 @@ onMounted(async () => {
 
   await loadCzone({ showLoading: true, awardVisit: true })
   await loadCzoneSearchItems()
-  loadUserWishlist()
+  loadUserWishlistCount()
   loadUserTradeList()
 
   // socket listeners

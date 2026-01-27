@@ -87,6 +87,10 @@
                 <div class="text-xs text-gray-300 mt-1">Total: {{ totalQuantityLabel }}</div>
               </div>
               <div class="rounded bg-gray-700/60 p-3">
+                <div class="text-xs uppercase text-gray-300">You Own</div>
+                <div class="font-semibold">{{ formatValue(ownedCount) }}</div>
+              </div>
+              <div class="rounded bg-gray-700/60 p-3">
                 <div class="text-xs uppercase text-gray-300">Rarity</div>
                 <div class="font-semibold">{{ formatValue(ctoon.rarity) }}</div>
               </div>
@@ -399,6 +403,7 @@ const {
 const ctoon = computed(() => data.value?.ctoon || {})
 const ctoonDescription = computed(() => String(ctoon.value?.description || '').trim())
 const userCtoon = computed(() => data.value?.userCtoon || null)
+const ownedCount = computed(() => data.value?.ownedCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => {
   const quantity = ctoon.value?.quantity

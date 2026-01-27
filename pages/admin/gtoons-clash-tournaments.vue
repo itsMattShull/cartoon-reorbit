@@ -175,7 +175,7 @@
     <div class="absolute inset-0 bg-black/40" @click="closeResolveModal"></div>
     <div class="relative w-full max-w-lg bg-white rounded-lg shadow-lg flex flex-col max-h-[90vh]">
       <div class="px-6 py-4 border-b flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Resolve Bracket Match (Admin Select)</h2>
+        <h2 class="text-lg font-semibold">Resolve Match (Admin Select)</h2>
         <button class="text-gray-500 hover:text-gray-700" @click="closeResolveModal">✕</button>
       </div>
 
@@ -200,9 +200,9 @@
               @change="selectResolveMatch($event.target.value)"
               :disabled="!resolveMatches.length"
             >
-              <option value="">{{ resolveMatches.length ? 'Select a match' : 'No bracket matches found' }}</option>
+              <option value="">{{ resolveMatches.length ? 'Select a match' : 'No matches found' }}</option>
               <option v-for="m in resolveMatches" :key="m.id" :value="m.id">
-                Round {{ m.roundNumber }} · {{ m.playerAName }} vs {{ m.playerBName }} ({{ m.status }})
+                {{ m.stage === 'SWISS' ? 'Swiss' : 'Bracket' }} Round {{ m.roundNumber }} · {{ m.playerAName }} vs {{ m.playerBName }} ({{ m.status }})
               </option>
             </select>
           </div>
@@ -220,6 +220,9 @@
               </option>
               <option v-if="selectedMatch" :value="selectedMatch.playerBUserId">
                 {{ selectedMatch.playerBName }} ({{ selectedMatch.playerBUserId }})
+              </option>
+              <option v-if="selectedMatch && selectedMatch.stage === 'SWISS'" value="TIE">
+                Tie
               </option>
             </select>
           </div>
@@ -274,6 +277,7 @@ const resolveForm = ref({
   tournamentId: '',
   matchId: '',
   winnerUserId: '',
+  outcome: '',
   notes: ''
 })
 
@@ -349,25 +353,39 @@ async function loadResolveMatches(tournamentId) {
   if (!tournamentId) return
   try {
     const data = await $fetch(`/api/tournaments/${tournamentId}/matches`)
-    const bracket = data?.BRACKET || {}
     const flat = []
-    for (const roundKey of Object.keys(bracket)) {
-      const roundMatches = bracket[roundKey] || []
-      for (const match of roundMatches) {
-        flat.push({
-          id: match.id,
-          roundNumber: match.roundNumber,
-          status: match.status,
-          playerAName: match.playerAName,
-          playerBName: match.playerBName,
-          playerAUserId: match.playerAUserId,
-          playerBUserId: match.playerBUserId,
-          needsTiebreak: match.needsTiebreak,
-          tiebreakNotes: match.tiebreakNotes
-        })
+    const bracket = data?.BRACKET || {}
+    const swiss = data?.SWISS || {}
+    const stageBuckets = [
+      { stage: 'BRACKET', rounds: bracket },
+      { stage: 'SWISS', rounds: swiss }
+    ]
+    for (const bucket of stageBuckets) {
+      const roundKeys = Object.keys(bucket.rounds || {}).sort((a, b) => Number(a) - Number(b))
+      for (const roundKey of roundKeys) {
+        const roundMatches = bucket.rounds[roundKey] || []
+        for (const match of roundMatches) {
+          flat.push({
+            id: match.id,
+            stage: match.stage || bucket.stage,
+            roundNumber: match.roundNumber,
+            status: match.status,
+            playerAName: match.playerAName,
+            playerBName: match.playerBName,
+            playerAUserId: match.playerAUserId,
+            playerBUserId: match.playerBUserId,
+            needsTiebreak: match.needsTiebreak,
+            tiebreakNotes: match.tiebreakNotes
+          })
+        }
       }
     }
-    resolveMatches.value = flat.filter(m => m.needsTiebreak || m.tiebreakNotes || m.status !== 'COMPLETE')
+    resolveMatches.value = flat.filter(m => {
+      if (m.stage === 'SWISS') {
+        return m.status !== 'COMPLETE'
+      }
+      return m.needsTiebreak || m.tiebreakNotes || m.status !== 'COMPLETE'
+    })
   } catch {
     resolveMatches.value = []
   }
@@ -380,6 +398,7 @@ function selectResolveTournament(value) {
   selectedWinnerId.value = ''
   resolveForm.value.matchId = ''
   resolveForm.value.winnerUserId = ''
+  resolveForm.value.outcome = ''
   loadResolveMatches(value)
 }
 
@@ -388,11 +407,18 @@ function selectResolveMatch(value) {
   resolveForm.value.matchId = value
   selectedWinnerId.value = ''
   resolveForm.value.winnerUserId = ''
+  resolveForm.value.outcome = ''
 }
 
 function selectResolveWinner(value) {
   selectedWinnerId.value = value
+  if (value === 'TIE') {
+    resolveForm.value.winnerUserId = ''
+    resolveForm.value.outcome = 'TIE'
+    return
+  }
   resolveForm.value.winnerUserId = value
+  resolveForm.value.outcome = ''
 }
 
 async function createTournament() {
@@ -508,10 +534,11 @@ async function resolveMatch() {
       body: {
         matchId: resolveForm.value.matchId,
         winnerUserId: resolveForm.value.winnerUserId,
+        outcome: resolveForm.value.outcome,
         notes: resolveForm.value.notes
       }
     })
-    resolveForm.value = { tournamentId: '', matchId: '', winnerUserId: '', notes: '' }
+    resolveForm.value = { tournamentId: '', matchId: '', winnerUserId: '', outcome: '', notes: '' }
     resolveMatches.value = []
     selectedTournamentId.value = ''
     selectedMatchId.value = ''
