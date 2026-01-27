@@ -42,8 +42,19 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
     }
 
-    // Count existing user purchases for limit checks
-    const existing = await prisma.userCtoon.findMany({ where: { userId, ctoonId } })
+    // Count existing user purchases for limit checks (first-owner only)
+    const existingRows = await prisma.$queryRaw`
+      SELECT COUNT(*)::int AS count
+      FROM (
+        SELECT DISTINCT ON ("userCtoonId") "userCtoonId", "userId"
+        FROM "CtoonOwnerLog"
+        WHERE "ctoonId" = ${ctoonId}
+          AND "userCtoonId" IS NOT NULL
+        ORDER BY "userCtoonId", "createdAt" ASC
+      ) first_logs
+      WHERE "userId" = ${userId}
+    `
+    const existing = existingRows[0]?.count ?? 0
 
     // Wallet balance check (available = total - active locks)
     const [wallet, activeLocks] = await Promise.all([
@@ -68,13 +79,13 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       if (
         enforceLimit &&
         ctoon.perUserLimit !== null &&
-        existing.length >= ctoon.perUserLimit
+        existing >= ctoon.perUserLimit
       ) {
         throw new Error(
           `Purchase limit of ${ctoon.perUserLimit} within first 48h reached`
         )
       }
-    } else if (!isSpecial && ctoon.perUserLimit !== null && existing.length >= ctoon.perUserLimit) {
+    } else if (!isSpecial && ctoon.perUserLimit !== null && existing >= ctoon.perUserLimit) {
       // Fallback if no releaseDate
       throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }

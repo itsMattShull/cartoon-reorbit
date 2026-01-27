@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
 
     // Release window gating (two-phase)
     if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
-      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.' })
+      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.  Quit being a cheater.' })
     }
 
     const isUnlimited = ctoon.quantity === null
