@@ -64,6 +64,16 @@
                 <div v-if="match.tiebreakNotes" class="text-xs text-red-600 mt-1">
                   {{ match.tiebreakNotes }}
                 </div>
+                <div class="mt-3">
+                  <button
+                    v-if="match.status === 'PENDING'"
+                    @click="forfeitMatch(match)"
+                    :disabled="forfeitLoading === match.id"
+                    class="px-3 py-1.5 rounded text-white text-xs bg-red-600 hover:bg-red-700 disabled:opacity-60"
+                  >
+                    Forfeit
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -177,6 +187,7 @@ const matches = ref({ SWISS: {}, BRACKET: {} })
 const myMatches = ref([])
 const loading = ref(true)
 const actionLoading = ref(false)
+const forfeitLoading = ref(null)
 
 const { user, fetchSelf, login } = useAuth()
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local'
@@ -293,6 +304,22 @@ async function toggleOptIn() {
     await loadAll()
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function forfeitMatch(match) {
+  if (!match || match.status !== 'PENDING') return
+  const ok = window.confirm('Forfeit this match? Your opponent will be awarded the win.')
+  if (!ok) return
+  forfeitLoading.value = match.id
+  try {
+    await $fetch(`/api/tournaments/${route.params.id}/forfeit`, {
+      method: 'POST',
+      body: { matchId: match.id }
+    })
+    await loadAll()
+  } finally {
+    forfeitLoading.value = null
   }
 }
 
