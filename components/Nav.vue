@@ -311,6 +311,7 @@ const adminGroups = [
       { label: 'Manage Announcements', to: '/admin/announcements' },
       { label: 'Admin Changes', to: '/admin/admin-changes' },
       { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
+      { label: 'Manage Production', to: '/admin/manage-dev' },
       { label: 'Initiate Trade', to: '/admin/initiate-trade' },
     ]
   },
