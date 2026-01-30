@@ -5,9 +5,9 @@ export default defineEventHandler(async (event) => {
   const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
 
-  const dropletId = process.env.DROPLET_DEV_ID
+  const dropletId = process.env.DROPLET_ID
   const token = process.env.DO_ACCESS_TOKEN || process.env.DO_API_TOKEN || process.env.DO_TOKEN
-  if (!dropletId) throw createError({ statusCode: 500, statusMessage: 'Missing DROPLET_DEV_ID' })
+  if (!dropletId) throw createError({ statusCode: 500, statusMessage: 'Missing DROPLET_ID' })
   if (!token)     throw createError({ statusCode: 500, statusMessage: 'Missing DO_ACCESS_TOKEN' })
 
   const resp = await fetch(`https://api.digitalocean.com/v2/droplets/${dropletId}`, {
