@@ -3,7 +3,7 @@
     <Nav />
 
     <div class="max-w-xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
-      <h1 class="text-2xl font-semibold mb-4">Manage Dev Instance</h1>
+      <h1 class="text-2xl font-semibold mb-4">Manage Production Instance</h1>
 
       <div class="flex items-center justify-between mb-4">
         <div class="text-sm">
@@ -20,9 +20,9 @@
           class="px-4 py-2 rounded text-white disabled:opacity-50"
           :class="status==='active' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
         >
-          <span v-if="working && status!=='active'">Turning On Dev...</span>
-          <span v-else-if="working && status==='active'">Turning Off Dev...</span>
-          <span v-else>{{ status==='active' ? 'Turn Off Dev' : 'Turn On Dev' }}</span>
+          <span v-if="working && status!=='active'">Turning On Production...</span>
+          <span v-else-if="working && status==='active'">Turning Off Production...</span>
+          <span v-else>{{ status==='active' ? 'Turn Off Production' : 'Turn On Production' }}</span>
         </button>
       </div>
 
