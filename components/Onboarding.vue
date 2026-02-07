@@ -7,70 +7,145 @@
         style="--panel-max: 300px;"
       >
         <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
-        <div class="px-4 py-3 flex items-center justify-between">
-          <div>
-            <p class="text-[11px] uppercase tracking-widest text-slate-500">Daily</p>
-            <h3 class="text-sm font-semibold text-[var(--reorbit-blue)]">Checklist</h3>
+        <div class="px-4 py-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-[11px] uppercase tracking-widest text-slate-500">Onboarding</p>
+              <h3 class="text-sm font-semibold text-[var(--reorbit-blue)]">
+                {{ activeTab === 'daily' ? 'Daily Checklist' : 'Events' }}
+              </h3>
+            </div>
+            <button
+              type="button"
+              class="text-xs font-semibold text-[var(--reorbit-blue)]/80 hover:text-[var(--reorbit-purple)]"
+              @click="isOpen = false"
+            >
+              Hide
+            </button>
           </div>
-          <button
-            type="button"
-            class="text-xs font-semibold text-[var(--reorbit-blue)]/80 hover:text-[var(--reorbit-purple)]"
-            @click="isOpen = false"
-          >
-            Hide
-          </button>
+          <div class="mt-3 flex rounded-full bg-[var(--reorbit-tint)] p-1 text-xs font-semibold">
+            <button
+              type="button"
+              :class="tabButtonClass('daily')"
+              @click="activeTab = 'daily'"
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              :class="tabButtonClass('events')"
+              @click="activeTab = 'events'"
+            >
+              Events
+            </button>
+          </div>
         </div>
         <div class="px-4 pb-4">
-          <div v-if="pending || (!data && !error)" class="space-y-3 animate-pulse">
-            <div class="h-4 bg-[var(--reorbit-tint)] rounded w-5/6"></div>
-            <div class="h-4 bg-[var(--reorbit-tint)] rounded w-4/6"></div>
-            <div class="h-4 bg-[var(--reorbit-tint)] rounded w-3/6"></div>
-          </div>
-          <div v-else-if="error" class="text-sm text-slate-600">
-            Sign in to view your daily activities.
-          </div>
-          <ul v-else class="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-            <li v-for="item in items" :key="item.id" class="flex items-start gap-3">
-              <span
-                :class="[
-                  'mt-0.5 flex h-6 w-6 flex-none shrink-0 items-center justify-center rounded-full border',
-                  item.done
-                    ? 'border-transparent bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow'
-                    : 'border-slate-300 bg-white'
-                ]"
-              >
-                <svg
-                  v-if="item.done"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  class="h-4 w-4 text-[var(--reorbit-deep)]"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
+          <div v-if="activeTab === 'daily'">
+            <div v-if="dailyPending || (!dailyData && !dailyError)" class="space-y-3 animate-pulse">
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-5/6"></div>
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-4/6"></div>
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-3/6"></div>
+            </div>
+            <div v-else-if="dailyError" class="text-sm text-slate-600">
+              Sign in to view your daily activities.
+            </div>
+            <ul v-else class="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+              <li v-for="item in items" :key="item.id" class="flex items-start gap-3">
+                <span
+                  :class="[
+                    'mt-0.5 flex h-6 w-6 flex-none shrink-0 items-center justify-center rounded-full border',
+                    item.done
+                      ? 'border-transparent bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow'
+                      : 'border-slate-300 bg-white'
+                  ]"
                 >
-                  <path d="M5 12l4 4L19 6" />
-                </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  class="h-4 w-4 text-slate-300"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="7" />
-                </svg>
-              </span>
-              <p class="text-sm text-slate-700">{{ item.text }}</p>
-            </li>
-          </ul>
+                  <svg
+                    v-if="item.done"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    class="h-4 w-4 text-[var(--reorbit-deep)]"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12l4 4L19 6" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    class="h-4 w-4 text-slate-300"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="7" />
+                  </svg>
+                </span>
+                <p class="text-sm text-slate-700">{{ item.text }}</p>
+              </li>
+            </ul>
+          </div>
+          <div v-else>
+            <div v-if="eventsPending || (!eventsData && !eventsError)" class="space-y-3 animate-pulse">
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-5/6"></div>
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-4/6"></div>
+              <div class="h-4 bg-[var(--reorbit-tint)] rounded w-3/6"></div>
+            </div>
+            <div v-else-if="eventsError" class="text-sm text-slate-600">
+              Sign in to view active events.
+            </div>
+            <div v-else class="space-y-4 max-h-[220px] overflow-y-auto pr-1">
+              <div>
+                <p class="text-[11px] uppercase tracking-widest text-slate-500">Holiday Events</p>
+                <div class="mt-1 text-[11px] text-slate-400 leading-snug">Check the cMart Holiday tab to purchase Holiday cToons.</div>
+                <div v-if="holidayEvents.length" class="mt-2 space-y-2">
+                  <div
+                    v-for="event in holidayEvents"
+                    :key="`holiday-${event.id}`"
+                    class="rounded-lg border border-[var(--reorbit-border)] bg-white/80 px-3 py-2"
+                  >
+                    <p class="text-sm font-semibold text-slate-700">
+                      {{ displayName(event.name, 'Holiday Event') }}
+                    </p>
+                    <p class="text-xs text-slate-500">
+                      Active {{ formatDateRange(event.startsAt, event.endsAt) }}
+                    </p>
+                  </div>
+                </div>
+                <p v-else class="mt-2 text-xs text-slate-500">No holiday events are active right now.</p>
+              </div>
+              <div>
+                <p class="text-[11px] uppercase tracking-widest text-slate-500">cZone Searches</p>
+                <div class="mt-1 text-[11px] text-slate-400 leading-snug">Look on other user's cZones to capture "shiny" cToons.</div>
+                <div v-if="czoneSearches.length" class="mt-2 space-y-2">
+                  <div
+                    v-for="search in czoneSearches"
+                    :key="`czone-${search.id}`"
+                    class="rounded-lg border border-[var(--reorbit-border)] bg-white/80 px-3 py-2 text-sm font-semibold"
+                  >
+                    <!-- <NuxtLink
+                      :to="`/czonesearch/${search.id}`"
+                      class="text-sm font-semibold text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)]"
+                    > -->
+                      {{ displayName(search.name, 'cZone Search') }}
+                    <!-- </NuxtLink> -->
+                    <p class="text-xs text-slate-500">
+                      Active {{ formatDateRange(search.startAt, search.endAt) }}
+                    </p>
+                  </div>
+                </div>
+                <p v-else class="mt-2 text-xs text-slate-500">No cZone searches are active right now.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </transition>
@@ -106,24 +181,45 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 const isOpen = ref(false)
 const onboardingRef = ref(null)
 
-const data = ref(null)
-const pending = ref(false)
-const error = ref(null)
+const activeTab = ref('daily')
+const dailyData = ref(null)
+const dailyPending = ref(false)
+const dailyError = ref(null)
+const eventsData = ref(null)
+const eventsPending = ref(false)
+const eventsError = ref(null)
 
 const fetchDaily = async () => {
-  pending.value = true
-  error.value = null
+  dailyPending.value = true
+  dailyError.value = null
   try {
-    data.value = await $fetch('/api/onboarding/daily', { credentials: 'include' })
+    dailyData.value = await $fetch('/api/onboarding/daily', { credentials: 'include' })
   } catch (err) {
-    error.value = err
+    dailyError.value = err
   } finally {
-    pending.value = false
+    dailyPending.value = false
   }
 }
 
-watch(isOpen, (next) => {
-  if (next) fetchDaily()
+const fetchEvents = async () => {
+  eventsPending.value = true
+  eventsError.value = null
+  try {
+    eventsData.value = await $fetch('/api/onboarding/events', { credentials: 'include' })
+  } catch (err) {
+    eventsError.value = err
+  } finally {
+    eventsPending.value = false
+  }
+}
+
+watch([isOpen, activeTab], ([nextOpen, nextTab]) => {
+  if (!nextOpen) return
+  if (nextTab === 'daily') {
+    fetchDaily()
+    return
+  }
+  fetchEvents()
 })
 
 const formatNumber = (value) => {
@@ -140,8 +236,8 @@ const pluralize = (count, singular, plural) => {
 }
 
 const items = computed(() => {
-  const cfg = data.value?.config || {}
-  const st = data.value?.status || {}
+  const cfg = dailyData.value?.config || {}
+  const st = dailyData.value?.status || {}
 
   const loginPoints = formatNumber(cfg.dailyLoginPoints)
   const czoneVisits = Number(cfg.czoneVisitMaxPerDay ?? 0)
@@ -190,6 +286,31 @@ const items = computed(() => {
 const toggleOpen = () => {
   isOpen.value = !isOpen.value
 }
+
+const tabButtonClass = (tab) => ([
+  'flex-1 rounded-full px-3 py-1.5 transition',
+  activeTab.value === tab
+    ? 'bg-white text-[var(--reorbit-blue)] shadow-sm'
+    : 'text-slate-500 hover:text-[var(--reorbit-blue)]'
+])
+
+const displayName = (value, fallback) => {
+  const trimmed = String(value || '').trim()
+  return trimmed || fallback
+}
+
+const formatDateRange = (start, end) => {
+  const startDate = start ? new Date(start) : null
+  const endDate = end ? new Date(end) : null
+  if (!startDate || !endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return 'dates unavailable'
+  }
+  const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${fmt.format(startDate)} - ${fmt.format(endDate)}`
+}
+
+const holidayEvents = computed(() => (eventsData.value?.holidayEvents || []))
+const czoneSearches = computed(() => (eventsData.value?.czoneSearches || []))
 
 const handleOutsideClick = (event) => {
   if (!isOpen.value) return

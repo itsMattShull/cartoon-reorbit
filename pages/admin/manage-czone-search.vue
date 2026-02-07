@@ -46,6 +46,7 @@
               <div class="col-span-2"><span class="font-semibold">Prize Pool:</span> {{ row.prizePool.length }} cToons</div>
             </div>
             <div class="mt-3 flex gap-3">
+              <NuxtLink class="text-blue-600 hover:text-blue-800" :to="`/czonesearch/${row.id}`">View</NuxtLink>
               <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
               <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
             </div>
@@ -83,6 +84,7 @@
                 <td class="py-3 pr-4">{{ collectionLabel(row.collectionType) }}</td>
                 <td class="py-3 pr-4">{{ row.prizePool.length }} cToons</td>
                 <td class="py-3 pr-4 whitespace-nowrap">
+                  <NuxtLink class="text-blue-600 hover:text-blue-800 mr-3" :to="`/czonesearch/${row.id}`">View</NuxtLink>
                   <button class="text-blue-600 hover:text-blue-800 mr-3" @click="openEdit(row)">Edit</button>
                   <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
                 </td>
