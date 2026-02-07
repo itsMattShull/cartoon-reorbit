@@ -331,6 +331,14 @@ onMounted(async ()=>{
     assetPath.value = ctoon.assetPath
     setField.value = ctoon.set
     characters.value = (ctoon.characters||[]).join(', ')
+    if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
+      const qty = Number(ctoon.quantity)
+      const initQty = Number(ctoon.initialReleaseQty)
+      if (Number.isFinite(qty) && qty > 0 && Number.isFinite(initQty) && initQty > 0) {
+        releasePercent.value = Math.round((initQty / qty) * 100)
+        clampReleasePercent()
+      }
+    }
 
     isGtoon.value   = ctoon.isGtoon
     gtoonType.value = ctoon.gtoonType || ''
