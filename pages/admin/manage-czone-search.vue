@@ -193,24 +193,210 @@
                 <div
                   v-for="(row, idx) in form.prizePool"
                   :key="row.ctoonId"
-                  class="flex flex-col sm:flex-row sm:items-center gap-3 bg-gray-50 rounded p-2"
+                  class="bg-gray-50 rounded p-2 space-y-3"
                 >
-                  <div class="flex items-center gap-3 flex-1">
-                    <img :src="row.ctoon.assetPath" class="h-10 w-auto rounded" />
-                    <div>
-                      <div class="font-medium">{{ row.ctoon.name }}</div>
-                      <div class="text-xs text-gray-500">{{ row.ctoon.rarity }}</div>
+                  <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <button type="button" class="flex items-center gap-3 flex-1 text-left" @click="togglePrizeRow(row)">
+                      <img :src="row.ctoon.assetPath" class="h-10 w-auto rounded" />
+                      <div>
+                        <div class="font-medium">{{ row.ctoon.name }}</div>
+                        <div class="text-xs text-gray-500">{{ row.ctoon.rarity }}</div>
+                      </div>
+                    </button>
+                    <div class="flex items-center gap-2">
+                      <label class="text-xs text-gray-500">Chance %</label>
+                      <input v-model.number="row.chancePercent" type="number" min="0" max="100" step="0.01" class="w-28 border rounded px-2 py-1" />
+                    </div>
+                    <div v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="flex items-center gap-2">
+                      <label class="text-xs text-gray-500">Max Captures</label>
+                      <input v-model="row.maxCaptures" type="number" min="1" step="1" placeholder="Unlimited" class="w-28 border rounded px-2 py-1" />
+                    </div>
+                    <button class="text-red-600 hover:text-red-800 text-sm" @click="removeCtoon(idx)">Remove</button>
+                  </div>
+
+                  <div v-if="expandedPrizeId === row.ctoonId" class="border-t pt-3 space-y-4">
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionDateEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'date')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">Date</div>
+                        <p class="text-xs text-gray-500">Must be within the search start/end date.</p>
+                        <div v-if="row.conditionDateEnabled" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                          <div>
+                            <label class="text-xs text-gray-500">Start Date</label>
+                            <input v-model="row.conditionDateStart" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded px-2 py-1" />
+                          </div>
+                          <div>
+                            <label class="text-xs text-gray-500">End Date</label>
+                            <input v-model="row.conditionDateEnd" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded px-2 py-1" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionTimeEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'time')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">Time of Day</div>
+                        <p class="text-xs text-gray-500">Based on the viewer's local timezone.</p>
+                        <div v-if="row.conditionTimeEnabled" class="mt-2">
+                          <select v-model="row.conditionTimeOfDay" class="w-full border rounded px-2 py-1">
+                            <option value="">Select a time of day</option>
+                            <option value="MORNING">Morning (6am–11:59am)</option>
+                            <option value="AFTERNOON">Afternoon (12pm–4:59pm)</option>
+                            <option value="EVENING">Evening (5pm–9:59pm)</option>
+                            <option value="NIGHT">Night (10pm–5:59am)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionBackgroundEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'background')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">cZone Background</div>
+                        <p class="text-xs text-gray-500">Select one or more backgrounds.</p>
+                        <div v-if="row.conditionBackgroundEnabled" class="mt-2">
+                          <div v-if="backgroundsLoading" class="text-xs text-gray-500">Loading backgrounds...</div>
+                          <div v-else-if="backgroundsError" class="text-xs text-red-600">{{ backgroundsError }}</div>
+                          <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button
+                              v-for="bg in backgrounds"
+                              :key="bg.id"
+                              type="button"
+                              class="border rounded overflow-hidden text-left"
+                              :class="row.conditionBackgrounds.includes(bg.filename) ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'"
+                              @click="toggleBackground(row, bg)"
+                            >
+                              <img :src="bg.imagePath" :alt="bg.label || bg.filename" class="w-full h-16 object-cover" />
+                              <div class="px-2 py-1 text-xs truncate">{{ bg.label || bg.filename }}</div>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionCtoonInZoneEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'ctoonInZone')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">cToon in cZone</div>
+                        <p class="text-xs text-gray-500">Select one cToon that must appear in the viewed cZone.</p>
+                        <div v-if="row.conditionCtoonInZoneEnabled" class="mt-2">
+                          <div class="relative">
+                            <input
+                              v-model="row.conditionCtoonInZoneTerm"
+                              type="text"
+                              placeholder="Type 3+ characters to search cToons"
+                              class="w-full border rounded px-2 py-1"
+                              @focus="row.conditionCtoonInZoneFocused = true"
+                              @blur="row.conditionCtoonInZoneFocused = false"
+                              @input="searchConditionCtoons(row, 'zone')"
+                            />
+                            <ul v-if="row.conditionCtoonInZoneTerm.length >= 3 && row.conditionCtoonInZoneFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                              <li v-if="row.conditionCtoonInZoneSearching" class="px-3 py-2 text-gray-500">Searching...</li>
+                              <li v-else-if="!row.conditionCtoonInZoneResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                              <li
+                                v-for="ctoon in row.conditionCtoonInZoneResults"
+                                :key="ctoon.id"
+                                class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                                @mousedown.prevent="selectConditionCtoonInZone(row, ctoon)"
+                              >
+                                <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
+                                <div>
+                                  <p class="font-medium">{{ ctoon.name }}</p>
+                                  <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
+                                </div>
+                              </li>
+                            </ul>
+                          </div>
+                          <div v-if="row.conditionCtoonInZone" class="mt-2 flex items-center gap-3 bg-white border rounded px-2 py-1">
+                            <img :src="row.conditionCtoonInZone.assetPath" class="h-8 w-auto rounded" />
+                            <div class="flex-1 text-sm">{{ row.conditionCtoonInZone.name }}</div>
+                            <button type="button" class="text-xs text-red-600" @click="clearConditionCtoonInZone(row)">Remove</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionUserOwnsEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userOwns')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">User Owns cToon</div>
+                        <p class="text-xs text-gray-500">All selected cToons and counts must be met.</p>
+                        <div v-if="row.conditionUserOwnsEnabled" class="mt-2 space-y-2">
+                          <div class="relative">
+                            <input
+                              v-model="row.conditionUserOwnsTerm"
+                              type="text"
+                              placeholder="Type 3+ characters to search cToons"
+                              class="w-full border rounded px-2 py-1"
+                              @focus="row.conditionUserOwnsFocused = true"
+                              @blur="row.conditionUserOwnsFocused = false"
+                              @input="searchConditionCtoons(row, 'owns')"
+                            />
+                            <ul v-if="row.conditionUserOwnsTerm.length >= 3 && row.conditionUserOwnsFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                              <li v-if="row.conditionUserOwnsSearching" class="px-3 py-2 text-gray-500">Searching...</li>
+                              <li v-else-if="!row.conditionUserOwnsResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                              <li
+                                v-for="ctoon in row.conditionUserOwnsResults"
+                                :key="ctoon.id"
+                                class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                                @mousedown.prevent="addConditionUserOwns(row, ctoon)"
+                              >
+                                <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
+                                <div>
+                                  <p class="font-medium">{{ ctoon.name }}</p>
+                                  <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
+                                </div>
+                              </li>
+                            </ul>
+                          </div>
+                          <div v-if="row.conditionUserOwnsList.length" class="space-y-2">
+                            <div v-for="entry in row.conditionUserOwnsList" :key="entry.ctoonId" class="flex items-center gap-3 bg-white border rounded px-2 py-1">
+                              <img v-if="entry.ctoon?.assetPath" :src="entry.ctoon.assetPath" class="h-8 w-auto rounded" />
+                              <div class="flex-1 text-sm">{{ entry.ctoon?.name || entry.ctoonId }}</div>
+                              <div class="flex items-center gap-2">
+                                <label class="text-xs text-gray-500"># Owned</label>
+                                <input v-model.number="entry.count" type="number" min="1" step="1" class="w-20 border rounded px-2 py-1" />
+                              </div>
+                              <button type="button" class="text-xs text-red-600" @click="removeConditionUserOwns(row, entry.ctoonId)">Remove</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div class="flex items-start gap-3">
+                        <input v-model="row.conditionUserPointsEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userPoints')" />
+                        <div class="flex-1">
+                          <div class="text-sm font-medium">User Points</div>
+                          <div v-if="row.conditionUserPointsEnabled" class="mt-1">
+                            <input v-model.number="row.conditionUserPointsMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-start gap-3">
+                        <input v-model="row.conditionUserTotalCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userTotal')" />
+                        <div class="flex-1">
+                          <div class="text-sm font-medium">User Total cToon Count</div>
+                          <div v-if="row.conditionUserTotalCountEnabled" class="mt-1">
+                            <input v-model.number="row.conditionUserTotalCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-start gap-3">
+                        <input v-model="row.conditionUserUniqueCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userUnique')" />
+                        <div class="flex-1">
+                          <div class="text-sm font-medium">User Unique cToon Count</div>
+                          <div v-if="row.conditionUserUniqueCountEnabled" class="mt-1">
+                            <input v-model.number="row.conditionUserUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <label class="text-xs text-gray-500">Chance %</label>
-                    <input v-model.number="row.chancePercent" type="number" min="0" max="100" step="0.01" class="w-28 border rounded px-2 py-1" />
-                  </div>
-                  <div v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="flex items-center gap-2">
-                    <label class="text-xs text-gray-500">Max Captures</label>
-                    <input v-model="row.maxCaptures" type="number" min="1" step="1" placeholder="Unlimited" class="w-28 border rounded px-2 py-1" />
-                  </div>
-                  <button class="text-red-600 hover:text-red-800 text-sm" @click="removeCtoon(idx)">Remove</button>
                 </div>
               </div>
             </div>
@@ -250,6 +436,11 @@ const showModal = ref(false)
 const saving = ref(false)
 const formError = ref('')
 const isSettingForm = ref(false)
+const expandedPrizeId = ref(null)
+
+const backgrounds = ref([])
+const backgroundsLoading = ref(false)
+const backgroundsError = ref('')
 
 const form = reactive({
   id: null,
@@ -270,6 +461,11 @@ const searchingCtoons = ref(false)
 const searchFocused = ref(false)
 
 const modalTitle = computed(() => (form.id ? 'Edit cZone Search' : 'Create cZone Search'))
+const searchDateBounds = computed(() => {
+  const start = String(form.startAt || '').split('T')[0] || ''
+  const end = String(form.endAt || '').split('T')[0] || ''
+  return { start, end }
+})
 
 function collectionLabel(value) {
   if (value === 'ONCE') return 'Collect Each cToon Once'
@@ -292,6 +488,202 @@ function resetLabel(row) {
 function dailyLimitLabel(row) {
   const limit = Number(row?.dailyCollectLimit ?? 0)
   return limit > 0 ? String(limit) : 'Unlimited'
+}
+
+function initPrizeRow(row) {
+  return {
+    ...row,
+    conditionDateEnabled: Boolean(row.conditionDateEnabled),
+    conditionDateStart: row.conditionDateStart || '',
+    conditionDateEnd: row.conditionDateEnd || '',
+    conditionTimeEnabled: Boolean(row.conditionTimeEnabled),
+    conditionTimeOfDay: row.conditionTimeOfDay || '',
+    conditionBackgroundEnabled: Boolean(row.conditionBackgroundEnabled),
+    conditionBackgrounds: Array.isArray(row.conditionBackgrounds) ? [...row.conditionBackgrounds] : [],
+    conditionCtoonInZoneEnabled: Boolean(row.conditionCtoonInZoneEnabled),
+    conditionCtoonInZoneId: row.conditionCtoonInZoneId || '',
+    conditionCtoonInZone: row.conditionCtoonInZone || null,
+    conditionCtoonInZoneTerm: '',
+    conditionCtoonInZoneResults: [],
+    conditionCtoonInZoneSearching: false,
+    conditionCtoonInZoneFocused: false,
+    conditionUserOwnsEnabled: Boolean(row.conditionUserOwnsEnabled),
+    conditionUserOwnsList: Array.isArray(row.conditionUserOwns)
+      ? row.conditionUserOwns.map((entry) => ({
+        ctoonId: entry?.ctoonId || '',
+        count: Number(entry?.count || 1),
+        ctoon: null
+      }))
+      : [],
+    conditionUserOwnsTerm: '',
+    conditionUserOwnsResults: [],
+    conditionUserOwnsSearching: false,
+    conditionUserOwnsFocused: false,
+    conditionUserPointsEnabled: Boolean(row.conditionUserPointsEnabled),
+    conditionUserPointsMin: row.conditionUserPointsMin ?? '',
+    conditionUserTotalCountEnabled: Boolean(row.conditionUserTotalCountEnabled),
+    conditionUserTotalCountMin: row.conditionUserTotalCountMin ?? '',
+    conditionUserUniqueCountEnabled: Boolean(row.conditionUserUniqueCountEnabled),
+    conditionUserUniqueCountMin: row.conditionUserUniqueCountMin ?? ''
+  }
+}
+
+function togglePrizeRow(row) {
+  expandedPrizeId.value = expandedPrizeId.value === row.ctoonId ? null : row.ctoonId
+}
+
+function onConditionToggle(row, key) {
+  if (key === 'date' && !row.conditionDateEnabled) {
+    row.conditionDateStart = ''
+    row.conditionDateEnd = ''
+  }
+  if (key === 'time' && !row.conditionTimeEnabled) {
+    row.conditionTimeOfDay = ''
+  }
+  if (key === 'background' && !row.conditionBackgroundEnabled) {
+    row.conditionBackgrounds = []
+  }
+  if (key === 'ctoonInZone' && !row.conditionCtoonInZoneEnabled) {
+    clearConditionCtoonInZone(row)
+  }
+  if (key === 'userOwns' && !row.conditionUserOwnsEnabled) {
+    row.conditionUserOwnsList = []
+    row.conditionUserOwnsTerm = ''
+    row.conditionUserOwnsResults = []
+    row.conditionUserOwnsSearching = false
+    row.conditionUserOwnsFocused = false
+  }
+  if (key === 'userPoints' && !row.conditionUserPointsEnabled) {
+    row.conditionUserPointsMin = ''
+  }
+  if (key === 'userTotal' && !row.conditionUserTotalCountEnabled) {
+    row.conditionUserTotalCountMin = ''
+  }
+  if (key === 'userUnique' && !row.conditionUserUniqueCountEnabled) {
+    row.conditionUserUniqueCountMin = ''
+  }
+}
+
+function toggleBackground(row, bg) {
+  const filename = String(bg?.filename || '').trim()
+  if (!filename) return
+  if (row.conditionBackgrounds.includes(filename)) {
+    row.conditionBackgrounds = row.conditionBackgrounds.filter(b => b !== filename)
+  } else {
+    row.conditionBackgrounds = [...row.conditionBackgrounds, filename]
+  }
+}
+
+function clearConditionCtoonInZone(row) {
+  row.conditionCtoonInZoneId = ''
+  row.conditionCtoonInZone = null
+  row.conditionCtoonInZoneTerm = ''
+  row.conditionCtoonInZoneResults = []
+  row.conditionCtoonInZoneSearching = false
+  row.conditionCtoonInZoneFocused = false
+}
+
+function selectConditionCtoonInZone(row, ctoon) {
+  row.conditionCtoonInZoneId = ctoon.id
+  row.conditionCtoonInZone = ctoon
+  row.conditionCtoonInZoneTerm = ''
+  row.conditionCtoonInZoneResults = []
+  row.conditionCtoonInZoneFocused = false
+}
+
+function addConditionUserOwns(row, ctoon) {
+  if (row.conditionUserOwnsList.some(entry => entry.ctoonId === ctoon.id)) {
+    row.conditionUserOwnsTerm = ''
+    row.conditionUserOwnsResults = []
+    row.conditionUserOwnsFocused = false
+    return
+  }
+  row.conditionUserOwnsList.push({ ctoonId: ctoon.id, count: 1, ctoon })
+  row.conditionUserOwnsTerm = ''
+  row.conditionUserOwnsResults = []
+  row.conditionUserOwnsFocused = false
+}
+
+function removeConditionUserOwns(row, ctoonId) {
+  row.conditionUserOwnsList = row.conditionUserOwnsList.filter(entry => entry.ctoonId !== ctoonId)
+}
+
+async function loadBackgrounds() {
+  backgroundsLoading.value = true
+  backgroundsError.value = ''
+  try {
+    const data = await $fetch('/api/admin/backgrounds')
+    backgrounds.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    backgrounds.value = []
+    backgroundsError.value = err?.data?.statusMessage || 'Failed to load backgrounds.'
+  } finally {
+    backgroundsLoading.value = false
+  }
+}
+
+async function searchConditionCtoons(row, type) {
+  const isZone = type === 'zone'
+  const term = isZone ? row.conditionCtoonInZoneTerm.trim() : row.conditionUserOwnsTerm.trim()
+  const timerKey = isZone ? '_ctoonInZoneTimer' : '_userOwnsTimer'
+  clearTimeout(row[timerKey])
+  if (term.length < 3) {
+    if (isZone) {
+      row.conditionCtoonInZoneResults = []
+      row.conditionCtoonInZoneSearching = false
+    } else {
+      row.conditionUserOwnsResults = []
+      row.conditionUserOwnsSearching = false
+    }
+    return
+  }
+  if (isZone) row.conditionCtoonInZoneSearching = true
+  else row.conditionUserOwnsSearching = true
+  row[timerKey] = setTimeout(async () => {
+    try {
+      const results = await $fetch('/api/admin/search-ctoons', { query: { q: term } })
+      const list = Array.isArray(results) ? results : []
+      if (isZone) {
+        row.conditionCtoonInZoneResults = list
+      } else {
+        const selected = new Set(row.conditionUserOwnsList.map(entry => entry.ctoonId))
+        row.conditionUserOwnsResults = list.filter(ctoon => !selected.has(ctoon.id))
+      }
+    } catch {
+      if (isZone) row.conditionCtoonInZoneResults = []
+      else row.conditionUserOwnsResults = []
+    } finally {
+      if (isZone) row.conditionCtoonInZoneSearching = false
+      else row.conditionUserOwnsSearching = false
+    }
+  }, 300)
+}
+
+async function hydrateConditionCtoons(rows) {
+  const ids = new Set()
+  for (const row of rows) {
+    if (row.conditionCtoonInZoneId) ids.add(row.conditionCtoonInZoneId)
+    for (const entry of row.conditionUserOwnsList || []) {
+      if (entry.ctoonId) ids.add(entry.ctoonId)
+    }
+  }
+  if (!ids.size) return
+  try {
+    const data = await $fetch('/api/admin/ctoons/by-ids', { method: 'POST', body: { ids: Array.from(ids) } })
+    const list = Array.isArray(data) ? data : []
+    const map = new Map(list.map(ctoon => [ctoon.id, ctoon]))
+    for (const row of rows) {
+      if (row.conditionCtoonInZoneId) {
+        row.conditionCtoonInZone = map.get(row.conditionCtoonInZoneId) || null
+      }
+      row.conditionUserOwnsList = (row.conditionUserOwnsList || []).map((entry) => ({
+        ...entry,
+        ctoon: map.get(entry.ctoonId) || entry.ctoon || null
+      }))
+    }
+  } catch {
+    // leave existing ids if fetch fails
+  }
 }
 
 function formatCentral(iso) {
@@ -391,6 +783,7 @@ function resetForm() {
   form.collectionType = 'MULTIPLE'
   form.prizePool = []
   formError.value = ''
+  expandedPrizeId.value = null
   ctoonSearchTerm.value = ''
   ctoonSearchResults.value = []
 }
@@ -402,8 +795,9 @@ function openCreate() {
   setTimeout(() => { isSettingForm.value = false }, 0)
 }
 
-function openEdit(row) {
+async function openEdit(row) {
   isSettingForm.value = true
+  expandedPrizeId.value = null
   form.id = row.id
   form.name = row.name || ''
   form.startAt = isoToCSTLocal(row.startAt)
@@ -415,22 +809,44 @@ function openEdit(row) {
     ? ''
     : Number(row.dailyCollectLimit)
   form.collectionType = row.collectionType || 'MULTIPLE'
-  form.prizePool = row.prizePool.map((p) => ({
+  form.prizePool = row.prizePool.map((p) => initPrizeRow({
     ctoonId: p.ctoonId,
     chancePercent: Number(p.chancePercent),
     maxCaptures: p.maxCaptures === null || p.maxCaptures === undefined ? '' : Number(p.maxCaptures),
+    conditionDateEnabled: p.conditionDateEnabled,
+    conditionDateStart: p.conditionDateStart,
+    conditionDateEnd: p.conditionDateEnd,
+    conditionTimeEnabled: p.conditionTimeEnabled,
+    conditionTimeOfDay: p.conditionTimeOfDay,
+    conditionBackgroundEnabled: p.conditionBackgroundEnabled,
+    conditionBackgrounds: p.conditionBackgrounds,
+    conditionCtoonInZoneEnabled: p.conditionCtoonInZoneEnabled,
+    conditionCtoonInZoneId: p.conditionCtoonInZoneId,
+    conditionUserOwnsEnabled: p.conditionUserOwnsEnabled,
+    conditionUserOwns: p.conditionUserOwns,
+    conditionUserPointsEnabled: p.conditionUserPointsEnabled,
+    conditionUserPointsMin: p.conditionUserPointsMin,
+    conditionUserTotalCountEnabled: p.conditionUserTotalCountEnabled,
+    conditionUserTotalCountMin: p.conditionUserTotalCountMin,
+    conditionUserUniqueCountEnabled: p.conditionUserUniqueCountEnabled,
+    conditionUserUniqueCountMin: p.conditionUserUniqueCountMin,
     ctoon: p.ctoon
   }))
   formError.value = ''
   showModal.value = true
+  await hydrateConditionCtoons(form.prizePool)
   setTimeout(() => { isSettingForm.value = false }, 0)
 }
 
 function closeModal() {
   showModal.value = false
+  expandedPrizeId.value = null
 }
 
 function removeCtoon(idx) {
+  if (expandedPrizeId.value && form.prizePool[idx]?.ctoonId === expandedPrizeId.value) {
+    expandedPrizeId.value = null
+  }
   form.prizePool.splice(idx, 1)
 }
 
@@ -458,6 +874,75 @@ async function saveSearch() {
   if (!form.prizePool.some(p => Number(p.chancePercent) > 0)) {
     formError.value = 'At least one prize pool cToon must have a chance above 0%.'
     return
+  }
+  const windowStart = searchDateBounds.value.start
+  const windowEnd = searchDateBounds.value.end
+  for (const row of form.prizePool) {
+    const label = row.ctoon?.name || 'cToon'
+    if (row.conditionDateEnabled) {
+      if (!row.conditionDateStart || !row.conditionDateEnd) {
+        formError.value = `Date condition requires start and end dates for ${label}.`
+        return
+      }
+      if (row.conditionDateStart > row.conditionDateEnd) {
+        formError.value = `Date condition start must be before end for ${label}.`
+        return
+      }
+      if (windowStart && row.conditionDateStart < windowStart) {
+        formError.value = `Date condition start must be within the search window for ${label}.`
+        return
+      }
+      if (windowEnd && row.conditionDateEnd > windowEnd) {
+        formError.value = `Date condition end must be within the search window for ${label}.`
+        return
+      }
+    }
+    if (row.conditionTimeEnabled && !row.conditionTimeOfDay) {
+      formError.value = `Time of day is required for ${label}.`
+      return
+    }
+    if (row.conditionBackgroundEnabled && !row.conditionBackgrounds.length) {
+      formError.value = `Select at least one background for ${label}.`
+      return
+    }
+    if (row.conditionCtoonInZoneEnabled && !row.conditionCtoonInZoneId) {
+      formError.value = `Select a cToon-in-cZone condition for ${label}.`
+      return
+    }
+    if (row.conditionUserOwnsEnabled) {
+      if (!row.conditionUserOwnsList.length) {
+        formError.value = `Select at least one user-owns cToon for ${label}.`
+        return
+      }
+      for (const entry of row.conditionUserOwnsList) {
+        const count = Number(entry.count)
+        if (!entry.ctoonId || !Number.isInteger(count) || count < 1) {
+          formError.value = `User-owns counts must be 1 or higher for ${label}.`
+          return
+        }
+      }
+    }
+    if (row.conditionUserPointsEnabled) {
+      const points = Number(row.conditionUserPointsMin)
+      if (!Number.isInteger(points) || points < 1) {
+        formError.value = `User points must be 1 or higher for ${label}.`
+        return
+      }
+    }
+    if (row.conditionUserTotalCountEnabled) {
+      const total = Number(row.conditionUserTotalCountMin)
+      if (!Number.isInteger(total) || total < 1) {
+        formError.value = `User total cToon count must be 1 or higher for ${label}.`
+        return
+      }
+    }
+    if (row.conditionUserUniqueCountEnabled) {
+      const unique = Number(row.conditionUserUniqueCountMin)
+      if (!Number.isInteger(unique) || unique < 1) {
+        formError.value = `User unique cToon count must be 1 or higher for ${label}.`
+        return
+      }
+    }
   }
   const isCustomCollection = form.collectionType === 'CUSTOM_PER_CTOON'
   if (isCustomCollection) {
@@ -505,7 +990,29 @@ async function saveSearch() {
       chancePercent: Number(p.chancePercent),
       maxCaptures: isCustomCollection
         ? (p.maxCaptures === '' || p.maxCaptures === null || p.maxCaptures === undefined ? null : Number(p.maxCaptures))
-        : null
+        : null,
+      conditionDateEnabled: Boolean(p.conditionDateEnabled),
+      conditionDateStart: p.conditionDateEnabled ? p.conditionDateStart : null,
+      conditionDateEnd: p.conditionDateEnabled ? p.conditionDateEnd : null,
+      conditionTimeEnabled: Boolean(p.conditionTimeEnabled),
+      conditionTimeOfDay: p.conditionTimeEnabled ? p.conditionTimeOfDay : null,
+      conditionBackgroundEnabled: Boolean(p.conditionBackgroundEnabled),
+      conditionBackgrounds: p.conditionBackgroundEnabled ? p.conditionBackgrounds : [],
+      conditionCtoonInZoneEnabled: Boolean(p.conditionCtoonInZoneEnabled),
+      conditionCtoonInZoneId: p.conditionCtoonInZoneEnabled ? p.conditionCtoonInZoneId : null,
+      conditionUserOwnsEnabled: Boolean(p.conditionUserOwnsEnabled),
+      conditionUserOwns: p.conditionUserOwnsEnabled
+        ? p.conditionUserOwnsList.map(entry => ({
+          ctoonId: entry.ctoonId,
+          count: Number(entry.count)
+        }))
+        : [],
+      conditionUserPointsEnabled: Boolean(p.conditionUserPointsEnabled),
+      conditionUserPointsMin: p.conditionUserPointsEnabled ? Number(p.conditionUserPointsMin) : null,
+      conditionUserTotalCountEnabled: Boolean(p.conditionUserTotalCountEnabled),
+      conditionUserTotalCountMin: p.conditionUserTotalCountEnabled ? Number(p.conditionUserTotalCountMin) : null,
+      conditionUserUniqueCountEnabled: Boolean(p.conditionUserUniqueCountEnabled),
+      conditionUserUniqueCountMin: p.conditionUserUniqueCountEnabled ? Number(p.conditionUserUniqueCountMin) : null
     }))
   }
 
@@ -579,12 +1086,12 @@ watch(() => form.collectionType, (value, oldValue) => {
 
 function addCtoonToPool(ctoon) {
   if (!form.prizePool.some(p => p.ctoonId === ctoon.id)) {
-    form.prizePool.push({
+    form.prizePool.push(initPrizeRow({
       ctoonId: ctoon.id,
       chancePercent: 0,
       maxCaptures: form.collectionType === 'CUSTOM_PER_CTOON' ? 1 : '',
       ctoon
-    })
+    }))
   }
   ctoonSearchTerm.value = ''
   ctoonSearchResults.value = []
@@ -592,5 +1099,7 @@ function addCtoonToPool(ctoon) {
 
 watch(showAll, loadSearches)
 
-onMounted(loadSearches)
+onMounted(async () => {
+  await Promise.all([loadSearches(), loadBackgrounds()])
+})
 </script>

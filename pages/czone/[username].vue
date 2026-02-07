@@ -1187,7 +1187,10 @@ async function loadCzoneSearchItems() {
   if (!user.value?.id || !ownerId.value) return
   if (user.value.id === ownerId.value) return
   try {
-    const res = await $fetch(`/api/czone/${username.value}/searches`)
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const res = await $fetch(`/api/czone/${username.value}/searches`, {
+      query: { tz, zoneIndex: currentZoneIndex.value }
+    })
     const items = Array.isArray(res?.items) ? res.items : []
     czoneSearchItems.value = buildSearchItems(items)
   } catch (err) {

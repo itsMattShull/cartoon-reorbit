@@ -64,6 +64,12 @@ enum CZoneSearchResetType {
   DAILY_AT_RESET
 }
 
+enum CZoneSearchTimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+}
 
 /// Tracks reserved points so users can’t overspend across auctions/trades.
 /// Model name follows Prisma conventions; underlying table is mapped to
@@ -123,6 +129,23 @@ model CZoneSearchPrize {
   ctoonId     String
   chancePercent Float      @default(0)
   maxCaptures Int?
+  conditionDateEnabled Boolean @default(false)
+  conditionDateStart   String?
+  conditionDateEnd     String?
+  conditionTimeEnabled Boolean @default(false)
+  conditionTimeOfDay   CZoneSearchTimeOfDay?
+  conditionBackgroundEnabled Boolean @default(false)
+  conditionBackgrounds String[] @default([])
+  conditionCtoonInZoneEnabled Boolean @default(false)
+  conditionCtoonInZoneId String?
+  conditionUserOwnsEnabled Boolean @default(false)
+  conditionUserOwns Json?
+  conditionUserPointsEnabled Boolean @default(false)
+  conditionUserPointsMin Int?
+  conditionUserTotalCountEnabled Boolean @default(false)
+  conditionUserTotalCountMin Int?
+  conditionUserUniqueCountEnabled Boolean @default(false)
+  conditionUserUniqueCountMin Int?
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)

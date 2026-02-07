@@ -1,4 +1,4 @@
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 
@@ -24,6 +24,14 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
+  const query = getQuery(event)
+  const zoneIndex = Number.isFinite(Number(query.zoneIndex)) ? Math.max(0, Number(query.zoneIndex)) : 0
+  const tzParam = typeof query.tz === 'string' && query.tz.trim() ? query.tz.trim() : 'UTC'
+  const tzNow = DateTime.now().setZone(tzParam)
+  const viewerNow = tzNow.isValid ? tzNow : DateTime.utc()
+  const viewerDate = viewerNow.toISODate()
+  const viewerHour = viewerNow.hour
+
   const { username } = event.context.params
   if (!username) throw createError({ statusCode: 400, statusMessage: 'Missing username' })
 
@@ -36,6 +44,32 @@ export default defineEventHandler(async (event) => {
   }
   if (zoneOwner.id === userId) {
     return { items: [] }
+  }
+
+  const zoneRow = await db.cZone.findUnique({
+    where: { userId: zoneOwner.id },
+    select: { layoutData: true, background: true }
+  })
+  const rawLayout = zoneRow?.layoutData
+  const baseZone = {
+    background: typeof zoneRow?.background === 'string' ? zoneRow.background : '',
+    toons: Array.isArray(rawLayout) ? rawLayout : []
+  }
+  const zones = (rawLayout && typeof rawLayout === 'object' && Array.isArray(rawLayout.zones))
+    ? rawLayout.zones
+    : [baseZone]
+  const activeZone = zones[zoneIndex] || zones[0] || baseZone
+  const zoneBackground = typeof activeZone?.background === 'string' ? activeZone.background : ''
+  const zoneToonIds = Array.isArray(activeZone?.toons)
+    ? activeZone.toons.map(item => item?.id).filter(Boolean)
+    : []
+  let zoneCtoonIds = new Set()
+  if (zoneToonIds.length) {
+    const zoneToons = await db.userCtoon.findMany({
+      where: { id: { in: zoneToonIds } },
+      select: { ctoonId: true }
+    })
+    zoneCtoonIds = new Set(zoneToons.map(row => row.ctoonId))
   }
 
   const now = new Date()
@@ -57,6 +91,64 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!searches.length) return { items: [] }
+
+  const needsUserOwns = searches.some(s => s.prizePool.some(p => p.conditionUserOwnsEnabled))
+  const needsUserPoints = searches.some(s => s.prizePool.some(p => p.conditionUserPointsEnabled))
+  const needsUserTotal = searches.some(s => s.prizePool.some(p => p.conditionUserTotalCountEnabled))
+  const needsUserUnique = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
+  const ownsIds = new Set()
+  if (needsUserOwns) {
+    for (const search of searches) {
+      for (const row of search.prizePool) {
+        if (!row.conditionUserOwnsEnabled) continue
+        const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
+        for (const entry of entries) {
+          if (entry?.ctoonId) ownsIds.add(entry.ctoonId)
+        }
+      }
+    }
+  }
+
+  let userPoints = 0
+  if (needsUserPoints) {
+    const pointsRow = await db.userPoints.findUnique({
+      where: { userId },
+      select: { points: true }
+    })
+    userPoints = Number(pointsRow?.points || 0)
+  }
+
+  let userTotalCount = 0
+  if (needsUserTotal) {
+    userTotalCount = await db.userCtoon.count({
+      where: { userId, burnedAt: null }
+    })
+  }
+
+  let userUniqueCount = 0
+  if (needsUserUnique) {
+    const uniqueRows = await db.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: { userId, burnedAt: null }
+    })
+    userUniqueCount = uniqueRows.length
+  }
+
+  const userOwnsCountMap = new Map()
+  if (needsUserOwns && ownsIds.size) {
+    const ownedCounts = await db.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: {
+        userId,
+        burnedAt: null,
+        ctoonId: { in: Array.from(ownsIds) }
+      },
+      _count: { _all: true }
+    })
+    for (const row of ownedCounts) {
+      userOwnsCountMap.set(row.ctoonId, row._count._all || 0)
+    }
+  }
 
   const searchIds = searches.map(s => s.id)
   const lastAppearances = await db.cZoneSearchAppearance.groupBy({
@@ -169,6 +261,58 @@ export default defineEventHandler(async (event) => {
           const capturedCount = customCaptured?.get(row.ctoonId) || 0
           if (capturedCount >= maxCaptures) return false
         }
+      }
+      if (row.conditionDateEnabled) {
+        const start = String(row.conditionDateStart || '')
+        const end = String(row.conditionDateEnd || '')
+        if (!start || !end) return false
+        if (viewerDate < start || viewerDate > end) return false
+      }
+      if (row.conditionTimeEnabled) {
+        const timeOfDay = String(row.conditionTimeOfDay || '')
+        if (!timeOfDay) return false
+        const hour = viewerHour
+        const matches = timeOfDay === 'MORNING'
+          ? hour >= 6 && hour < 12
+          : timeOfDay === 'AFTERNOON'
+            ? hour >= 12 && hour < 17
+            : timeOfDay === 'EVENING'
+              ? hour >= 17 && hour < 22
+              : timeOfDay === 'NIGHT'
+                ? hour >= 22 || hour < 6
+                : false
+        if (!matches) return false
+      }
+      if (row.conditionBackgroundEnabled) {
+        const backgrounds = Array.isArray(row.conditionBackgrounds) ? row.conditionBackgrounds : []
+        if (!backgrounds.length) return false
+        if (!zoneBackground || !backgrounds.includes(zoneBackground)) return false
+      }
+      if (row.conditionCtoonInZoneEnabled) {
+        if (!row.conditionCtoonInZoneId) return false
+        if (!zoneCtoonIds.has(row.conditionCtoonInZoneId)) return false
+      }
+      if (row.conditionUserOwnsEnabled) {
+        const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
+        if (!entries.length) return false
+        for (const entry of entries) {
+          const ctoonId = entry?.ctoonId
+          const required = Number(entry?.count || 0)
+          const owned = userOwnsCountMap.get(ctoonId) || 0
+          if (!ctoonId || required < 1 || owned < required) return false
+        }
+      }
+      if (row.conditionUserPointsEnabled) {
+        const minPoints = Number(row.conditionUserPointsMin || 0)
+        if (minPoints < 1 || userPoints < minPoints) return false
+      }
+      if (row.conditionUserTotalCountEnabled) {
+        const minTotal = Number(row.conditionUserTotalCountMin || 0)
+        if (minTotal < 1 || userTotalCount < minTotal) return false
+      }
+      if (row.conditionUserUniqueCountEnabled) {
+        const minUnique = Number(row.conditionUserUniqueCountMin || 0)
+        if (minUnique < 1 || userUniqueCount < minUnique) return false
       }
       return clampPercent(row.chancePercent) > 0
     })
