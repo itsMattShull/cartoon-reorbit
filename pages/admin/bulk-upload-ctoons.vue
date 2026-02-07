@@ -97,7 +97,14 @@
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
           <div>
             <label class="block mb-1 font-medium">Initial Release %</label>
-            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+            <input
+              v-model.number="releasePercent"
+              type="number"
+              min="1"
+              max="100"
+              @input="clampReleasePercent"
+              class="w-full border rounded p-2"
+            />
           </div>
           <div>
             <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
@@ -434,6 +441,15 @@ const uploading = ref(false)
 const releasePercent = ref(75)
 const delayHours = ref(12)
 
+function clampReleasePercent() {
+  const next = Number(releasePercent.value)
+  if (!Number.isFinite(next)) {
+    releasePercent.value = 1
+    return
+  }
+  releasePercent.value = Math.min(100, Math.max(1, next))
+}
+
 // only allow upload once every file has a rarity AND a non-empty characters string
 const canUpload = computed(() => {
   return (
@@ -596,7 +612,12 @@ onMounted(async () => {
   setsOptions.value = await setsRes.json()
   seriesOptions.value = await seriesRes.json()
   try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
-  try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
+  try {
+    const r = await relRes.json()
+    releasePercent.value = Number(r.initialReleasePercent ?? 75)
+    delayHours.value = Number(r.finalReleaseDelayHours ?? 12)
+    clampReleasePercent()
+  } catch {}
 })
 
 function handleFiles(e) {
