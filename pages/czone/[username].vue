@@ -1499,9 +1499,10 @@ onBeforeUnmount(() => {
 .czone-search-image {
   position: relative;
   z-index: 1;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
   filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
 }
 
