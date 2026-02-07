@@ -37,7 +37,11 @@
             <div class="font-medium text-gray-900">{{ formatCentral(row.endAt) }}</div>
             <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
               <div><span class="font-semibold">Appearance:</span> {{ row.appearanceRatePercent }}%</div>
-              <div><span class="font-semibold">Cooldown:</span> {{ row.cooldownHours }}h</div>
+              <div><span class="font-semibold">Reset:</span> {{ resetLabel(row) }}</div>
+              <div v-if="isDailyReset(row)" class="col-span-2">
+                <span class="font-semibold">Able To Collect Daily:</span> {{ dailyLimitLabel(row) }}
+              </div>
+              <div v-else><span class="font-semibold">Cooldown:</span> {{ row.cooldownHours }}h</div>
               <div class="col-span-2"><span class="font-semibold">Collection:</span> {{ collectionLabel(row.collectionType) }}</div>
               <div class="col-span-2"><span class="font-semibold">Prize Pool:</span> {{ row.prizePool.length }} cToons</div>
             </div>
@@ -57,7 +61,7 @@
                 <th class="py-2 pr-4">Start (CST)</th>
                 <th class="py-2 pr-4">End (CST)</th>
                 <th class="py-2 pr-4">Appearance %</th>
-                <th class="py-2 pr-4">Cooldown</th>
+                <th class="py-2 pr-4">Reset</th>
                 <th class="py-2 pr-4">Collection</th>
                 <th class="py-2 pr-4">Prize Pool</th>
                 <th class="py-2 pr-4">Actions</th>
@@ -69,7 +73,13 @@
                 <td class="py-3 pr-4 whitespace-nowrap">{{ formatCentral(row.startAt) }}</td>
                 <td class="py-3 pr-4 whitespace-nowrap">{{ formatCentral(row.endAt) }}</td>
                 <td class="py-3 pr-4">{{ row.appearanceRatePercent }}%</td>
-                <td class="py-3 pr-4">{{ row.cooldownHours }}h</td>
+                <td class="py-3 pr-4">
+                  <div>{{ resetLabel(row) }}</div>
+                  <div v-if="isDailyReset(row)" class="text-xs text-gray-500">
+                    Able To Collect Daily: {{ dailyLimitLabel(row) }}
+                  </div>
+                  <div v-else class="text-xs text-gray-500">{{ row.cooldownHours }}h</div>
+                </td>
                 <td class="py-3 pr-4">{{ collectionLabel(row.collectionType) }}</td>
                 <td class="py-3 pr-4">{{ row.prizePool.length }} cToons</td>
                 <td class="py-3 pr-4 whitespace-nowrap">
@@ -116,20 +126,41 @@
                 <input v-model.number="form.appearanceRatePercent" type="number" min="0" max="100" step="0.01" class="w-full border rounded px-3 py-2" />
               </div>
               <div>
-                <label class="block mb-1 font-medium">Cooldown (Hours)</label>
-                <input v-model.number="form.cooldownHours" type="number" min="0" step="1" class="w-full border rounded px-3 py-2" />
+                <label class="block mb-1 font-medium">Reset Type</label>
+                <select v-model="form.resetType" class="w-full border rounded px-3 py-2">
+                  <option value="COOLDOWN_HOURS">Cooldown in Hours</option>
+                  <option value="DAILY_AT_RESET">Daily at 8pm CT</option>
+                </select>
               </div>
               <div>
                 <label class="block mb-1 font-medium">Collection Type</label>
                 <select v-model="form.collectionType" class="w-full border rounded px-3 py-2">
                   <option value="ONCE">Collect Each cToon Once</option>
                   <option value="MULTIPLE">Collect Each cToon Multiple Times</option>
+                  <option value="CUSTOM_PER_CTOON">Custom Per cToon</option>
                 </select>
+              </div>
+            </div>
+
+            <div v-if="form.resetType === 'COOLDOWN_HOURS'" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="block mb-1 font-medium">Cooldown (Hours)</label>
+                <input v-model.number="form.cooldownHours" type="number" min="0" step="1" class="w-full border rounded px-3 py-2" />
+              </div>
+            </div>
+            <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="block mb-1 font-medium">Able To Collect Daily</label>
+                <input v-model="form.dailyCollectLimit" type="number" min="1" step="1" class="w-full border rounded px-3 py-2" />
+                <p class="text-xs text-gray-500 mt-1">Leave blank for unlimited.</p>
               </div>
             </div>
 
             <div>
               <label class="block mb-1 font-medium">Prize Pool</label>
+              <p v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="text-xs text-gray-500 mb-2">
+                Max Captures: leave blank for unlimited.
+              </p>
               <div class="relative">
                 <input
                   v-model="ctoonSearchTerm"
@@ -175,6 +206,10 @@
                     <label class="text-xs text-gray-500">Chance %</label>
                     <input v-model.number="row.chancePercent" type="number" min="0" max="100" step="0.01" class="w-28 border rounded px-2 py-1" />
                   </div>
+                  <div v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="flex items-center gap-2">
+                    <label class="text-xs text-gray-500">Max Captures</label>
+                    <input v-model="row.maxCaptures" type="number" min="1" step="1" placeholder="Unlimited" class="w-28 border rounded px-2 py-1" />
+                  </div>
                   <button class="text-red-600 hover:text-red-800 text-sm" @click="removeCtoon(idx)">Remove</button>
                 </div>
               </div>
@@ -214,6 +249,7 @@ const showAll = ref(false)
 const showModal = ref(false)
 const saving = ref(false)
 const formError = ref('')
+const isSettingForm = ref(false)
 
 const form = reactive({
   id: null,
@@ -222,6 +258,8 @@ const form = reactive({
   endAt: '',
   appearanceRatePercent: 0,
   cooldownHours: 0,
+  resetType: 'COOLDOWN_HOURS',
+  dailyCollectLimit: '',
   collectionType: 'MULTIPLE',
   prizePool: []
 })
@@ -234,7 +272,26 @@ const searchFocused = ref(false)
 const modalTitle = computed(() => (form.id ? 'Edit cZone Search' : 'Create cZone Search'))
 
 function collectionLabel(value) {
-  return value === 'ONCE' ? 'Collect Each cToon Once' : 'Collect Each cToon Multiple Times'
+  if (value === 'ONCE') return 'Collect Each cToon Once'
+  if (value === 'CUSTOM_PER_CTOON') return 'Custom Per cToon'
+  return 'Collect Each cToon Multiple Times'
+}
+
+function normalizeResetType(value) {
+  return value === 'DAILY_AT_RESET' ? 'DAILY_AT_RESET' : 'COOLDOWN_HOURS'
+}
+
+function isDailyReset(row) {
+  return normalizeResetType(row?.resetType) === 'DAILY_AT_RESET'
+}
+
+function resetLabel(row) {
+  return isDailyReset(row) ? 'Daily at 8pm CT' : 'Cooldown in Hours'
+}
+
+function dailyLimitLabel(row) {
+  const limit = Number(row?.dailyCollectLimit ?? 0)
+  return limit > 0 ? String(limit) : 'Unlimited'
 }
 
 function formatCentral(iso) {
@@ -329,6 +386,8 @@ function resetForm() {
   form.endAt = ''
   form.appearanceRatePercent = 0
   form.cooldownHours = 0
+  form.resetType = 'COOLDOWN_HOURS'
+  form.dailyCollectLimit = ''
   form.collectionType = 'MULTIPLE'
   form.prizePool = []
   formError.value = ''
@@ -337,25 +396,34 @@ function resetForm() {
 }
 
 function openCreate() {
+  isSettingForm.value = true
   resetForm()
   showModal.value = true
+  setTimeout(() => { isSettingForm.value = false }, 0)
 }
 
 function openEdit(row) {
+  isSettingForm.value = true
   form.id = row.id
   form.name = row.name || ''
   form.startAt = isoToCSTLocal(row.startAt)
   form.endAt = isoToCSTLocal(row.endAt)
   form.appearanceRatePercent = Number(row.appearanceRatePercent)
   form.cooldownHours = Number(row.cooldownHours)
+  form.resetType = row.resetType || 'COOLDOWN_HOURS'
+  form.dailyCollectLimit = row.dailyCollectLimit === null || row.dailyCollectLimit === undefined
+    ? ''
+    : Number(row.dailyCollectLimit)
   form.collectionType = row.collectionType || 'MULTIPLE'
   form.prizePool = row.prizePool.map((p) => ({
     ctoonId: p.ctoonId,
     chancePercent: Number(p.chancePercent),
+    maxCaptures: p.maxCaptures === null || p.maxCaptures === undefined ? '' : Number(p.maxCaptures),
     ctoon: p.ctoon
   }))
   formError.value = ''
   showModal.value = true
+  setTimeout(() => { isSettingForm.value = false }, 0)
 }
 
 function closeModal() {
@@ -391,10 +459,36 @@ async function saveSearch() {
     formError.value = 'At least one prize pool cToon must have a chance above 0%.'
     return
   }
-  const cooldownValue = Number(form.cooldownHours)
-  if (!Number.isInteger(cooldownValue) || cooldownValue < 0) {
-    formError.value = 'Cooldown must be a whole number of hours (0 or higher).'
-    return
+  const isCustomCollection = form.collectionType === 'CUSTOM_PER_CTOON'
+  if (isCustomCollection) {
+    for (const row of form.prizePool) {
+      if (row.maxCaptures === '' || row.maxCaptures === null || row.maxCaptures === undefined) continue
+      const maxCaptures = Number(row.maxCaptures)
+      if (!Number.isInteger(maxCaptures) || maxCaptures <= 0) {
+        formError.value = 'Max Captures must be a positive whole number or left blank.'
+        return
+      }
+    }
+  }
+  const resetType = form.resetType === 'DAILY_AT_RESET' ? 'DAILY_AT_RESET' : 'COOLDOWN_HOURS'
+  let cooldownValue = 0
+  if (resetType === 'COOLDOWN_HOURS') {
+    cooldownValue = Number(form.cooldownHours)
+    if (!Number.isInteger(cooldownValue) || cooldownValue < 0) {
+      formError.value = 'Cooldown must be a whole number of hours (0 or higher).'
+      return
+    }
+  }
+  let dailyCollectLimit = null
+  if (resetType === 'DAILY_AT_RESET') {
+    if (form.dailyCollectLimit !== '' && form.dailyCollectLimit !== null && form.dailyCollectLimit !== undefined) {
+      const limitValue = Number(form.dailyCollectLimit)
+      if (!Number.isInteger(limitValue) || limitValue <= 0) {
+        formError.value = 'Able To Collect Daily must be a positive whole number or left blank.'
+        return
+      }
+      dailyCollectLimit = limitValue
+    }
   }
 
   const payload = {
@@ -403,10 +497,15 @@ async function saveSearch() {
     endAt: endIso,
     appearanceRatePercent: Number(form.appearanceRatePercent),
     cooldownHours: cooldownValue,
+    resetType,
+    dailyCollectLimit,
     collectionType: form.collectionType,
     prizePool: form.prizePool.map(p => ({
       ctoonId: p.ctoonId,
-      chancePercent: Number(p.chancePercent)
+      chancePercent: Number(p.chancePercent),
+      maxCaptures: isCustomCollection
+        ? (p.maxCaptures === '' || p.maxCaptures === null || p.maxCaptures === undefined ? null : Number(p.maxCaptures))
+        : null
     }))
   }
 
@@ -459,11 +558,31 @@ watch(ctoonSearchTerm, (val) => {
   }, 300)
 })
 
+watch(() => form.resetType, (value) => {
+  if (value === 'DAILY_AT_RESET') {
+    form.cooldownHours = 0
+  } else {
+    form.dailyCollectLimit = ''
+  }
+})
+
+watch(() => form.collectionType, (value, oldValue) => {
+  if (isSettingForm.value) return
+  if (value !== 'CUSTOM_PER_CTOON') return
+  if (oldValue === 'CUSTOM_PER_CTOON') return
+  for (const row of form.prizePool) {
+    if (row.maxCaptures === null || row.maxCaptures === undefined || row.maxCaptures === '') {
+      row.maxCaptures = 1
+    }
+  }
+})
+
 function addCtoonToPool(ctoon) {
   if (!form.prizePool.some(p => p.ctoonId === ctoon.id)) {
     form.prizePool.push({
       ctoonId: ctoon.id,
       chancePercent: 0,
+      maxCaptures: form.collectionType === 'CUSTOM_PER_CTOON' ? 1 : '',
       ctoon
     })
   }

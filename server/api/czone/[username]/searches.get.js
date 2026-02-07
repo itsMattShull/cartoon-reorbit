@@ -1,4 +1,5 @@
 import { defineEventHandler, createError } from 'h3'
+import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 
 function clampPercent(value) {
@@ -89,12 +90,66 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const dailyLimitIds = searches
+    .filter(s => (s.resetType || 'COOLDOWN_HOURS') === 'DAILY_AT_RESET')
+    .filter(s => Number(s.dailyCollectLimit ?? 0) > 0)
+    .map(s => s.id)
+  const dailyCaptureMap = new Map()
+  if (dailyLimitIds.length) {
+    const chicagoNow = DateTime.now().setZone('America/Chicago')
+    let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+    if (chicagoNow < boundaryLocal) {
+      boundaryLocal = boundaryLocal.minus({ days: 1 })
+    }
+    const boundaryUtc = boundaryLocal.toUTC().toJSDate()
+    const dailyCaptureCounts = await db.cZoneSearchCapture.groupBy({
+      by: ['cZoneSearchId'],
+      where: {
+        userId,
+        cZoneSearchId: { in: dailyLimitIds },
+        createdAt: { gte: boundaryUtc }
+      },
+      _count: { _all: true }
+    })
+    for (const row of dailyCaptureCounts) {
+      dailyCaptureMap.set(row.cZoneSearchId, row._count._all || 0)
+    }
+  }
+
+  const customIds = searches.filter(s => s.collectionType === 'CUSTOM_PER_CTOON').map(s => s.id)
+  const customCaptureMap = new Map()
+  if (customIds.length) {
+    const customCaptureCounts = await db.cZoneSearchCapture.groupBy({
+      by: ['cZoneSearchId', 'ctoonId'],
+      where: {
+        userId,
+        cZoneSearchId: { in: customIds }
+      },
+      _count: { _all: true }
+    })
+    for (const row of customCaptureCounts) {
+      if (!customCaptureMap.has(row.cZoneSearchId)) {
+        customCaptureMap.set(row.cZoneSearchId, new Map())
+      }
+      customCaptureMap.get(row.cZoneSearchId).set(row.ctoonId, row._count._all || 0)
+    }
+  }
+
   const items = []
   for (const search of searches) {
-    const lastSeen = lastMap.get(search.id)
-    if (search.cooldownHours > 0 && lastSeen) {
-      const nextAllowed = new Date(lastSeen.getTime() + search.cooldownHours * 3600 * 1000)
-      if (nextAllowed > now) continue
+    const resetType = search.resetType || 'COOLDOWN_HOURS'
+    if (resetType === 'COOLDOWN_HOURS') {
+      const lastSeen = lastMap.get(search.id)
+      if (search.cooldownHours > 0 && lastSeen) {
+        const nextAllowed = new Date(lastSeen.getTime() + search.cooldownHours * 3600 * 1000)
+        if (nextAllowed > now) continue
+      }
+    } else if (resetType === 'DAILY_AT_RESET') {
+      const dailyLimit = Number(search.dailyCollectLimit ?? 0)
+      if (dailyLimit > 0) {
+        const capturedToday = dailyCaptureMap.get(search.id) || 0
+        if (capturedToday >= dailyLimit) continue
+      }
     }
 
     const appearanceRate = clampPercent(search.appearanceRatePercent)
@@ -102,9 +157,19 @@ export default defineEventHandler(async (event) => {
     if (Math.random() * 100 >= appearanceRate) continue
 
     const capturedSet = search.collectionType === 'ONCE' ? (capturedMap.get(search.id) || new Set()) : null
+    const customCaptured = search.collectionType === 'CUSTOM_PER_CTOON'
+      ? (customCaptureMap.get(search.id) || new Map())
+      : null
     const eligiblePool = search.prizePool.filter((row) => {
       if (!row?.ctoon) return false
       if (search.collectionType === 'ONCE' && capturedSet?.has(row.ctoonId)) return false
+      if (search.collectionType === 'CUSTOM_PER_CTOON') {
+        const maxCaptures = Number(row.maxCaptures ?? 0)
+        if (maxCaptures > 0) {
+          const capturedCount = customCaptured?.get(row.ctoonId) || 0
+          if (capturedCount >= maxCaptures) return false
+        }
+      }
       return clampPercent(row.chancePercent) > 0
     })
 

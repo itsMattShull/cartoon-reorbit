@@ -56,6 +56,12 @@ enum CtoonSuggestionStatus {
 enum CZoneSearchCollectionType {
   ONCE
   MULTIPLE
+  CUSTOM_PER_CTOON
+}
+
+enum CZoneSearchResetType {
+  COOLDOWN_HOURS
+  DAILY_AT_RESET
 }
 
 
@@ -97,6 +103,8 @@ model CZoneSearch {
   endAt                  DateTime
   appearanceRatePercent  Float                     @default(0)
   cooldownHours          Int                       @default(0)
+  resetType              CZoneSearchResetType      @default(COOLDOWN_HOURS)
+  dailyCollectLimit      Int?
   collectionType         CZoneSearchCollectionType @default(MULTIPLE)
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
@@ -114,6 +122,7 @@ model CZoneSearchPrize {
   cZoneSearchId String
   ctoonId     String
   chancePercent Float      @default(0)
+  maxCaptures Int?
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)

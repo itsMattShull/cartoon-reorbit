@@ -1,4 +1,5 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { getScaleUpUntil } from '@/server/utils/devScaleState'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -14,9 +15,16 @@ export default defineEventHandler(async (event) => {
     headers: { Authorization: `Bearer ${token}` }
   })
 
-  if (resp.status === 404) return { status: 'missing' }
+  if (resp.status === 404) return { status: 'missing', scaleUpUntil: getScaleUpUntil() }
   if (!resp.ok) throw createError({ statusCode: resp.status, statusMessage: 'DigitalOcean error' })
 
   const data = await resp.json()
-  return { status: data?.droplet?.status ?? 'unknown' }
+  const droplet = data?.droplet
+  return {
+    status: droplet?.status ?? 'unknown',
+    scaleUpUntil: getScaleUpUntil(),
+    sizeSlug: droplet?.size_slug ?? null,
+    vcpus: droplet?.vcpus ?? null,
+    memoryMb: droplet?.memory ?? null
+  }
 })

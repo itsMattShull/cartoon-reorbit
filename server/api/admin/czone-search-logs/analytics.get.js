@@ -86,6 +86,8 @@ export default defineEventHandler(async (event) => {
       endAt: true,
       appearanceRatePercent: true,
       cooldownHours: true,
+      resetType: true,
+      dailyCollectLimit: true,
       collectionType: true
     }
   })

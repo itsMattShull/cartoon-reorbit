@@ -8,14 +8,17 @@
       <div class="flex items-center justify-between mb-4">
         <div class="text-sm">
           <div class="text-gray-600">Status</div>
-          <div class="font-medium">
+          <div class="font-medium flex items-center gap-2">
             <span v-if="status==='active'">On</span>
             <span v-else-if="status==='off'">Off</span>
             <span v-else>{{ status }}</span>
+            <span v-if="vcpus && memoryMb" class="text-xs text-gray-500">
+              ({{ vcpus }} vCPU / {{ formatMemory(memoryMb) }})
+            </span>
           </div>
         </div>
         <button
-          :disabled="working || status==='unknown' || status==='missing'"
+          :disabled="working || scaleWorking || status==='unknown' || status==='missing'"
           @click="togglePower"
           class="px-4 py-2 rounded text-white disabled:opacity-50"
           :class="status==='active' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
@@ -26,12 +29,34 @@
         </button>
       </div>
 
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-sm">
+          <div class="text-gray-600">Scale</div>
+          <div class="font-medium">
+            <span v-if="scaleUpUntil">Upsized</span>
+            <span v-else>Normal</span>
+          </div>
+          <div v-if="scaleUpUntil" class="text-xs text-gray-500">
+            Downsizes at {{ formatTimestamp(scaleUpUntil) }}
+          </div>
+        </div>
+        <button
+          :disabled="working || scaleWorking || status==='unknown' || status==='missing'"
+          @click="handleScaleAction"
+          class="px-4 py-2 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+        >
+          <span v-if="scaleWorking && scaleUpUntil">Downsizing...</span>
+          <span v-else-if="scaleWorking">Scaling Up...</span>
+          <span v-else>{{ scaleUpUntil ? 'Down Size Server' : 'Scale Up for 5 hours' }}</span>
+        </button>
+      </div>
+
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
       <div class="mt-4">
         <button
           @click="refresh"
-          :disabled="working"
+          :disabled="working || scaleWorking"
           class="px-3 py-1 border rounded text-sm disabled:opacity-50"
         >
           Refresh status
@@ -49,7 +74,30 @@ import Nav from '~/components/Nav.vue'
 
 const status  = ref('unknown') // 'active' | 'off' | 'unknown' | 'missing'
 const working = ref(false)
+const scaleWorking = ref(false)
+const scaleUpUntil = ref(null)
+const vcpus = ref(null)
+const memoryMb = ref(null)
 const error   = ref('')
+let scaleTimerId = null
+
+function setScaleUpUntil(value) {
+  if (scaleTimerId) {
+    clearTimeout(scaleTimerId)
+    scaleTimerId = null
+  }
+
+  if (value && value > Date.now()) {
+    scaleUpUntil.value = value
+    scaleTimerId = setTimeout(() => {
+      scaleUpUntil.value = null
+      scaleTimerId = null
+    }, value - Date.now())
+    return
+  }
+
+  scaleUpUntil.value = null
+}
 
 async function fetchStatus() {
   error.value = ''
@@ -61,6 +109,9 @@ async function fetchStatus() {
   }
   const data = await res.json()
   status.value = data.status || 'unknown'
+  setScaleUpUntil(data.scaleUpUntil)
+  vcpus.value = data.vcpus || null
+  memoryMb.value = data.memoryMb || null
 }
 
 async function togglePower() {
@@ -87,7 +138,45 @@ async function togglePower() {
   }
 }
 
-function refresh() { if (!working.value) fetchStatus() }
+async function handleScaleAction() {
+  error.value = ''
+  scaleWorking.value = true
+  try {
+    const endpoint = scaleUpUntil.value ? '/api/admin/dev/scale-down' : '/api/admin/dev/scale'
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include'
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(txt || 'Scale up failed')
+    }
+    const data = await res.json()
+    setScaleUpUntil(data.scaleUpUntil)
+    await fetchStatus()
+  } catch (e) {
+    error.value = e.message || 'Error'
+  } finally {
+    scaleWorking.value = false
+  }
+}
+
+function refresh() { if (!working.value && !scaleWorking.value) fetchStatus() }
+
+function formatTimestamp(ts) {
+  try {
+    return new Date(ts).toLocaleString()
+  } catch {
+    return ''
+  }
+}
+
+function formatMemory(mb) {
+  const gb = mb / 1024
+  if (!Number.isFinite(gb)) return ''
+  return `${gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1)} GB`
+}
 
 onMounted(fetchStatus)
 </script>

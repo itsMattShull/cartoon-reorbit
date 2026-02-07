@@ -25,6 +25,31 @@ function parseCooldownHours(value) {
   return num
 }
 
+function parseMaxCaptures(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0 || !Number.isInteger(num)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid max captures (positive whole number or blank)' })
+  }
+  return num
+}
+
+function parseResetType(value) {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (!normalized) return 'COOLDOWN_HOURS'
+  if (normalized === 'COOLDOWN_HOURS' || normalized === 'DAILY_AT_RESET') return normalized
+  throw createError({ statusCode: 400, statusMessage: 'Invalid reset type' })
+}
+
+function parseDailyCollectLimit(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0 || !Number.isInteger(num)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid daily collect limit (positive whole number or blank)' })
+  }
+  return num
+}
+
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -55,12 +80,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const appearanceRatePercent = parsePercent(body?.appearanceRatePercent, 'appearance rate percent')
-  const cooldownHours = parseCooldownHours(body?.cooldownHours)
+  const resetType = parseResetType(body?.resetType)
+  const cooldownHours = resetType === 'COOLDOWN_HOURS' ? parseCooldownHours(body?.cooldownHours) : 0
+  const dailyCollectLimit = resetType === 'DAILY_AT_RESET' ? parseDailyCollectLimit(body?.dailyCollectLimit) : null
 
   const collectionType = body?.collectionType
-  if (collectionType !== 'ONCE' && collectionType !== 'MULTIPLE') {
+  if (collectionType !== 'ONCE' && collectionType !== 'MULTIPLE' && collectionType !== 'CUSTOM_PER_CTOON') {
     throw createError({ statusCode: 400, statusMessage: 'Invalid collection type' })
   }
+  const isCustom = collectionType === 'CUSTOM_PER_CTOON'
 
   const pool = Array.isArray(body?.prizePool) ? body.prizePool : []
   if (!pool.length) {
@@ -78,7 +106,8 @@ export default defineEventHandler(async (event) => {
     }
     seen.add(ctoonId)
     const chancePercent = parsePercent(row?.chancePercent, 'cToon chance percent')
-    return { ctoonId, chancePercent }
+    const maxCaptures = isCustom ? parseMaxCaptures(row?.maxCaptures) : null
+    return { ctoonId, chancePercent, maxCaptures }
   })
 
   if (!entries.some(e => e.chancePercent > 0)) {
@@ -93,6 +122,8 @@ export default defineEventHandler(async (event) => {
       endAt,
       appearanceRatePercent,
       cooldownHours,
+      resetType,
+      dailyCollectLimit,
       collectionType,
       prizePool: {
         deleteMany: {},
