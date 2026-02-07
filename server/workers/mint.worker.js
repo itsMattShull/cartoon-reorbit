@@ -107,7 +107,14 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       const updatedCtoon = await tx.ctoon.update({
         where: { id: ctoonId },
         data: { totalMinted: { increment: 1 } },
-        select: { totalMinted: true, initialQuantity: true, quantity: true, releaseDate: true }
+        select: {
+          totalMinted: true,
+          initialQuantity: true,
+          quantity: true,
+          releaseDate: true,
+          initialReleaseQty: true,
+          finalReleaseAt: true
+        }
       })
 
       const mintNumber = updatedCtoon.totalMinted
@@ -117,10 +124,16 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
 
       // Window-aware cap (non-special mints only)
-      if (!isSpecial && updatedCtoon.quantity !== null && ctoon.releaseDate) {
+      if (!isSpecial && updatedCtoon.quantity !== null && updatedCtoon.releaseDate) {
         const qty = Number(updatedCtoon.quantity)
-        const initialCap = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
-        const finalReleaseAt = new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+        const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+        const initialCap = Math.min(
+          qty,
+          Math.max(1, Number(updatedCtoon.initialReleaseQty ?? initialCapFromPct))
+        )
+        const finalReleaseAt = updatedCtoon.finalReleaseAt
+          ? new Date(updatedCtoon.finalReleaseAt)
+          : new Date(new Date(updatedCtoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
         const now = new Date()
         const beforeFinal = now < finalReleaseAt
         const allowedCap = beforeFinal ? initialCap : qty

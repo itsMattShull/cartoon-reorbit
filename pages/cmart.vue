@@ -407,13 +407,13 @@
 
                 <!-- Between windows: initial sold out, more coming -->
                 <button
-                  v-else-if="ctoon.nextReleaseAt && new Date(ctoon.nextReleaseAt).getTime() > nowTs && ctoon.quantity !== null && ctoon.minted >= (ctoon.initialCap || 0) && ctoon.minted < ctoon.quantity"
+                  v-else-if="shouldShowFinalCountdown(ctoon)"
                   disabled
                   class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
-                  :aria-label="`Releases in ${formatCountdown(ctoon.nextReleaseAt)}`"
+                  :aria-label="`Releases in ${formatCountdown(getFinalReleaseAt(ctoon))}`"
                   title="Final release pending"
                 >
-                  Releases in {{ formatCountdown(ctoon.nextReleaseAt) }}
+                  Releases in {{ formatCountdown(getFinalReleaseAt(ctoon)) }}
                 </button>
 
                 <button
@@ -750,6 +750,24 @@ let _tick = null
 function isReleased(ctoon) {
   if (!ctoon.releaseDate) return true
   return new Date(ctoon.releaseDate).getTime() <= nowTs.value
+}
+
+function getFinalReleaseAt(ctoon) {
+  return ctoon.finalReleaseAt || ctoon.nextReleaseAt || null
+}
+
+function shouldShowFinalCountdown(ctoon) {
+  if (ctoon.quantity === null) return false
+  if (!ctoon.releaseDate) return false
+  const finalAt = getFinalReleaseAt(ctoon)
+  if (!finalAt) return false
+  const finalTs = new Date(finalAt).getTime()
+  if (!Number.isFinite(finalTs)) return false
+  const qty = Number(ctoon.quantity)
+  const initialCap = Number(ctoon.initialCap ?? 0)
+  if (!Number.isFinite(qty) || qty <= 0) return false
+  if (!Number.isFinite(initialCap) || initialCap <= 0) return false
+  return ctoon.minted >= initialCap && ctoon.minted < qty && nowTs.value < finalTs
 }
 
 function currentAllowedCap(ctoon) {

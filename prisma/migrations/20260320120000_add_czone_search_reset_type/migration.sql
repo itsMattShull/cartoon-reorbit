@@ -1,0 +1,4 @@
+CREATE TYPE "CZoneSearchResetType" AS ENUM ('COOLDOWN_HOURS', 'DAILY_AT_RESET');
+
+ALTER TABLE "CZoneSearch" ADD COLUMN "resetType" "CZoneSearchResetType" NOT NULL DEFAULT 'COOLDOWN_HOURS';
+ALTER TABLE "CZoneSearch" ADD COLUMN "dailyCollectLimit" INTEGER;

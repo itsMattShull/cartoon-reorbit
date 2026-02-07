@@ -320,7 +320,7 @@
             </template>
             <template v-else>
               <div
-                v-for="auction in filteredAuctions"
+                v-for="auction in paginatedAuctions"
                 :key="auction.id"
                 class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full relative"
               >
@@ -381,6 +381,25 @@
                 </div>
               </div>
             </template>
+          </div>
+          <div v-if="!isLoading && currentTotalPages > 1" class="flex items-center justify-between mt-6">
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="currentPage <= 1"
+              @click="currentPage = Math.max(1, currentPage - 1)"
+            >
+              Previous
+            </button>
+            <div class="text-sm text-gray-600">
+              Page {{ currentPage }} of {{ currentTotalPages }}
+            </div>
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="currentPage >= currentTotalPages"
+              @click="currentPage = Math.min(currentTotalPages, currentPage + 1)"
+            >
+              Next
+            </button>
           </div>
         </template>
 
@@ -756,6 +775,8 @@ const activeTab = ref('current')
 
 const auctions = ref([])
 const isLoading = ref(false)
+const currentPage = ref(1)
+const currentPageSize = ref(50)
 
 const trendingAuctions = ref([])
 const isLoadingTrending = ref(false)
@@ -810,6 +831,12 @@ function normalizeListParam(v) {
   return []
 }
 
+function normalizePageParam(v) {
+  const raw = Array.isArray(v) ? v[0] : v
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
 function updateUrlQueryFromFilters() {
   const newQuery = { ...route.query }
 
@@ -846,6 +873,9 @@ function updateUrlQueryFromFilters() {
   if (activeTab.value && activeTab.value !== 'current') newQuery.tab = activeTab.value
   else delete newQuery.tab
 
+  if (activeTab.value === 'current' && currentPage.value > 1) newQuery.page = String(currentPage.value)
+  else delete newQuery.page
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
@@ -868,6 +898,7 @@ onMounted(() => {
   const wishlistParam = typeof route.query.wishlist === 'string' ? route.query.wishlist : ''
   const hasBidsParam = typeof route.query.hasBids === 'string' ? route.query.hasBids : ''
   const gtoonParam = typeof route.query.gtoon === 'string' ? route.query.gtoon : ''
+  const pageParam = normalizePageParam(route.query.page)
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
   const initSets     = normalizeListParam(setParam)
@@ -888,6 +919,7 @@ onMounted(() => {
   if (['1','true','yes'].includes(wishlistParam.toLowerCase())) wishlistOnly.value = true
   if (['1','true','yes'].includes(hasBidsParam.toLowerCase())) hasBidsOnly.value = true
   if (['1','true','yes'].includes(gtoonParam.toLowerCase())) gtoonsOnly.value = true
+  if (pageParam > 1) currentPage.value = pageParam
 
   // Normalize URL based on initialized values
   updateUrlQueryFromFilters()
@@ -1038,6 +1070,7 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
   const isMine = activeTab.value === 'mine'
   const isMyBids = activeTab.value === 'mybids'
 
+  if (currentPage.value !== 1) currentPage.value = 1
   if (allPage.value !== 1) allPage.value = 1
   else if (isAll) loadAllAuctions()
 
@@ -1057,12 +1090,18 @@ watch(myBidsSort, () => {
 })
 watch(allPage, () => {
   if (activeTab.value === 'all') loadAllAuctions()
+  updateUrlQueryFromFilters()
 })
 watch(myPage, () => {
   if (activeTab.value === 'mine') loadMyAuctions()
+  updateUrlQueryFromFilters()
 })
 watch(myBidsPage, () => {
   if (activeTab.value === 'mybids') loadMyBids()
+  updateUrlQueryFromFilters()
+})
+watch(currentPage, () => {
+  updateUrlQueryFromFilters()
 })
 
 watch(wishlistOnly, value => {
@@ -1191,6 +1230,14 @@ const filteredAuctions = computed(() => {
   })
 })
 
+const currentTotalPages = computed(() => {
+  const total = Math.ceil(filteredAuctions.value.length / currentPageSize.value)
+  return Math.max(1, total || 1)
+})
+const paginatedAuctions = computed(() => {
+  const start = (currentPage.value - 1) * currentPageSize.value
+  return filteredAuctions.value.slice(start, start + currentPageSize.value)
+})
 const filteredTrendingAuctions = computed(() => applyCommonFilters(trendingAuctions.value))
 const filteredMyAuctions = computed(() => {
   if (!hasBidsOnly.value) return myAuctions.value
@@ -1242,6 +1289,12 @@ const sortedMyBids = computed(() => {
     case 'recentDesc':
     default:
       return items.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
+  }
+})
+
+watch(filteredAuctions, () => {
+  if (currentPage.value > currentTotalPages.value) {
+    currentPage.value = currentTotalPages.value
   }
 })
 </script>

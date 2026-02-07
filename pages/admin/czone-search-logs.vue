@@ -53,7 +53,11 @@
             <div class="text-sm font-semibold">{{ displayName(row.name) }} — {{ formatCentral(row.startAt) }} → {{ formatCentral(row.endAt) }}</div>
             <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div><span class="text-gray-500">Appearance:</span> {{ row.appearanceRatePercent }}%</div>
-              <div><span class="text-gray-500">Cooldown:</span> {{ row.cooldownHours }}h</div>
+              <div><span class="text-gray-500">Reset:</span> {{ resetLabel(row) }}</div>
+              <div v-if="isDailyReset(row)" class="col-span-2">
+                <span class="text-gray-500">Able To Collect Daily:</span> {{ dailyLimitLabel(row) }}
+              </div>
+              <div v-else><span class="text-gray-500">Cooldown:</span> {{ row.cooldownHours }}h</div>
               <div class="col-span-2"><span class="text-gray-500">Collection:</span> {{ collectionLabel(row.collectionType) }}</div>
               <div><span class="text-gray-500">Appearances:</span> {{ row.appearances }}</div>
               <div><span class="text-gray-500">Captures:</span> {{ row.captures }}</div>
@@ -72,7 +76,7 @@
                 <th class="px-3 py-2 border-b">Start (CST)</th>
                 <th class="px-3 py-2 border-b">End (CST)</th>
                 <th class="px-3 py-2 border-b">Appearance %</th>
-                <th class="px-3 py-2 border-b">Cooldown</th>
+                <th class="px-3 py-2 border-b">Reset</th>
                 <th class="px-3 py-2 border-b">Collection</th>
                 <th class="px-3 py-2 border-b">Appearances</th>
                 <th class="px-3 py-2 border-b">Captures</th>
@@ -86,7 +90,13 @@
                 <td class="px-3 py-2 whitespace-nowrap">{{ formatCentral(row.startAt) }}</td>
                 <td class="px-3 py-2 whitespace-nowrap">{{ formatCentral(row.endAt) }}</td>
                 <td class="px-3 py-2">{{ row.appearanceRatePercent }}%</td>
-                <td class="px-3 py-2">{{ row.cooldownHours }}h</td>
+                <td class="px-3 py-2">
+                  <div>{{ resetLabel(row) }}</div>
+                  <div v-if="isDailyReset(row)" class="text-xs text-gray-500">
+                    Able To Collect Daily: {{ dailyLimitLabel(row) }}
+                  </div>
+                  <div v-else class="text-xs text-gray-500">{{ row.cooldownHours }}h</div>
+                </td>
                 <td class="px-3 py-2">{{ collectionLabel(row.collectionType) }}</td>
                 <td class="px-3 py-2">{{ row.appearances }}</td>
                 <td class="px-3 py-2">{{ row.captures }}</td>
@@ -178,7 +188,26 @@ const breakdown = ref({ rows: [], totals: { appearances: 0, captures: 0 } })
 const searchOptions = ref([])
 
 function collectionLabel(value) {
-  return value === 'ONCE' ? 'Collect Each cToon Once' : 'Collect Each cToon Multiple Times'
+  if (value === 'ONCE') return 'Collect Each cToon Once'
+  if (value === 'CUSTOM_PER_CTOON') return 'Custom Per cToon'
+  return 'Collect Each cToon Multiple Times'
+}
+
+function normalizeResetType(value) {
+  return value === 'DAILY_AT_RESET' ? 'DAILY_AT_RESET' : 'COOLDOWN_HOURS'
+}
+
+function isDailyReset(row) {
+  return normalizeResetType(row?.resetType) === 'DAILY_AT_RESET'
+}
+
+function resetLabel(row) {
+  return isDailyReset(row) ? 'Daily at 8pm CT' : 'Cooldown in Hours'
+}
+
+function dailyLimitLabel(row) {
+  const limit = Number(row?.dailyCollectLimit ?? 0)
+  return limit > 0 ? String(limit) : 'Unlimited'
 }
 
 function formatCentral(iso) {
