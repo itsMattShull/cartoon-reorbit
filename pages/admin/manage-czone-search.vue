@@ -144,6 +144,11 @@
               </div>
             </div>
 
+            <div class="flex items-center gap-2">
+              <input id="link-in-onboarding" v-model="form.linkInOnboarding" type="checkbox" class="h-4 w-4" />
+              <label for="link-in-onboarding" class="text-sm text-gray-700">Link in Onboarding</label>
+            </div>
+
             <div v-if="form.resetType === 'COOLDOWN_HOURS'" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label class="block mb-1 font-medium">Cooldown (Hours)</label>
@@ -454,6 +459,7 @@ const form = reactive({
   resetType: 'COOLDOWN_HOURS',
   dailyCollectLimit: '',
   collectionType: 'MULTIPLE',
+  linkInOnboarding: false,
   prizePool: []
 })
 
@@ -783,6 +789,7 @@ function resetForm() {
   form.resetType = 'COOLDOWN_HOURS'
   form.dailyCollectLimit = ''
   form.collectionType = 'MULTIPLE'
+  form.linkInOnboarding = false
   form.prizePool = []
   formError.value = ''
   expandedPrizeId.value = null
@@ -811,6 +818,7 @@ async function openEdit(row) {
     ? ''
     : Number(row.dailyCollectLimit)
   form.collectionType = row.collectionType || 'MULTIPLE'
+  form.linkInOnboarding = Boolean(row.linkInOnboarding)
   form.prizePool = row.prizePool.map((p) => initPrizeRow({
     ctoonId: p.ctoonId,
     chancePercent: Number(p.chancePercent),
@@ -987,6 +995,7 @@ async function saveSearch() {
     resetType,
     dailyCollectLimit,
     collectionType: form.collectionType,
+    linkInOnboarding: Boolean(form.linkInOnboarding),
     prizePool: form.prizePool.map(p => ({
       ctoonId: p.ctoonId,
       chancePercent: Number(p.chancePercent),

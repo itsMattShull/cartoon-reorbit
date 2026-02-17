@@ -112,6 +112,7 @@ model CZoneSearch {
   resetType              CZoneSearchResetType      @default(COOLDOWN_HOURS)
   dailyCollectLimit      Int?
   collectionType         CZoneSearchCollectionType @default(MULTIPLE)
+  linkInOnboarding       Boolean                   @default(false)
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
 
