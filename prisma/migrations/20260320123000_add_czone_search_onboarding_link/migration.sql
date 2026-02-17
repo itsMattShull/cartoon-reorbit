@@ -1,0 +1,1 @@
+ALTER TABLE "CZoneSearch" ADD COLUMN "linkInOnboarding" BOOLEAN NOT NULL DEFAULT false;

@@ -95,6 +95,13 @@ function parseDailyCollectLimit(value) {
   return num
 }
 
+function parseBoolean(value) {
+  if (value === true || value === false) return value
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') return true
+  return false
+}
+
 function normalizeConditions(row, window) {
   const dateEnabled = Boolean(row?.conditionDateEnabled)
   let dateStart = null
@@ -198,6 +205,7 @@ export default defineEventHandler(async (event) => {
   const resetType = parseResetType(body?.resetType)
   const cooldownHours = resetType === 'COOLDOWN_HOURS' ? parseCooldownHours(body?.cooldownHours) : 0
   const dailyCollectLimit = resetType === 'DAILY_AT_RESET' ? parseDailyCollectLimit(body?.dailyCollectLimit) : null
+  const linkInOnboarding = parseBoolean(body?.linkInOnboarding)
 
   const collectionType = body?.collectionType
   if (collectionType !== 'ONCE' && collectionType !== 'MULTIPLE' && collectionType !== 'CUSTOM_PER_CTOON') {
@@ -241,6 +249,7 @@ export default defineEventHandler(async (event) => {
       resetType,
       dailyCollectLimit,
       collectionType,
+      linkInOnboarding,
       prizePool: {
         deleteMany: {},
         create: entries

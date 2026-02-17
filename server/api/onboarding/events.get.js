@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     }),
     db.cZoneSearch.findMany({
       where: {
+        linkInOnboarding: true,
         startAt: { lte: now },
         endAt: { gte: now }
       },
@@ -32,6 +33,7 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true,
         name: true,
+        linkInOnboarding: true,
         startAt: true,
         endAt: true
       }
@@ -48,6 +50,7 @@ export default defineEventHandler(async (event) => {
     czoneSearches: czoneSearches.map((row) => ({
       id: row.id,
       name: row.name,
+      linkInOnboarding: row.linkInOnboarding,
       startAt: row.startAt.toISOString(),
       endAt: row.endAt.toISOString()
     }))

@@ -131,12 +131,16 @@
                     :key="`czone-${search.id}`"
                     class="rounded-lg border border-[var(--reorbit-border)] bg-white/80 px-3 py-2 text-sm font-semibold"
                   >
-                    <!-- <NuxtLink
+                    <NuxtLink
+                      v-if="search.linkInOnboarding"
                       :to="`/czonesearch/${search.id}`"
                       class="text-sm font-semibold text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)]"
-                    > -->
+                    >
                       {{ displayName(search.name, 'cZone Search') }}
-                    <!-- </NuxtLink> -->
+                    </NuxtLink>
+                    <span v-else class="text-sm font-semibold text-slate-700">
+                      {{ displayName(search.name, 'cZone Search') }}
+                    </span>
                     <p class="text-xs text-slate-500">
                       Active {{ formatDateRange(search.startAt, search.endAt) }}
                     </p>
