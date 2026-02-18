@@ -46,11 +46,11 @@
       </a>
 
       <div
-        class="hidden md:block ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
+        class="nav-pill hidden md:block ml-auto inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--reorbit-deep)]
               bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
         aria-label="Sign in with Discord"
       >
-        Points: {{ user?.points ?? 0 }}
+        Points: {{ formattedPoints }}
       </div>
     </div>
   </header>
@@ -77,6 +77,11 @@
 
       <!-- links -->
       <nav class="flex-1 overflow-y-auto py-2 space-y-4">
+        <div class="px-5 text-center">
+          <div class="text-xs font-semibold text-slate-500">
+            Points: <span class="text-slate-700">{{ formattedPoints }}</span>
+          </div>
+        </div>
         <!-- main -->
         <div>
           <NuxtLink
@@ -101,6 +106,56 @@
               class="inline-block bg-[var(--reorbit-cyan)] text-[var(--reorbit-deep)] text-xs font-semibold px-2 py-0.5 rounded-full"
             >{{ activeCount }}</span>
           </NuxtLink>
+        </div>
+
+        <div class="pt-2 border-t border-[color:var(--reorbit-border)]">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2 text-left text-sm font-semibold"
+            @click="toggle('games')"
+          >
+            <span>Games</span>
+            <span class="text-slate-400">{{ open.games || q ? '−' : '+' }}</span>
+          </button>
+
+          <div v-show="open.games || q">
+            <NuxtLink
+              v-for="item in filteredGames"
+              :key="item.to"
+              :to="item.to"
+              @click="close"
+              class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)]"
+              :class="isActive(item.to)
+                ? 'bg-[var(--reorbit-cyan-transparent)] text-[var(--reorbit-blue)] font-semibold'
+                : ''"
+            >
+              <span class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-[color:var(--reorbit-border)]">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2 text-left text-sm font-semibold"
+            @click="toggle('clash')"
+          >
+            <span>gToons Clash</span>
+            <span class="text-slate-400">{{ open.clash || q ? '−' : '+' }}</span>
+          </button>
+
+          <div v-show="open.clash || q">
+            <NuxtLink
+              v-for="item in filteredClash"
+              :key="item.to"
+              :to="item.to"
+              @click="close"
+              class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)]"
+              :class="isActive(item.to)
+                ? 'bg-[var(--reorbit-cyan-transparent)] text-[var(--reorbit-blue)] font-semibold'
+                : ''"
+            >
+              <span class="truncate">{{ item.label }}</span>
+            </NuxtLink>
+          </div>
         </div>
 
         <!-- admin groups -->
@@ -161,7 +216,14 @@ const handleLogout = async () => { await logout(); close() }
 
 const route = useRoute()
 const isOnTradeOffersPage = computed(() => route.path === '/trade-offers')
-const isActive = (to) => route.path === to
+const formattedPoints = computed(() => {
+  const value = user.value?.points ?? 0
+  return Number(value).toLocaleString('en-US')
+})
+const isActive = (to) => {
+  if (to === '/create-trade') return route.path.startsWith('/create-trade')
+  return route.path === to
+}
 
 const pendingCount = ref(0)
 const activeCount  = ref(0)
@@ -178,6 +240,11 @@ onMounted(async () => {
     } catch {}
   }
 })
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === 'visible') {
+    await fetchSelf().catch(() => {})
+  }
+}
 
 /* search */
 const q = ref('')
@@ -190,21 +257,44 @@ const mainLinks = [
   { label: 'Achievements', to: '/achievements' },
   { label: 'cMart', to: '/cmart' },
   { label: 'Auctions', to: '/auctions' },
-  { label: 'Live Trading', to: '/live-trading' },
+  { label: 'Create Trade', to: '/create-trade' },
   { label: 'Trade Offers', to: '/trade-offers' },
   { label: 'Redeem Code', to: '/redeem' },
+  { label: 'Settings', to: '/settings' }
+]
+
+const gamesLinks = [
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
   { label: 'Lottery', to: '/lottery' },
-  { label: 'Monsters', to: '/monsters' },
-  { label: 'gToons Clash', to: '/games/clash/rooms' }, 
-  { label: 'Settings', to: '/settings' }
+  { label: 'Monsters', to: '/monsters' }
+]
+
+const clashLinks = [
+  { label: 'Play vs AI', to: '/games/clash' },
+  { label: 'Play vs Others', to: '/games/clash/rooms' },
+  { label: 'Manage Decks', to: '/games/clash/decks' },
+  { label: 'Tournaments', to: '/games/clash/tournaments' },
+  { label: 'Leaderboards', to: '/games/clash/leaderboard' },
+  { label: 'Meta', to: '/games/clash/meta' }
 ]
 
 const filteredMain = computed(() =>
   !q.value
     ? mainLinks
     : mainLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
+)
+
+const filteredGames = computed(() =>
+  !q.value
+    ? gamesLinks
+    : gamesLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
+)
+
+const filteredClash = computed(() =>
+  !q.value
+    ? clashLinks
+    : clashLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
 )
 
 /* admin grouped */
@@ -219,7 +309,10 @@ const adminGroups = [
       { label: 'Global Settings', to: '/admin/global-settings' },
       { label: 'Manage Ads', to: '/admin/manage-ads' },
       { label: 'Manage Announcements', to: '/admin/announcements' },
-      { label: 'Admin Changes', to: '/admin/admin-changes' }
+      { label: 'Admin Changes', to: '/admin/admin-changes' },
+      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
+      { label: 'Manage Production', to: '/admin/manage-dev' },
+      { label: 'Initiate Trade', to: '/admin/initiate-trade' },
     ]
   },
       {
@@ -227,15 +320,16 @@ const adminGroups = [
         title: 'Admin — Content',
         items: [
           { label: 'Manage cToons', to: '/admin/ctoons' },
-          { label: 'Initiate Trade', to: '/admin/initiate-trade' },
           { label: 'Manage Packs', to: '/admin/packs' },
           { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
           { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
           { label: 'Manage Codes', to: '/admin/codes' },
           { label: 'Manage Monsters', to: '/admin/manage-monster' },
-          { label: 'Manage Lotto', to: '/admin/manage-lotto' },
-          { label: 'Manage Games', to: '/admin/games' },
-          { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
+          { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
+      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
+      { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
+      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
           { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
           { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
       { label: 'Manage Achievements', to: '/admin/achievements' }
@@ -250,6 +344,7 @@ const adminGroups = [
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
       { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
+      { label: 'cZone Search Logs', to: '/admin/czone-search-logs' },
       { label: 'Point Logs', to: '/admin/points-log' },
       { label: 'Achievement Logs', to: '/admin/achievement-logs' },
       { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
@@ -264,6 +359,7 @@ const adminGroups = [
 /* accordion state */
 const open = ref({
   'admin-core': false,
+  clash: false,
   content: false,
   games: false,
   logs: false,
@@ -437,10 +533,14 @@ async function initAds() {
   }
 }
 
-onMounted(() => { initAds() })
+onMounted(() => {
+  initAds()
+  if (process.client) document.addEventListener('visibilitychange', handleVisibilityChange)
+})
 onBeforeUnmount(() => {
   clearTimeout(timer)
   abortCtrl.abort()
+  if (process.client) document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -472,4 +572,12 @@ onBeforeUnmount(() => {
 
 /* keep link colors consistent */
 #nav-drawer a, #nav-drawer button { color: inherit !important; }
+
+#nav-root button,
+#nav-drawer button {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.nav-pill { border-radius: 0.75rem; }
 </style>

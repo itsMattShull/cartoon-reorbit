@@ -262,7 +262,15 @@
               <ul class="w-full mt-3">
                 <li v-for="(entry, i) in activeCtoonAcquirers" :key="entry.username"
                     class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
+                  </span>
                   <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
                 </li>
               </ul>
@@ -280,7 +288,15 @@
               <ul class="w-full mt-3">
                 <li v-for="(entry, i) in trendingEarners" :key="entry.username"
                     class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
+                  </span>
                   <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
                 </li>
               </ul>
@@ -298,7 +314,15 @@
               <ul class="w-full mt-3">
                 <li v-for="(entry, i) in trendingSpenders" :key="entry.username"
                     class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
+                  </span>
                   <span class="font-medium text-right">{{ entry.points.toLocaleString() }}</span>
                 </li>
               </ul>
@@ -313,7 +337,15 @@
               <ul class="w-full">
                 <li v-for="(entry, i) in uniqueCtoonLb" :key="entry.username"
                     class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
+                  </span>
                   <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
                 </li>
               </ul>
@@ -328,7 +360,15 @@
               <ul class="w-full">
                 <li v-for="(entry, i) in totalCtoonLb" :key="entry.username"
                     class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2">
-                  <span class="flex-1 mr-2 truncate">{{ i + 1 }}. {{ entry.username }}</span>
+                  <span class="flex-1 mr-2 truncate">
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
+                  </span>
                   <span class="font-medium text-right">{{ entry.count.toLocaleString() }}</span>
                 </li>
               </ul>
@@ -347,7 +387,13 @@
                   class="flex items-center border-b border-[var(--reorbit-border)] last:border-b-0 py-2"
                 >
                   <span class="flex-1 mr-2 truncate">
-                    {{ i + 1 }}. {{ entry.username }}
+                    {{ i + 1 }}.
+                    <NuxtLink
+                      :to="`/czone/${entry.username}`"
+                      class="text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)] hover:underline"
+                    >
+                      {{ entry.username }}
+                    </NuxtLink>
                   </span>
                   <span class="font-medium text-right">
                     {{ entry.points.toLocaleString() }}
@@ -480,10 +526,12 @@ const upcoming = computed(() => {
 const recent = computed(() => {
   const now = new Date()
   const fourWeeksAgo = new Date(now); fourWeeksAgo.setDate(now.getDate() - 28)
-  return allCToons.value.filter(c => {
-    const d = new Date(c.releaseDate)
-    return d <= now && d >= fourWeeksAgo
-  })
+  return allCToons.value
+    .filter(c => {
+      const d = new Date(c.releaseDate)
+      return d <= now && d >= fourWeeksAgo
+    })
+    .sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
 })
 const fetchCToons = async () => {
   try {

@@ -28,7 +28,16 @@ export default defineEventHandler(async (event) => {
     // Fetch cToon for release check (and basic availability)
     const ctoon = await prisma.ctoon.findUnique({
       where: { id: ctoonId },
-      select: { id: true, inCmart: true, releaseDate: true, quantity: true, totalMinted: true, price: true }
+      select: {
+        id: true,
+        inCmart: true,
+        releaseDate: true,
+        quantity: true,
+        totalMinted: true,
+        price: true,
+        initialReleaseQty: true,
+        finalReleaseAt: true
+      }
     })
 
     // Allow if in cMart OR part of an active holiday event
@@ -50,7 +59,7 @@ export default defineEventHandler(async (event) => {
 
     // Release window gating (two-phase)
     if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
-      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.' })
+      throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.  Quit being a cheater.' })
     }
 
     const isUnlimited = ctoon.quantity === null
@@ -67,10 +76,16 @@ export default defineEventHandler(async (event) => {
       } catch {}
 
       const qty = Number(ctoon.quantity)
-      const initialCap = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
-      const finalReleaseAt = ctoon.releaseDate
-        ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-        : null
+      const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+      const initialCap = Math.min(
+        qty,
+        Math.max(1, Number(ctoon.initialReleaseQty ?? initialCapFromPct))
+      )
+      const finalReleaseAt = ctoon.finalReleaseAt
+        ? new Date(ctoon.finalReleaseAt)
+        : ctoon.releaseDate
+          ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+          : null
 
       const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
       const allowedCap = beforeFinal ? initialCap : qty

@@ -72,12 +72,16 @@
               </div>
             </div>
 
-            <!-- Availability -->
+            <!-- Other Filters -->
             <div>
-              <div class="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+              <div class="h-4 w-28 bg-gray-200 rounded mb-2"></div>
               <div class="flex items-center gap-2">
                 <div class="h-4 w-4 bg-gray-200 rounded"></div>
                 <div class="h-3 w-28 bg-gray-200 rounded"></div>
+              </div>
+              <div class="flex items-center gap-2 mt-2">
+                <div class="h-4 w-4 bg-gray-200 rounded"></div>
+                <div class="h-3 w-24 bg-gray-200 rounded"></div>
               </div>
             </div>
 
@@ -195,6 +199,13 @@
               placeholder="Type a name or character…"
               class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
+            <button
+              type="button"
+              class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+              @click="resetFilters"
+            >
+              Reset Filters
+            </button>
           </div>
 
           <!-- Filter by Set -->
@@ -291,9 +302,9 @@
             </div>
           </div>
 
-          <!-- Filter by Availability -->
+          <!-- Other Filters -->
           <div class="mb-10">
-            <p class="text-sm font-medium text-gray-700 mb-2">Availability</p>
+            <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
             <div class="space-y-1">
               <label class="flex items-center text-sm">
                 <input
@@ -302,6 +313,14 @@
                   class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
                 />
                 <span class="ml-2">Hide Out Of Stock</span>
+              </label>
+              <label class="flex items-center text-sm">
+                <input
+                  type="checkbox"
+                  v-model="gtoonsOnly"
+                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                />
+                <span class="ml-2">gToons Only</span>
               </label>
             </div>
           </div>
@@ -351,6 +370,9 @@
                   :alt="ctoon.name"
                   :name="ctoon.name"
                   :ctoon-id="ctoon.id"
+                  :is-gtoon="ctoon.isGtoon"
+                  :power="ctoon.power"
+                  :cost="ctoon.cost"
                   image-class="max-w-full h-auto"
                 />
               </div>
@@ -385,13 +407,13 @@
 
                 <!-- Between windows: initial sold out, more coming -->
                 <button
-                  v-else-if="ctoon.nextReleaseAt && new Date(ctoon.nextReleaseAt).getTime() > nowTs && ctoon.quantity !== null && ctoon.minted >= (ctoon.initialCap || 0) && ctoon.minted < ctoon.quantity"
+                  v-else-if="shouldShowFinalCountdown(ctoon)"
                   disabled
                   class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-80 text-xs"
-                  :aria-label="`Releases in ${formatCountdown(ctoon.nextReleaseAt)}`"
+                  :aria-label="`Releases in ${formatCountdown(getFinalReleaseAt(ctoon))}`"
                   title="Final release pending"
                 >
-                  Releases in {{ formatCountdown(ctoon.nextReleaseAt) }}
+                  Releases in {{ formatCountdown(getFinalReleaseAt(ctoon)) }}
                 </button>
 
                 <button
@@ -452,6 +474,9 @@
                 :alt="ctoon.name"
                 :name="ctoon.name"
                 :ctoon-id="ctoon.id"
+                :is-gtoon="ctoon.isGtoon"
+                :power="ctoon.power"
+                :cost="ctoon.cost"
                 image-class="max-w-full h-auto"
               />
             </div>
@@ -485,41 +510,46 @@
       </div>
 
       <!-- ─── PACKS TAB ─────────────────────────────── -->
-      <div v-if="activeTab === 'Packs'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div
-          v-for="pack in packs"
-          :key="pack.id"
-          class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
-          @click="openPackModal(pack)"
-        >
-          <h2 class="text-xl font-semibold mb-2 text-center break-words">
-            {{ pack.name }}
-          </h2>
-          <div class="flex-grow flex items-center justify-center w-full mb-4">
-            <img :src="pack.imagePath" class="max-w-full h-auto" />
-          </div>
-          <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
-            <li
-              v-for="r in pack.rarityConfigs"
-              :key="r.rarity"
-              class="mt-2"
-            >
-              <strong>{{ r.rarity }}:</strong>
-              {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
-            </li>
-          </ul>
-          <button
-            @click.stop="buyPack(pack)"
-            :disabled="buyingPacks.has(pack.id)"
-            class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+      <div v-if="activeTab === 'Packs'">
+        <div v-if="packs.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            v-for="pack in packs"
+            :key="pack.id"
+            class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full cursor-pointer hover:ring-2 hover:ring-indigo-300"
+            @click="openPackModal(pack)"
           >
-          <span v-if="buyingPacks.has(pack.id)">
-            Purchasing…
-          </span>
-          <span v-else>
-            Buy Pack for {{ pack.price }} Pts
-          </span>
-          </button>
+            <h2 class="text-xl font-semibold mb-2 text-center break-words">
+              {{ pack.name }}
+            </h2>
+            <div class="flex-grow flex items-center justify-center w-full mb-4">
+              <img :src="pack.imagePath" class="max-w-full h-auto" />
+            </div>
+            <ul class="text-sm text-gray-700 mb-2 space-y-0.5">
+              <li
+                v-for="r in pack.rarityConfigs"
+                :key="r.rarity"
+                class="mt-2"
+              >
+                <strong>{{ r.rarity }}:</strong>
+                {{ r.probabilityPercent }}% chance to receive {{ r.count }} cToon(s)
+              </li>
+            </ul>
+            <button
+              @click.stop="buyPack(pack)"
+              :disabled="buyingPacks.has(pack.id)"
+              class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+            >
+            <span v-if="buyingPacks.has(pack.id)">
+              Purchasing…
+            </span>
+            <span v-else>
+              Buy Pack for {{ pack.price }} Pts
+            </span>
+            </button>
+          </div>
+        </div>
+        <div v-else class="text-gray-500">
+          No packs available right now.
         </div>
       </div>
 
@@ -582,6 +612,9 @@
                       :alt="item.name"
                       :name="item.name"
                       :ctoon-id="item.ctoonId"
+                      :is-gtoon="item.isGtoon"
+                      :power="item.power"
+                      :cost="item.cost"
                       image-class="max-w-full h-24 object-contain"
                     />
                   </div>
@@ -632,6 +665,9 @@
                 :alt="item.name"
                 :name="item.name"
                 :ctoon-id="item.id"
+                :is-gtoon="item.isGtoon"
+                :power="item.power"
+                :cost="item.cost"
                 image-class="w-24 h-24 object-contain mb-2 mt-8"
               />
 
@@ -716,6 +752,24 @@ function isReleased(ctoon) {
   return new Date(ctoon.releaseDate).getTime() <= nowTs.value
 }
 
+function getFinalReleaseAt(ctoon) {
+  return ctoon.finalReleaseAt || ctoon.nextReleaseAt || null
+}
+
+function shouldShowFinalCountdown(ctoon) {
+  if (ctoon.quantity === null) return false
+  if (!ctoon.releaseDate) return false
+  const finalAt = getFinalReleaseAt(ctoon)
+  if (!finalAt) return false
+  const finalTs = new Date(finalAt).getTime()
+  if (!Number.isFinite(finalTs)) return false
+  const qty = Number(ctoon.quantity)
+  const initialCap = Number(ctoon.initialCap ?? 0)
+  if (!Number.isFinite(qty) || qty <= 0) return false
+  if (!Number.isFinite(initialCap) || initialCap <= 0) return false
+  return ctoon.minted >= initialCap && ctoon.minted < qty && nowTs.value < finalTs
+}
+
 function currentAllowedCap(ctoon) {
   if (ctoon.quantity === null) return Infinity
   const finalAt = ctoon.finalReleaseAt ? new Date(ctoon.finalReleaseAt).getTime() : null
@@ -774,6 +828,7 @@ const selectedSeries   = ref([])
 const selectedRarities = ref([])
 const ownedFilter      = ref('all')   // 'all' | 'owned' | 'unowned'
 const hideOutOfStock   = ref(false)
+const gtoonsOnly       = ref(false)
 const sortBy           = ref('releaseDateDesc')
 const currentPage      = ref(1)
 const itemsPerPage     = 50
@@ -809,12 +864,28 @@ function updateUrlQueryFromFilters() {
   if (hideOutOfStock.value) newQuery.available = 'true';
   else delete newQuery.available
 
+  if (gtoonsOnly.value) newQuery.gtoon = 'true';
+  else delete newQuery.gtoon
+
   if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
   else delete newQuery.sort
 
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedSets.value = []
+  selectedSeries.value = []
+  selectedRarities.value = []
+  ownedFilter.value = 'all'
+  hideOutOfStock.value = false
+  gtoonsOnly.value = false
+  sortBy.value = 'releaseDateDesc'
+  currentPage.value = 1
+  updateUrlQueryFromFilters()
 }
 
 // ────────── DERIVE UNIQUE FILTER OPTIONS ──────
@@ -884,8 +955,10 @@ const filteredCtoons = computed(() => {
       availabilityMatch = released && inStock
     }
 
+    // 7) Filter by gToons only
+    const gtoonMatch = !gtoonsOnly.value || c.isGtoon
 
-    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch && availabilityMatch
+    return nameOrCharMatch && setMatch && seriesMatch && rarityMatch && ownedMatch && availabilityMatch && gtoonMatch
   })
 })
 
@@ -922,7 +995,7 @@ const pagedCtoons = computed(() => {
 
 // Reset to page 1 whenever filters/sort change
 watch(
-  [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, hideOutOfStock, sortBy],
+  [searchQuery, selectedSets, selectedSeries, selectedRarities, ownedFilter, hideOutOfStock, gtoonsOnly, sortBy],
   () => {
     currentPage.value = 1
     updateUrlQueryFromFilters()
@@ -1010,6 +1083,7 @@ onMounted(async () => {
   const rarityParam = route.query.rarity
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
   const availableParam = route.query.available
+  const gtoonParam = route.query.gtoon
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
@@ -1021,6 +1095,7 @@ onMounted(async () => {
   if (initRarities.length) selectedRarities.value = initRarities
   if (['all','owned','unowned'].includes(ownedParam)) ownedFilter.value = ownedParam
   if (availableParam === 'true') hideOutOfStock.value = true
+  if (gtoonParam === 'true') gtoonsOnly.value = true
 
   const validSorts = ['releaseDateDesc','releaseDateAsc','priceDesc','priceAsc','series']
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
@@ -1039,6 +1114,9 @@ onMounted(async () => {
       price:       c.price,
       releaseDate: c.releaseDate,
       quantity:    c.quantity,
+      isGtoon:     c.isGtoon,
+      cost:        c.cost,
+      power:       c.power,
       owners:      c.owners,
       characters:  c.characters,
       minted:      c.totalMinted ?? 0,

@@ -42,7 +42,7 @@
             <p><strong>End:</strong> {{ g.endedAt ? formatDate(g.endedAt, true) : '—' }}</p>
             <p><strong>Player 1:</strong> {{ username(g.player1) }}</p>
             <p><strong>Player 2:</strong> {{ player2Label(g) }}</p>
-            <p><strong>Outcome:</strong> {{ g.outcome || '—' }}</p>
+            <p><strong>Outcome:</strong> {{ outcomeLabel(g) }}</p>
             <p><strong>Winner:</strong> {{ winnerLabel(g) }}</p>
             <p><strong>Who Left:</strong> {{ whoLeftLabel(g) }}</p>
           </div>
@@ -76,8 +76,8 @@
                 <td class="p-2 border-b">
                   {{ player2Label(g) }}
                 </td>
-                <td class="p-2 border-b capitalize">
-                  {{ g.outcome || '—' }}
+                <td class="p-2 border-b">
+                  {{ outcomeLabel(g) }}
                 </td>
                 <td class="p-2 border-b">
                   {{ winnerLabel(g) }}
@@ -187,7 +187,7 @@ const filteredGames = computed(() => {
     const p1 = username(g.player1).toLowerCase()
     const p2 = player2Label(g).toLowerCase()
     const w  = winnerLabel(g).toLowerCase()
-    const oc = (g.outcome || '').toLowerCase()
+    const oc = outcomeLabel(g).toLowerCase()
     const wl = whoLeftLabel(g).toLowerCase()               // ← NEW
     return (
       p1.includes(q) ||
@@ -208,14 +208,23 @@ function player2Label(g) {
   return g.player2?.username || 'AI'
 }
 
+function outcomeLabel(g) {
+  if (!g.outcome) return '—'
+  if (g.outcome === 'tie') return 'Tie'
+  if (g.outcome === 'incomplete') return '—'
+  if (g.outcome === 'player') return username(g.player1)
+  if (g.outcome === 'ai') return player2Label(g)
+  return g.outcome
+}
+
 function winnerLabel(g) {
   if (!g.outcome) return '—'
   if (g.outcome === 'tie') return 'Tie'
   if (g.outcome === 'incomplete') return '—'
-  if (g.outcome === 'ai') return 'AI'
-  // outcome === 'player' → winner relation should be player1 user in PvP,
-  // but we rely on the API's winner relation; if null, fall back to '—'
-  return g.winner?.username || '—'
+  if (g.winner?.username) return g.winner.username
+  if (g.outcome === 'ai') return player2Label(g)
+  if (g.outcome === 'player') return username(g.player1)
+  return '—'
 }
 
 function formatDate(input, withTime = false) {

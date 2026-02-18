@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
       warning180: true,
       warning210: true,
       warning240: true,
+      additionalCzones: true,
       points: { select: { points: true } },
     },
   })
@@ -81,6 +82,7 @@ export default defineEventHandler(async (event) => {
     isAdmin:       u.isAdmin,
     active:        u.active,
     banned:        u.banned,
+    additionalCzones: u.additionalCzones ?? 0,
 
     // keep flat flags for convenience
     warning180:    u.warning180,

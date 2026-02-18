@@ -1,6 +1,6 @@
 <template>
   <Nav />
-
+  <div class="mt-1">&nbsp;</div>
   <!-- Mobile Buttons -->
   <div class="lg:hidden flex flex-col gap-2 my-6 mt-20 md:pt-10 px-4">
     <button
@@ -17,9 +17,9 @@
     </button>
   </div>
 
-  <div class="px-0 md:px-4 py-6 mx-auto flex gap-6 md:mt-20 max-w-[800px]">
+  <div class="px-0 md:px-4 py-6 mx-auto flex gap-6 md:mt-20 w-full max-w-[1200px] justify-center items-start">
     <!-- Left Panel -->
-    <div class="hidden lg:block w-2/3 bg-white rounded-xl shadow-md p-4 flex flex-col">
+    <div class="hidden lg:block lg:w-[360px] lg:flex-shrink-0 bg-white rounded-xl shadow-md p-4 flex flex-col">
       <div class="flex gap-2 mb-4">
         <button
           :class="tab === 'ctoones' ? activeTab : tabClass"
@@ -57,11 +57,18 @@
             draggable="true"
             @dragstart="onDragStart(element, $event)"
           >
-            <img
-              :src="element.assetPath"
-              :alt="element.name"
-              class="block max-w-full h-auto object-contain"
-            />
+            <div class="relative inline-flex items-center justify-center">
+              <img
+                :src="element.assetPath"
+                :alt="element.name"
+                class="block max-w-full h-auto object-contain"
+              />
+              <GtoonOverlay
+                v-if="element.isGtoon"
+                :power="element.power"
+                :cost="element.cost"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -79,7 +86,7 @@
     </div>
 
     <!-- Right Canvas Panel -->
-    <div class="bg-white max-w-full">
+    <div class="bg-white w-full lg:w-[800px] lg:flex-shrink-0">
       <!-- Zone pager controls -->
       <div class="flex justify-between items-center mb-2 px-4">
         <button
@@ -87,17 +94,17 @@
           @click="prevZone"
           :disabled="currentZoneIndex === 0"
         >
-          ← Zone {{ currentZoneIndex + 1 }}
+          ← Zone {{ currentZoneIndex }}
         </button>
         <div class="text-sm font-medium">
-          Zone {{ currentZoneIndex + 1 }} of 3
+          Zone {{ currentZoneIndex + 1 }} of {{ zoneCount }}
         </div>
         <button
           class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 disabled:opacity-50"
           @click="nextZone"
-          :disabled="currentZoneIndex === 2"
+          :disabled="currentZoneIndex === zoneCount - 1"
         >
-          Zone {{ currentZoneIndex + 1 }} →
+          Zone {{ currentZoneIndex + 2 }} →
         </button>
       </div>
 
@@ -141,6 +148,11 @@
                 :alt="item.name"
                 class="max-w-none object-contain"
                 draggable="false"
+              />
+              <GtoonOverlay
+                v-if="item.isGtoon"
+                :power="item.power"
+                :cost="item.cost"
               />
             </div>
           </div>
@@ -210,11 +222,18 @@
               class="cursor-pointer flex items-center justify-center w-[48%] border rounded p-1"
               @click="selectCtoon(ctoon)"
             >
-              <img
-                :src="ctoon.assetPath"
-                :alt="ctoon.name"
-                class="block max-w-full h-auto object-contain"
-              />
+              <div class="relative inline-flex items-center justify-center">
+                <img
+                  :src="ctoon.assetPath"
+                  :alt="ctoon.name"
+                  class="block max-w-full h-auto object-contain"
+                />
+                <GtoonOverlay
+                  v-if="ctoon.isGtoon"
+                  :power="ctoon.power"
+                  :cost="ctoon.cost"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -238,6 +257,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { navigateTo, useHead } from '#app'
+import GtoonOverlay from '@/components/GtoonOverlay.vue'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 
@@ -280,16 +300,17 @@ const seriesFilter = ref('')
 const rarityFilter = ref('')
 const searchQuery = ref('')
 
-// Instead of a single layout/background, store three zones
+// Instead of a single layout/background, store multiple zones
 const zones = ref([
   { layout: [], background: '' },
   { layout: [], background: '' },
   { layout: [], background: '' },
 ])
 
-// Which zone is currently active (0, 1 or 2)
+// Which zone is currently active
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
+const zoneCount = computed(() => Math.max(1, zones.value.length))
 
 // Computed getter/setter so template can do “layout” → currentZone.layout
 const layout = computed({
@@ -338,7 +359,7 @@ const uniqueRarities = computed(() =>
   [...new Set(ctoons.value.map((c) => c.rarity).filter(Boolean))]
 )
 
-// Keep track of every cToon already placed in any of the three zones
+// Keep track of every cToon already placed in any zone
 const placedIds = computed(() =>
   new Set(zones.value.flatMap((z) => z.layout.map((item) => item.id)))
 )
@@ -360,7 +381,7 @@ const filteredCtoons = computed(() => {
 
 // ——— Zone paging ———
 function nextZone() {
-  if (currentZoneIndex.value < 2) {
+  if (currentZoneIndex.value < zoneCount.value - 1) {
     currentZoneIndex.value += 1
   }
 }
@@ -429,6 +450,9 @@ async function onDrop(e) {
     assetPath: draggingItem.value.assetPath,
     series: draggingItem.value.series,
     rarity: draggingItem.value.rarity,
+    isGtoon: draggingItem.value.isGtoon,
+    cost: draggingItem.value.cost,
+    power: draggingItem.value.power,
     characters: Array.isArray(draggingItem.value.characters) ? draggingItem.value.characters : [],
     x,
     y,
@@ -618,6 +642,9 @@ async function selectCtoon(ctoon) {
     assetPath: ctoon.assetPath,
     series: ctoon.series,
     rarity: ctoon.rarity,
+    isGtoon: ctoon.isGtoon,
+    cost: ctoon.cost,
+    power: ctoon.power,
     characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     x,
     y,
@@ -665,7 +692,7 @@ onMounted(async () => {
   if (
     res.zones &&
     Array.isArray(res.zones) &&
-    res.zones.length === 3 &&
+    res.zones.length >= 1 &&
     res.zones.every((z) => typeof z.background === 'string' && Array.isArray(z.toons))
   ) {
     zones.value = res.zones.map((z) => ({
@@ -673,14 +700,13 @@ onMounted(async () => {
       background: typeof z.background === 'string' ? z.background : '',
     }))
   } else {
-    zones.value = [
-      {
-        layout: Array.isArray(res.layout) ? [...res.layout] : [],
-        background: typeof res.background === 'string' ? res.background : '',
-      },
-      { layout: [], background: '' },
-      { layout: [], background: '' },
-    ]
+    zones.value = [{
+      layout: Array.isArray(res.layout) ? [...res.layout] : [],
+      background: typeof res.background === 'string' ? res.background : '',
+    }]
+  }
+  if (currentZoneIndex.value > zones.value.length - 1) {
+    currentZoneIndex.value = zones.value.length - 1
   }
 
   // Assign width/height to every loaded cToon

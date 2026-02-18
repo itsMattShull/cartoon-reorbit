@@ -1,5 +1,6 @@
 // server/api/barcode/scan.post.js
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
+import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 import { createHmac, randomBytes } from 'node:crypto'
 
@@ -205,6 +206,13 @@ function getDailyScanWindowCst(now = new Date()) {
     start: new Date(startMs),
     resetAt: new Date(endMs),
   }
+}
+
+function getGamePointBoundaryUtc(now = DateTime.now().setZone('America/Chicago')) {
+  const boundary = now.hour >= 20
+    ? now.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+    : now.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
+  return boundary.toUTC().toJSDate()
 }
 
 function buildItemResult(itemRow) {
@@ -487,15 +495,35 @@ export default defineEventHandler(async (event) => {
   }
 
   if (scanPointsValue > 0) {
-    const updatedPoints = await db.userPoints.upsert({
-      where: { userId },
-      update: { points: { increment: scanPointsValue } },
-      create: { userId, points: scanPointsValue },
+    let toGive = scanPointsValue
+    const globalConfig = await db.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { dailyPointLimit: true }
     })
-    await db.pointsLog.create({
-      data: { userId, points: scanPointsValue, total: updatedPoints.points, method: 'Barcode Scan', direction: 'increase' }
-    })
-    scanPointsAwarded = scanPointsValue
+    if (globalConfig) {
+      const cutoffUTC = getGamePointBoundaryUtc()
+      const agg = await db.gamePointLog.aggregate({
+        where: { userId, createdAt: { gte: cutoffUTC } },
+        _sum: { points: true }
+      })
+      const used = agg._sum.points || 0
+      const cap = Number(globalConfig.dailyPointLimit ?? 0)
+      const remaining = Math.max(0, cap - used)
+      toGive = Math.min(scanPointsValue, remaining)
+    }
+
+    if (toGive > 0) {
+      await db.gamePointLog.create({ data: { userId, points: toGive } })
+      const updatedPoints = await db.userPoints.upsert({
+        where: { userId },
+        update: { points: { increment: toGive } },
+        create: { userId, points: toGive },
+      })
+      await db.pointsLog.create({
+        data: { userId, points: toGive, total: updatedPoints.points, method: 'Barcode Scan', direction: 'increase' }
+      })
+      scanPointsAwarded = toGive
+    }
   }
 
   let battleInfo = null

@@ -5,8 +5,8 @@
     <h1 class="text-3xl font-bold mb-6">My Collections</h1>
 
     <!-- ─────────────────── TABS ─────────────────── -->
-    <div class="mb-6 flex items-center border-b border-gray-300">
-      <div class="flex space-x-4">
+    <div class="mb-6 flex items-center border-b border-gray-300 overflow-x-auto overflow-y-hidden no-scrollbar">
+      <div class="flex flex-nowrap space-x-4 whitespace-nowrap">
         <button
           @click="switchTab('MyCollection')"
           :class="activeTab === 'MyCollection'
@@ -28,6 +28,19 @@
          class="px-4 py-2 -mb-px text-sm font-medium"
        >
          My Wishlist
+       </button>
+        <button
+         @click="switchTab('MyTradeList')"
+         :disabled="isLoadingTradeList"
+         :class="[
+           activeTab === 'MyTradeList'
+             ? 'border-b-2 border-indigo-600 text-indigo-600'
+             : 'border-transparent text-gray-500 hover:text-gray-700',
+           isLoadingTradeList && 'cursor-not-allowed opacity-50'
+         ]"
+         class="px-4 py-2 -mb-px text-sm font-medium"
+       >
+         My Trade List
        </button>
         <button
           @click="switchTab('AllSets')"
@@ -78,6 +91,13 @@
             placeholder="Type a name…"
             class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           />
+          <button
+            type="button"
+            class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            @click="resetFilters"
+          >
+            Reset Filters
+          </button>
         </div>
 
         <!-- Filter by Set -->
@@ -174,17 +194,27 @@
           </div>
         </div>
 
-        <!-- Duplicates Only (applies to My Collection) -->
+        <!-- Other Filters -->
         <div class="mb-4">
-          <p class="text-sm font-medium text-gray-700 mb-2">Duplicates</p>
-          <label class="flex items-center text-sm">
-            <input
-              type="checkbox"
-              v-model="duplicatesOnly"
-              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-            />
-            <span class="ml-2">Show duplicates only</span>
-          </label>
+          <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
+          <div class="space-y-1">
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                v-model="duplicatesOnly"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Show duplicates only</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                v-model="gtoonsOnly"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">gToons Only</span>
+            </label>
+          </div>
         </div>
 
         <!-- Sort -->
@@ -256,6 +286,9 @@
                     :name="uc.name"
                     :ctoon-id="uc.ctoonId"
                     :user-ctoon-id="uc.id"
+                    :is-gtoon="uc.isGtoon"
+                    :power="uc.power"
+                    :cost="uc.cost"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
                     progressive
@@ -263,23 +296,58 @@
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
-                    <span class="capitalize">{{ uc.series }}</span> •
-                    <span class="capitalize">{{ uc.rarity }}</span> •
-                    <span class="capitalize">{{ uc.set }}</span>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', uc.series)"
+                    >
+                      {{ uc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', uc.rarity)"
+                    >
+                      {{ uc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', uc.set)"
+                    >
+                      {{ uc.set }}
+                    </button>
                   </p>
                 </div>
                 <div class="mt-auto text-sm text-center">
-                  <p v-if="!uc.isHolidayItem">Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
-                  <p v-if="uc.isFirstEdition" class="text-indigo-600 font-semibold">
-                    First Edition
-                  </p>
+                  <template v-if="showUnique">
+                    <p>Mints Owned: {{ uc.mintCount }}</p>
+                    <p v-if="uc.earliestMint != null && uc.latestMint != null">
+                      Mint Range (Earliest-Latest): #{{ uc.earliestMint }} - #{{ uc.latestMint }}
+                    </p>
+                    <p v-else>Mint Range: N/A</p>
+                  </template>
+                  <template v-else>
+                    <p v-if="!uc.isHolidayItem">Mint #{{ uc.mintNumber ?? 'N/A' }}</p>
+                    <p v-if="uc.isFirstEdition" class="text-indigo-600 font-semibold">
+                      First Edition
+                    </p>
+                  </template>
                 </div>
-                <div class="mt-auto flex space-x-2">
+                <div class="mt-auto flex flex-wrap gap-2 whitespace-nowrap">
                   <AddToAuction
+                    class="flex-1 min-w-[12rem]"
                     :userCtoon="uc"
                     :isOwner="uc.userId === user.id"
                     :hasActiveAuction="uc.auctions.length > 0"
                     @auctionCreated="loadMoreUser"
+                  />
+                  <AddToTradeList
+                    class="flex-1 min-w-[12rem]"
+                    :user-ctoon-id="uc.id"
+                    :isOwner="uc.userId === user.id"
                   />
                 </div>
               </div>
@@ -350,6 +418,9 @@
                     :alt="wc.name"
                     :name="wc.name"
                     :ctoon-id="wc.id"
+                    :is-gtoon="wc.isGtoon"
+                    :power="wc.power"
+                    :cost="wc.cost"
                     image-class="max-w-full h-auto"
                     placeholder-height="8rem"
                     progressive
@@ -357,9 +428,29 @@
                 </div>
                 <div class="text-sm text-center mb-2">
                   <p>
-                    <span class="capitalize">{{ wc.series }}</span> •
-                    <span class="capitalize">{{ wc.rarity }}</span> •
-                    <span class="capitalize">{{ wc.set }}</span>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', wc.series)"
+                    >
+                      {{ wc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', wc.rarity)"
+                    >
+                      {{ wc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', wc.set)"
+                    >
+                      {{ wc.set }}
+                    </button>
                   </p>
                 </div>
                 <AddToWishlist :ctoon-id="wc.id" class="mt-auto" />
@@ -381,6 +472,99 @@
               class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
               :disabled="pageWishlist === totalPagesWishlist"
               @click="nextWishlistPage()"
+            >
+              Next Page
+            </button>
+          </div>
+        </div>
+
+        <!-- My Trade List -->
+        <div v-if="activeTab === 'MyTradeList'">
+          <p class="mb-4 text-sm font-medium text-gray-600">
+            {{ tradeListCountText }}
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <template v-if="isLoadingTradeList && pagedTradeList.length === 0">
+              <div
+                v-for="n in 6"
+                :key="n"
+                class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full animate-pulse"
+              >
+                <div class="bg-gray-200 rounded w-3/4 h-6 mb-4"></div>
+                <div class="bg-gray-200 rounded w-full h-32 mb-4"></div>
+                <div class="bg-gray-200 rounded w-1/2 h-4 mb-2"></div>
+                <div class="bg-gray-200 rounded w-1/2 h-4"></div>
+              </div>
+            </template>
+            <template v-else>
+              <div
+                v-for="tc in pagedTradeList"
+                :key="tc.userCtoonId"
+                class="relative bg-white rounded-lg shadow p-4 flex flex-col items-center h-full"
+              >
+                <h2 class="text-xl font-semibold mb-2 mt-6">{{ tc.name }}</h2>
+                <div class="flex-grow flex items-center justify-center w-full mb-2">
+                  <CtoonAsset
+                    :src="tc.assetPath"
+                    :alt="tc.name"
+                    :name="tc.name"
+                    :ctoon-id="tc.ctoonId"
+                    :user-ctoon-id="tc.userCtoonId"
+                    :is-gtoon="tc.isGtoon"
+                    :power="tc.power"
+                    :cost="tc.cost"
+                    image-class="max-w-full h-auto"
+                    placeholder-height="8rem"
+                    progressive
+                  />
+                </div>
+                <div class="text-sm text-center mb-2">
+                  <p>
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', tc.series)"
+                    >
+                      {{ tc.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', tc.rarity)"
+                    >
+                      {{ tc.rarity }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', tc.set)"
+                    >
+                      {{ tc.set }}
+                    </button>
+                  </p>
+                  <p class="text-xs text-gray-600 mt-1">Mint #{{ tc.mintNumber ?? 'N/A' }}</p>
+                </div>
+                <AddToTradeList :user-ctoon-id="tc.userCtoonId" :isOwner="true" class="mt-auto" />
+              </div>
+            </template>
+          </div>
+
+          <!-- Pager -->
+          <div class="mt-6 flex items-center justify-center gap-4">
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageTradeList === 1"
+              @click="prevTradeListPage()"
+            >
+              Previous Page
+            </button>
+            <span class="text-sm">Page {{ pageTradeList }} of {{ totalPagesTradeList }}</span>
+            <button
+              class="bg-white border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              :disabled="pageTradeList === totalPagesTradeList"
+              @click="nextTradeListPage()"
             >
               Next Page
             </button>
@@ -438,13 +622,30 @@
                       :alt="c.name"
                       :name="c.name"
                       :ctoon-id="c.id"
+                      :is-gtoon="c.isGtoon"
+                      :power="c.power"
+                      :cost="c.cost"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
                       progressive
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
-                    {{ c.series }} • {{ c.rarity }}
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('series', c.series)"
+                    >
+                      {{ c.series }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', c.rarity)"
+                    >
+                      {{ c.rarity }}
+                    </button>
                     <span class="block">
                       Highest Mint #: {{ c.highestMint }}
                     </span>
@@ -534,13 +735,30 @@
                       :alt="c.name"
                       :name="c.name"
                       :ctoon-id="c.id"
+                      :is-gtoon="c.isGtoon"
+                      :power="c.power"
+                      :cost="c.cost"
                       image-class="max-h-48 object-contain"
                       placeholder-height="8rem"
                       progressive
                     />
                   </div>
                   <p class="text-sm mt-2 text-center">
-                    {{ c.set }} • {{ c.rarity }}
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('set', c.set)"
+                    >
+                      {{ c.set }}
+                    </button>
+                    •
+                    <button
+                      type="button"
+                      class="capitalize text-indigo-600 hover:text-indigo-700 hover:underline focus:underline"
+                      @click="applyFilterFromCard('rarity', c.rarity)"
+                    >
+                      {{ c.rarity }}
+                    </button>
                     <span class="block">
                       Highest Mint #: {{ c.highestMint }}
                     </span>
@@ -594,7 +812,7 @@
   <transition name="slide-panel">
     <div
       v-if="ownersPanelVisible"
-      class="fixed top-0 right-0 h-full w-auto min-w-[450px] max-w-[85%] bg-white shadow-xl z-50 p-12 overflow-y-auto"
+      class="fixed top-0 right-0 h-full w-full max-w-full bg-white shadow-xl z-50 p-12 overflow-y-auto sm:w-auto sm:min-w-[560px] sm:max-w-[92%]"
     >
       <button
         class="absolute top-3 right-3 text-gray-500 hover:text-black"
@@ -604,19 +822,64 @@
         Owners of {{ currentOwnersCtoon?.name }}
       </h2>
       <div v-if="ownersLoading" class="text-center py-6">Loading…</div>
-      <ul v-else class="space-y-2">
+      <ul v-else class="space-y-3">
         <li
           v-for="owner in sortedOwners"
           :key="owner.userId + '-' + owner.mintNumber"
-          class="flex justify-between max-w-[250px] mx-auto"
+          class="w-full max-w-[420px] mx-auto"
         >
-          <span v-if="!owner.isHolidayItem" class="text-sm text-gray-600">Mint #{{ owner.mintNumber }}</span>
-          <NuxtLink
-            :to="`/czone/${owner.username}`"
-            class="text-indigo-600 hover:underline"
-          >
-            <span>{{ owner.username }}</span>
-          </NuxtLink>
+          <!-- mobile: stacked rows -->
+          <div class="flex flex-col gap-2 sm:hidden">
+            <div
+              v-if="!owner.isHolidayItem || owner.isTradeListItem"
+              class="flex items-center justify-between text-sm text-gray-600"
+            >
+              <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber }}</span>
+              <span v-else>&nbsp;</span>
+              <NuxtLink
+                v-if="owner.isTradeListItem"
+                :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+                class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:underline"
+              >
+                Tradeable
+              </NuxtLink>
+            </div>
+            <NuxtLink
+              :to="`/czone/${owner.username}`"
+              class="text-indigo-600 hover:underline text-sm font-semibold"
+            >
+              <span>{{ owner.username }}</span>
+            </NuxtLink>
+            <div
+              v-if="!owner.isHolidayItem || owner.isTradeListItem"
+              class="h-px w-full bg-gray-200"
+            ></div>
+          </div>
+
+          <!-- desktop: single row columns -->
+          <div class="hidden sm:grid sm:grid-cols-[auto,1fr,auto] sm:items-center sm:gap-4">
+            <span
+              v-if="!owner.isHolidayItem"
+              class="text-sm text-gray-600 whitespace-nowrap"
+            >
+              Mint #{{ owner.mintNumber }}
+            </span>
+            <span v-else class="text-sm text-gray-600">&nbsp;</span>
+            <NuxtLink
+              :to="`/czone/${owner.username}`"
+              class="text-indigo-600 hover:underline truncate"
+            >
+              <span>{{ owner.username }}</span>
+            </NuxtLink>
+            <NuxtLink
+              v-if="owner.isTradeListItem"
+              :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+              class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 whitespace-nowrap hover:underline"
+            >
+              Tradeable
+            </NuxtLink>
+            <span v-else>&nbsp;</span>
+          </div>
         </li>
       </ul>
     </div>
@@ -629,6 +892,7 @@ import { useAuth } from '@/composables/useAuth'
 import Nav from '@/components/Nav.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import AddToAuction from '@/components/AddToAuction.vue'
+import AddToTradeList from '@/components/AddToTradeList.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 
 definePageMeta({ title: 'Collection', middleware: 'auth', layout: 'default' })
@@ -647,6 +911,7 @@ const selectedRarities = ref([])
 const selectedOwned  = ref('all')
 const sortBy         = ref(defaultSortForTab(activeTab.value))
 const duplicatesOnly = ref(false)  // My Collection: only show duplicate holdings
+const gtoonsOnly     = ref(false)
 
 const filterMeta       = ref({ sets: [], series: [], rarities: [] })
 
@@ -663,12 +928,16 @@ const hasLoadedUserAll   = ref(false)
 const wishlistCtoons   = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
+const tradeListCtoons   = ref([])
+const isLoadingTradeList = ref(false)
+const hasLoadedTradeList = ref(false)
 
 // Pagination
 const PAGE_SIZE   = 100
 const pageUser    = ref(1)
 const pageAll     = ref(1)
 const pageWishlist= ref(1)
+const pageTradeList= ref(1)
 
 // Owners panel
 const ownersPanelVisible   = ref(false)
@@ -715,9 +984,36 @@ function updateUrlQueryFromFilters() {
   // My Collection: duplicates-only toggle
   if (duplicatesOnly.value) newQuery.dupes = '1'; else delete newQuery.dupes
 
+  if (gtoonsOnly.value) newQuery.gtoon = 'true'; else delete newQuery.gtoon
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedSets.value = []
+  selectedSeries.value = []
+  selectedRarities.value = []
+  selectedOwned.value = 'all'
+  showUnique.value = false
+  duplicatesOnly.value = false
+  gtoonsOnly.value = false
+  sortBy.value = defaultSortForTab(activeTab.value)
+  pageUser.value = 1
+  pageAll.value = 1
+  pageWishlist.value = 1
+  pageTradeList.value = 1
+  updateUrlQueryFromFilters()
+}
+
+function applyFilterFromCard(type, value) {
+  const next = String(value || '').trim()
+  if (!next) return
+  if (type === 'set') selectedSets.value = [next]
+  if (type === 'series') selectedSeries.value = [next]
+  if (type === 'rarity') selectedRarities.value = [next]
 }
 
 // collections.vue <script setup> — add helpers near top of sort code
@@ -726,33 +1022,48 @@ function sortCmp(a, b, { useMintTie = false } = {}) {
   const getTimeDesc = v => v ? new Date(v).getTime() : -Number.MAX_SAFE_INTEGER
   const numAsc  = (x,y) => (x ?? Number.POSITIVE_INFINITY) - (y ?? Number.POSITIVE_INFINITY)
   const numDesc = (x,y) => (y ?? Number.NEGATIVE_INFINITY) - (x ?? Number.NEGATIVE_INFINITY)
+  const nameTie = () => {
+    const cmp = (a.name || '').localeCompare(b.name || '')
+    if (!cmp && useMintTie) return (a.mintNumber ?? 0) - (b.mintNumber ?? 0)
+    return cmp
+  }
 
   switch (sortBy.value) {
     case 'acquiredDateAsc':
       return getTimeAsc(a.acquiredAt) - getTimeAsc(b.acquiredAt)
     case 'acquiredDateDesc':
       return getTimeDesc(b.acquiredAt) - getTimeDesc(a.acquiredAt)
-    case 'releaseDateAsc':  return getTimeAsc(a.releaseDate)  - getTimeAsc(b.releaseDate)
-    case 'releaseDateDesc': return getTimeDesc(b.releaseDate) - getTimeDesc(a.releaseDate)
-    case 'priceAsc':        return numAsc(a.price, b.price)
-    case 'priceDesc':       return numDesc(a.price, b.price)
+    case 'releaseDateAsc': {
+      const primary = getTimeAsc(a.releaseDate) - getTimeAsc(b.releaseDate)
+      return primary || nameTie()
+    }
+    case 'releaseDateDesc': {
+      const primary = getTimeDesc(b.releaseDate) - getTimeDesc(a.releaseDate)
+      return primary || nameTie()
+    }
+    case 'priceAsc': {
+      const primary = numAsc(a.price, b.price)
+      return primary || nameTie()
+    }
+    case 'priceDesc': {
+      const primary = numDesc(a.price, b.price)
+      return primary || nameTie()
+    }
     case 'rarity': {
       const cmp = (a.rarity || '').localeCompare(b.rarity || '')
-      return cmp || (a.name || '').localeCompare(b.name || '')
+      return cmp || nameTie()
     }
     case 'series': {
       const cmp = (a.series || '').localeCompare(b.series || '')
-      return cmp || (a.name || '').localeCompare(b.name || '')
+      return cmp || nameTie()
     }
     case 'set': {
       const cmp = (a.set || '').localeCompare(b.set || '')
-      return cmp || (a.name || '').localeCompare(b.name || '')
+      return cmp || nameTie()
     }
     case 'name':
     default: {
-      const cmp = (a.name || '').localeCompare(b.name || '')
-      if (!cmp && useMintTie) return (a.mintNumber ?? 0) - (b.mintNumber ?? 0)
-      return cmp
+      return nameTie()
     }
   }
 }
@@ -794,7 +1105,8 @@ const filteredAllCtoons = computed(() => {
       : selectedOwned.value === 'owned'
         ? c.isOwned
         : !c.isOwned
-    return nm && sm && se && r && o
+    const g = !gtoonsOnly.value || c.isGtoon
+    return nm && sm && se && r && o && g
   })
 })
 const sortedAll = computed(() =>
@@ -831,12 +1143,48 @@ const filteredUserCtoons = computed(() =>
     const sm = !selectedSets.value.length || selectedSets.value.includes(uc.set)
     const se = !selectedSeries.value.length || selectedSeries.value.includes(uc.series)
     const r  = !selectedRarities.value.length || selectedRarities.value.includes(uc.rarity)
-    return nm && sm && se && r
+    const g  = !gtoonsOnly.value || uc.isGtoon
+    return nm && sm && se && r && g
   })
 )
-const sortedUserAll = computed(() =>
-  filteredUserCtoons.value.slice().sort((a, b) => sortCmp(a, b, { useMintTie: true }))
-)
+const uniqueUserCtoons = computed(() => {
+  const grouped = new Map()
+  for (const uc of filteredUserCtoons.value) {
+    const key = uc.ctoonId
+    let entry = grouped.get(key)
+    if (!entry) {
+      entry = {
+        ...uc,
+        mintCount: 0,
+        earliestMint: null,
+        latestMint: null
+      }
+      grouped.set(key, entry)
+    }
+    entry.mintCount += 1
+    if (uc.isHolidayItem) entry.isHolidayItem = true
+    if (uc.isFirstEdition) entry.isFirstEdition = true
+    if (uc.acquiredAt) {
+      const next = new Date(uc.acquiredAt).getTime()
+      const current = entry.acquiredAt ? new Date(entry.acquiredAt).getTime() : 0
+      if (!current || next > current) entry.acquiredAt = uc.acquiredAt
+    }
+    if (typeof uc.mintNumber === 'number') {
+      entry.earliestMint = entry.earliestMint === null
+        ? uc.mintNumber
+        : Math.min(entry.earliestMint, uc.mintNumber)
+      entry.latestMint = entry.latestMint === null
+        ? uc.mintNumber
+        : Math.max(entry.latestMint, uc.mintNumber)
+    }
+  }
+  return Array.from(grouped.values())
+})
+
+const sortedUserAll = computed(() => {
+  const list = (showUnique.value ? uniqueUserCtoons.value : filteredUserCtoons.value).slice()
+  return list.sort((a, b) => sortCmp(a, b, { useMintTie: !showUnique.value }))
+})
 const totalPagesUser = computed(() =>
   Math.max(1, Math.ceil(sortedUserAll.value.length / PAGE_SIZE))
 )
@@ -852,11 +1200,25 @@ const filteredWishlistCtoons = computed(() =>
     const sm = !selectedSets.value.length || selectedSets.value.includes(wc.set)
     const se = !selectedSeries.value.length || selectedSeries.value.includes(wc.series)
     const r  = !selectedRarities.value.length || selectedRarities.value.includes(wc.rarity)
-    return nm && sm && se && r
+    const g  = !gtoonsOnly.value || wc.isGtoon
+    return nm && sm && se && r && g
   })
 )
 const filteredAndSortedWishlistCtoons = computed(() =>
   filteredWishlistCtoons.value.slice().sort((a, b) => sortCmp(a, b))
+)
+const filteredTradeListCtoons = computed(() =>
+  tradeListCtoons.value.filter(tc => {
+    const nm = (tc.name || '').toLowerCase().includes(searchQuery.value.toLowerCase())
+    const sm = !selectedSets.value.length || selectedSets.value.includes(tc.set)
+    const se = !selectedSeries.value.length || selectedSeries.value.includes(tc.series)
+    const r  = !selectedRarities.value.length || selectedRarities.value.includes(tc.rarity)
+    const g  = !gtoonsOnly.value || tc.isGtoon
+    return nm && sm && se && r && g
+  })
+)
+const filteredAndSortedTradeListCtoons = computed(() =>
+  filteredTradeListCtoons.value.slice().sort((a, b) => sortCmp(a, b, { useMintTie: true }))
 )
 const totalPagesWishlist = computed(() =>
   Math.max(1, Math.ceil(filteredAndSortedWishlistCtoons.value.length / PAGE_SIZE))
@@ -864,6 +1226,13 @@ const totalPagesWishlist = computed(() =>
 const pagedWishlist = computed(() => {
   const start = (pageWishlist.value - 1) * PAGE_SIZE
   return filteredAndSortedWishlistCtoons.value.slice(start, start + PAGE_SIZE)
+})
+const totalPagesTradeList = computed(() =>
+  Math.max(1, Math.ceil(filteredAndSortedTradeListCtoons.value.length / PAGE_SIZE))
+)
+const pagedTradeList = computed(() => {
+  const start = (pageTradeList.value - 1) * PAGE_SIZE
+  return filteredAndSortedTradeListCtoons.value.slice(start, start + PAGE_SIZE)
 })
 
 // ─── HELPERS: ownership stats ────────────────────────────────────────────────
@@ -943,6 +1312,10 @@ const wishlistCountText = computed(() => {
   if (!hasLoadedWishlist.value) return 'Loading wishlist totals...'
   return `Total Wishlist cToons: ${wishlistCtoons.value.length}`
 })
+const tradeListCountText = computed(() => {
+  if (!hasLoadedTradeList.value) return 'Loading trade list totals...'
+  return `Total Trade List cToons: ${tradeListCtoons.value.length}`
+})
 const setsCountText = computed(() => {
   if (!hasLoadedAll.value) return 'Loading set totals...'
   return `${completedSetsCount.value} of ${totalSetsCount.value} Sets Collected`
@@ -966,6 +1339,9 @@ function switchTab(tab) {
   } else if (tab === 'MyWishlist') {
     if (!wishlistCtoons.value.length && !isLoadingWishlist.value) loadWishlist()
     pageWishlist.value = 1
+  } else if (tab === 'MyTradeList') {
+    if (!tradeListCtoons.value.length && !isLoadingTradeList.value) loadTradeList()
+    pageTradeList.value = 1
   } else if (tab === 'AllSets' || tab === 'AllSeries') {
     if (!allCtoons.value.length) loadAll()
     pageAll.value = 1
@@ -1022,17 +1398,30 @@ async function loadWishlist() {
     isLoadingWishlist.value = false
   }
 }
+async function loadTradeList() {
+  if (isLoadingTradeList.value || hasLoadedTradeList.value) return
+  if (!user.value?.username) return
+  isLoadingTradeList.value = true
+  try {
+    tradeListCtoons.value = await $fetch(`/api/trade-list/users/${user.value.username}`)
+    hasLoadedTradeList.value = true
+  } finally {
+    isLoadingTradeList.value = false
+  }
+}
 
 // Reset page when filters or sort change
-watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned], () => {
+watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned, gtoonsOnly, showUnique], () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
+  if (activeTab.value === 'MyTradeList') pageTradeList.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
   updateUrlQueryFromFilters()
 }, { deep: true })
 watch(sortBy, () => {
   if (activeTab.value === 'MyCollection') pageUser.value = 1
   if (activeTab.value === 'MyWishlist') pageWishlist.value = 1
+  if (activeTab.value === 'MyTradeList') pageTradeList.value = 1
   if (activeTab.value === 'AllSets' || activeTab.value === 'AllSeries') pageAll.value = 1
   updateUrlQueryFromFilters()
 })
@@ -1061,6 +1450,7 @@ onMounted(async () => {
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
   const dupesParam  = typeof route.query.dupes === 'string' ? route.query.dupes : ''
+  const gtoonParam  = route.query.gtoon
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
 
@@ -1089,6 +1479,9 @@ onMounted(async () => {
 
   if (['1', 'true'].includes(dupesParam.toLowerCase ? dupesParam.toLowerCase() : dupesParam)) {
     duplicatesOnly.value = true
+  }
+  if (['1', 'true'].includes(gtoonParam?.toLowerCase?.() || gtoonParam)) {
+    gtoonsOnly.value = true
   }
 
   // Normalize URL now to reflect initialized values
@@ -1121,6 +1514,12 @@ function prevWishlistPage () {
 function nextWishlistPage () {
   if (pageWishlist.value < totalPagesWishlist.value) { pageWishlist.value++; scrollToTop() }
 }
+function prevTradeListPage () {
+  if (pageTradeList.value > 1) { pageTradeList.value--; scrollToTop() }
+}
+function nextTradeListPage () {
+  if (pageTradeList.value < totalPagesTradeList.value) { pageTradeList.value++; scrollToTop() }
+}
 function prevAllPage () {
   if (pageAll.value > 1) { pageAll.value--; scrollToTop() }
 }
@@ -1132,4 +1531,7 @@ function nextAllPage () {
 <style scoped>
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background-color: rgba(107,114,128,0.5); border-radius: 3px; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>

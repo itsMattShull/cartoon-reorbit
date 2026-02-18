@@ -36,7 +36,16 @@
           v-else
           class="inline-block bg-green-100 text-green-800 text-xl font-bold px-4 py-2 rounded-full"
         >
-          🎉 Winner: {{ displayWinner || '—' }} 🎉
+          🎉 Winner:
+          <NuxtLink
+            v-if="displayWinner"
+            :to="`/czone/${displayWinner}`"
+            class="text-indigo-700 hover:text-indigo-900 hover:underline"
+          >
+            {{ displayWinner }}
+          </NuxtLink>
+          <span v-else>—</span>
+          🎉
         </span>
       </div>
 
@@ -48,6 +57,9 @@
           :name="auction.ctoon.name"
           :ctoon-id="auction.ctoon.id"
           :user-ctoon-id="auction.ctoon.userCtoonId"
+          :is-gtoon="auction.ctoon.isGtoon"
+          :power="auction.ctoon.power"
+          :cost="auction.ctoon.cost"
           image-class="block max-w-full mx-auto rounded"
         />
       </div>
@@ -61,7 +73,13 @@
         </p>
         <p><strong>Current Highest Bid:</strong> {{ displayedBid }} pts</p>
         <p v-if="hasBids && currentTopBidder">
-          <strong>Top Bidder:</strong> {{ currentTopBidder }}
+          <strong>Top Bidder:</strong>
+          <NuxtLink
+            :to="`/czone/${currentTopBidder}`"
+            class="text-indigo-600 hover:text-indigo-800 hover:underline"
+          >
+            {{ currentTopBidder }}
+          </NuxtLink>
         </p>
       </div>
 
@@ -75,7 +93,7 @@
         </div>
         <p>
           This is a featured auction. You’ll only be allowed to bid if you
-          haven’t owned more than one copy of this cToon in the last 30 days.
+          haven’t owned 2 mints of this cToon in the last 30 days.
         </p>
       </div>
 
@@ -165,7 +183,13 @@
           <h2 class="text-xl font-semibold mb-2">Bid History</h2>
           <ul class="space-y-1 text-sm">
             <li v-for="(b, i) in bids" :key="i">
-              {{ b.user }}: {{ b.amount }} pts
+              <NuxtLink
+                :to="`/czone/${b.user}`"
+                class="text-indigo-600 hover:text-indigo-800 hover:underline"
+              >
+                {{ b.user }}
+              </NuxtLink>
+              : {{ b.amount }} pts
             </li>
             <li v-if="!bids.length" class="text-gray-500">No bids yet.</li>
           </ul>

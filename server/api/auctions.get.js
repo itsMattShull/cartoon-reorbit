@@ -1,5 +1,5 @@
 // server/api/auctions.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -14,16 +14,22 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
+  const query = getQuery(event)
+  const hasBidsOnly = ['1', 'true', 'yes'].includes(String(query.hasBids || '').toLowerCase())
+
   // 2) Active auctions with minimal nested data
+  const where = { status: 'ACTIVE' }
+  if (hasBidsOnly) where.bids = { some: {} }
+
   const auctions = await prisma.auction.findMany({
-    where: { status: 'ACTIVE' },
+    where,
     include: {
       userCtoon: {
         select: {
           id: true,
           ctoonId: true,
           mintNumber: true,
-          ctoon: { select: { name: true, series: true, rarity: true, assetPath: true, characters: true } }
+          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true } }
         }
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
@@ -68,12 +74,17 @@ export default defineEventHandler(async (event) => {
     userCtoonId:  a.userCtoon.id,
     ctoonId:      a.userCtoon.ctoonId,
     name:         a.userCtoon.ctoon.name,
+    set:          a.userCtoon.ctoon.set,
     series:       a.userCtoon.ctoon.series,
     rarity:       a.userCtoon.ctoon.rarity,
+    isGtoon:      a.userCtoon.ctoon.isGtoon,
+    cost:         a.userCtoon.ctoon.cost,
+    power:        a.userCtoon.ctoon.power,
     characters:   a.userCtoon.ctoon.characters || [],
     mintNumber:   a.userCtoon.mintNumber,
     assetPath:    a.userCtoon.ctoon.assetPath,
     endAt:        a.endAt.toISOString(),
+    initialBid:   a.initialBet,
     highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
     bidCount:     a._count?.bids ?? 0,
     isOwned:      ownedSet.has(a.userCtoon.ctoonId),

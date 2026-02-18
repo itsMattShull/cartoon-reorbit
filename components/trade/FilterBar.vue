@@ -65,15 +65,16 @@
       </select>
     </div>
 
-    <!-- Duplicates -->
+    <!-- Other filters -->
     <div>
-      <label class="block text-xs font-medium mb-1">Duplicates</label>
+      <label class="block text-xs font-medium mb-1">Other Filters</label>
       <select
         class="border rounded px-3 py-2 max-w-[152px]"
         :value="duplicatesFilter"
         @change="$emit('update:duplicates-filter', $event.target.value)"
       >
         <option value="all">All</option>
+        <option value="trade-list">On Trade List</option>
         <option value="dups">Only Duplicates</option>
       </select>
     </div>

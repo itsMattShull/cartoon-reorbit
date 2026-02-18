@@ -86,7 +86,14 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
           <div>
             <label class="block mb-1 font-medium">Initial Release %</label>
-            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
+            <input
+              v-model.number="releasePercent"
+              type="number"
+              min="1"
+              max="100"
+              @input="clampReleasePercent"
+              class="w-full border rounded p-2"
+            />
           </div>
           <div>
             <label class="block mb-1 font-medium">Initial Release Qty</label>
@@ -239,6 +246,15 @@ const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Priz
 const releasePercent = ref(75)
 const delayHours = ref(12)
 
+function clampReleasePercent() {
+  const next = Number(releasePercent.value)
+  if (!Number.isFinite(next)) {
+    releasePercent.value = 1
+    return
+  }
+  releasePercent.value = Math.min(100, Math.max(1, next))
+}
+
 /* toast helpers */
 const showToast = ref(false)
 const toastMessage = ref(''); const toastType = ref('success')
@@ -296,6 +312,7 @@ onMounted(async ()=>{
       const rs = await $fetch('/api/release-settings')
       releasePercent.value = Number(rs.initialReleasePercent ?? 75)
       delayHours.value = Number(rs.finalReleaseDelayHours ?? 12)
+      clampReleasePercent()
     } catch {}
     const res = await fetch(`/api/admin/ctoon/${id}`,{credentials:'include'})
     if(!res.ok) throw new Error()
@@ -314,6 +331,14 @@ onMounted(async ()=>{
     assetPath.value = ctoon.assetPath
     setField.value = ctoon.set
     characters.value = (ctoon.characters||[]).join(', ')
+    if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
+      const qty = Number(ctoon.quantity)
+      const initQty = Number(ctoon.initialReleaseQty)
+      if (Number.isFinite(qty) && qty > 0 && Number.isFinite(initQty) && initQty > 0) {
+        releasePercent.value = Math.round((initQty / qty) * 100)
+        clampReleasePercent()
+      }
+    }
 
     isGtoon.value   = ctoon.isGtoon
     gtoonType.value = ctoon.gtoonType || ''

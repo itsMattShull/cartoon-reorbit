@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
         dailyNewUserPoints: 1000,
         czoneVisitPoints: 20,
         czoneVisitMaxPerDay: 10,
+        czoneCount: 3,
         phashDuplicateThreshold: 14,
         dhashDuplicateThreshold: 16
       }

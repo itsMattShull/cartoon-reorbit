@@ -3,6 +3,11 @@ import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
+  const requesterId = event.context.userId
+  if (!requesterId) {
+    throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
+  }
+
   const { username } = event.context.params
   const { filter } = getQuery(event)
 
@@ -49,6 +54,9 @@ export default defineEventHandler(async (event) => {
     series: uc.ctoon.series?.trim() || null,
     set: uc.ctoon.set?.trim() || null,
     rarity: uc.ctoon.rarity?.trim() || null,
+    isGtoon: uc.ctoon.isGtoon,
+    cost: uc.ctoon.cost,
+    power: uc.ctoon.power,
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,

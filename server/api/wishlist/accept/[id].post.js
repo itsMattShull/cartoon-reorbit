@@ -34,11 +34,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient points' })
   }
 
+  const availableUserCtoonWhere = {
+    userId: recipientId,
+    ctoonId: wi.ctoonId,
+    tradeOfferCtoons: { none: { tradeOffer: { status: 'PENDING' } } },
+    auctions: { none: { status: 'ACTIVE' } }
+  }
+
   // preflight ownership
   const ownsCount = await prisma.userCtoon.count({
-    where: { userId: recipientId, ctoonId: wi.ctoonId }
+    where: availableUserCtoonWhere
   })
-  if (ownsCount === 0) throw createError({ statusCode: 400, statusMessage: 'You do not own this cToon' })
+  if (ownsCount === 0) throw createError({ statusCode: 400, statusMessage: 'You do not own this cToon that isnt in an active auction or pending trade.' })
 
   // grab initiator discord id now for DM later
   const initiator = await prisma.user.findUnique({
@@ -56,13 +63,13 @@ export default defineEventHandler(async (event) => {
 
     // pick highest mint owned by recipient
     let uc = await tx.userCtoon.findFirst({
-      where: { userId: recipientId, ctoonId: wi.ctoonId, mintNumber: { not: null } },
+      where: { ...availableUserCtoonWhere, mintNumber: { not: null } },
       orderBy: { mintNumber: 'desc' },
       select: { id: true, ctoonId: true, mintNumber: true }
     })
     if (!uc) {
       uc = await tx.userCtoon.findFirst({
-        where: { userId: recipientId, ctoonId: wi.ctoonId },
+        where: availableUserCtoonWhere,
         orderBy: { createdAt: 'desc' },
         select: { id: true, ctoonId: true, mintNumber: true }
       })
@@ -97,6 +104,9 @@ export default defineEventHandler(async (event) => {
     const transferred = await tx.userCtoon.update({
       where: { id: uc.id },
       data: { userId: initiatorId }
+    })
+    await tx.userTradeListItem.deleteMany({
+      where: { userCtoonId: uc.id, userId: { not: initiatorId } }
     })
     await tx.ctoonOwnerLog.create({
       data: { userId: initiatorId, ctoonId: transferred.ctoonId, userCtoonId: transferred.id, mintNumber: transferred.mintNumber }

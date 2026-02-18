@@ -1,7 +1,10 @@
 import { prisma } from '@/server/prisma'
 
-function computeInitialCap(totalQty, percent) {
+function computeInitialCap(totalQty, percent, overrideQty) {
   if (totalQty == null) return null
+  if (overrideQty != null && Number.isFinite(Number(overrideQty))) {
+    return Math.min(Number(totalQty), Math.max(1, Number(overrideQty)))
+  }
   const raw = Math.floor((Number(totalQty) * Number(percent)) / 100)
   return Math.max(1, raw)
 }
@@ -38,6 +41,9 @@ export default defineEventHandler(async () => {
       releaseDate: true,
       quantity: true,
       totalMinted: true,
+      isGtoon: true,
+      cost: true,
+      power: true,
       characters: true,
       // advisory fields (optional)
       initialReleaseAt: true,
@@ -50,11 +56,12 @@ export default defineEventHandler(async () => {
   // Compute nextReleaseAt and initialCap for UI convenience
   return ctoons.map(c => {
     const qty = c.quantity
-    let finalAt = null
-    if (c.releaseDate) {
-      finalAt = new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-    }
-    const initialCap = qty != null ? computeInitialCap(qty, initialPercent) : null
+    const finalAt = c.finalReleaseAt
+      ? new Date(c.finalReleaseAt)
+      : c.releaseDate
+        ? new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+        : null
+    const initialCap = qty != null ? computeInitialCap(qty, initialPercent, c.initialReleaseQty) : null
     let nextReleaseAt = null
     if (c.releaseDate && new Date(c.releaseDate) > now) {
       nextReleaseAt = c.releaseDate

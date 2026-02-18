@@ -6,7 +6,7 @@
     <h1 class="text-3xl font-bold mb-6">Auctions</h1>
 
     <!-- Tabs -->
-    <div class="mb-6 flex border-b">
+    <div class="mb-6 flex flex-nowrap border-b overflow-x-auto overflow-y-hidden whitespace-nowrap no-scrollbar">
       <button
         :class="[
           'px-4 py-2 -mb-px font-semibold',
@@ -42,142 +42,203 @@
       >
         My Auctions
       </button>
+
+      <button
+        :class="[
+          'ml-6 px-4 py-2 -mb-px font-semibold',
+          activeTab === 'all'
+            ? 'border-b-2 border-indigo-600 text-indigo-600'
+            : 'text-gray-600'
+        ]"
+        @click="activeTab = 'all'"
+      >
+        All Auctions
+      </button>
     </div>
 
-    <!-- Current Auctions -->
-    <div v-if="activeTab === 'current'">
-      <div class="lg:flex lg:gap-6">
-        <!-- Toggle Filters on Mobile -->
-        <button
-          class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
-          @click="showFilters = !showFilters"
-        >
-          {{ showFilters ? 'Hide Filters' : 'Show Filters & Sort' }}
-        </button>
+    <div class="lg:flex lg:gap-6">
+      <!-- Toggle Filters on Mobile -->
+      <button
+        class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
+        @click="showFilters = !showFilters"
+      >
+        {{ showFilters ? 'Hide Filters' : 'Show Filters & Sort' }}
+      </button>
 
-        <!-- Sidebar Filters -->
-        <aside
-          :class="[
-            showFilters ? 'block' : 'hidden',
-            'lg:block',
-            'w-full lg:w-1/4',
-            'bg-white rounded-lg shadow p-6'
-          ]"
-        >
-          <!-- Search -->
-          <div class="mb-4">
-            <label for="search" class="block text-sm font-medium text-gray-700 mb-1">
-              Search Auctions
-            </label>
-            <input
-              id="search"
-              type="text"
-              v-model="searchQuery"
-              placeholder="Type a name or character…"
-              class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
+      <!-- Sidebar Filters -->
+      <aside
+        :class="[
+          showFilters ? 'block' : 'hidden',
+          'lg:block',
+          'w-full lg:w-1/4',
+          'bg-white rounded-lg shadow p-6'
+        ]"
+      >
+        <!-- Search -->
+        <div class="mb-4">
+          <label for="search" class="block text-sm font-medium text-gray-700 mb-1">
+            Search Auctions
+          </label>
+          <input
+            id="search"
+            type="text"
+            v-model="searchQuery"
+            placeholder="Type a name or character…"
+            class="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          <button
+            type="button"
+            class="mt-3 w-full rounded bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            @click="resetFilters"
+          >
+            Reset Filters
+          </button>
+        </div>
 
-          <!-- Filter by Series -->
-          <div class="mb-4">
-            <p class="text-sm font-medium text-gray-700 mb-2">Filter by Series</p>
-            <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
-              <label v-for="(ser, i) in uniqueSeries" :key="ser + i" class="flex items-center text-sm">
-                <input
-                  type="checkbox"
-                  :value="ser"
-                  v-model="selectedSeries"
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                />
-                <span class="ml-2 capitalize">{{ ser }}</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Filter by Rarity -->
-          <div class="mb-4">
-            <p class="text-sm font-medium text-gray-700 mb-2">Filter by Rarity</p>
-            <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
-              <label v-for="(r, i) in uniqueRarities" :key="r + i" class="flex items-center text-sm">
-                <input
-                  type="checkbox"
-                  :value="r"
-                  v-model="selectedRarities"
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                />
-                <span class="ml-2 capitalize">{{ r }}</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Filter by Ownership -->
-          <div class="mb-4">
-            <p class="text-sm font-medium text-gray-700 mb-2">Filter by Ownership</p>
-            <div class="space-y-1">
-              <label class="flex items-center text-sm">
-                <input
-                  type="radio"
-                  value="all"
-                  v-model="selectedOwned"
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                />
-                <span class="ml-2">All</span>
-              </label>
-              <label class="flex items-center text-sm">
-                <input
-                  type="radio"
-                  value="owned"
-                  v-model="selectedOwned"
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                />
-                <span class="ml-2">Owned Only</span>
-              </label>
-              <label class="flex items-center text-sm">
-                <input
-                  type="radio"
-                  value="unowned"
-                  v-model="selectedOwned"
-                  class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                />
-                <span class="ml-2">Un-owned Only</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Filter by Featured -->
-          <div class="mb-4">
-            <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
-            <label class="flex items-center text-sm">
+        <!-- Filter by Set -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Set</p>
+          <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
+            <label v-for="(setName, i) in uniqueSets" :key="setName + i" class="flex items-center text-sm">
               <input
                 type="checkbox"
-                v-model="featuredOnly"
+                :value="setName"
+                v-model="selectedSets"
                 class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
               />
-              <span class="ml-2">Featured Only</span>
+              <span class="ml-2 capitalize">{{ setName }}</span>
             </label>
           </div>
+        </div>
 
-          <!-- Sort Select -->
-          <div class="mt-6">
-            <label for="sort" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-            <select
-              id="sort"
-              v-model="sortBy"
-              class="mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="endAsc">Ending Soonest</option>
-              <option value="nameAsc">Name (A→Z)</option>
-              <option value="nameDesc">Name (Z→A)</option>
-              <option value="mintAsc">Mint # (Asc)</option>
-              <option value="mintDesc">Mint # (Desc)</option>
-              <option value="rarity">Rarity (A→Z)</option>
-            </select>
+        <!-- Filter by Series -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Series</p>
+          <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
+            <label v-for="(ser, i) in uniqueSeries" :key="ser + i" class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                :value="ser"
+                v-model="selectedSeries"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ ser }}</span>
+            </label>
           </div>
-        </aside>
+        </div>
 
-        <!-- Auction cards -->
-        <div class="w-full lg:w-3/4">
-          <div v-if="isLoadingTrending || trendingAuctions.length" class="mb-6">
+        <!-- Filter by Rarity -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Rarity</p>
+          <div class="space-y-1 max-h-28 overflow-y-auto pr-2">
+            <label v-for="(r, i) in uniqueRarities" :key="r + i" class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                :value="r"
+                v-model="selectedRarities"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2 capitalize">{{ r }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Filter by Ownership -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Filter by Ownership</p>
+          <div class="space-y-1">
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="all"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">All</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="owned"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Owned Only</span>
+            </label>
+            <label class="flex items-center text-sm">
+              <input
+                type="radio"
+                value="unowned"
+                v-model="selectedOwned"
+                class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+              />
+              <span class="ml-2">Un-owned Only</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Filter by Featured -->
+        <div class="mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">Other Filters</p>
+          <label class="flex items-center text-sm">
+            <input
+              type="checkbox"
+              v-model="featuredOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">Featured Only</span>
+          </label>
+          <label class="flex items-center text-sm mt-2">
+            <input
+              type="checkbox"
+              v-model="wishlistOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">On My Wishlist</span>
+          </label>
+          <label class="flex items-center text-sm mt-2">
+            <input
+              type="checkbox"
+              v-model="hasBidsOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">Has 1+ Bids</span>
+          </label>
+          <label class="flex items-center text-sm mt-2">
+            <input
+              type="checkbox"
+              v-model="gtoonsOnly"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="ml-2">gToons Only</span>
+          </label>
+          <p v-if="wishlistOnly && isLoadingWishlist" class="mt-2 text-xs text-gray-500">
+            Loading wishlist...
+          </p>
+        </div>
+
+        <!-- Sort Select -->
+        <div class="mt-6">
+          <label for="sort" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+          <select
+            id="sort"
+            v-model="sortBy"
+            class="mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="endAsc">Ending Soonest</option>
+            <option value="nameAsc">Name (A→Z)</option>
+            <option value="nameDesc">Name (Z→A)</option>
+            <option value="mintAsc">Mint # (Asc)</option>
+            <option value="mintDesc">Mint # (Desc)</option>
+            <option value="rarity">Rarity (A→Z)</option>
+          </select>
+        </div>
+      </aside>
+
+      <div class="w-full lg:w-3/4">
+        <!-- Current Auctions -->
+        <template v-if="activeTab === 'current'">
+          <div v-if="isLoadingTrending || filteredTrendingAuctions.length" class="mb-6">
             <div class="bg-blue-600 rounded-lg shadow p-4">
             <h2 class="text-xl font-semibold mb-3 bg-blue-200 text-blue-600 px-3 py-2 rounded">
               Trending Auctions
@@ -188,7 +249,7 @@
                 </template>
                 <template v-else>
                   <div
-                    v-for="auction in trendingAuctions"
+                    v-for="auction in filteredTrendingAuctions"
                     :key="auction.id"
                     class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full relative"
                   >
@@ -218,6 +279,9 @@
                         :name="auction.name"
                         :ctoon-id="auction.ctoonId"
                         :user-ctoon-id="auction.userCtoonId"
+                        :is-gtoon="auction.isGtoon"
+                        :power="auction.power"
+                        :cost="auction.cost"
                         image-class="block max-w-full mx-auto rounded mb-4"
                       />
                     </div>
@@ -227,6 +291,9 @@
                       <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
                       <p v-if="!auction.isHolidayItem" class="text-sm text-gray-600 mb-1">
                         Mint #{{ auction.mintNumber ?? 'N/A' }}
+                      </p>
+                      <p class="text-sm text-gray-600 mb-1">
+                        Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
                         Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
@@ -253,7 +320,7 @@
             </template>
             <template v-else>
               <div
-                v-for="auction in filteredAuctions"
+                v-for="auction in paginatedAuctions"
                 :key="auction.id"
                 class="bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full relative"
               >
@@ -283,6 +350,9 @@
                     :name="auction.name"
                     :ctoon-id="auction.ctoonId"
                     :user-ctoon-id="auction.userCtoonId"
+                    :is-gtoon="auction.isGtoon"
+                    :power="auction.power"
+                    :cost="auction.cost"
                     image-class="block max-w-full mx-auto rounded mb-4"
                   />
                 </div>
@@ -292,6 +362,9 @@
                   <p class="text-sm text-gray-600 mb-1">Rarity: {{ auction.rarity }}</p>
                   <p v-if="!auction.isHolidayItem" class="text-sm text-gray-600 mb-1">
                     Mint #{{ auction.mintNumber ?? 'N/A' }}
+                  </p>
+                  <p class="text-sm text-gray-600 mb-1">
+                    Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
                     Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
@@ -309,19 +382,41 @@
               </div>
             </template>
           </div>
-        </div>
-      </div>
-    </div>
+          <div v-if="!isLoading && currentTotalPages > 1" class="flex items-center justify-between mt-6">
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="currentPage <= 1"
+              @click="currentPage = Math.max(1, currentPage - 1)"
+            >
+              Previous
+            </button>
+            <div class="text-sm text-gray-600">
+              Page {{ currentPage }} of {{ currentTotalPages }}
+            </div>
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="currentPage >= currentTotalPages"
+              @click="currentPage = Math.min(currentTotalPages, currentPage + 1)"
+            >
+              Next
+            </button>
+          </div>
+        </template>
 
-    <!-- My Bids -->
-    <div v-else-if="activeTab === 'mybids'">
+        <!-- My Bids -->
+        <template v-else-if="activeTab === 'mybids'">
       <div v-if="isLoadingMyBids" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
       </div>
 
       <div v-else>
-        <div v-if="sortedMyBids.length === 0" class="text-gray-500">
-          You haven't bid on any auctions yet.
+        <div v-if="myBids.length === 0" class="text-gray-500">
+          <template v-if="hasActiveFilters">
+            No auctions match your filters.
+          </template>
+          <template v-else>
+            You haven't bid on any auctions yet.
+          </template>
         </div>
 
         <div v-else>
@@ -383,6 +478,9 @@
                   :name="bid.name"
                   :ctoon-id="bid.ctoonId"
                   :user-ctoon-id="bid.userCtoonId"
+                  :is-gtoon="bid.isGtoon"
+                  :power="bid.power"
+                  :cost="bid.cost"
                   image-class="max-w-full rounded"
                 />
               </div>
@@ -390,6 +488,9 @@
               <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
               <p class="text-sm text-gray-600 mb-1">
                 Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">
+                Starting Bid: {{ bid.initialBid != null ? bid.initialBid + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
@@ -418,82 +519,245 @@
               </NuxtLink>
             </div>
           </div>
+
+          <div class="flex items-center justify-between mt-6">
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="myBidsPage <= 1"
+              @click="myBidsPage = Math.max(1, myBidsPage - 1)"
+            >
+              Previous
+            </button>
+            <div class="text-sm text-gray-600">
+              Page {{ myBidsPage }} of {{ myBidsTotalPages }}
+            </div>
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="myBidsPage >= myBidsTotalPages"
+              @click="myBidsPage = Math.min(myBidsTotalPages, myBidsPage + 1)"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
 
     <!-- My Auctions -->
-    <div v-else>
+    <template v-else-if="activeTab === 'mine'">
       <div v-if="isLoadingMy" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
       </div>
 
       <div v-else>
         <div v-if="myAuctions.length === 0" class="text-gray-500">
-          You haven't created any auctions yet.
+          <template v-if="hasActiveFilters">
+            No auctions match your filters.
+          </template>
+          <template v-else>
+            You haven't created any auctions yet.
+          </template>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div
-            v-for="auction in myAuctions"
-            :key="auction.id"
-            class="relative bg-white rounded-lg shadow p-4 h-full"
-          >
-            <!-- status badge -->
-            <div class="absolute top-2 right-2">
-              <span
-                v-if="new Date(auction.endAt) > now"
-                class="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
-              >
-                In Progress
-              </span>
-              <span v-else class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                Ended
-              </span>
-            </div>
+        <div v-else>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div
+              v-for="auction in filteredMyAuctions"
+              :key="auction.id"
+              class="relative bg-white rounded-lg shadow p-4 h-full"
+            >
+              <!-- status badge -->
+              <div class="absolute top-2 right-2">
+                <span
+                  v-if="new Date(auction.endAt) > now"
+                  class="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                >
+                  In Progress
+                </span>
+                <span v-else class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded">
+                  Ended
+                </span>
+              </div>
 
-            <div class="flex-grow flex items-center justify-center mb-4">
-              <CtoonAsset
-                :src="auction.assetPath"
-                :alt="auction.name"
-                :name="auction.name"
-                :ctoon-id="auction.ctoonId"
-                :user-ctoon-id="auction.userCtoonId"
-                image-class="max-w-full rounded"
-              />
-            </div>
+              <div class="flex-grow flex items-center justify-center mb-4">
+                <CtoonAsset
+                  :src="auction.assetPath"
+                  :alt="auction.name"
+                  :name="auction.name"
+                  :ctoon-id="auction.ctoonId"
+                  :user-ctoon-id="auction.userCtoonId"
+                  :is-gtoon="auction.isGtoon"
+                  :power="auction.power"
+                  :cost="auction.cost"
+                  image-class="max-w-full rounded"
+                />
+              </div>
 
-            <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
-            <p class="text-sm text-gray-600 mb-1">Created: {{ formatDate(auction.createdAt) }}</p>
-            <p v-if="!isEnded(auction.endAt)" class="text-sm text-red-600 mb-1">Ending in: {{ formatRemaining(auction.endAt) }}</p>
-            <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
-            <p class="text-sm text-gray-600 mb-1">
-              Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
-            </p>
-            <p class="text-sm text-gray-600 mb-1">
-              Bids: {{ auction.bidCount ?? 0 }}
-            </p>
-            <p v-if="auction.winningBidder" class="text-sm text-gray-600">
-              Winner: {{ auction.winningBidder }}
-            </p>
-            <div v-if="auction.isOwner" class="mt-4">
-              <AddToAuction
-                :userCtoon="{
-                  id: auction.userCtoonId,
-                  ctoonId: auction.ctoonId,
-                  name: auction.name,
-                  price: auction.price,
-                  rarity: auction.rarity,
-                  mintNumber: auction.mintNumber,
-                  assetPath: auction.assetPath
-                }"
-                :isOwner="auction.isOwner"
-                :hasActiveAuction="auction.hasActiveAuction"
-                @auctionCreated="loadMyAuctions"
-              />
+              <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
+              <p class="text-sm text-gray-600 mb-1">Created: {{ formatDate(auction.createdAt) }}</p>
+              <p v-if="!isEnded(auction.endAt)" class="text-sm text-red-600 mb-1">
+                Ending in: {{ formatRemaining(auction.endAt) }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
+              <p class="text-sm text-gray-600 mb-1">
+                Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
+              </p>
+              <p class="text-sm text-gray-600 mb-1">
+                Bids: {{ auction.bidCount ?? 0 }}
+              </p>
+              <p v-if="auction.winningBidder" class="text-sm text-gray-600">
+                Winner: {{ auction.winningBidder }}
+              </p>
+              <div v-if="auction.isOwner" class="mt-4 flex flex-col items-start gap-2">
+                <AddToAuction
+                  :userCtoon="{
+                    id: auction.userCtoonId,
+                    ctoonId: auction.ctoonId,
+                    name: auction.name,
+                    price: auction.price,
+                    rarity: auction.rarity,
+                    mintNumber: auction.mintNumber,
+                    assetPath: auction.assetPath
+                  }"
+                  :isOwner="auction.isOwner"
+                  :hasActiveAuction="auction.hasActiveAuction"
+                  @auctionCreated="loadMyAuctions"
+                />
+                <NuxtLink
+                  :to="`/auction/${auction.id}`"
+                  class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  View Auction
+                </NuxtLink>
+              </div>
             </div>
           </div>
+
+          <div class="flex items-center justify-between mt-6">
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="myPage <= 1"
+              @click="myPage = Math.max(1, myPage - 1)"
+            >
+              Previous
+            </button>
+            <div class="text-sm text-gray-600">
+              Page {{ myPage }} of {{ myTotalPages }}
+            </div>
+            <button
+              class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+              :disabled="myPage >= myTotalPages"
+              @click="myPage = Math.min(myTotalPages, myPage + 1)"
+            >
+              Next
+            </button>
+          </div>
         </div>
+      </div>
+    </template>
+
+        <!-- All Auctions -->
+        <template v-else-if="activeTab === 'all'">
+          <div v-if="isLoadingAll" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
+          </div>
+
+          <div v-else>
+            <div v-if="filteredAllAuctions.length === 0" class="text-gray-500">
+              <template v-if="hasActiveFilters">
+                No auctions match your filters.
+              </template>
+              <template v-else>
+                No auctions found.
+              </template>
+            </div>
+
+            <div v-else>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div
+                  v-for="auction in filteredAllAuctions"
+                  :key="auction.id"
+                  class="relative bg-white rounded-lg shadow p-4 h-full"
+                >
+                  <!-- status badge -->
+                  <div class="absolute top-2 right-2">
+                    <span
+                      v-if="new Date(auction.endAt) > now"
+                      class="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded"
+                    >
+                      In Progress
+                    </span>
+                    <span v-else class="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded">
+                      Ended
+                    </span>
+                  </div>
+
+                  <div class="flex-grow flex items-center justify-center mb-4">
+                  <CtoonAsset
+                    :src="auction.assetPath"
+                    :alt="auction.name"
+                    :name="auction.name"
+                    :ctoon-id="auction.ctoonId"
+                    :user-ctoon-id="auction.userCtoonId"
+                    :is-gtoon="auction.isGtoon"
+                    :power="auction.power"
+                    :cost="auction.cost"
+                    image-class="max-w-full rounded"
+                  />
+                  </div>
+
+                  <h2 class="text-lg font-semibold mb-1 truncate">{{ auction.name }}</h2>
+                  <p class="text-sm text-gray-600 mb-1">Created: {{ formatDate(auction.createdAt) }}</p>
+                  <p v-if="!isEnded(auction.endAt)" class="text-sm text-red-600 mb-1">
+                    Ending in: {{ formatRemaining(auction.endAt) }}
+                  </p>
+                  <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
+                  <p class="text-sm text-gray-600 mb-1">
+                    Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
+                  </p>
+                  <p class="text-sm text-gray-600 mb-1">
+                    Bids: {{ auction.bidCount ?? 0 }}
+                  </p>
+                  <p v-if="auction.winningBidder" class="text-sm text-gray-600 mb-3">
+                    Winner:
+                    <NuxtLink
+                      :to="`/czone/${auction.winningBidder}`"
+                      class="text-indigo-600 hover:text-indigo-800 hover:underline"
+                    >
+                      {{ auction.winningBidder }}
+                    </NuxtLink>
+                  </p>
+
+                  <NuxtLink
+                    :to="`/auction/${auction.id}`"
+                    class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-center mt-auto"
+                  >
+                    View Auction
+                  </NuxtLink>
+                </div>
+              </div>
+              <div class="flex items-center justify-between mt-6">
+                <button
+                  class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+                  :disabled="allPage <= 1"
+                  @click="allPage = Math.max(1, allPage - 1)"
+                >
+                  Previous
+                </button>
+                <div class="text-sm text-gray-600">
+                  Page {{ allPage }} of {{ allTotalPages }}
+                </div>
+                <button
+                  class="px-3 py-2 rounded border border-gray-300 text-sm disabled:opacity-50"
+                  :disabled="allPage >= allTotalPages"
+                  @click="allPage = Math.min(allTotalPages, allPage + 1)"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -511,6 +775,8 @@ const activeTab = ref('current')
 
 const auctions = ref([])
 const isLoading = ref(false)
+const currentPage = ref(1)
+const currentPageSize = ref(50)
 
 const trendingAuctions = ref([])
 const isLoadingTrending = ref(false)
@@ -518,22 +784,42 @@ const hasLoadedTrending = ref(false)
 
 const myAuctions = ref([])
 const isLoadingMy = ref(false)
+const myPage = ref(1)
+const myPageSize = ref(50)
+const myTotalPages = ref(1)
 
 const myBids = ref([])
 const isLoadingMyBids = ref(false)
 const myBidsSort = ref('recentDesc')
+const myBidsPage = ref(1)
+const myBidsPageSize = ref(50)
+const myBidsTotalPages = ref(1)
+
+const allAuctions = ref([])
+const isLoadingAll = ref(false)
+const allPage = ref(1)
+const allPageSize = ref(50)
+const allTotalPages = ref(1)
+const allTotalCount = ref(0)
 
 const now = ref(new Date())
 let timer = null
 
 // Filters & sorting (Current Auctions)
 const searchQuery = ref('')
+const selectedSets = ref([])
 const selectedSeries = ref([])
 const selectedRarities = ref([])
 const selectedOwned = ref('all')
 const sortBy = ref('endAsc')
 const showFilters = ref(false)
 const featuredOnly = ref(false)
+const wishlistOnly = ref(false)
+const hasBidsOnly = ref(false)
+const gtoonsOnly = ref(false)
+const wishlistCtoonIds = ref([])
+const isLoadingWishlist = ref(false)
+const hasLoadedWishlist = ref(false)
 
 // Route + URL query sync
 const route  = useRoute()
@@ -545,11 +831,20 @@ function normalizeListParam(v) {
   return []
 }
 
+function normalizePageParam(v) {
+  const raw = Array.isArray(v) ? v[0] : v
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
 function updateUrlQueryFromFilters() {
   const newQuery = { ...route.query }
 
   const q = String(searchQuery.value || '').trim()
   if (q) newQuery.q = q; else delete newQuery.q
+
+  if (selectedSets.value.length) newQuery.set = selectedSets.value
+  else delete newQuery.set
 
   if (selectedSeries.value.length) newQuery.series = selectedSeries.value
   else delete newQuery.series
@@ -563,11 +858,23 @@ function updateUrlQueryFromFilters() {
   if (featuredOnly.value) newQuery.featured = '1'
   else delete newQuery.featured
 
+  if (wishlistOnly.value) newQuery.wishlist = '1'
+  else delete newQuery.wishlist
+
+  if (hasBidsOnly.value) newQuery.hasBids = '1'
+  else delete newQuery.hasBids
+
+  if (gtoonsOnly.value) newQuery.gtoon = '1'
+  else delete newQuery.gtoon
+
   if (sortBy.value && sortBy.value !== 'endAsc') newQuery.sort = sortBy.value
   else delete newQuery.sort
 
   if (activeTab.value && activeTab.value !== 'current') newQuery.tab = activeTab.value
   else delete newQuery.tab
+
+  if (activeTab.value === 'current' && currentPage.value > 1) newQuery.page = String(currentPage.value)
+  else delete newQuery.page
 
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
@@ -581,16 +888,23 @@ onMounted(() => {
 
   // Initialize from URL query
   const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
+  const setParam    = route.query.set ?? route.query.sets
   const seriesParam = route.query.series
   const rarityParam = route.query.rarity
   const ownedParam  = typeof route.query.owned === 'string' ? route.query.owned : ''
   const sortParam   = typeof route.query.sort === 'string' ? route.query.sort : ''
   const tabParam    = typeof route.query.tab === 'string' ? route.query.tab : ''
   const featuredParam = typeof route.query.featured === 'string' ? route.query.featured : ''
+  const wishlistParam = typeof route.query.wishlist === 'string' ? route.query.wishlist : ''
+  const hasBidsParam = typeof route.query.hasBids === 'string' ? route.query.hasBids : ''
+  const gtoonParam = typeof route.query.gtoon === 'string' ? route.query.gtoon : ''
+  const pageParam = normalizePageParam(route.query.page)
 
   if (qParam.trim()) searchQuery.value = qParam.trim()
+  const initSets     = normalizeListParam(setParam)
   const initSeries   = normalizeListParam(seriesParam)
   const initRarities = normalizeListParam(rarityParam)
+  if (initSets.length)     selectedSets.value = initSets
   if (initSeries.length)   selectedSeries.value = initSeries
   if (initRarities.length) selectedRarities.value = initRarities
   if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
@@ -598,13 +912,21 @@ onMounted(() => {
   const validSorts = ['endAsc','nameAsc','nameDesc','mintAsc','mintDesc','rarity']
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
 
-  const validTabs = ['current','mybids','mine']
+  const validTabs = ['current','mybids','mine','all']
   if (validTabs.includes(tabParam)) activeTab.value = tabParam
 
   if (['1','true','yes'].includes(featuredParam.toLowerCase())) featuredOnly.value = true
+  if (['1','true','yes'].includes(wishlistParam.toLowerCase())) wishlistOnly.value = true
+  if (['1','true','yes'].includes(hasBidsParam.toLowerCase())) hasBidsOnly.value = true
+  if (['1','true','yes'].includes(gtoonParam.toLowerCase())) gtoonsOnly.value = true
+  if (pageParam > 1) currentPage.value = pageParam
 
   // Normalize URL based on initialized values
   updateUrlQueryFromFilters()
+
+  if (wishlistOnly.value) {
+    loadWishlist()
+  }
 
   loadAuctions()
   loadTrendingAuctions()
@@ -614,9 +936,18 @@ onUnmounted(() => {
   clearInterval(timer)
 })
 
+function buildCurrentParams() {
+  const params = new URLSearchParams()
+  if (hasBidsOnly.value) params.set('hasBids', '1')
+  return params
+}
+
 function loadAuctions() {
   isLoading.value = true
-  $fetch('/api/auctions')
+  const params = buildCurrentParams()
+  const query = params.toString()
+  const url = query ? `/api/auctions?${query}` : '/api/auctions'
+  $fetch(url)
     .then(data => {
       auctions.value = data
     })
@@ -625,10 +956,13 @@ function loadAuctions() {
     })
 }
 
-function loadTrendingAuctions() {
-  if (hasLoadedTrending.value) return
+function loadTrendingAuctions({ force = false } = {}) {
+  if (hasLoadedTrending.value && !force) return
   isLoadingTrending.value = true
-  $fetch('/api/auctions/trending')
+  const params = buildCurrentParams()
+  const query = params.toString()
+  const url = query ? `/api/auctions/trending?${query}` : '/api/auctions/trending'
+  $fetch(url)
     .then(data => {
       trendingAuctions.value = Array.isArray(data) ? data : []
     })
@@ -638,11 +972,44 @@ function loadTrendingAuctions() {
     })
 }
 
+async function loadWishlist() {
+  if (isLoadingWishlist.value || hasLoadedWishlist.value) return
+  isLoadingWishlist.value = true
+  try {
+    const items = await $fetch('/api/wishlist')
+    wishlistCtoonIds.value = Array.isArray(items)
+      ? items.map(item => item?.id).filter(Boolean)
+      : []
+    hasLoadedWishlist.value = true
+  } finally {
+    isLoadingWishlist.value = false
+  }
+}
+
+function buildFilterParams() {
+  const params = new URLSearchParams()
+  const q = String(searchQuery.value || '').trim()
+  if (q) params.set('q', q)
+  if (selectedSets.value.length) params.set('set', selectedSets.value.join(','))
+  if (selectedSeries.value.length) params.set('series', selectedSeries.value.join(','))
+  if (selectedRarities.value.length) params.set('rarity', selectedRarities.value.join(','))
+  if (selectedOwned.value && selectedOwned.value !== 'all') params.set('owned', selectedOwned.value)
+  if (featuredOnly.value) params.set('featured', '1')
+  if (wishlistOnly.value) params.set('wishlist', '1')
+  if (hasBidsOnly.value) params.set('hasBids', '1')
+  if (gtoonsOnly.value) params.set('gtoon', '1')
+  return params
+}
+
 function loadMyAuctions() {
   isLoadingMy.value = true
-  $fetch('/api/my-auctions')
+  const params = buildFilterParams()
+  params.set('page', String(myPage.value))
+  params.set('limit', String(myPageSize.value))
+  $fetch(`/api/my-auctions?${params.toString()}`)
     .then(data => {
-      myAuctions.value = data
+      myAuctions.value = Array.isArray(data?.items) ? data.items : []
+      myTotalPages.value = data?.totalPages ?? 1
     })
     .finally(() => {
       isLoadingMy.value = false
@@ -651,32 +1018,112 @@ function loadMyAuctions() {
 
 function loadMyBids() {
   isLoadingMyBids.value = true
-  $fetch('/api/auction/mybids')
+  const params = buildFilterParams()
+  params.set('page', String(myBidsPage.value))
+  params.set('limit', String(myBidsPageSize.value))
+  params.set('sort', myBidsSort.value)
+  $fetch(`/api/auction/mybids?${params.toString()}`)
     .then(data => {
       // Expect each item to include at least:
-      // { id, name, assetPath, endAt, myBid, highestBid, bidCount, didWin }
-      myBids.value = Array.isArray(data) ? data : []
+      // { id, name, assetPath, endAt, myBid, highestBid, initialBid, bidCount, didWin }
+      myBids.value = Array.isArray(data?.items) ? data.items : []
+      myBidsTotalPages.value = data?.totalPages ?? 1
     })
     .finally(() => {
       isLoadingMyBids.value = false
     })
 }
 
+function loadAllAuctions() {
+  isLoadingAll.value = true
+  const params = buildFilterParams()
+  params.set('page', String(allPage.value))
+  params.set('limit', String(allPageSize.value))
+  $fetch(`/api/auctions/all?${params.toString()}`)
+    .then(data => {
+      allAuctions.value = Array.isArray(data?.items) ? data.items : []
+      allTotalCount.value = data?.total ?? 0
+      allTotalPages.value = data?.totalPages ?? 1
+    })
+    .finally(() => {
+      isLoadingAll.value = false
+    })
+}
+
 watch(activeTab, newTab => {
-  if (newTab === 'mine' && myAuctions.value.length === 0) {
+  if (newTab === 'mine') {
     loadMyAuctions()
   }
-  if (newTab === 'mybids' && myBids.value.length === 0) {
+  if (newTab === 'mybids') {
     loadMyBids()
+  }
+  if (newTab === 'all') {
+    loadAllAuctions()
   }
   updateUrlQueryFromFilters()
 })
 
 // Keep URL in sync when filters change
-watch([searchQuery, selectedSeries, selectedRarities, selectedOwned, featuredOnly], () => {
+watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwned, featuredOnly, wishlistOnly, hasBidsOnly, gtoonsOnly], () => {
   updateUrlQueryFromFilters()
+  const isAll = activeTab.value === 'all'
+  const isMine = activeTab.value === 'mine'
+  const isMyBids = activeTab.value === 'mybids'
+
+  if (currentPage.value !== 1) currentPage.value = 1
+  if (allPage.value !== 1) allPage.value = 1
+  else if (isAll) loadAllAuctions()
+
+  if (myPage.value !== 1) myPage.value = 1
+  else if (isMine) loadMyAuctions()
+
+  if (myBidsPage.value !== 1) myBidsPage.value = 1
+  else if (isMyBids) loadMyBids()
 }, { deep: true })
 watch(sortBy, () => { updateUrlQueryFromFilters() })
+watch(myBidsSort, () => {
+  if (myBidsPage.value !== 1) {
+    myBidsPage.value = 1
+  } else if (activeTab.value === 'mybids') {
+    loadMyBids()
+  }
+})
+watch(allPage, () => {
+  if (activeTab.value === 'all') loadAllAuctions()
+  updateUrlQueryFromFilters()
+})
+watch(myPage, () => {
+  if (activeTab.value === 'mine') loadMyAuctions()
+  updateUrlQueryFromFilters()
+})
+watch(myBidsPage, () => {
+  if (activeTab.value === 'mybids') loadMyBids()
+  updateUrlQueryFromFilters()
+})
+watch(currentPage, () => {
+  updateUrlQueryFromFilters()
+})
+
+watch(wishlistOnly, value => {
+  if (value) loadWishlist()
+})
+
+watch(hasBidsOnly, () => {
+  loadAuctions()
+  loadTrendingAuctions({ force: true })
+})
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedSets.value = []
+  selectedSeries.value = []
+  selectedRarities.value = []
+  selectedOwned.value = 'all'
+  featuredOnly.value = false
+  wishlistOnly.value = false
+  hasBidsOnly.value = false
+  gtoonsOnly.value = false
+}
 
 function isEnded(endAt) {
   return new Date(endAt) <= now.value
@@ -697,42 +1144,112 @@ function formatDate(date) {
   return new Date(date).toLocaleDateString()
 }
 
+const wishlistCtoonIdSet = computed(() => new Set(wishlistCtoonIds.value))
+const normalizedSearch = computed(() => (searchQuery.value || '').toLowerCase().trim())
+const hasActiveFilters = computed(() => {
+  return Boolean(
+    normalizedSearch.value ||
+    selectedSets.value.length ||
+    selectedSeries.value.length ||
+    selectedRarities.value.length ||
+    (selectedOwned.value && selectedOwned.value !== 'all') ||
+    featuredOnly.value ||
+    wishlistOnly.value ||
+    hasBidsOnly.value ||
+    gtoonsOnly.value
+  )
+})
+const filterSources = computed(() => [
+  ...auctions.value,
+  ...trendingAuctions.value,
+  ...myAuctions.value,
+  ...myBids.value,
+  ...allAuctions.value
+])
+
+function applyCommonFilters(items) {
+  const term = normalizedSearch.value
+  const setFilter = selectedSets.value
+  const seriesFilter = selectedSeries.value
+  const rarityFilter = selectedRarities.value
+  const ownedFilter = selectedOwned.value
+  const requireFeatured = featuredOnly.value
+  const requireWishlist = wishlistOnly.value
+  const requireBids = hasBidsOnly.value
+  const requireGtoons = gtoonsOnly.value
+  const wishlistSet = wishlistCtoonIdSet.value
+
+  return (Array.isArray(items) ? items : []).filter(item => {
+    if (!item) return false
+    if (term) {
+      const nameMatch = (item.name || '').toLowerCase().includes(term)
+      const chars = Array.isArray(item.characters) ? item.characters : []
+      const charMatch = chars.some(ch => String(ch || '').toLowerCase().includes(term))
+      if (!nameMatch && !charMatch) return false
+    }
+    if (setFilter.length && !setFilter.includes(item.set)) return false
+    if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
+    if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
+    if (requireFeatured && !item.isFeatured) return false
+    if (ownedFilter === 'owned' && !item.isOwned) return false
+    if (ownedFilter === 'unowned' && item.isOwned) return false
+    if (requireWishlist) {
+      if (!hasLoadedWishlist.value) return false
+      if (!wishlistSet.has(item.ctoonId)) return false
+    }
+    if (requireBids) {
+      const bidCount = Number(item.bidCount ?? 0)
+      if (bidCount < 1) return false
+    }
+    if (requireGtoons && !item.isGtoon) return false
+    return true
+  })
+}
+
+const uniqueSets = computed(() => {
+  return [...new Set(filterSources.value.map(a => a.set).filter(Boolean))].sort()
+})
 const uniqueSeries = computed(() => {
-  return [...new Set(auctions.value.map(a => a.series).filter(Boolean))].sort()
+  return [...new Set(filterSources.value.map(a => a.series).filter(Boolean))].sort()
 })
 const uniqueRarities = computed(() => {
-  return [...new Set(auctions.value.map(a => a.rarity).filter(Boolean))].sort()
+  return [...new Set(filterSources.value.map(a => a.rarity).filter(Boolean))].sort()
 })
 
 const filteredAuctions = computed(() => {
-  const term = (searchQuery.value || '').toLowerCase().trim()
-  return auctions.value
-    .filter(a => {
-      if (!term) return true
-      const nameMatch = (a.name || '').toLowerCase().includes(term)
-      const chars = Array.isArray(a.characters) ? a.characters : []
-      const charMatch = chars.some(ch => (ch || '').toLowerCase().includes(term))
-      return nameMatch || charMatch
-    })
-    .filter(a => !selectedSeries.value.length || selectedSeries.value.includes(a.series))
-    .filter(a => !selectedRarities.value.length || selectedRarities.value.includes(a.rarity))
-    .filter(a => !featuredOnly.value || !!a.isFeatured)
-    .filter(a => {
-      if (selectedOwned.value === 'owned')   return a.isOwned
-      if (selectedOwned.value === 'unowned') return !a.isOwned
-      return true
-    })
-    .sort((a, b) => {
-      switch (sortBy.value) {
-        case 'endAsc':   return new Date(a.endAt) - new Date(b.endAt)
-        case 'nameAsc':  return a.name.localeCompare(b.name)
-        case 'nameDesc': return b.name.localeCompare(a.name)
-        case 'mintAsc':  return (a.mintNumber||0) - (b.mintNumber||0)
-        case 'mintDesc': return (b.mintNumber||0) - (a.mintNumber||0)
-        case 'rarity':   return a.rarity.localeCompare(b.rarity)
-        default:         return 0
-      }
-    })
+  return applyCommonFilters(auctions.value).sort((a, b) => {
+    switch (sortBy.value) {
+      case 'endAsc':   return new Date(a.endAt) - new Date(b.endAt)
+      case 'nameAsc':  return a.name.localeCompare(b.name)
+      case 'nameDesc': return b.name.localeCompare(a.name)
+      case 'mintAsc':  return (a.mintNumber || 0) - (b.mintNumber || 0)
+      case 'mintDesc': return (b.mintNumber || 0) - (a.mintNumber || 0)
+      case 'rarity':   return a.rarity.localeCompare(b.rarity)
+      default:         return 0
+    }
+  })
+})
+
+const currentTotalPages = computed(() => {
+  const total = Math.ceil(filteredAuctions.value.length / currentPageSize.value)
+  return Math.max(1, total || 1)
+})
+const paginatedAuctions = computed(() => {
+  const start = (currentPage.value - 1) * currentPageSize.value
+  return filteredAuctions.value.slice(start, start + currentPageSize.value)
+})
+const filteredTrendingAuctions = computed(() => applyCommonFilters(trendingAuctions.value))
+const filteredMyAuctions = computed(() => {
+  if (!hasBidsOnly.value) return myAuctions.value
+  return myAuctions.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
+})
+const filteredAllAuctions = computed(() => {
+  if (!hasBidsOnly.value) return allAuctions.value
+  return allAuctions.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
+})
+const filteredMyBids = computed(() => {
+  if (!hasBidsOnly.value) return myBids.value
+  return myBids.value.filter(item => Number(item?.bidCount ?? 0) >= 1)
 })
 
 /**
@@ -741,7 +1258,7 @@ const filteredAuctions = computed(() => {
  *  - Within each group, ending soonest first
  */
 const sortedMyBids = computed(() => {
-  const items = [...myBids.value]
+  const items = [...filteredMyBids.value]
 
   switch (myBidsSort.value) {
     case 'recentAsc':
@@ -774,10 +1291,19 @@ const sortedMyBids = computed(() => {
       return items.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
   }
 })
+
+watch(filteredAuctions, () => {
+  if (currentPage.value > currentTotalPages.value) {
+    currentPage.value = currentTotalPages.value
+  }
+})
 </script>
 
 <style scoped>
 /* scrollbar tweaks for filter lists */
 ::-webkit-scrollbar { width: 6px }
 ::-webkit-scrollbar-thumb { background-color: rgba(107,114,128,0.5); border-radius:3px }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>

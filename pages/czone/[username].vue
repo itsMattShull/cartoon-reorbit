@@ -127,16 +127,29 @@
             <div class="absolute inset-0">
               <div
                 v-for="(item, index) in cZoneItems"
-                :key="index"
+                :key="item.key || index"
                 class="absolute"
                 :style="item.style"
               >
+                <button
+                  v-if="item.isSearch"
+                  type="button"
+                  class="czone-search-ctoon"
+                  :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
+                  @click="captureCzoneSearchItem(item)"
+                >
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                </button>
                 <CtoonAsset
+                  v-else
                   :src="item.assetPath"
                   :alt="item.name"
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -150,10 +163,18 @@
     <div class="flex justify-between items-center text-sm flex-wrap gap-4 mb-6 mx-4">
       <div class="flex gap-2 flex-wrap">
         <button
+          v-if="user?.id !== ownerId"
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
           @click="openWishlist"
         >
-          View Wishlist
+          View Wishlist ({{ wishlistCountText }})
+        </button>
+        <button
+          v-if="user?.id !== ownerId"
+          class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded ml-2"
+          @click="openTradeList"
+        >
+          View Trade List ({{ tradeListCountText }})
         </button>
         <button
           v-if="user?.id !== ownerId"
@@ -291,11 +312,11 @@
         >
           <NuxtLink
             :to="`/czone/${msg.user}`"
-            class="font-bold text-indigo-700 min-w-[80px] hover:underline-none no-underline"
+            class="czone-chat-user font-bold hover:no-underline no-underline"
           >
             {{ msg.user }}
           </NuxtLink>
-          <div class="flex-1 break-words">{{ msg.message }}</div>
+          <div class="czone-chat-message flex-1 break-words">{{ msg.message }}</div>
         </div>
       </div>
       <ClientOnly>
@@ -364,16 +385,29 @@
             <div class="absolute top-0 left-0">
               <div
                 v-for="(item, index) in cZoneItems"
-                :key="index"
+                :key="item.key || index"
                 class="absolute"
                 :style="item.style"
               >
+                <button
+                  v-if="item.isSearch"
+                  type="button"
+                  class="czone-search-ctoon"
+                  :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
+                  @click="captureCzoneSearchItem(item)"
+                >
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                </button>
                 <CtoonAsset
+                  v-else
                   :src="item.assetPath"
                   :alt="item.name"
                   :name="item.name"
                   :ctoon-id="item.ctoonId"
                   :user-ctoon-id="item.id"
+                  :is-gtoon="item.isGtoon"
+                  :power="item.power"
+                  :cost="item.cost"
                   image-class="object-contain cursor-pointer max-w-[initial]"
                 />
               </div>
@@ -387,10 +421,18 @@
             <!-- Group 2: wishlist / collection / edit -->
             <div class="flex gap-2">
               <button
+                v-if="user?.id !== ownerId"
                 class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
                 @click="openWishlist"
               >
-                View Wishlist
+                View Wishlist ({{ wishlistCountText }})
+              </button>
+              <button
+                v-if="user?.id !== ownerId"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded"
+                @click="openTradeList"
+              >
+                View Trade List ({{ tradeListCountText }})
               </button>
               <button
                 v-if="user?.id !== ownerId"
@@ -424,7 +466,7 @@
       v-if="wishlistModalVisible"
       class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
     >
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <button
           class="absolute top-3 right-3 text-gray-500 hover:text-black"
           @click="closeWishlist"
@@ -437,7 +479,7 @@
         <div v-else-if="wishlistCtoons.length === 0" class="text-center py-10">
           No cToons on their wishlist.
         </div>
-        <div v-else class="grid grid-cols-2 gap-4">
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
             v-for="item in wishlistCtoons"
             :key="item.ctoon.id"
@@ -448,19 +490,86 @@
               :alt="item.ctoon.name"
               :name="item.ctoon.name"
               :ctoon-id="item.ctoon.id"
+              :is-gtoon="item.ctoon.isGtoon"
+              :power="item.ctoon.power"
+              :cost="item.ctoon.cost"
               image-class="w-20 h-20 object-contain mb-2"
             />
             <p class="text-sm text-center">{{ item.ctoon.name }}</p>
             <p class="text-xs text-gray-600 mt-1">Offer: {{ item.offeredPoints }} pts</p>
+            <p class="text-xs text-gray-600 mt-1">
+              You own: {{ item.viewerOwnedCount || 0 }} {{ (item.viewerOwnedCount || 0) === 1 ? 'copy' : 'copies' }}
+            </p>
+            <p
+              v-if="(item.viewerOwnedCount || 0) > 0 && item.viewerTradeMintNumber !== null && item.viewerTradeMintNumber !== undefined"
+              class="text-xs text-gray-600"
+            >
+              Send your highest mint: #{{ item.viewerTradeMintNumber }}
+            </p>
+            <p
+              v-else-if="(item.viewerOwnedCount || 0) > 0"
+              class="text-xs text-gray-600"
+            >
+              Highest mint to trade: none (no mint #, newest copy traded)
+            </p>
+            <p
+              v-else
+              class="text-xs text-gray-600"
+            >
+              Trade disabled: you do not own this cToon.
+            </p>
 
             <button
               class="mt-2 w-full px-3 py-1 rounded text-white text-sm"
-              :class="item.hasEnough ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
-              :disabled="!item.hasEnough || isProcessingWishlistTrade"
+              :class="item.hasEnough && (item.viewerOwnedCount || 0) > 0 ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'"
+              :disabled="!item.hasEnough || (item.viewerOwnedCount || 0) === 0 || isProcessingWishlistTrade"
               @click="onClickWishlistTrade(item)"
             >
               Trade for {{ item.offeredPoints }} points
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
+  <!-- Trade List modal -->
+  <transition name="fade">
+    <div
+      v-if="tradeListModalVisible"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          class="absolute top-3 right-3 text-gray-500 hover:text-black"
+          @click="closeTradeList"
+        >✕</button>
+        <h2 class="text-xl font-semibold mb-4">{{ ownerName }}’s Trade List</h2>
+
+        <div v-if="isLoadingTradeList" class="text-center py-10">
+          Loading…
+        </div>
+        <div v-else-if="tradeListCtoons.length === 0" class="text-center py-10">
+          No cToons on their trade list.
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4">
+          <div
+            v-for="item in tradeListCtoons"
+            :key="item.userCtoonId"
+            class="flex flex-col items-center border rounded p-2"
+          >
+            <CtoonAsset
+              :src="item.assetPath"
+              :alt="item.name"
+              :name="item.name"
+              :ctoon-id="item.ctoonId"
+              :user-ctoon-id="item.userCtoonId"
+              :is-gtoon="item.isGtoon"
+              :power="item.power"
+              :cost="item.cost"
+              image-class="w-20 h-20 object-contain mb-2"
+            />
+            <p class="text-sm text-center">{{ item.name }}</p>
+            <p class="text-xs text-gray-600 mt-1">Mint #{{ item.mintNumber ?? 'N/A' }}</p>
           </div>
         </div>
       </div>
@@ -519,6 +628,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-2 mt-8"
                   stop-propagation
                 />
@@ -578,6 +690,9 @@
                   :name="c.name"
                   :ctoon-id="c.ctoonId"
                   :user-ctoon-id="c.id"
+                  :is-gtoon="c.isGtoon"
+                  :power="c.power"
+                  :cost="c.cost"
                   image-class="w-16 h-16 object-contain mb-1 mt-8"
                   stop-propagation
                 />
@@ -618,6 +733,40 @@
           >
             Send Offer
           </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Capture modal -->
+  <transition name="fade">
+    <div
+      v-if="captureModalVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="closeCaptureModal"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+        <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-lg font-semibold">cToon Captured</h2>
+          <button class="text-gray-500 hover:text-black" @click="closeCaptureModal">✕</button>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1">
+          <div v-if="capturedCtoon" class="space-y-4">
+            <img
+              :src="capturedCtoon.assetPath"
+              :alt="capturedCtoon.name || 'Captured cToon'"
+              class="w-full max-h-56 object-contain rounded"
+            />
+            <div class="space-y-1 text-sm">
+              <div><span class="text-gray-500">Name:</span> <span class="font-medium">{{ capturedCtoon.name || '—' }}</span></div>
+              <div><span class="text-gray-500">Rarity:</span> <span class="font-medium">{{ capturedCtoon.rarity || '—' }}</span></div>
+              <div><span class="text-gray-500">Series:</span> <span class="font-medium">{{ capturedCtoon.series || '—' }}</span></div>
+              <div><span class="text-gray-500">Set:</span> <span class="font-medium">{{ capturedCtoon.set || '—' }}</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="px-4 py-3 border-t flex justify-end gap-2 flex-shrink-0">
+          <button class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700" @click="closeCaptureModal">Close</button>
         </div>
       </div>
     </div>
@@ -722,6 +871,9 @@ const showToast        = ref(false)
 const toastMessage     = ref('')
 const toastType        = ref('success') // 'success' or 'error'
 
+const captureModalVisible = ref(false)
+const capturedCtoon = ref(null)
+
 const isOwnerViewing = computed(() => user.value?.id === ownerId.value)
 
 watch(ownerIsBooster, (isBooster) => {
@@ -736,6 +888,11 @@ function displayToast(message, type = 'success') {
   setTimeout(() => {
     showToast.value = false
   }, 4000)
+}
+
+function closeCaptureModal() {
+  captureModalVisible.value = false
+  capturedCtoon.value = null
 }
 
 watch([isOwnerViewing, username], () => {
@@ -758,7 +915,7 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
 
-    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length === 3) {
+    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
       zones.value = res.cZone.zones.map(z => ({
         background: typeof z.background === 'string' ? z.background : '',
         toons: Array.isArray(z.toons) ? z.toons : []
@@ -769,6 +926,10 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
         { background: '', toons: [] },
         { background: '', toons: [] }
       ]
+    }
+
+    if (currentZoneIndex.value > zones.value.length - 1) {
+      currentZoneIndex.value = zones.value.length - 1
     }
 
     if (awardVisit && user.value && res.ownerId !== user.value.id) {
@@ -814,7 +975,7 @@ function closeCollection() {
 const isProcessingWishlistTrade = ref(false)
 
 async function onClickWishlistTrade(item) {
-  if (!item?.hasEnough || isProcessingWishlistTrade.value) return
+  if (!item?.hasEnough || (item?.viewerOwnedCount || 0) === 0 || isProcessingWishlistTrade.value) return
   isProcessingWishlistTrade.value = true
 
   try {
@@ -894,14 +1055,59 @@ const zones = ref([
   { background: '', toons: [] }
 ])
 
+const czoneSearchItems = ref([])
+const SEARCH_TOON_SIZE = 140
+
 const wishlistModalVisible  = ref(false)
 const wishlistCtoons        = ref([])
 const isLoadingWishlist     = ref(false)
+const hasLoadedWishlist     = ref(false)
+const wishlistCount         = ref(0)
+const isLoadingWishlistCount = ref(false)
+const hasLoadedWishlistCount = ref(false)
+const tradeListModalVisible = ref(false)
+const tradeListCtoons       = ref([])
+const isLoadingTradeList    = ref(false)
+const hasLoadedTradeList    = ref(false)
 
 async function loadUserWishlist() {
   isLoadingWishlist.value = true
-  wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
-  isLoadingWishlist.value = false
+  try {
+    wishlistCtoons.value = await $fetch(`/api/wishlist/users/${username.value}`)
+    wishlistCount.value = Array.isArray(wishlistCtoons.value) ? wishlistCtoons.value.length : 0
+    hasLoadedWishlistCount.value = true
+  } catch (err) {
+    wishlistCtoons.value = []
+    wishlistCount.value = 0
+  } finally {
+    isLoadingWishlist.value = false
+    hasLoadedWishlist.value = true
+  }
+}
+
+async function loadUserWishlistCount() {
+  isLoadingWishlistCount.value = true
+  try {
+    const res = await $fetch(`/api/wishlist/users/${username.value}/count`)
+    wishlistCount.value = Number(res?.count ?? 0)
+  } catch (err) {
+    wishlistCount.value = 0
+  } finally {
+    isLoadingWishlistCount.value = false
+    hasLoadedWishlistCount.value = true
+  }
+}
+
+async function loadUserTradeList() {
+  isLoadingTradeList.value = true
+  try {
+    tradeListCtoons.value = await $fetch(`/api/trade-list/users/${username.value}`)
+  } catch (err) {
+    tradeListCtoons.value = []
+  } finally {
+    isLoadingTradeList.value = false
+    hasLoadedTradeList.value = true
+  }
 }
 
 function openWishlist() {
@@ -912,7 +1118,29 @@ function closeWishlist() {
   wishlistModalVisible.value = false
 }
 
-// Which zone index is currently displayed (0, 1, or 2)
+const wishlistCountText = computed(() => {
+  if (!hasLoadedWishlist.value && isLoadingWishlist.value) return '...'
+  if (hasLoadedWishlist.value) return String(wishlistCtoons.value.length)
+  if (!hasLoadedWishlistCount.value && isLoadingWishlistCount.value) return '...'
+  if (hasLoadedWishlistCount.value) return String(wishlistCount.value)
+  return '0'
+})
+
+function openTradeList() {
+  loadUserTradeList()
+  tradeListModalVisible.value = true
+}
+function closeTradeList() {
+  tradeListModalVisible.value = false
+}
+
+const tradeListCountText = computed(() => {
+  if (!hasLoadedTradeList.value && isLoadingTradeList.value) return '...'
+  if (!hasLoadedTradeList.value) return '0'
+  return String(tradeListCtoons.value.length)
+})
+
+// Which zone index is currently displayed
 const currentZoneIndex = ref(0)
 const currentZone = computed(() => zones.value[currentZoneIndex.value])
 const maxZoneNumber = computed(() => {
@@ -925,16 +1153,101 @@ const maxZoneNumber = computed(() => {
   return max
 })
 
+function randomSearchPosition(size) {
+  const maxX = Math.max(0, CANVAS_W - size)
+  const maxY = Math.max(0, CANVAS_H - size)
+  return {
+    x: Math.floor(Math.random() * (maxX + 1)),
+    y: Math.floor(Math.random() * (maxY + 1))
+  }
+}
+
+function buildSearchItems(items) {
+  return items.map((entry) => {
+    const size = SEARCH_TOON_SIZE
+    const pos = randomSearchPosition(size)
+    return {
+      appearanceId: entry.appearanceId,
+      cZoneSearchId: entry.cZoneSearchId,
+      ctoonId: entry.ctoon?.id,
+      name: entry.ctoon?.name || 'cToon',
+      assetPath: entry.ctoon?.assetPath,
+      rarity: entry.ctoon?.rarity,
+      x: pos.x,
+      y: pos.y,
+      size,
+      isCapturing: false,
+      key: `search-${entry.appearanceId}`
+    }
+  }).filter(item => item.ctoonId && item.assetPath)
+}
+
+async function loadCzoneSearchItems() {
+  czoneSearchItems.value = []
+  if (!user.value?.id || !ownerId.value) return
+  if (user.value.id === ownerId.value) return
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const res = await $fetch(`/api/czone/${username.value}/searches`, {
+      query: { tz, zoneIndex: currentZoneIndex.value }
+    })
+    const items = Array.isArray(res?.items) ? res.items : []
+    czoneSearchItems.value = buildSearchItems(items)
+  } catch (err) {
+    console.error('Failed to load cZone Search items', err)
+    czoneSearchItems.value = []
+  }
+}
+
+async function captureCzoneSearchItem(item) {
+  if (!item || item.isCapturing) return
+  item.isCapturing = true
+  try {
+    const res = await $fetch('/api/czone/searches/capture', {
+      method: 'POST',
+      body: { appearanceId: item.appearanceId }
+    })
+    const name = res?.ctoon?.name || item.name
+    displayToast(`Captured ${name}!`, 'success')
+    capturedCtoon.value = res?.ctoon ? { ...res.ctoon } : {
+      name: item.name,
+      assetPath: item.assetPath,
+      rarity: item.rarity,
+      series: item.series,
+      set: item.set
+    }
+    captureModalVisible.value = true
+    czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+  } catch (err) {
+    const message = err?.data?.statusMessage || 'Failed to capture cToon.'
+    displayToast(message, 'error')
+    if (String(message).toLowerCase().includes('already')) {
+      czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+      return
+    }
+    item.isCapturing = false
+  }
+}
+
 // Build a list of “renderable” cToon items for the current zone
 // (Expose indices so we can update the clicked slot later)
 const cZoneItems = computed(() => {
   const zidx = currentZoneIndex.value
-  return (currentZone.value.toons || []).map((item, idx) => ({
+  const baseItems = (currentZone.value.toons || []).map((item, idx) => ({
     ...item,
     style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`,
     __zoneIndex: zidx,
     __itemIndex: idx
   }))
+  if (zidx !== 0 || !czoneSearchItems.value.length) return baseItems
+  const searchItems = czoneSearchItems.value.map((item, idx) => ({
+    ...item,
+    isSearch: true,
+    style: `top: ${item.y}px; left: ${item.x}px; width: ${item.size}px; height: ${item.size}px; z-index: 60;`,
+    __zoneIndex: zidx,
+    __itemIndex: idx
+  }))
+  return [...baseItems, ...searchItems]
 })
 
 // ——— Show arrows only if another zone (besides the current one) has ≥1 toon ———
@@ -948,7 +1261,7 @@ const hasOtherZones = computed(() => {
 
 // Helper booleans for “Next” / “Previous” arrow enable/disable
 const hasNext = computed(() => {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) return true
   }
   return false
@@ -962,7 +1275,7 @@ const hasPrevious = computed(() => {
 
 // Functions to advance to the next/previous non‐empty zone
 function goToNext() {
-  for (let i = currentZoneIndex.value + 1; i < 3; i++) {
+  for (let i = currentZoneIndex.value + 1; i < zones.value.length; i++) {
     if (zones.value[i].toons.length > 0) {
       currentZoneIndex.value = i
       return
@@ -1088,6 +1401,9 @@ onMounted(async () => {
   await fetchSelf({ force: true })
 
   await loadCzone({ showLoading: true, awardVisit: true })
+  await loadCzoneSearchItems()
+  loadUserWishlistCount()
+  loadUserTradeList()
 
   // socket listeners
   socket.emit('join-zone', { zone: username.value })
@@ -1145,6 +1461,57 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 
+/* Chat text colors */
+.czone-chat-user {
+  color: #4338ca;
+  display: inline-block;
+  width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.czone-chat-message {
+  color: #1f2937;
+}
+
+.czone-search-ctoon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.czone-search-ctoon::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.75) 0%, rgba(255, 215, 0, 0.15) 55%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: czone-search-pulse 2.6s ease-in-out infinite;
+  z-index: 0;
+}
+.czone-search-image {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+
+@keyframes czone-search-pulse {
+  0% { transform: scale(0.9); opacity: 0.65; }
+  50% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.65; }
+}
+
 /* Dark‐mode overrides when ownerIsBooster toggles body.booster-bg */
   .booster-bg {
     background-color: #121212;
@@ -1164,6 +1531,13 @@ onBeforeUnmount(() => {
   .booster-bg .bg-indigo-100      { background-color: #222 !important; }
   .booster-bg .bg-indigo-500,
   .booster-bg .bg-indigo-600      { background-color: #333 !important; }
+
+  .booster-bg .czone-chat-user {
+    color: #c7d2fe;
+  }
+  .booster-bg .czone-chat-message {
+    color: #e5e7eb;
+  }
   /* Owner’s username (was text-blue-700) */
   .booster-bg .text-blue-700 {
     color: #ffffff !important;

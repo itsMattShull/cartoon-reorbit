@@ -5,6 +5,8 @@ import { createServer }  from 'http'
 import { Server }        from 'socket.io'
 import { prisma as db }  from './prisma.js'
 import { DateTime } from 'luxon'
+import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
+import { startDiagnostics } from './diagnostics/telemetry.mjs'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -12,6 +14,10 @@ import { dirname }        from 'node:path'
 import { fileURLToPath }  from 'node:url'
 import { randomUUID }     from 'crypto'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
+
+startDiagnostics().catch((err) => {
+  console.error('[Diagnostics] failed to start (socket server):', err)
+})
 
 /* ── Clash engine & helpers ────────────────────────────────── */
 import { createBattle }   from './utils/battleEngine.js'
@@ -32,8 +38,10 @@ const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
  *  HTTP + Socket.IO bootstrap
  * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
+const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 const io = new Server(httpServer, { cors: { origin: '*' } })
+attachSocketIoMetrics(io)
 
 /* ────────────────────────────────────────────────────────────
  *  cZone visitors & chat (unchanged)
@@ -49,12 +57,144 @@ const pvpMatches = new Map();    // roomId -> { battle, recordId }
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000
+const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
+const PVP_MATCH_IDLE_MS = 15 * 60 * 1000
+const PVE_MATCH_IDLE_MS = 15 * 60 * 1000
+const MONSTER_BATTLE_IDLE_MS = 15 * 60 * 1000
+const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
+
+const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
+const METRICS_HISTORY_LIMIT = Number(process.env.SOCKET_METRICS_HISTORY_LIMIT || 1440)
+const METRICS_TOKEN = process.env.SOCKET_METRICS_TOKEN || ''
+const metricsHistory = []
 
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
 const tradeRooms   = {}
 const tradeSockets = {}
+
+const touchActivity = (obj) => {
+  if (obj) obj.lastActivity = Date.now()
+}
+
+const isIdle = (obj, now, maxMs) => (now - (obj?.lastActivity || 0)) > maxMs
+
+function getSocketMetricsSnapshot() {
+  const zoneNames = Object.keys(zoneSockets)
+  let zoneSocketRefs = 0
+  for (const zone of zoneNames) {
+    const set = zoneSockets[zone]
+    zoneSocketRefs += set ? set.size : 0
+  }
+
+  const tradeRoomNames = Object.keys(tradeRooms)
+  let tradeSpectators = 0
+  for (const roomName of tradeRoomNames) {
+    const room = tradeRooms[roomName]
+    tradeSpectators += room?.spectators?.size || 0
+  }
+
+  const adapterRooms = io.sockets.adapter.rooms
+  const socketIds = new Set(io.sockets.sockets.keys())
+  let auctionSocketMembers = 0
+
+  for (const [roomName, members] of adapterRooms) {
+    if (socketIds.has(roomName)) continue
+    if (roomName.startsWith('auction_')) {
+      auctionSocketMembers += members?.size || 0
+    }
+  }
+
+  let monsterSocketMembers = 0
+  for (const battleId of monsterBattles.keys()) {
+    monsterSocketMembers += roomSize(io, battleId)
+  }
+
+  let clashSocketMembers = 0
+  for (const roomId of pvpRooms.keys()) {
+    clashSocketMembers += roomSize(io, roomId)
+  }
+  for (const roomId of pvpMatches.keys()) {
+    clashSocketMembers += roomSize(io, roomId)
+  }
+  for (const gameId of pveMatches.keys()) {
+    clashSocketMembers += roomSize(io, gameId)
+  }
+
+  const mem = process.memoryUsage()
+
+  return {
+    ts: Date.now(),
+    activeSockets: io.sockets.sockets.size,
+    zoneCount: zoneNames.length,
+    zoneSocketRefs,
+    zoneVisitorCount: Object.values(zoneVisitors).reduce((sum, count) => sum + Number(count || 0), 0),
+    tradeRoomCount: tradeRoomNames.length,
+    tradeSpectators,
+    tradeSocketsCount: Object.keys(tradeSockets).length,
+    auctionSocketMembers,
+    monsterSocketMembers,
+    clashSocketMembers,
+    pvpRoomCount: pvpRooms.size,
+    pvpMatchCount: pvpMatches.size,
+    pveMatchCount: pveMatches.size,
+    monsterBattleCount: monsterBattles.size,
+    rssMb: Math.round(mem.rss / 1024 / 1024),
+    heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024)
+  }
+}
+
+function recordSocketMetrics() {
+  const sample = getSocketMetricsSnapshot()
+  metricsHistory.push(sample)
+  if (metricsHistory.length > METRICS_HISTORY_LIMIT) {
+    metricsHistory.splice(0, metricsHistory.length - METRICS_HISTORY_LIMIT)
+  }
+  return sample
+}
+
+httpServer.on('request', (req, res) => {
+  if (!req?.url) return
+  const host = req.headers.host || 'localhost'
+  const url = new URL(req.url, `http://${host}`)
+  if (url.pathname.startsWith(SOCKET_PATH)) return
+
+  if (url.pathname === '/metrics/socket') {
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, x-metrics-token'
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, headers)
+      res.end()
+      return
+    }
+
+    const token = Array.isArray(req.headers['x-metrics-token'])
+      ? req.headers['x-metrics-token'][0]
+      : req.headers['x-metrics-token']
+    if (METRICS_TOKEN && token !== METRICS_TOKEN) {
+      res.writeHead(401, headers)
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
+
+    if (!metricsHistory.length) recordSocketMetrics()
+    const limit = Number(url.searchParams.get('limit') || METRICS_HISTORY_LIMIT)
+    const samples = metricsHistory.slice(-limit)
+    const latest = samples[samples.length - 1] || metricsHistory[metricsHistory.length - 1] || getSocketMetricsSnapshot()
+
+    res.writeHead(200, { ...headers, 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ intervalMs: METRICS_SAMPLE_MS, latest, samples }))
+    return
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' })
+  res.end('Not Found')
+})
 
 const ASSET_BASE =
   process.env.ASSET_BASE ||
@@ -788,8 +928,12 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
   const lobby = pvpRooms.get(roomId)
   if (lobby) {
     if (userId) {
-      lobby.players = lobby.players.filter(id => id !== String(userId))
-      if (lobby.decks) delete lobby.decks[String(userId)]
+      const uid = String(userId)
+      lobby.players = lobby.players.filter(id => id !== uid)
+      if (lobby.decks) delete lobby.decks[uid]
+      if (lobby.deckSnapshots) delete lobby.deckSnapshots[uid]
+      if (lobby.ready) delete lobby.ready[uid]
+      if (lobby.usernames) delete lobby.usernames[uid]
     }
 
     // recompute future size after this socket leaves
@@ -828,6 +972,41 @@ function lobbySnapshot(room) {
   }
 }
 
+function buildDeckSnapshotFromCards(cards = [], meta = {}) {
+  if (!Array.isArray(cards) || !cards.length) return null
+  const counts = new Map()
+  for (const raw of cards) {
+    const c = raw?.ctoon ?? raw
+    if (!c?.id) continue
+    const existing = counts.get(c.id)
+    if (existing) {
+      existing.quantity += 1
+      continue
+    }
+    counts.set(c.id, {
+      ctoonId: c.id,
+      name: c.name || null,
+      gtoonType: c.gtoonType || null,
+      cost: Number.isFinite(c.cost) ? c.cost : null,
+      power: Number.isFinite(c.power) ? c.power : null,
+      quantity: 1
+    })
+  }
+  const list = Array.from(counts.values())
+    .sort((a, b) => (b.quantity - a.quantity) || String(a.name || '').localeCompare(String(b.name || '')))
+  return {
+    deckId: meta.deckId || null,
+    deckName: meta.deckName || null,
+    totalCards: cards.length,
+    cards: list
+  }
+}
+
+function buildDeckSnapshot(deck) {
+  if (!deck) return null
+  return buildDeckSnapshotFromCards(deck.cards || [], { deckId: deck.id, deckName: deck.name })
+}
+
 async function startPvpMatch(roomId) {
   const room = pvpRooms.get(roomId)
   if (!room || pvpMatches.has(roomId)) return
@@ -835,6 +1014,9 @@ async function startPvpMatch(roomId) {
   if (!room.decks?.[p1] || !room.decks?.[p2]) return
   if (!room.ready?.[p1] || !room.ready?.[p2]) return
   const stake = Math.max(0, Math.floor(Number(room.stakePoints || 0)))
+  const deckSnap1 = room.deckSnapshots?.[p1] || buildDeckSnapshotFromCards(room.decks?.[p1] || [])
+  const deckSnap2 = room.deckSnapshots?.[p2] || buildDeckSnapshotFromCards(room.decks?.[p2] || [])
+  const startedAt = new Date()
 
   const battleId = randomUUID()
   const battle = createBattle({
@@ -880,6 +1062,18 @@ async function startPvpMatch(roomId) {
         })
       }
 
+      const tournamentMatch = await tx.gtoonTournamentMatch.findFirst({
+        where: {
+          lockedAt: null,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+          pairedAt: { lte: startedAt },
+          OR: [
+            { playerAUserId: p1, playerBUserId: p2 },
+            { playerAUserId: p2, playerBUserId: p1 }
+          ]
+        }
+      })
+
       // Create the ClashGame with the stake on both sides
       const rec = await tx.clashGame.create({
         data: {
@@ -887,7 +1081,10 @@ async function startPvpMatch(roomId) {
           player2UserId: p2,
           player1Points: stake,     // 👈 NEW
           player2Points: stake,     // 👈 NEW
-          startedAt:     new Date()
+          player1DeckSnapshot: deckSnap1,
+          player2DeckSnapshot: deckSnap2,
+          isTournament: Boolean(tournamentMatch),
+          startedAt
         }
       })
       return rec
@@ -912,7 +1109,8 @@ async function startPvpMatch(roomId) {
     userSide: { [p1]: 'player', [p2]: 'ai' },
     pending:  { player: null, ai: null },
     confirmed:{ player: false, ai: false },
-    timer: null
+    timer: null,
+    lastActivity: Date.now()
   })
   pvpRooms.delete(roomId); // no longer a lobby entity
 
@@ -1245,7 +1443,8 @@ io.on('connection', socket => {
         actions: { player1: null, player2: null },
         timers: { player1: null, player2: null },
         deadlines: {},
-        disconnectTimers: { player1: null, player2: null }
+        disconnectTimers: { player1: null, player2: null },
+        lastActivity: Date.now()
       }
 
       monsterBattles.set(record.id, battle)
@@ -1275,6 +1474,7 @@ io.on('connection', socket => {
       socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
       return
     }
+    touchActivity(battle)
     const uid = userId ? sid(userId) : socket.data.userId
     const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
     if (!playerKey) {
@@ -1298,6 +1498,7 @@ io.on('connection', socket => {
       socket.emit('battle:error', { battleId, message: 'Battle not found.', code: 'NotFound' })
       return
     }
+    touchActivity(battle)
     const uid = socket.data.userId
     const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
     if (!playerKey) {
@@ -1401,9 +1602,11 @@ io.on('connection', socket => {
     pvpRooms.set(roomId, {
       players: [uid],
       decks: {},          // set later via setPvpDeck
+      deckSnapshots: {},
       ready: {},          // userId -> bool
       usernames: {},       // userId -> username
-      stakePoints: stake
+      stakePoints: stake,
+      lastActivity: Date.now()
     })
     socket.join(roomId);
     socket.data.roomId = roomId
@@ -1497,6 +1700,7 @@ io.on('connection', socket => {
       socket.emit('joinError', { message: 'Room unavailable.' });
       return;
     }
+    touchActivity(room)
     socket.join(roomId)
     socket.data.roomId = roomId
     const uid = sid(userId)
@@ -1540,6 +1744,7 @@ io.on('connection', socket => {
     const room = pvpRooms.get(roomId)
     const uid = sid(userId)
     if (!room || !room.players.includes(uid)) return
+    touchActivity(room)
 
     const deck = await db.clashDeck.findUnique({
       where: { id: deckId },
@@ -1561,6 +1766,7 @@ io.on('connection', socket => {
       gtoonType: c.gtoonType || null,
       abilityData: c.abilityData || null
     }))
+    room.deckSnapshots[uid] = buildDeckSnapshot(deck)
 
     io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
     await startPvpMatch(roomId)
@@ -1570,6 +1776,7 @@ io.on('connection', socket => {
     const room = pvpRooms.get(roomId)
     const uid = sid(userId)
     if (!room || !room.players.includes(uid)) return
+    touchActivity(room)
     room.ready = room.ready || {}
     room.ready[uid] = !!ready
 
@@ -1582,6 +1789,7 @@ io.on('connection', socket => {
     const roomId = socket.data.roomId;
     const match  = pvpMatches.get(roomId);
     if (!match) return;
+    touchActivity(match)
 
     const uid  = socket.data.userId;
     const side = match.userSide?.[uid]; // 'player' | 'ai'
@@ -1664,7 +1872,8 @@ io.on('connection', socket => {
         aiConfirmed:     false,
         timer:           null,
         selectDeadline:  null,
-        playerUserId: userId
+        playerUserId: userId,
+        lastActivity: Date.now()
       }
 
       pveMatches.set(gameId, match)
@@ -1690,6 +1899,7 @@ io.on('connection', socket => {
       )
       return
     }
+    touchActivity(match)
     if (match.battle.state.phase !== 'select') {
       console.warn('[Server] selectCards but phase=', match.battle.state.phase)
       return
@@ -1735,6 +1945,23 @@ io.on('connection', socket => {
   })
 
   socket.on('join-zone', ({ zone }) => {
+    const prevZone = socket.zone
+    if (prevZone && prevZone !== zone) {
+      socket.leave(prevZone)
+      if (zoneSockets[prevZone]) {
+        zoneSockets[prevZone].delete(socket.id)
+      }
+      if (zoneVisitors[prevZone]) {
+        zoneVisitors[prevZone] = Math.max(zoneVisitors[prevZone] - 1, 0)
+        if (zoneVisitors[prevZone] === 0) {
+          delete zoneVisitors[prevZone]
+          delete zoneSockets[prevZone]
+        } else {
+          io.to(prevZone).emit('visitor-count', zoneVisitors[prevZone])
+        }
+      }
+    }
+
     socket.zone = zone
     socket.join(zone)
 
@@ -1761,11 +1988,13 @@ io.on('connection', socket => {
         spectators: new Set(),
         offers: {},
         confirmed: {},
-        finalized: {}   // track finalize-phase per user
+        finalized: {},   // track finalize-phase per user
+        lastActivity: Date.now()
       }
     }
 
     const roomData = tradeRooms[room]
+    touchActivity(roomData)
 
     if (!roomData.traderA) {
       roomData.traderA = user
@@ -1801,6 +2030,7 @@ io.on('connection', socket => {
   socket.on('become-traderB', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     if (!roomData.traderB) {
       roomData.traderB = user
@@ -1849,6 +2079,7 @@ io.on('connection', socket => {
   socket.on('add-trade-offer', async ({ room, user, ctoons }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.offers[user] = ctoons
     roomData.confirmed[user] = false
@@ -1879,6 +2110,7 @@ io.on('connection', socket => {
   socket.on('remove-all-trade-offer', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.offers[user] = []
     roomData.confirmed[user] = false
@@ -1909,6 +2141,7 @@ io.on('connection', socket => {
   socket.on('confirm-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
 
     roomData.confirmed[user] = true
 
@@ -1938,6 +2171,7 @@ io.on('connection', socket => {
   socket.on('cancel-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
   
     // Mark this user as un-confirmed
     roomData.confirmed   = {}
@@ -1972,6 +2206,7 @@ io.on('connection', socket => {
   socket.on('finalize-trade', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    touchActivity(roomData)
     roomData.finalized[user] = true
 
     const a = roomData.traderA, b = roomData.traderB
@@ -1996,6 +2231,9 @@ io.on('connection', socket => {
             data:   { userId: bId },
             select: { id: true, ctoonId: true, mintNumber: true }
           })
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId: c.id, userId: { not: bId } }
+          })
           logs.push({ userId: bId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
 
@@ -2005,6 +2243,9 @@ io.on('connection', socket => {
             data:   { userId: aId },
             select: { id: true, ctoonId: true, mintNumber: true }
           })
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId: c.id, userId: { not: aId } }
+          })
           logs.push({ userId: aId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
 
@@ -2013,18 +2254,58 @@ io.on('connection', socket => {
 
       // CZone cleanup
       try {
+        const offerIdsA = new Set(offersA.map(ct => ct.id))
         const aZone = await db.cZone.findUnique({ where: { userId: aId } })
-        if (aZone && Array.isArray(aZone.layoutData)) {
-          const filtered = aZone.layoutData.filter(id => !offersA.some(ct => ct.id === id))
-          await db.cZone.update({ where: { userId: aId }, data: { layoutData: filtered } })
+        if (aZone) {
+          let changed = false
+          let nextLayoutData = aZone.layoutData
+          if (Array.isArray(aZone.layoutData)) {
+            const filtered = aZone.layoutData.filter(id => !offerIdsA.has(id))
+            changed = filtered.length !== aZone.layoutData.length
+            nextLayoutData = filtered
+          } else if (aZone.layoutData && typeof aZone.layoutData === 'object' && Array.isArray(aZone.layoutData.zones)) {
+            const nextZones = aZone.layoutData.zones.map((zone) => {
+              if (!Array.isArray(zone?.toons)) return zone
+              const filteredToons = zone.toons.filter((item) => {
+                const itemId = item?.userCtoonId || item?.id
+                return !offerIdsA.has(itemId)
+              })
+              if (filteredToons.length !== zone.toons.length) changed = true
+              return { ...zone, toons: filteredToons }
+            })
+            nextLayoutData = { ...aZone.layoutData, zones: nextZones }
+          }
+          if (changed) {
+            await db.cZone.update({ where: { userId: aId }, data: { layoutData: nextLayoutData } })
+          }
         }
       } catch (e) { console.error('CZone A update failed:', e) }
 
       try {
+        const offerIdsB = new Set(offersB.map(ct => ct.id))
         const bZone = await db.cZone.findUnique({ where: { userId: bId } })
-        if (bZone && Array.isArray(bZone.layoutData)) {
-          const filtered = bZone.layoutData.filter(id => !offersB.some(ct => ct.id === id))
-          await db.cZone.update({ where: { userId: bId }, data: { layoutData: filtered } })
+        if (bZone) {
+          let changed = false
+          let nextLayoutData = bZone.layoutData
+          if (Array.isArray(bZone.layoutData)) {
+            const filtered = bZone.layoutData.filter(id => !offerIdsB.has(id))
+            changed = filtered.length !== bZone.layoutData.length
+            nextLayoutData = filtered
+          } else if (bZone.layoutData && typeof bZone.layoutData === 'object' && Array.isArray(bZone.layoutData.zones)) {
+            const nextZones = bZone.layoutData.zones.map((zone) => {
+              if (!Array.isArray(zone?.toons)) return zone
+              const filteredToons = zone.toons.filter((item) => {
+                const itemId = item?.userCtoonId || item?.id
+                return !offerIdsB.has(itemId)
+              })
+              if (filteredToons.length !== zone.toons.length) changed = true
+              return { ...zone, toons: filteredToons }
+            })
+            nextLayoutData = { ...bZone.layoutData, zones: nextZones }
+          }
+          if (changed) {
+            await db.cZone.update({ where: { userId: bId }, data: { layoutData: nextLayoutData } })
+          }
         }
       } catch (e) { console.error('CZone B update failed:', e) }
 
@@ -2052,10 +2333,18 @@ io.on('connection', socket => {
 
 
   socket.on('trade-chat', ({ room, user, message }) => {
+    const roomData = tradeRooms[room]
+    if (roomData) touchActivity(roomData)
     io.to(room).emit('trade-chat', { user, message })
   })
 
   socket.on('leave-zone', ({ zone }) => {
+    if (zone) {
+      socket.leave(zone)
+      if (socket.zone === zone) {
+        socket.zone = null
+      }
+    }
     if (zone && zoneVisitors[zone]) {
       zoneVisitors[zone]--
       if (zoneSockets[zone]) {
@@ -2352,6 +2641,108 @@ io.on('connection', socket => {
   })
 })
 
+async function sweepStaleState() {
+  const now = Date.now()
+  const activeSocketIds = new Set(io.sockets.sockets.keys())
+
+  for (const socketId of Object.keys(tradeSockets)) {
+    if (!activeSocketIds.has(socketId)) delete tradeSockets[socketId]
+  }
+
+  for (const [zone, socketSet] of Object.entries(zoneSockets)) {
+    for (const socketId of Array.from(socketSet)) {
+      if (!activeSocketIds.has(socketId)) socketSet.delete(socketId)
+    }
+    if (socketSet.size === 0) {
+      delete zoneSockets[zone]
+      delete zoneVisitors[zone]
+    } else {
+      zoneVisitors[zone] = socketSet.size
+    }
+  }
+
+  for (const [roomId, room] of pvpRooms.entries()) {
+    if (roomSize(io, roomId) === 0 && isIdle(room, now, PVP_ROOM_IDLE_MS)) {
+      pvpRooms.delete(roomId)
+    }
+  }
+
+  for (const [roomId, match] of pvpMatches.entries()) {
+    if (roomSize(io, roomId) !== 0) continue
+    if (!isIdle(match, now, PVP_MATCH_IDLE_MS)) continue
+    if (match.timer) clearInterval(match.timer)
+    try {
+      await db.clashGame.update({
+        where: { id: match.recordId },
+        data: { endedAt: new Date(), outcome: 'incomplete', winnerUserId: null }
+      })
+    } catch {}
+    pvpMatches.delete(roomId)
+  }
+
+  for (const [gameId, match] of pveMatches.entries()) {
+    if (roomSize(io, gameId) !== 0) continue
+    if (!isIdle(match, now, PVE_MATCH_IDLE_MS)) continue
+    const finished = match.battle?.state?.phase === 'gameEnd' && match.battle?.state?.result
+    try {
+      if (finished) {
+        await endMatch(io, match, match.battle.state.result)
+      } else {
+        await endMatch(io, match, {
+          winner: 'incomplete',
+          playerLanesWon: 0,
+          aiLanesWon: 0,
+          reason: 'inactive'
+        })
+      }
+    } catch {
+      if (match.timer) clearInterval(match.timer)
+      pveMatches.delete(gameId)
+    }
+  }
+
+  for (const [battleId, battle] of monsterBattles.entries()) {
+    if (roomSize(io, battleId) !== 0) continue
+    if (!isIdle(battle, now, MONSTER_BATTLE_IDLE_MS)) continue
+    if (battle.state?.status === 'active') {
+      try {
+        await db.monsterBattle.update({
+          where: { id: battle.recordId },
+          data: {
+            endedAt: new Date(),
+            endReason: 'DISCONNECT',
+            winnerUserId: null,
+            winnerIsAi: false
+          }
+        })
+      } catch {}
+    }
+    cleanupMonsterBattle(battle)
+  }
+
+  for (const [roomName, roomData] of Object.entries(tradeRooms)) {
+    if (roomData?.spectators?.size) {
+      for (const socketId of Array.from(roomData.spectators)) {
+        if (!activeSocketIds.has(socketId)) roomData.spectators.delete(socketId)
+      }
+    }
+    if (roomSize(io, roomName) !== 0) continue
+    if (!isIdle(roomData, now, TRADE_ROOM_IDLE_MS)) continue
+    delete tradeRooms[roomName]
+  }
+}
+
+recordSocketMetrics()
+setInterval(() => {
+  recordSocketMetrics()
+}, METRICS_SAMPLE_MS)
+
+setInterval(() => {
+  sweepStaleState().catch((err) => {
+    console.error('[socket] stale sweep failed:', err)
+  })
+}, SWEEP_INTERVAL_MS)
+
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
 // in your socket‐server.js (or wherever you close auctions):
@@ -2377,7 +2768,7 @@ setInterval(async () => {
       }
 
       // 1) fetch all bids placed before auction end; highest first, then earliest
-      const allBids = await db.bid.findMany({
+      const winningBid = await db.bid.findFirst({
         where: {
           auctionId: id,
           createdAt: { lte: auc.endAt }
@@ -2385,11 +2776,9 @@ setInterval(async () => {
         orderBy: [
           { amount: 'desc' },
           { createdAt: 'asc' }
-        ]
+        ],
+        select: { userId: true, amount: true }
       })
-
-      // 2) winner is the highest eligible bid (before end)
-      const winningBid = allBids[0] || null
 
       // 3) transaction
       await db.$transaction(async tx => {
@@ -2410,6 +2799,10 @@ setInterval(async () => {
             where:  { id: userCtoonId },
             data:   { userId: winningBid.userId, isTradeable: true },
             select: { id: true, ctoonId: true, mintNumber: true }
+          })
+
+          await tx.userTradeListItem.deleteMany({
+            where: { userCtoonId, userId: { not: winningBid.userId } }
           })
           await tx.ctoonOwnerLog.create({
             data: {

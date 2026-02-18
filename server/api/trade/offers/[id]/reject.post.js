@@ -41,10 +41,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5) Reject the offer and release any locked points for it
+  const nextStatus = userId === offer.initiatorId ? 'WITHDRAWN' : 'REJECTED'
+
   await prisma.$transaction(async (tx) => {
     await tx.tradeOffer.update({
       where: { id: offerId },
-      data: { status: 'REJECTED', updatedAt: new Date() }
+      data: { status: nextStatus, updatedAt: new Date() }
     })
 
     await tx.lockedPoints.updateMany({
@@ -90,7 +92,7 @@ export default defineEventHandler(async (event) => {
       )
 
       // determine wording
-      const action = userId === offer.recipientId ? 'rejected' : 'cancelled'
+      const action = userId === offer.recipientId ? 'rejected' : 'withdrawn'
       const emoji = '❌'
       const messageContent = [
         `${emoji} **${me.username}** has ${action} your trade offer.`,

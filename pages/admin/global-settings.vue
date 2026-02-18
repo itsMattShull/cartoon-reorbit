@@ -53,6 +53,11 @@
             <input type="number" class="input" v-model.number="czoneVisitMaxPerDay" />
             <p class="text-xs text-gray-500 mt-1">Maximum unique cZones that award visit points per day.</p>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Global cZone Count</label>
+            <input type="number" min="1" class="input" v-model.number="czoneCount" />
+            <p class="text-xs text-gray-500 mt-1">Base number of zones each user can have (before per-user additions).</p>
+          </div>
         </div>
         <div>
           <button class="btn-primary" :disabled="savingGlobal" @click="saveGlobal">
@@ -187,6 +192,7 @@ const dailyNewUserPoints   = ref(1000)
 const czoneVisitPoints     = ref(20)
 const dailyPointLimit      = ref(250)
 const czoneVisitMaxPerDay  = ref(10)
+const czoneCount           = ref(3)
 const phashDuplicateThreshold = ref(14)
 const dhashDuplicateThreshold = ref(16)
 
@@ -199,6 +205,7 @@ async function loadGlobal() {
     czoneVisitPoints.value     = Number(g?.czoneVisitPoints     ?? 20)
     dailyPointLimit.value      = Number(g?.dailyPointLimit      ?? 250)
     czoneVisitMaxPerDay.value  = Number(g?.czoneVisitMaxPerDay  ?? 10)
+    czoneCount.value           = Number(g?.czoneCount           ?? 3)
     phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
     dhashDuplicateThreshold.value = Number(g?.dhashDuplicateThreshold ?? 16)
   } catch (e) {
@@ -216,7 +223,8 @@ async function saveGlobal() {
         dailyNewUserPoints:   Number(dailyNewUserPoints.value),
         czoneVisitPoints:     Number(czoneVisitPoints.value),
         dailyPointLimit:      Number(dailyPointLimit.value),
-        czoneVisitMaxPerDay:  Number(czoneVisitMaxPerDay.value)
+        czoneVisitMaxPerDay:  Number(czoneVisitMaxPerDay.value),
+        czoneCount:           Number(czoneCount.value)
       }
     })
     toast.value = { type: 'ok', msg: 'Global points saved.' }

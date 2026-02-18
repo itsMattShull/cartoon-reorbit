@@ -149,6 +149,13 @@ export default defineEventHandler(async (event) => {
         data:  { userId: newOwner }
       })
 
+      await tx.userTradeListItem.deleteMany({
+        where: {
+          userCtoonId: tc.userCtoonId,
+          userId: { not: newOwner }
+        }
+      })
+
       await tx.ctoonOwnerLog.create({
         data: {
           userId:      newOwner,

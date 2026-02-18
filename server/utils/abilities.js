@@ -17,8 +17,15 @@
 /** @typedef {import('../utils/battleEngine').BattleCtx} BattleCtx */
 
 const norm = s => typeof s === 'string' ? s.trim().toLowerCase() : ''
-const isType = (c, t) => norm(c?.gtoonType) === norm(t)
-const hasType = (c, sub) => norm(c?.gtoonType).includes(norm(sub))
+const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const typeHasToken = (type, token) => {
+  if (!type || !token) return false
+  const rx = new RegExp(`\\b${escapeRegExp(token)}\\b`)
+  return rx.test(type)
+}
+const isType = (c, t) => typeHasToken(norm(c?.gtoonType), norm(t))
+const hasType = (c, sub) => typeHasToken(norm(c?.gtoonType), norm(sub))
+const isHeroType = c => typeof c?.gtoonType === 'string' && /\bhero\b/i.test(c.gtoonType)
 const nameIs = (c, ...names) => names.some(n => norm(c?.name) === norm(n))
 const nameHas = (c, token) => norm(c?.name).includes(norm(token))
 
@@ -264,11 +271,54 @@ export const abilityRegistry = {
 
   heroine_rally: {
     onReveal({ game, side, card }) {
-      const allies = game.state.lanes
-        .flatMap(l => l[side])
+      const targets = game.state.lanes
+        .flatMap(l => [...l.player, ...l.ai])
         .filter(c => c !== card && isType(c, 'female hero'))
-      allies.forEach(a => { a.power += 4 })
-      if (allies.length) game.log.push(`${card.name}: +4 to ${allies.length} Female Hero ally/ies`)
+      targets.forEach(a => { a.power += 4 })
+      if (targets.length) {
+        game.log.push(`${card.name}: +4 to all Female Hero(es) in play`)
+      }
+    }
+  },
+
+  girl_power: {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      const allies = lane[side].filter(
+        c => c !== card && isType(c, 'female')
+      )
+      allies.forEach(a => { a.power += 1 })
+      if (allies.length) {
+        game.log.push(`${card.name}: +1 to all Female allies in ${lane.name}.`)
+      }
+    }
+  },
+
+  dont_think_so: {
+    onReveal({ game, side, laneIndex, card }) {
+      const lane = game.state.lanes[laneIndex]; if (!lane) return
+      card._dontThinkSoActive = true
+      const enemy = side === 'player' ? 'ai' : 'player'
+      const targets = lane[enemy].filter(isHeroType)
+      if (!targets.length) return
+      game.log.push(
+        `${card.name}: negates ${targets.length} enemy Hero ability/ies in ${lane.name}`
+      )
+    }
+  },
+
+  keen_for_kean: {
+    onReveal({ game, laneIndex, card }) {
+      const lanes = game.state.lanes
+      const left = lanes[laneIndex - 1]
+      const right = lanes[laneIndex + 1]
+      const hasMsKean = [left, right]
+        .filter(Boolean)
+        .some(lane => [...lane.player, ...lane.ai].some(c => nameHas(c, 'kean')))
+
+      if (!hasMsKean) return
+      card.power += 5
+      game.log.push(`${card.name}: +5 (Keen for Kean)`)
     }
   },
 
@@ -299,6 +349,15 @@ export const abilityRegistry = {
   DOUBLE_ABILITIES: {
     onReveal({ game, side, laneIndex, card }) {
       if (!card) return
+      const lane = game.state.lanes[laneIndex]
+      const enemy = side === 'player' ? 'ai' : 'player'
+      const suppressed =
+        card._abilityDisabled ||
+        (isHeroType(card) &&
+          lane?.[enemy]?.some(
+            c => c.abilityKey === 'dont_think_so' && c._dontThinkSoActive
+          ))
+      if (suppressed) return
       const cardDef = abilityRegistry[card.abilityKey]
       if (cardDef?.onReveal) {
         // The card already fired once in fireReveal → fire exactly one *extra* time

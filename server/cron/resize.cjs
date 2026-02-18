@@ -4,6 +4,7 @@
 // - Tue 00:00 downsize
 // - Tue 08:00 upsize
 // - Tue 12:00 downsize
+// - Daily 04:00 restart
 //
 // Env: DO_ACCESS_TOKEN, DROPLET_ID, UPSIZE_SLUG, DOWNSIZE_SLUG,
 //      BOT_TOKEN (Discord Bot token), DISCORD_USER_ID (target user),
@@ -48,6 +49,18 @@ async function waitAction(actionId, label = 'action') {
   }
 }
 
+async function waitForActive(id, timeoutMs = 10 * 60 * 1000, intervalMs = 5000) {
+  const start = Date.now();
+  for (;;) {
+    const { droplet } = await api(`/droplets/${id}`);
+    if (droplet.status === 'active') return droplet;
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`droplet ${id} not active after ${Math.round(timeoutMs / 1000)}s (status: ${droplet.status})`);
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+}
+
 async function ensureOff(id) {
   const { droplet } = await api(`/droplets/${id}`);
   if (droplet.status === 'off') return;
@@ -68,15 +81,19 @@ async function powerOn(id) {
 }
 
 async function resizeCpuRamOnly(id, sizeSlug) {
-  try {
-    await ensureOff(id);
-    const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'resize', size: sizeSlug });
-    await waitAction(action.id, 'resize');
-    await powerOn(id);
-    return sizeSlug; // for success reporting
-  } catch (err) {
-    // console.log(`[DO resize scheduler] Resize to ${sizeSlug} failed: ${err?.message || err}`);
-  }
+  await ensureOff(id);
+  const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'resize', size: sizeSlug });
+  await waitAction(action.id, 'resize');
+  await powerOn(id);
+  const droplet = await waitForActive(id);
+  return droplet?.size_slug || sizeSlug; // for success reporting
+}
+
+async function restartDroplet(id) {
+  const { action } = await api(`/droplets/${id}/actions`, 'POST', { type: 'reboot' });
+  await waitAction(action.id, 'reboot');
+  const droplet = await waitForActive(id);
+  return droplet?.size_slug || 'unknown-size';
 }
 
 // ---------- notifications ----------
@@ -100,7 +117,7 @@ async function notifyDiscord(userId, content) {
 }
 
 async function onError(label, err) {
-  const msg = `[DO resize scheduler] ${label} failed: ${err?.message || err}`;
+  const msg = `[DO scheduler] ${label} failed: ${err?.message || err}`;
   console.error(msg);
   await notifyDiscord(DISCORD_USER_ID, `⚠️ ${msg}`);
 }
@@ -121,10 +138,12 @@ function schedule(label, cronExpr, job) {
 }
 
 // Mon 20:00 upsize
-schedule('Mon 20:00 upsize', '0 20 * * 1', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
+schedule('Mon 20:00 upsize', '30 20 * * 1', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
 // Tue 00:00 downsize
 schedule('Tue 00:00 downsize', '0 0 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
 // Tue 08:00 upsize
-schedule('Tue 08:00 upsize', '0 8 * * 2', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
+schedule('Thu 08:00 upsize', '0 8 * * 4', () => resizeCpuRamOnly(DROPLET_ID, UPSIZE_SLUG));
 // Tue 12:00 downsize
-schedule('Tue 12:00 downsize', '0 12 * * 2', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
+schedule('Thu 12:00 downsize', '0 12 * * 4', () => resizeCpuRamOnly(DROPLET_ID, DOWNSIZE_SLUG));
+// Daily 04:00 restart
+schedule('Daily 04:00 restart', '0 4 * * *', () => restartDroplet(DROPLET_ID));
