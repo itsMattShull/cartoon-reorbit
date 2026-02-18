@@ -206,7 +206,7 @@ onMounted(() => {
   const ballWallRestitution = 1.2   // high restitution for energetic wall bounces
   const boardFriction = 0         // moderate friction on playfield for rolling
   const boardRestitution = 0.0      // no bounce on the board surface
-  const plungerMaxPull = 0.65                    // max pull distance
+  const plungerMaxPull = 0.6                    // max pull distance
   const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
   const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
   const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
@@ -745,14 +745,14 @@ bumperXs.forEach((bx) => {
     }
 
     // ALSO: if we haven’t pulled or launched yet, keep ball glued
-    //if (!plungerPulling && !ballLaunched) {
-      //const frontZ = plungerBody.position.z - plungerLength / 2
-      //const targetZ = frontZ - ballRadius
-      //const targetY = boardYAt(frontZ) + ballRadius
-      //ballBody.position.set(laneCenterX, targetY, targetZ)
-      //ballBody.velocity.setZero()
-      //ballBody.angularVelocity.setZero()
-    //}
+    if (!plungerPulling && !ballLaunched) {
+      const frontZ = plungerBody.position.z - plungerLength / 2
+      const targetZ = frontZ - ballRadius
+      const targetY = boardYAt(frontZ) + ballRadius
+      ballBody.position.set(laneCenterX, targetY, targetZ)
+      ballBody.velocity.setZero()
+      ballBody.angularVelocity.setZero()
+    }
 
     // Step the physics world
     world.step(1/60, dt, 20)
