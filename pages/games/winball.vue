@@ -704,7 +704,7 @@ bumperXs.forEach((bx) => {
     requestAnimationFrame(animate)
     // controls.update()
 
-    const dt = clock.getDelta() || 1/60
+    const dt = clock.getDelta()
 
     if (plungerMesh && plungerBody) {
       // Determine desired plunger position
@@ -782,7 +782,7 @@ bumperXs.forEach((bx) => {
 
     // --- Stop ball at south wall and lock it in place ---
     const southLimit = southZ - ballRadius
-    if (ballLaunched && ballBody.position.z >= southLimit - 1 && !gameEnded) {
+    if (ballBody.position.x<16.75 && ballBody.position.z >= southLimit - 1 && !gameEnded) {
       stateHistory.push({
         position: {
           x: ballBody.position.x,
@@ -873,7 +873,7 @@ bumperXs.forEach((bx) => {
     }
 
     // Close cap once ball has cleared the curve and is moving away
-    if (!capClosed && ballBody.position.z + 4 < startZ - ballRadius && ballBody.velocity.z < 0) {
+    if (!capClosed && ballBody.velocity.x != 0) {
       capClosed = true
       ballLaunched = true
       // Cap wall creation
