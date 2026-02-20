@@ -56,6 +56,7 @@
             class="cursor-move flex items-start justify-center w-[48%]"
             draggable="true"
             @dragstart="onDragStart(element, $event)"
+            @click="onSidebarClick(element)"
           >
             <div class="relative inline-flex items-center justify-center">
               <img
@@ -275,6 +276,7 @@ useHead({
 const loading = ref(true)
 const pressTimer = ref(null)
 const longPressDuration = 3000  // 3 seconds
+const isTouchDevice = ref(false)
 
 // ——— Scale logic ———
 const scale = ref(1)
@@ -656,6 +658,11 @@ async function selectCtoon(ctoon) {
   await saveZones(false)
 }
 
+function onSidebarClick(ctoon) {
+  if (!isTouchDevice.value) return
+  selectCtoon(ctoon)
+}
+
 function openPanel(type) {
   panelType.value = type
   showPanel.value = true
@@ -675,6 +682,11 @@ async function closeEditor() {
 }
 
 onMounted(async () => {
+  isTouchDevice.value =
+    (typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(pointer: coarse)').matches) ||
+    (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
   recalcScale()
   window.addEventListener('resize', recalcScale)
   window.addEventListener('dragend', cleanupDragImage)
