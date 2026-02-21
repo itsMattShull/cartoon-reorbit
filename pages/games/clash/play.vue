@@ -185,7 +185,7 @@
           </div>
           <p v-if="summary.winner === 'player'" class="mb-4 text-indigo-600 font-medium">
             You earned {{ summary.pointsAwarded }} point
-            <span v-if="summary.pointsAwarded > 1">s</span>!
+            <span v-if="summary.pointsAwarded !== 1">s</span>!
           </p>
           <NuxtLink
             to="/games/clash"

@@ -296,7 +296,7 @@
                         Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
-                        Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                        Highest Bid: {{ formatHighestBid(auction) }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
                         Bids: {{ auction.bidCount ?? 0 }}
@@ -367,7 +367,7 @@
                     Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
-                    Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                    Highest Bid: {{ formatHighestBid(auction) }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
                     Bids: {{ auction.bidCount ?? 0 }}
@@ -493,7 +493,7 @@
                 Starting Bid: {{ bid.initialBid != null ? bid.initialBid + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
-                Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
+                Highest Bid: {{ formatHighestBid(bid) }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Bids: {{ bid.bidCount ?? 0 }}
@@ -1040,6 +1040,7 @@ function loadAllAuctions() {
   const params = buildFilterParams()
   params.set('page', String(allPage.value))
   params.set('limit', String(allPageSize.value))
+  if (sortBy.value) params.set('sort', sortBy.value)
   $fetch(`/api/auctions/all?${params.toString()}`)
     .then(data => {
       allAuctions.value = Array.isArray(data?.items) ? data.items : []
@@ -1081,7 +1082,19 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
   if (myBidsPage.value !== 1) myBidsPage.value = 1
   else if (isMyBids) loadMyBids()
 }, { deep: true })
-watch(sortBy, () => { updateUrlQueryFromFilters() })
+watch(sortBy, () => {
+  updateUrlQueryFromFilters()
+
+  if (activeTab.value === 'mine') {
+    if (myPage.value !== 1) myPage.value = 1
+    else loadMyAuctions()
+  }
+
+  if (activeTab.value === 'all') {
+    if (allPage.value !== 1) allPage.value = 1
+    else loadAllAuctions()
+  }
+})
 watch(myBidsSort, () => {
   if (myBidsPage.value !== 1) {
     myBidsPage.value = 1
@@ -1143,6 +1156,16 @@ function formatRemaining(endAt) {
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString()
+}
+
+function formatHighestBid(item) {
+  const bidCount = Number(item?.bidCount ?? 0)
+  if (bidCount < 1) return 'No bids'
+
+  const highestBid = item?.highestBid
+  if (highestBid != null) return `${highestBid} points`
+
+  return 'No bids'
 }
 
 const wishlistCtoonIdSet = computed(() => new Set(wishlistCtoonIds.value))
