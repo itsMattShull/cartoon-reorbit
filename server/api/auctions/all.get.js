@@ -37,6 +37,24 @@ function intersectLists(a, b) {
   return a.filter(id => bSet.has(id))
 }
 
+function buildSortOrder(sort) {
+  switch (sort) {
+    case 'nameAsc':
+      return [{ userCtoon: { ctoon: { name: 'asc' } } }, { id: 'desc' }]
+    case 'nameDesc':
+      return [{ userCtoon: { ctoon: { name: 'desc' } } }, { id: 'desc' }]
+    case 'mintAsc':
+      return [{ userCtoon: { mintNumber: 'asc' } }, { id: 'desc' }]
+    case 'mintDesc':
+      return [{ userCtoon: { mintNumber: 'desc' } }, { id: 'desc' }]
+    case 'rarity':
+      return [{ userCtoon: { ctoon: { rarity: 'asc' } } }, { id: 'desc' }]
+    case 'endAsc':
+    default:
+      return [{ endAt: 'asc' }, { id: 'desc' }]
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -65,6 +83,8 @@ export default defineEventHandler(async (event) => {
   const gtoonsOnly = isTruthy(query.gtoon)
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
+  const sort = typeof query.sort === 'string' ? query.sort : 'endAsc'
+  const orderBy = buildSortOrder(sort)
 
   let ownedIds = null
   let ownedSet = null
@@ -134,7 +154,7 @@ export default defineEventHandler(async (event) => {
     prisma.auction.count({ where }),
     prisma.auction.findMany({
       where,
-      orderBy: { endAt: 'desc' },
+      orderBy,
       skip,
       take,
       include: {
