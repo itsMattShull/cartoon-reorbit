@@ -1040,6 +1040,7 @@ function loadAllAuctions() {
   const params = buildFilterParams()
   params.set('page', String(allPage.value))
   params.set('limit', String(allPageSize.value))
+  if (sortBy.value) params.set('sort', sortBy.value)
   $fetch(`/api/auctions/all?${params.toString()}`)
     .then(data => {
       allAuctions.value = Array.isArray(data?.items) ? data.items : []
@@ -1081,7 +1082,19 @@ watch([searchQuery, selectedSets, selectedSeries, selectedRarities, selectedOwne
   if (myBidsPage.value !== 1) myBidsPage.value = 1
   else if (isMyBids) loadMyBids()
 }, { deep: true })
-watch(sortBy, () => { updateUrlQueryFromFilters() })
+watch(sortBy, () => {
+  updateUrlQueryFromFilters()
+
+  if (activeTab.value === 'mine') {
+    if (myPage.value !== 1) myPage.value = 1
+    else loadMyAuctions()
+  }
+
+  if (activeTab.value === 'all') {
+    if (allPage.value !== 1) allPage.value = 1
+    else loadAllAuctions()
+  }
+})
 watch(myBidsSort, () => {
   if (myBidsPage.value !== 1) {
     myBidsPage.value = 1
