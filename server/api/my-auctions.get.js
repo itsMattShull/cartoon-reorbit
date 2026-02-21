@@ -64,6 +64,10 @@ function sortMyAuctions(items, sort) {
       return list.sort((a, b) => (b?.mintNumber || 0) - (a?.mintNumber || 0))
     case 'rarity':
       return list.sort((a, b) => (a?.rarity || '').localeCompare(b?.rarity || ''))
+    case 'endOldest':
+      return list.sort((a, b) => new Date(a.endAt) - new Date(b.endAt))
+    case 'endNewest':
+      return list.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
     case 'endAsc':
     default: {
       const now = Date.now()
