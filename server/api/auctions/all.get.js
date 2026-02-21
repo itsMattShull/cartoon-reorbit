@@ -50,6 +50,10 @@ function buildSortOrder(sort) {
     case 'rarity':
       return [{ userCtoon: { ctoon: { rarity: 'asc' } } }, { id: 'desc' }]
     case 'endAsc':
+    case 'endOldest':
+      return [{ endAt: 'asc' }, { id: 'desc' }]
+    case 'endNewest':
+      return [{ endAt: 'desc' }, { id: 'desc' }]
     default:
       return [{ endAt: 'asc' }, { id: 'desc' }]
   }

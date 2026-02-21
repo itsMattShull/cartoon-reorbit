@@ -226,6 +226,8 @@
             class="mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="endAsc">Ending Soonest</option>
+            <option value="endOldest">Auction End Date: Oldest</option>
+            <option value="endNewest">Auction End Date: Newest</option>
             <option value="nameAsc">Name (A→Z)</option>
             <option value="nameDesc">Name (Z→A)</option>
             <option value="mintAsc">Mint # (Asc)</option>
@@ -431,6 +433,8 @@
             >
               <option value="recentDesc">Recent - Descending</option>
               <option value="recentAsc">Recent - Ascending</option>
+              <option value="endOldest">Auction End Date: Oldest</option>
+              <option value="endNewest">Auction End Date: Newest</option>
               <option value="biggestBid">My Biggest Bid</option>
               <option value="recentlyWon">Recently Won</option>
               <option value="recentlyLost">Recently Lost</option>
@@ -909,7 +913,7 @@ onMounted(() => {
   if (initRarities.length) selectedRarities.value = initRarities
   if (['all','owned','unowned'].includes(ownedParam)) selectedOwned.value = ownedParam
 
-  const validSorts = ['endAsc','nameAsc','nameDesc','mintAsc','mintDesc','rarity']
+  const validSorts = ['endAsc','endOldest','endNewest','nameAsc','nameDesc','mintAsc','mintDesc','rarity']
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
 
   const validTabs = ['current','mybids','mine','all']
@@ -1244,6 +1248,8 @@ const filteredAuctions = computed(() => {
   return applyCommonFilters(auctions.value).sort((a, b) => {
     switch (sortBy.value) {
       case 'endAsc':   return new Date(a.endAt) - new Date(b.endAt)
+      case 'endOldest': return new Date(a.endAt) - new Date(b.endAt)
+      case 'endNewest': return new Date(b.endAt) - new Date(a.endAt)
       case 'nameAsc':  return a.name.localeCompare(b.name)
       case 'nameDesc': return b.name.localeCompare(a.name)
       case 'mintAsc':  return (a.mintNumber || 0) - (b.mintNumber || 0)
@@ -1286,7 +1292,10 @@ const sortedMyBids = computed(() => {
 
   switch (myBidsSort.value) {
     case 'recentAsc':
+    case 'endOldest':
       return items.sort((a, b) => new Date(a.endAt) - new Date(b.endAt))
+    case 'endNewest':
+      return items.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
     case 'biggestBid':
       return items.sort((a, b) => {
         const aBid = a.myBid ?? Number.NEGATIVE_INFINITY
