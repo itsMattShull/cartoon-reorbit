@@ -1006,6 +1006,7 @@ function loadMyAuctions() {
   const params = buildFilterParams()
   params.set('page', String(myPage.value))
   params.set('limit', String(myPageSize.value))
+  if (sortBy.value) params.set('sort', sortBy.value)
   $fetch(`/api/my-auctions?${params.toString()}`)
     .then(data => {
       myAuctions.value = Array.isArray(data?.items) ? data.items : []
