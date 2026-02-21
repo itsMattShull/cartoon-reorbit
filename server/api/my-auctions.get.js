@@ -49,6 +49,40 @@ function applyAuctionFilters(items, filters) {
   })
 }
 
+
+function sortMyAuctions(items, sort) {
+  const list = Array.isArray(items) ? [...items] : []
+
+  switch (sort) {
+    case 'nameAsc':
+      return list.sort((a, b) => (a?.name || '').localeCompare(b?.name || ''))
+    case 'nameDesc':
+      return list.sort((a, b) => (b?.name || '').localeCompare(a?.name || ''))
+    case 'mintAsc':
+      return list.sort((a, b) => (a?.mintNumber || 0) - (b?.mintNumber || 0))
+    case 'mintDesc':
+      return list.sort((a, b) => (b?.mintNumber || 0) - (a?.mintNumber || 0))
+    case 'rarity':
+      return list.sort((a, b) => (a?.rarity || '').localeCompare(b?.rarity || ''))
+    case 'endAsc':
+    default: {
+      const now = Date.now()
+      const active = []
+      const ended = []
+
+      for (const item of list) {
+        const endTs = Number(new Date(item?.endAt))
+        if (Number.isFinite(endTs) && endTs <= now) ended.push(item)
+        else active.push(item)
+      }
+
+      active.sort((a, b) => new Date(a.endAt) - new Date(b.endAt))
+      ended.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
+      return [...active, ...ended]
+    }
+  }
+}
+
 export default defineEventHandler(async (event) => {
   // 1. Authenticate
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -78,6 +112,7 @@ export default defineEventHandler(async (event) => {
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
   const gtoonsOnly = isTruthy(query.gtoon)
+  const sort = typeof query.sort === 'string' ? query.sort : 'endAsc'
 
   let wishlistSet = null
   if (wishlistOnly) {
@@ -174,9 +209,10 @@ export default defineEventHandler(async (event) => {
     gtoonsOnly
   })
 
-  const total = filtered.length
+  const sorted = sortMyAuctions(filtered, sort)
+  const total = sorted.length
   const totalPages = Math.max(1, Math.ceil(total / take))
-  const paged = filtered.slice(skip, skip + take)
+  const paged = sorted.slice(skip, skip + take)
 
   // 3. Return endAt so frontend can show “In Progress” vs “Ended”
   return {
