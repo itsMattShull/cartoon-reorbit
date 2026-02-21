@@ -296,7 +296,7 @@
                         Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
-                        Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                        Highest Bid: {{ formatHighestBid(auction) }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
                         Bids: {{ auction.bidCount ?? 0 }}
@@ -367,7 +367,7 @@
                     Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
-                    Highest Bid: {{ auction.highestBid != null ? auction.highestBid + ' points' : 'No bids' }}
+                    Highest Bid: {{ formatHighestBid(auction) }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
                     Bids: {{ auction.bidCount ?? 0 }}
@@ -493,7 +493,7 @@
                 Starting Bid: {{ bid.initialBid != null ? bid.initialBid + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
-                Highest Bid: {{ bid.highestBid != null ? bid.highestBid + ' points' : 'No bids' }}
+                Highest Bid: {{ formatHighestBid(bid) }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Bids: {{ bid.bidCount ?? 0 }}
@@ -1143,6 +1143,16 @@ function formatRemaining(endAt) {
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString()
+}
+
+function formatHighestBid(item) {
+  const bidCount = Number(item?.bidCount ?? 0)
+  if (bidCount < 1) return 'No bids'
+
+  const highestBid = item?.highestBid
+  if (highestBid != null) return `${highestBid} points`
+
+  return 'No bids'
 }
 
 const wishlistCtoonIdSet = computed(() => new Set(wishlistCtoonIds.value))
