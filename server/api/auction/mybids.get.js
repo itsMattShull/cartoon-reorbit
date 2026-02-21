@@ -56,7 +56,10 @@ function sortMyBids(items, sortKey, now) {
   const sorted = items.slice()
   switch (sortKey) {
     case 'recentAsc':
+    case 'endOldest':
       return sorted.sort((a, b) => new Date(a.endAt) - new Date(b.endAt))
+    case 'endNewest':
+      return sorted.sort((a, b) => new Date(b.endAt) - new Date(a.endAt))
     case 'biggestBid':
       return sorted.sort((a, b) => {
         const aBid = a.myBid ?? Number.NEGATIVE_INFINITY
@@ -116,7 +119,7 @@ export default defineEventHandler(async (event) => {
   const hasBidsOnly = isTruthy(query.hasBids)
   const gtoonsOnly = isTruthy(query.gtoon)
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
-  const validSorts = ['recentDesc', 'recentAsc', 'biggestBid', 'recentlyWon', 'recentlyLost']
+  const validSorts = ['recentDesc', 'recentAsc', 'endOldest', 'endNewest', 'biggestBid', 'recentlyWon', 'recentlyLost']
   const effectiveSort = validSorts.includes(sortKey) ? sortKey : 'recentDesc'
 
   let wishlistSet = null
