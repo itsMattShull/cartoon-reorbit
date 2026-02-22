@@ -79,7 +79,7 @@ function parseUserOwns(value) {
   return rows
 }
 
-function normalizeConditions(row, window) {
+async function normalizeConditions(row, window) {
   const dateEnabled = Boolean(row?.conditionDateEnabled)
   let dateStart = null
   let dateEnd = null
@@ -124,6 +124,22 @@ function normalizeConditions(row, window) {
   const userUniqueEnabled = Boolean(row?.conditionUserUniqueCountEnabled)
   const userUniqueMin = userUniqueEnabled ? parsePositiveInt(row?.conditionUserUniqueCountMin, 'user unique cToon count') : null
 
+  const setUniqueEnabled = Boolean(row?.conditionSetUniqueCountEnabled)
+  const setUniqueMin = setUniqueEnabled ? parsePositiveInt(row?.conditionSetUniqueCountMin, 'set unique cToon count') : null
+  const setUniqueSet = setUniqueEnabled ? String(row?.conditionSetUniqueCountSet || '').trim() : null
+  if (setUniqueEnabled && !setUniqueSet) {
+    throw createError({ statusCode: 400, statusMessage: 'Set name is required for unique cToons from set condition' })
+  }
+  if (setUniqueEnabled) await assertSetExists(setUniqueSet, 'unique cToons from set condition')
+
+  const setTotalEnabled = Boolean(row?.conditionSetTotalCountEnabled)
+  const setTotalMin = setTotalEnabled ? parsePositiveInt(row?.conditionSetTotalCountMin, 'set total cToon count') : null
+  const setTotalSet = setTotalEnabled ? String(row?.conditionSetTotalCountSet || '').trim() : null
+  if (setTotalEnabled && !setTotalSet) {
+    throw createError({ statusCode: 400, statusMessage: 'Set name is required for total cToons from set condition' })
+  }
+  if (setTotalEnabled) await assertSetExists(setTotalSet, 'total cToons from set condition')
+
   return {
     conditionDateEnabled: dateEnabled,
     conditionDateStart: dateStart,
@@ -141,7 +157,13 @@ function normalizeConditions(row, window) {
     conditionUserTotalCountEnabled: userTotalEnabled,
     conditionUserTotalCountMin: userTotalMin,
     conditionUserUniqueCountEnabled: userUniqueEnabled,
-    conditionUserUniqueCountMin: userUniqueMin
+    conditionUserUniqueCountMin: userUniqueMin,
+    conditionSetUniqueCountEnabled: setUniqueEnabled,
+    conditionSetUniqueCountMin: setUniqueMin,
+    conditionSetUniqueCountSet: setUniqueSet,
+    conditionSetTotalCountEnabled: setTotalEnabled,
+    conditionSetTotalCountMin: setTotalMin,
+    conditionSetTotalCountSet: setTotalSet
   }
 }
 
@@ -166,6 +188,16 @@ function parseBoolean(value) {
   const normalized = String(value || '').trim().toLowerCase()
   if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') return true
   return false
+}
+
+async function assertSetExists(setName, label) {
+  const existing = await db.ctoon.findFirst({
+    where: { set: setName },
+    select: { id: true }
+  })
+  if (!existing) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid ${label}: set does not exist` })
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -213,7 +245,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const seen = new Set()
-  const entries = pool.map((row) => {
+  const entries = await Promise.all(pool.map(async (row) => {
     const ctoonId = String(row?.ctoonId || '').trim()
     if (!ctoonId) {
       throw createError({ statusCode: 400, statusMessage: 'Prize pool entries require a cToon' })
@@ -224,9 +256,9 @@ export default defineEventHandler(async (event) => {
     seen.add(ctoonId)
     const chancePercent = parsePercent(row?.chancePercent, 'cToon chance percent')
     const maxCaptures = isCustom ? parseMaxCaptures(row?.maxCaptures) : null
-    const conditions = normalizeConditions(row, windowDates)
+    const conditions = await normalizeConditions(row, windowDates)
     return { ctoonId, chancePercent, maxCaptures, ...conditions }
-  })
+  }))
 
   if (!entries.some(e => e.chancePercent > 0)) {
     throw createError({ statusCode: 400, statusMessage: 'At least one prize pool cToon must have a chance above 0%' })

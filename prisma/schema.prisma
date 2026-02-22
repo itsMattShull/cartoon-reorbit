@@ -147,6 +147,12 @@ model CZoneSearchPrize {
   conditionUserTotalCountMin Int?
   conditionUserUniqueCountEnabled Boolean @default(false)
   conditionUserUniqueCountMin Int?
+  conditionSetUniqueCountEnabled Boolean @default(false)
+  conditionSetUniqueCountMin Int?
+  conditionSetUniqueCountSet String?
+  conditionSetTotalCountEnabled Boolean @default(false)
+  conditionSetTotalCountMin Int?
+  conditionSetTotalCountSet String?
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
