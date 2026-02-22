@@ -191,6 +191,14 @@
                         <p class="font-semibold text-slate-800">Unique cToon Count Required</p>
                         <p class="text-slate-600">{{ formatNumber(entry.conditionUserUniqueCountMin) }}+ unique cToons</p>
                       </div>
+                      <div v-if="entry.conditionSetUniqueCountEnabled" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p class="font-semibold text-slate-800"># of unique cToons from set</p>
+                        <p class="text-slate-600">{{ formatNumber(entry.conditionSetUniqueCountMin) }}+ from {{ entry.conditionSetUniqueCountSet }}</p>
+                      </div>
+                      <div v-if="entry.conditionSetTotalCountEnabled" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p class="font-semibold text-slate-800"># of total cToons from set</p>
+                        <p class="text-slate-600">{{ formatNumber(entry.conditionSetTotalCountMin) }}+ from {{ entry.conditionSetTotalCountSet }}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -299,6 +307,8 @@ const hasConditions = (entry) => (
   || entry?.conditionUserPointsEnabled
   || entry?.conditionUserTotalCountEnabled
   || entry?.conditionUserUniqueCountEnabled
+  || entry?.conditionSetUniqueCountEnabled
+  || entry?.conditionSetTotalCountEnabled
 )
 
 const backgroundSrc = (bg) => {

@@ -115,7 +115,13 @@ export default defineEventHandler(async (event) => {
         conditionUserTotalCountEnabled: row.conditionUserTotalCountEnabled,
         conditionUserTotalCountMin: row.conditionUserTotalCountMin,
         conditionUserUniqueCountEnabled: row.conditionUserUniqueCountEnabled,
-        conditionUserUniqueCountMin: row.conditionUserUniqueCountMin
+        conditionUserUniqueCountMin: row.conditionUserUniqueCountMin,
+        conditionSetUniqueCountEnabled: row.conditionSetUniqueCountEnabled,
+        conditionSetUniqueCountMin: row.conditionSetUniqueCountMin,
+        conditionSetUniqueCountSet: row.conditionSetUniqueCountSet,
+        conditionSetTotalCountEnabled: row.conditionSetTotalCountEnabled,
+        conditionSetTotalCountMin: row.conditionSetTotalCountMin,
+        conditionSetTotalCountSet: row.conditionSetTotalCountSet
       }
     })
   }
