@@ -372,7 +372,7 @@
                       </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionUserPointsEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userPoints')" />
                         <div class="flex-1">
@@ -399,6 +399,72 @@
                           <div class="text-sm font-medium">User Unique cToon Count</div>
                           <div v-if="row.conditionUserUniqueCountEnabled" class="mt-1">
                             <input v-model.number="row.conditionUserUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-start gap-3">
+                        <input v-model="row.conditionSetUniqueCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'setUnique')" />
+                        <div class="flex-1">
+                          <div class="text-sm font-medium"># of unique cToons from set</div>
+                          <div v-if="row.conditionSetUniqueCountEnabled" class="mt-1 space-y-1">
+                            <input v-model.number="row.conditionSetUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <div class="relative">
+                              <input
+                                v-model="row.conditionSetUniqueCountSet"
+                                type="text"
+                                placeholder="Type 3+ characters for set"
+                                class="w-full border rounded px-2 py-1"
+                                @focus="row.conditionSetUniqueCountFocused = true"
+                                @blur="row.conditionSetUniqueCountFocused = false"
+                                @input="searchConditionSets(row, 'unique')"
+                              />
+                              <ul v-if="row.conditionSetUniqueCountSet.length >= 3 && row.conditionSetUniqueCountFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                                <li v-if="row.conditionSetUniqueCountSearching" class="px-3 py-2 text-gray-500">Searching...</li>
+                                <li v-else-if="!row.conditionSetUniqueCountResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                                <li
+                                  v-for="setName in row.conditionSetUniqueCountResults"
+                                  :key="setName"
+                                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  @mousedown.prevent="selectConditionSet(row, 'unique', setName)"
+                                >
+                                  {{ setName }}
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-start gap-3">
+                        <input v-model="row.conditionSetTotalCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'setTotal')" />
+                        <div class="flex-1">
+                          <div class="text-sm font-medium"># of total cToons from set</div>
+                          <div v-if="row.conditionSetTotalCountEnabled" class="mt-1 space-y-1">
+                            <input v-model.number="row.conditionSetTotalCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <div class="relative">
+                              <input
+                                v-model="row.conditionSetTotalCountSet"
+                                type="text"
+                                placeholder="Type 3+ characters for set"
+                                class="w-full border rounded px-2 py-1"
+                                @focus="row.conditionSetTotalCountFocused = true"
+                                @blur="row.conditionSetTotalCountFocused = false"
+                                @input="searchConditionSets(row, 'total')"
+                              />
+                              <ul v-if="row.conditionSetTotalCountSet.length >= 3 && row.conditionSetTotalCountFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                                <li v-if="row.conditionSetTotalCountSearching" class="px-3 py-2 text-gray-500">Searching...</li>
+                                <li v-else-if="!row.conditionSetTotalCountResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                                <li
+                                  v-for="setName in row.conditionSetTotalCountResults"
+                                  :key="setName"
+                                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  @mousedown.prevent="selectConditionSet(row, 'total', setName)"
+                                >
+                                  {{ setName }}
+                                </li>
+                              </ul>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -532,7 +598,19 @@ function initPrizeRow(row) {
     conditionUserTotalCountEnabled: Boolean(row.conditionUserTotalCountEnabled),
     conditionUserTotalCountMin: row.conditionUserTotalCountMin ?? '',
     conditionUserUniqueCountEnabled: Boolean(row.conditionUserUniqueCountEnabled),
-    conditionUserUniqueCountMin: row.conditionUserUniqueCountMin ?? ''
+    conditionUserUniqueCountMin: row.conditionUserUniqueCountMin ?? '',
+    conditionSetUniqueCountEnabled: Boolean(row.conditionSetUniqueCountEnabled),
+    conditionSetUniqueCountMin: row.conditionSetUniqueCountMin ?? '',
+    conditionSetUniqueCountSet: row.conditionSetUniqueCountSet || '',
+    conditionSetUniqueCountResults: [],
+    conditionSetUniqueCountSearching: false,
+    conditionSetUniqueCountFocused: false,
+    conditionSetTotalCountEnabled: Boolean(row.conditionSetTotalCountEnabled),
+    conditionSetTotalCountMin: row.conditionSetTotalCountMin ?? '',
+    conditionSetTotalCountSet: row.conditionSetTotalCountSet || '',
+    conditionSetTotalCountResults: [],
+    conditionSetTotalCountSearching: false,
+    conditionSetTotalCountFocused: false
   }
 }
 
@@ -569,6 +647,20 @@ function onConditionToggle(row, key) {
   }
   if (key === 'userUnique' && !row.conditionUserUniqueCountEnabled) {
     row.conditionUserUniqueCountMin = ''
+  }
+  if (key === 'setUnique' && !row.conditionSetUniqueCountEnabled) {
+    row.conditionSetUniqueCountMin = ''
+    row.conditionSetUniqueCountSet = ''
+    row.conditionSetUniqueCountResults = []
+    row.conditionSetUniqueCountSearching = false
+    row.conditionSetUniqueCountFocused = false
+  }
+  if (key === 'setTotal' && !row.conditionSetTotalCountEnabled) {
+    row.conditionSetTotalCountMin = ''
+    row.conditionSetTotalCountSet = ''
+    row.conditionSetTotalCountResults = []
+    row.conditionSetTotalCountSearching = false
+    row.conditionSetTotalCountFocused = false
   }
 }
 
@@ -663,6 +755,52 @@ async function searchConditionCtoons(row, type) {
     } finally {
       if (isZone) row.conditionCtoonInZoneSearching = false
       else row.conditionUserOwnsSearching = false
+    }
+  }, 300)
+}
+
+
+
+function selectConditionSet(row, type, setName) {
+  if (type === 'unique') {
+    row.conditionSetUniqueCountSet = setName
+    row.conditionSetUniqueCountResults = []
+    row.conditionSetUniqueCountFocused = false
+  } else {
+    row.conditionSetTotalCountSet = setName
+    row.conditionSetTotalCountResults = []
+    row.conditionSetTotalCountFocused = false
+  }
+}
+
+async function searchConditionSets(row, type) {
+  const isUnique = type === 'unique'
+  const term = isUnique ? row.conditionSetUniqueCountSet.trim() : row.conditionSetTotalCountSet.trim()
+  const timerKey = isUnique ? '_setUniqueTimer' : '_setTotalTimer'
+  clearTimeout(row[timerKey])
+  if (term.length < 3) {
+    if (isUnique) {
+      row.conditionSetUniqueCountResults = []
+      row.conditionSetUniqueCountSearching = false
+    } else {
+      row.conditionSetTotalCountResults = []
+      row.conditionSetTotalCountSearching = false
+    }
+    return
+  }
+  if (isUnique) row.conditionSetUniqueCountSearching = true
+  else row.conditionSetTotalCountSearching = true
+  row[timerKey] = setTimeout(async () => {
+    try {
+      const results = await $fetch('/api/admin/ctoon-sets', { query: { q: term } })
+      if (isUnique) row.conditionSetUniqueCountResults = Array.isArray(results) ? results : []
+      else row.conditionSetTotalCountResults = Array.isArray(results) ? results : []
+    } catch {
+      if (isUnique) row.conditionSetUniqueCountResults = []
+      else row.conditionSetTotalCountResults = []
+    } finally {
+      if (isUnique) row.conditionSetUniqueCountSearching = false
+      else row.conditionSetTotalCountSearching = false
     }
   }, 300)
 }
@@ -840,6 +978,12 @@ async function openEdit(row) {
     conditionUserTotalCountMin: p.conditionUserTotalCountMin,
     conditionUserUniqueCountEnabled: p.conditionUserUniqueCountEnabled,
     conditionUserUniqueCountMin: p.conditionUserUniqueCountMin,
+    conditionSetUniqueCountEnabled: p.conditionSetUniqueCountEnabled,
+    conditionSetUniqueCountMin: p.conditionSetUniqueCountMin,
+    conditionSetUniqueCountSet: p.conditionSetUniqueCountSet,
+    conditionSetTotalCountEnabled: p.conditionSetTotalCountEnabled,
+    conditionSetTotalCountMin: p.conditionSetTotalCountMin,
+    conditionSetTotalCountSet: p.conditionSetTotalCountSet,
     ctoon: p.ctoon
   }))
   formError.value = ''
@@ -953,6 +1097,28 @@ async function saveSearch() {
         return
       }
     }
+    if (row.conditionSetUniqueCountEnabled) {
+      const uniqueSetMin = Number(row.conditionSetUniqueCountMin)
+      if (!Number.isInteger(uniqueSetMin) || uniqueSetMin < 1) {
+        formError.value = `# of unique cToons from set must be 1 or higher for ${label}.`
+        return
+      }
+      if (!String(row.conditionSetUniqueCountSet || '').trim()) {
+        formError.value = `Set name is required for unique cToons from set for ${label}.`
+        return
+      }
+    }
+    if (row.conditionSetTotalCountEnabled) {
+      const totalSetMin = Number(row.conditionSetTotalCountMin)
+      if (!Number.isInteger(totalSetMin) || totalSetMin < 1) {
+        formError.value = `# of total cToons from set must be 1 or higher for ${label}.`
+        return
+      }
+      if (!String(row.conditionSetTotalCountSet || '').trim()) {
+        formError.value = `Set name is required for total cToons from set for ${label}.`
+        return
+      }
+    }
   }
   const isCustomCollection = form.collectionType === 'CUSTOM_PER_CTOON'
   if (isCustomCollection) {
@@ -1023,7 +1189,13 @@ async function saveSearch() {
       conditionUserTotalCountEnabled: Boolean(p.conditionUserTotalCountEnabled),
       conditionUserTotalCountMin: p.conditionUserTotalCountEnabled ? Number(p.conditionUserTotalCountMin) : null,
       conditionUserUniqueCountEnabled: Boolean(p.conditionUserUniqueCountEnabled),
-      conditionUserUniqueCountMin: p.conditionUserUniqueCountEnabled ? Number(p.conditionUserUniqueCountMin) : null
+      conditionUserUniqueCountMin: p.conditionUserUniqueCountEnabled ? Number(p.conditionUserUniqueCountMin) : null,
+      conditionSetUniqueCountEnabled: Boolean(p.conditionSetUniqueCountEnabled),
+      conditionSetUniqueCountMin: p.conditionSetUniqueCountEnabled ? Number(p.conditionSetUniqueCountMin) : null,
+      conditionSetUniqueCountSet: p.conditionSetUniqueCountEnabled ? String(p.conditionSetUniqueCountSet || '').trim() : null,
+      conditionSetTotalCountEnabled: Boolean(p.conditionSetTotalCountEnabled),
+      conditionSetTotalCountMin: p.conditionSetTotalCountEnabled ? Number(p.conditionSetTotalCountMin) : null,
+      conditionSetTotalCountSet: p.conditionSetTotalCountEnabled ? String(p.conditionSetTotalCountSet || '').trim() : null
     }))
   }
 

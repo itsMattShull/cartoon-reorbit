@@ -96,6 +96,8 @@ export default defineEventHandler(async (event) => {
   const needsUserPoints = searches.some(s => s.prizePool.some(p => p.conditionUserPointsEnabled))
   const needsUserTotal = searches.some(s => s.prizePool.some(p => p.conditionUserTotalCountEnabled))
   const needsUserUnique = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
+  const needsSetUnique = searches.some(s => s.prizePool.some(p => p.conditionSetUniqueCountEnabled))
+  const needsSetTotal = searches.some(s => s.prizePool.some(p => p.conditionSetTotalCountEnabled))
   const ownsIds = new Set()
   if (needsUserOwns) {
     for (const search of searches) {
@@ -132,6 +134,53 @@ export default defineEventHandler(async (event) => {
       where: { userId, burnedAt: null }
     })
     userUniqueCount = uniqueRows.length
+  }
+
+  const setUniqueNames = new Set()
+  const setTotalNames = new Set()
+  if (needsSetUnique || needsSetTotal) {
+    for (const search of searches) {
+      for (const row of search.prizePool) {
+        if (row.conditionSetUniqueCountEnabled && row.conditionSetUniqueCountSet) setUniqueNames.add(row.conditionSetUniqueCountSet)
+        if (row.conditionSetTotalCountEnabled && row.conditionSetTotalCountSet) setTotalNames.add(row.conditionSetTotalCountSet)
+      }
+    }
+  }
+
+  const userSetUniqueCountMap = new Map()
+  if (setUniqueNames.size) {
+    const uniqueSetRows = await db.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setUniqueNames) } } }
+    })
+    const ctoonIds = uniqueSetRows.map(row => row.ctoonId)
+    if (ctoonIds.length) {
+      const ctoons = await db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, set: true } })
+      for (const ctoon of ctoons) {
+        const setName = ctoon.set
+        if (!setName) continue
+        userSetUniqueCountMap.set(setName, (userSetUniqueCountMap.get(setName) || 0) + 1)
+      }
+    }
+  }
+
+  const userSetTotalCountMap = new Map()
+  if (setTotalNames.size) {
+    const totalSetRows = await db.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setTotalNames) } } },
+      _count: { _all: true }
+    })
+    const ctoonIds = totalSetRows.map(row => row.ctoonId)
+    if (ctoonIds.length) {
+      const ctoons = await db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, set: true } })
+      const setById = new Map(ctoons.map(ctoon => [ctoon.id, ctoon.set]))
+      for (const row of totalSetRows) {
+        const setName = setById.get(row.ctoonId)
+        if (!setName) continue
+        userSetTotalCountMap.set(setName, (userSetTotalCountMap.get(setName) || 0) + (row._count._all || 0))
+      }
+    }
   }
 
   const userOwnsCountMap = new Map()
@@ -313,6 +362,20 @@ export default defineEventHandler(async (event) => {
       if (row.conditionUserUniqueCountEnabled) {
         const minUnique = Number(row.conditionUserUniqueCountMin || 0)
         if (minUnique < 1 || userUniqueCount < minUnique) return false
+      }
+      if (row.conditionSetUniqueCountEnabled) {
+        const minSetUnique = Number(row.conditionSetUniqueCountMin || 0)
+        const setName = String(row.conditionSetUniqueCountSet || '')
+        if (minSetUnique < 1 || !setName) return false
+        const ownedUniqueInSet = userSetUniqueCountMap.get(setName) || 0
+        if (ownedUniqueInSet < minSetUnique) return false
+      }
+      if (row.conditionSetTotalCountEnabled) {
+        const minSetTotal = Number(row.conditionSetTotalCountMin || 0)
+        const setName = String(row.conditionSetTotalCountSet || '')
+        if (minSetTotal < 1 || !setName) return false
+        const ownedTotalInSet = userSetTotalCountMap.get(setName) || 0
+        if (ownedTotalInSet < minSetTotal) return false
       }
       return clampPercent(row.chancePercent) > 0
     })
