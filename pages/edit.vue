@@ -164,7 +164,7 @@
       <div class="flex flex-col lg:flex-row justify-between gap-2 px-4 mb-6 mt-6 max-w-full">
         <button
           class="bg-red-500 text-white px-4 py-2 rounded"
-          @click="clearZone"
+          @click="openClearZoneModal"
         >
           Remove All cToons
         </button>
@@ -183,6 +183,37 @@
           </button>
         </div>
       </div>
+
+      <Transition name="fade">
+        <div
+          v-if="showClearZoneModal"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          @click.self="closeClearZoneModal"
+        >
+          <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 class="mb-2 text-lg font-semibold">Confirm removal</h3>
+            <p class="text-sm text-gray-700">
+              Are you sure you want to remove all cToons currently in your cZone for Zone {{ currentZoneIndex + 1 }}?
+            </p>
+            <div class="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                class="rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
+                @click="closeClearZoneModal"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                @click="confirmClearZone"
+              >
+                Remove Zone {{ currentZoneIndex + 1 }} cToons
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
 
     <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
@@ -676,6 +707,20 @@ const activeTab = 'bg-blue-600 text-white px-3 py-1 rounded shadow'
 
 const showPanel = ref(false)
 const panelType = ref('ctoones')
+const showClearZoneModal = ref(false)
+
+function openClearZoneModal() {
+  showClearZoneModal.value = true
+}
+
+function closeClearZoneModal() {
+  showClearZoneModal.value = false
+}
+
+async function confirmClearZone() {
+  await clearZone()
+  closeClearZoneModal()
+}
 
 async function closeEditor() {
   navigateTo('/czone/' + user.value.username)
@@ -761,6 +806,22 @@ onBeforeUnmount(() => {
   outline: 2px dashed #3b82f6;
   z-index: 50;
 }
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.fade-enter-to,
+.fade-leave-from {
+  opacity: 1;
+}
+
 #czone-canvas {
   touch-action: none;
 }
