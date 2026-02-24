@@ -346,6 +346,7 @@ model User {
   warning210                        Boolean   @default(false)
   warning240                        Boolean   @default(false)
   additionalCzones                  Int       @default(0)
+  usernameChangedAt                 DateTime?
 
   cZones                   CZone[]
   clashDecks               ClashDeck[]
