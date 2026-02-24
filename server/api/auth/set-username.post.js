@@ -65,7 +65,27 @@ export default defineEventHandler(async (event) => {
     if (!username || !isValidUsername(username)) {
       throw createError({ statusCode: 400, statusMessage: 'Username must be built from the provided options.' })
     }
-  
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true, usernameChangedAt: true }
+    })
+    if (!currentUser) throw createError({ statusCode: 404, statusMessage: 'User not found' })
+
+    if (currentUser.usernameChangedAt) {
+      const nextAllowedAt = new Date(currentUser.usernameChangedAt.getTime() + 30 * 24 * 60 * 60 * 1000)
+      if (new Date() < nextAllowedAt) {
+        throw createError({
+          statusCode: 429,
+          statusMessage: 'You can only change your username once every 30 days.'
+        })
+      }
+    }
+
+    if (currentUser.username === username) {
+      throw createError({ statusCode: 400, statusMessage: 'That is already your current username.' })
+    }
+
     // Ensure uniqueness
     const exists = await prisma.user.findFirst({ where: { username } })
     if (exists) throw createError({ statusCode: 409, statusMessage: 'Username already taken' })
@@ -73,7 +93,7 @@ export default defineEventHandler(async (event) => {
     // Update local DB
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { username }
+      data: { username, usernameChangedAt: new Date() }
     })
   
     // Update nickname in Discord server
