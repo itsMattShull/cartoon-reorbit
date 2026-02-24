@@ -210,7 +210,7 @@ const isOpen = ref(false)
 const close  = () => { isOpen.value = false }
 
 const { logout, user, fetchSelf } = useAuth()
-await fetchSelf().catch(() => {})
+if (!user.value) await fetchSelf().catch(() => {})
 
 const handleLogout = async () => { await logout(); close() }
 
@@ -242,7 +242,7 @@ onMounted(async () => {
 })
 const handleVisibilityChange = async () => {
   if (document.visibilityState === 'visible') {
-    await fetchSelf().catch(() => {})
+    await fetchSelf({ ttlMs: 30_000 }).catch(() => {})
   }
 }
 

@@ -1398,7 +1398,7 @@ onMounted(async () => {
   recalcScale()
   window.addEventListener('resize', recalcScale)
 
-  await fetchSelf({ force: true })
+  await fetchSelf()
 
   await loadCzone({ showLoading: true, awardVisit: true })
   await loadCzoneSearchItems()
