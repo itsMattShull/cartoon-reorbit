@@ -143,10 +143,10 @@
                   </NuxtLink>
                   <p class="text-slate-800">{{ user?.points }} Points</p>
                   <p class="text-slate-800">
-                    {{ user?.ctoons ? new Set(user.ctoons.map(c => c.ctoonId)).size : 0 }} unique cToons Collected
+                    {{ collectionSummary.uniqueCount }} unique cToons Collected
                   </p>
                   <p class="text-slate-800">
-                    {{ user?.ctoons ? user.ctoons.length : 0 }} total cToons Collected
+                    {{ collectionSummary.totalCount }} total cToons Collected
                   </p>
                 </div>
               </div>
@@ -494,6 +494,7 @@ const showcaseSrc = computed(
 
 const loading = ref(true)
 const { user, fetchSelf } = useAuth()
+const collectionSummary = ref({ totalCount: 0, uniqueCount: 0 })
 const router = useRouter()
 
 const guild = ref(null)
@@ -552,6 +553,15 @@ const totalCtoonLb  = ref([])
 const activeCtoonAcquirers = ref([])
 const trendingEarners = ref([])
 const trendingSpenders = ref([])
+
+async function fetchCollectionSummary() {
+  try {
+    collectionSummary.value = await $fetch('/api/collection/self/summary', { credentials: 'include' })
+  } catch (err) {
+    console.error('Failed to load collection summary:', err)
+    collectionSummary.value = { totalCount: 0, uniqueCount: 0 }
+  }
+}
 
 async function fetchLeaderboards() {
   try {
@@ -621,6 +631,7 @@ onMounted(async () => {
 
   updateCountdown()
   countdownInterval = setInterval(updateCountdown, 1000)
+  await fetchCollectionSummary()
   await fetchLeaderboards()
   getDiscordWidget()
   await fetchCToons()

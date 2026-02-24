@@ -726,10 +726,11 @@ const loading = ref(true)
 
 // ────────── Auth & User ────────────────────────
 const { setPoints, user, fetchSelf } = useAuth()
+const ownedCtoonIds = ref([])
 
 // Track what they owned _before_ opening this pack
 const originalOwnedSet = computed(() =>
-  new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+  new Set(ownedCtoonIds.value)
 )
 
 // ────────── Holiday Event Tab ──────────────────
@@ -797,6 +798,16 @@ function formatCountdown(dateLike) {
   return parts.join(' ')
 }
 
+async function loadOwnedCtoons() {
+  try {
+    const res = await $fetch('/api/cmart/self/owned', { credentials: 'include' })
+    ownedCtoonIds.value = Array.isArray(res?.ownedCtoonIds) ? res.ownedCtoonIds : []
+  } catch (err) {
+    console.error('Failed to load owned cToon ids:', err)
+    ownedCtoonIds.value = []
+  }
+}
+
 // ────────── Shop Data ──────────────────────────
 const ctoons = ref([])
 const packs  = ref([])
@@ -804,7 +815,7 @@ const packs  = ref([])
 // Holiday list built from cMart list (by id) + only still mintable
 const holidayShopItems = computed(() => {
   const list = activeHoliday.value?.shopCtoons || []
-  const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+  const ownedIds = new Set(ownedCtoonIds.value)
   return list
     .filter(c => c.quantity === null || c.minted < c.quantity) // still mintable
     .map(c => ({ ...c, owned: ownedIds.has(c.id) }))
@@ -1075,6 +1086,7 @@ function resetSequence() {
 // ────────── ON MOUNT: FETCH DATA ──────────────
 onMounted(async () => {
   await fetchSelf({ force: true })
+  await loadOwnedCtoons()
 
   // Initialize filters from URL query
   const qParam      = typeof route.query.q === 'string' ? route.query.q : ''
@@ -1102,7 +1114,7 @@ onMounted(async () => {
 
   // LOAD cToons
   try {
-    const ownedIds = new Set((user.value.ctoons || []).map(ct => ct.ctoonId))
+    const ownedIds = new Set(ownedCtoonIds.value)
     const ctoonRes = await $fetch('/api/cmart')
     ctoons.value = ctoonRes.map(c => ({
       id:          c.id,
@@ -1184,6 +1196,7 @@ async function buyCtoon(ctoon) {
   } finally {
     buyingCtoons.value.delete(ctoon.id)
     await fetchSelf({ force: true })
+    await loadOwnedCtoons()
   }
 }
 
@@ -1255,6 +1268,7 @@ async function buyPack(pack) {
   } finally {
     buyingPacks.value.delete(pack.id)
     await fetchSelf({ force: true })
+    await loadOwnedCtoons()
   }
 }
 
