@@ -1,5 +1,7 @@
 export const useAuth = () => {
     const user = useState('user', () => null)
+    const fetchSelfInFlight = useState('auth:fetch-self-in-flight', () => null)
+    const fetchSelfLastFetchedAt = useState('auth:fetch-self-last-fetched-at', () => 0)
   
     const login = () => {
       window.location.href = '/api/auth/discord'
@@ -24,6 +26,20 @@ export const useAuth = () => {
     }
   
     const fetchSelf = async (opts = {}) => {
+      const ttlMs = Number(opts.ttlMs) || 0
+
+      if (!opts.force) {
+        if (fetchSelfInFlight.value) {
+          return fetchSelfInFlight.value
+        }
+
+        const ageMs = Date.now() - (fetchSelfLastFetchedAt.value || 0)
+        if (ttlMs > 0 && ageMs < ttlMs) {
+          return user.value
+        }
+      }
+
+      const request = (async () => {
       try {
         if (opts.force) {
           const me = await $fetch('/api/auth/me', {
@@ -34,6 +50,7 @@ export const useAuth = () => {
             }
           })
           user.value = me
+          fetchSelfLastFetchedAt.value = Date.now()
           return me
         }
         const { data } = await useFetch('/api/auth/me', {
@@ -41,6 +58,8 @@ export const useAuth = () => {
           headers: process.server ? useRequestHeaders(['cookie']) : undefined
         })
         user.value = data.value
+        fetchSelfLastFetchedAt.value = Date.now()
+        return data.value
       } catch (err) {
         user.value = null
         // If banned, kick to /join-discord with notice
@@ -49,7 +68,20 @@ export const useAuth = () => {
         if (status === 403 && /banned/i.test(msg || '')) {
           if (process.client) window.location.replace('/join-discord?banned=1')
         }
+        return null
       }
+      })()
+
+      if (!opts.force) {
+        fetchSelfInFlight.value = request
+        request.finally(() => {
+          if (fetchSelfInFlight.value === request) {
+            fetchSelfInFlight.value = null
+          }
+        })
+      }
+
+      return request
     }
 
     // Optional helpers for optimistic UI

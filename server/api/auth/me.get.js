@@ -44,21 +44,36 @@ export default defineEventHandler(async (event) => {
       isAdmin: true,
       inGuild: true,
       points: true,
-      ctoons: true,
       isBooster: true
     }
   })
-
-  if (user.banned) {
-    throw createError({ statusCode: 403, statusMessage: 'Banned' })
-  }
 
   if (!user) {
     throw createError({ statusCode: 404, statusMessage: 'User not found' })
   }
 
+  if (user.banned) {
+    throw createError({ statusCode: 403, statusMessage: 'Banned' })
+  }
+
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
+
+  const [ctoonCount, uniqueCtoonRows] = await Promise.all([
+    prisma.userCtoon.count({
+      where: {
+        userId: user.id,
+        burnedAt: null
+      }
+    }),
+    prisma.userCtoon.groupBy({
+      by: ['ctoonId'],
+      where: {
+        userId: user.id,
+        burnedAt: null
+      }
+    })
+  ])
 
   // Return full session data
   return {
@@ -71,11 +86,12 @@ export default defineEventHandler(async (event) => {
     email: user.email,
     roles: user.roles,
     points: user.points?.points || 0,
-    needsSetup: !(user.username && user.avatar && user.ctoons.length > 0),
+    needsSetup: !(user.username && user.avatar && ctoonCount > 0),
     inGuild: user.inGuild,
     isAdmin: user.isAdmin,
     active: user.active,
-    ctoons: user.ctoons,
+    ctoonCount,
+    uniqueCtoonCount: uniqueCtoonRows.length,
     isBooster: user.isBooster
   }
 })
