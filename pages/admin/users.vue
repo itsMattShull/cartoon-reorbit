@@ -300,7 +300,10 @@
           <strong>{{ official?.username || '—' }}</strong>, and immediately start 24‑hour auctions for those items.
         </p>
       </div>
-      <div v-if="dissolveError" class="mt-2 text-sm text-red-600">{{ dissolveError }}</div>
+      <div v-if="dissolveError" class="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-1">
+        <p class="font-medium">Dissolve failed</p>
+        <p>{{ dissolveError }}</p>
+      </div>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button class="px-3 py-1 text-sm border rounded-md" @click="closeDissolveModal" :disabled="dissolveWorking">Cancel</button>
         <button
@@ -717,6 +720,19 @@ function closeDissolveModal() {
   dissolveWorking.value = false
   dissolveError.value = ''
 }
+function parseDissolveError(e) {
+  const statusMessage = e?.data?.statusMessage || ''
+  const low = String(statusMessage || e?.message || '').toLowerCase()
+
+  if (statusMessage) return statusMessage
+  if (low.includes('p2002') || low.includes('unique constraint')) {
+    return 'Dissolve failed: duplicate user record conflict. Please contact engineering with the user ID.'
+  }
+  if (low.includes('p2003') || low.includes('foreign key')) {
+    return 'Dissolve failed: user still has linked records (such as pending trades or active listings).'
+  }
+  return 'Failed to dissolve user due to a server error.'
+}
 async function confirmDissolve() {
   if (!dissolveTarget.value) return
   dissolveWorking.value = true
@@ -730,7 +746,7 @@ async function confirmDissolve() {
     }
     closeDissolveModal()
   } catch (e) {
-    dissolveError.value = e?.data?.statusMessage || e?.message || 'Failed to dissolve user.'
+    dissolveError.value = parseDissolveError(e)
   } finally {
     dissolveWorking.value = false
   }
