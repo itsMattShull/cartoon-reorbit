@@ -1,5 +1,6 @@
 // server/api/admin/users/[id]/dissolve.post.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
@@ -44,6 +45,7 @@ export default defineEventHandler(async (event) => {
     where: { id },
     select: {
       id: true,
+      discordId: true,
       username: true,
       isAdmin: true,
       active: true,
@@ -69,7 +71,8 @@ export default defineEventHandler(async (event) => {
   let autoBidsReassigned = 0
   let tradeOffersReassigned = 0
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
     // 1) Points transfer from target -> official
     const up = await tx.userPoints.findUnique({ where: { userId: id } })
     const amt = Math.max(0, up?.points || 0)
@@ -190,8 +193,19 @@ export default defineEventHandler(async (event) => {
     const toRe = await tx.tradeOffer.updateMany({ where: { initiatorId: id }, data: { initiatorId: official.id } })
     tradeOffersReassigned = toRe.count
 
-    // 7) Set account inactive (do not ban)
-    await tx.user.update({ where: { id }, data: { active: false } })
+    // 7) Set account inactive (do not ban).
+    // Also rotate discordId so dissolve is resilient to legacy duplicate rows
+    // that can conflict with @@unique([discordId, active]) when active -> false.
+    await tx.user.update({
+      where: { id },
+      data: {
+        active: false,
+        discordId: `dissolved:${id}:${target.discordId}`,
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiresAt: null
+      }
+    })
 
     // 8) Write account history note (DISSOLVE)
     await tx.userBanNote.create({
@@ -222,6 +236,26 @@ export default defineEventHandler(async (event) => {
       }
     })
   })
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2002') {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'Dissolve failed: user record conflicts with an existing inactive account. Please contact engineering with this user ID.'
+        })
+      }
+      if (err.code === 'P2003') {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'Dissolve failed: this user still has linked records (for example a pending trade or active listing) that must be resolved first.'
+        })
+      }
+    }
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Dissolve failed due to a server data consistency issue. Please retry or contact engineering.'
+    })
+  }
 
   return {
     ok: true,
