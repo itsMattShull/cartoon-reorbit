@@ -30,6 +30,7 @@
               <p class="text-xs uppercase tracking-widest text-slate-400">Schedule</p>
               <p class="mt-1 text-sm text-slate-700">Start: {{ formatDateTime(search?.startAt) }}</p>
               <p class="text-sm text-slate-700">End: {{ formatDateTime(search?.endAt) }}</p>
+              <p class="text-xs text-slate-500">Your timezone: {{ userTimeZone }}</p>
             </div>
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p class="text-xs uppercase tracking-widest text-slate-400">Appearance</p>
@@ -238,6 +239,7 @@ const { data, pending, error } = await useFetch(
 const search = computed(() => data.value || null)
 const searchName = computed(() => (search.value?.name || '').trim() || 'cZone Search')
 const prizeCount = computed(() => Number(search.value?.prizePool?.length || 0))
+const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'
 
 const formatNumber = (value) => {
   const num = Number(value)
@@ -253,7 +255,8 @@ const formatDateTime = (value) => {
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZoneName: 'short'
   }).format(date)
 }
 
