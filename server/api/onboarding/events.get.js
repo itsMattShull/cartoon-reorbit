@@ -25,7 +25,6 @@ export default defineEventHandler(async (event) => {
     }),
     db.cZoneSearch.findMany({
       where: {
-        linkInOnboarding: true,
         startAt: { lte: now },
         endAt: { gte: now }
       },
