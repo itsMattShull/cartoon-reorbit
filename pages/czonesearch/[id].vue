@@ -111,7 +111,7 @@
                       </div>
                       <div v-if="entry.conditionTimeEnabled" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
                         <p class="font-semibold text-slate-800">Time of Day</p>
-                        <p class="text-slate-600">{{ timeOfDayLabel(entry.conditionTimeOfDay) }}</p>
+                        <p class="text-slate-600">{{ timeOfDayLabel(entry.conditionTimeOfDay) }} ({{ userTimeZone }})</p>
                       </div>
                       <div v-if="entry.conditionBackgroundEnabled" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
                         <p class="font-semibold text-slate-800">Required Backgrounds</p>
