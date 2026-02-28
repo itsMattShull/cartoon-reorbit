@@ -78,8 +78,8 @@
           v-for="bg in availableBackgrounds"
           :key="bg.id"
           class="border p-1 cursor-pointer"
-          :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
-          @click="selectBackground(bg.imagePath)"
+          :class="{ 'border-blue-500': (selectedBackground || '').split('/').pop() === bg.filename }"
+          @click="selectBackground(bg.filename)"
         >
           <img :src="bg.imagePath" class="w-full h-auto object-cover" />
         </div>
@@ -274,8 +274,8 @@
             v-for="bg in availableBackgrounds"
             :key="bg.id"
             class="border p-1 cursor-pointer"
-            :class="{ 'border-blue-500': selectedBackground === bg.imagePath }"
-            @click="selectBackground(bg.imagePath)"
+            :class="{ 'border-blue-500': (selectedBackground || '').split('/').pop() === bg.filename }"
+            @click="selectBackground(bg.filename)"
           >
             <img :src="bg.imagePath" class="w-full h-auto object-cover" />
           </div>

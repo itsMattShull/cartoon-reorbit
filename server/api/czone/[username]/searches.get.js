@@ -335,7 +335,8 @@ export default defineEventHandler(async (event) => {
       if (row.conditionBackgroundEnabled) {
         const backgrounds = Array.isArray(row.conditionBackgrounds) ? row.conditionBackgrounds : []
         if (!backgrounds.length) return false
-        if (!zoneBackground || !backgrounds.includes(zoneBackground)) return false
+        const zoneBgFile = (zoneBackground || '').split('/').pop()
+        if (!zoneBgFile || !backgrounds.some(b => (b || '').split('/').pop() === zoneBgFile)) return false
       }
       if (row.conditionCtoonInZoneEnabled) {
         if (!row.conditionCtoonInZoneId) return false
