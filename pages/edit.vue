@@ -79,7 +79,7 @@
           :key="bg.id"
           class="border p-1 cursor-pointer"
           :class="{ 'border-blue-500': (selectedBackground || '').split('/').pop() === bg.filename }"
-          @click="selectBackground(bg.filename)"
+          @click="selectBackground(bg.imagePath)"
         >
           <img :src="bg.imagePath" class="w-full h-auto object-cover" />
         </div>
@@ -275,7 +275,7 @@
             :key="bg.id"
             class="border p-1 cursor-pointer"
             :class="{ 'border-blue-500': (selectedBackground || '').split('/').pop() === bg.filename }"
-            @click="selectBackground(bg.filename)"
+            @click="selectBackground(bg.imagePath)"
           >
             <img :src="bg.imagePath" class="w-full h-auto object-cover" />
           </div>
