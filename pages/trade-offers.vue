@@ -284,14 +284,18 @@
             <div class="flex justify-end space-x-3">
               <button
                 v-if="isRecipient && currentOffer.status === 'PENDING'"
-                class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+                class="bg-green-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="{ 'hover:bg-green-600': !isProcessing }"
+                :disabled="isProcessing"
                 @click="acceptOffer"
               >
                 Accept Offer
               </button>
               <button
                 v-if="(isRecipient || isInitiator) && currentOffer.status === 'PENDING'"
-                class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+                class="bg-red-500 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="{ 'hover:bg-red-600': !isProcessing }"
+                :disabled="isProcessing"
                 @click="rejectOffer"
               >
                 Reject Offer
@@ -332,6 +336,7 @@ const loading = ref(true)
 
 const showModal = ref(false)
 const currentOffer = ref(null)
+const isProcessing = ref(false)
 
 const selfCtoons    = ref([])
 const isLoadingSelf = ref(false)
@@ -423,24 +428,31 @@ function viewOffer(offer) {
 function closeModal() {
   showModal.value = false
   currentOffer.value = null
+  isProcessing.value = false
 }
 
 async function acceptOffer() {
+  isProcessing.value = true
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/accept`, { method: 'POST' })
     closeModal(); await loadOffers(); showToast('Offer accepted!', 'success')
   } catch (err) {
     const msg = err.data?.statusMessage || err.statusMessage || 'Failed to accept'
     closeModal(); await loadOffers(); showToast(msg, 'error')
+  } finally {
+    isProcessing.value = false
   }
 }
 async function rejectOffer() {
+  isProcessing.value = true
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/reject`, { method: 'POST' })
     closeModal(); await loadOffers(); showToast('Offer rejected.', 'success')
   } catch (err) {
     const msg = err.data?.statusMessage || err.statusMessage || 'Failed to reject'
     closeModal(); await loadOffers(); showToast(msg, 'error')
+  } finally {
+    isProcessing.value = false
   }
 }
 
