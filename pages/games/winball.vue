@@ -134,6 +134,7 @@ const makeMat = (hex, opts = {}) =>
   })
 
 let stateHistory = []
+let frameTick = 0
 let gameEnded = false
 
 const canvas = ref(null)
@@ -167,6 +168,7 @@ const resetBall = () => {
   }
   capClosed = false
   stateHistory = []
+  frameTick = 0
   gameEnded = false
 
   initSounds()
@@ -234,7 +236,7 @@ onMounted(() => {
   camera.lookAt(0, 0, 0)
 
   const renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true })
-  renderer.setPixelRatio(window.devicePixelRatio)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.setSize(window.innerWidth, window.innerHeight)
 
   // const controls = new OrbitControls(camera, renderer.domElement)
@@ -755,23 +757,26 @@ bumperXs.forEach((bx) => {
     }
 
     // Step the physics world
-    world.step(1/60, dt, 20)
+    world.step(1/60, dt, 5)
     ballBody.linearFactor.set(1, 0, 1)
 
-    // ── record every tick
-    if(!gameEnded) {
-      stateHistory.push({
-        position: {
-          x: ballBody.position.x,
-          y: ballBody.position.y,
-          z: ballBody.position.z
-        },
-        velocity: {
-          x: ballBody.velocity.x,
-          y: ballBody.velocity.y,
-          z: ballBody.velocity.z
-        }
-      })
+    // ── record every 4th tick to cap payload size (~450 samples max for a 30s game)
+    if (!gameEnded) {
+      frameTick++
+      if (frameTick % 4 === 0) {
+        stateHistory.push({
+          position: {
+            x: ballBody.position.x,
+            y: ballBody.position.y,
+            z: ballBody.position.z
+          },
+          velocity: {
+            x: ballBody.velocity.x,
+            y: ballBody.velocity.y,
+            z: ballBody.velocity.z
+          }
+        })
+      }
     }
     
     // Clamp ball to board surface on Y axis so it only moves in X/Z
