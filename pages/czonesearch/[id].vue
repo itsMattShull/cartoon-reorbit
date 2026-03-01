@@ -200,6 +200,10 @@
                         <p class="font-semibold text-slate-800"># of total cToons from set</p>
                         <p class="text-slate-600">{{ formatNumber(entry.conditionSetTotalCountMin) }}+ from {{ entry.conditionSetTotalCountSet }}</p>
                       </div>
+                      <div v-if="entry.conditionOwnsLessThanEnabled" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p class="font-semibold text-slate-800">User Owns This cToon Less Than</p>
+                        <p class="text-slate-600">Must own fewer than {{ formatNumber(entry.conditionOwnsLessThanCount) }} of this cToon</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -312,6 +316,7 @@ const hasConditions = (entry) => (
   || entry?.conditionUserUniqueCountEnabled
   || entry?.conditionSetUniqueCountEnabled
   || entry?.conditionSetTotalCountEnabled
+  || entry?.conditionOwnsLessThanEnabled
 )
 
 const backgroundSrc = (bg) => {

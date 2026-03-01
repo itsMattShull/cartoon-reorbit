@@ -98,6 +98,7 @@ export default defineEventHandler(async (event) => {
   const needsUserUnique = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
   const needsSetUnique = searches.some(s => s.prizePool.some(p => p.conditionSetUniqueCountEnabled))
   const needsSetTotal = searches.some(s => s.prizePool.some(p => p.conditionSetTotalCountEnabled))
+  const needsOwnsLessThan = searches.some(s => s.prizePool.some(p => p.conditionOwnsLessThanEnabled))
   const ownsIds = new Set()
   if (needsUserOwns) {
     for (const search of searches) {
@@ -196,6 +197,30 @@ export default defineEventHandler(async (event) => {
     })
     for (const row of ownedCounts) {
       userOwnsCountMap.set(row.ctoonId, row._count._all || 0)
+    }
+  }
+
+  const userOwnsLessThanCountMap = new Map()
+  if (needsOwnsLessThan) {
+    const lessThanCtoonIds = new Set()
+    for (const search of searches) {
+      for (const row of search.prizePool) {
+        if (row.conditionOwnsLessThanEnabled && row.ctoonId) lessThanCtoonIds.add(row.ctoonId)
+      }
+    }
+    if (lessThanCtoonIds.size) {
+      const ownedCounts = await db.userCtoon.groupBy({
+        by: ['ctoonId'],
+        where: {
+          userId,
+          burnedAt: null,
+          ctoonId: { in: Array.from(lessThanCtoonIds) }
+        },
+        _count: { _all: true }
+      })
+      for (const row of ownedCounts) {
+        userOwnsLessThanCountMap.set(row.ctoonId, row._count._all || 0)
+      }
     }
   }
 
@@ -377,6 +402,12 @@ export default defineEventHandler(async (event) => {
         if (minSetTotal < 1 || !setName) return false
         const ownedTotalInSet = userSetTotalCountMap.get(setName) || 0
         if (ownedTotalInSet < minSetTotal) return false
+      }
+      if (row.conditionOwnsLessThanEnabled) {
+        const lessThanCount = Number(row.conditionOwnsLessThanCount || 0)
+        if (lessThanCount < 1) return false
+        const owned = userOwnsLessThanCountMap.get(row.ctoonId) || 0
+        if (owned >= lessThanCount) return false
       }
       return clampPercent(row.chancePercent) > 0
     })
