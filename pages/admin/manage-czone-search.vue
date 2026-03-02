@@ -469,6 +469,17 @@
                         </div>
                       </div>
                     </div>
+
+                    <div class="flex items-start gap-3">
+                      <input v-model="row.conditionOwnsLessThanEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'ownsLessThan')" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">User Owns This cToon Less Than X</div>
+                        <p class="text-xs text-gray-500">This cToon is eligible only if the user owns fewer than X copies (ignoring burned).</p>
+                        <div v-if="row.conditionOwnsLessThanEnabled" class="mt-1">
+                          <input v-model.number="row.conditionOwnsLessThanCount" type="number" min="1" step="1" placeholder="X (e.g. 1)" class="w-full border rounded px-2 py-1" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -610,7 +621,9 @@ function initPrizeRow(row) {
     conditionSetTotalCountSet: row.conditionSetTotalCountSet || '',
     conditionSetTotalCountResults: [],
     conditionSetTotalCountSearching: false,
-    conditionSetTotalCountFocused: false
+    conditionSetTotalCountFocused: false,
+    conditionOwnsLessThanEnabled: Boolean(row.conditionOwnsLessThanEnabled),
+    conditionOwnsLessThanCount: row.conditionOwnsLessThanCount ?? ''
   }
 }
 
@@ -661,6 +674,9 @@ function onConditionToggle(row, key) {
     row.conditionSetTotalCountResults = []
     row.conditionSetTotalCountSearching = false
     row.conditionSetTotalCountFocused = false
+  }
+  if (key === 'ownsLessThan' && !row.conditionOwnsLessThanEnabled) {
+    row.conditionOwnsLessThanCount = ''
   }
 }
 
@@ -984,6 +1000,8 @@ async function openEdit(row) {
     conditionSetTotalCountEnabled: p.conditionSetTotalCountEnabled,
     conditionSetTotalCountMin: p.conditionSetTotalCountMin,
     conditionSetTotalCountSet: p.conditionSetTotalCountSet,
+    conditionOwnsLessThanEnabled: p.conditionOwnsLessThanEnabled,
+    conditionOwnsLessThanCount: p.conditionOwnsLessThanCount,
     ctoon: p.ctoon
   }))
   formError.value = ''
@@ -1119,6 +1137,13 @@ async function saveSearch() {
         return
       }
     }
+    if (row.conditionOwnsLessThanEnabled) {
+      const lessThan = Number(row.conditionOwnsLessThanCount)
+      if (!Number.isInteger(lessThan) || lessThan < 1) {
+        formError.value = `"Owns less than" count must be 1 or higher for ${label}.`
+        return
+      }
+    }
   }
   const isCustomCollection = form.collectionType === 'CUSTOM_PER_CTOON'
   if (isCustomCollection) {
@@ -1195,7 +1220,9 @@ async function saveSearch() {
       conditionSetUniqueCountSet: p.conditionSetUniqueCountEnabled ? String(p.conditionSetUniqueCountSet || '').trim() : null,
       conditionSetTotalCountEnabled: Boolean(p.conditionSetTotalCountEnabled),
       conditionSetTotalCountMin: p.conditionSetTotalCountEnabled ? Number(p.conditionSetTotalCountMin) : null,
-      conditionSetTotalCountSet: p.conditionSetTotalCountEnabled ? String(p.conditionSetTotalCountSet || '').trim() : null
+      conditionSetTotalCountSet: p.conditionSetTotalCountEnabled ? String(p.conditionSetTotalCountSet || '').trim() : null,
+      conditionOwnsLessThanEnabled: Boolean(p.conditionOwnsLessThanEnabled),
+      conditionOwnsLessThanCount: p.conditionOwnsLessThanEnabled ? Number(p.conditionOwnsLessThanCount) : null
     }))
   }
 

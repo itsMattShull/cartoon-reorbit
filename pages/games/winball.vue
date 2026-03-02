@@ -134,6 +134,7 @@ const makeMat = (hex, opts = {}) =>
   })
 
 let stateHistory = []
+let frameTick = 0
 let gameEnded = false
 
 const canvas = ref(null)
@@ -167,6 +168,7 @@ const resetBall = () => {
   }
   capClosed = false
   stateHistory = []
+  frameTick = 0
   gameEnded = false
 
   initSounds()
@@ -234,7 +236,7 @@ onMounted(() => {
   camera.lookAt(0, 0, 0)
 
   const renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true })
-  renderer.setPixelRatio(window.devicePixelRatio)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.setSize(window.innerWidth, window.innerHeight)
 
   // const controls = new OrbitControls(camera, renderer.domElement)
@@ -331,9 +333,9 @@ onMounted(() => {
   world.addBody(ballBody)
   // Allow movement only along X and Z axes; lock Y-axis translation
   ballBody.linearFactor.set(1, 0, 1)
-  // Prevent tunneling through walls
-  ballBody.ccdSpeedThreshold = ballRadius * 2
-  ballBody.ccdIterations = 10
+  // Prevent tunneling through walls and bumpers at high speeds
+  ballBody.ccdSpeedThreshold = 0.1
+  ballBody.ccdIterations = 20
 
   ballMesh = new THREE.Mesh(
     new THREE.SphereGeometry(ballRadius, 32, 32),
@@ -489,7 +491,7 @@ bumperXs.forEach((bx) => {
   const by = boardYAt(actualZ) + bumperHeight / 2
   bumperBody.position.set(bx, by, actualZ)
   world.addBody(bumperBody)
-  
+
   bumpers.push(bumperBody)
 
   // Visual: a matching Three.js cylinder
@@ -500,6 +502,31 @@ bumperXs.forEach((bx) => {
   // No extra rotation needed—upright by default
   rootGroup.add(bumperMesh)
 })
+
+// Fourth bumper: centered near the top of the board, above all three existing bumpers
+{
+  const fourthX = -2
+  const fourthZ = -17
+  const fourthCylShape = new CANNON.Cylinder(bumperRadius, bumperRadius, bumperHeight, 16)
+  const fourthQ = new CANNON.Quaternion()
+  fourthQ.setFromEuler(Math.PI / 2, 0, 0)
+  fourthCylShape.transformAllPoints(new CANNON.Vec3(), fourthQ)
+  const fourthBumperBody = new CANNON.Body({
+    mass: 0,
+    shape: fourthCylShape,
+    material: wallMat
+  })
+  const fourthBy = boardYAt(fourthZ) + bumperHeight / 2
+  fourthBumperBody.position.set(fourthX, fourthBy, fourthZ)
+  world.addBody(fourthBumperBody)
+  bumpers.push(fourthBumperBody)
+
+  const fourthBumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
+  const fourthBumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
+  const fourthBumperMesh = new THREE.Mesh(fourthBumperGeo, fourthBumperMat)
+  fourthBumperMesh.position.set(fourthX, fourthBy, fourthZ)
+  rootGroup.add(fourthBumperMesh)
+}
 
   // ---------- HALF-CIRCLE TRIGGERS ----------
   const halfCircleConfigs = [
@@ -755,23 +782,26 @@ bumperXs.forEach((bx) => {
     }
 
     // Step the physics world
-    world.step(1/60, dt, 20)
+    world.step(1/60, dt, 10)
     ballBody.linearFactor.set(1, 0, 1)
 
-    // ── record every tick
-    if(!gameEnded) {
-      stateHistory.push({
-        position: {
-          x: ballBody.position.x,
-          y: ballBody.position.y,
-          z: ballBody.position.z
-        },
-        velocity: {
-          x: ballBody.velocity.x,
-          y: ballBody.velocity.y,
-          z: ballBody.velocity.z
-        }
-      })
+    // ── record every 4th tick to cap payload size (~450 samples max for a 30s game)
+    if (!gameEnded) {
+      frameTick++
+      if (frameTick % 4 === 0) {
+        stateHistory.push({
+          position: {
+            x: ballBody.position.x,
+            y: ballBody.position.y,
+            z: ballBody.position.z
+          },
+          velocity: {
+            x: ballBody.velocity.x,
+            y: ballBody.velocity.y,
+            z: ballBody.velocity.z
+          }
+        })
+      }
     }
     
     // Clamp ball to board surface on Y axis so it only moves in X/Z

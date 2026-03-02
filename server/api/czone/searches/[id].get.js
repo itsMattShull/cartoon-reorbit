@@ -121,7 +121,9 @@ export default defineEventHandler(async (event) => {
         conditionSetUniqueCountSet: row.conditionSetUniqueCountSet,
         conditionSetTotalCountEnabled: row.conditionSetTotalCountEnabled,
         conditionSetTotalCountMin: row.conditionSetTotalCountMin,
-        conditionSetTotalCountSet: row.conditionSetTotalCountSet
+        conditionSetTotalCountSet: row.conditionSetTotalCountSet,
+        conditionOwnsLessThanEnabled: row.conditionOwnsLessThanEnabled,
+        conditionOwnsLessThanCount: row.conditionOwnsLessThanCount
       }
     })
   }

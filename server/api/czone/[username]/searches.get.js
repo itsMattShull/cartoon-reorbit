@@ -2,6 +2,41 @@ import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 
+// Cache active searches + prize pool for 60 s.  The prize pool for a given
+// search never changes mid-event, so all 250+ concurrent visitors can share
+// one DB round-trip per minute instead of each firing their own query.
+const ACTIVE_SEARCHES_TTL = 1_800_000 // 30 minutes
+let _searchesCache = null
+let _searchesCacheExpiry = 0
+let _searchesFetch = null
+
+async function getActiveSearches() {
+  const now = Date.now()
+  if (_searchesCache && now < _searchesCacheExpiry) return _searchesCache
+  // Coalesce concurrent cache-miss requests onto one in-flight DB query
+  if (_searchesFetch) return _searchesFetch
+  _searchesFetch = db.cZoneSearch.findMany({
+    where: { startAt: { lte: new Date() }, endAt: { gte: new Date() } },
+    orderBy: { endAt: 'asc' },
+    include: {
+      prizePool: {
+        include: {
+          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+        }
+      }
+    }
+  }).then(rows => {
+    _searchesCache = rows
+    _searchesCacheExpiry = Date.now() + ACTIVE_SEARCHES_TTL
+    _searchesFetch = null
+    return rows
+  }).catch(err => {
+    _searchesFetch = null
+    throw err
+  })
+  return _searchesFetch
+}
+
 function clampPercent(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return 0
@@ -73,22 +108,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const now = new Date()
-  const searches = await db.cZoneSearch.findMany({
-    where: {
-      startAt: { lte: now },
-      endAt: { gte: now }
-    },
-    orderBy: { endAt: 'asc' },
-    include: {
-      prizePool: {
-        include: {
-          ctoon: {
-            select: { id: true, name: true, rarity: true, assetPath: true }
-          }
-        }
-      }
-    }
-  })
+  const searches = await getActiveSearches()
 
   if (!searches.length) return { items: [] }
 
@@ -98,6 +118,7 @@ export default defineEventHandler(async (event) => {
   const needsUserUnique = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
   const needsSetUnique = searches.some(s => s.prizePool.some(p => p.conditionSetUniqueCountEnabled))
   const needsSetTotal = searches.some(s => s.prizePool.some(p => p.conditionSetTotalCountEnabled))
+  const needsOwnsLessThan = searches.some(s => s.prizePool.some(p => p.conditionOwnsLessThanEnabled))
   const ownsIds = new Set()
   if (needsUserOwns) {
     for (const search of searches) {
@@ -196,6 +217,30 @@ export default defineEventHandler(async (event) => {
     })
     for (const row of ownedCounts) {
       userOwnsCountMap.set(row.ctoonId, row._count._all || 0)
+    }
+  }
+
+  const userOwnsLessThanCountMap = new Map()
+  if (needsOwnsLessThan) {
+    const lessThanCtoonIds = new Set()
+    for (const search of searches) {
+      for (const row of search.prizePool) {
+        if (row.conditionOwnsLessThanEnabled && row.ctoonId) lessThanCtoonIds.add(row.ctoonId)
+      }
+    }
+    if (lessThanCtoonIds.size) {
+      const ownedCounts = await db.userCtoon.groupBy({
+        by: ['ctoonId'],
+        where: {
+          userId,
+          burnedAt: null,
+          ctoonId: { in: Array.from(lessThanCtoonIds) }
+        },
+        _count: { _all: true }
+      })
+      for (const row of ownedCounts) {
+        userOwnsLessThanCountMap.set(row.ctoonId, row._count._all || 0)
+      }
     }
   }
 
@@ -377,6 +422,12 @@ export default defineEventHandler(async (event) => {
         if (minSetTotal < 1 || !setName) return false
         const ownedTotalInSet = userSetTotalCountMap.get(setName) || 0
         if (ownedTotalInSet < minSetTotal) return false
+      }
+      if (row.conditionOwnsLessThanEnabled) {
+        const lessThanCount = Number(row.conditionOwnsLessThanCount || 0)
+        if (lessThanCount < 1) return false
+        const owned = userOwnsLessThanCountMap.get(row.ctoonId) || 0
+        if (owned >= lessThanCount) return false
       }
       return clampPercent(row.chancePercent) > 0
     })

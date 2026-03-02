@@ -173,6 +173,9 @@ async function normalizeConditions(row, window) {
   }
   if (setTotalEnabled) await assertSetExists(setTotalSet, 'total cToons from set condition')
 
+  const ownsLessThanEnabled = Boolean(row?.conditionOwnsLessThanEnabled)
+  const ownsLessThanCount = ownsLessThanEnabled ? parsePositiveInt(row?.conditionOwnsLessThanCount, 'owns less than count') : null
+
   return {
     conditionDateEnabled: dateEnabled,
     conditionDateStart: dateStart,
@@ -196,7 +199,9 @@ async function normalizeConditions(row, window) {
     conditionSetUniqueCountSet: setUniqueSet,
     conditionSetTotalCountEnabled: setTotalEnabled,
     conditionSetTotalCountMin: setTotalMin,
-    conditionSetTotalCountSet: setTotalSet
+    conditionSetTotalCountSet: setTotalSet,
+    conditionOwnsLessThanEnabled: ownsLessThanEnabled,
+    conditionOwnsLessThanCount: ownsLessThanCount
   }
 }
 

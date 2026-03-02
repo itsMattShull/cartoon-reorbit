@@ -122,6 +122,7 @@ model CZoneSearch {
 
   @@index([startAt])
   @@index([endAt])
+  @@index([startAt, endAt])
 }
 
 model CZoneSearchPrize {
@@ -153,6 +154,8 @@ model CZoneSearchPrize {
   conditionSetTotalCountEnabled Boolean @default(false)
   conditionSetTotalCountMin Int?
   conditionSetTotalCountSet String?
+  conditionOwnsLessThanEnabled Boolean @default(false)
+  conditionOwnsLessThanCount   Int?
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
