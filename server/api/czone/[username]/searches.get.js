@@ -2,6 +2,41 @@ import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 
+// Cache active searches + prize pool for 60 s.  The prize pool for a given
+// search never changes mid-event, so all 250+ concurrent visitors can share
+// one DB round-trip per minute instead of each firing their own query.
+const ACTIVE_SEARCHES_TTL = 60_000
+let _searchesCache = null
+let _searchesCacheExpiry = 0
+let _searchesFetch = null
+
+async function getActiveSearches() {
+  const now = Date.now()
+  if (_searchesCache && now < _searchesCacheExpiry) return _searchesCache
+  // Coalesce concurrent cache-miss requests onto one in-flight DB query
+  if (_searchesFetch) return _searchesFetch
+  _searchesFetch = db.cZoneSearch.findMany({
+    where: { startAt: { lte: new Date() }, endAt: { gte: new Date() } },
+    orderBy: { endAt: 'asc' },
+    include: {
+      prizePool: {
+        include: {
+          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+        }
+      }
+    }
+  }).then(rows => {
+    _searchesCache = rows
+    _searchesCacheExpiry = Date.now() + ACTIVE_SEARCHES_TTL
+    _searchesFetch = null
+    return rows
+  }).catch(err => {
+    _searchesFetch = null
+    throw err
+  })
+  return _searchesFetch
+}
+
 function clampPercent(value) {
   const num = Number(value)
   if (!Number.isFinite(num)) return 0
@@ -73,22 +108,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const now = new Date()
-  const searches = await db.cZoneSearch.findMany({
-    where: {
-      startAt: { lte: now },
-      endAt: { gte: now }
-    },
-    orderBy: { endAt: 'asc' },
-    include: {
-      prizePool: {
-        include: {
-          ctoon: {
-            select: { id: true, name: true, rarity: true, assetPath: true }
-          }
-        }
-      }
-    }
-  })
+  const searches = await getActiveSearches()
 
   if (!searches.length) return { items: [] }
 
