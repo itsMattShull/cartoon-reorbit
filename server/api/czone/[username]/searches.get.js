@@ -5,7 +5,7 @@ import { prisma as db } from '@/server/prisma'
 // Cache active searches + prize pool for 60 s.  The prize pool for a given
 // search never changes mid-event, so all 250+ concurrent visitors can share
 // one DB round-trip per minute instead of each firing their own query.
-const ACTIVE_SEARCHES_TTL = 60_000
+const ACTIVE_SEARCHES_TTL = 1_800_000 // 30 minutes
 let _searchesCache = null
 let _searchesCacheExpiry = 0
 let _searchesFetch = null
