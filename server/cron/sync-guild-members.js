@@ -1101,7 +1101,7 @@ cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' }
 cron.schedule('35 2 * * *', syncVerifiedRoles, { timezone: 'America/Chicago' }) // 02:35 CST daily
 
 await recomputeLastActivity()
-cron.schedule('0 2 * * *', recomputeLastActivity)      // 02:00 daily
+cron.schedule('0 4 * * *', recomputeLastActivity, { timezone: 'America/Chicago' })  // 04:00 CST daily
 
 await sendInactivityWarnings()
 cron.schedule('0 3 * * *', sendInactivityWarnings)    // 03:00 daily
@@ -1127,7 +1127,7 @@ async function enqueueAchievementsDaily() {
   }
 }
 
-await enqueueAchievementsDaily()
+// await enqueueAchievementsDaily()
 cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
 
 await runTournamentCron()

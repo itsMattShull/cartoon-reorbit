@@ -3,6 +3,10 @@ import { prisma } from '../../server/prisma.js'
 import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 
+let cachedAchievements     = null
+let cachedAchievementsTime = 0
+const ACHIEVEMENTS_TTL_MS  = 10 * 60 * 1000  // 10 minutes
+
 function toIntOrNull(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : null
@@ -250,10 +254,11 @@ export async function processAchievementsForUser(userId) {
     return { awarded: 0 }
   }
 
-  const achievements = await prisma.achievement.findMany({
-    where: { isActive: true },
-    orderBy: { createdAt: 'asc' },
-  })
+  if (!cachedAchievements || Date.now() - cachedAchievementsTime > ACHIEVEMENTS_TTL_MS) {
+    cachedAchievements     = await prisma.achievement.findMany({ where: { isActive: true }, orderBy: { createdAt: 'asc' } })
+    cachedAchievementsTime = Date.now()
+  }
+  const achievements = cachedAchievements
 
   let awarded = 0
   for (const ach of achievements) {
