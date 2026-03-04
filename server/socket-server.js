@@ -2746,7 +2746,10 @@ setInterval(() => {
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
 // in your socket‐server.js (or wherever you close auctions):
+let auctionClosingInFlight = false
 setInterval(async () => {
+  if (auctionClosingInFlight) return
+  auctionClosingInFlight = true
   try {
     const now = new Date()
     // find all auctions that have just expired
@@ -2879,11 +2882,17 @@ setInterval(async () => {
 
   } catch (err) {
     console.error(`Auction closing failed for ${id}:`, err)
+  } finally {
+    auctionClosingInFlight = false
   }
 }, 60 * 1000)
 
 // Auction notifications
+let auctionNotificationInFlight = false
 setInterval(async () => {
+  if (auctionNotificationInFlight) return
+  auctionNotificationInFlight = true
+  try {
   const now  = new Date()
   const five = new Date(now.getTime() + 5 * 60 * 1000)
 
@@ -3036,6 +3045,9 @@ setInterval(async () => {
     } catch (err) {
       console.error(`Failed 5m-warning for auction ${auc.id}:`, err)
     }
+  }
+  } finally {
+    auctionNotificationInFlight = false
   }
 }, 60 * 1000)
 
