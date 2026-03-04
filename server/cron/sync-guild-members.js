@@ -1131,4 +1131,4 @@ async function enqueueAchievementsDaily() {
 cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
 
 await runTournamentCron()
-cron.schedule('*/1 * * * *', runTournamentCron)
+cron.schedule('*/15 * * * *', runTournamentCron)
