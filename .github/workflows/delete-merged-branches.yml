@@ -1,0 +1,119 @@
+name: Delete Merged Branch
+
+on:
+  pull_request:
+    types: [closed]
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (list branches without deleting)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  delete_branch:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete merged branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = context.payload.pull_request.head.ref;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Never delete protected branches
+            const protected_branches = ['master', 'main', 'dev'];
+            if (protected_branches.includes(branch)) {
+              console.log(`Skipping protected branch: ${branch}`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({
+                owner,
+                repo,
+                ref: `heads/${branch}`,
+              });
+              console.log(`Deleted branch: ${branch}`);
+            } catch (err) {
+              if (err.status === 422) {
+                console.log(`Branch already deleted: ${branch}`);
+              } else {
+                throw err;
+              }
+            }
+
+  cleanup_stale_branches:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Delete all stale merged-PR branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const dry_run = context.payload.inputs?.dry_run === 'true';
+            const protected_branches = ['master', 'main', 'dev'];
+
+            // Collect all merged PR head branches
+            let page = 1;
+            const merged_branches = new Set();
+            while (true) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner, repo, state: 'closed', per_page: 100, page,
+              });
+              if (pulls.length === 0) break;
+              for (const pr of pulls) {
+                if (pr.merged_at && pr.head.ref) {
+                  merged_branches.add(pr.head.ref);
+                }
+              }
+              page++;
+            }
+
+            // Get all remote branches
+            const { data: refs } = await github.rest.git.listMatchingRefs({
+              owner, repo, ref: 'heads/',
+            });
+
+            let deleted = 0;
+            let skipped = 0;
+            for (const ref of refs) {
+              const branch = ref.ref.replace('refs/heads/', '');
+              if (protected_branches.includes(branch)) {
+                console.log(`SKIP (protected): ${branch}`);
+                skipped++;
+                continue;
+              }
+              if (!merged_branches.has(branch)) {
+                console.log(`SKIP (no merged PR): ${branch}`);
+                skipped++;
+                continue;
+              }
+              if (dry_run) {
+                console.log(`DRY RUN - would delete: ${branch}`);
+                deleted++;
+                continue;
+              }
+              try {
+                await github.rest.git.deleteRef({
+                  owner, repo, ref: `heads/${branch}`,
+                });
+                console.log(`Deleted: ${branch}`);
+                deleted++;
+              } catch (err) {
+                console.log(`Failed to delete ${branch}: ${err.message}`);
+              }
+            }
+
+            console.log(`\nSummary: ${deleted} deleted, ${skipped} skipped`);
