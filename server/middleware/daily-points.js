@@ -3,6 +3,10 @@ import { DateTime } from 'luxon'
 import { prisma }   from '@/server/prisma'
 import { defineEventHandler } from 'h3'
 
+let cachedGlobalConfig     = null
+let cachedGlobalConfigTime = 0
+const GLOBAL_CONFIG_TTL_MS = 5 * 60 * 1000  // 5 minutes
+
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) return
@@ -25,12 +29,16 @@ export default defineEventHandler(async (event) => {
   })
 
   // 4. Determine award based on account age
-  //    Load global config for dynamic point values with safe fallbacks
+  //    Load global config for dynamic point values with safe fallbacks (module-level cache, 5-min TTL)
   let cfg
   try {
-    cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: {
-      dailyLoginPoints: true, dailyNewUserPoints: true
-    } })
+    if (!cachedGlobalConfig || Date.now() - cachedGlobalConfigTime > GLOBAL_CONFIG_TTL_MS) {
+      cachedGlobalConfig     = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: {
+        dailyLoginPoints: true, dailyNewUserPoints: true
+      } })
+      cachedGlobalConfigTime = Date.now()
+    }
+    cfg = cachedGlobalConfig
   } catch {
     cfg = null
   }
