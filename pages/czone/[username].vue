@@ -1549,7 +1549,7 @@ onBeforeUnmount(() => {
   }
 
   /* Form controls */
-  .booster-bg button:not(.czone-search-ctoon),
+  .booster-bg button:not(.czone-search-ctoon):not(.ctoon-asset-button),
   .booster-bg input,
   .booster-bg select {
     background-color: #2a2a2a !important;
@@ -1560,6 +1560,13 @@ onBeforeUnmount(() => {
   /* Keep czone search cToon button transparent in booster theme */
   .booster-bg .czone-search-ctoon {
     background: transparent !important;
+    border-color: transparent !important;
+  }
+
+  /* Keep cToon asset buttons transparent in booster theme */
+  .booster-bg .ctoon-asset-button {
+    background: transparent !important;
+    background-color: transparent !important;
     border-color: transparent !important;
   }
 
