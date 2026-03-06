@@ -57,11 +57,11 @@ const pvpMatches = new Map();    // roomId -> { battle, recordId }
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
-const SWEEP_INTERVAL_MS = 5 * 60 * 1000
+const SWEEP_INTERVAL_MS = 2 * 60 * 1000
 const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
-const PVP_MATCH_IDLE_MS = 15 * 60 * 1000
-const PVE_MATCH_IDLE_MS = 15 * 60 * 1000
-const MONSTER_BATTLE_IDLE_MS = 15 * 60 * 1000
+const PVP_MATCH_IDLE_MS = 5 * 60 * 1000
+const PVE_MATCH_IDLE_MS = 5 * 60 * 1000
+const MONSTER_BATTLE_IDLE_MS = 5 * 60 * 1000
 const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
 
 const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
@@ -427,6 +427,7 @@ async function handleMonsterForfeit(io, battle, loserKey, reason) {
     endReason: reason,
     winnerKey: turnResult.winnerKey
   })
+  if (battle.state.turnLog.length > 200) battle.state.turnLog.shift()
   const finalState = battlePublicState(battle)
   await finishMonsterBattle(io, battle, {
     battleId: battle.state.id,
@@ -459,6 +460,7 @@ const resolveMonsterTurn = async (io, battle) => {
     endReason: turnResult.endReason ?? null,
     winnerKey: turnResult.winnerKey ?? null
   })
+  if (battle.state.turnLog.length > 200) battle.state.turnLog.shift()
 
   const updatedState = battlePublicState(battle)
   io.to(battle.state.id).emit('battle:turnResolved', {
