@@ -757,8 +757,11 @@
               :alt="capturedCtoon.name || 'Captured cToon'"
               class="w-full max-h-56 object-contain rounded"
             />
+            <div class="space-y-1">
+              <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount }} {{ capturedCtoon.name }}s</p>
+              <p class="text-sm text-gray-600">You now own {{ capturedCtoon.ownedCount }} {{ capturedCtoon.name }}s</p>
+            </div>
             <div class="space-y-1 text-sm">
-              <div><span class="text-gray-500">Name:</span> <span class="font-medium">{{ capturedCtoon.name || '—' }}</span></div>
               <div><span class="text-gray-500">Rarity:</span> <span class="font-medium">{{ capturedCtoon.rarity || '—' }}</span></div>
               <div><span class="text-gray-500">Series:</span> <span class="font-medium">{{ capturedCtoon.series || '—' }}</span></div>
               <div><span class="text-gray-500">Set:</span> <span class="font-medium">{{ capturedCtoon.set || '—' }}</span></div>
@@ -1214,7 +1217,9 @@ async function captureCzoneSearchItem(item) {
       assetPath: item.assetPath,
       rarity: item.rarity,
       series: item.series,
-      set: item.set
+      set: item.set,
+      captureCount: 1,
+      ownedCount: 1
     }
     captureModalVisible.value = true
     czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
