@@ -591,6 +591,7 @@ const bumperZ = 0
 // X positions for the three bumpers
 const bumperXs = [-12, -1, 8]
 const bumpers = []
+const bumperVisuals = []
 
 bumperXs.forEach((bx, bumperIdx) => {
   // Offset left/right bumpers forward by 3 units
@@ -615,30 +616,48 @@ bumperXs.forEach((bx, bumperIdx) => {
 
   // Visual: a matching Three.js cylinder
   const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0.8, shininess: 80 })
+  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 1, shininess: 80 })
+  bumperMat.emissive = new THREE.Color(hexToInt(COLORS.bumper))
+  bumperMat.emissiveIntensity = 0
   const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
   bumperMesh.position.set(bx, by, actualZ)
   // No extra rotation needed—upright by default
   rootGroup.add(bumperMesh)
 
+  const bumperVisual = {
+    body: bumperBody,
+    mesh: bumperMesh,
+    imageMat: null,
+    glowUntil: 0
+  }
+
   // Image overlay: flat circle on the top face of the bumper
   const imgPath = COLORS.bumperImagePaths[bumperIdx]
   if (imgPath) {
     const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
-      const imageAspect = loadedTex.image.width / loadedTex.image.height
       loadedTex.wrapS = THREE.ClampToEdgeWrapping
       loadedTex.wrapT = THREE.ClampToEdgeWrapping
-      loadedTex.repeat.set(1, imageAspect)
       loadedTex.needsUpdate = true
     })
-    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
-    const imgMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+    const imgGeo = new THREE.CircleGeometry(bumperRadius * 0.8, 32)
+    const imgMat = new THREE.MeshPhongMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 1,
+      side: THREE.DoubleSide,
+      emissive: 0xffffff,
+      emissiveIntensity: 0
+    })
     const imgMesh = new THREE.Mesh(imgGeo, imgMat)
     // Position on top face of bumper; CircleGeometry is in XY plane so rotate to lie flat in XZ
     imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
     imgMesh.rotation.x = -Math.PI / 2
     rootGroup.add(imgMesh)
+
+    bumperVisual.imageMat = imgMat
   }
+
+  bumperVisuals.push(bumperVisual)
 })
 
 
@@ -745,6 +764,12 @@ bumperXs.forEach((bx, bumperIdx) => {
       (bodyA === ballBody && bumpers.includes(bodyB)) ||
       (bodyB === ballBody && bumpers.includes(bodyA))
     ) {
+      const hitBumper = bodyA === ballBody ? bodyB : bodyA
+      const hitVisual = bumperVisuals.find((visual) => visual.body === hitBumper)
+      if (hitVisual) {
+        hitVisual.glowUntil = performance.now() + 180
+      }
+
       const s = bigBumperSound.cloneNode()   // clone with same src
       s.currentTime = 0
       s.play().catch(()=>{})
@@ -880,6 +905,16 @@ bumperXs.forEach((bx, bumperIdx) => {
       // Keep mesh visually synced
       plungerMesh.position.z += (plungerBody.position.z - plungerMesh.position.z) * 0.5
     }
+
+    const now = performance.now()
+    bumperVisuals.forEach((visual) => {
+      const glowProgress = visual.glowUntil > now ? (visual.glowUntil - now) / 180 : 0
+      const glowIntensity = Math.max(0, Math.min(1, glowProgress))
+      visual.mesh.material.emissiveIntensity = glowIntensity * 1.4
+      if (visual.imageMat) {
+        visual.imageMat.emissiveIntensity = glowIntensity * 1.8
+      }
+    })
 
     // While pulling (and before initial launch), keep the ball resting on the plunger face
     if (plungerPulling && !ballLaunched) {
