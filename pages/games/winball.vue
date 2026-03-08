@@ -571,8 +571,8 @@ onMounted(async () => {
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
   // Triangular bouncer mounted on the left wall
-  const triangleDepth = 3.5
-  const triangleRadius = 3.5
+  const triangleDepth = 6
+  const triangleRadius = 6
   const triangleZ = -2
   const triangleY = boardYAt(triangleZ) + wallHeight / 2
   const triangleX = -boardWidth / 2 + triangleDepth / 2
@@ -619,12 +619,12 @@ onMounted(async () => {
   }
 
   // --- Bumpers ---
-const bumperRadius = 3
-const bumperHeight = 3
+const bumperRadius = 6
+const bumperHeight = 6
 // Z position for bumpers (just above center)
 const bumperZ = 0
 // X positions for the three bumpers
-const bumperXs = [-10.5, -1, 8]
+const bumperXs = [-8, -1, 6]
 const bumpers = []
 const bumperVisuals = []
 
