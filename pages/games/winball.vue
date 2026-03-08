@@ -334,10 +334,19 @@ onMounted(async () => {
     boardMat = new THREE.MeshBasicMaterial({ transparent: false, side: THREE.DoubleSide })
     const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
       const imageAspect = loadedTex.image.width / loadedTex.image.height
-      const boardAspect = boardWidth / boardLength
+      // ShapeGeometry uses raw 2D shape coordinates as UVs (not normalized to [0,1]).
+      // Board shape X ∈ [-boardWidth/2, boardWidth/2], Y ∈ [-boardLength/2, boardLength/2].
+      // To map these raw coords to texture [0,1]:
+      //   texture_coord = UV * repeat + offset
+      //   repeat.x = 1/boardWidth → maps the full boardWidth span to texture width
+      //   offset.x = 0.5          → centers: UV=0 (center) → texture 0.5
+      // For height, scale proportionally to image aspect ratio (width fills board, height adjusts):
+      //   repeat.y = imageAspect/boardWidth
+      //   offset.y = 0.5
       loadedTex.wrapS = THREE.ClampToEdgeWrapping
       loadedTex.wrapT = THREE.ClampToEdgeWrapping
-      loadedTex.repeat.set(1, imageAspect / boardAspect)
+      loadedTex.repeat.set(1 / boardWidth, imageAspect / boardWidth)
+      loadedTex.offset.set(0.5, 0.5)
       loadedTex.needsUpdate = true
       boardMat.needsUpdate = true
     })
