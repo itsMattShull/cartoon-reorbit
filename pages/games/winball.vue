@@ -76,6 +76,8 @@ const COLORS = {
   walls:              '#4b4b4b',
   overlayColor:       '#ffffff',
   overlayAlpha:       0,
+  colorTransform:     '#ffffff',
+  colorTransformIntensity: 0,
   imageWidthPercent:  100,
   imageOffsetXPercent: 0,
   imageOffsetYPercent: 0,
@@ -234,6 +236,8 @@ onMounted(async () => {
     COLORS.board          = cfg.winballColorBackboard  || COLORS.board
     COLORS.overlayColor   = cfg.winballOverlayColor    || COLORS.overlayColor
     if (cfg.winballOverlayAlpha != null) COLORS.overlayAlpha = cfg.winballOverlayAlpha
+    COLORS.colorTransform = cfg.winballColorTransform || COLORS.colorTransform
+    if (cfg.winballColorTransformIntensity != null) COLORS.colorTransformIntensity = cfg.winballColorTransformIntensity
     if (cfg.winballImageWidthPercent != null) COLORS.imageWidthPercent = cfg.winballImageWidthPercent
     if (cfg.winballImageOffsetXPercent != null) COLORS.imageOffsetXPercent = cfg.winballImageOffsetXPercent
     if (cfg.winballImageOffsetYPercent != null) COLORS.imageOffsetYPercent = cfg.winballImageOffsetYPercent
@@ -362,6 +366,22 @@ onMounted(async () => {
     imageMat.map = tex
     imageMat.needsUpdate = true
     rootGroup.add(imageMesh)
+  }
+
+  const transformIntensity = Math.max(0, Math.min(1, COLORS.colorTransformIntensity || 0))
+  if (transformIntensity > 0) {
+    const transformMesh = new THREE.Mesh(
+      boardGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: hexToInt(COLORS.colorTransform),
+        transparent: true,
+        opacity: transformIntensity,
+        side: THREE.DoubleSide,
+        blending: THREE.MultiplyBlending
+      })
+    )
+    transformMesh.position.set(0, 0.03, 0)
+    rootGroup.add(transformMesh)
   }
 
   const overlayAlpha = Math.max(0, Math.min(1, COLORS.overlayAlpha || 0))
@@ -656,7 +676,7 @@ bumperXs.forEach((bx, bumperIdx) => {
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
-            opacity: 0.85
+            opacity: 1
           })
         } else {
           return new THREE.MeshPhongMaterial({
@@ -664,7 +684,7 @@ bumperXs.forEach((bx, bumperIdx) => {
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
-            opacity: 0.85
+            opacity: 1
           })
         }
       })()
