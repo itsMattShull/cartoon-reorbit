@@ -330,7 +330,15 @@ onMounted(async () => {
 
   const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
   if (COLORS.backboardImagePath) {
-    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath)
+    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
+      const imageAspect = loadedTex.image.width / loadedTex.image.height
+      const boardAspect = boardWidth / boardLength
+      loadedTex.wrapS = THREE.ClampToEdgeWrapping
+      loadedTex.wrapT = THREE.ClampToEdgeWrapping
+      loadedTex.repeat.set(1, imageAspect / boardAspect)
+      loadedTex.needsUpdate = true
+      boardMat.needsUpdate = true
+    })
     boardMat.map = tex
     boardMat.color.set(0xffffff)
     boardMat.needsUpdate = true
@@ -565,7 +573,13 @@ bumperXs.forEach((bx, bumperIdx) => {
   // Image overlay: flat circle on the top face of the bumper
   const imgPath = COLORS.bumperImagePaths[bumperIdx]
   if (imgPath) {
-    const tex = new THREE.TextureLoader().load(imgPath)
+    const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
+      const imageAspect = loadedTex.image.width / loadedTex.image.height
+      loadedTex.wrapS = THREE.ClampToEdgeWrapping
+      loadedTex.wrapT = THREE.ClampToEdgeWrapping
+      loadedTex.repeat.set(1, imageAspect)
+      loadedTex.needsUpdate = true
+    })
     const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
     const imgMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
     const imgMesh = new THREE.Mesh(imgGeo, imgMat)
