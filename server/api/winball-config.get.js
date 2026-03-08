@@ -3,6 +3,7 @@ import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
 const DEFAULTS = {
+  // Colors
   winballColorBackground: '#ffffff',
   winballColorBackboard:  '#F0E6FF',
   winballColorWalls:      '#4b4b4b',
@@ -11,22 +12,39 @@ const DEFAULTS = {
   winballColorLeftCup:    '#8c8cff',
   winballColorRightCup:   '#8c8cff',
   winballColorGoldCup:    '#FFD700',
-  winballColorCap:        '#ffd000'
+  winballColorCap:        '#ffd000',
+  // Physics
+  winballGravity:             15,
+  winballBallMass:            8,
+  winballBallLinearDamping:   0.2,
+  winballBallAngularDamping:  0,
+  winballBallWallRestitution: 1.2,
+  winballPlungerMaxPull:      0.6,
+  winballPlungerImpactFactor: 0.2,
+  winballPlungerForce:        500
 }
 
 export default defineEventHandler(async () => {
   const config = await db.gameConfig.findUnique({
     where: { gameName: 'Winball' },
     select: {
-      winballColorBackground: true,
-      winballColorBackboard:  true,
-      winballColorWalls:      true,
-      winballColorBall:       true,
-      winballColorBumpers:    true,
-      winballColorLeftCup:    true,
-      winballColorRightCup:   true,
-      winballColorGoldCup:    true,
-      winballColorCap:        true
+      winballColorBackground:     true,
+      winballColorBackboard:      true,
+      winballColorWalls:          true,
+      winballColorBall:           true,
+      winballColorBumpers:        true,
+      winballColorLeftCup:        true,
+      winballColorRightCup:       true,
+      winballColorGoldCup:        true,
+      winballColorCap:            true,
+      winballGravity:             true,
+      winballBallMass:            true,
+      winballBallLinearDamping:   true,
+      winballBallAngularDamping:  true,
+      winballBallWallRestitution: true,
+      winballPlungerMaxPull:      true,
+      winballPlungerImpactFactor: true,
+      winballPlungerForce:        true
     }
   })
 

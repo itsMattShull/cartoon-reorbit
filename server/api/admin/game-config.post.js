@@ -31,6 +31,15 @@ function validatePayload(payload) {
         throw createError({ statusCode: 400, statusMessage: `"${fld}" must be a string or null` })
       }
     }
+    const physicsFields = [
+      'winballGravity','winballBallMass','winballBallLinearDamping','winballBallAngularDamping',
+      'winballBallWallRestitution','winballPlungerMaxPull','winballPlungerImpactFactor','winballPlungerForce'
+    ]
+    for (const fld of physicsFields) {
+      if (payload[fld] != null && typeof payload[fld] !== 'number') {
+        throw createError({ statusCode: 400, statusMessage: `"${fld}" must be a number or null` })
+      }
+    }
 
   } else if (payload.gameName === 'Clash') {
     if (payload.pointsPerWin == null || typeof payload.pointsPerWin !== 'number') {
@@ -107,6 +116,14 @@ export default defineEventHandler(async (event) => {
     winballColorRightCup = null,
     winballColorGoldCup = null,
     winballColorCap = null,
+    winballGravity = null,
+    winballBallMass = null,
+    winballBallLinearDamping = null,
+    winballBallAngularDamping = null,
+    winballBallWallRestitution = null,
+    winballPlungerMaxPull = null,
+    winballPlungerImpactFactor = null,
+    winballPlungerForce = null,
     // Clash field
     pointsPerWin,
     // Winwheel fields
@@ -141,13 +158,24 @@ export default defineEventHandler(async (event) => {
           winballColorGoldCup: winballColorGoldCup || '#FFD700',
           winballColorCap: winballColorCap || '#ffd000'
         }
+        const winballPhysics = {
+          winballGravity:             winballGravity             ?? 15,
+          winballBallMass:            winballBallMass            ?? 8,
+          winballBallLinearDamping:   winballBallLinearDamping   ?? 0.2,
+          winballBallAngularDamping:  winballBallAngularDamping  ?? 0,
+          winballBallWallRestitution: winballBallWallRestitution ?? 1.2,
+          winballPlungerMaxPull:      winballPlungerMaxPull      ?? 0.6,
+          winballPlungerImpactFactor: winballPlungerImpactFactor ?? 0.2,
+          winballPlungerForce:        winballPlungerForce        ?? 500
+        }
         createData = {
           ...createData,
           leftCupPoints,
           rightCupPoints,
           goldCupPoints,
           grandPrizeCtoonId: grandPrizeCtoonId || null,
-          ...winballColors
+          ...winballColors,
+          ...winballPhysics
         }
         updateData = {
           ...updateData,
@@ -155,7 +183,8 @@ export default defineEventHandler(async (event) => {
           rightCupPoints,
           goldCupPoints,
           grandPrizeCtoonId: grandPrizeCtoonId || null,
-          ...winballColors
+          ...winballColors,
+          ...winballPhysics
         }
       } else if (gameName === 'Clash') {
         createData = { ...createData, pointsPerWin }
@@ -221,7 +250,15 @@ export default defineEventHandler(async (event) => {
             ['winballColorLeftCup', before?.winballColorLeftCup, winballColorLeftCup],
             ['winballColorRightCup', before?.winballColorRightCup, winballColorRightCup],
             ['winballColorGoldCup', before?.winballColorGoldCup, winballColorGoldCup],
-            ['winballColorCap', before?.winballColorCap, winballColorCap]
+            ['winballColorCap', before?.winballColorCap, winballColorCap],
+            ['winballGravity', before?.winballGravity, winballGravity],
+            ['winballBallMass', before?.winballBallMass, winballBallMass],
+            ['winballBallLinearDamping', before?.winballBallLinearDamping, winballBallLinearDamping],
+            ['winballBallAngularDamping', before?.winballBallAngularDamping, winballBallAngularDamping],
+            ['winballBallWallRestitution', before?.winballBallWallRestitution, winballBallWallRestitution],
+            ['winballPlungerMaxPull', before?.winballPlungerMaxPull, winballPlungerMaxPull],
+            ['winballPlungerImpactFactor', before?.winballPlungerImpactFactor, winballPlungerImpactFactor],
+            ['winballPlungerForce', before?.winballPlungerForce, winballPlungerForce]
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })

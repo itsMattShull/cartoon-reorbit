@@ -719,6 +719,16 @@ model GameConfig {
   grandPrizeCtoon   Ctoon?  @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
   pointsPerWin      Int?    @default(0)
 
+  // — Winball physics settings —
+  winballGravity             Float? @default(15)
+  winballBallMass            Float? @default(8)
+  winballBallLinearDamping   Float? @default(0.2)
+  winballBallAngularDamping  Float? @default(0)
+  winballBallWallRestitution Float? @default(1.2)
+  winballPlungerMaxPull      Float? @default(0.6)
+  winballPlungerImpactFactor Float? @default(0.2)
+  winballPlungerForce        Float? @default(500)
+
   // — Winball color settings —
   winballColorBackground String? @default("#ffffff")
   winballColorBackboard  String? @default("#F0E6FF")
