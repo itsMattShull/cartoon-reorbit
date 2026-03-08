@@ -125,6 +125,43 @@
             </div>
           </div>
 
+          <!-- Bumper image uploads -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-3">Bumper Images</h3>
+            <p class="text-xs text-gray-400 mb-3">Best size: 256 × 256 px (square). Image is displayed on the face of each bumper.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div v-for="(_, i) in [0, 1, 2]" :key="i" class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Bumper {{ i + 1 }} (SVG/PNG/JPEG)</label>
+                <input
+                  type="file"
+                  accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png"
+                  @change="onWinballBumperFileChange(i, $event)"
+                  class="block w-full text-sm"
+                />
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn-primary"
+                    @click="uploadWinballBumperImage(i)"
+                    :disabled="!winballBumperFiles[i] || uploadingBumper[i]"
+                  >
+                    <span v-if="!uploadingBumper[i]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="winballBumperImagePaths[i]"
+                    type="button"
+                    class="px-3 py-2 text-sm rounded border"
+                    @click="removeWinballBumperImage(i)"
+                  >Remove</button>
+                </div>
+                <div v-if="winballBumperImagePaths[i]" class="mt-1">
+                  <p class="text-xs text-gray-600 break-all">{{ winballBumperImagePaths[i] }}</p>
+                  <img :src="winballBumperImagePaths[i]" alt="Bumper image preview" class="mt-1 max-h-20 rounded border" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Grand Prize selection + preview (moved above schedule) -->
           <div class="mb-8">
             <div class="mb-3 relative">
@@ -531,6 +568,9 @@ const loadingWinball        = ref(false)
 const winballBackboardFile  = ref(null)
 const uploadingBackboard    = ref(false)
 const winballBackboardImagePath = ref('')
+const winballBumperFiles    = ref([null, null, null])
+const uploadingBumper       = ref([false, false, false])
+const winballBumperImagePaths = ref(['', '', ''])
 const loadingClash          = ref(false)
 
 const winballColorFields = [
@@ -799,6 +839,11 @@ async function loadSettings() {
     searchTerm.value      = wb.grandPrizeCtoon.name
   }
   winballBackboardImagePath.value = wb.winballBackboardImagePath || ''
+  winballBumperImagePaths.value = [
+    wb.winballBumper1ImagePath || '',
+    wb.winballBumper2ImagePath || '',
+    wb.winballBumper3ImagePath || ''
+  ]
   for (const fld of winballColorFields) {
     if (wb[fld.key]) winballColors.value[fld.key] = wb[fld.key]
   }
@@ -967,6 +1012,40 @@ function removeWinballBackboardImage() {
   winballBackboardImagePath.value = ''
 }
 
+// ── Winball bumper image upload handlers ──
+function onWinballBumperFileChange(idx, e) {
+  const f = e.target.files?.[0]
+  winballBumperFiles.value[idx] = f || null
+}
+async function uploadWinballBumperImage(idx) {
+  if (!winballBumperFiles.value[idx]) return
+  uploadingBumper.value[idx] = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', winballBumperFiles.value[idx])
+    fd.append('bumperIndex', String(idx + 1))
+
+    const res = await $fetch('/api/admin/winball-bumper-image', {
+      method: 'POST',
+      body: fd
+    })
+    winballBumperImagePaths.value[idx] = res.assetPath
+    toastMessage.value = `Bumper ${idx + 1} image uploaded.`
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = `Bumper ${idx + 1} image upload failed`
+    toastType.value = 'error'
+  } finally {
+    uploadingBumper.value[idx] = false
+    winballBumperFiles.value[idx] = null
+  }
+}
+function removeWinballBumperImage(idx) {
+  winballBumperImagePaths.value[idx] = ''
+}
+
 // ── Saves ────────────────────────────────────
 async function saveWinWheelConfig() {
   loadingWinWheel.value = true
@@ -1024,6 +1103,9 @@ async function saveWinballConfig() {
         dailyPointLimit:          globalDailyPointLimit.value,
         grandPrizeCtoonId:        selectedCtoonId.value || null,
         winballBackboardImagePath: winballBackboardImagePath.value || null,
+        winballBumper1ImagePath:   winballBumperImagePaths.value[0] || null,
+        winballBumper2ImagePath:   winballBumperImagePaths.value[1] || null,
+        winballBumper3ImagePath:   winballBumperImagePaths.value[2] || null,
         ...winballColors.value,
         ...winballPhysics.value
       }

@@ -740,6 +740,9 @@ model GameConfig {
   winballColorGoldCup    String? @default("#FFD700")
   winballColorCap        String? @default("#ffd000")
   winballBackboardImagePath String?
+  winballBumper1ImagePath   String?
+  winballBumper2ImagePath   String?
+  winballBumper3ImagePath   String?
 
   // — Win Wheel settings —
   spinCost          Int              @default(100)

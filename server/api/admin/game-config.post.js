@@ -25,7 +25,7 @@ function validatePayload(payload) {
     const colorFields = [
       'winballColorBackground','winballColorBackboard','winballColorWalls','winballColorBall',
       'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap',
-      'winballBackboardImagePath'
+      'winballBackboardImagePath','winballBumper1ImagePath','winballBumper2ImagePath','winballBumper3ImagePath'
     ]
     for (const fld of colorFields) {
       if (payload[fld] != null && typeof payload[fld] !== 'string') {
@@ -118,6 +118,9 @@ export default defineEventHandler(async (event) => {
     winballColorGoldCup = null,
     winballColorCap = null,
     winballBackboardImagePath = null,
+    winballBumper1ImagePath = null,
+    winballBumper2ImagePath = null,
+    winballBumper3ImagePath = null,
     winballGravity = null,
     winballBallMass = null,
     winballBallLinearDamping = null,
@@ -159,7 +162,10 @@ export default defineEventHandler(async (event) => {
           winballColorRightCup: winballColorRightCup || '#8c8cff',
           winballColorGoldCup: winballColorGoldCup || '#FFD700',
           winballColorCap: winballColorCap || '#ffd000',
-          winballBackboardImagePath: winballBackboardImagePath || null
+          winballBackboardImagePath: winballBackboardImagePath || null,
+          winballBumper1ImagePath: winballBumper1ImagePath || null,
+          winballBumper2ImagePath: winballBumper2ImagePath || null,
+          winballBumper3ImagePath: winballBumper3ImagePath || null
         }
         const winballPhysics = {
           winballGravity:             winballGravity             ?? 15,
@@ -255,6 +261,9 @@ export default defineEventHandler(async (event) => {
             ['winballColorGoldCup', before?.winballColorGoldCup, winballColorGoldCup],
             ['winballColorCap', before?.winballColorCap, winballColorCap],
             ['winballBackboardImagePath', before?.winballBackboardImagePath || null, winballBackboardImagePath || null],
+            ['winballBumper1ImagePath', before?.winballBumper1ImagePath || null, winballBumper1ImagePath || null],
+            ['winballBumper2ImagePath', before?.winballBumper2ImagePath || null, winballBumper2ImagePath || null],
+            ['winballBumper3ImagePath', before?.winballBumper3ImagePath || null, winballBumper3ImagePath || null],
             ['winballGravity', before?.winballGravity, winballGravity],
             ['winballBallMass', before?.winballBallMass, winballBallMass],
             ['winballBallLinearDamping', before?.winballBallLinearDamping, winballBallLinearDamping],
