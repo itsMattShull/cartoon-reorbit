@@ -666,7 +666,7 @@ bumperXs.forEach((bx, bumperIdx) => {
     glowUntil: 0
   }
 
-  // Image overlay: flat circle on the top face of the bumper
+  // Image overlay: vertical plane on the front face of the bumper, facing the camera
   const imgPath = COLORS.bumperImagePaths[bumperIdx]
   if (imgPath) {
     const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
@@ -674,7 +674,8 @@ bumperXs.forEach((bx, bumperIdx) => {
       loadedTex.wrapT = THREE.ClampToEdgeWrapping
       loadedTex.needsUpdate = true
     })
-    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
+    // Plane stretched to cover the full visible face: full diameter wide, full height tall
+    const imgGeo = new THREE.PlaneGeometry(bumperRadius * 2, bumperHeight)
     const imgMat = new THREE.MeshPhongMaterial({
       map: tex,
       transparent: true,
@@ -684,24 +685,9 @@ bumperXs.forEach((bx, bumperIdx) => {
       emissiveIntensity: 0
     })
     const imgMesh = new THREE.Mesh(imgGeo, imgMat)
-    // Position on top face of bumper; CircleGeometry is in XY plane so rotate to lie flat in XZ
-    imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
-    imgMesh.rotation.x = -Math.PI / 2
+    // Position on the front face of the bumper (toward the camera along +Z)
+    imgMesh.position.set(bx, by, actualZ + bumperRadius + 0.05)
     rootGroup.add(imgMesh)
-
-    // Drop shadow: dark semi-transparent disc slightly below and larger than the image
-    const shadowGeo = new THREE.CircleGeometry(bumperRadius * 1.15, 32)
-    const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.35,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    })
-    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
-    shadowMesh.position.set(bx, by + bumperHeight / 2 + 0.01, actualZ)
-    shadowMesh.rotation.x = -Math.PI / 2
-    rootGroup.add(shadowMesh)
 
     bumperVisual.imageMat = imgMat
   }
