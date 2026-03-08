@@ -64,12 +64,20 @@ async function closeModal() {
   scavenger.openIfPending()
 }
 
+// Colors are loaded from the API in onMounted; this object is populated before scene init
 const COLORS = {
-  board:          0xF0E6FF,  // light lavender
-  bumper:         0x8c8cff,  // periwinkle-blue
-  halfCircle:     0x8c8cff,  // pale lilac
-  cap:            0xffd000,
-  goldHalfCircle: 0xFFD700
+  background:     '#ffffff',
+  board:          '#F0E6FF',
+  bumper:         '#8c8cff',
+  halfCircle:     '#8c8cff',
+  cap:            '#ffd000',
+  goldHalfCircle: '#FFD700',
+  ball:           '#ff0000',
+  walls:          '#4b4b4b'
+}
+
+function hexToInt(hex) {
+  return parseInt((hex || '#ffffff').replace('#', ''), 16)
 }
 
 let winSound, loseSound, bigBumperSound, plungerSound, wallSound;
@@ -196,9 +204,26 @@ const resetBall = () => {
   plungerBody.collisionResponse = true
 }
 
-onMounted(() => {
+onMounted(async () => {
   // Clear any stale scavenger state on page entry
   scavenger.reset()
+
+  // Load admin-configured colors before building the scene
+  try {
+    const cfg = await $fetch('/api/winball-config')
+    COLORS.background     = cfg.winballColorBackground || COLORS.background
+    COLORS.board          = cfg.winballColorBackboard  || COLORS.board
+    COLORS.walls          = cfg.winballColorWalls      || COLORS.walls
+    COLORS.ball           = cfg.winballColorBall       || COLORS.ball
+    COLORS.bumper         = cfg.winballColorBumpers    || COLORS.bumper
+    COLORS.halfCircle     = cfg.winballColorLeftCup    || COLORS.halfCircle
+    COLORS.rightCircle    = cfg.winballColorRightCup   || COLORS.halfCircle
+    COLORS.goldHalfCircle = cfg.winballColorGoldCup    || COLORS.goldHalfCircle
+    COLORS.cap            = cfg.winballColorCap        || COLORS.cap
+  } catch (e) {
+    console.warn('Could not load Winball colors, using defaults', e)
+  }
+
   // === TUNABLE PARAMETERS ===
   const ballMass = 8                            // increased mass for realistic pinball feel
   const boardGravityVec = new CANNON.Vec3(0, 0, 15) // gravity along negative Z (board downhill)
@@ -219,7 +244,7 @@ onMounted(() => {
 
   /* ---------- THREE SCENE ---------- */
   scene = new THREE.Scene()
-  scene.background = new THREE.Color('#ffffff')
+  scene.background = new THREE.Color(COLORS.background)
   // Root group to rotate entire machine: lay flat and orient downhill
   rootGroup = new THREE.Group()
   rootGroup.rotation.set(Math.PI / 2, boardRotationY, 0)
@@ -274,7 +299,7 @@ onMounted(() => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = makeMat(COLORS.board, { opacity: 0.5 }) // single white color
+  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 }) // single white color
   const board    = new THREE.Mesh(boardGeo, boardMat)
   // board.rotation.x = -Math.PI / 2           // lay flat
   board.position.set(0, 0, 0)
@@ -339,7 +364,7 @@ onMounted(() => {
 
   ballMesh = new THREE.Mesh(
     new THREE.SphereGeometry(ballRadius, 32, 32),
-    new THREE.MeshPhongMaterial({ color: '#ff0000' })
+    new THREE.MeshPhongMaterial({ color: COLORS.ball })
   )
   rootGroup.add(ballMesh)
 
@@ -398,7 +423,7 @@ onMounted(() => {
   /* ---------- WALLS ---------- */
   const wallHeight = 3
   // const wallThickness = 0.5   // Already defined above with ball/plunger
-  const wallMatColor = '#4b4b4b'
+  const wallMatColor = COLORS.walls
   const walls = []
 
   // Helper to get the Y position of the board surface at a given Z (accounts for tilt)
@@ -496,37 +521,13 @@ bumperXs.forEach((bx) => {
 
   // Visual: a matching Three.js cylinder
   const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
+  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0.8, shininess: 80 })
   const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
   bumperMesh.position.set(bx, by, actualZ)
   // No extra rotation needed—upright by default
   rootGroup.add(bumperMesh)
 })
 
-// Fourth bumper: centered near the top of the board, above all three existing bumpers
-{
-  const fourthX = -2
-  const fourthZ = -17
-  const fourthCylShape = new CANNON.Cylinder(bumperRadius, bumperRadius, bumperHeight, 16)
-  const fourthQ = new CANNON.Quaternion()
-  fourthQ.setFromEuler(Math.PI / 2, 0, 0)
-  fourthCylShape.transformAllPoints(new CANNON.Vec3(), fourthQ)
-  const fourthBumperBody = new CANNON.Body({
-    mass: 0,
-    shape: fourthCylShape,
-    material: wallMat
-  })
-  const fourthBy = boardYAt(fourthZ) + bumperHeight / 2
-  fourthBumperBody.position.set(fourthX, fourthBy, fourthZ)
-  world.addBody(fourthBumperBody)
-  bumpers.push(fourthBumperBody)
-
-  const fourthBumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const fourthBumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
-  const fourthBumperMesh = new THREE.Mesh(fourthBumperGeo, fourthBumperMat)
-  fourthBumperMesh.position.set(fourthX, fourthBy, fourthZ)
-  rootGroup.add(fourthBumperMesh)
-}
 
   // ---------- HALF-CIRCLE TRIGGERS ----------
   const halfCircleConfigs = [
@@ -550,15 +551,23 @@ bumperXs.forEach((bx) => {
       (() => {
         if (name === 'halfCircle2') {
           return new THREE.MeshPhongMaterial({
-            color: COLORS.goldHalfCircle,    // gold
-            specular: 0xFFFFFF, // full‐white highlights
-            shininess: 100,     // max out the gloss
+            color: hexToInt(COLORS.goldHalfCircle),
+            specular: 0xFFFFFF,
+            shininess: 100,
             transparent: true,
             opacity: 1
           })
+        } else if (name === 'halfCircle3') {
+          return new THREE.MeshPhongMaterial({
+            color: hexToInt(COLORS.rightCircle || COLORS.halfCircle),
+            specular: 0xffffff,
+            shininess: 50,
+            transparent: true,
+            opacity: 0.85
+          })
         } else {
           return new THREE.MeshPhongMaterial({
-            color: COLORS.halfCircle,    // your default pale
+            color: hexToInt(COLORS.halfCircle),
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
@@ -926,7 +935,7 @@ bumperXs.forEach((bx) => {
       // Visual
       capMesh = new THREE.Mesh(
         new THREE.BoxGeometry(capWidth, wallHeight, capThickness),
-        new THREE.MeshPhongMaterial({ color: COLORS.cap, shininess: 100 })
+        new THREE.MeshPhongMaterial({ color: hexToInt(COLORS.cap), shininess: 100 })
       )
       capMesh.position.set(capCenterX-0.4, capY-0.2, capZ-0.2)
       capMesh.rotation.set(-boardTilt, Math.PI / 4, 0)
