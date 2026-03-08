@@ -666,7 +666,7 @@ bumperXs.forEach((bx, bumperIdx) => {
     glowUntil: 0
   }
 
-  // Image overlay: vertical plane on the front face of the bumper, facing the camera
+  // Image overlay: circle on the front face of the bumper, facing the camera
   const imgPath = COLORS.bumperImagePaths[bumperIdx]
   if (imgPath) {
     const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
@@ -674,8 +674,8 @@ bumperXs.forEach((bx, bumperIdx) => {
       loadedTex.wrapT = THREE.ClampToEdgeWrapping
       loadedTex.needsUpdate = true
     })
-    // Plane stretched to cover the full visible face: full diameter wide, full height tall
-    const imgGeo = new THREE.PlaneGeometry(bumperRadius * 2, bumperHeight)
+    // Circle sized to fill the full face of the bumper cylinder
+    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
     const imgMat = new THREE.MeshPhongMaterial({
       map: tex,
       transparent: true,
@@ -685,7 +685,7 @@ bumperXs.forEach((bx, bumperIdx) => {
       emissiveIntensity: 0
     })
     const imgMesh = new THREE.Mesh(imgGeo, imgMat)
-    // Position on the front face of the bumper (toward the camera along +Z)
+    // CircleGeometry lies in XY plane (normal +Z), so it faces the camera directly
     imgMesh.position.set(bx, by, actualZ + bumperRadius + 0.05)
     rootGroup.add(imgMesh)
 
