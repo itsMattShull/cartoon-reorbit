@@ -64,7 +64,7 @@ async function closeModal() {
   scavenger.openIfPending()
 }
 
-// Colors are loaded from the API in onMounted; this object is populated before scene init
+// Colors and physics are loaded from the API in onMounted before scene init
 const COLORS = {
   background:     '#ffffff',
   board:          '#F0E6FF',
@@ -74,6 +74,17 @@ const COLORS = {
   goldHalfCircle: '#FFD700',
   ball:           '#ff0000',
   walls:          '#4b4b4b'
+}
+
+const PHYSICS = {
+  gravity:             15,
+  ballMass:            8,
+  ballLinearDamping:   0.2,
+  ballAngularDamping:  0,
+  ballWallRestitution: 1.2,
+  plungerMaxPull:      0.6,
+  plungerImpactFactor: 0.2,
+  plungerForce:        500
 }
 
 function hexToInt(hex) {
@@ -208,9 +219,10 @@ onMounted(async () => {
   // Clear any stale scavenger state on page entry
   scavenger.reset()
 
-  // Load admin-configured colors before building the scene
+  // Load admin-configured colors and physics before building the scene
   try {
     const cfg = await $fetch('/api/winball-config')
+    // Colors
     COLORS.background     = cfg.winballColorBackground || COLORS.background
     COLORS.board          = cfg.winballColorBackboard  || COLORS.board
     COLORS.walls          = cfg.winballColorWalls      || COLORS.walls
@@ -220,23 +232,32 @@ onMounted(async () => {
     COLORS.rightCircle    = cfg.winballColorRightCup   || COLORS.halfCircle
     COLORS.goldHalfCircle = cfg.winballColorGoldCup    || COLORS.goldHalfCircle
     COLORS.cap            = cfg.winballColorCap        || COLORS.cap
+    // Physics
+    if (cfg.winballGravity             != null) PHYSICS.gravity             = cfg.winballGravity
+    if (cfg.winballBallMass            != null) PHYSICS.ballMass            = cfg.winballBallMass
+    if (cfg.winballBallLinearDamping   != null) PHYSICS.ballLinearDamping   = cfg.winballBallLinearDamping
+    if (cfg.winballBallAngularDamping  != null) PHYSICS.ballAngularDamping  = cfg.winballBallAngularDamping
+    if (cfg.winballBallWallRestitution != null) PHYSICS.ballWallRestitution = cfg.winballBallWallRestitution
+    if (cfg.winballPlungerMaxPull      != null) PHYSICS.plungerMaxPull      = cfg.winballPlungerMaxPull
+    if (cfg.winballPlungerImpactFactor != null) PHYSICS.plungerImpactFactor = cfg.winballPlungerImpactFactor
+    if (cfg.winballPlungerForce        != null) PHYSICS.plungerForce        = cfg.winballPlungerForce
   } catch (e) {
-    console.warn('Could not load Winball colors, using defaults', e)
+    console.warn('Could not load Winball config, using defaults', e)
   }
 
-  // === TUNABLE PARAMETERS ===
-  const ballMass = 8                            // increased mass for realistic pinball feel
-  const boardGravityVec = new CANNON.Vec3(0, 0, 15) // gravity along negative Z (board downhill)
-  const ballLinearDamping = 0.2           // slight rolling damping
-  const ballAngularDamping = 0          // spin friction for realistic roll
-  const ballWallFriction = 0      // low friction on walls for snappy bounce
-  const ballWallRestitution = 1.2   // high restitution for energetic wall bounces
-  const boardFriction = 0         // moderate friction on playfield for rolling
-  const boardRestitution = 0.0      // no bounce on the board surface
-  const plungerMaxPull = 0.6                    // max pull distance
-  const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
-  const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
-  const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
+  // === TUNABLE PARAMETERS (loaded from admin config) ===
+  const ballMass = PHYSICS.ballMass
+  const boardGravityVec = new CANNON.Vec3(0, 0, PHYSICS.gravity)
+  const ballLinearDamping = PHYSICS.ballLinearDamping
+  const ballAngularDamping = PHYSICS.ballAngularDamping
+  const ballWallFriction = 0
+  const ballWallRestitution = PHYSICS.ballWallRestitution
+  const boardFriction = 0
+  const boardRestitution = 0.0
+  const plungerMaxPull = PHYSICS.plungerMaxPull
+  const plungerImpactFactor = PHYSICS.plungerImpactFactor
+  const boardTilt = 0
+  const boardRotationY = 0
 
   initSounds()
 
@@ -415,7 +436,7 @@ onMounted(async () => {
   let plungerStartY = 0
   const maxPull = plungerMaxPull      // allow a deeper pull
   // impulse strength calibrated for board length and tilt
-  const plungerForce = 500
+  const plungerForce = PHYSICS.plungerForce
   const maxBallSpeed = 700  // cap launch speed to allow full travel
 
   plungerOriginalZ = plungerMesh.position.z
