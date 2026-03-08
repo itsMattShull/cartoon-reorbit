@@ -570,6 +570,41 @@ onMounted(async () => {
   // guideGap, guideX, and laneCenterX already defined above
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
+  // Triangular bouncer mounted on the left wall
+  const triangleDepth = 2.5
+  const triangleRadius = 2.5
+  const triangleZ = -2
+  const triangleY = boardYAt(triangleZ) + wallHeight / 2
+  const triangleX = -boardWidth / 2 + triangleDepth / 2
+
+  const triangleShape = new CANNON.Cylinder(triangleRadius, triangleRadius, wallHeight, 3)
+  const triangleShapeQuat = new CANNON.Quaternion()
+  triangleShapeQuat.setFromEuler(Math.PI / 2, 0, 0)
+  triangleShape.transformAllPoints(new CANNON.Vec3(), triangleShapeQuat)
+
+  const triangleBody = new CANNON.Body({
+    mass: 0,
+    shape: triangleShape,
+    material: wallMat
+  })
+  triangleBody.position.set(triangleX, triangleY, triangleZ)
+  triangleBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2, 0)
+  world.addBody(triangleBody)
+  walls.push(triangleBody)
+
+  const triangleMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(triangleRadius, triangleRadius, wallHeight, 3),
+    new THREE.MeshPhongMaterial({ color: wallMatColor })
+  )
+  triangleMesh.position.copy(triangleBody.position)
+  triangleMesh.quaternion.set(
+    triangleBody.quaternion.x,
+    triangleBody.quaternion.y,
+    triangleBody.quaternion.z,
+    triangleBody.quaternion.w
+  )
+  rootGroup.add(triangleMesh)
+
   addWall(0, southZ, boardWidth + wallThickness * 2, wallThickness)
 
   for (let i = 0; i < segmentCount; i++) {
@@ -589,7 +624,7 @@ const bumperHeight = 3
 // Z position for bumpers (just above center)
 const bumperZ = 0
 // X positions for the three bumpers
-const bumperXs = [-12, -1, 8]
+const bumperXs = [-10.5, -1, 8]
 const bumpers = []
 const bumperVisuals = []
 
