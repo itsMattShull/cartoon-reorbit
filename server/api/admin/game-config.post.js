@@ -24,7 +24,7 @@ function validatePayload(payload) {
     }
     const colorFields = [
       'winballColorBackground','winballColorBackboard','winballColorWalls','winballColorBall',
-      'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap','winballOverlayColor',
+      'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap','winballColorTransform','winballOverlayColor',
       'winballBackboardImagePath','winballBumper1ImagePath','winballBumper2ImagePath','winballBumper3ImagePath'
     ]
     for (const fld of colorFields) {
@@ -35,7 +35,7 @@ function validatePayload(payload) {
     const physicsFields = [
       'winballGravity','winballBallMass','winballBallLinearDamping','winballBallAngularDamping',
       'winballBallWallRestitution','winballPlungerMaxPull','winballPlungerImpactFactor','winballPlungerForce',
-      'winballOverlayAlpha','winballImageWidthPercent','winballImageOffsetXPercent','winballImageOffsetYPercent'
+      'winballOverlayAlpha','winballColorTransformIntensity','winballImageWidthPercent','winballImageOffsetXPercent','winballImageOffsetYPercent'
     ]
     for (const fld of physicsFields) {
       if (payload[fld] != null && typeof payload[fld] !== 'number') {
@@ -118,6 +118,7 @@ export default defineEventHandler(async (event) => {
     winballColorRightCup = null,
     winballColorGoldCup = null,
     winballColorCap = null,
+    winballColorTransform = null,
     winballOverlayColor = null,
     winballBackboardImagePath = null,
     winballBumper1ImagePath = null,
@@ -132,6 +133,7 @@ export default defineEventHandler(async (event) => {
     winballPlungerImpactFactor = null,
     winballPlungerForce = null,
     winballOverlayAlpha = null,
+    winballColorTransformIntensity = null,
     winballImageWidthPercent = null,
     winballImageOffsetXPercent = null,
     winballImageOffsetYPercent = null,
@@ -168,6 +170,7 @@ export default defineEventHandler(async (event) => {
           winballColorRightCup: winballColorRightCup || '#8c8cff',
           winballColorGoldCup: winballColorGoldCup || '#FFD700',
           winballColorCap: winballColorCap || '#ffd000',
+          winballColorTransform: winballColorTransform || '#ffffff',
           winballOverlayColor: winballOverlayColor || '#ffffff',
           winballBackboardImagePath: winballBackboardImagePath || null,
           winballBumper1ImagePath: winballBumper1ImagePath || null,
@@ -184,6 +187,7 @@ export default defineEventHandler(async (event) => {
           winballPlungerImpactFactor: winballPlungerImpactFactor ?? 0.2,
           winballPlungerForce:        winballPlungerForce        ?? 500,
           winballOverlayAlpha:         winballOverlayAlpha         ?? 0,
+          winballColorTransformIntensity: winballColorTransformIntensity ?? 0,
           winballImageWidthPercent:    winballImageWidthPercent    ?? 100,
           winballImageOffsetXPercent:  winballImageOffsetXPercent  ?? 0,
           winballImageOffsetYPercent:  winballImageOffsetYPercent  ?? 0
@@ -271,6 +275,7 @@ export default defineEventHandler(async (event) => {
             ['winballColorRightCup', before?.winballColorRightCup, winballColorRightCup],
             ['winballColorGoldCup', before?.winballColorGoldCup, winballColorGoldCup],
             ['winballColorCap', before?.winballColorCap, winballColorCap],
+            ['winballColorTransform', before?.winballColorTransform, winballColorTransform],
             ['winballOverlayColor', before?.winballOverlayColor, winballOverlayColor],
             ['winballBackboardImagePath', before?.winballBackboardImagePath || null, winballBackboardImagePath || null],
             ['winballBumper1ImagePath', before?.winballBumper1ImagePath || null, winballBumper1ImagePath || null],
@@ -285,6 +290,7 @@ export default defineEventHandler(async (event) => {
             ['winballPlungerImpactFactor', before?.winballPlungerImpactFactor, winballPlungerImpactFactor],
             ['winballPlungerForce', before?.winballPlungerForce, winballPlungerForce],
             ['winballOverlayAlpha', before?.winballOverlayAlpha, winballOverlayAlpha],
+            ['winballColorTransformIntensity', before?.winballColorTransformIntensity, winballColorTransformIntensity],
             ['winballImageWidthPercent', before?.winballImageWidthPercent, winballImageWidthPercent],
             ['winballImageOffsetXPercent', before?.winballImageOffsetXPercent, winballImageOffsetXPercent],
             ['winballImageOffsetYPercent', before?.winballImageOffsetYPercent, winballImageOffsetYPercent]

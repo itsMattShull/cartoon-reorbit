@@ -67,7 +67,7 @@
 
           <div class="mb-6 border rounded-lg p-4 bg-gray-50">
             <h3 class="text-lg font-semibold mb-1">Playfield Layers</h3>
-            <p class="text-xs text-gray-500 mb-4">Layer order: base color → board image → overlay color with alpha.</p>
+            <p class="text-xs text-gray-500 mb-4">Layer order: base color → board image → color transform with intensity → overlay color with alpha.</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Base Board Color</label>
@@ -75,6 +75,17 @@
                   <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
                   <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="input flex-1" maxlength="7" />
                 </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Color Transform</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" v-model="winballBoardLayer.winballColorTransform" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballColorTransform" class="input flex-1" maxlength="7" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Transform Intensity</label>
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballColorTransformIntensity" class="input" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Color</label>
@@ -641,6 +652,8 @@ const winballColors = ref({
 
 const winballBoardLayer = ref({
   winballColorBackboard: '#F0E6FF',
+  winballColorTransform: '#ffffff',
+  winballColorTransformIntensity: 0,
   winballOverlayColor: '#ffffff',
   winballOverlayAlpha: 0,
   winballImageWidthPercent: 100,
@@ -897,6 +910,8 @@ async function loadSettings() {
     wb.winballBumper3ImagePath || ''
   ]
   if (wb.winballColorBackboard) winballBoardLayer.value.winballColorBackboard = wb.winballColorBackboard
+  if (wb.winballColorTransform) winballBoardLayer.value.winballColorTransform = wb.winballColorTransform
+  if (wb.winballColorTransformIntensity != null) winballBoardLayer.value.winballColorTransformIntensity = wb.winballColorTransformIntensity
   if (wb.winballOverlayColor) winballBoardLayer.value.winballOverlayColor = wb.winballOverlayColor
   if (wb.winballOverlayAlpha != null) winballBoardLayer.value.winballOverlayAlpha = wb.winballOverlayAlpha
   if (wb.winballImageWidthPercent != null) winballBoardLayer.value.winballImageWidthPercent = wb.winballImageWidthPercent

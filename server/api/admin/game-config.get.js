@@ -78,6 +78,8 @@ export default defineEventHandler(async (event) => {
             winballColorRightCup: '#8c8cff',
             winballColorGoldCup: '#FFD700',
             winballColorCap: '#ffd000',
+            winballColorTransform: '#ffffff',
+            winballColorTransformIntensity: 0,
             winballOverlayColor: '#ffffff',
             winballOverlayAlpha: 0,
             winballImageWidthPercent: 100,
