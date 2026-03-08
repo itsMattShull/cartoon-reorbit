@@ -63,6 +63,20 @@
             </div>
           </div>
 
+          <!-- Colors -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-3">Colors</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div v-for="c in winballColorFields" :key="c.key">
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ c.label }}</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" v-model="winballColors[c.key]" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballColors[c.key]" class="input flex-1" maxlength="7" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Grand Prize selection + preview (moved above schedule) -->
           <div class="mb-8">
             <div class="mb-3 relative">
@@ -468,6 +482,29 @@ const clashPointsPerWin     = ref(1)
 const loadingWinball        = ref(false)
 const loadingClash          = ref(false)
 
+const winballColorFields = [
+  { key: 'winballColorBackground', label: 'Background' },
+  { key: 'winballColorBackboard',  label: 'Backboard' },
+  { key: 'winballColorWalls',      label: 'Walls' },
+  { key: 'winballColorBall',       label: 'Ball' },
+  { key: 'winballColorBumpers',    label: 'Bumpers' },
+  { key: 'winballColorLeftCup',    label: 'Left Cup' },
+  { key: 'winballColorRightCup',   label: 'Right Cup' },
+  { key: 'winballColorGoldCup',    label: 'Gold Cup' },
+  { key: 'winballColorCap',        label: 'Cap' }
+]
+const winballColors = ref({
+  winballColorBackground: '#ffffff',
+  winballColorBackboard:  '#F0E6FF',
+  winballColorWalls:      '#4b4b4b',
+  winballColorBall:       '#ff0000',
+  winballColorBumpers:    '#8c8cff',
+  winballColorLeftCup:    '#8c8cff',
+  winballColorRightCup:   '#8c8cff',
+  winballColorGoldCup:    '#FFD700',
+  winballColorCap:        '#ffd000'
+})
+
 const grandPrizeCtoon       = ref(null)
 const selectedCtoonId       = ref('')
 const allCtoons             = ref([])
@@ -689,6 +726,9 @@ async function loadSettings() {
     selectedCtoonId.value = wb.grandPrizeCtoon.id
     searchTerm.value      = wb.grandPrizeCtoon.name
   }
+  for (const fld of winballColorFields) {
+    if (wb[fld.key]) winballColors.value[fld.key] = wb[fld.key]
+  }
   allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath,quantity')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
@@ -872,7 +912,8 @@ async function saveWinballConfig() {
         rightCupPoints:    rightCupPoints.value,
         goldCupPoints:     goldCupPoints.value,
         dailyPointLimit:   globalDailyPointLimit.value,
-        grandPrizeCtoonId: selectedCtoonId.value || null
+        grandPrizeCtoonId: selectedCtoonId.value || null,
+        ...winballColors.value
       }
     })
     toastMessage.value = 'Winball settings saved!'; toastType.value = 'success'

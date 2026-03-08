@@ -719,6 +719,17 @@ model GameConfig {
   grandPrizeCtoon   Ctoon?  @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
   pointsPerWin      Int?    @default(0)
 
+  // — Winball color settings —
+  winballColorBackground String? @default("#ffffff")
+  winballColorBackboard  String? @default("#F0E6FF")
+  winballColorWalls      String? @default("#4b4b4b")
+  winballColorBall       String? @default("#ff0000")
+  winballColorBumpers    String? @default("#8c8cff")
+  winballColorLeftCup    String? @default("#8c8cff")
+  winballColorRightCup   String? @default("#8c8cff")
+  winballColorGoldCup    String? @default("#FFD700")
+  winballColorCap        String? @default("#ffd000")
+
   // — Win Wheel settings —
   spinCost          Int              @default(100)
   pointsWon         Int              @default(250)
