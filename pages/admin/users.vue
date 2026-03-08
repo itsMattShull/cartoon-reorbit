@@ -67,6 +67,7 @@
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
+              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
               <button
                 v-if="!u.isAdmin && !u.banned"
                 class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
@@ -283,6 +284,45 @@
           @click="saveAdditionalZones"
         >
           {{ additionalZonesWorking ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update Username modal -->
+  <div v-if="showUpdateUsernameModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeUpdateUsernameModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <h3 class="text-lg font-semibold">Update Username — {{ updateUsernameTarget?.username || updateUsernameTarget?.discordTag || 'user' }}</h3>
+      <p class="mt-2 text-sm text-gray-600">
+        Enter a new username. Must be 3 words each starting with a capital letter with no spaces (e.g. <span class="font-mono">AwesomeAlienAce</span>).
+      </p>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700">New Username</label>
+        <input
+          v-model="updateUsernameValue"
+          type="text"
+          placeholder="e.g. AwesomeAlienAce"
+          class="mt-2 w-full border rounded-md px-3 py-2 text-sm"
+          @keydown.enter="saveUpdateUsername"
+        />
+        <p v-if="updateUsernameValue && !isUsernameFormatValid" class="mt-1 text-xs text-red-600">
+          Must be 3 words each starting with a capital letter, no spaces (e.g. AwesomeAlienAce).
+        </p>
+      </div>
+
+      <div v-if="updateUsernameError" class="mt-2 text-sm text-red-600">{{ updateUsernameError }}</div>
+
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeUpdateUsernameModal()" :disabled="updateUsernameWorking">Cancel</button>
+        <button
+          class="px-3 py-1 text-sm rounded-md text-white"
+          :class="updateUsernameCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+          :disabled="!updateUsernameCanSave || updateUsernameWorking"
+          @click="saveUpdateUsername"
+        >
+          {{ updateUsernameWorking ? 'Saving…' : 'Save' }}
         </button>
       </div>
     </div>
@@ -660,6 +700,51 @@ async function saveAdditionalZones() {
     additionalZonesError.value = e?.data?.statusMessage || e?.message || 'Failed to update additional cZones.'
   } finally {
     additionalZonesWorking.value = false
+  }
+}
+
+// Update Username state
+const showUpdateUsernameModal = ref(false)
+const updateUsernameTarget = ref(null)
+const updateUsernameValue = ref('')
+const updateUsernameError = ref('')
+const updateUsernameWorking = ref(false)
+
+const isUsernameFormatValid = computed(() => /^([A-Z][a-z]+){3}$/.test(updateUsernameValue.value.trim()))
+const updateUsernameCanSave = computed(() => isUsernameFormatValid.value && !!updateUsernameTarget.value)
+
+function openUpdateUsername(u) {
+  updateUsernameTarget.value = u
+  updateUsernameValue.value = u.username || ''
+  updateUsernameError.value = ''
+  updateUsernameWorking.value = false
+  showUpdateUsernameModal.value = true
+}
+function closeUpdateUsernameModal() {
+  showUpdateUsernameModal.value = false
+  updateUsernameTarget.value = null
+  updateUsernameValue.value = ''
+  updateUsernameError.value = ''
+  updateUsernameWorking.value = false
+}
+async function saveUpdateUsername() {
+  if (!updateUsernameCanSave.value) return
+  updateUsernameWorking.value = true
+  updateUsernameError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${updateUsernameTarget.value.id}/update-username`, {
+      method: 'POST',
+      body: { username: updateUsernameValue.value.trim() }
+    })
+    const idx = users.value.findIndex(x => x.id === updateUsernameTarget.value.id)
+    if (idx !== -1) {
+      users.value[idx] = { ...users.value[idx], username: res.username }
+    }
+    closeUpdateUsernameModal()
+  } catch (e) {
+    updateUsernameError.value = e?.data?.statusMessage || e?.message || 'Failed to update username.'
+  } finally {
+    updateUsernameWorking.value = false
   }
 }
 
