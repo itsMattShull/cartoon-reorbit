@@ -739,6 +739,11 @@ model GameConfig {
   winballColorRightCup   String? @default("#8c8cff")
   winballColorGoldCup    String? @default("#FFD700")
   winballColorCap        String? @default("#ffd000")
+  winballOverlayColor    String? @default("#ffffff")
+  winballOverlayAlpha    Float?  @default(0)
+  winballImageWidthPercent Float? @default(100)
+  winballImageOffsetXPercent Float? @default(0)
+  winballImageOffsetYPercent Float? @default(0)
   winballBackboardImagePath String?
   winballBumper1ImagePath   String?
   winballBumper2ImagePath   String?
