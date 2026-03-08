@@ -328,8 +328,10 @@ onMounted(async () => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
+  let boardMat
   if (COLORS.backboardImagePath) {
+    // Use MeshBasicMaterial for the image so it shows at full brightness unaffected by lighting
+    boardMat = new THREE.MeshBasicMaterial({ transparent: false, side: THREE.DoubleSide })
     const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
       const imageAspect = loadedTex.image.width / loadedTex.image.height
       const boardAspect = boardWidth / boardLength
@@ -340,8 +342,9 @@ onMounted(async () => {
       boardMat.needsUpdate = true
     })
     boardMat.map = tex
-    boardMat.color.set(0xffffff)
     boardMat.needsUpdate = true
+  } else {
+    boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
   }
   const board    = new THREE.Mesh(boardGeo, boardMat)
   // board.rotation.x = -Math.PI / 2           // lay flat
