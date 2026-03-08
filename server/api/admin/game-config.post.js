@@ -24,7 +24,8 @@ function validatePayload(payload) {
     }
     const colorFields = [
       'winballColorBackground','winballColorBackboard','winballColorWalls','winballColorBall',
-      'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap'
+      'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap',
+      'winballBackboardImagePath'
     ]
     for (const fld of colorFields) {
       if (payload[fld] != null && typeof payload[fld] !== 'string') {
@@ -116,6 +117,7 @@ export default defineEventHandler(async (event) => {
     winballColorRightCup = null,
     winballColorGoldCup = null,
     winballColorCap = null,
+    winballBackboardImagePath = null,
     winballGravity = null,
     winballBallMass = null,
     winballBallLinearDamping = null,
@@ -156,7 +158,8 @@ export default defineEventHandler(async (event) => {
           winballColorLeftCup: winballColorLeftCup || '#8c8cff',
           winballColorRightCup: winballColorRightCup || '#8c8cff',
           winballColorGoldCup: winballColorGoldCup || '#FFD700',
-          winballColorCap: winballColorCap || '#ffd000'
+          winballColorCap: winballColorCap || '#ffd000',
+          winballBackboardImagePath: winballBackboardImagePath || null
         }
         const winballPhysics = {
           winballGravity:             winballGravity             ?? 15,
@@ -251,6 +254,7 @@ export default defineEventHandler(async (event) => {
             ['winballColorRightCup', before?.winballColorRightCup, winballColorRightCup],
             ['winballColorGoldCup', before?.winballColorGoldCup, winballColorGoldCup],
             ['winballColorCap', before?.winballColorCap, winballColorCap],
+            ['winballBackboardImagePath', before?.winballBackboardImagePath || null, winballBackboardImagePath || null],
             ['winballGravity', before?.winballGravity, winballGravity],
             ['winballBallMass', before?.winballBallMass, winballBallMass],
             ['winballBallLinearDamping', before?.winballBallLinearDamping, winballBallLinearDamping],

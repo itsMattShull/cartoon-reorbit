@@ -13,6 +13,7 @@ const DEFAULTS = {
   winballColorRightCup:   '#8c8cff',
   winballColorGoldCup:    '#FFD700',
   winballColorCap:        '#ffd000',
+  winballBackboardImagePath: null,
   // Physics
   winballGravity:             15,
   winballBallMass:            8,
@@ -37,6 +38,7 @@ export default defineEventHandler(async () => {
       winballColorRightCup:       true,
       winballColorGoldCup:        true,
       winballColorCap:            true,
+      winballBackboardImagePath:  true,
       winballGravity:             true,
       winballBallMass:            true,
       winballBallLinearDamping:   true,

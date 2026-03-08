@@ -89,6 +89,42 @@
             </div>
           </div>
 
+          <!-- Backboard image upload -->
+          <div class="space-y-3 mb-6">
+            <label class="block text-sm font-medium text-gray-700">
+              Backboard Image (SVG/PNG/JPEG)
+            </label>
+            <p class="text-xs text-gray-400">Best size: 360 × 500 px (portrait, matches board proportions)</p>
+            <input
+              type="file"
+              accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png"
+              @change="onWinballBackboardFileChange"
+              class="block w-full text-sm"
+            />
+            <div class="flex items-center gap-3">
+              <button
+                class="btn-primary"
+                @click="uploadWinballBackboardImage"
+                :disabled="!winballBackboardFile || uploadingBackboard"
+              >
+                <span v-if="!uploadingBackboard">Upload Image</span>
+                <span v-else>Uploading…</span>
+              </button>
+              <button
+                v-if="winballBackboardImagePath"
+                type="button"
+                class="px-3 py-2 text-sm rounded border"
+                @click="removeWinballBackboardImage"
+              >Remove Image</button>
+            </div>
+            <div v-if="winballBackboardImagePath" class="mt-2">
+              <p class="text-xs text-gray-600 break-all">Saved path: {{ winballBackboardImagePath }}</p>
+              <div class="mt-2 border rounded p-2 bg-gray-50">
+                <img :src="winballBackboardImagePath" alt="Backboard image preview" class="max-h-40 mx-auto" />
+              </div>
+            </div>
+          </div>
+
           <!-- Grand Prize selection + preview (moved above schedule) -->
           <div class="mb-8">
             <div class="mb-3 relative">
@@ -492,6 +528,9 @@ const rightCupPoints        = ref(0)
 const goldCupPoints         = ref(0)
 const clashPointsPerWin     = ref(1)
 const loadingWinball        = ref(false)
+const winballBackboardFile  = ref(null)
+const uploadingBackboard    = ref(false)
+const winballBackboardImagePath = ref('')
 const loadingClash          = ref(false)
 
 const winballColorFields = [
@@ -759,6 +798,7 @@ async function loadSettings() {
     selectedCtoonId.value = wb.grandPrizeCtoon.id
     searchTerm.value      = wb.grandPrizeCtoon.name
   }
+  winballBackboardImagePath.value = wb.winballBackboardImagePath || ''
   for (const fld of winballColorFields) {
     if (wb[fld.key]) winballColors.value[fld.key] = wb[fld.key]
   }
@@ -893,6 +933,40 @@ function removeWinWheelSound() {
   winWheelSoundPath.value = ''
 }
 
+// ── Winball backboard image upload handlers ──
+function onWinballBackboardFileChange(e) {
+  const f = e.target.files?.[0]
+  winballBackboardFile.value = f || null
+}
+async function uploadWinballBackboardImage() {
+  if (!winballBackboardFile.value) return
+  uploadingBackboard.value = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', winballBackboardFile.value)
+    fd.append('label', 'winball-backboard')
+
+    const res = await $fetch('/api/admin/winball-backboard-image', {
+      method: 'POST',
+      body: fd
+    })
+    winballBackboardImagePath.value = res.assetPath
+    toastMessage.value = 'Backboard image uploaded.'
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Backboard image upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingBackboard.value = false
+    winballBackboardFile.value = null
+  }
+}
+function removeWinballBackboardImage() {
+  winballBackboardImagePath.value = ''
+}
+
 // ── Saves ────────────────────────────────────
 async function saveWinWheelConfig() {
   loadingWinWheel.value = true
@@ -943,12 +1017,13 @@ async function saveWinballConfig() {
     await $fetch('/api/admin/game-config', {
       method: 'POST',
       body: {
-        gameName:          'Winball',
-        leftCupPoints:     leftCupPoints.value,
-        rightCupPoints:    rightCupPoints.value,
-        goldCupPoints:     goldCupPoints.value,
-        dailyPointLimit:   globalDailyPointLimit.value,
-        grandPrizeCtoonId: selectedCtoonId.value || null,
+        gameName:                 'Winball',
+        leftCupPoints:            leftCupPoints.value,
+        rightCupPoints:           rightCupPoints.value,
+        goldCupPoints:            goldCupPoints.value,
+        dailyPointLimit:          globalDailyPointLimit.value,
+        grandPrizeCtoonId:        selectedCtoonId.value || null,
+        winballBackboardImagePath: winballBackboardImagePath.value || null,
         ...winballColors.value,
         ...winballPhysics.value
       }

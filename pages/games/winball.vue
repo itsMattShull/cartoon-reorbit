@@ -66,14 +66,15 @@ async function closeModal() {
 
 // Colors and physics are loaded from the API in onMounted before scene init
 const COLORS = {
-  background:     '#ffffff',
-  board:          '#F0E6FF',
-  bumper:         '#8c8cff',
-  halfCircle:     '#8c8cff',
-  cap:            '#ffd000',
-  goldHalfCircle: '#FFD700',
-  ball:           '#ff0000',
-  walls:          '#4b4b4b'
+  background:         '#ffffff',
+  board:              '#F0E6FF',
+  bumper:             '#8c8cff',
+  halfCircle:         '#8c8cff',
+  cap:                '#ffd000',
+  goldHalfCircle:     '#FFD700',
+  ball:               '#ff0000',
+  walls:              '#4b4b4b',
+  backboardImagePath: null
 }
 
 const PHYSICS = {
@@ -225,6 +226,7 @@ onMounted(async () => {
     // Colors
     COLORS.background     = cfg.winballColorBackground || COLORS.background
     COLORS.board          = cfg.winballColorBackboard  || COLORS.board
+    COLORS.backboardImagePath = cfg.winballBackboardImagePath || null
     COLORS.walls          = cfg.winballColorWalls      || COLORS.walls
     COLORS.ball           = cfg.winballColorBall       || COLORS.ball
     COLORS.bumper         = cfg.winballColorBumpers    || COLORS.bumper
@@ -320,7 +322,13 @@ onMounted(async () => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 }) // single white color
+  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
+  if (COLORS.backboardImagePath) {
+    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath)
+    boardMat.map = tex
+    boardMat.color.set(0xffffff)
+    boardMat.needsUpdate = true
+  }
   const board    = new THREE.Mesh(boardGeo, boardMat)
   // board.rotation.x = -Math.PI / 2           // lay flat
   board.position.set(0, 0, 0)
