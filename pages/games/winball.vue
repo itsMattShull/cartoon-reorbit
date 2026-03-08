@@ -66,14 +66,16 @@ async function closeModal() {
 
 // Colors and physics are loaded from the API in onMounted before scene init
 const COLORS = {
-  background:     '#ffffff',
-  board:          '#F0E6FF',
-  bumper:         '#8c8cff',
-  halfCircle:     '#8c8cff',
-  cap:            '#ffd000',
-  goldHalfCircle: '#FFD700',
-  ball:           '#ff0000',
-  walls:          '#4b4b4b'
+  background:         '#ffffff',
+  board:              '#F0E6FF',
+  bumper:             '#8c8cff',
+  halfCircle:         '#8c8cff',
+  cap:                '#ffd000',
+  goldHalfCircle:     '#FFD700',
+  ball:               '#ff0000',
+  walls:              '#4b4b4b',
+  backboardImagePath: null,
+  bumperImagePaths:   [null, null, null]
 }
 
 const PHYSICS = {
@@ -225,6 +227,12 @@ onMounted(async () => {
     // Colors
     COLORS.background     = cfg.winballColorBackground || COLORS.background
     COLORS.board          = cfg.winballColorBackboard  || COLORS.board
+    COLORS.backboardImagePath = cfg.winballBackboardImagePath || null
+    COLORS.bumperImagePaths   = [
+      cfg.winballBumper1ImagePath || null,
+      cfg.winballBumper2ImagePath || null,
+      cfg.winballBumper3ImagePath || null
+    ]
     COLORS.walls          = cfg.winballColorWalls      || COLORS.walls
     COLORS.ball           = cfg.winballColorBall       || COLORS.ball
     COLORS.bumper         = cfg.winballColorBumpers    || COLORS.bumper
@@ -320,7 +328,13 @@ onMounted(async () => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 }) // single white color
+  const boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
+  if (COLORS.backboardImagePath) {
+    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath)
+    boardMat.map = tex
+    boardMat.color.set(0xffffff)
+    boardMat.needsUpdate = true
+  }
   const board    = new THREE.Mesh(boardGeo, boardMat)
   // board.rotation.x = -Math.PI / 2           // lay flat
   board.position.set(0, 0, 0)
@@ -519,7 +533,7 @@ const bumperZ = 0
 const bumperXs = [-12, -1, 8]
 const bumpers = []
 
-bumperXs.forEach((bx) => {
+bumperXs.forEach((bx, bumperIdx) => {
   // Offset left/right bumpers forward by 3 units
   const zOffset = bx === -1 ? 0 : -9
   const actualZ = bumperZ + zOffset
@@ -547,6 +561,19 @@ bumperXs.forEach((bx) => {
   bumperMesh.position.set(bx, by, actualZ)
   // No extra rotation needed—upright by default
   rootGroup.add(bumperMesh)
+
+  // Image overlay: flat circle on the top face of the bumper
+  const imgPath = COLORS.bumperImagePaths[bumperIdx]
+  if (imgPath) {
+    const tex = new THREE.TextureLoader().load(imgPath)
+    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
+    const imgMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+    const imgMesh = new THREE.Mesh(imgGeo, imgMat)
+    // Position on top face of bumper; CircleGeometry is in XY plane so rotate to lie flat in XZ
+    imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
+    imgMesh.rotation.x = -Math.PI / 2
+    rootGroup.add(imgMesh)
+  }
 })
 
 
