@@ -571,8 +571,8 @@ onMounted(async () => {
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
   // Triangular bouncer mounted on the left wall
-  const triangleDepth = 2.5
-  const triangleRadius = 2.5
+  const triangleDepth = 3.5
+  const triangleRadius = 3.5
   const triangleZ = -2
   const triangleY = boardYAt(triangleZ) + wallHeight / 2
   const triangleX = -boardWidth / 2 + triangleDepth / 2
