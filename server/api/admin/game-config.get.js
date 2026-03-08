@@ -77,7 +77,15 @@ export default defineEventHandler(async (event) => {
             winballColorLeftCup: '#8c8cff',
             winballColorRightCup: '#8c8cff',
             winballColorGoldCup: '#FFD700',
-            winballColorCap: '#ffd000'
+            winballColorCap: '#ffd000',
+            winballGravity: 15,
+            winballBallMass: 8,
+            winballBallLinearDamping: 0.2,
+            winballBallAngularDamping: 0,
+            winballBallWallRestitution: 1.2,
+            winballPlungerMaxPull: 0.6,
+            winballPlungerImpactFactor: 0.2,
+            winballPlungerForce: 500
           },
           include: includeOptions
         })

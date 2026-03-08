@@ -63,6 +63,18 @@
             </div>
           </div>
 
+          <!-- Physics -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-3">Physics</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div v-for="p in winballPhysicsFields" :key="p.key">
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ p.label }}</label>
+                <p class="text-xs text-gray-400 mb-1">{{ p.hint }}</p>
+                <input type="number" v-model.number="winballPhysics[p.key]" :step="p.step" class="input" />
+              </div>
+            </div>
+          </div>
+
           <!-- Colors -->
           <div class="mb-6">
             <h3 class="text-lg font-semibold mb-3">Colors</h3>
@@ -505,6 +517,27 @@ const winballColors = ref({
   winballColorCap:        '#ffd000'
 })
 
+const winballPhysicsFields = [
+  { key: 'winballGravity',             label: 'Gravity',               hint: 'Board downhill pull (default 15)',    step: 0.5 },
+  { key: 'winballBallMass',            label: 'Ball Mass',             hint: 'Heavier = more momentum (default 8)', step: 0.5 },
+  { key: 'winballBallLinearDamping',   label: 'Linear Damping',        hint: 'Rolling slowdown 0–1 (default 0.2)',  step: 0.01 },
+  { key: 'winballBallAngularDamping',  label: 'Angular Damping',       hint: 'Spin slowdown 0–1 (default 0)',       step: 0.01 },
+  { key: 'winballBallWallRestitution', label: 'Wall Bounciness',       hint: 'Bounce off walls (default 1.2)',      step: 0.05 },
+  { key: 'winballPlungerMaxPull',      label: 'Plunger Max Pull',      hint: 'Max pull distance (default 0.6)',     step: 0.05 },
+  { key: 'winballPlungerImpactFactor', label: 'Plunger Impact Factor', hint: 'Velocity transfer 0–1 (default 0.2)', step: 0.01 },
+  { key: 'winballPlungerForce',        label: 'Plunger Force',         hint: 'Launch impulse strength (default 500)', step: 10 }
+]
+const winballPhysics = ref({
+  winballGravity:             15,
+  winballBallMass:            8,
+  winballBallLinearDamping:   0.2,
+  winballBallAngularDamping:  0,
+  winballBallWallRestitution: 1.2,
+  winballPlungerMaxPull:      0.6,
+  winballPlungerImpactFactor: 0.2,
+  winballPlungerForce:        500
+})
+
 const grandPrizeCtoon       = ref(null)
 const selectedCtoonId       = ref('')
 const allCtoons             = ref([])
@@ -729,6 +762,9 @@ async function loadSettings() {
   for (const fld of winballColorFields) {
     if (wb[fld.key]) winballColors.value[fld.key] = wb[fld.key]
   }
+  for (const fld of winballPhysicsFields) {
+    if (wb[fld.key] != null) winballPhysics.value[fld.key] = wb[fld.key]
+  }
   allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath,quantity')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
@@ -913,7 +949,8 @@ async function saveWinballConfig() {
         goldCupPoints:     goldCupPoints.value,
         dailyPointLimit:   globalDailyPointLimit.value,
         grandPrizeCtoonId: selectedCtoonId.value || null,
-        ...winballColors.value
+        ...winballColors.value,
+        ...winballPhysics.value
       }
     })
     toastMessage.value = 'Winball settings saved!'; toastType.value = 'success'
