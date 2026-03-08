@@ -1,0 +1,5 @@
+ALTER TABLE "GameConfig" ADD COLUMN "winballOverlayColor" TEXT DEFAULT '#ffffff';
+ALTER TABLE "GameConfig" ADD COLUMN "winballOverlayAlpha" DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE "GameConfig" ADD COLUMN "winballImageWidthPercent" DOUBLE PRECISION DEFAULT 100;
+ALTER TABLE "GameConfig" ADD COLUMN "winballImageOffsetXPercent" DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE "GameConfig" ADD COLUMN "winballImageOffsetYPercent" DOUBLE PRECISION DEFAULT 0;

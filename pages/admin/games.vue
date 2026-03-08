@@ -47,8 +47,9 @@
         <section v-if="activeTab === 'Winball'" role="tabpanel" aria-label="Winball Settings">
           <h2 class="text-2xl font-semibold mb-4">Winball Settings</h2>
 
-          <!-- Points -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-3">Scoring</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700">Left Cup Points</label>
               <input type="number" v-model.number="leftCupPoints" class="input" />
@@ -61,10 +62,59 @@
               <label class="block text-sm font-medium text-gray-700">Gold Cup Points</label>
               <input type="number" v-model.number="goldCupPoints" class="input" />
             </div>
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4 bg-gray-50">
+            <h3 class="text-lg font-semibold mb-1">Playfield Layers</h3>
+            <p class="text-xs text-gray-500 mb-4">Layer order: base color → board image → image color transform (intensity) → overlay color with alpha.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Base Board Color</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="input flex-1" maxlength="7" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Color</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" v-model="winballBoardLayer.winballOverlayColor" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballOverlayColor" class="input flex-1" maxlength="7" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Alpha</label>
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballOverlayAlpha" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Image Transform Color</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" v-model="winballBoardLayer.winballImageTransformColor" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballImageTransformColor" class="input flex-1" maxlength="7" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Image Transform Intensity</label>
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballImageTransformIntensity" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Image Width (%)</label>
+                <input type="number" min="1" max="300" step="1" v-model.number="winballBoardLayer.winballImageWidthPercent" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Image Horizontal Offset (%)</label>
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetXPercent" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Image Vertical Offset (%)</label>
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetYPercent" class="input" />
+              </div>
+            </div>
           </div>
 
           <!-- Physics -->
-          <div class="mb-6">
+          <div class="mb-6 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Physics</h3>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div v-for="p in winballPhysicsFields" :key="p.key">
@@ -76,8 +126,8 @@
           </div>
 
           <!-- Colors -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">Colors</h3>
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-3">Component Colors</h3>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div v-for="c in winballColorFields" :key="c.key">
                 <label class="block text-sm font-medium text-gray-700 mb-1">{{ c.label }}</label>
@@ -90,7 +140,7 @@
           </div>
 
           <!-- Backboard image upload -->
-          <div class="space-y-3 mb-6">
+          <div class="space-y-3 mb-6 border rounded-lg p-4">
             <label class="block text-sm font-medium text-gray-700">
               Backboard Image (SVG/PNG/JPEG)
             </label>
@@ -126,7 +176,7 @@
           </div>
 
           <!-- Bumper image uploads -->
-          <div class="mb-6">
+          <div class="mb-6 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Bumper Images</h3>
             <p class="text-xs text-gray-400 mb-3">Best size: 256 × 256 px (square). Image is displayed on the face of each bumper.</p>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -163,7 +213,8 @@
           </div>
 
           <!-- Grand Prize selection + preview (moved above schedule) -->
-          <div class="mb-8">
+          <div class="mb-8 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-3">Grand Prize</h3>
             <div class="mb-3 relative">
               <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
               <input
@@ -208,6 +259,8 @@
           </div>
 
           <!-- Schedule UI -->
+          <div class="mb-6 border rounded-lg p-4">
+          <h3 class="text-lg font-semibold mb-3">Grand Prize Schedule</h3>
           <p class="text-sm text-gray-600 mb-2">
             All dates and times are interpreted as <strong>Central Time (US)</strong>. Default time is 8:00 PM (8:00 AM on Thursdays).
           </p>
@@ -359,6 +412,8 @@
                 </button>
               </div>
             </div>
+          </div>
+
           </div>
 
           <button @click="saveWinballConfig" :disabled="loadingWinball" class="btn-primary">
@@ -575,7 +630,6 @@ const loadingClash          = ref(false)
 
 const winballColorFields = [
   { key: 'winballColorBackground', label: 'Background' },
-  { key: 'winballColorBackboard',  label: 'Backboard' },
   { key: 'winballColorWalls',      label: 'Walls' },
   { key: 'winballColorBall',       label: 'Ball' },
   { key: 'winballColorBumpers',    label: 'Bumpers' },
@@ -586,7 +640,6 @@ const winballColorFields = [
 ]
 const winballColors = ref({
   winballColorBackground: '#ffffff',
-  winballColorBackboard:  '#F0E6FF',
   winballColorWalls:      '#4b4b4b',
   winballColorBall:       '#ff0000',
   winballColorBumpers:    '#8c8cff',
@@ -594,6 +647,18 @@ const winballColors = ref({
   winballColorRightCup:   '#8c8cff',
   winballColorGoldCup:    '#FFD700',
   winballColorCap:        '#ffd000'
+})
+
+
+const winballBoardLayer = ref({
+  winballColorBackboard: '#F0E6FF',
+  winballOverlayColor: '#ffffff',
+  winballOverlayAlpha: 0,
+  winballImageTransformColor: '#ffffff',
+  winballImageTransformIntensity: 0,
+  winballImageWidthPercent: 100,
+  winballImageOffsetXPercent: 0,
+  winballImageOffsetYPercent: 0
 })
 
 const winballPhysicsFields = [
@@ -844,6 +909,15 @@ async function loadSettings() {
     wb.winballBumper2ImagePath || '',
     wb.winballBumper3ImagePath || ''
   ]
+  if (wb.winballColorBackboard) winballBoardLayer.value.winballColorBackboard = wb.winballColorBackboard
+  if (wb.winballOverlayColor) winballBoardLayer.value.winballOverlayColor = wb.winballOverlayColor
+  if (wb.winballOverlayAlpha != null) winballBoardLayer.value.winballOverlayAlpha = wb.winballOverlayAlpha
+  if (wb.winballImageTransformColor) winballBoardLayer.value.winballImageTransformColor = wb.winballImageTransformColor
+  if (wb.winballImageTransformIntensity != null) winballBoardLayer.value.winballImageTransformIntensity = wb.winballImageTransformIntensity
+  if (wb.winballImageWidthPercent != null) winballBoardLayer.value.winballImageWidthPercent = wb.winballImageWidthPercent
+  if (wb.winballImageOffsetXPercent != null) winballBoardLayer.value.winballImageOffsetXPercent = wb.winballImageOffsetXPercent
+  if (wb.winballImageOffsetYPercent != null) winballBoardLayer.value.winballImageOffsetYPercent = wb.winballImageOffsetYPercent
+
   for (const fld of winballColorFields) {
     if (wb[fld.key]) winballColors.value[fld.key] = wb[fld.key]
   }
@@ -1106,6 +1180,7 @@ async function saveWinballConfig() {
         winballBumper1ImagePath:   winballBumperImagePaths.value[0] || null,
         winballBumper2ImagePath:   winballBumperImagePaths.value[1] || null,
         winballBumper3ImagePath:   winballBumperImagePaths.value[2] || null,
+        ...winballBoardLayer.value,
         ...winballColors.value,
         ...winballPhysics.value
       }

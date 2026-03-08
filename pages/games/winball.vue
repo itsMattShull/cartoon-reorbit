@@ -74,6 +74,13 @@ const COLORS = {
   goldHalfCircle:     '#FFD700',
   ball:               '#ff0000',
   walls:              '#4b4b4b',
+  overlayColor:       '#ffffff',
+  overlayAlpha:       0,
+  imageTransformColor: '#ffffff',
+  imageTransformIntensity: 0,
+  imageWidthPercent:  100,
+  imageOffsetXPercent: 0,
+  imageOffsetYPercent: 0,
   backboardImagePath: null,
   bumperImagePaths:   [null, null, null]
 }
@@ -227,6 +234,13 @@ onMounted(async () => {
     // Colors
     COLORS.background     = cfg.winballColorBackground || COLORS.background
     COLORS.board          = cfg.winballColorBackboard  || COLORS.board
+    COLORS.overlayColor   = cfg.winballOverlayColor    || COLORS.overlayColor
+    if (cfg.winballOverlayAlpha != null) COLORS.overlayAlpha = cfg.winballOverlayAlpha
+    COLORS.imageTransformColor = cfg.winballImageTransformColor || COLORS.imageTransformColor
+    if (cfg.winballImageTransformIntensity != null) COLORS.imageTransformIntensity = cfg.winballImageTransformIntensity
+    if (cfg.winballImageWidthPercent != null) COLORS.imageWidthPercent = cfg.winballImageWidthPercent
+    if (cfg.winballImageOffsetXPercent != null) COLORS.imageOffsetXPercent = cfg.winballImageOffsetXPercent
+    if (cfg.winballImageOffsetYPercent != null) COLORS.imageOffsetYPercent = cfg.winballImageOffsetYPercent
     COLORS.backboardImagePath = cfg.winballBackboardImagePath || null
     COLORS.bumperImagePaths   = [
       cfg.winballBumper1ImagePath || null,
@@ -328,37 +342,64 @@ onMounted(async () => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  let boardMat
-  if (COLORS.backboardImagePath) {
-    // Use MeshBasicMaterial for the image so it shows at full brightness unaffected by lighting
-    boardMat = new THREE.MeshBasicMaterial({ transparent: false, side: THREE.DoubleSide })
-    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
-      const imageAspect = loadedTex.image.width / loadedTex.image.height
-      // ShapeGeometry uses raw 2D shape coordinates as UVs (not normalized to [0,1]).
-      // Board shape X ∈ [-boardWidth/2, boardWidth/2], Y ∈ [-boardLength/2, boardLength/2].
-      // To map these raw coords to texture [0,1]:
-      //   texture_coord = UV * repeat + offset
-      //   repeat.x = 1/boardWidth → maps the full boardWidth span to texture width
-      //   offset.x = 0.5          → centers: UV=0 (center) → texture 0.5
-      // For height, scale proportionally to image aspect ratio (width fills board, height adjusts):
-      //   repeat.y = imageAspect/boardWidth
-      //   offset.y = 0.5
-      loadedTex.wrapS = THREE.ClampToEdgeWrapping
-      loadedTex.wrapT = THREE.ClampToEdgeWrapping
-      loadedTex.repeat.set(1 / boardWidth, imageAspect / boardWidth)
-      loadedTex.offset.set(0.5, 0.5)
-      loadedTex.needsUpdate = true
-      boardMat.needsUpdate = true
-    })
-    boardMat.map = tex
-    boardMat.needsUpdate = true
-  } else {
-    boardMat = makeMat(hexToInt(COLORS.board), { opacity: 0.5 })
-  }
-  const board    = new THREE.Mesh(boardGeo, boardMat)
-  // board.rotation.x = -Math.PI / 2           // lay flat
+  const board = new THREE.Mesh(boardGeo, makeMat(hexToInt(COLORS.board), { opacity: 1 }))
   board.position.set(0, 0, 0)
   rootGroup.add(board)
+
+  if (COLORS.backboardImagePath) {
+    const imageMat = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide })
+    const imageMesh = new THREE.Mesh(boardGeo.clone(), imageMat)
+    imageMesh.position.set(0, 0.02, 0)
+    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
+      const imageAspect = loadedTex.image.width / loadedTex.image.height
+      const widthScale = Math.max(0.01, (COLORS.imageWidthPercent || 100) / 100)
+      loadedTex.wrapS = THREE.ClampToEdgeWrapping
+      loadedTex.wrapT = THREE.ClampToEdgeWrapping
+      loadedTex.repeat.set((1 / boardWidth) / widthScale, (imageAspect / boardWidth) / widthScale)
+      loadedTex.offset.set(
+        0.5 + ((COLORS.imageOffsetXPercent || 0) / 100),
+        0.5 + ((COLORS.imageOffsetYPercent || 0) / 100)
+      )
+      loadedTex.needsUpdate = true
+      imageMat.needsUpdate = true
+    })
+    imageMat.map = tex
+    imageMat.needsUpdate = true
+    rootGroup.add(imageMesh)
+  }
+
+  const imageTransformIntensity = Math.max(0, Math.min(1, COLORS.imageTransformIntensity || 0))
+  if (imageTransformIntensity > 0) {
+    const transformMesh = new THREE.Mesh(
+      boardGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: hexToInt(COLORS.imageTransformColor),
+        transparent: true,
+        opacity: imageTransformIntensity,
+        blending: THREE.MultiplyBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    )
+    transformMesh.position.set(0, 0.03, 0)
+    rootGroup.add(transformMesh)
+  }
+
+  const overlayAlpha = Math.max(0, Math.min(1, COLORS.overlayAlpha || 0))
+  if (overlayAlpha > 0) {
+    const overlayMesh = new THREE.Mesh(
+      boardGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: hexToInt(COLORS.overlayColor),
+        transparent: true,
+        opacity: overlayAlpha,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    )
+    overlayMesh.position.set(0, 0.04, 0)
+    rootGroup.add(overlayMesh)
+  }
 
   /* ---------- PHYSICS WORLD ---------- */
   world = new CANNON.World({ gravity: boardGravityVec })
@@ -621,7 +662,7 @@ bumperXs.forEach((bx, bumperIdx) => {
     extrudedGeo.rotateX(-Math.PI / 2)
     const mesh = new THREE.Mesh(
       extrudedGeo,
-      // new THREE.MeshPhongMaterial({ color: COLORS.halfCircle, transparent: true, opacity: 0.85 })
+      // new THREE.MeshPhongMaterial({ color: COLORS.halfCircle, transparent: true, opacity: 1 })
       (() => {
         if (name === 'halfCircle2') {
           return new THREE.MeshPhongMaterial({
@@ -637,7 +678,7 @@ bumperXs.forEach((bx, bumperIdx) => {
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
-            opacity: 0.85
+            opacity: 1
           })
         } else {
           return new THREE.MeshPhongMaterial({
@@ -645,7 +686,7 @@ bumperXs.forEach((bx, bumperIdx) => {
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
-            opacity: 0.85
+            opacity: 1
           })
         }
       })()
