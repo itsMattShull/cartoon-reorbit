@@ -685,8 +685,11 @@ bumperXs.forEach((bx, bumperIdx) => {
       emissiveIntensity: 0
     })
     const imgMesh = new THREE.Mesh(imgGeo, imgMat)
-    // CircleGeometry lies in XY plane (normal +Z), so it faces the camera directly
-    imgMesh.position.set(bx, by, actualZ + bumperRadius + 0.05)
+    // rootGroup is rotated +π/2 around X, so local +Y maps to world +Z (toward camera).
+    // Rotate the circle -π/2 around X so its normal faces local +Y (toward camera),
+    // then place it on the top face of the cylinder.
+    imgMesh.rotation.x = -Math.PI / 2
+    imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
     rootGroup.add(imgMesh)
 
     bumperVisual.imageMat = imgMat
