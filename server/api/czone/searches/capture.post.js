@@ -112,6 +112,11 @@ export default defineEventHandler(async (event) => {
   const initialQuantity = appearance.ctoon.initialQuantity ?? 0
   const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
 
+  const [captureCount, ownedCount] = await Promise.all([
+    db.cZoneSearchCapture.count({ where: { userId, ctoonId: appearance.ctoonId } }),
+    db.userCtoon.count({ where: { userId, ctoonId: appearance.ctoonId } })
+  ])
+
   await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
 
   return {
@@ -123,7 +128,9 @@ export default defineEventHandler(async (event) => {
       series: appearance.ctoon.series,
       set: appearance.ctoon.set,
       mintNumber,
-      isFirstEdition
+      isFirstEdition,
+      captureCount,
+      ownedCount: ownedCount + 1
     }
   }
 })

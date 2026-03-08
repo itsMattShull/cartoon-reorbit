@@ -22,6 +22,26 @@ function validatePayload(payload) {
     if (payload.grandPrizeCtoonId != null && typeof payload.grandPrizeCtoonId !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"grandPrizeCtoonId" must be a string or null' })
     }
+    const colorFields = [
+      'winballColorBackground','winballColorBackboard','winballColorWalls','winballColorBall',
+      'winballColorBumpers','winballColorLeftCup','winballColorRightCup','winballColorGoldCup','winballColorCap','winballColorTransform','winballOverlayColor',
+      'winballBackboardImagePath','winballBumper1ImagePath','winballBumper2ImagePath','winballBumper3ImagePath'
+    ]
+    for (const fld of colorFields) {
+      if (payload[fld] != null && typeof payload[fld] !== 'string') {
+        throw createError({ statusCode: 400, statusMessage: `"${fld}" must be a string or null` })
+      }
+    }
+    const physicsFields = [
+      'winballGravity','winballBallMass','winballBallLinearDamping','winballBallAngularDamping',
+      'winballBallWallRestitution','winballPlungerMaxPull','winballPlungerImpactFactor','winballPlungerForce',
+      'winballOverlayAlpha','winballColorTransformIntensity','winballImageWidthPercent','winballImageOffsetXPercent','winballImageOffsetYPercent'
+    ]
+    for (const fld of physicsFields) {
+      if (payload[fld] != null && typeof payload[fld] !== 'number') {
+        throw createError({ statusCode: 400, statusMessage: `"${fld}" must be a number or null` })
+      }
+    }
 
   } else if (payload.gameName === 'Clash') {
     if (payload.pointsPerWin == null || typeof payload.pointsPerWin !== 'number') {
@@ -89,6 +109,34 @@ export default defineEventHandler(async (event) => {
     rightCupPoints,
     goldCupPoints,
     grandPrizeCtoonId,
+    winballColorBackground = null,
+    winballColorBackboard = null,
+    winballColorWalls = null,
+    winballColorBall = null,
+    winballColorBumpers = null,
+    winballColorLeftCup = null,
+    winballColorRightCup = null,
+    winballColorGoldCup = null,
+    winballColorCap = null,
+    winballColorTransform = null,
+    winballOverlayColor = null,
+    winballBackboardImagePath = null,
+    winballBumper1ImagePath = null,
+    winballBumper2ImagePath = null,
+    winballBumper3ImagePath = null,
+    winballGravity = null,
+    winballBallMass = null,
+    winballBallLinearDamping = null,
+    winballBallAngularDamping = null,
+    winballBallWallRestitution = null,
+    winballPlungerMaxPull = null,
+    winballPlungerImpactFactor = null,
+    winballPlungerForce = null,
+    winballOverlayAlpha = null,
+    winballColorTransformIntensity = null,
+    winballImageWidthPercent = null,
+    winballImageOffsetXPercent = null,
+    winballImageOffsetYPercent = null,
     // Clash field
     pointsPerWin,
     // Winwheel fields
@@ -112,19 +160,55 @@ export default defineEventHandler(async (event) => {
       let updateData = { updatedAt: new Date() }
 
       if (gameName === 'Winball') {
+        const winballColors = {
+          winballColorBackground: winballColorBackground || '#ffffff',
+          winballColorBackboard: winballColorBackboard || '#F0E6FF',
+          winballColorWalls: winballColorWalls || '#4b4b4b',
+          winballColorBall: winballColorBall || '#ff0000',
+          winballColorBumpers: winballColorBumpers || '#8c8cff',
+          winballColorLeftCup: winballColorLeftCup || '#8c8cff',
+          winballColorRightCup: winballColorRightCup || '#8c8cff',
+          winballColorGoldCup: winballColorGoldCup || '#FFD700',
+          winballColorCap: winballColorCap || '#ffd000',
+          winballColorTransform: winballColorTransform || '#ffffff',
+          winballOverlayColor: winballOverlayColor || '#ffffff',
+          winballBackboardImagePath: winballBackboardImagePath || null,
+          winballBumper1ImagePath: winballBumper1ImagePath || null,
+          winballBumper2ImagePath: winballBumper2ImagePath || null,
+          winballBumper3ImagePath: winballBumper3ImagePath || null
+        }
+        const winballPhysics = {
+          winballGravity:             winballGravity             ?? 15,
+          winballBallMass:            winballBallMass            ?? 8,
+          winballBallLinearDamping:   winballBallLinearDamping   ?? 0.2,
+          winballBallAngularDamping:  winballBallAngularDamping  ?? 0,
+          winballBallWallRestitution: winballBallWallRestitution ?? 1.2,
+          winballPlungerMaxPull:      winballPlungerMaxPull      ?? 0.6,
+          winballPlungerImpactFactor: winballPlungerImpactFactor ?? 0.2,
+          winballPlungerForce:        winballPlungerForce        ?? 500,
+          winballOverlayAlpha:         winballOverlayAlpha         ?? 0,
+          winballColorTransformIntensity: winballColorTransformIntensity ?? 0,
+          winballImageWidthPercent:    winballImageWidthPercent    ?? 100,
+          winballImageOffsetXPercent:  winballImageOffsetXPercent  ?? 0,
+          winballImageOffsetYPercent:  winballImageOffsetYPercent  ?? 0
+        }
         createData = {
           ...createData,
           leftCupPoints,
           rightCupPoints,
           goldCupPoints,
-          grandPrizeCtoonId: grandPrizeCtoonId || null
+          grandPrizeCtoonId: grandPrizeCtoonId || null,
+          ...winballColors,
+          ...winballPhysics
         }
         updateData = {
           ...updateData,
           leftCupPoints,
           rightCupPoints,
           goldCupPoints,
-          grandPrizeCtoonId: grandPrizeCtoonId || null
+          grandPrizeCtoonId: grandPrizeCtoonId || null,
+          ...winballColors,
+          ...winballPhysics
         }
       } else if (gameName === 'Clash') {
         createData = { ...createData, pointsPerWin }
@@ -181,7 +265,35 @@ export default defineEventHandler(async (event) => {
             ['leftCupPoints', before?.leftCupPoints, leftCupPoints],
             ['rightCupPoints', before?.rightCupPoints, rightCupPoints],
             ['goldCupPoints', before?.goldCupPoints, goldCupPoints],
-            ['grandPrizeCtoonId', before?.grandPrizeCtoonId || null, grandPrizeCtoonId || null]
+            ['grandPrizeCtoonId', before?.grandPrizeCtoonId || null, grandPrizeCtoonId || null],
+            ['winballColorBackground', before?.winballColorBackground, winballColorBackground],
+            ['winballColorBackboard', before?.winballColorBackboard, winballColorBackboard],
+            ['winballColorWalls', before?.winballColorWalls, winballColorWalls],
+            ['winballColorBall', before?.winballColorBall, winballColorBall],
+            ['winballColorBumpers', before?.winballColorBumpers, winballColorBumpers],
+            ['winballColorLeftCup', before?.winballColorLeftCup, winballColorLeftCup],
+            ['winballColorRightCup', before?.winballColorRightCup, winballColorRightCup],
+            ['winballColorGoldCup', before?.winballColorGoldCup, winballColorGoldCup],
+            ['winballColorCap', before?.winballColorCap, winballColorCap],
+            ['winballColorTransform', before?.winballColorTransform, winballColorTransform],
+            ['winballOverlayColor', before?.winballOverlayColor, winballOverlayColor],
+            ['winballBackboardImagePath', before?.winballBackboardImagePath || null, winballBackboardImagePath || null],
+            ['winballBumper1ImagePath', before?.winballBumper1ImagePath || null, winballBumper1ImagePath || null],
+            ['winballBumper2ImagePath', before?.winballBumper2ImagePath || null, winballBumper2ImagePath || null],
+            ['winballBumper3ImagePath', before?.winballBumper3ImagePath || null, winballBumper3ImagePath || null],
+            ['winballGravity', before?.winballGravity, winballGravity],
+            ['winballBallMass', before?.winballBallMass, winballBallMass],
+            ['winballBallLinearDamping', before?.winballBallLinearDamping, winballBallLinearDamping],
+            ['winballBallAngularDamping', before?.winballBallAngularDamping, winballBallAngularDamping],
+            ['winballBallWallRestitution', before?.winballBallWallRestitution, winballBallWallRestitution],
+            ['winballPlungerMaxPull', before?.winballPlungerMaxPull, winballPlungerMaxPull],
+            ['winballPlungerImpactFactor', before?.winballPlungerImpactFactor, winballPlungerImpactFactor],
+            ['winballPlungerForce', before?.winballPlungerForce, winballPlungerForce],
+            ['winballOverlayAlpha', before?.winballOverlayAlpha, winballOverlayAlpha],
+            ['winballColorTransformIntensity', before?.winballColorTransformIntensity, winballColorTransformIntensity],
+            ['winballImageWidthPercent', before?.winballImageWidthPercent, winballImageWidthPercent],
+            ['winballImageOffsetXPercent', before?.winballImageOffsetXPercent, winballImageOffsetXPercent],
+            ['winballImageOffsetYPercent', before?.winballImageOffsetYPercent, winballImageOffsetYPercent]
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })

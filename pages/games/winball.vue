@@ -64,12 +64,40 @@ async function closeModal() {
   scavenger.openIfPending()
 }
 
+// Colors and physics are loaded from the API in onMounted before scene init
 const COLORS = {
-  board:          0xF0E6FF,  // light lavender
-  bumper:         0x8c8cff,  // periwinkle-blue
-  halfCircle:     0x8c8cff,  // pale lilac
-  cap:            0xffd000,
-  goldHalfCircle: 0xFFD700
+  background:         '#ffffff',
+  board:              '#F0E6FF',
+  bumper:             '#8c8cff',
+  halfCircle:         '#8c8cff',
+  cap:                '#ffd000',
+  goldHalfCircle:     '#FFD700',
+  ball:               '#ff0000',
+  walls:              '#4b4b4b',
+  overlayColor:       '#ffffff',
+  overlayAlpha:       0,
+  colorTransform:     '#ffffff',
+  colorTransformIntensity: 0,
+  imageWidthPercent:  100,
+  imageOffsetXPercent: 0,
+  imageOffsetYPercent: 0,
+  backboardImagePath: null,
+  bumperImagePaths:   [null, null, null]
+}
+
+const PHYSICS = {
+  gravity:             15,
+  ballMass:            8,
+  ballLinearDamping:   0.2,
+  ballAngularDamping:  0,
+  ballWallRestitution: 1.2,
+  plungerMaxPull:      0.6,
+  plungerImpactFactor: 0.2,
+  plungerForce:        500
+}
+
+function hexToInt(hex) {
+  return parseInt((hex || '#ffffff').replace('#', ''), 16)
 }
 
 let winSound, loseSound, bigBumperSound, plungerSound, wallSound;
@@ -196,22 +224,62 @@ const resetBall = () => {
   plungerBody.collisionResponse = true
 }
 
-onMounted(() => {
+onMounted(async () => {
   // Clear any stale scavenger state on page entry
   scavenger.reset()
-  // === TUNABLE PARAMETERS ===
-  const ballMass = 8                            // increased mass for realistic pinball feel
-  const boardGravityVec = new CANNON.Vec3(0, 0, 15) // gravity along negative Z (board downhill)
-  const ballLinearDamping = 0.2           // slight rolling damping
-  const ballAngularDamping = 0          // spin friction for realistic roll
-  const ballWallFriction = 0      // low friction on walls for snappy bounce
-  const ballWallRestitution = 1.2   // high restitution for energetic wall bounces
-  const boardFriction = 0         // moderate friction on playfield for rolling
-  const boardRestitution = 0.0      // no bounce on the board surface
-  const plungerMaxPull = 0.6                    // max pull distance
-  const plungerImpactFactor = 0.2               // plunger velocity multiplier for transfer
-  const boardTilt = 0                    // tilt angle in radians (positive rotates board toward player)
-  const boardRotationY = 0    // radians: rotate around Y to align downhill vertically
+
+  // Load admin-configured colors and physics before building the scene
+  try {
+    const cfg = await $fetch('/api/winball-config')
+    // Colors
+    COLORS.background     = cfg.winballColorBackground || COLORS.background
+    COLORS.board          = cfg.winballColorBackboard  || COLORS.board
+    COLORS.overlayColor   = cfg.winballOverlayColor    || COLORS.overlayColor
+    if (cfg.winballOverlayAlpha != null) COLORS.overlayAlpha = cfg.winballOverlayAlpha
+    COLORS.colorTransform = cfg.winballColorTransform || COLORS.colorTransform
+    if (cfg.winballColorTransformIntensity != null) COLORS.colorTransformIntensity = cfg.winballColorTransformIntensity
+    if (cfg.winballImageWidthPercent != null) COLORS.imageWidthPercent = cfg.winballImageWidthPercent
+    if (cfg.winballImageOffsetXPercent != null) COLORS.imageOffsetXPercent = cfg.winballImageOffsetXPercent
+    if (cfg.winballImageOffsetYPercent != null) COLORS.imageOffsetYPercent = cfg.winballImageOffsetYPercent
+    COLORS.backboardImagePath = cfg.winballBackboardImagePath || null
+    COLORS.bumperImagePaths   = [
+      cfg.winballBumper1ImagePath || null,
+      cfg.winballBumper2ImagePath || null,
+      cfg.winballBumper3ImagePath || null
+    ]
+    COLORS.walls          = cfg.winballColorWalls      || COLORS.walls
+    COLORS.ball           = cfg.winballColorBall       || COLORS.ball
+    COLORS.bumper         = cfg.winballColorBumpers    || COLORS.bumper
+    COLORS.halfCircle     = cfg.winballColorLeftCup    || COLORS.halfCircle
+    COLORS.rightCircle    = cfg.winballColorRightCup   || COLORS.halfCircle
+    COLORS.goldHalfCircle = cfg.winballColorGoldCup    || COLORS.goldHalfCircle
+    COLORS.cap            = cfg.winballColorCap        || COLORS.cap
+    // Physics
+    if (cfg.winballGravity             != null) PHYSICS.gravity             = cfg.winballGravity
+    if (cfg.winballBallMass            != null) PHYSICS.ballMass            = cfg.winballBallMass
+    if (cfg.winballBallLinearDamping   != null) PHYSICS.ballLinearDamping   = cfg.winballBallLinearDamping
+    if (cfg.winballBallAngularDamping  != null) PHYSICS.ballAngularDamping  = cfg.winballBallAngularDamping
+    if (cfg.winballBallWallRestitution != null) PHYSICS.ballWallRestitution = cfg.winballBallWallRestitution
+    if (cfg.winballPlungerMaxPull      != null) PHYSICS.plungerMaxPull      = cfg.winballPlungerMaxPull
+    if (cfg.winballPlungerImpactFactor != null) PHYSICS.plungerImpactFactor = cfg.winballPlungerImpactFactor
+    if (cfg.winballPlungerForce        != null) PHYSICS.plungerForce        = cfg.winballPlungerForce
+  } catch (e) {
+    console.warn('Could not load Winball config, using defaults', e)
+  }
+
+  // === TUNABLE PARAMETERS (loaded from admin config) ===
+  const ballMass = PHYSICS.ballMass
+  const boardGravityVec = new CANNON.Vec3(0, 0, PHYSICS.gravity)
+  const ballLinearDamping = PHYSICS.ballLinearDamping
+  const ballAngularDamping = PHYSICS.ballAngularDamping
+  const ballWallFriction = 0
+  const ballWallRestitution = PHYSICS.ballWallRestitution
+  const boardFriction = 0
+  const boardRestitution = 0.0
+  const plungerMaxPull = PHYSICS.plungerMaxPull
+  const plungerImpactFactor = PHYSICS.plungerImpactFactor
+  const boardTilt = 0
+  const boardRotationY = 0
 
   initSounds()
 
@@ -219,7 +287,7 @@ onMounted(() => {
 
   /* ---------- THREE SCENE ---------- */
   scene = new THREE.Scene()
-  scene.background = new THREE.Color('#ffffff')
+  scene.background = new THREE.Color(COLORS.background)
   // Root group to rotate entire machine: lay flat and orient downhill
   rootGroup = new THREE.Group()
   rootGroup.rotation.set(Math.PI / 2, boardRotationY, 0)
@@ -274,11 +342,62 @@ onMounted(() => {
   boardGeo.rotateX(-Math.PI / 2 - boardTilt)                    // lay flat with tilt
   boardGeo.computeVertexNormals()
 
-  const boardMat = makeMat(COLORS.board, { opacity: 0.5 }) // single white color
-  const board    = new THREE.Mesh(boardGeo, boardMat)
-  // board.rotation.x = -Math.PI / 2           // lay flat
+  const board = new THREE.Mesh(boardGeo, makeMat(hexToInt(COLORS.board), { opacity: 1 }))
   board.position.set(0, 0, 0)
   rootGroup.add(board)
+
+  if (COLORS.backboardImagePath) {
+    const imageMat = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide })
+    const imageMesh = new THREE.Mesh(boardGeo.clone(), imageMat)
+    imageMesh.position.set(0, 0.02, 0)
+    const tex = new THREE.TextureLoader().load(COLORS.backboardImagePath, (loadedTex) => {
+      const imageAspect = loadedTex.image.width / loadedTex.image.height
+      const widthScale = Math.max(0.01, (COLORS.imageWidthPercent || 100) / 100)
+      loadedTex.wrapS = THREE.ClampToEdgeWrapping
+      loadedTex.wrapT = THREE.ClampToEdgeWrapping
+      loadedTex.repeat.set((1 / boardWidth) / widthScale, (imageAspect / boardWidth) / widthScale)
+      loadedTex.offset.set(
+        0.5 + ((COLORS.imageOffsetXPercent || 0) / 100),
+        0.5 + ((COLORS.imageOffsetYPercent || 0) / 100)
+      )
+      loadedTex.needsUpdate = true
+      imageMat.needsUpdate = true
+    })
+    imageMat.map = tex
+    imageMat.needsUpdate = true
+    rootGroup.add(imageMesh)
+  }
+
+  const transformIntensity = Math.max(0, Math.min(1, COLORS.colorTransformIntensity || 0))
+  if (transformIntensity > 0) {
+    const transformMesh = new THREE.Mesh(
+      boardGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: hexToInt(COLORS.colorTransform),
+        transparent: true,
+        opacity: transformIntensity,
+        side: THREE.DoubleSide,
+        blending: THREE.MultiplyBlending
+      })
+    )
+    transformMesh.position.set(0, 0.03, 0)
+    rootGroup.add(transformMesh)
+  }
+
+  const overlayAlpha = Math.max(0, Math.min(1, COLORS.overlayAlpha || 0))
+  if (overlayAlpha > 0) {
+    const overlayMesh = new THREE.Mesh(
+      boardGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: hexToInt(COLORS.overlayColor),
+        transparent: true,
+        opacity: overlayAlpha,
+        side: THREE.DoubleSide
+      })
+    )
+    overlayMesh.position.set(0, 0.04, 0)
+    rootGroup.add(overlayMesh)
+  }
 
   /* ---------- PHYSICS WORLD ---------- */
   world = new CANNON.World({ gravity: boardGravityVec })
@@ -339,7 +458,7 @@ onMounted(() => {
 
   ballMesh = new THREE.Mesh(
     new THREE.SphereGeometry(ballRadius, 32, 32),
-    new THREE.MeshPhongMaterial({ color: '#ff0000' })
+    new THREE.MeshPhongMaterial({ color: COLORS.ball })
   )
   rootGroup.add(ballMesh)
 
@@ -390,7 +509,7 @@ onMounted(() => {
   let plungerStartY = 0
   const maxPull = plungerMaxPull      // allow a deeper pull
   // impulse strength calibrated for board length and tilt
-  const plungerForce = 500
+  const plungerForce = PHYSICS.plungerForce
   const maxBallSpeed = 700  // cap launch speed to allow full travel
 
   plungerOriginalZ = plungerMesh.position.z
@@ -398,7 +517,7 @@ onMounted(() => {
   /* ---------- WALLS ---------- */
   const wallHeight = 3
   // const wallThickness = 0.5   // Already defined above with ball/plunger
-  const wallMatColor = '#4b4b4b'
+  const wallMatColor = COLORS.walls
   const walls = []
 
   // Helper to get the Y position of the board surface at a given Z (accounts for tilt)
@@ -451,6 +570,41 @@ onMounted(() => {
   // guideGap, guideX, and laneCenterX already defined above
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
+  // Triangular bouncer mounted on the left wall
+  const triangleDepth = 3.5
+  const triangleRadius = 3.5
+  const triangleZ = -2
+  const triangleY = boardYAt(triangleZ) + wallHeight / 2
+  const triangleX = -boardWidth / 2 + triangleDepth / 2
+
+  const triangleShape = new CANNON.Cylinder(triangleRadius, triangleRadius, wallHeight, 3)
+  const triangleShapeQuat = new CANNON.Quaternion()
+  triangleShapeQuat.setFromEuler(Math.PI / 2, 0, 0)
+  triangleShape.transformAllPoints(new CANNON.Vec3(), triangleShapeQuat)
+
+  const triangleBody = new CANNON.Body({
+    mass: 0,
+    shape: triangleShape,
+    material: wallMat
+  })
+  triangleBody.position.set(triangleX, triangleY, triangleZ)
+  triangleBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2, 0)
+  world.addBody(triangleBody)
+  walls.push(triangleBody)
+
+  const triangleMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(triangleRadius, triangleRadius, wallHeight, 3),
+    new THREE.MeshPhongMaterial({ color: wallMatColor })
+  )
+  triangleMesh.position.copy(triangleBody.position)
+  triangleMesh.quaternion.set(
+    triangleBody.quaternion.x,
+    triangleBody.quaternion.y,
+    triangleBody.quaternion.z,
+    triangleBody.quaternion.w
+  )
+  rootGroup.add(triangleMesh)
+
   addWall(0, southZ, boardWidth + wallThickness * 2, wallThickness)
 
   for (let i = 0; i < segmentCount; i++) {
@@ -470,10 +624,11 @@ const bumperHeight = 3
 // Z position for bumpers (just above center)
 const bumperZ = 0
 // X positions for the three bumpers
-const bumperXs = [-12, -1, 8]
+const bumperXs = [-10.5, -1, 8]
 const bumpers = []
+const bumperVisuals = []
 
-bumperXs.forEach((bx) => {
+bumperXs.forEach((bx, bumperIdx) => {
   // Offset left/right bumpers forward by 3 units
   const zOffset = bx === -1 ? 0 : -9
   const actualZ = bumperZ + zOffset
@@ -494,39 +649,66 @@ bumperXs.forEach((bx) => {
 
   bumpers.push(bumperBody)
 
-  // Visual: a matching Three.js cylinder
+  // Visual: a matching Three.js cylinder (invisible — image overlay carries the look)
   const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
+  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0, shininess: 80 })
+  bumperMat.emissive = new THREE.Color(hexToInt(COLORS.bumper))
+  bumperMat.emissiveIntensity = 0
   const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
   bumperMesh.position.set(bx, by, actualZ)
   // No extra rotation needed—upright by default
   rootGroup.add(bumperMesh)
+
+  const bumperVisual = {
+    body: bumperBody,
+    mesh: bumperMesh,
+    imageMat: null,
+    glowUntil: 0
+  }
+
+  // Image overlay: flat circle on the top face of the bumper
+  const imgPath = COLORS.bumperImagePaths[bumperIdx]
+  if (imgPath) {
+    const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
+      loadedTex.wrapS = THREE.ClampToEdgeWrapping
+      loadedTex.wrapT = THREE.ClampToEdgeWrapping
+      loadedTex.needsUpdate = true
+    })
+    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
+    const imgMat = new THREE.MeshPhongMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 1,
+      side: THREE.DoubleSide,
+      emissive: 0xffffff,
+      emissiveIntensity: 0
+    })
+    const imgMesh = new THREE.Mesh(imgGeo, imgMat)
+    // Position on top face of bumper; CircleGeometry is in XY plane so rotate to lie flat in XZ
+    imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
+    imgMesh.rotation.x = -Math.PI / 2
+    rootGroup.add(imgMesh)
+
+    // Drop shadow: dark semi-transparent disc slightly below and larger than the image
+    const shadowGeo = new THREE.CircleGeometry(bumperRadius * 1.15, 32)
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    })
+    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
+    shadowMesh.position.set(bx, by + bumperHeight / 2 + 0.01, actualZ)
+    shadowMesh.rotation.x = -Math.PI / 2
+    rootGroup.add(shadowMesh)
+
+    bumperVisual.imageMat = imgMat
+  }
+
+  bumperVisuals.push(bumperVisual)
 })
 
-// Fourth bumper: centered near the top of the board, above all three existing bumpers
-{
-  const fourthX = -2
-  const fourthZ = -17
-  const fourthCylShape = new CANNON.Cylinder(bumperRadius, bumperRadius, bumperHeight, 16)
-  const fourthQ = new CANNON.Quaternion()
-  fourthQ.setFromEuler(Math.PI / 2, 0, 0)
-  fourthCylShape.transformAllPoints(new CANNON.Vec3(), fourthQ)
-  const fourthBumperBody = new CANNON.Body({
-    mass: 0,
-    shape: fourthCylShape,
-    material: wallMat
-  })
-  const fourthBy = boardYAt(fourthZ) + bumperHeight / 2
-  fourthBumperBody.position.set(fourthX, fourthBy, fourthZ)
-  world.addBody(fourthBumperBody)
-  bumpers.push(fourthBumperBody)
-
-  const fourthBumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const fourthBumperMat = makeMat(COLORS.bumper, { opacity: 0.8, shininess: 80 })
-  const fourthBumperMesh = new THREE.Mesh(fourthBumperGeo, fourthBumperMat)
-  fourthBumperMesh.position.set(fourthX, fourthBy, fourthZ)
-  rootGroup.add(fourthBumperMesh)
-}
 
   // ---------- HALF-CIRCLE TRIGGERS ----------
   const halfCircleConfigs = [
@@ -550,19 +732,27 @@ bumperXs.forEach((bx) => {
       (() => {
         if (name === 'halfCircle2') {
           return new THREE.MeshPhongMaterial({
-            color: COLORS.goldHalfCircle,    // gold
-            specular: 0xFFFFFF, // full‐white highlights
-            shininess: 100,     // max out the gloss
+            color: hexToInt(COLORS.goldHalfCircle),
+            specular: 0xFFFFFF,
+            shininess: 100,
+            transparent: true,
+            opacity: 1
+          })
+        } else if (name === 'halfCircle3') {
+          return new THREE.MeshPhongMaterial({
+            color: hexToInt(COLORS.rightCircle || COLORS.halfCircle),
+            specular: 0xffffff,
+            shininess: 50,
             transparent: true,
             opacity: 1
           })
         } else {
           return new THREE.MeshPhongMaterial({
-            color: COLORS.halfCircle,    // your default pale
+            color: hexToInt(COLORS.halfCircle),
             specular: 0xffffff,
             shininess: 50,
             transparent: true,
-            opacity: 0.85
+            opacity: 1
           })
         }
       })()
@@ -623,6 +813,12 @@ bumperXs.forEach((bx) => {
       (bodyA === ballBody && bumpers.includes(bodyB)) ||
       (bodyB === ballBody && bumpers.includes(bodyA))
     ) {
+      const hitBumper = bodyA === ballBody ? bodyB : bodyA
+      const hitVisual = bumperVisuals.find((visual) => visual.body === hitBumper)
+      if (hitVisual) {
+        hitVisual.glowUntil = performance.now() + 180
+      }
+
       const s = bigBumperSound.cloneNode()   // clone with same src
       s.currentTime = 0
       s.play().catch(()=>{})
@@ -758,6 +954,16 @@ bumperXs.forEach((bx) => {
       // Keep mesh visually synced
       plungerMesh.position.z += (plungerBody.position.z - plungerMesh.position.z) * 0.5
     }
+
+    const now = performance.now()
+    bumperVisuals.forEach((visual) => {
+      const glowProgress = visual.glowUntil > now ? (visual.glowUntil - now) / 180 : 0
+      const glowIntensity = Math.max(0, Math.min(1, glowProgress))
+      visual.mesh.material.emissiveIntensity = glowIntensity * 1.4
+      if (visual.imageMat) {
+        visual.imageMat.emissiveIntensity = glowIntensity * 1.8
+      }
+    })
 
     // While pulling (and before initial launch), keep the ball resting on the plunger face
     if (plungerPulling && !ballLaunched) {
@@ -926,7 +1132,7 @@ bumperXs.forEach((bx) => {
       // Visual
       capMesh = new THREE.Mesh(
         new THREE.BoxGeometry(capWidth, wallHeight, capThickness),
-        new THREE.MeshPhongMaterial({ color: COLORS.cap, shininess: 100 })
+        new THREE.MeshPhongMaterial({ color: hexToInt(COLORS.cap), shininess: 100 })
       )
       capMesh.position.set(capCenterX-0.4, capY-0.2, capZ-0.2)
       capMesh.rotation.set(-boardTilt, Math.PI / 4, 0)

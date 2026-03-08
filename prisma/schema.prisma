@@ -719,6 +719,38 @@ model GameConfig {
   grandPrizeCtoon   Ctoon?  @relation("GrandPrize", fields: [grandPrizeCtoonId], references: [id])
   pointsPerWin      Int?    @default(0)
 
+  // — Winball physics settings —
+  winballGravity             Float? @default(15)
+  winballBallMass            Float? @default(8)
+  winballBallLinearDamping   Float? @default(0.2)
+  winballBallAngularDamping  Float? @default(0)
+  winballBallWallRestitution Float? @default(1.2)
+  winballPlungerMaxPull      Float? @default(0.6)
+  winballPlungerImpactFactor Float? @default(0.2)
+  winballPlungerForce        Float? @default(500)
+
+  // — Winball color settings —
+  winballColorBackground String? @default("#ffffff")
+  winballColorBackboard  String? @default("#F0E6FF")
+  winballColorWalls      String? @default("#4b4b4b")
+  winballColorBall       String? @default("#ff0000")
+  winballColorBumpers    String? @default("#8c8cff")
+  winballColorLeftCup    String? @default("#8c8cff")
+  winballColorRightCup   String? @default("#8c8cff")
+  winballColorGoldCup    String? @default("#FFD700")
+  winballColorCap        String? @default("#ffd000")
+  winballColorTransform  String? @default("#ffffff")
+  winballColorTransformIntensity Float? @default(0)
+  winballOverlayColor    String? @default("#ffffff")
+  winballOverlayAlpha    Float?  @default(0)
+  winballImageWidthPercent Float? @default(100)
+  winballImageOffsetXPercent Float? @default(0)
+  winballImageOffsetYPercent Float? @default(0)
+  winballBackboardImagePath String?
+  winballBumper1ImagePath   String?
+  winballBumper2ImagePath   String?
+  winballBumper3ImagePath   String?
+
   // — Win Wheel settings —
   spinCost          Int              @default(100)
   pointsWon         Int              @default(250)

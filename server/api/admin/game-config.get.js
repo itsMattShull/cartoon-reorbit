@@ -61,14 +61,38 @@ export default defineEventHandler(async (event) => {
           include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } }
         })
         config.schedules = schedules
-        
+
         config = await db.gameConfig.create({
           data: {
             gameName,
             leftCupPoints: 0,
             rightCupPoints: 0,
             goldCupPoints: 0,
-            grandPrizeCtoonId: null
+            grandPrizeCtoonId: null,
+            winballColorBackground: '#ffffff',
+            winballColorBackboard: '#F0E6FF',
+            winballColorWalls: '#4b4b4b',
+            winballColorBall: '#ff0000',
+            winballColorBumpers: '#8c8cff',
+            winballColorLeftCup: '#8c8cff',
+            winballColorRightCup: '#8c8cff',
+            winballColorGoldCup: '#FFD700',
+            winballColorCap: '#ffd000',
+            winballColorTransform: '#ffffff',
+            winballColorTransformIntensity: 0,
+            winballOverlayColor: '#ffffff',
+            winballOverlayAlpha: 0,
+            winballImageWidthPercent: 100,
+            winballImageOffsetXPercent: 0,
+            winballImageOffsetYPercent: 0,
+            winballGravity: 15,
+            winballBallMass: 8,
+            winballBallLinearDamping: 0.2,
+            winballBallAngularDamping: 0,
+            winballBallWallRestitution: 1.2,
+            winballPlungerMaxPull: 0.6,
+            winballPlungerImpactFactor: 0.2,
+            winballPlungerForce: 500
           },
           include: includeOptions
         })
