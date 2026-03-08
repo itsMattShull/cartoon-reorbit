@@ -649,9 +649,9 @@ bumperXs.forEach((bx, bumperIdx) => {
 
   bumpers.push(bumperBody)
 
-  // Visual: a matching Three.js cylinder
+  // Visual: a matching Three.js cylinder (invisible — image overlay carries the look)
   const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 1, shininess: 80 })
+  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0, shininess: 80 })
   bumperMat.emissive = new THREE.Color(hexToInt(COLORS.bumper))
   bumperMat.emissiveIntensity = 0
   const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
@@ -674,7 +674,7 @@ bumperXs.forEach((bx, bumperIdx) => {
       loadedTex.wrapT = THREE.ClampToEdgeWrapping
       loadedTex.needsUpdate = true
     })
-    const imgGeo = new THREE.CircleGeometry(bumperRadius * 0.8, 32)
+    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
     const imgMat = new THREE.MeshPhongMaterial({
       map: tex,
       transparent: true,
@@ -688,6 +688,20 @@ bumperXs.forEach((bx, bumperIdx) => {
     imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
     imgMesh.rotation.x = -Math.PI / 2
     rootGroup.add(imgMesh)
+
+    // Drop shadow: dark semi-transparent disc slightly below and larger than the image
+    const shadowGeo = new THREE.CircleGeometry(bumperRadius * 1.15, 32)
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    })
+    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
+    shadowMesh.position.set(bx, by + bumperHeight / 2 + 0.01, actualZ)
+    shadowMesh.rotation.x = -Math.PI / 2
+    rootGroup.add(shadowMesh)
 
     bumperVisual.imageMat = imgMat
   }
