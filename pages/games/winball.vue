@@ -104,21 +104,22 @@ const LAYOUT = {
   ],
   triangles: [
     { radius: 6, depth: 6, x: -15, z: -2 },
-    { radius: 0, depth: 6, x:  15, z: -2 }
+    { radius: 0, depth: 6, x:  15, z: -2 },
+    { radius: 4, depth: 6, x:  13, z: -2 }
   ],
   pegs: [
-    { radius: 1.5, height: 4, x: -11, z: -17 },
-    { radius: 1.5, height: 4, x:  -3, z: -17 },
-    { radius: 1.5, height: 4, x:   5, z: -17 },
-    { radius: 1.5, height: 4, x:  12, z: -17 },
-    { radius: 1.5, height: 4, x: -12, z:  -6 },
-    { radius: 1.5, height: 4, x:  -5, z:  -6 },
-    { radius: 1.5, height: 4, x:   2, z:  -6 },
-    { radius: 1.5, height: 4, x:  10, z:  -6 },
-    { radius: 1.5, height: 4, x: -12, z:   4 },
-    { radius: 1.5, height: 4, x:  -5, z:   5 },
-    { radius: 1.5, height: 4, x:   3, z:   4 },
-    { radius: 1.5, height: 4, x:  11, z:   4 }
+    { radius: 0.5, height: 4, x: -11, z: -17 },
+    { radius: 0.5, height: 4, x:  -3, z: -17 },
+    { radius: 0.5, height: 4, x:   5, z: -17 },
+    { radius: 0.5, height: 4, x:  12, z: -17 },
+    { radius: 0.5, height: 4, x: -12, z:  -6 },
+    { radius: 0.5, height: 4, x:  -5, z:  -6 },
+    { radius: 0.5, height: 4, x:   2, z:  -6 },
+    { radius: 0.5, height: 4, x:  10, z:  -6 },
+    { radius: 0.5, height: 4, x: -12, z:   4 },
+    { radius: 0.5, height: 4, x:  -5, z:   5 },
+    { radius: 0.5, height: 4, x:   3, z:   4 },
+    { radius: 0.5, height: 4, x:  11, z:   4 }
   ]
 }
 
@@ -311,6 +312,10 @@ onMounted(async () => {
     if (cfg.winballTriangle2Depth  != null) LAYOUT.triangles[1].depth  = cfg.winballTriangle2Depth
     if (cfg.winballTriangle2X      != null) LAYOUT.triangles[1].x      = cfg.winballTriangle2X
     if (cfg.winballTriangle2Z      != null) LAYOUT.triangles[1].z      = cfg.winballTriangle2Z
+    if (cfg.winballTriangle3Radius != null) LAYOUT.triangles[2].radius = cfg.winballTriangle3Radius
+    if (cfg.winballTriangle3Depth  != null) LAYOUT.triangles[2].depth  = cfg.winballTriangle3Depth
+    if (cfg.winballTriangle3X      != null) LAYOUT.triangles[2].x      = cfg.winballTriangle3X
+    if (cfg.winballTriangle3Z      != null) LAYOUT.triangles[2].z      = cfg.winballTriangle3Z
     // Peg geometry
     for (let i = 0; i < 12; i++) {
       const n = i + 1
@@ -906,6 +911,26 @@ onMounted(async () => {
       const s = bigBumperSound.cloneNode()   // clone with same src
       s.currentTime = 0
       s.play().catch(()=>{})
+
+      // Physics: bounce ball off the bumper's edge with a velocity boost.
+      // Calculate direction from bumper center to ball center (XZ plane only)
+      // so the ball always flies outward from the bumper surface, not from its middle.
+      const dx = ballBody.position.x - hitBumper.position.x
+      const dz = ballBody.position.z - hitBumper.position.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
+      if (dist > 0.001) {
+        const nx = dx / dist
+        const nz = dz / dist
+        // Current horizontal speed
+        const currentSpeed = Math.sqrt(
+          ballBody.velocity.x * ballBody.velocity.x +
+          ballBody.velocity.z * ballBody.velocity.z
+        )
+        // Boost speed: add 10 units on top of current speed, minimum 15
+        const boostedSpeed = Math.max(currentSpeed + 10, 15)
+        ballBody.velocity.x = nx * boostedSpeed
+        ballBody.velocity.z = nz * boostedSpeed
+      }
     }
 
     halfCircles.forEach(({ name, trigger }) => {

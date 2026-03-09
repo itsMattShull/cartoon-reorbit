@@ -35,7 +35,7 @@
           <h2 class="text-2xl font-semibold mb-4">Global Settings</h2>
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700">Daily Point Cap</label>
-            <input type="number" v-model.number="globalDailyPointLimit" class="input" />
+            <input type="number" v-model.number="globalDailyPointLimit" class="input" @change="autoSaveGlobal" />
           </div>
           <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="btn-primary">
             <span v-if="!loadingGlobal">Save Global Settings</span>
@@ -52,15 +52,15 @@
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700">Left Cup Points</label>
-              <input type="number" v-model.number="leftCupPoints" class="input" />
+              <input type="number" v-model.number="leftCupPoints" class="input" @change="autoSaveWinball" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Right Cup Points</label>
-              <input type="number" v-model.number="rightCupPoints" class="input" />
+              <input type="number" v-model.number="rightCupPoints" class="input" @change="autoSaveWinball" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Gold Cup Points</label>
-              <input type="number" v-model.number="goldCupPoints" class="input" />
+              <input type="number" v-model.number="goldCupPoints" class="input" @change="autoSaveWinball" />
             </div>
             </div>
           </div>
@@ -72,43 +72,43 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Base Board Color</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-9 w-14 rounded border cursor-pointer p-0.5" @change="autoSaveWinball" />
+                  <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="input flex-1" maxlength="7" @change="autoSaveWinball" />
                 </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Color Transform</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballColorTransform" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballColorTransform" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballColorTransform" class="h-9 w-14 rounded border cursor-pointer p-0.5" @change="autoSaveWinball" />
+                  <input type="text" v-model="winballBoardLayer.winballColorTransform" class="input flex-1" maxlength="7" @change="autoSaveWinball" />
                 </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Transform Intensity</label>
-                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballColorTransformIntensity" class="input" />
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballColorTransformIntensity" class="input" @change="autoSaveWinball" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Color</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballOverlayColor" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballOverlayColor" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballOverlayColor" class="h-9 w-14 rounded border cursor-pointer p-0.5" @change="autoSaveWinball" />
+                  <input type="text" v-model="winballBoardLayer.winballOverlayColor" class="input flex-1" maxlength="7" @change="autoSaveWinball" />
                 </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Alpha</label>
-                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballOverlayAlpha" class="input" />
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballOverlayAlpha" class="input" @change="autoSaveWinball" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Image Width (%)</label>
-                <input type="number" min="1" max="300" step="1" v-model.number="winballBoardLayer.winballImageWidthPercent" class="input" />
+                <input type="number" min="1" max="300" step="1" v-model.number="winballBoardLayer.winballImageWidthPercent" class="input" @change="autoSaveWinball" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Image Horizontal Offset (%)</label>
-                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetXPercent" class="input" />
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetXPercent" class="input" @change="autoSaveWinball" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Image Vertical Offset (%)</label>
-                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetYPercent" class="input" />
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetYPercent" class="input" @change="autoSaveWinball" />
               </div>
             </div>
           </div>
@@ -120,7 +120,7 @@
               <div v-for="p in winballPhysicsFields" :key="p.key">
                 <label class="block text-sm font-medium text-gray-700 mb-1">{{ p.label }}</label>
                 <p class="text-xs text-gray-400 mb-1">{{ p.hint }}</p>
-                <input type="number" v-model.number="winballPhysics[p.key]" :step="p.step" class="input" />
+                <input type="number" v-model.number="winballPhysics[p.key]" :step="p.step" class="input" @change="autoSaveWinball" />
               </div>
             </div>
           </div>
@@ -132,8 +132,8 @@
               <div v-for="c in winballColorFields" :key="c.key">
                 <label class="block text-sm font-medium text-gray-700 mb-1">{{ c.label }}</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballColors[c.key]" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballColors[c.key]" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballColors[c.key]" class="h-9 w-14 rounded border cursor-pointer p-0.5" @change="autoSaveWinball" />
+                  <input type="text" v-model="winballColors[c.key]" class="input flex-1" maxlength="7" @change="autoSaveWinball" />
                 </div>
               </div>
             </div>
@@ -222,19 +222,19 @@
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].radius" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].height" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].height" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].x" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].z" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                 </div>
               </div>
@@ -246,24 +246,24 @@
             <h3 class="text-lg font-semibold mb-1">Triangle Geometry</h3>
             <p class="text-xs text-gray-400 mb-3">Set radius to 0 to remove a triangle. Depth controls how far the triangle protrudes from the wall.</p>
             <div class="space-y-4">
-              <div v-for="(_, i) in [0, 1]" :key="i" class="border rounded p-3">
+              <div v-for="(_, i) in [0, 1, 2]" :key="i" class="border rounded p-3">
                 <h4 class="text-sm font-semibold mb-2">Triangle {{ i + 1 }}</h4>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].radius" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Depth</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].depth" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].depth" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].x" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].z" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                 </div>
               </div>
@@ -280,19 +280,19 @@
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="input" @change="autoSaveWinball" />
                   </div>
                 </div>
               </div>
@@ -516,7 +516,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div>
               <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
-              <input type="number" v-model.number="clashPointsPerWin" class="input" />
+              <input type="number" v-model.number="clashPointsPerWin" class="input" @change="autoSaveClash" />
             </div>
           </div>
           <button @click="saveClashConfig" :disabled="loadingClash" class="btn-primary">
@@ -532,15 +532,15 @@
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div>
               <label class="block text-sm font-medium text-gray-700">Spin Cost (pts)</label>
-              <input type="number" v-model.number="spinCostWW" class="input" />
+              <input type="number" v-model.number="spinCostWW" class="input" @change="autoSaveWinWheel" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Points Won</label>
-              <input type="number" v-model.number="pointsWonWW" class="input" />
+              <input type="number" v-model.number="pointsWonWW" class="input" @change="autoSaveWinWheel" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Max Daily Spins</label>
-              <input type="number" v-model.number="maxDailySpinsWW" class="input" />
+              <input type="number" v-model.number="maxDailySpinsWW" class="input" @change="autoSaveWinWheel" />
             </div>
           </div>
 
@@ -722,21 +722,22 @@ const winballBumperGeometry = ref([
 ])
 const winballTriangleGeometry = ref([
   { radius: 6, depth: 6, x: -15, z: -2 },
-  { radius: 0, depth: 6, x:  15, z: -2 }
+  { radius: 0, depth: 6, x:  15, z: -2 },
+  { radius: 4, depth: 6, x:  13, z: -2 }
 ])
 const winballPegGeometry = ref([
-  { radius: 1.5, height: 4, x: -11, z: -17 },
-  { radius: 1.5, height: 4, x:  -3, z: -17 },
-  { radius: 1.5, height: 4, x:   5, z: -17 },
-  { radius: 1.5, height: 4, x:  12, z: -17 },
-  { radius: 1.5, height: 4, x: -12, z:  -6 },
-  { radius: 1.5, height: 4, x:  -5, z:  -6 },
-  { radius: 1.5, height: 4, x:   2, z:  -6 },
-  { radius: 1.5, height: 4, x:  10, z:  -6 },
-  { radius: 1.5, height: 4, x: -12, z:   4 },
-  { radius: 1.5, height: 4, x:  -5, z:   5 },
-  { radius: 1.5, height: 4, x:   3, z:   4 },
-  { radius: 1.5, height: 4, x:  11, z:   4 }
+  { radius: 0.5, height: 4, x: -11, z: -17 },
+  { radius: 0.5, height: 4, x:  -3, z: -17 },
+  { radius: 0.5, height: 4, x:   5, z: -17 },
+  { radius: 0.5, height: 4, x:  12, z: -17 },
+  { radius: 0.5, height: 4, x: -12, z:  -6 },
+  { radius: 0.5, height: 4, x:  -5, z:  -6 },
+  { radius: 0.5, height: 4, x:   2, z:  -6 },
+  { radius: 0.5, height: 4, x:  10, z:  -6 },
+  { radius: 0.5, height: 4, x: -12, z:   4 },
+  { radius: 0.5, height: 4, x:  -5, z:   5 },
+  { radius: 0.5, height: 4, x:   3, z:   4 },
+  { radius: 0.5, height: 4, x:  11, z:   4 }
 ])
 
 const winballColorFields = [
@@ -807,6 +808,27 @@ const toastClass   = computed(() => [
     ? 'bg-red-100 text-red-700'
     : 'bg-green-100 text-green-700'
 ])
+
+let _toastTimer = null
+function showToast(message, type) {
+  toastMessage.value = message
+  toastType.value    = type
+  if (_toastTimer) clearTimeout(_toastTimer)
+  _toastTimer = setTimeout(() => { toastMessage.value = '' }, 5000)
+}
+
+async function autoSaveWinball() {
+  await saveWinballConfig()
+}
+async function autoSaveGlobal() {
+  await saveGlobalConfig()
+}
+async function autoSaveClash() {
+  await saveClashConfig()
+}
+async function autoSaveWinWheel() {
+  await saveWinWheelConfig()
+}
 
 const schedules = ref([])
 
@@ -1057,6 +1079,10 @@ async function loadSettings() {
   if (wb.winballTriangle2Depth  != null) winballTriangleGeometry.value[1].depth  = wb.winballTriangle2Depth
   if (wb.winballTriangle2X      != null) winballTriangleGeometry.value[1].x      = wb.winballTriangle2X
   if (wb.winballTriangle2Z      != null) winballTriangleGeometry.value[1].z      = wb.winballTriangle2Z
+  if (wb.winballTriangle3Radius != null) winballTriangleGeometry.value[2].radius = wb.winballTriangle3Radius
+  if (wb.winballTriangle3Depth  != null) winballTriangleGeometry.value[2].depth  = wb.winballTriangle3Depth
+  if (wb.winballTriangle3X      != null) winballTriangleGeometry.value[2].x      = wb.winballTriangle3X
+  if (wb.winballTriangle3Z      != null) winballTriangleGeometry.value[2].z      = wb.winballTriangle3Z
 
   for (let i = 0; i < 12; i++) {
     const n = i + 1
@@ -1280,12 +1306,10 @@ async function saveWinWheelConfig() {
         winWheelSoundMode: winWheelSoundMode.value || 'repeat'
       }
     })
-    toastMessage.value = 'Win Wheel settings saved!'
-    toastType.value    = 'success'
+    showToast('Win Wheel settings saved!', 'success')
   } catch (err) {
     console.error(err)
-    toastMessage.value = 'Error saving Win Wheel settings'
-    toastType.value    = 'error'
+    showToast('Error saving Win Wheel settings', 'error')
   } finally {
     loadingWinWheel.value = false
   }
@@ -1298,9 +1322,9 @@ async function saveGlobalConfig() {
       method: 'POST',
       body: { dailyPointLimit: globalDailyPointLimit.value }
     })
-    toastMessage.value = 'Global settings saved!'; toastType.value = 'success'
+    showToast('Global settings saved!', 'success')
   } catch {
-    toastMessage.value = 'Error saving global settings'; toastType.value = 'error'
+    showToast('Error saving global settings', 'error')
   } finally {
     loadingGlobal.value = false
   }
@@ -1342,6 +1366,10 @@ async function saveWinballConfig() {
         winballTriangle2Depth:  winballTriangleGeometry.value[1].depth,
         winballTriangle2X:      winballTriangleGeometry.value[1].x,
         winballTriangle2Z:      winballTriangleGeometry.value[1].z,
+        winballTriangle3Radius: winballTriangleGeometry.value[2].radius,
+        winballTriangle3Depth:  winballTriangleGeometry.value[2].depth,
+        winballTriangle3X:      winballTriangleGeometry.value[2].x,
+        winballTriangle3Z:      winballTriangleGeometry.value[2].z,
         ...Object.fromEntries(
           winballPegGeometry.value.flatMap((p, i) => [
             [`winballPeg${i+1}Radius`, p.radius],
@@ -1355,9 +1383,9 @@ async function saveWinballConfig() {
         ...winballPhysics.value
       }
     })
-    toastMessage.value = 'Winball settings saved!'; toastType.value = 'success'
+    showToast('Winball settings saved!', 'success')
   } catch {
-    toastMessage.value = 'Error saving Winball settings'; toastType.value = 'error'
+    showToast('Error saving Winball settings', 'error')
   } finally {
     loadingWinball.value = false
   }
@@ -1374,9 +1402,9 @@ async function saveClashConfig() {
         dailyPointLimit: globalDailyPointLimit.value
       }
     })
-    toastMessage.value = 'Clash settings saved!'; toastType.value = 'success'
+    showToast('Clash settings saved!', 'success')
   } catch {
-    toastMessage.value = 'Error saving Clash settings'; toastType.value = 'error'
+    showToast('Error saving Clash settings', 'error')
   } finally {
     loadingClash.value = false
   }
