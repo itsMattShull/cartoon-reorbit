@@ -751,6 +751,30 @@ model GameConfig {
   winballBumper2ImagePath   String?
   winballBumper3ImagePath   String?
 
+  // — Winball bumper geometry —
+  winballBumper1Radius Float? @default(6)
+  winballBumper1Height Float? @default(6)
+  winballBumper1X      Float? @default(-8)
+  winballBumper1Z      Float? @default(-9)
+  winballBumper2Radius Float? @default(6)
+  winballBumper2Height Float? @default(6)
+  winballBumper2X      Float? @default(-1)
+  winballBumper2Z      Float? @default(0)
+  winballBumper3Radius Float? @default(6)
+  winballBumper3Height Float? @default(6)
+  winballBumper3X      Float? @default(6)
+  winballBumper3Z      Float? @default(-9)
+
+  // — Winball triangle geometry —
+  winballTriangle1Radius Float? @default(6)
+  winballTriangle1Depth  Float? @default(6)
+  winballTriangle1X      Float? @default(-15)
+  winballTriangle1Z      Float? @default(-2)
+  winballTriangle2Radius Float? @default(0)
+  winballTriangle2Depth  Float? @default(6)
+  winballTriangle2X      Float? @default(15)
+  winballTriangle2Z      Float? @default(-2)
+
   // — Win Wheel settings —
   spinCost          Int              @default(100)
   pointsWon         Int              @default(250)

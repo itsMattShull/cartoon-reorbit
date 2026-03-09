@@ -35,7 +35,12 @@ function validatePayload(payload) {
     const physicsFields = [
       'winballGravity','winballBallMass','winballBallLinearDamping','winballBallAngularDamping',
       'winballBallWallRestitution','winballPlungerMaxPull','winballPlungerImpactFactor','winballPlungerForce',
-      'winballOverlayAlpha','winballColorTransformIntensity','winballImageWidthPercent','winballImageOffsetXPercent','winballImageOffsetYPercent'
+      'winballOverlayAlpha','winballColorTransformIntensity','winballImageWidthPercent','winballImageOffsetXPercent','winballImageOffsetYPercent',
+      'winballBumper1Radius','winballBumper1Height','winballBumper1X','winballBumper1Z',
+      'winballBumper2Radius','winballBumper2Height','winballBumper2X','winballBumper2Z',
+      'winballBumper3Radius','winballBumper3Height','winballBumper3X','winballBumper3Z',
+      'winballTriangle1Radius','winballTriangle1Depth','winballTriangle1X','winballTriangle1Z',
+      'winballTriangle2Radius','winballTriangle2Depth','winballTriangle2X','winballTriangle2Z'
     ]
     for (const fld of physicsFields) {
       if (payload[fld] != null && typeof payload[fld] !== 'number') {
@@ -137,6 +142,26 @@ export default defineEventHandler(async (event) => {
     winballImageWidthPercent = null,
     winballImageOffsetXPercent = null,
     winballImageOffsetYPercent = null,
+    winballBumper1Radius = null,
+    winballBumper1Height = null,
+    winballBumper1X = null,
+    winballBumper1Z = null,
+    winballBumper2Radius = null,
+    winballBumper2Height = null,
+    winballBumper2X = null,
+    winballBumper2Z = null,
+    winballBumper3Radius = null,
+    winballBumper3Height = null,
+    winballBumper3X = null,
+    winballBumper3Z = null,
+    winballTriangle1Radius = null,
+    winballTriangle1Depth = null,
+    winballTriangle1X = null,
+    winballTriangle1Z = null,
+    winballTriangle2Radius = null,
+    winballTriangle2Depth = null,
+    winballTriangle2X = null,
+    winballTriangle2Z = null,
     // Clash field
     pointsPerWin,
     // Winwheel fields
@@ -190,7 +215,27 @@ export default defineEventHandler(async (event) => {
           winballColorTransformIntensity: winballColorTransformIntensity ?? 0,
           winballImageWidthPercent:    winballImageWidthPercent    ?? 100,
           winballImageOffsetXPercent:  winballImageOffsetXPercent  ?? 0,
-          winballImageOffsetYPercent:  winballImageOffsetYPercent  ?? 0
+          winballImageOffsetYPercent:  winballImageOffsetYPercent  ?? 0,
+          winballBumper1Radius: winballBumper1Radius ?? 6,
+          winballBumper1Height: winballBumper1Height ?? 6,
+          winballBumper1X:      winballBumper1X      ?? -8,
+          winballBumper1Z:      winballBumper1Z      ?? -9,
+          winballBumper2Radius: winballBumper2Radius ?? 6,
+          winballBumper2Height: winballBumper2Height ?? 6,
+          winballBumper2X:      winballBumper2X      ?? -1,
+          winballBumper2Z:      winballBumper2Z      ?? 0,
+          winballBumper3Radius: winballBumper3Radius ?? 6,
+          winballBumper3Height: winballBumper3Height ?? 6,
+          winballBumper3X:      winballBumper3X      ?? 6,
+          winballBumper3Z:      winballBumper3Z      ?? -9,
+          winballTriangle1Radius: winballTriangle1Radius ?? 6,
+          winballTriangle1Depth:  winballTriangle1Depth  ?? 6,
+          winballTriangle1X:      winballTriangle1X      ?? -15,
+          winballTriangle1Z:      winballTriangle1Z      ?? -2,
+          winballTriangle2Radius: winballTriangle2Radius ?? 0,
+          winballTriangle2Depth:  winballTriangle2Depth  ?? 6,
+          winballTriangle2X:      winballTriangle2X      ?? 15,
+          winballTriangle2Z:      winballTriangle2Z      ?? -2
         }
         createData = {
           ...createData,
@@ -293,7 +338,27 @@ export default defineEventHandler(async (event) => {
             ['winballColorTransformIntensity', before?.winballColorTransformIntensity, winballColorTransformIntensity],
             ['winballImageWidthPercent', before?.winballImageWidthPercent, winballImageWidthPercent],
             ['winballImageOffsetXPercent', before?.winballImageOffsetXPercent, winballImageOffsetXPercent],
-            ['winballImageOffsetYPercent', before?.winballImageOffsetYPercent, winballImageOffsetYPercent]
+            ['winballImageOffsetYPercent', before?.winballImageOffsetYPercent, winballImageOffsetYPercent],
+            ['winballBumper1Radius', before?.winballBumper1Radius, winballBumper1Radius],
+            ['winballBumper1Height', before?.winballBumper1Height, winballBumper1Height],
+            ['winballBumper1X', before?.winballBumper1X, winballBumper1X],
+            ['winballBumper1Z', before?.winballBumper1Z, winballBumper1Z],
+            ['winballBumper2Radius', before?.winballBumper2Radius, winballBumper2Radius],
+            ['winballBumper2Height', before?.winballBumper2Height, winballBumper2Height],
+            ['winballBumper2X', before?.winballBumper2X, winballBumper2X],
+            ['winballBumper2Z', before?.winballBumper2Z, winballBumper2Z],
+            ['winballBumper3Radius', before?.winballBumper3Radius, winballBumper3Radius],
+            ['winballBumper3Height', before?.winballBumper3Height, winballBumper3Height],
+            ['winballBumper3X', before?.winballBumper3X, winballBumper3X],
+            ['winballBumper3Z', before?.winballBumper3Z, winballBumper3Z],
+            ['winballTriangle1Radius', before?.winballTriangle1Radius, winballTriangle1Radius],
+            ['winballTriangle1Depth', before?.winballTriangle1Depth, winballTriangle1Depth],
+            ['winballTriangle1X', before?.winballTriangle1X, winballTriangle1X],
+            ['winballTriangle1Z', before?.winballTriangle1Z, winballTriangle1Z],
+            ['winballTriangle2Radius', before?.winballTriangle2Radius, winballTriangle2Radius],
+            ['winballTriangle2Depth', before?.winballTriangle2Depth, winballTriangle2Depth],
+            ['winballTriangle2X', before?.winballTriangle2X, winballTriangle2X],
+            ['winballTriangle2Z', before?.winballTriangle2Z, winballTriangle2Z]
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
