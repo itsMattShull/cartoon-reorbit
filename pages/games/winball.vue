@@ -605,7 +605,8 @@ onMounted(async () => {
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
   // Triangular bouncers (configurable, skipped if radius == 0)
-  for (const triCfg of LAYOUT.triangles) {
+  for (let triIdx = 0; triIdx < LAYOUT.triangles.length; triIdx++) {
+    const triCfg = LAYOUT.triangles[triIdx]
     if (triCfg.radius <= 0) continue
     const tRadius = triCfg.radius
     const tZ = triCfg.z
@@ -623,7 +624,8 @@ onMounted(async () => {
       material: wallMat
     })
     triBody.position.set(tX, tY, tZ)
-    triBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2, 0)
+    const triFlipY = triIdx === 1 ? Math.PI : 0
+    triBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2 + triFlipY, 0)
     world.addBody(triBody)
     walls.push(triBody)
 
