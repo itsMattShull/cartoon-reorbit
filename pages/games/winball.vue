@@ -105,6 +105,20 @@ const LAYOUT = {
   triangles: [
     { radius: 6, depth: 6, x: -15, z: -2 },
     { radius: 0, depth: 6, x:  15, z: -2 }
+  ],
+  pegs: [
+    { radius: 1.5, height: 4, x: -11, z: -17 },
+    { radius: 1.5, height: 4, x:  -3, z: -17 },
+    { radius: 1.5, height: 4, x:   5, z: -17 },
+    { radius: 1.5, height: 4, x:  12, z: -17 },
+    { radius: 1.5, height: 4, x: -12, z:  -6 },
+    { radius: 1.5, height: 4, x:  -5, z:  -6 },
+    { radius: 1.5, height: 4, x:   2, z:  -6 },
+    { radius: 1.5, height: 4, x:  10, z:  -6 },
+    { radius: 1.5, height: 4, x: -12, z:   4 },
+    { radius: 1.5, height: 4, x:  -5, z:   5 },
+    { radius: 1.5, height: 4, x:   3, z:   4 },
+    { radius: 1.5, height: 4, x:  11, z:   4 }
   ]
 }
 
@@ -297,6 +311,14 @@ onMounted(async () => {
     if (cfg.winballTriangle2Depth  != null) LAYOUT.triangles[1].depth  = cfg.winballTriangle2Depth
     if (cfg.winballTriangle2X      != null) LAYOUT.triangles[1].x      = cfg.winballTriangle2X
     if (cfg.winballTriangle2Z      != null) LAYOUT.triangles[1].z      = cfg.winballTriangle2Z
+    // Peg geometry
+    for (let i = 0; i < 12; i++) {
+      const n = i + 1
+      if (cfg[`winballPeg${n}Radius`] != null) LAYOUT.pegs[i].radius = cfg[`winballPeg${n}Radius`]
+      if (cfg[`winballPeg${n}Height`] != null) LAYOUT.pegs[i].height = cfg[`winballPeg${n}Height`]
+      if (cfg[`winballPeg${n}X`]      != null) LAYOUT.pegs[i].x      = cfg[`winballPeg${n}X`]
+      if (cfg[`winballPeg${n}Z`]      != null) LAYOUT.pegs[i].z      = cfg[`winballPeg${n}Z`]
+    }
   } catch (e) {
     console.warn('Could not load Winball config, using defaults', e)
   }
@@ -457,6 +479,12 @@ onMounted(async () => {
   world.addContactMaterial(new CANNON.ContactMaterial(
     defaultMat, laneWallMat,
     { friction: ballWallFriction, restitution: ballWallRestitution }
+  ))
+  // Peg material: lower restitution to dampen ball on contact
+  const pegMat = new CANNON.Material('peg')
+  world.addContactMaterial(new CANNON.ContactMaterial(
+    defaultMat, pegMat,
+    { friction: 0, restitution: 0.4 }
   ))
 
   /* ---------- BOARD PHYSICS ---------- */
@@ -727,6 +755,44 @@ onMounted(async () => {
     bumperVisuals.push(bumperVisual)
   })
 
+  // ---------- PEGS ----------
+  // Small round pegs that dampen the ball slightly on contact
+  LAYOUT.pegs.forEach((pCfg) => {
+    if (pCfg.radius <= 0) return
+    const pegRadius = pCfg.radius
+    const pegHeight = pCfg.height
+    const px = pCfg.x
+    const pz = pCfg.z
+
+    // Physics: upright cylinder with peg material (lower restitution = dampening)
+    const pegCylShape = new CANNON.Cylinder(pegRadius, pegRadius, pegHeight, 16)
+    const pegQ = new CANNON.Quaternion()
+    pegQ.setFromEuler(Math.PI / 2, 0, 0)
+    pegCylShape.transformAllPoints(new CANNON.Vec3(), pegQ)
+    const pegBody = new CANNON.Body({
+      mass: 0,
+      shape: pegCylShape,
+      material: pegMat
+    })
+    const py = boardYAt(pz) + pegHeight / 2
+    pegBody.position.set(px, py, pz)
+    world.addBody(pegBody)
+
+    // Visual: small cylinder, solid colored
+    const pegGeo = new THREE.CylinderGeometry(pegRadius, pegRadius, pegHeight, 16)
+    const pegMesh = new THREE.Mesh(
+      pegGeo,
+      new THREE.MeshPhongMaterial({
+        color: hexToInt(COLORS.bumper),
+        specular: 0xffffff,
+        shininess: 60,
+        transparent: false,
+        opacity: 1
+      })
+    )
+    pegMesh.position.set(px, py, pz)
+    rootGroup.add(pegMesh)
+  })
 
   // ---------- HALF-CIRCLE TRIGGERS ----------
   const halfCircleConfigs = [
