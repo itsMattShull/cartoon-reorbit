@@ -270,6 +270,35 @@
             </div>
           </div>
 
+          <!-- Peg Geometry -->
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Peg Geometry</h3>
+            <p class="text-xs text-gray-400 mb-3">12 small round pegs that dampen the ball on contact. Set radius to 0 to remove a peg.</p>
+            <div class="space-y-4">
+              <div v-for="(_, i) in Array(12).fill(0)" :key="i" class="border rounded p-3">
+                <h4 class="text-sm font-semibold mb-2">Peg {{ i + 1 }}</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="input" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Grand Prize selection + preview (moved above schedule) -->
           <div class="mb-8 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Grand Prize</h3>
@@ -695,6 +724,20 @@ const winballTriangleGeometry = ref([
   { radius: 6, depth: 6, x: -15, z: -2 },
   { radius: 0, depth: 6, x:  15, z: -2 }
 ])
+const winballPegGeometry = ref([
+  { radius: 1.5, height: 4, x: -11, z: -17 },
+  { radius: 1.5, height: 4, x:  -3, z: -17 },
+  { radius: 1.5, height: 4, x:   5, z: -17 },
+  { radius: 1.5, height: 4, x:  12, z: -17 },
+  { radius: 1.5, height: 4, x: -12, z:  -6 },
+  { radius: 1.5, height: 4, x:  -5, z:  -6 },
+  { radius: 1.5, height: 4, x:   2, z:  -6 },
+  { radius: 1.5, height: 4, x:  10, z:  -6 },
+  { radius: 1.5, height: 4, x: -12, z:   4 },
+  { radius: 1.5, height: 4, x:  -5, z:   5 },
+  { radius: 1.5, height: 4, x:   3, z:   4 },
+  { radius: 1.5, height: 4, x:  11, z:   4 }
+])
 
 const winballColorFields = [
   { key: 'winballColorBackground', label: 'Background' },
@@ -1015,6 +1058,14 @@ async function loadSettings() {
   if (wb.winballTriangle2X      != null) winballTriangleGeometry.value[1].x      = wb.winballTriangle2X
   if (wb.winballTriangle2Z      != null) winballTriangleGeometry.value[1].z      = wb.winballTriangle2Z
 
+  for (let i = 0; i < 12; i++) {
+    const n = i + 1
+    if (wb[`winballPeg${n}Radius`] != null) winballPegGeometry.value[i].radius = wb[`winballPeg${n}Radius`]
+    if (wb[`winballPeg${n}Height`] != null) winballPegGeometry.value[i].height = wb[`winballPeg${n}Height`]
+    if (wb[`winballPeg${n}X`]      != null) winballPegGeometry.value[i].x      = wb[`winballPeg${n}X`]
+    if (wb[`winballPeg${n}Z`]      != null) winballPegGeometry.value[i].z      = wb[`winballPeg${n}Z`]
+  }
+
   allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath,quantity')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
@@ -1291,6 +1342,14 @@ async function saveWinballConfig() {
         winballTriangle2Depth:  winballTriangleGeometry.value[1].depth,
         winballTriangle2X:      winballTriangleGeometry.value[1].x,
         winballTriangle2Z:      winballTriangleGeometry.value[1].z,
+        ...Object.fromEntries(
+          winballPegGeometry.value.flatMap((p, i) => [
+            [`winballPeg${i+1}Radius`, p.radius],
+            [`winballPeg${i+1}Height`, p.height],
+            [`winballPeg${i+1}X`,      p.x],
+            [`winballPeg${i+1}Z`,      p.z]
+          ])
+        ),
         ...winballBoardLayer.value,
         ...winballColors.value,
         ...winballPhysics.value
