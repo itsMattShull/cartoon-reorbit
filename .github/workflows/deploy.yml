@@ -85,7 +85,7 @@ jobs:
           nvm install 23.10.0 >/dev/null
           nvm use 23.10.0 >/dev/null
 
-          pm2 stop 6 4 2 3 5
+          pm2 stop 4 2 3 5
 
           cd /var/www/dev.cartoon-reorbit
 
@@ -100,5 +100,5 @@ jobs:
           npx prisma generate
           npm run build
 
-          pm2 restart 6 4 2 3 5 --update-env
+          pm2 restart 4 2 3 5 --update-env
           EOF
