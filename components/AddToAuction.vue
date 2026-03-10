@@ -1,7 +1,6 @@
 <template>
   <!-- Global toast notification -->
   <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
-
   <button
     v-bind="buttonAttrs"
     @click="openModal"
