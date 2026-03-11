@@ -823,12 +823,16 @@ async function startDueAuctions() {
   }
 }
 
+let sendDueAnnouncementsInFlight = false
 async function sendDueAnnouncements() {
+  if (sendDueAnnouncementsInFlight) return
+  sendDueAnnouncementsInFlight = true
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
     const claimCutoff = new Date(Date.now() - 10 *60 * 1000)
-    while (true) {
+    let iterations = 0
+    while (iterations++ < 20) {
       const due = await prisma.announcement.findMany({
         where: {
           sentAt: null,
@@ -899,6 +903,8 @@ async function sendDueAnnouncements() {
     }
   } catch (e) {
     console.error('[sendDueAnnouncements] error:', e)
+  } finally {
+    sendDueAnnouncementsInFlight = false
   }
 }
 

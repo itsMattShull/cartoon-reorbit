@@ -75,6 +75,16 @@ const metricsHistory = []
 const tradeRooms   = {}
 const tradeSockets = {}
 
+function emitTradeRoomUpdate(io, room, roomData) {
+  io.to(room).emit('trade-room-update', {
+    traderA:    roomData.traderAInfo,
+    traderB:    roomData.traderBInfo,
+    spectators: roomData.spectators.size,
+    offers:     roomData.offers,
+    confirmed:  roomData.confirmed
+  })
+}
+
 const touchActivity = (obj) => {
   if (obj) obj.lastActivity = Date.now()
 }
@@ -1952,6 +1962,7 @@ io.on('connection', socket => {
       socket.leave(prevZone)
       if (zoneSockets[prevZone]) {
         zoneSockets[prevZone].delete(socket.id)
+        if (zoneSockets[prevZone].size === 0) delete zoneSockets[prevZone]
       }
       if (zoneVisitors[prevZone]) {
         zoneVisitors[prevZone] = Math.max(zoneVisitors[prevZone] - 1, 0)
@@ -1987,6 +1998,8 @@ io.on('connection', socket => {
       tradeRooms[room] = {
         traderA: null,
         traderB: null,
+        traderAInfo: null,
+        traderBInfo: null,
         spectators: new Set(),
         offers: {},
         confirmed: {},
@@ -2000,33 +2013,17 @@ io.on('connection', socket => {
 
     if (!roomData.traderA) {
       roomData.traderA = user
+      if (!roomData.traderAInfo) {
+        const info = await db.user.findUnique({ where: { username: user }, select: { username: true, avatar: true } })
+        roomData.traderAInfo = info
+      }
     } else if (roomData.traderA !== user && roomData.traderB !== user) {
       roomData.spectators.add(socket.id)
     }
 
     tradeSockets[socket.id] = room
 
-    // Load full user info for traders
-    const traderAUser = roomData.traderA
-      ? await db.user.findUnique({
-          where: { username: roomData.traderA },
-          select: { username: true, avatar: true }
-        })
-      : null;
-    const traderBUser = roomData.traderB
-      ? await db.user.findUnique({
-          where: { username: roomData.traderB },
-          select: { username: true, avatar: true }
-        })
-      : null;
-
-    io.to(room).emit('trade-room-update', {
-      traderA: traderAUser,
-      traderB: traderBUser,
-      spectators: roomData.spectators.size,
-      offers: roomData.offers,
-      confirmed: roomData.confirmed
-    })
+    emitTradeRoomUpdate(io, room, roomData)
   })
 
   socket.on('become-traderB', async ({ room, user }) => {
@@ -2038,11 +2035,11 @@ io.on('connection', socket => {
       roomData.traderB = user
       // Remove from spectators if previously added
       roomData.spectators.delete(socket.id)
-      // Persist Trader B to database
+      // Persist Trader B to database and cache their info
       try {
-        // Look up the user ID by username
-        const dbUser = await db.user.findUnique({ where: { username: user } });
+        const dbUser = await db.user.findUnique({ where: { username: user }, select: { id: true, username: true, avatar: true } });
         if (dbUser) {
+          roomData.traderBInfo = { username: dbUser.username, avatar: dbUser.avatar }
           await db.tradeRoom.update({
             where: { name: room },
             data: { traderBId: dbUser.id }
@@ -2052,27 +2049,7 @@ io.on('connection', socket => {
         console.error('Failed to set traderB in DB:', err);
       }
 
-      // Load full user info for traders
-      const traderAUser = roomData.traderA
-        ? await db.user.findUnique({
-            where: { username: roomData.traderA },
-            select: { username: true, avatar: true }
-          })
-        : null;
-      const traderBUser = roomData.traderB
-        ? await db.user.findUnique({
-            where: { username: roomData.traderB },
-            select: { username: true, avatar: true }
-          })
-        : null;
-
-      io.to(room).emit('trade-room-update', {
-        traderA: traderAUser,
-        traderB: traderBUser,
-        spectators: roomData.spectators.size,
-        offers: roomData.offers,
-        confirmed: roomData.confirmed
-      })
+      emitTradeRoomUpdate(io, room, roomData)
     } else {
       socket.emit('become-traderB-failed', { message: 'Trader B slot is already taken.' })
     }
@@ -2086,27 +2063,7 @@ io.on('connection', socket => {
     roomData.offers[user] = ctoons
     roomData.confirmed[user] = false
 
-    // Load full user info for traders
-    const traderAUser = roomData.traderA
-      ? await db.user.findUnique({
-          where: { username: roomData.traderA },
-          select: { username: true, avatar: true }
-        })
-      : null;
-    const traderBUser = roomData.traderB
-      ? await db.user.findUnique({
-          where: { username: roomData.traderB },
-          select: { username: true, avatar: true }
-        })
-      : null;
-
-    io.to(room).emit('trade-room-update', {
-      traderA: traderAUser,
-      traderB: traderBUser,
-      spectators: roomData.spectators.size,
-      offers: roomData.offers,
-      confirmed: roomData.confirmed
-    })
+    emitTradeRoomUpdate(io, room, roomData)
   })
 
   socket.on('remove-all-trade-offer', async ({ room, user }) => {
@@ -2117,27 +2074,7 @@ io.on('connection', socket => {
     roomData.offers[user] = []
     roomData.confirmed[user] = false
 
-    // Load full user info for traders
-    const traderAUser = roomData.traderA
-      ? await db.user.findUnique({
-          where: { username: roomData.traderA },
-          select: { username: true, avatar: true }
-        })
-      : null;
-    const traderBUser = roomData.traderB
-      ? await db.user.findUnique({
-          where: { username: roomData.traderB },
-          select: { username: true, avatar: true }
-        })
-      : null;
-
-    io.to(room).emit('trade-room-update', {
-      traderA: traderAUser,
-      traderB: traderBUser,
-      spectators: roomData.spectators.size,
-      offers: roomData.offers,
-      confirmed: roomData.confirmed
-    })
+    emitTradeRoomUpdate(io, room, roomData)
   })
 
   socket.on('confirm-trade', async ({ room, user }) => {
@@ -2147,27 +2084,7 @@ io.on('connection', socket => {
 
     roomData.confirmed[user] = true
 
-    // Load full user info for traders
-    const traderAUser = roomData.traderA
-      ? await db.user.findUnique({
-          where: { username: roomData.traderA },
-          select: { username: true, avatar: true }
-        })
-      : null;
-    const traderBUser = roomData.traderB
-      ? await db.user.findUnique({
-          where: { username: roomData.traderB },
-          select: { username: true, avatar: true }
-        })
-      : null;
-
-    io.to(room).emit('trade-room-update', {
-      traderA: traderAUser,
-      traderB: traderBUser,
-      spectators: roomData.spectators.size,
-      offers: roomData.offers,
-      confirmed: roomData.confirmed
-    })
+    emitTradeRoomUpdate(io, room, roomData)
   })
 
   socket.on('cancel-trade', async ({ room, user }) => {
@@ -2178,30 +2095,8 @@ io.on('connection', socket => {
     // Mark this user as un-confirmed
     roomData.confirmed   = {}
     roomData.finalized   = {}
-  
-    // Look up full trader info
-    const traderAUser = roomData.traderA
-      ? await db.user.findUnique({
-          where: { username: roomData.traderA },
-          select: { username: true, avatar: true }
-        })
-      : null
-  
-    const traderBUser = roomData.traderB
-      ? await db.user.findUnique({
-          where: { username: roomData.traderB },
-          select: { username: true, avatar: true }
-        })
-      : null
-  
-    // Broadcast the updated, enriched room snapshot
-    io.to(room).emit('trade-room-update', {
-      traderA: traderAUser,
-      traderB: traderBUser,
-      spectators: roomData.spectators.size,
-      offers: roomData.offers,
-      confirmed: roomData.confirmed
-    })
+
+    emitTradeRoomUpdate(io, room, roomData)
   })
 
   // --- Finalize-trade event for two-phase trade flow ---
@@ -2316,16 +2211,7 @@ io.on('connection', socket => {
       roomData.confirmed = {}
       roomData.finalized = {}
 
-      const traderAUser = await db.user.findUnique({ where:{id:aId}, select:{username:true,avatar:true} })
-      const traderBUser = await db.user.findUnique({ where:{id:bId}, select:{username:true,avatar:true} })
-
-      io.to(room).emit('trade-room-update', {
-        traderA: traderAUser,
-        traderB: traderBUser,
-        spectators: roomData.spectators.size,
-        offers: roomData.offers,
-        confirmed: roomData.confirmed
-      })
+      emitTradeRoomUpdate(io, room, roomData)
       io.to(room).emit('trade-complete', { message: 'Trade completed successfully.' })
     } catch (err) {
       console.error('Trade execution failed:', err)
@@ -2415,18 +2301,16 @@ io.on('connection', socket => {
       const roomData = tradeRooms[tradeRoom]
       let leftA = false;
       let leftB = false;
-      if (roomData.traderA === socket.user) { roomData.traderA = null; leftA = true; }
-      if (roomData.traderB === socket.user) { roomData.traderB = null; leftB = true; }
+      if (roomData.traderA === socket.user) { roomData.traderA = null; roomData.traderAInfo = null; leftA = true; }
+      if (roomData.traderB === socket.user) { roomData.traderB = null; roomData.traderBInfo = null; leftB = true; }
       roomData.spectators.delete(socket.id)
       delete tradeSockets[socket.id]
-    
-      // ← Insert here:
+
       // Reset this trader’s offers and confirmation/finalization state
       roomData.offers[socket.user]    = []
       roomData.confirmed[socket.user] = false
       roomData.finalized[socket.user] = false
-    
-      // Persist trader slot removal to database …
+
       // Persist trader slot removal to database
       try {
         const updateData = {};
@@ -2439,24 +2323,11 @@ io.on('connection', socket => {
           });
         }
       } catch (err) {
-        console.error('Failed to clear trader slot in DB:', err);
+        console.error(‘Failed to clear trader slot in DB:’, err);
       }
 
       // Notify remaining clients of updated room state
-      // Load full user info for traders
-      const traderAUser = roomData.traderA
-        ? await db.user.findUnique({ where: { username: roomData.traderA }, select: { username: true, avatar: true } })
-        : null;
-      const traderBUser = roomData.traderB
-        ? await db.user.findUnique({ where: { username: roomData.traderB }, select: { username: true, avatar: true } })
-        : null;
-      io.to(tradeRoom).emit('trade-room-update', {
-        traderA: traderAUser,
-        traderB: traderBUser,
-        spectators: roomData.spectators.size,
-        offers: roomData.offers,
-        confirmed: roomData.confirmed
-      });
+      emitTradeRoomUpdate(io, tradeRoom, roomData)
 
       const bothTradersGone = !roomData.traderA && !roomData.traderB;
       if (bothTradersGone) {
@@ -2501,21 +2372,7 @@ io.on('connection', socket => {
       if (roomData.spectators.has(socket.id)) {
         roomData.spectators.delete(socket.id);
         delete tradeSockets[socket.id];
-        // Load full user info for traders
-        const traderAUser = roomData.traderA
-          ? await db.user.findUnique({ where: { username: roomData.traderA }, select: { username: true, avatar: true } })
-          : null;
-        const traderBUser = roomData.traderB
-          ? await db.user.findUnique({ where: { username: roomData.traderB }, select: { username: true, avatar: true } })
-          : null;
-        // Emit updated room state
-        io.to(tradeRoom).emit('trade-room-update', {
-          traderA: traderAUser,
-          traderB: traderBUser,
-          spectators: roomData.spectators.size,
-          offers: roomData.offers,
-          confirmed: roomData.confirmed
-        });
+        emitTradeRoomUpdate(io, tradeRoom, roomData)
       }
     }
   })
@@ -2533,16 +2390,15 @@ io.on('connection', socket => {
       const roomData = tradeRooms[tradeRoom];
       let leftA = false;
       let leftB = false;
-      if (roomData.traderA === socket.user) { roomData.traderA = null; leftA = true; }
-      if (roomData.traderB === socket.user) { roomData.traderB = null; leftB = true; }
+      if (roomData.traderA === socket.user) { roomData.traderA = null; roomData.traderAInfo = null; leftA = true; }
+      if (roomData.traderB === socket.user) { roomData.traderB = null; roomData.traderBInfo = null; leftB = true; }
       roomData.spectators.delete(socket.id);
       delete tradeSockets[socket.id];
-    
-      // ← Insert here:
+
       roomData.offers[socket.user]    = []
       roomData.confirmed[socket.user] = false
       roomData.finalized[socket.user] = false
-    
+
       // Persist trader slot removal to database
       try {
         const updateData = {};
@@ -2557,21 +2413,10 @@ io.on('connection', socket => {
       } catch (err) {
         console.error('Failed to clear trader slot in DB:', err);
       }
+
       // Notify remaining clients of updated room state
-      const traderAUser = roomData.traderA
-        ? await db.user.findUnique({ where: { username: roomData.traderA }, select: { username: true, avatar: true } })
-        : null;
-      const traderBUser = roomData.traderB
-        ? await db.user.findUnique({ where: { username: roomData.traderB }, select: { username: true, avatar: true } })
-        : null;
-      io.to(tradeRoom).emit('trade-room-update', {
-        traderA: traderAUser,
-        traderB: traderBUser,
-        spectators: roomData.spectators.size,
-        offers: roomData.offers,
-        confirmed: roomData.confirmed
-      });
-      
+      emitTradeRoomUpdate(io, tradeRoom, roomData)
+
       const bothTradersGone = !roomData.traderA && !roomData.traderB;
       if (bothTradersGone) {
         for (const spectatorSocketId of roomData.spectators) {
@@ -2610,20 +2455,7 @@ io.on('connection', socket => {
       if (roomData.spectators.has(socket.id)) {
         roomData.spectators.delete(socket.id);
         delete tradeSockets[socket.id];
-        // Load full user info for traders
-        const traderAUser = roomData.traderA
-          ? await db.user.findUnique({ where: { username: roomData.traderA }, select: { username: true, avatar: true } })
-          : null;
-        const traderBUser = roomData.traderB
-          ? await db.user.findUnique({ where: { username: roomData.traderB }, select: { username: true, avatar: true } })
-          : null;
-        io.to(tradeRoom).emit('trade-room-update', {
-          traderA: traderAUser,
-          traderB: traderBUser,
-          spectators: roomData.spectators.size,
-          offers: roomData.offers,
-          confirmed: roomData.confirmed
-        });
+        emitTradeRoomUpdate(io, tradeRoom, roomData)
       }
     }
   });
@@ -2905,10 +2737,19 @@ setInterval(async () => {
       endAt:   { lte: five, gt: now },
       endingSoonNotified: false
     },
-    include: {
-      userCtoon:     { include: { ctoon: true } },
-      creator:       true,
-      highestBidder: true
+    select: {
+      id:          true,
+      endAt:       true,
+      highestBid:  true,
+      initialBet:  true,
+      userCtoon: {
+        select: {
+          mintNumber: true,
+          ctoonId:    true,
+          ctoon: { select: { name: true, rarity: true, assetPath: true } }
+        }
+      },
+      highestBidder: { select: { discordId: true } }
     }
   })
 
