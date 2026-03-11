@@ -339,47 +339,55 @@
       </div>
 
       <div class="pt-4 border-t border-white/10 flex items-center justify-between gap-4 shrink-0">
-        <template v-if="activeTab === 'suggest'">
-          <button
-            type="submit"
-            form="ctoon-suggestion-form"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm ml-auto"
-            :disabled="suggestionDisabled"
-          >
-            {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
-          </button>
-        </template>
-        <template v-else>
-          <button
-            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-            @click="close"
-          >
-            Close
-          </button>
-          <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
-            <div v-if="canSeeHolidayReveal">
-              <button
-                v-if="canOpenNow"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
-                :disabled="openingHoliday"
-                @click="openHolidayCtoon"
-              >
-                {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
-              </button>
-              <div v-else class="text-xs text-gray-300">
-                Reveal available in:
-                <span class="font-semibold">{{ revealCountdown }}</span>
-              </div>
-            </div>
-            <AddToWishlist
-              v-if="ctoon.id"
-              :ctoon-id="ctoon.id"
-              class="text-xs"
-            />
-          </div>
-        </template>
-      </div>
-    </div>
+              <template v-if="activeTab === 'suggest'">
+                <button
+                  type="submit"
+                  form="ctoon-suggestion-form"
+                  class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm ml-auto"
+                  :disabled="suggestionDisabled"
+                >
+                  {{ submittingSuggestion ? 'Submitting...' : 'Submit Suggestion' }}
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+                  @click="close"
+                >
+                  Close
+                </button>
+                <div class="flex items-center gap-4">
+                  <NuxtLink
+                    v-if="isAdmin && ctoon.id"
+                    :to="`/admin/editCtoon/${ctoon.id}`"
+                    class="px-4 py-2 rounded text-sm font-medium transition bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    Edit cToon
+                  </NuxtLink>
+                  <div v-if="ctoon.id || canSeeHolidayReveal" class="text-right flex flex-col items-end gap-2">
+                    <div v-if="canSeeHolidayReveal">
+                      <button
+                        v-if="canOpenNow"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-sm"
+                        :disabled="openingHoliday"
+                        @click="openHolidayCtoon"
+                      >
+                        {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
+                      </button>
+                      <div v-else class="text-xs text-gray-300">
+                        Reveal available in:
+                        <span class="font-semibold">{{ revealCountdown }}</span>
+                      </div>
+                    </div>
+                    <AddToWishlist
+                      v-if="ctoon.id"
+                      :ctoon-id="ctoon.id"
+                      class="text-xs"
+                    />
+                  </div>
+                </div>
+              </template>
+            </div>    </div>
   </Modal>
 </template>
 
@@ -389,6 +397,9 @@ import Modal from '@/components/Modal.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
+import { useAuth } from '@/composables/useAuth'
+
+const { isAdmin } = useAuth()
 
 const {
   isOpen,
