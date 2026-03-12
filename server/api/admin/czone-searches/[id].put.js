@@ -233,9 +233,13 @@ export default defineEventHandler(async (event) => {
   if (endAt <= startAt) {
     throw createError({ statusCode: 400, statusMessage: 'End date/time must be after start date/time' })
   }
+  // Use the later of the new endAt or the original endAt as the window ceiling for
+  // condition-date validation. This prevents entries whose conditionDateEnd was valid
+  // in the original window from being rejected when the search is ended early.
+  const effectiveWindowEnd = endAt > existing.endAt ? endAt : existing.endAt
   const windowDates = {
     start: DateTime.fromJSDate(startAt).setZone('America/Chicago').toISODate(),
-    end: DateTime.fromJSDate(endAt).setZone('America/Chicago').toISODate()
+    end: DateTime.fromJSDate(effectiveWindowEnd).setZone('America/Chicago').toISODate()
   }
 
   const appearanceRatePercent = parsePercent(body?.appearanceRatePercent, 'appearance rate percent')
