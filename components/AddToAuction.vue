@@ -59,6 +59,18 @@
               <span class="ml-2">Quick: 3 minutes</span>
             </label>
             <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="30m" v-model="durationPreset" />
+              <span class="ml-2">30 minutes</span>
+            </label>
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="1h" v-model="durationPreset" />
+              <span class="ml-2">1 hour</span>
+            </label>
+            <label class="inline-flex items-center">
+              <input type="radio" class="form-radio" value="6h" v-model="durationPreset" />
+              <span class="ml-2">6 hours</span>
+            </label>
+            <label class="inline-flex items-center">
               <input type="radio" class="form-radio" value="4h" v-model="durationPreset" />
               <span class="ml-2">4 hours</span>
             </label>
@@ -195,6 +207,9 @@ async function sendToAuction() {
   let durationMinutes = 0
   switch (durationPreset.value) {
     case '3m':  durationMinutes = 3;        break
+    case '30m': durationMinutes = 30;       break
+    case '1h':  durationMinutes = 60;       break
+    case '6h':  durationMinutes = 6 * 60;   break
     case '4h':  durationMinutes = 4 * 60;   break
     case '12h': durationMinutes = 12 * 60;  break
     case 'days':
