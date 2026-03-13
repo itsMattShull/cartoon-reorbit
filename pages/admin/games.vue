@@ -212,6 +212,93 @@
             </div>
           </div>
 
+          <!-- Bumper Geometry -->
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Bumper Geometry</h3>
+            <p class="text-xs text-gray-400 mb-3">Set radius to 0 to remove a bumper. Z is the depth position on the board.</p>
+            <div class="space-y-4">
+              <div v-for="(_, i) in [0, 1, 2]" :key="i" class="border rounded p-3">
+                <h4 class="text-sm font-semibold mb-2">Bumper {{ i + 1 }}</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
+                    <input type="number" v-model.number="winballBumperGeometry[i].radius" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
+                    <input type="number" v-model.number="winballBumperGeometry[i].height" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
+                    <input type="number" v-model.number="winballBumperGeometry[i].x" step="0.5" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
+                    <input type="number" v-model.number="winballBumperGeometry[i].z" step="0.5" class="input" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Triangle Geometry -->
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Triangle Geometry</h3>
+            <p class="text-xs text-gray-400 mb-3">Set radius to 0 to remove a triangle. Depth controls how far the triangle protrudes from the wall.</p>
+            <div class="space-y-4">
+              <div v-for="(_, i) in [0, 1]" :key="i" class="border rounded p-3">
+                <h4 class="text-sm font-semibold mb-2">Triangle {{ i + 1 }}</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
+                    <input type="number" v-model.number="winballTriangleGeometry[i].radius" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Depth</label>
+                    <input type="number" v-model.number="winballTriangleGeometry[i].depth" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
+                    <input type="number" v-model.number="winballTriangleGeometry[i].x" step="0.5" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
+                    <input type="number" v-model.number="winballTriangleGeometry[i].z" step="0.5" class="input" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Peg Geometry -->
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Peg Geometry</h3>
+            <p class="text-xs text-gray-400 mb-3">12 small round pegs that dampen the ball on contact. Set radius to 0 to remove a peg.</p>
+            <div class="space-y-4">
+              <div v-for="(_, i) in Array(12).fill(0)" :key="i" class="border rounded p-3">
+                <h4 class="text-sm font-semibold mb-2">Peg {{ i + 1 }}</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="input" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
+                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="input" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Grand Prize selection + preview (moved above schedule) -->
           <div class="mb-8 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Grand Prize</h3>
@@ -628,6 +715,30 @@ const uploadingBumper       = ref([false, false, false])
 const winballBumperImagePaths = ref(['', '', ''])
 const loadingClash          = ref(false)
 
+const winballBumperGeometry = ref([
+  { radius: 6, height: 6, x: -8, z: -9 },
+  { radius: 6, height: 6, x: -1, z:  0 },
+  { radius: 6, height: 6, x:  6, z: -9 }
+])
+const winballTriangleGeometry = ref([
+  { radius: 6, depth: 6, x: -15, z: -2 },
+  { radius: 0, depth: 6, x:  15, z: -2 }
+])
+const winballPegGeometry = ref([
+  { radius: 1.5, height: 4, x: -11, z: -17 },
+  { radius: 1.5, height: 4, x:  -3, z: -17 },
+  { radius: 1.5, height: 4, x:   5, z: -17 },
+  { radius: 1.5, height: 4, x:  12, z: -17 },
+  { radius: 1.5, height: 4, x: -12, z:  -6 },
+  { radius: 1.5, height: 4, x:  -5, z:  -6 },
+  { radius: 1.5, height: 4, x:   2, z:  -6 },
+  { radius: 1.5, height: 4, x:  10, z:  -6 },
+  { radius: 1.5, height: 4, x: -12, z:   4 },
+  { radius: 1.5, height: 4, x:  -5, z:   5 },
+  { radius: 1.5, height: 4, x:   3, z:   4 },
+  { radius: 1.5, height: 4, x:  11, z:   4 }
+])
+
 const winballColorFields = [
   { key: 'winballColorBackground', label: 'Background' },
   { key: 'winballColorWalls',      label: 'Walls' },
@@ -924,6 +1035,37 @@ async function loadSettings() {
   for (const fld of winballPhysicsFields) {
     if (wb[fld.key] != null) winballPhysics.value[fld.key] = wb[fld.key]
   }
+
+  if (wb.winballBumper1Radius != null) winballBumperGeometry.value[0].radius = wb.winballBumper1Radius
+  if (wb.winballBumper1Height != null) winballBumperGeometry.value[0].height = wb.winballBumper1Height
+  if (wb.winballBumper1X      != null) winballBumperGeometry.value[0].x      = wb.winballBumper1X
+  if (wb.winballBumper1Z      != null) winballBumperGeometry.value[0].z      = wb.winballBumper1Z
+  if (wb.winballBumper2Radius != null) winballBumperGeometry.value[1].radius = wb.winballBumper2Radius
+  if (wb.winballBumper2Height != null) winballBumperGeometry.value[1].height = wb.winballBumper2Height
+  if (wb.winballBumper2X      != null) winballBumperGeometry.value[1].x      = wb.winballBumper2X
+  if (wb.winballBumper2Z      != null) winballBumperGeometry.value[1].z      = wb.winballBumper2Z
+  if (wb.winballBumper3Radius != null) winballBumperGeometry.value[2].radius = wb.winballBumper3Radius
+  if (wb.winballBumper3Height != null) winballBumperGeometry.value[2].height = wb.winballBumper3Height
+  if (wb.winballBumper3X      != null) winballBumperGeometry.value[2].x      = wb.winballBumper3X
+  if (wb.winballBumper3Z      != null) winballBumperGeometry.value[2].z      = wb.winballBumper3Z
+
+  if (wb.winballTriangle1Radius != null) winballTriangleGeometry.value[0].radius = wb.winballTriangle1Radius
+  if (wb.winballTriangle1Depth  != null) winballTriangleGeometry.value[0].depth  = wb.winballTriangle1Depth
+  if (wb.winballTriangle1X      != null) winballTriangleGeometry.value[0].x      = wb.winballTriangle1X
+  if (wb.winballTriangle1Z      != null) winballTriangleGeometry.value[0].z      = wb.winballTriangle1Z
+  if (wb.winballTriangle2Radius != null) winballTriangleGeometry.value[1].radius = wb.winballTriangle2Radius
+  if (wb.winballTriangle2Depth  != null) winballTriangleGeometry.value[1].depth  = wb.winballTriangle2Depth
+  if (wb.winballTriangle2X      != null) winballTriangleGeometry.value[1].x      = wb.winballTriangle2X
+  if (wb.winballTriangle2Z      != null) winballTriangleGeometry.value[1].z      = wb.winballTriangle2Z
+
+  for (let i = 0; i < 12; i++) {
+    const n = i + 1
+    if (wb[`winballPeg${n}Radius`] != null) winballPegGeometry.value[i].radius = wb[`winballPeg${n}Radius`]
+    if (wb[`winballPeg${n}Height`] != null) winballPegGeometry.value[i].height = wb[`winballPeg${n}Height`]
+    if (wb[`winballPeg${n}X`]      != null) winballPegGeometry.value[i].x      = wb[`winballPeg${n}X`]
+    if (wb[`winballPeg${n}Z`]      != null) winballPegGeometry.value[i].z      = wb[`winballPeg${n}Z`]
+  }
+
   allCtoons.value = await $fetch('/api/admin/game-ctoons?select=id,name,rarity,assetPath,quantity')
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
@@ -1180,6 +1322,34 @@ async function saveWinballConfig() {
         winballBumper1ImagePath:   winballBumperImagePaths.value[0] || null,
         winballBumper2ImagePath:   winballBumperImagePaths.value[1] || null,
         winballBumper3ImagePath:   winballBumperImagePaths.value[2] || null,
+        winballBumper1Radius: winballBumperGeometry.value[0].radius,
+        winballBumper1Height: winballBumperGeometry.value[0].height,
+        winballBumper1X:      winballBumperGeometry.value[0].x,
+        winballBumper1Z:      winballBumperGeometry.value[0].z,
+        winballBumper2Radius: winballBumperGeometry.value[1].radius,
+        winballBumper2Height: winballBumperGeometry.value[1].height,
+        winballBumper2X:      winballBumperGeometry.value[1].x,
+        winballBumper2Z:      winballBumperGeometry.value[1].z,
+        winballBumper3Radius: winballBumperGeometry.value[2].radius,
+        winballBumper3Height: winballBumperGeometry.value[2].height,
+        winballBumper3X:      winballBumperGeometry.value[2].x,
+        winballBumper3Z:      winballBumperGeometry.value[2].z,
+        winballTriangle1Radius: winballTriangleGeometry.value[0].radius,
+        winballTriangle1Depth:  winballTriangleGeometry.value[0].depth,
+        winballTriangle1X:      winballTriangleGeometry.value[0].x,
+        winballTriangle1Z:      winballTriangleGeometry.value[0].z,
+        winballTriangle2Radius: winballTriangleGeometry.value[1].radius,
+        winballTriangle2Depth:  winballTriangleGeometry.value[1].depth,
+        winballTriangle2X:      winballTriangleGeometry.value[1].x,
+        winballTriangle2Z:      winballTriangleGeometry.value[1].z,
+        ...Object.fromEntries(
+          winballPegGeometry.value.flatMap((p, i) => [
+            [`winballPeg${i+1}Radius`, p.radius],
+            [`winballPeg${i+1}Height`, p.height],
+            [`winballPeg${i+1}X`,      p.x],
+            [`winballPeg${i+1}Z`,      p.z]
+          ])
+        ),
         ...winballBoardLayer.value,
         ...winballColors.value,
         ...winballPhysics.value

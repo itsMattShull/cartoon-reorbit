@@ -531,6 +531,7 @@ const form = reactive({
   name: '',
   startAt: '',
   endAt: '',
+  originalEndAt: '', // tracks the saved endAt when editing, to allow early-ending without invalidating existing condition dates
   appearanceRatePercent: 0,
   cooldownHours: 0,
   resetType: 'COOLDOWN_HOURS',
@@ -938,6 +939,7 @@ function resetForm() {
   form.name = ''
   form.startAt = ''
   form.endAt = ''
+  form.originalEndAt = ''
   form.appearanceRatePercent = 0
   form.cooldownHours = 0
   form.resetType = 'COOLDOWN_HOURS'
@@ -965,6 +967,7 @@ async function openEdit(row) {
   form.name = row.name || ''
   form.startAt = isoToCSTLocal(row.startAt)
   form.endAt = isoToCSTLocal(row.endAt)
+  form.originalEndAt = isoToCSTLocal(row.endAt)
   form.appearanceRatePercent = Number(row.appearanceRatePercent)
   form.cooldownHours = Number(row.cooldownHours)
   form.resetType = row.resetType || 'COOLDOWN_HOURS'
@@ -1049,6 +1052,10 @@ async function saveSearch() {
   }
   const windowStart = searchDateBounds.value.start
   const windowEnd = searchDateBounds.value.end
+  // When editing, use the later of the current or original end date so that existing
+  // condition dates remain valid when the search is ended early.
+  const originalWindowEnd = form.originalEndAt ? String(form.originalEndAt).split('T')[0] : ''
+  const effectiveWindowEnd = originalWindowEnd > windowEnd ? originalWindowEnd : windowEnd
   for (const row of form.prizePool) {
     const label = row.ctoon?.name || 'cToon'
     if (row.conditionDateEnabled) {
@@ -1064,7 +1071,7 @@ async function saveSearch() {
         formError.value = `Date condition start must be within the search window for ${label}.`
         return
       }
-      if (windowEnd && row.conditionDateEnd > windowEnd) {
+      if (effectiveWindowEnd && row.conditionDateEnd > effectiveWindowEnd) {
         formError.value = `Date condition end must be within the search window for ${label}.`
         return
       }

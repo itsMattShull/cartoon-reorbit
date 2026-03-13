@@ -96,6 +96,32 @@ const PHYSICS = {
   plungerForce:        500
 }
 
+const LAYOUT = {
+  bumpers: [
+    { radius: 6, height: 6, x: -8, z: -9 },
+    { radius: 6, height: 6, x: -1, z:  0 },
+    { radius: 6, height: 6, x:  6, z: -9 }
+  ],
+  triangles: [
+    { radius: 6, depth: 6, x: -15, z: -2 },
+    { radius: 0, depth: 6, x:  15, z: -2 }
+  ],
+  pegs: [
+    { radius: 1.5, height: 4, x: -11, z: -17 },
+    { radius: 1.5, height: 4, x:  -3, z: -17 },
+    { radius: 1.5, height: 4, x:   5, z: -17 },
+    { radius: 1.5, height: 4, x:  12, z: -17 },
+    { radius: 1.5, height: 4, x: -12, z:  -6 },
+    { radius: 1.5, height: 4, x:  -5, z:  -6 },
+    { radius: 1.5, height: 4, x:   2, z:  -6 },
+    { radius: 1.5, height: 4, x:  10, z:  -6 },
+    { radius: 1.5, height: 4, x: -12, z:   4 },
+    { radius: 1.5, height: 4, x:  -5, z:   5 },
+    { radius: 1.5, height: 4, x:   3, z:   4 },
+    { radius: 1.5, height: 4, x:  11, z:   4 }
+  ]
+}
+
 function hexToInt(hex) {
   return parseInt((hex || '#ffffff').replace('#', ''), 16)
 }
@@ -263,6 +289,36 @@ onMounted(async () => {
     if (cfg.winballPlungerMaxPull      != null) PHYSICS.plungerMaxPull      = cfg.winballPlungerMaxPull
     if (cfg.winballPlungerImpactFactor != null) PHYSICS.plungerImpactFactor = cfg.winballPlungerImpactFactor
     if (cfg.winballPlungerForce        != null) PHYSICS.plungerForce        = cfg.winballPlungerForce
+    // Bumper geometry
+    if (cfg.winballBumper1Radius != null) LAYOUT.bumpers[0].radius = cfg.winballBumper1Radius
+    if (cfg.winballBumper1Height != null) LAYOUT.bumpers[0].height = cfg.winballBumper1Height
+    if (cfg.winballBumper1X      != null) LAYOUT.bumpers[0].x      = cfg.winballBumper1X
+    if (cfg.winballBumper1Z      != null) LAYOUT.bumpers[0].z      = cfg.winballBumper1Z
+    if (cfg.winballBumper2Radius != null) LAYOUT.bumpers[1].radius = cfg.winballBumper2Radius
+    if (cfg.winballBumper2Height != null) LAYOUT.bumpers[1].height = cfg.winballBumper2Height
+    if (cfg.winballBumper2X      != null) LAYOUT.bumpers[1].x      = cfg.winballBumper2X
+    if (cfg.winballBumper2Z      != null) LAYOUT.bumpers[1].z      = cfg.winballBumper2Z
+    if (cfg.winballBumper3Radius != null) LAYOUT.bumpers[2].radius = cfg.winballBumper3Radius
+    if (cfg.winballBumper3Height != null) LAYOUT.bumpers[2].height = cfg.winballBumper3Height
+    if (cfg.winballBumper3X      != null) LAYOUT.bumpers[2].x      = cfg.winballBumper3X
+    if (cfg.winballBumper3Z      != null) LAYOUT.bumpers[2].z      = cfg.winballBumper3Z
+    // Triangle geometry
+    if (cfg.winballTriangle1Radius != null) LAYOUT.triangles[0].radius = cfg.winballTriangle1Radius
+    if (cfg.winballTriangle1Depth  != null) LAYOUT.triangles[0].depth  = cfg.winballTriangle1Depth
+    if (cfg.winballTriangle1X      != null) LAYOUT.triangles[0].x      = cfg.winballTriangle1X
+    if (cfg.winballTriangle1Z      != null) LAYOUT.triangles[0].z      = cfg.winballTriangle1Z
+    if (cfg.winballTriangle2Radius != null) LAYOUT.triangles[1].radius = cfg.winballTriangle2Radius
+    if (cfg.winballTriangle2Depth  != null) LAYOUT.triangles[1].depth  = cfg.winballTriangle2Depth
+    if (cfg.winballTriangle2X      != null) LAYOUT.triangles[1].x      = cfg.winballTriangle2X
+    if (cfg.winballTriangle2Z      != null) LAYOUT.triangles[1].z      = cfg.winballTriangle2Z
+    // Peg geometry
+    for (let i = 0; i < 12; i++) {
+      const n = i + 1
+      if (cfg[`winballPeg${n}Radius`] != null) LAYOUT.pegs[i].radius = cfg[`winballPeg${n}Radius`]
+      if (cfg[`winballPeg${n}Height`] != null) LAYOUT.pegs[i].height = cfg[`winballPeg${n}Height`]
+      if (cfg[`winballPeg${n}X`]      != null) LAYOUT.pegs[i].x      = cfg[`winballPeg${n}X`]
+      if (cfg[`winballPeg${n}Z`]      != null) LAYOUT.pegs[i].z      = cfg[`winballPeg${n}Z`]
+    }
   } catch (e) {
     console.warn('Could not load Winball config, using defaults', e)
   }
@@ -424,6 +480,12 @@ onMounted(async () => {
     defaultMat, laneWallMat,
     { friction: ballWallFriction, restitution: ballWallRestitution }
   ))
+  // Peg material: lower restitution to dampen ball on contact
+  const pegMat = new CANNON.Material('peg')
+  world.addContactMaterial(new CANNON.ContactMaterial(
+    defaultMat, pegMat,
+    { friction: 0, restitution: 0.4 }
+  ))
 
   /* ---------- BOARD PHYSICS ---------- */
   const boardBody = new CANNON.Body({ mass: 0, material: boardMatPhys })
@@ -570,40 +632,44 @@ onMounted(async () => {
   // guideGap, guideX, and laneCenterX already defined above
   addWall(guideX, straightCenterZ, wallThickness, straightLength, 0, laneWallMat)
 
-  // Triangular bouncer mounted on the left wall
-  const triangleDepth = 3.5
-  const triangleRadius = 3.5
-  const triangleZ = -2
-  const triangleY = boardYAt(triangleZ) + wallHeight / 2
-  const triangleX = -boardWidth / 2 + triangleDepth / 2
+  // Triangular bouncers (configurable, skipped if radius == 0)
+  for (let triIdx = 0; triIdx < LAYOUT.triangles.length; triIdx++) {
+    const triCfg = LAYOUT.triangles[triIdx]
+    if (triCfg.radius <= 0) continue
+    const tRadius = triCfg.radius
+    const tZ = triCfg.z
+    const tX = triCfg.x
+    const tY = boardYAt(tZ) + wallHeight / 2
 
-  const triangleShape = new CANNON.Cylinder(triangleRadius, triangleRadius, wallHeight, 3)
-  const triangleShapeQuat = new CANNON.Quaternion()
-  triangleShapeQuat.setFromEuler(Math.PI / 2, 0, 0)
-  triangleShape.transformAllPoints(new CANNON.Vec3(), triangleShapeQuat)
+    const triShape = new CANNON.Cylinder(tRadius, tRadius, wallHeight, 3)
+    const triShapeQuat = new CANNON.Quaternion()
+    triShapeQuat.setFromEuler(Math.PI / 2, 0, 0)
+    triShape.transformAllPoints(new CANNON.Vec3(), triShapeQuat)
 
-  const triangleBody = new CANNON.Body({
-    mass: 0,
-    shape: triangleShape,
-    material: wallMat
-  })
-  triangleBody.position.set(triangleX, triangleY, triangleZ)
-  triangleBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2, 0)
-  world.addBody(triangleBody)
-  walls.push(triangleBody)
+    const triBody = new CANNON.Body({
+      mass: 0,
+      shape: triShape,
+      material: wallMat
+    })
+    triBody.position.set(tX, tY, tZ)
+    const triFlipY = triIdx === 1 ? Math.PI : 0
+    triBody.quaternion.setFromEuler(-boardTilt, Math.PI / 2 + triFlipY, 0)
+    world.addBody(triBody)
+    walls.push(triBody)
 
-  const triangleMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(triangleRadius, triangleRadius, wallHeight, 3),
-    new THREE.MeshPhongMaterial({ color: wallMatColor })
-  )
-  triangleMesh.position.copy(triangleBody.position)
-  triangleMesh.quaternion.set(
-    triangleBody.quaternion.x,
-    triangleBody.quaternion.y,
-    triangleBody.quaternion.z,
-    triangleBody.quaternion.w
-  )
-  rootGroup.add(triangleMesh)
+    const triMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(tRadius, tRadius, wallHeight, 3),
+      new THREE.MeshPhongMaterial({ color: wallMatColor })
+    )
+    triMesh.position.copy(triBody.position)
+    triMesh.quaternion.set(
+      triBody.quaternion.x,
+      triBody.quaternion.y,
+      triBody.quaternion.z,
+      triBody.quaternion.w
+    )
+    rootGroup.add(triMesh)
+  }
 
   addWall(0, southZ, boardWidth + wallThickness * 2, wallThickness)
 
@@ -618,97 +684,115 @@ onMounted(async () => {
     addWall(cx, cz, wallThickness, segLen, midAngle)
   }
 
-  // --- Bumpers ---
-const bumperRadius = 3
-const bumperHeight = 3
-// Z position for bumpers (just above center)
-const bumperZ = 0
-// X positions for the three bumpers
-const bumperXs = [-10.5, -1, 8]
-const bumpers = []
-const bumperVisuals = []
+  // --- Bumpers (configurable, skipped if radius == 0) ---
+  const bumpers = []
+  const bumperVisuals = []
 
-bumperXs.forEach((bx, bumperIdx) => {
-  // Offset left/right bumpers forward by 3 units
-  const zOffset = bx === -1 ? 0 : -9
-  const actualZ = bumperZ + zOffset
-  // Physics: a cylinder standing upright
-  const cylShape = new CANNON.Cylinder(bumperRadius, bumperRadius, bumperHeight, 16)
-  // Align its axis to Y
-  const q = new CANNON.Quaternion()
-  q.setFromEuler(Math.PI / 2, 0, 0)
-  cylShape.transformAllPoints(new CANNON.Vec3(), q)
-  const bumperBody = new CANNON.Body({
-    mass: 0,
-    shape: cylShape,
-    material: wallMat   // high-restitution “wall” material
+  LAYOUT.bumpers.forEach((bCfg, bumperIdx) => {
+    if (bCfg.radius <= 0) return
+    const bumperRadius = bCfg.radius
+    const bumperHeight = bCfg.height
+    const bx = bCfg.x
+    const actualZ = bCfg.z
+
+    // Physics: a cylinder standing upright
+    const cylShape = new CANNON.Cylinder(bumperRadius, bumperRadius, bumperHeight, 16)
+    const q = new CANNON.Quaternion()
+    q.setFromEuler(Math.PI / 2, 0, 0)
+    cylShape.transformAllPoints(new CANNON.Vec3(), q)
+    const bumperBody = new CANNON.Body({
+      mass: 0,
+      shape: cylShape,
+      material: wallMat
+    })
+    const by = boardYAt(actualZ) + bumperHeight / 2
+    bumperBody.position.set(bx, by, actualZ)
+    world.addBody(bumperBody)
+
+    bumpers.push(bumperBody)
+
+    // Visual: a matching Three.js cylinder (invisible — image overlay carries the look)
+    const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
+    const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0, shininess: 80 })
+    bumperMat.emissive = new THREE.Color(hexToInt(COLORS.bumper))
+    bumperMat.emissiveIntensity = 0
+    const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
+    bumperMesh.position.set(bx, by, actualZ)
+    rootGroup.add(bumperMesh)
+
+    const bumperVisual = {
+      body: bumperBody,
+      mesh: bumperMesh,
+      imageMat: null,
+      glowUntil: 0
+    }
+
+    // Image overlay: circle on the front face of the bumper, facing the camera
+    const imgPath = COLORS.bumperImagePaths[bumperIdx]
+    if (imgPath) {
+      const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
+        loadedTex.wrapS = THREE.ClampToEdgeWrapping
+        loadedTex.wrapT = THREE.ClampToEdgeWrapping
+        loadedTex.needsUpdate = true
+      })
+      const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
+      const imgMat = new THREE.MeshPhongMaterial({
+        map: tex,
+        transparent: true,
+        opacity: 1,
+        side: THREE.DoubleSide,
+        emissive: 0xffffff,
+        emissiveIntensity: 0
+      })
+      const imgMesh = new THREE.Mesh(imgGeo, imgMat)
+      imgMesh.rotation.x = -Math.PI / 2
+      imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
+      rootGroup.add(imgMesh)
+
+      bumperVisual.imageMat = imgMat
+    }
+
+    bumperVisuals.push(bumperVisual)
   })
-  const by = boardYAt(actualZ) + bumperHeight / 2
-  bumperBody.position.set(bx, by, actualZ)
-  world.addBody(bumperBody)
 
-  bumpers.push(bumperBody)
+  // ---------- PEGS ----------
+  // Small round pegs that dampen the ball slightly on contact
+  LAYOUT.pegs.forEach((pCfg) => {
+    if (pCfg.radius <= 0) return
+    const pegRadius = pCfg.radius
+    const pegHeight = pCfg.height
+    const px = pCfg.x
+    const pz = pCfg.z
 
-  // Visual: a matching Three.js cylinder (invisible — image overlay carries the look)
-  const bumperGeo = new THREE.CylinderGeometry(bumperRadius, bumperRadius, bumperHeight, 32)
-  const bumperMat = makeMat(hexToInt(COLORS.bumper), { opacity: 0, shininess: 80 })
-  bumperMat.emissive = new THREE.Color(hexToInt(COLORS.bumper))
-  bumperMat.emissiveIntensity = 0
-  const bumperMesh = new THREE.Mesh(bumperGeo, bumperMat)
-  bumperMesh.position.set(bx, by, actualZ)
-  // No extra rotation needed—upright by default
-  rootGroup.add(bumperMesh)
-
-  const bumperVisual = {
-    body: bumperBody,
-    mesh: bumperMesh,
-    imageMat: null,
-    glowUntil: 0
-  }
-
-  // Image overlay: flat circle on the top face of the bumper
-  const imgPath = COLORS.bumperImagePaths[bumperIdx]
-  if (imgPath) {
-    const tex = new THREE.TextureLoader().load(imgPath, (loadedTex) => {
-      loadedTex.wrapS = THREE.ClampToEdgeWrapping
-      loadedTex.wrapT = THREE.ClampToEdgeWrapping
-      loadedTex.needsUpdate = true
+    // Physics: upright cylinder with peg material (lower restitution = dampening)
+    const pegCylShape = new CANNON.Cylinder(pegRadius, pegRadius, pegHeight, 16)
+    const pegQ = new CANNON.Quaternion()
+    pegQ.setFromEuler(Math.PI / 2, 0, 0)
+    pegCylShape.transformAllPoints(new CANNON.Vec3(), pegQ)
+    const pegBody = new CANNON.Body({
+      mass: 0,
+      shape: pegCylShape,
+      material: pegMat
     })
-    const imgGeo = new THREE.CircleGeometry(bumperRadius, 32)
-    const imgMat = new THREE.MeshPhongMaterial({
-      map: tex,
-      transparent: true,
-      opacity: 1,
-      side: THREE.DoubleSide,
-      emissive: 0xffffff,
-      emissiveIntensity: 0
-    })
-    const imgMesh = new THREE.Mesh(imgGeo, imgMat)
-    // Position on top face of bumper; CircleGeometry is in XY plane so rotate to lie flat in XZ
-    imgMesh.position.set(bx, by + bumperHeight / 2 + 0.05, actualZ)
-    imgMesh.rotation.x = -Math.PI / 2
-    rootGroup.add(imgMesh)
+    const py = boardYAt(pz) + pegHeight / 2
+    pegBody.position.set(px, py, pz)
+    world.addBody(pegBody)
 
-    // Drop shadow: dark semi-transparent disc slightly below and larger than the image
-    const shadowGeo = new THREE.CircleGeometry(bumperRadius * 1.15, 32)
-    const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.35,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    })
-    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
-    shadowMesh.position.set(bx, by + bumperHeight / 2 + 0.01, actualZ)
-    shadowMesh.rotation.x = -Math.PI / 2
-    rootGroup.add(shadowMesh)
-
-    bumperVisual.imageMat = imgMat
-  }
-
-  bumperVisuals.push(bumperVisual)
-})
-
+    // Visual: small cylinder, solid colored
+    const pegGeo = new THREE.CylinderGeometry(pegRadius, pegRadius, pegHeight, 16)
+    const pegMesh = new THREE.Mesh(
+      pegGeo,
+      new THREE.MeshPhongMaterial({
+        color: hexToInt(COLORS.bumper),
+        specular: 0xffffff,
+        shininess: 60,
+        transparent: false,
+        opacity: 1
+      })
+    )
+    pegMesh.position.set(px, py, pz)
+    rootGroup.add(pegMesh)
+  })
 
   // ---------- HALF-CIRCLE TRIGGERS ----------
   const halfCircleConfigs = [

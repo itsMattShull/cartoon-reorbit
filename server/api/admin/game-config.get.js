@@ -92,7 +92,19 @@ export default defineEventHandler(async (event) => {
             winballBallWallRestitution: 1.2,
             winballPlungerMaxPull: 0.6,
             winballPlungerImpactFactor: 0.2,
-            winballPlungerForce: 500
+            winballPlungerForce: 500,
+            winballPeg1Radius: 1.5, winballPeg1Height: 4, winballPeg1X: -11, winballPeg1Z: -17,
+            winballPeg2Radius: 1.5, winballPeg2Height: 4, winballPeg2X: -3,  winballPeg2Z: -17,
+            winballPeg3Radius: 1.5, winballPeg3Height: 4, winballPeg3X: 5,   winballPeg3Z: -17,
+            winballPeg4Radius: 1.5, winballPeg4Height: 4, winballPeg4X: 12,  winballPeg4Z: -17,
+            winballPeg5Radius: 1.5, winballPeg5Height: 4, winballPeg5X: -12, winballPeg5Z: -6,
+            winballPeg6Radius: 1.5, winballPeg6Height: 4, winballPeg6X: -5,  winballPeg6Z: -6,
+            winballPeg7Radius: 1.5, winballPeg7Height: 4, winballPeg7X: 2,   winballPeg7Z: -6,
+            winballPeg8Radius: 1.5, winballPeg8Height: 4, winballPeg8X: 10,  winballPeg8Z: -6,
+            winballPeg9Radius: 1.5, winballPeg9Height: 4, winballPeg9X: -12, winballPeg9Z: 4,
+            winballPeg10Radius: 1.5, winballPeg10Height: 4, winballPeg10X: -5, winballPeg10Z: 5,
+            winballPeg11Radius: 1.5, winballPeg11Height: 4, winballPeg11X: 3,  winballPeg11Z: 4,
+            winballPeg12Radius: 1.5, winballPeg12Height: 4, winballPeg12X: 11, winballPeg12Z: 4
           },
           include: includeOptions
         })
