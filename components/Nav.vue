@@ -333,7 +333,7 @@ const adminGroups = [
           { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
           { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
       { label: 'Manage Achievements', to: '/admin/achievements' },
-      { label: 'Manage cZone Contests', to: '/admin/czone-contests' }
+      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
     ]
   },
   {
