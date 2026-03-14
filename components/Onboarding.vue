@@ -148,6 +148,28 @@
                 </div>
                 <p v-else class="mt-2 text-xs text-slate-500">No cZone searches are active right now.</p>
               </div>
+              <div>
+                <p class="text-[11px] uppercase tracking-widest text-slate-500">cZone Contests</p>
+                <div class="mt-1 text-[11px] text-slate-400 leading-snug">Submit your cZone and vote on others during active contests.</div>
+                <div v-if="czoneContests.length" class="mt-2 space-y-2">
+                  <div
+                    v-for="contest in czoneContests"
+                    :key="`contest-${contest.id}`"
+                    class="rounded-lg border border-[var(--reorbit-border)] bg-white/80 px-3 py-2 text-sm font-semibold"
+                  >
+                    <NuxtLink
+                      :to="`/czone-contest/${contest.id}`"
+                      class="text-sm font-semibold text-[var(--reorbit-blue)] hover:text-[var(--reorbit-purple)]"
+                    >
+                      {{ displayName(contest.name, 'cZone Contest') }}
+                    </NuxtLink>
+                    <p class="text-xs text-slate-500">
+                      Active {{ formatDateRange(contest.startDate, contest.endDate) }}
+                    </p>
+                  </div>
+                </div>
+                <p v-else class="mt-2 text-xs text-slate-500">No cZone contests are active right now.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -315,6 +337,7 @@ const formatDateRange = (start, end) => {
 
 const holidayEvents = computed(() => (eventsData.value?.holidayEvents || []))
 const czoneSearches = computed(() => (eventsData.value?.czoneSearches || []))
+const czoneContests = computed(() => (eventsData.value?.czoneContests || []))
 
 const handleOutsideClick = (event) => {
   if (!isOpen.value) return
