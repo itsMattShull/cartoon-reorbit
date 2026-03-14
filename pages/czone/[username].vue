@@ -78,7 +78,10 @@
         alt="Owner Avatar"
         class="w-14 h-14 rounded-full border border-blue-300"
       />
-      <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+      <div>
+        <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+        <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
+      </div>
     </div>
 
     <!-- Top toolbar (mobile, stacked) -->
@@ -298,7 +301,10 @@
           alt="Owner Avatar"
           class="w-14 h-14 rounded-full border border-blue-300"
         />
-        <div class="text-xl font-semibold text-blue-700"  style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+        <div>
+          <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+          <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
+        </div>
       </div>
       <h2 class="text-lg font-bold mb-2">Visitors: {{ visitorCount }}</h2>
       <div
@@ -853,6 +859,15 @@ const ownerName = ref(username.value)
 const ownerIsBooster = ref(false)
 const ownerAvatar = ref('/avatars/default.png')
 const ownerId = ref(null)
+const ownerLastActivity = ref(null)
+
+const lastOnlineText = computed(() => {
+  if (!ownerLastActivity.value) return null
+  const diffMs = Date.now() - new Date(ownerLastActivity.value).getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 1) return 'Last Online: Today!'
+  return `Last Online: ${diffDays} day${diffDays === 1 ? '' : 's'}`
+})
 const visitorCount = ref(0)
 const chatMessages = ref([])
 const newMessage = ref('')
@@ -917,6 +932,7 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
     ownerIsBooster.value = res.isBooster
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
+    ownerLastActivity.value = res.lastActivity ?? null
 
     if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
       zones.value = res.cZone.zones.map(z => ({
