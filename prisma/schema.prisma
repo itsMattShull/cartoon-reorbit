@@ -422,6 +422,9 @@ model User {
 
   ctoonSuggestions CtoonUserSuggestion[]
 
+  czoneContestSubmissions CZoneContestSubmission[]
+  czoneContestVotes       CZoneContestVote[]
+
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
   userMonsterItems UserMonsterItem[]
@@ -2072,4 +2075,53 @@ model UserScan {
   @@index([mappingId])
   @@index([configId])
   @@index([scannedAt])
+}
+
+// ── cZone Contest ─────────────────────────────────────────────────────────────
+
+model CZoneContest {
+  id                String    @id @default(uuid())
+  name              String
+  startDate         DateTime
+  endDate           DateTime
+  maxVotesPerUser   Int       @default(5)
+  winnerPrizes      Json      @default("{\"ctoons\":[],\"backgroundIds\":[],\"points\":0}")
+  participantPrizes Json      @default("{\"ctoons\":[],\"backgroundIds\":[],\"points\":0}")
+  winnerId          String?   // FK to the winning CZoneContestSubmission.id
+  distributedAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  submissions CZoneContestSubmission[]
+}
+
+model CZoneContestSubmission {
+  id         String   @id @default(uuid())
+  contestId  String
+  userId     String
+  zoneIndex  Int
+  imageUrl   String
+  createdAt  DateTime @default(now())
+
+  contest CZoneContest       @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  user    User               @relation(fields: [userId], references: [id])
+  votes   CZoneContestVote[]
+
+  @@unique([contestId, userId])
+  @@index([contestId])
+  @@index([userId])
+}
+
+model CZoneContestVote {
+  id           String   @id @default(uuid())
+  submissionId String
+  userId       String
+  createdAt    DateTime @default(now())
+
+  submission CZoneContestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id])
+
+  @@unique([submissionId, userId])
+  @@index([submissionId])
+  @@index([userId])
 }
