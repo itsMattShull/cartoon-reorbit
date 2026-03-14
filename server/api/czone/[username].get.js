@@ -201,6 +201,7 @@ export default defineEventHandler(async (event) => {
     avatar: user.avatar,
     ownerName: user.username,
     isBooster: user.isBooster,
+    lastActivity: user.lastActivity ?? null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

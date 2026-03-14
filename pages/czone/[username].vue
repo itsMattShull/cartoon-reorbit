@@ -78,7 +78,10 @@
         alt="Owner Avatar"
         class="w-14 h-14 rounded-full border border-blue-300"
       />
-      <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+      <div class="min-w-0 flex-1">
+        <div class="text-xl font-semibold text-blue-700 truncate">{{ ownerName }}</div>
+        <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
+      </div>
     </div>
 
     <!-- Top toolbar (mobile, stacked) -->
@@ -121,6 +124,7 @@
         <!-- INNER: keeps the true 800x600, just visually scaled -->
         <div :style="scaleStyle">
           <div
+            ref="mobileCanvasRef"
             class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
             :style="canvasBackgroundStyle"
           >
@@ -189,6 +193,13 @@
           class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
         >
           ✏️ Edit cZone
+        </button>
+        <button
+          v-if="user?.id === ownerId && activeContests.length > 0"
+          @click="openContestModal"
+          class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded flex items-center gap-1"
+        >
+          🏆 Submit to Contest
         </button>
       </div>
       <div
@@ -298,7 +309,10 @@
           alt="Owner Avatar"
           class="w-14 h-14 rounded-full border border-blue-300"
         />
-        <div class="text-xl font-semibold text-blue-700"  style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-xl font-semibold text-blue-700 truncate">{{ ownerName }}</div>
+          <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
+        </div>
       </div>
       <h2 class="text-lg font-bold mb-2">Visitors: {{ visitorCount }}</h2>
       <div
@@ -378,6 +392,7 @@
         </div>
         <div class="flex justify-center overflow-hidden mb-4">
           <div
+            ref="desktopCanvasRef"
             class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
             :style="canvasBackgroundStyle"
           >
@@ -448,6 +463,13 @@
               >
                 ✏️ Edit cZone
               </button>
+              <button
+                v-if="user?.id === ownerId && activeContests.length > 0"
+                @click="openContestModal"
+                class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded flex items-center gap-1"
+              >
+                🏆 Submit to Contest
+              </button>
             </div>
           </div>
 
@@ -459,6 +481,60 @@
       </div>
     </div>
   </div>
+
+  <!-- Contest Submission Modal -->
+  <transition name="fade">
+    <div
+      v-if="contestModalVisible"
+      class="fixed inset-0 z-50 flex sm:items-center items-start justify-center bg-black/50 overflow-y-auto p-4"
+    >
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+        <button class="absolute top-3 right-3 text-gray-500 hover:text-black" @click="closeContestModal">✕</button>
+        <h2 class="text-xl font-bold mb-4">Submit to Contest</h2>
+
+        <div v-if="contestSubmitSuccess" class="text-center py-6">
+          <div class="text-green-600 text-4xl mb-3">✓</div>
+          <p class="text-lg font-semibold text-green-700">Submitted successfully!</p>
+          <p class="text-gray-600 text-sm mt-2">Your cZone has been entered into the contest. Good luck!</p>
+          <button class="mt-4 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded" @click="closeContestModal">Close</button>
+        </div>
+
+        <template v-else>
+          <div class="space-y-4">
+            <!-- Zone selector -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Which zone do you want to submit?</label>
+              <select v-model="contestZoneIndex" class="w-full border rounded p-2">
+                <option v-for="z in availableZoneOptions" :key="z.value" :value="z.value">{{ z.label }}</option>
+              </select>
+            </div>
+
+            <!-- Contest selector -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Which contest?</label>
+              <select v-model="selectedContestId" class="w-full border rounded p-2">
+                <option value="">— Select a contest —</option>
+                <option v-for="c in activeContests" :key="c.id" :value="c.id">
+                  {{ c.name }} (ends {{ formatContestDate(c.endDate) }})
+                </option>
+              </select>
+            </div>
+
+            <div v-if="contestSubmitError" class="text-red-600 text-sm">{{ contestSubmitError }}</div>
+
+            <div class="flex gap-3 pt-2">
+              <button
+                :disabled="!selectedContestId || contestSubmitting"
+                class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded font-medium disabled:opacity-50"
+                @click="submitToContest"
+              >{{ contestSubmitting ? 'Capturing & submitting...' : 'Submit' }}</button>
+              <button class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded" @click="closeContestModal">Cancel</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </transition>
 
   <!-- Wishlist modal -->
   <transition name="fade">
@@ -853,6 +929,15 @@ const ownerName = ref(username.value)
 const ownerIsBooster = ref(false)
 const ownerAvatar = ref('/avatars/default.png')
 const ownerId = ref(null)
+const ownerLastActivity = ref(null)
+
+const lastOnlineText = computed(() => {
+  if (!ownerLastActivity.value) return null
+  const diffMs = Date.now() - new Date(ownerLastActivity.value).getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 1) return 'Last Online: Today!'
+  return `Last Online: ${diffDays} day${diffDays === 1 ? '' : 's'}`
+})
 const visitorCount = ref(0)
 const chatMessages = ref([])
 const newMessage = ref('')
@@ -917,6 +1002,7 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
     ownerIsBooster.value = res.isBooster
     ownerAvatar.value = res.avatar || '/avatars/default.png'
     ownerId.value = res.ownerId
+    ownerLastActivity.value = res.lastActivity ?? null
 
     if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
       zones.value = res.cZone.zones.map(z => ({
@@ -1434,6 +1520,108 @@ onBeforeUnmount(() => {
 
 // With definePageMeta key forcing remount per username, the route-change
 // watcher is no longer needed. onMounted/onBeforeUnmount handle lifecycle.
+
+// ── cZone Contest Submission ──────────────────────────────────────────────────
+const mobileCanvasRef = ref(null)
+const desktopCanvasRef = ref(null)
+const activeContests = ref([])
+const contestModalVisible = ref(false)
+const selectedContestId = ref('')
+const contestZoneIndex = ref(0)
+const contestSubmitting = ref(false)
+const contestSubmitError = ref('')
+const contestSubmitSuccess = ref(false)
+
+const availableZoneOptions = computed(() => {
+  return zones.value.map((z, i) => ({ value: i, label: `Zone ${i + 1}` }))
+})
+
+function formatContestDate(dt) {
+  return new Date(dt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function openContestModal() {
+  contestZoneIndex.value = currentZoneIndex.value
+  selectedContestId.value = activeContests.value.length === 1 ? activeContests.value[0].id : ''
+  contestSubmitError.value = ''
+  contestSubmitSuccess.value = false
+  contestModalVisible.value = true
+}
+
+function closeContestModal() {
+  contestModalVisible.value = false
+}
+
+async function submitToContest() {
+  if (!selectedContestId.value) return
+  contestSubmitError.value = ''
+  contestSubmitting.value = true
+
+  try {
+    // Determine which canvas element to capture (use the non-scaled desktop one if visible)
+    const canvasEl = desktopCanvasRef.value || mobileCanvasRef.value
+    if (!canvasEl) throw new Error('Could not find canvas to capture')
+
+    // Temporarily switch to the chosen zone for capture
+    const prevZone = currentZoneIndex.value
+    currentZoneIndex.value = contestZoneIndex.value
+    await nextTick()
+
+    // Use html2canvas to snapshot the zone
+    const { default: html2canvas } = await import('html2canvas')
+    const canvas = await html2canvas(canvasEl, {
+      useCORS: true,
+      allowTaint: true,
+      width: 800,
+      height: 600,
+      scale: 1
+    })
+
+    // Restore zone
+    currentZoneIndex.value = prevZone
+
+    // Convert to blob
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) throw new Error('Failed to capture zone image')
+
+    // Build form data
+    const fd = new FormData()
+    fd.append('image', blob, 'zone.png')
+    fd.append('zoneIndex', String(contestZoneIndex.value))
+
+    await $fetch(`/api/czone-contest/${selectedContestId.value}/submit`, {
+      method: 'POST',
+      body: fd
+    })
+
+    contestSubmitSuccess.value = true
+    // Remove active contest from list after successful submission (can't resubmit)
+    activeContests.value = activeContests.value.filter(c => c.id !== selectedContestId.value)
+  } catch (err) {
+    currentZoneIndex.value = contestZoneIndex.value // restore on error
+    contestSubmitError.value = err?.data?.statusMessage || err?.message || 'Submission failed'
+  } finally {
+    contestSubmitting.value = false
+  }
+}
+
+// Fetch active contests on mount (only needed if user is viewing their own cZone)
+onMounted(async () => {
+  if (isOwnerViewing.value) {
+    try {
+      activeContests.value = await $fetch('/api/czone-contest')
+    } catch {}
+  }
+})
+
+// Re-fetch if ownership status changes after initial mount
+watch(isOwnerViewing, async (val) => {
+  if (val && activeContests.value.length === 0) {
+    try {
+      activeContests.value = await $fetch('/api/czone-contest')
+    } catch {}
+  }
+})
 </script>
 
 <style>
