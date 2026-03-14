@@ -78,8 +78,8 @@
         alt="Owner Avatar"
         class="w-14 h-14 rounded-full border border-blue-300"
       />
-      <div>
-        <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+      <div class="min-w-0 flex-1">
+        <div class="text-xl font-semibold text-blue-700 truncate">{{ ownerName }}</div>
         <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
       </div>
     </div>
@@ -301,8 +301,8 @@
           alt="Owner Avatar"
           class="w-14 h-14 rounded-full border border-blue-300"
         />
-        <div>
-          <div class="text-xl font-semibold text-blue-700" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ownerName }}</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-xl font-semibold text-blue-700 truncate">{{ ownerName }}</div>
           <div v-if="lastOnlineText" class="text-xs text-gray-500 mt-0.5">{{ lastOnlineText }}</div>
         </div>
       </div>
