@@ -1571,6 +1571,18 @@ async function submitToContest() {
     currentZoneIndex.value = contestZoneIndex.value
     await nextTick()
 
+    // Wait for all images in the canvas to finish loading
+    const imgs = Array.from(canvasEl.querySelectorAll('img'))
+    if (imgs.length > 0) {
+      await Promise.all(imgs.map(img => {
+        if (img.complete && img.naturalHeight !== 0) return Promise.resolve()
+        return new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true })
+          img.addEventListener('error', resolve, { once: true })
+        })
+      }))
+    }
+
     // Use html2canvas to snapshot the zone
     const { default: html2canvas } = await import('html2canvas')
     const canvas = await html2canvas(canvasEl, {
