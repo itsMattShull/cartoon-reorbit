@@ -42,12 +42,13 @@
           :key="submission.id"
           class="bg-white rounded-xl shadow overflow-hidden flex flex-col"
         >
-          <img
-            :src="submission.imageUrl"
-            alt="cZone submission"
-            class="w-full object-cover"
-            style="aspect-ratio: 800/600"
-          />
+          <div class="relative w-full" style="aspect-ratio: 800/600">
+            <img
+              :src="submission.imageUrl"
+              alt="cZone submission"
+              class="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
           <div class="p-4 flex items-center justify-between">
             <span class="text-sm text-gray-600">
               {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
