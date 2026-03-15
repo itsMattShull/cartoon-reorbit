@@ -60,20 +60,31 @@ export default defineEventHandler(async (event) => {
     ? join(baseDir, 'cartoon-reorbit-images', 'czone-contests')
     : join(baseDir, 'public', 'czone-contests')
 
-  await mkdir(uploadDir, { recursive: true })
+  let filename
+  let imageUrl
+  try {
+    await mkdir(uploadDir, { recursive: true })
 
-  const safeExt = extname(filePart.filename || '').toLowerCase() || '.png'
-  const filename = `${me.id}-${id}-${Date.now()}${safeExt}`
-  await writeFile(join(uploadDir, filename), filePart.data)
+    const safeExt = extname(filePart.filename || '').toLowerCase() || '.png'
+    filename = `${me.id}-${id}-${Date.now()}${safeExt}`
+    await writeFile(join(uploadDir, filename), filePart.data)
 
-  const imageUrl = process.env.NODE_ENV === 'production'
-    ? `/images/czone-contests/${filename}`
-    : `/czone-contests/${filename}`
+    imageUrl = process.env.NODE_ENV === 'production'
+      ? `/images/czone-contests/${filename}`
+      : `/czone-contests/${filename}`
+  } catch (err) {
+    throw createError({ statusCode: 500, statusMessage: `Failed to save image: ${err.message}` })
+  }
 
   // Create submission record
-  const submission = await prisma.cZoneContestSubmission.create({
-    data: { contestId: id, userId: me.id, zoneIndex, imageUrl }
-  })
+  let submission
+  try {
+    submission = await prisma.cZoneContestSubmission.create({
+      data: { contestId: id, userId: me.id, zoneIndex, imageUrl }
+    })
+  } catch (err) {
+    throw createError({ statusCode: 500, statusMessage: `Failed to save submission: ${err.message}` })
+  }
 
   return { id: submission.id, imageUrl }
 })
