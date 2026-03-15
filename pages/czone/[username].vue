@@ -1533,7 +1533,11 @@ const contestSubmitError = ref('')
 const contestSubmitSuccess = ref(false)
 
 const availableZoneOptions = computed(() => {
-  return zones.value.map((z, i) => ({ value: i, label: `Zone ${i + 1}` }))
+  const opts = zones.value
+    .map((z, i) => ({ value: i, label: `Zone ${i + 1}`, hasToons: Array.isArray(z.toons) && z.toons.length > 0 }))
+    .filter(o => o.hasToons)
+    .map(({ value, label }) => ({ value, label }))
+  return opts.length ? opts : [{ value: 0, label: 'Zone 1' }]
 })
 
 function formatContestDate(dt) {
