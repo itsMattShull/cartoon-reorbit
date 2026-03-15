@@ -6,6 +6,7 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
@@ -16,7 +17,7 @@ const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
-const ALLOWED = new Set(['image/png','image/jpeg','image/jpg','image/svg+xml'])
+const ALLOWED = new Set(['image/png','image/jpeg','image/jpg','image/svg+xml','image/gif','video/mp4'])
 
 const publicAssetPath = (filename) =>
   process.env.NODE_ENV === 'production' ? `/images/homepage/${filename}` : `/homepage/${filename}`
@@ -61,9 +62,26 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: `Invalid file type for ${key}` })
     }
     const ext = extname(part.filename || '').toLowerCase() ||
-      (part.type === 'image/svg+xml' ? '.svg' : part.type === 'image/png' ? '.png' : '.jpg')
-    const filename = `${key}-${Date.now()}${ext}`
-    await writeFile(join(uploadDir, filename), part.data)
+      (part.type === 'image/svg+xml' ? '.svg' : part.type === 'image/png' ? '.png' : part.type === 'image/gif' ? '.gif' : part.type === 'video/mp4' ? '.mp4' : '.jpg')
+    const ts = Date.now()
+    const filename = `${key}-${ts}${ext}`
+    const dest = join(uploadDir, filename)
+    await writeFile(dest, part.data)
+    // If this is an mp4, attempt to generate a poster image using ffmpeg (optional).
+    // Poster will be named with the same base but .jpg so frontend can discover it.
+    if (ext === '.mp4') {
+      try {
+        const posterName = `${key}-${ts}.jpg`
+        const posterDest = join(uploadDir, posterName)
+        const args = ['-ss', '00:00:01', '-i', dest, '-frames:v', '1', '-q:v', '2', posterDest]
+        const res = spawnSync('ffmpeg', args, { stdio: 'ignore' })
+        if (res.status === 0) {
+          // poster generated successfully
+        }
+      } catch (e) {
+        // ignore poster generation failures
+      }
+    }
     return publicAssetPath(filename)
   }
 
