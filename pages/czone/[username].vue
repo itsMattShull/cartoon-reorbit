@@ -1562,16 +1562,33 @@ async function submitToContest() {
   contestSubmitting.value = true
 
   try {
-    // Determine which canvas element to capture (use the non-scaled desktop one if visible)
-    const canvasEl = desktopCanvasRef.value || mobileCanvasRef.value
+    // Determine which canvas element to capture.
+    // The desktop canvas is inside a "hidden lg:flex" container (display:none on mobile),
+    // so we must pick the one that is actually rendered in the DOM.
+    const desktopVisible = desktopCanvasRef.value && desktopCanvasRef.value.offsetParent !== null
+    const canvasEl = desktopVisible ? desktopCanvasRef.value : mobileCanvasRef.value
     if (!canvasEl) throw new Error('Could not find canvas to capture')
 
     // Temporarily switch to the chosen zone for capture
     const prevZone = currentZoneIndex.value
     currentZoneIndex.value = contestZoneIndex.value
+    // Two ticks: first to flush reactive updates, second to let child components mount
+    await nextTick()
     await nextTick()
 
-    // Wait for all images in the canvas to finish loading
+    // Preload the zone's background image so it appears in the captured snapshot
+    const bgSrc = bgUrl(zones.value[contestZoneIndex.value]?.background)
+    if (bgSrc) {
+      await new Promise(resolve => {
+        const bgImg = new Image()
+        bgImg.crossOrigin = 'anonymous'
+        bgImg.onload = resolve
+        bgImg.onerror = resolve
+        bgImg.src = bgSrc
+      })
+    }
+
+    // Wait for all <img> elements in the canvas to finish loading
     const imgs = Array.from(canvasEl.querySelectorAll('img'))
     if (imgs.length > 0) {
       await Promise.all(imgs.map(img => {
@@ -1590,7 +1607,9 @@ async function submitToContest() {
       allowTaint: true,
       width: 800,
       height: 600,
-      scale: 1
+      scale: 1,
+      scrollX: 0,
+      scrollY: 0
     })
 
     // Restore zone
