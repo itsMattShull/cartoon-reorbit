@@ -7,7 +7,7 @@ import { prisma } from '@/server/prisma'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..', '..', '..')
+  ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
 export default defineEventHandler(async (event) => {
