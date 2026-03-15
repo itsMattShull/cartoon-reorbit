@@ -53,13 +53,22 @@
               {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
             </span>
             <div class="flex gap-2">
-              <!-- Own submission badge -->
-              <span
-                v-if="submission.isOwn"
-                class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium"
-              >
-                Your submission
-              </span>
+              <!-- Own submission badge + delete -->
+              <template v-if="submission.isOwn">
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                  Your submission
+                </span>
+                <button
+                  :disabled="!!contest.distributedAt || deletingId === submission.id"
+                  class="text-xs px-2 py-1 rounded font-medium transition-colors"
+                  :class="!contest.distributedAt
+                    ? 'bg-red-100 hover:bg-red-200 text-red-700'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
+                  @click="deleteSubmission(submission)"
+                >
+                  {{ deletingId === submission.id ? 'Deleting...' : 'Delete' }}
+                </button>
+              </template>
 
               <!-- Vote / Unvote button -->
               <template v-else-if="me">
@@ -104,6 +113,7 @@ const votesRemaining = computed(() => contest.value?.votesRemaining ?? 0)
 const toastMessage = ref('')
 const toastType = ref('error')
 const votingId = ref(null)
+const deletingId = ref(null)
 
 function showToast(msg, type = 'error') {
   toastType.value = type
@@ -149,6 +159,20 @@ async function unvote(submission) {
     showToast(err?.data?.statusMessage || 'Failed to remove vote')
   } finally {
     votingId.value = null
+  }
+}
+
+async function deleteSubmission(submission) {
+  if (!confirm('Are you sure you want to delete your submission? This cannot be undone.')) return
+  deletingId.value = submission.id
+  try {
+    await $fetch(`/api/czone-contest/${contestId}/submissions/${submission.id}`, { method: 'DELETE' })
+    contest.value.submissions = contest.value.submissions.filter(s => s.id !== submission.id)
+    showToast('Your submission has been deleted.', 'success')
+  } catch (err) {
+    showToast(err?.data?.statusMessage || 'Failed to delete submission')
+  } finally {
+    deletingId.value = null
   }
 }
 </script>
