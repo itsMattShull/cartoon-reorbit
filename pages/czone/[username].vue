@@ -1600,6 +1600,21 @@ async function submitToContest() {
       }))
     }
 
+    // Temporarily remove CSS transform from the scaled wrapper so html2canvas
+    // captures the full 800×600 element instead of just the scaled region
+    const innerWrapper = canvasEl.parentElement
+    const outerWrapper = innerWrapper?.parentElement
+    const savedInnerTransform = innerWrapper?.style.transform ?? ''
+    const savedOuterOverflow = outerWrapper?.style.overflow ?? ''
+    const savedOuterWidth = outerWrapper?.style.width ?? ''
+    const savedOuterHeight = outerWrapper?.style.height ?? ''
+    if (innerWrapper) innerWrapper.style.transform = 'none'
+    if (outerWrapper) {
+      outerWrapper.style.overflow = 'visible'
+      outerWrapper.style.width = '800px'
+      outerWrapper.style.height = '600px'
+    }
+
     // Use html2canvas to snapshot the zone
     const { default: html2canvas } = await import('html2canvas')
     const canvas = await html2canvas(canvasEl, {
@@ -1611,6 +1626,14 @@ async function submitToContest() {
       scrollX: 0,
       scrollY: 0
     })
+
+    // Restore scaled wrapper styles
+    if (innerWrapper) innerWrapper.style.transform = savedInnerTransform
+    if (outerWrapper) {
+      outerWrapper.style.overflow = savedOuterOverflow
+      outerWrapper.style.width = savedOuterWidth
+      outerWrapper.style.height = savedOuterHeight
+    }
 
     // Restore zone
     currentZoneIndex.value = prevZone
