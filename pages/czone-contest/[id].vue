@@ -1,6 +1,7 @@
 <template>
   <Nav />
-  <div class="min-h-screen bg-gray-50 px-4 py-6" style="margin-top: 70px">
+  <div class="reorbit-theme relative overflow-hidden min-h-screen" style="background: linear-gradient(180deg, var(--reorbit-cyan) -50%, transparent 100%) top/100% 100px no-repeat, linear-gradient(180deg, var(--reorbit-blue), var(--reorbit-navy))">
+  <div class="mt-16 md:mt-20 min-h-screen px-4 py-6 text-white">
     <Toast v-if="toastMessage" :message="toastMessage" :type="toastType" />
 
     <!-- Loading -->
@@ -17,24 +18,64 @@
     <template v-else-if="contest">
       <!-- Header -->
       <div class="max-w-6xl mx-auto mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">{{ contest.name }}</h1>
-        <div class="mt-2 text-sm text-gray-600 flex flex-wrap gap-4">
-          <span>Ends: <strong>{{ formatDate(contest.endDate) }}</strong></span>
-          <span v-if="me">
-            Votes remaining: <strong>{{ votesRemaining }}</strong> / {{ contest.maxVotesPerUser }}
-          </span>
-          <span v-if="contest.distributedAt" class="text-amber-600 font-semibold">Contest ended — prizes distributed</span>
-        </div>
-        <p v-if="!me" class="mt-2 text-sm text-gray-500">
-          <a href="/api/auth/discord" class="text-blue-600 hover:underline">Log in</a> to vote.
-        </p>
-        <div v-if="me && !contest.distributedAt && !hasOwnSubmission" class="mt-3">
-          <button
-            class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium px-4 py-2 rounded"
-            @click="openSubmitModal"
-          >
-            Submit Your cZone
-          </button>
+        <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
+          <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
+          <div class="p-6 text-slate-900">
+            <h1 class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ contest.name }}</h1>
+
+            <div class="mt-5 flex flex-wrap gap-8 items-start">
+              <!-- Countdown / ended -->
+              <div v-if="!contest.distributedAt">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Time Remaining</p>
+                <div class="flex items-end gap-3">
+                  <template v-if="countdown.days > 0">
+                    <div class="text-center">
+                      <span class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ countdown.days }}</span>
+                      <p class="text-xs text-slate-500 mt-0.5">{{ countdown.days === 1 ? 'day' : 'days' }}</p>
+                    </div>
+                    <span class="text-slate-300 text-2xl pb-4">·</span>
+                  </template>
+                  <template v-if="countdown.days > 0 || countdown.hours > 0">
+                    <div class="text-center">
+                      <span class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ countdown.hours }}</span>
+                      <p class="text-xs text-slate-500 mt-0.5">{{ countdown.hours === 1 ? 'hr' : 'hrs' }}</p>
+                    </div>
+                    <span class="text-slate-300 text-2xl pb-4">·</span>
+                  </template>
+                  <div class="text-center">
+                    <span class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ countdown.minutes }}</span>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ countdown.minutes === 1 ? 'min' : 'mins' }}</p>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="flex items-center">
+                <span class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 text-sm font-semibold px-3 py-1.5 rounded-full">
+                  Contest ended — prizes distributed
+                </span>
+              </div>
+
+              <!-- Votes remaining -->
+              <div v-if="me && !contest.distributedAt">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Votes Remaining</p>
+                <p class="text-3xl font-bold text-[var(--reorbit-blue)]">
+                  {{ votesRemaining }}
+                  <span class="text-base font-normal text-slate-400">/ {{ contest.maxVotesPerUser }}</span>
+                </p>
+              </div>
+            </div>
+
+            <p v-if="!me" class="mt-4 text-sm text-slate-500">
+              <a href="/api/auth/discord" class="text-[var(--reorbit-blue)] hover:underline font-medium">Log in</a> to vote.
+            </p>
+            <div v-if="me && !contest.distributedAt && !hasOwnSubmission" class="mt-5">
+              <button
+                class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium px-4 py-2 rounded"
+                @click="openSubmitModal"
+              >
+                Submit Your cZone
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -84,6 +125,7 @@
         </div>
       </div>
     </template>
+  </div>
   </div>
 
   <!-- Submit cZone Modal -->
@@ -310,6 +352,31 @@ async function submitCZone() {
   }
 }
 
+// ── Countdown ─────────────────────────────────────────────────────────────────
+const countdown = ref({ days: 0, hours: 0, minutes: 0 })
+let countdownTimer = null
+
+function updateContestCountdown() {
+  if (!contest.value?.endDate) return
+  const diffMs = new Date(contest.value.endDate) - Date.now()
+  if (diffMs <= 0) { countdown.value = { days: 0, hours: 0, minutes: 0 }; return }
+  const totalMinutes = Math.floor(diffMs / 60000)
+  countdown.value = {
+    days: Math.floor(totalMinutes / 1440),
+    hours: Math.floor((totalMinutes % 1440) / 60),
+    minutes: totalMinutes % 60
+  }
+}
+
+onMounted(() => {
+  updateContestCountdown()
+  countdownTimer = setInterval(updateContestCountdown, 60000)
+})
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+})
+
 const shuffledSubmissions = computed(() => {
   if (!contest.value?.submissions) return []
   const arr = [...contest.value.submissions]
@@ -359,6 +426,20 @@ async function vote(submission) {
 </script>
 
 <style>
+.reorbit-theme {
+  --reorbit-deep: #010A36;
+  --reorbit-navy: #002C62;
+  --reorbit-blue: #2D5294;
+  --reorbit-cyan: #0FDDD6;
+  --reorbit-aqua: #16ECE9;
+  --reorbit-teal: #19E6AC;
+  --reorbit-green-2: #70F873;
+  --reorbit-lime: #AFFA2D;
+  --reorbit-purple: #9647CF;
+  --reorbit-border: rgba(45,82,148,0.25);
+  --reorbit-tint: rgba(0,44,98,0.035);
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
