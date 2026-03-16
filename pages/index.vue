@@ -41,7 +41,13 @@
       <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-8">
         <div class="grid lg:grid-cols-2 gap-8">
           <div class="relative">
-            <img
+            <video v-if="isVideo(topLeftSrc)"
+              :src="topLeftSrc"
+              controls playsinline preload="metadata"
+              class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
+              @click="login"
+            ></video>
+            <img v-else
               :src="topLeftSrc"
               alt="Cartoon ReOrbit Welcome Image"
               class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
@@ -58,14 +64,31 @@
 
             <div class="relative">
               <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-                <img :src="bottomLeftSrc" alt="Cartoon ReOrbit gToons preview" class="rounded-2xl" style="width:100%; cursor: pointer;" @click="login" />
+                <video v-if="isVideo(bottomLeftSrc)"
+                  :src="bottomLeftSrc"
+                  controls playsinline preload="metadata"
+                  class="rounded-2xl" style="width:100%; cursor: pointer;"
+                  @click="login"
+                ></video>
+                <img v-else
+                  :src="bottomLeftSrc"
+                  alt="Cartoon ReOrbit gToons preview"
+                  class="rounded-2xl" style="width:100%; cursor: pointer;"
+                  @click="login"
+                />
               </div>
             </div>
           </div>
 
           <div class="relative">
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-              <img
+              <video v-if="isVideo(topRightSrc)"
+                :src="topRightSrc"
+                controls playsinline preload="metadata"
+                class="rounded-2xl" style="width:100%; cursor: pointer;"
+                @click="login"
+              ></video>
+              <img v-else
                 :src="topRightSrc"
                 alt="Cartoon ReOrbit WinWheel Preview"
                 class="rounded-2xl" style="width:100%; cursor: pointer;"
@@ -74,7 +97,13 @@
             </div>
             <!-- bottom-right card -->
             <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2 relative">
-              <img
+              <video v-if="isVideo(bottomRightSrc)"
+                :src="bottomRightSrc"
+                controls playsinline preload="metadata"
+                class="rounded-2xl w-full cursor-pointer"
+                @click="login"
+              ></video>
+              <img v-else
                 :src="bottomRightSrc"
                 alt="Cartoon ReOrbit cToons preview"
                 class="rounded-2xl w-full cursor-pointer"
@@ -230,6 +259,10 @@
 </template>
 
 <script setup>
+// Utility to check if a path is an mp4 video
+function isVideo(path) {
+  return /\.mp4($|\?)/i.test(path || '')
+}
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 

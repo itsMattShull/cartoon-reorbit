@@ -520,6 +520,16 @@
               </select>
             </div>
 
+            <div v-if="canvasRFPDetected" class="bg-yellow-50 border border-yellow-300 rounded p-3 text-sm text-yellow-800">
+              <strong>LibreWolf / Canvas Protection Detected</strong><br>
+              Your browser's canvas fingerprinting protection is active, which will cause the snapshot image to have vertical line artifacts. To fix this, you can either:<br>
+              <ul class="list-disc list-inside mt-1 space-y-1">
+                <li>In LibreWolf, go to <strong>about:preferences#privacy</strong> and disable "Enable Resist Fingerprinting", then retry.</li>
+                <li>Or, open <strong>about:config</strong>, search for <code>privacy.resistFingerprinting</code>, and set it to <strong>false</strong>.</li>
+              </ul>
+              You can re-enable it after submitting.
+            </div>
+
             <div v-if="contestSubmitError" class="text-red-600 text-sm">{{ contestSubmitError }}</div>
 
             <div class="flex gap-3 pt-2">
@@ -1531,9 +1541,29 @@ const contestZoneIndex = ref(0)
 const contestSubmitting = ref(false)
 const contestSubmitError = ref('')
 const contestSubmitSuccess = ref(false)
+const canvasRFPDetected = ref(false)
+
+function detectCanvasRFP() {
+  try {
+    const c = document.createElement('canvas')
+    c.width = 1
+    c.height = 1
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = 'rgb(100, 150, 200)'
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+    canvasRFPDetected.value = (r !== 100 || g !== 150 || b !== 200)
+  } catch {
+    canvasRFPDetected.value = false
+  }
+}
 
 const availableZoneOptions = computed(() => {
-  return zones.value.map((z, i) => ({ value: i, label: `Zone ${i + 1}` }))
+  const opts = zones.value
+    .map((z, i) => ({ value: i, label: `Zone ${i + 1}`, hasToons: Array.isArray(z.toons) && z.toons.length > 0 }))
+    .filter(o => o.hasToons)
+    .map(({ value, label }) => ({ value, label }))
+  return opts.length ? opts : [{ value: 0, label: 'Zone 1' }]
 })
 
 function formatContestDate(dt) {
@@ -1545,6 +1575,7 @@ function openContestModal() {
   selectedContestId.value = activeContests.value.length === 1 ? activeContests.value[0].id : ''
   contestSubmitError.value = ''
   contestSubmitSuccess.value = false
+  detectCanvasRFP()
   contestModalVisible.value = true
 }
 
@@ -1558,14 +1589,58 @@ async function submitToContest() {
   contestSubmitting.value = true
 
   try {
-    // Determine which canvas element to capture (use the non-scaled desktop one if visible)
-    const canvasEl = desktopCanvasRef.value || mobileCanvasRef.value
+    // Determine which canvas element to capture.
+    // The desktop canvas is inside a "hidden lg:flex" container (display:none on mobile),
+    // so we must pick the one that is actually rendered in the DOM.
+    const desktopVisible = desktopCanvasRef.value && desktopCanvasRef.value.offsetParent !== null
+    const canvasEl = desktopVisible ? desktopCanvasRef.value : mobileCanvasRef.value
     if (!canvasEl) throw new Error('Could not find canvas to capture')
 
     // Temporarily switch to the chosen zone for capture
     const prevZone = currentZoneIndex.value
     currentZoneIndex.value = contestZoneIndex.value
+    // Two ticks: first to flush reactive updates, second to let child components mount
     await nextTick()
+    await nextTick()
+
+    // Preload the zone's background image so it appears in the captured snapshot
+    const bgSrc = bgUrl(zones.value[contestZoneIndex.value]?.background)
+    if (bgSrc) {
+      await new Promise(resolve => {
+        const bgImg = new Image()
+        bgImg.crossOrigin = 'anonymous'
+        bgImg.onload = resolve
+        bgImg.onerror = resolve
+        bgImg.src = bgSrc
+      })
+    }
+
+    // Wait for all <img> elements in the canvas to finish loading
+    const imgs = Array.from(canvasEl.querySelectorAll('img'))
+    if (imgs.length > 0) {
+      await Promise.all(imgs.map(img => {
+        if (img.complete && img.naturalHeight !== 0) return Promise.resolve()
+        return new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true })
+          img.addEventListener('error', resolve, { once: true })
+        })
+      }))
+    }
+
+    // Temporarily remove CSS transform from the scaled wrapper so html2canvas
+    // captures the full 800×600 element instead of just the scaled region
+    const innerWrapper = canvasEl.parentElement
+    const outerWrapper = innerWrapper?.parentElement
+    const savedInnerTransform = innerWrapper?.style.transform ?? ''
+    const savedOuterOverflow = outerWrapper?.style.overflow ?? ''
+    const savedOuterWidth = outerWrapper?.style.width ?? ''
+    const savedOuterHeight = outerWrapper?.style.height ?? ''
+    if (innerWrapper) innerWrapper.style.transform = 'none'
+    if (outerWrapper) {
+      outerWrapper.style.overflow = 'visible'
+      outerWrapper.style.width = '800px'
+      outerWrapper.style.height = '600px'
+    }
 
     // Use html2canvas to snapshot the zone
     const { default: html2canvas } = await import('html2canvas')
@@ -1574,8 +1649,18 @@ async function submitToContest() {
       allowTaint: true,
       width: 800,
       height: 600,
-      scale: 1
+      scale: 1,
+      scrollX: 0,
+      scrollY: 0
     })
+
+    // Restore scaled wrapper styles
+    if (innerWrapper) innerWrapper.style.transform = savedInnerTransform
+    if (outerWrapper) {
+      outerWrapper.style.overflow = savedOuterOverflow
+      outerWrapper.style.width = savedOuterWidth
+      outerWrapper.style.height = savedOuterHeight
+    }
 
     // Restore zone
     currentZoneIndex.value = prevZone

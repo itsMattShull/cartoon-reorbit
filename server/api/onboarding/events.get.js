@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const now = new Date()
-  const [holidayEvents, czoneSearches] = await Promise.all([
+  const [holidayEvents, czoneSearches, czoneContests] = await Promise.all([
     db.holidayEvent.findMany({
       where: {
         isActive: true,
@@ -36,6 +36,20 @@ export default defineEventHandler(async (event) => {
         startAt: true,
         endAt: true
       }
+    }),
+    db.cZoneContest.findMany({
+      where: {
+        startDate: { lte: now },
+        endDate: { gte: now },
+        distributedAt: null
+      },
+      orderBy: { endDate: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true
+      }
     })
   ])
 
@@ -52,6 +66,12 @@ export default defineEventHandler(async (event) => {
       linkInOnboarding: row.linkInOnboarding,
       startAt: row.startAt.toISOString(),
       endAt: row.endAt.toISOString()
+    })),
+    czoneContests: czoneContests.map((row) => ({
+      id: row.id,
+      name: row.name,
+      startDate: row.startDate.toISOString(),
+      endDate: row.endDate.toISOString()
     }))
   }
 })
