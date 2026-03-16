@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { invalidate } from '@/server/utils/cache'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 
 // ── path helpers ──────────────────────────────────────────────
@@ -172,6 +173,8 @@ export default defineEventHandler(async (event) => {
       newValue: { id: newCtoon.id, name: newCtoon.name, series: newCtoon.series, rarity: newCtoon.rarity }
     })
   } catch {}
+
+  await invalidate('cmart:catalog')
 
   return { ctoon: newCtoon }
 })

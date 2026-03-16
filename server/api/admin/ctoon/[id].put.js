@@ -8,6 +8,7 @@ import {
 } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { invalidate } from '@/server/utils/cache'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
@@ -203,6 +204,8 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch {}
+
+  await invalidate('cmart:catalog')
 
   return { success: true, ctoon: updated }
 })

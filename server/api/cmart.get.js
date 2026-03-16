@@ -1,4 +1,5 @@
 import { prisma } from '@/server/prisma'
+import { getOrSet } from '@/server/utils/cache'
 
 function computeInitialCap(totalQty, percent, overrideQty) {
   if (totalQty == null) return null
@@ -10,71 +11,73 @@ function computeInitialCap(totalQty, percent, overrideQty) {
 }
 
 export default defineEventHandler(async () => {
-  const now = new Date()
-  const twoWeeksAhead = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000)
+  return getOrSet('cmart:catalog', 30, async () => {
+    const now = new Date()
+    const twoWeeksAhead = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000)
 
-  // Load global release settings (with safe defaults)
-  let initialPercent = 75
-  let delayHours = 12
-  try {
-    const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-    if (cfg) {
-      if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
-      if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
-    }
-  } catch {}
+    // Load global release settings (with safe defaults)
+    let initialPercent = 75
+    let delayHours = 12
+    try {
+      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+      if (cfg) {
+        if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
+        if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+      }
+    } catch {}
 
-  const ctoons = await prisma.ctoon.findMany({
-    where: {
-      inCmart: true,
-      releaseDate: { lte: twoWeeksAhead }
-    },
-    orderBy: { releaseDate: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      set: true,
-      series: true,
-      rarity: true,
-      assetPath: true,
-      price: true,
-      releaseDate: true,
-      quantity: true,
-      totalMinted: true,
-      isGtoon: true,
-      cost: true,
-      power: true,
-      characters: true,
-      // advisory fields (optional)
-      initialReleaseAt: true,
-      finalReleaseAt: true,
-      initialReleaseQty: true,
-      finalReleaseQty: true,
-    }
-  })
+    const ctoons = await prisma.ctoon.findMany({
+      where: {
+        inCmart: true,
+        releaseDate: { lte: twoWeeksAhead }
+      },
+      orderBy: { releaseDate: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        set: true,
+        series: true,
+        rarity: true,
+        assetPath: true,
+        price: true,
+        releaseDate: true,
+        quantity: true,
+        totalMinted: true,
+        isGtoon: true,
+        cost: true,
+        power: true,
+        characters: true,
+        // advisory fields (optional)
+        initialReleaseAt: true,
+        finalReleaseAt: true,
+        initialReleaseQty: true,
+        finalReleaseQty: true,
+      }
+    })
 
-  // Compute nextReleaseAt and initialCap for UI convenience
-  return ctoons.map(c => {
-    const qty = c.quantity
-    const finalAt = c.finalReleaseAt
-      ? new Date(c.finalReleaseAt)
-      : c.releaseDate
-        ? new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-        : null
-    const initialCap = qty != null ? computeInitialCap(qty, initialPercent, c.initialReleaseQty) : null
-    let nextReleaseAt = null
-    if (c.releaseDate && new Date(c.releaseDate) > now) {
-      nextReleaseAt = c.releaseDate
-    } else if (
-      qty != null && c.releaseDate && finalAt && now < finalAt && c.totalMinted >= (initialCap ?? 0) && c.totalMinted < qty
-    ) {
-      nextReleaseAt = finalAt.toISOString()
-    }
-    return {
-      ...c,
-      initialCap,
-      finalReleaseAt: finalAt ? finalAt.toISOString() : null,
-      nextReleaseAt
-    }
+    // Compute nextReleaseAt and initialCap for UI convenience
+    return ctoons.map(c => {
+      const qty = c.quantity
+      const finalAt = c.finalReleaseAt
+        ? new Date(c.finalReleaseAt)
+        : c.releaseDate
+          ? new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+          : null
+      const initialCap = qty != null ? computeInitialCap(qty, initialPercent, c.initialReleaseQty) : null
+      let nextReleaseAt = null
+      if (c.releaseDate && new Date(c.releaseDate) > now) {
+        nextReleaseAt = c.releaseDate
+      } else if (
+        qty != null && c.releaseDate && finalAt && now < finalAt && c.totalMinted >= (initialCap ?? 0) && c.totalMinted < qty
+      ) {
+        nextReleaseAt = finalAt.toISOString()
+      }
+      return {
+        ...c,
+        initialCap,
+        finalReleaseAt: finalAt ? finalAt.toISOString() : null,
+        nextReleaseAt
+      }
+    })
   })
 })
