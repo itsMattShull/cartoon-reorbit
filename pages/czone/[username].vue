@@ -520,6 +520,16 @@
               </select>
             </div>
 
+            <div v-if="canvasRFPDetected" class="bg-yellow-50 border border-yellow-300 rounded p-3 text-sm text-yellow-800">
+              <strong>LibreWolf / Canvas Protection Detected</strong><br>
+              Your browser's canvas fingerprinting protection is active, which will cause the snapshot image to have vertical line artifacts. To fix this, you can either:<br>
+              <ul class="list-disc list-inside mt-1 space-y-1">
+                <li>In LibreWolf, go to <strong>about:preferences#privacy</strong> and disable "Enable Resist Fingerprinting", then retry.</li>
+                <li>Or, open <strong>about:config</strong>, search for <code>privacy.resistFingerprinting</code>, and set it to <strong>false</strong>.</li>
+              </ul>
+              You can re-enable it after submitting.
+            </div>
+
             <div v-if="contestSubmitError" class="text-red-600 text-sm">{{ contestSubmitError }}</div>
 
             <div class="flex gap-3 pt-2">
@@ -1531,6 +1541,22 @@ const contestZoneIndex = ref(0)
 const contestSubmitting = ref(false)
 const contestSubmitError = ref('')
 const contestSubmitSuccess = ref(false)
+const canvasRFPDetected = ref(false)
+
+function detectCanvasRFP() {
+  try {
+    const c = document.createElement('canvas')
+    c.width = 1
+    c.height = 1
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = 'rgb(100, 150, 200)'
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+    canvasRFPDetected.value = (r !== 100 || g !== 150 || b !== 200)
+  } catch {
+    canvasRFPDetected.value = false
+  }
+}
 
 const availableZoneOptions = computed(() => {
   const opts = zones.value
@@ -1549,6 +1575,7 @@ function openContestModal() {
   selectedContestId.value = activeContests.value.length === 1 ? activeContests.value[0].id : ''
   contestSubmitError.value = ''
   contestSubmitSuccess.value = false
+  detectCanvasRFP()
   contestModalVisible.value = true
 }
 
