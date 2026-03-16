@@ -91,113 +91,141 @@
     </div>
 
     <!-- ── Create / Edit Modal ─────────────────────────────────────── -->
-    <Modal v-if="showFormModal" :hide-close-button="true" :close-on-backdrop="false" @close="closeFormModal">
-      <h2 class="text-lg font-semibold text-white mb-4">{{ editingContest ? 'Edit Contest' : 'Create Contest' }}</h2>
-
-      <div class="space-y-4 text-sm">
-        <!-- Name -->
-        <div>
-          <label class="block text-gray-300 mb-1">Contest Name</label>
-          <input v-model="form.name" class="w-full border rounded p-2 bg-gray-700 text-white" placeholder="Spring cZone Showdown" />
+    <div v-if="showFormModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click.self="closeFormModal"></div>
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-lg font-semibold">{{ editingContest ? 'Edit Contest' : 'Create Contest' }}</h2>
+          <button class="text-gray-600 hover:text-gray-800" @click="closeFormModal">Close</button>
         </div>
 
-        <!-- Dates -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-gray-300 mb-1">Start Date</label>
-            <input v-model="form.startDate" type="datetime-local" class="w-full border rounded p-2 bg-gray-700 text-white" />
+        <div class="p-4 overflow-y-auto flex-1">
+          <div class="space-y-4 text-sm">
+            <!-- Name -->
+            <div>
+              <label class="block font-medium mb-1">Contest Name</label>
+              <input v-model="form.name" class="w-full border rounded px-3 py-2" placeholder="Spring cZone Showdown" />
+            </div>
+
+            <!-- Dates -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-medium mb-1">Start Date</label>
+                <input v-model="form.startDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
+              </div>
+              <div>
+                <label class="block font-medium mb-1">End Date</label>
+                <input v-model="form.endDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
+              </div>
+            </div>
+
+            <!-- Max votes -->
+            <div>
+              <label class="block font-medium mb-1">Max Votes Per User</label>
+              <input v-model.number="form.maxVotesPerUser" type="number" min="1" class="w-full border rounded px-3 py-2" />
+            </div>
+
+            <!-- Winner prizes -->
+            <div>
+              <p class="font-semibold mb-2">Winner Prizes</p>
+              <PrizeBuilder v-model="form.winnerPrizes" :ctoon-options="ctoonOptions" :bg-options="bgOptions" />
+            </div>
+
+            <!-- Participant prizes -->
+            <div>
+              <p class="font-semibold mb-2">Participant Prizes</p>
+              <PrizeBuilder v-model="form.participantPrizes" :ctoon-options="ctoonOptions" :bg-options="bgOptions" />
+            </div>
+
+            <div v-if="formError" class="text-red-600 text-xs">{{ formError }}</div>
           </div>
-          <div>
-            <label class="block text-gray-300 mb-1">End Date</label>
-            <input v-model="form.endDate" type="datetime-local" class="w-full border rounded p-2 bg-gray-700 text-white" />
-          </div>
         </div>
 
-        <!-- Max votes -->
-        <div>
-          <label class="block text-gray-300 mb-1">Max Votes Per User</label>
-          <input v-model.number="form.maxVotesPerUser" type="number" min="1" class="w-full border rounded p-2 bg-gray-700 text-white" />
-        </div>
-
-        <!-- Winner prizes -->
-        <div>
-          <p class="font-semibold text-white mb-2">Winner Prizes</p>
-          <PrizeBuilder v-model="form.winnerPrizes" :ctoon-options="ctoonOptions" :bg-options="bgOptions" />
-        </div>
-
-        <!-- Participant prizes -->
-        <div>
-          <p class="font-semibold text-white mb-2">Participant Prizes</p>
-          <PrizeBuilder v-model="form.participantPrizes" :ctoon-options="ctoonOptions" :bg-options="bgOptions" />
-        </div>
-
-        <div v-if="formError" class="text-red-400 text-xs">{{ formError }}</div>
-
-        <div class="flex gap-3 pt-2">
+        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
+          <button class="px-4 py-2 rounded border" @click="closeFormModal">Cancel</button>
           <button
             :disabled="formSaving"
-            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-medium disabled:opacity-50"
+            class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             @click="saveForm"
           >{{ formSaving ? 'Saving...' : (editingContest ? 'Save Changes' : 'Create') }}</button>
-          <button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded" @click="closeFormModal">Cancel</button>
         </div>
       </div>
-    </Modal>
+    </div>
 
     <!-- ── Delete Confirmation Modal ──────────────────────────────── -->
-    <Modal v-if="showDeleteModal" :hide-close-button="true" :close-on-backdrop="true" @close="showDeleteModal = false">
-      <h2 class="text-lg font-semibold text-white mb-3">Delete Contest</h2>
-      <p class="text-gray-300 text-sm mb-4">
-        Are you sure you want to delete <strong class="text-white">{{ deletingContest?.name }}</strong>?
-        This will also delete all submissions and votes.
-      </p>
-      <div class="flex gap-3">
-        <button :disabled="deleteSaving" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded disabled:opacity-50" @click="doDelete">
-          {{ deleteSaving ? 'Deleting...' : 'Delete' }}
-        </button>
-        <button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded" @click="showDeleteModal = false">Cancel</button>
+    <div v-if="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="showDeleteModal = false"></div>
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-lg font-semibold">Delete Contest</h2>
+          <button class="text-gray-600 hover:text-gray-800" @click="showDeleteModal = false">Close</button>
+        </div>
+
+        <div class="p-4 overflow-y-auto flex-1">
+          <p class="text-gray-700 text-sm">
+            Are you sure you want to delete <strong>{{ deletingContest?.name }}</strong>?
+            This will also delete all submissions and votes.
+          </p>
+        </div>
+
+        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
+          <button class="px-4 py-2 rounded border" @click="showDeleteModal = false">Cancel</button>
+          <button
+            :disabled="deleteSaving"
+            class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            @click="doDelete"
+          >{{ deleteSaving ? 'Deleting...' : 'Delete' }}</button>
+        </div>
       </div>
-    </Modal>
+    </div>
 
     <!-- ── Distribute Prizes Modal ─────────────────────────────────── -->
-    <Modal v-if="showDistributeModal" :hide-close-button="true" :close-on-backdrop="false" @close="closeDistributeModal">
-      <h2 class="text-lg font-semibold text-white mb-3">Distribute Prizes — {{ distributingContest?.name }}</h2>
-
-      <div v-if="leaderboardLoading" class="text-gray-400 text-sm">Loading leaderboard...</div>
-      <div v-else-if="leaderboard.length === 0" class="text-gray-400 text-sm">No submissions yet.</div>
-
-      <template v-else>
-        <p class="text-gray-300 text-sm mb-3">Select the winner from the leaderboard, then click Distribute.</p>
-
-        <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
-          <label
-            v-for="(sub, i) in leaderboard"
-            :key="sub.id"
-            class="flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-gray-700"
-            :class="selectedWinnerId === sub.id ? 'bg-gray-700 ring-2 ring-blue-500' : 'bg-gray-750'"
-          >
-            <input type="radio" v-model="selectedWinnerId" :value="sub.id" class="mt-0.5" />
-            <img :src="sub.imageUrl" class="w-16 h-12 object-cover rounded" />
-            <div class="flex-1 min-w-0">
-              <div class="text-white text-sm font-medium truncate">{{ sub.username }}</div>
-              <div class="text-xs text-gray-400">Zone {{ sub.zoneIndex + 1 }} &mdash; {{ sub.voteCount }} votes</div>
-            </div>
-            <span v-if="i === 0" class="text-xs bg-yellow-500 text-black px-1.5 py-0.5 rounded font-semibold">#1</span>
-          </label>
+    <div v-if="showDistributeModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click.self="closeDistributeModal"></div>
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-lg font-semibold">Distribute Prizes — {{ distributingContest?.name }}</h2>
+          <button class="text-gray-600 hover:text-gray-800" @click="closeDistributeModal">Close</button>
         </div>
 
-        <div v-if="distributeError" class="text-red-400 text-xs mt-2">{{ distributeError }}</div>
+        <div class="p-4 overflow-y-auto flex-1">
+          <div v-if="leaderboardLoading" class="text-gray-500 text-sm">Loading leaderboard...</div>
+          <div v-else-if="leaderboard.length === 0" class="text-gray-500 text-sm">No submissions yet.</div>
 
-        <div class="flex gap-3 mt-4">
+          <template v-else>
+            <p class="text-gray-600 text-sm mb-3">Select the winner from the leaderboard, then click Distribute.</p>
+
+            <div class="space-y-2">
+              <label
+                v-for="(sub, i) in leaderboard"
+                :key="sub.id"
+                class="flex items-center gap-3 p-2 rounded border cursor-pointer hover:bg-gray-50"
+                :class="selectedWinnerId === sub.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'"
+              >
+                <input type="radio" v-model="selectedWinnerId" :value="sub.id" class="mt-0.5" />
+                <img :src="sub.imageUrl" class="w-16 h-12 object-cover rounded" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">{{ sub.username }}</div>
+                  <div class="text-xs text-gray-500">Zone {{ sub.zoneIndex + 1 }} &mdash; {{ sub.voteCount }} votes</div>
+                </div>
+                <span v-if="i === 0" class="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded font-semibold">#1</span>
+              </label>
+            </div>
+
+            <div v-if="distributeError" class="text-red-600 text-xs mt-2">{{ distributeError }}</div>
+          </template>
+        </div>
+
+        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
+          <button class="px-4 py-2 rounded border" @click="closeDistributeModal">Cancel</button>
           <button
             :disabled="!selectedWinnerId || distributeSaving"
-            class="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded font-medium disabled:opacity-50"
+            class="px-4 py-2 rounded bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
             @click="doDistribute"
           >{{ distributeSaving ? 'Distributing...' : 'Distribute Prizes' }}</button>
-          <button class="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded" @click="closeDistributeModal">Cancel</button>
         </div>
-      </template>
-    </Modal>
+      </div>
+    </div>
   </div>
 </template>
 
