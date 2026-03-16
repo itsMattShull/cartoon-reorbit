@@ -69,17 +69,40 @@
     <!-- Backgrounds -->
     <div>
       <label class="block text-gray-300 mb-1">Backgrounds</label>
-      <select
-        class="w-full border rounded p-2 bg-gray-700 text-white mb-2"
-        @change="onBackgroundSelect($event)"
-      >
-        <option value="">— Select a background to add —</option>
-        <option
-          v-for="bg in availableBackgrounds"
-          :key="bg.id"
-          :value="bg.id"
-        >{{ bg.label }}</option>
-      </select>
+      <div class="relative mb-2">
+        <button
+          type="button"
+          class="w-full border rounded p-2 bg-gray-700 text-white text-left flex items-center justify-between"
+          @click="bgDropdownOpen = !bgDropdownOpen"
+        >
+          <span class="text-gray-400">— Select a background to add —</span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div
+          v-if="bgDropdownOpen"
+          class="absolute z-20 w-full bg-gray-800 border border-gray-600 rounded-md mt-1 max-h-64 overflow-y-auto shadow-xl"
+        >
+          <div
+            v-if="!availableBackgrounds.length"
+            class="px-3 py-2 text-gray-400 text-xs"
+          >No backgrounds available</div>
+          <div
+            v-for="bg in availableBackgrounds"
+            :key="bg.id"
+            class="flex items-center gap-3 px-3 py-2 hover:bg-gray-700 cursor-pointer border-b border-gray-700 last:border-0"
+            @mousedown.prevent="addBackground(bg.id); bgDropdownOpen = false"
+          >
+            <img
+              v-if="bg.imagePath"
+              :src="bg.imagePath"
+              :alt="bg.label"
+              class="h-12 w-20 object-cover rounded flex-shrink-0 bg-gray-900"
+            />
+            <div v-else class="h-12 w-20 rounded flex-shrink-0 bg-gray-900 flex items-center justify-center text-gray-500 text-xs">No image</div>
+            <span class="text-white text-xs">{{ bg.label }}</span>
+          </div>
+        </div>
+      </div>
       <div v-if="modelValue.backgroundIds.length" class="space-y-2">
         <div
           v-for="bgId in modelValue.backgroundIds"
@@ -118,6 +141,7 @@ const emit = defineEmits(['update:modelValue'])
 
 const ctoonSearch = ref('')
 const ctoonFocused = ref(false)
+const bgDropdownOpen = ref(false)
 
 const filteredCtoons = computed(() => {
   const q = ctoonSearch.value.trim().toLowerCase()
@@ -153,13 +177,6 @@ function removeCtoon(i) {
 function updateCtoonQty(i, qty) {
   const newCtoons = props.modelValue.ctoons.map((e, idx) => idx === i ? { ...e, qty } : e)
   emit('update:modelValue', { ...props.modelValue, ctoons: newCtoons })
-}
-
-function onBackgroundSelect(event) {
-  const bgId = event.target.value
-  if (!bgId) return
-  addBackground(bgId)
-  event.target.value = ''
 }
 
 function addBackground(bgId) {
