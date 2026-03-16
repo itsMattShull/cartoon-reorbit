@@ -100,6 +100,13 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // Required cToons: replace
+  await db.achievementRequiredCtoon.deleteMany({ where: { achievementId: id } })
+  const reqCtoonCreates = (Array.isArray(criteria?.ctoonsRequired) ? criteria.ctoonsRequired : [])
+    .filter(r => r?.ctoonId)
+    .map(r => ({ achievementId: id, ctoonId: String(r.ctoonId) }))
+  if (reqCtoonCreates.length) await db.achievementRequiredCtoon.createMany({ data: reqCtoonCreates, skipDuplicates: true })
+
   // Rewards: ensure single reward row exists
   let reward = await db.achievementReward.findFirst({ where: { achievementId: id } })
   if (!reward) {

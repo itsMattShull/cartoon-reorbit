@@ -260,8 +260,9 @@ model Ctoon {
   // Scavenger Hunt relations
   scavengerExclusivePoolRows ScavengerExclusiveCtoon[] @relation("ScavengerExclusivePool")
   scavengerAwardedSessions   ScavengerSession[]        @relation("ScavengerAwardedCtoon")
-  // Achievements back‑relation
+  // Achievements back‑relations
   achievementRewardCtoons    AchievementRewardCtoon[]
+  achievementRequiredCtoons  AchievementRequiredCtoon[]
 
   cZoneSearchPrizeRows  CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
@@ -1729,8 +1730,9 @@ model Achievement {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  rewards AchievementReward[]
-  users   AchievementUser[]
+  rewards        AchievementReward[]
+  users          AchievementUser[]
+  requiredCtoons AchievementRequiredCtoon[]
 }
 
 model AchievementUser {
@@ -1792,6 +1794,18 @@ model AchievementRewardBackground {
 
   @@unique([rewardId, backgroundId])
   @@index([backgroundId])
+}
+
+model AchievementRequiredCtoon {
+  id            String @id @default(uuid())
+  achievementId String
+  ctoonId       String
+
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([achievementId, ctoonId])
+  @@index([ctoonId])
 }
 
 // ── Barcode / Monster Scanning ──────────────────────────────────────────────
