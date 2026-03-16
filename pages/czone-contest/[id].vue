@@ -57,10 +57,7 @@
               class="absolute inset-0 w-full h-full object-cover"
             />
           </div>
-          <div class="p-4 flex items-center justify-between">
-            <span class="text-sm text-gray-600">
-              {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
-            </span>
+          <div class="p-4 flex items-center justify-end">
             <div class="flex gap-2">
               <!-- Own submission badge -->
               <template v-if="submission.isOwn">
@@ -69,26 +66,17 @@
                 </span>
               </template>
 
-              <!-- Vote / Unvote button -->
+              <!-- Vote button -->
               <template v-else-if="me">
                 <button
-                  v-if="!submission.hasVoted"
-                  :disabled="contest.distributedAt || votesRemaining <= 0 || votingId === submission.id"
+                  :disabled="!!contest.distributedAt || submission.hasVoted || votesRemaining <= 0 || votingId === submission.id"
                   class="text-sm px-3 py-1 rounded font-medium transition-colors"
-                  :class="votesRemaining > 0 && !contest.distributedAt
+                  :class="!submission.hasVoted && votesRemaining > 0 && !contest.distributedAt
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
                   @click="vote(submission)"
                 >
-                  {{ votingId === submission.id ? 'Voting...' : 'Vote' }}
-                </button>
-                <button
-                  v-else
-                  :disabled="!!contest.distributedAt || votingId === submission.id"
-                  class="text-sm px-3 py-1 rounded font-medium transition-colors bg-gray-200 hover:bg-red-100 text-gray-700 hover:text-red-600"
-                  @click="unvote(submission)"
-                >
-                  {{ votingId === submission.id ? 'Removing...' : 'Unvote' }}
+                  {{ votingId === submission.id ? 'Voting...' : submission.hasVoted ? 'Voted' : 'Vote' }}
                 </button>
               </template>
             </div>
@@ -358,7 +346,6 @@ async function vote(submission) {
   try {
     await $fetch(`/api/czone-contest/${contestId}/submissions/${submission.id}/vote`, { method: 'POST' })
     submission.hasVoted = true
-    submission.voteCount++
     contest.value.votesUsed++
     contest.value.votesRemaining--
   } catch (err) {
@@ -368,20 +355,6 @@ async function vote(submission) {
   }
 }
 
-async function unvote(submission) {
-  votingId.value = submission.id
-  try {
-    await $fetch(`/api/czone-contest/${contestId}/submissions/${submission.id}/vote`, { method: 'DELETE' })
-    submission.hasVoted = false
-    submission.voteCount--
-    contest.value.votesUsed--
-    contest.value.votesRemaining++
-  } catch (err) {
-    showToast(err?.data?.statusMessage || 'Failed to remove vote')
-  } finally {
-    votingId.value = null
-  }
-}
 
 </script>
 
