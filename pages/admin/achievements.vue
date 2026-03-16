@@ -110,6 +110,46 @@
             </div>
           </div>
 
+          <div class="mt-3">
+            <label class="block text-sm">cToons Required (must own all):</label>
+            <div class="relative">
+              <input
+                v-model="ctoonsRequiredInput"
+                class="w-full border rounded px-2 py-1"
+                placeholder="Type 3+ characters to search"
+                autocomplete="off"
+                @focus="showCtoonsRequiredDropdown = true"
+                @blur="hideCtoonsRequiredDropdown"
+              />
+              <div
+                v-if="showCtoonsRequiredDropdown && filteredCtoonsRequired.length"
+                class="absolute z-10 bg-white border rounded shadow-lg w-full max-h-52 overflow-y-auto"
+              >
+                <button
+                  v-for="c in filteredCtoonsRequired"
+                  :key="c.id"
+                  type="button"
+                  class="flex items-center gap-2 w-full px-2 py-1 hover:bg-gray-100 text-left"
+                  @mousedown.prevent="addRequiredCtoon(c)"
+                >
+                  <img :src="c.assetPath" class="w-8 h-8 object-contain flex-shrink-0" alt="" />
+                  <span class="text-sm truncate">{{ c.name }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-2">
+              <div
+                v-for="(r, i) in form.criteria.ctoonsRequired"
+                :key="r.ctoonId"
+                class="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded"
+              >
+                <img v-if="r.assetPath" :src="r.assetPath" class="w-6 h-6 object-contain flex-shrink-0" alt="" />
+                <span class="text-sm">{{ r.name }}</span>
+                <button type="button" class="ml-1 text-red-600" @click="form.criteria.ctoonsRequired.splice(i, 1)">×</button>
+              </div>
+            </div>
+          </div>
+
             <h3 class="text-lg font-semibold mt-6">Rewards</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -235,6 +275,8 @@ const imageInput = ref(null)
 const setInput = ref('')
 const bgSelection = ref([])
 const ctoonSelection = ref({ name: '', qty: 1 })
+const ctoonsRequiredInput = ref('')
+const showCtoonsRequiredDropdown = ref(false)
 
 const emptyForm = () => ({
   title: '', slug: '', description: '', isActive: true, notifyDiscord: false, discordRoleName: '',
@@ -248,6 +290,7 @@ const emptyForm = () => ({
     ctoonSuggestionsAcceptedGte: null,
     cumulativeActiveDaysGte: null,
     setsRequired: [],
+    ctoonsRequired: [],
     userCreatedBefore: null
   },
   rewards: { points: 0, ctoons: [], backgrounds: [] }
@@ -263,6 +306,8 @@ function resetForm() {
   editId.value = ''
   bgSelection.value = []
   ctoonSelection.value = { name: '', qty: 1 }
+  ctoonsRequiredInput.value = ''
+  showCtoonsRequiredDropdown.value = false
   if (imageInput.value) imageInput.value.value = ''
 }
 
@@ -342,6 +387,25 @@ function findCtoonByName(name) {
   return (ctoons.value || []).find(ct => ct.name === v) || null
 }
 
+const filteredCtoonsRequired = computed(() => {
+  const v = String(ctoonsRequiredInput.value || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  const existing = new Set(form.criteria.ctoonsRequired.map(r => r.ctoonId))
+  return (ctoons.value || []).filter(ct => !existing.has(ct.id) && ct.name.toLowerCase().includes(v))
+})
+
+function addRequiredCtoon(c) {
+  if (!form.criteria.ctoonsRequired.find(r => r.ctoonId === c.id)) {
+    form.criteria.ctoonsRequired.push({ ctoonId: c.id, name: c.name, assetPath: c.assetPath || null })
+  }
+  ctoonsRequiredInput.value = ''
+  showCtoonsRequiredDropdown.value = false
+}
+
+function hideCtoonsRequiredDropdown() {
+  setTimeout(() => { showCtoonsRequiredDropdown.value = false }, 150)
+}
+
 function addCtoon() {
   const match = findCtoonByName(ctoonSelection.value.name)
   if (!match) {
@@ -378,6 +442,7 @@ function startEdit(a) {
       ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
+      ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
     },
     rewards: {

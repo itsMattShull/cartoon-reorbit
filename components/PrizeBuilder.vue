@@ -25,7 +25,7 @@
           @blur="setTimeout(() => { ctoonFocused = false }, 150)"
         />
         <ul
-          v-if="ctoonSearch.length >= 2 && ctoonFocused && filteredCtoons.length"
+          v-if="ctoonSearch.length >= 3 && ctoonFocused && filteredCtoons.length"
           class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg"
         >
           <li
@@ -69,25 +69,56 @@
     <!-- Backgrounds -->
     <div>
       <label class="block text-gray-300 mb-1">Backgrounds</label>
-      <select
-        class="w-full border rounded p-2 bg-gray-700 text-white mb-2"
-        @change="addBackground($event.target.value); $event.target.value = ''"
-      >
-        <option value="">— Select a background to add —</option>
-        <option
-          v-for="bg in availableBackgrounds"
-          :key="bg.id"
-          :value="bg.id"
-        >{{ bg.label }}</option>
-      </select>
-      <div v-if="modelValue.backgroundIds.length" class="flex flex-wrap gap-2">
+      <div class="relative mb-2">
+        <button
+          type="button"
+          class="w-full border rounded p-2 bg-gray-700 text-white text-left flex items-center justify-between"
+          @click="bgDropdownOpen = !bgDropdownOpen"
+        >
+          <span class="text-gray-400">— Select a background to add —</span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div
+          v-if="bgDropdownOpen"
+          class="absolute z-20 w-full bg-gray-800 border border-gray-600 rounded-md mt-1 max-h-64 overflow-y-auto shadow-xl"
+        >
+          <div
+            v-if="!availableBackgrounds.length"
+            class="px-3 py-2 text-gray-400 text-xs"
+          >No backgrounds available</div>
+          <div
+            v-for="bg in availableBackgrounds"
+            :key="bg.id"
+            class="flex items-center gap-3 px-3 py-2 hover:bg-gray-700 cursor-pointer border-b border-gray-700 last:border-0"
+            @mousedown.prevent="addBackground(bg.id); bgDropdownOpen = false"
+          >
+            <img
+              v-if="bg.imagePath"
+              :src="bg.imagePath"
+              :alt="bg.label"
+              class="h-12 w-20 object-cover rounded flex-shrink-0 bg-gray-900"
+            />
+            <div v-else class="h-12 w-20 rounded flex-shrink-0 bg-gray-900 flex items-center justify-center text-gray-500 text-xs">No image</div>
+            <span class="text-white text-xs">{{ bg.label }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="modelValue.backgroundIds.length" class="space-y-2">
         <div
           v-for="bgId in modelValue.backgroundIds"
           :key="bgId"
-          class="flex items-center gap-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white"
+          class="bg-gray-700 border border-gray-600 rounded overflow-hidden"
         >
-          <span>{{ bgLabel(bgId) }}</span>
-          <button class="text-red-400 hover:text-red-300 ml-1" @click="removeBackground(bgId)">✕</button>
+          <img
+            v-if="bgImagePath(bgId)"
+            :src="bgImagePath(bgId)"
+            :alt="bgLabel(bgId)"
+            class="w-full max-h-24 object-cover"
+          />
+          <div class="flex items-center gap-1 px-2 py-1 text-xs text-white">
+            <span class="flex-1 truncate">{{ bgLabel(bgId) }}</span>
+            <button class="text-red-400 hover:text-red-300 ml-1" @click="removeBackground(bgId)">✕</button>
+          </div>
         </div>
       </div>
       <p v-else class="text-gray-400 text-xs">No backgrounds added.</p>
@@ -110,10 +141,11 @@ const emit = defineEmits(['update:modelValue'])
 
 const ctoonSearch = ref('')
 const ctoonFocused = ref(false)
+const bgDropdownOpen = ref(false)
 
 const filteredCtoons = computed(() => {
   const q = ctoonSearch.value.trim().toLowerCase()
-  if (q.length < 2) return []
+  if (q.length < 3) return []
   return props.ctoonOptions.filter(ct =>
     ct.name.toLowerCase().includes(q) || ct.id.toLowerCase().includes(q)
   ).slice(0, 20)
@@ -158,5 +190,9 @@ function removeBackground(bgId) {
 
 function bgLabel(bgId) {
   return props.bgOptions.find(b => b.id === bgId)?.label || bgId
+}
+
+function bgImagePath(bgId) {
+  return props.bgOptions.find(b => b.id === bgId)?.imagePath || ''
 }
 </script>

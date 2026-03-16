@@ -89,6 +89,11 @@ export default defineEventHandler(async (event) => {
       cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
+      requiredCtoons: {
+        create: (Array.isArray(criteria?.ctoonsRequired) ? criteria.ctoonsRequired : [])
+          .filter(r => r?.ctoonId)
+          .map(r => ({ ctoonId: String(r.ctoonId) }))
+      },
       rewards: {
         create: {
           points: Number(rewards?.points || 0) || 0,
