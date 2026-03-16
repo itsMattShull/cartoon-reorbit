@@ -38,7 +38,7 @@
       <!-- Submission grid -->
       <div v-else class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
-          v-for="submission in contest.submissions"
+          v-for="submission in shuffledSubmissions"
           :key="submission.id"
           class="bg-white rounded-xl shadow overflow-hidden flex flex-col"
         >
@@ -54,21 +54,11 @@
               {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
             </span>
             <div class="flex gap-2">
-              <!-- Own submission badge + delete -->
+              <!-- Own submission badge -->
               <template v-if="submission.isOwn">
                 <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
                   Your submission
                 </span>
-                <button
-                  :disabled="!!contest.distributedAt || deletingId === submission.id"
-                  class="text-xs px-2 py-1 rounded font-medium transition-colors"
-                  :class="!contest.distributedAt
-                    ? 'bg-red-100 hover:bg-red-200 text-red-700'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
-                  @click="deleteSubmission(submission)"
-                >
-                  {{ deletingId === submission.id ? 'Deleting...' : 'Delete' }}
-                </button>
               </template>
 
               <!-- Vote / Unvote button -->
@@ -111,10 +101,19 @@ const { data: contest, pending, error, refresh } = await useFetch(`/api/czone-co
 
 const votesRemaining = computed(() => contest.value?.votesRemaining ?? 0)
 
+const shuffledSubmissions = computed(() => {
+  if (!contest.value?.submissions) return []
+  const arr = [...contest.value.submissions]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+})
+
 const toastMessage = ref('')
 const toastType = ref('error')
 const votingId = ref(null)
-const deletingId = ref(null)
 
 function showToast(msg, type = 'error') {
   toastType.value = type
@@ -163,17 +162,4 @@ async function unvote(submission) {
   }
 }
 
-async function deleteSubmission(submission) {
-  if (!confirm('Are you sure you want to delete your submission? This cannot be undone.')) return
-  deletingId.value = submission.id
-  try {
-    await $fetch(`/api/czone-contest/${contestId}/submissions/${submission.id}`, { method: 'DELETE' })
-    contest.value.submissions = contest.value.submissions.filter(s => s.id !== submission.id)
-    showToast('Your submission has been deleted.', 'success')
-  } catch (err) {
-    showToast(err?.data?.statusMessage || 'Failed to delete submission')
-  } finally {
-    deletingId.value = null
-  }
-}
 </script>
