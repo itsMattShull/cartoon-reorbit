@@ -118,6 +118,13 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     // console.log('[achievements] evaluate: pass createdBefore', { userId, ach: achKey, userCreatedAt: created.toISOString(), cutoff: cutoff.toISOString() })
   }
 
+  // Required cToon ownership (must own at least one non-burned copy of each)
+  const reqCtoons = Array.isArray(ach.requiredCtoons) ? ach.requiredCtoons : []
+  for (const rc of reqCtoons) {
+    const owned = await db.userCtoon.findFirst({ where: { userId, ctoonId: rc.ctoonId, burnedAt: null } })
+    if (!owned) return false
+  }
+
   // Set completion (AND across all sets)
   const setsReq = Array.isArray(ach.setsRequired) ? ach.setsRequired.filter(Boolean) : []
   for (const setName of setsReq) {
@@ -255,7 +262,7 @@ export async function processAchievementsForUser(userId) {
   }
 
   if (!cachedAchievements || Date.now() - cachedAchievementsTime > ACHIEVEMENTS_TTL_MS) {
-    cachedAchievements     = await prisma.achievement.findMany({ where: { isActive: true }, orderBy: { createdAt: 'asc' } })
+    cachedAchievements     = await prisma.achievement.findMany({ where: { isActive: true }, orderBy: { createdAt: 'asc' }, include: { requiredCtoons: { select: { ctoonId: true } } } })
     cachedAchievementsTime = Date.now()
   }
   const achievements = cachedAchievements
