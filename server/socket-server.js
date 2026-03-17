@@ -3132,6 +3132,25 @@ async function boot() {
   }
   // ──────────────────────────────────────────────────────────────────────────
 
+  // ── Backfill BullMQ jobs for any active auctions that have no job yet ───────
+  // Handles the first deploy (existing auctions predate the queue) and any
+  // scenario where Redis was flushed. Safe on every boot — scheduleAuctionClose
+  // is idempotent.
+  try {
+    const activeAuctions = await db.auction.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, endAt: true }
+    })
+    if (activeAuctions.length > 0) {
+      console.log(`[Boot] Backfilling BullMQ close jobs for ${activeAuctions.length} active auction(s)…`)
+      await Promise.all(activeAuctions.map(a => scheduleAuctionClose(a.id, a.endAt)))
+      console.log('[Boot] Backfill complete.')
+    }
+  } catch (err) {
+    console.error('[Boot] Auction job backfill failed:', err)
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Start the BullMQ worker AFTER downtime recovery so extended auctions have
   // their jobs rescheduled before any processing begins.
   const auctionCloseWorker = new Worker(
