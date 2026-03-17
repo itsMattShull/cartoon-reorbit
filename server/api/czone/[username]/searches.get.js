@@ -1,10 +1,11 @@
 import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
 
-// Cache active searches + prize pool for 60 s.  The prize pool for a given
-// search never changes mid-event, so all 250+ concurrent visitors can share
-// one DB round-trip per minute instead of each firing their own query.
+// Cache active searches + prize pool for 30 minutes.  The prize pool for a
+// given search never changes mid-event, so all concurrent visitors share one
+// DB round-trip per 30 minutes instead of each firing their own query.
 const ACTIVE_SEARCHES_TTL = 1_800_000 // 30 minutes
 let _searchesCache = null
 let _searchesCacheExpiry = 0
@@ -55,6 +56,193 @@ function pickWeighted(pool) {
   return pool[pool.length - 1]
 }
 
+// Per-user inventory data cached in Redis for 5 minutes.
+// Counts rarely change and are safe to serve slightly stale.
+const USER_CONDITION_TTL = 300 // seconds
+
+async function getUserConditionData(userId, searches) {
+  const cacheKey = `czone:ucond:${userId}`
+  try {
+    const cached = await redis.get(cacheKey)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+
+  const needsUserPoints  = searches.some(s => s.prizePool.some(p => p.conditionUserPointsEnabled))
+  const needsUserTotal   = searches.some(s => s.prizePool.some(p => p.conditionUserTotalCountEnabled))
+  const needsUserUnique  = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
+  const needsSetUnique   = searches.some(s => s.prizePool.some(p => p.conditionSetUniqueCountEnabled))
+  const needsSetTotal    = searches.some(s => s.prizePool.some(p => p.conditionSetTotalCountEnabled))
+  const needsUserOwns    = searches.some(s => s.prizePool.some(p => p.conditionUserOwnsEnabled))
+  const needsOwnsLessThan = searches.some(s => s.prizePool.some(p => p.conditionOwnsLessThanEnabled))
+
+  // Collect set names and ctoon IDs needed for condition checks
+  const setUniqueNames = new Set()
+  const setTotalNames  = new Set()
+  const ownsIds        = new Set()
+  const lessThanIds    = new Set()
+  for (const search of searches) {
+    for (const row of search.prizePool) {
+      if (needsSetUnique && row.conditionSetUniqueCountEnabled && row.conditionSetUniqueCountSet)
+        setUniqueNames.add(row.conditionSetUniqueCountSet)
+      if (needsSetTotal && row.conditionSetTotalCountEnabled && row.conditionSetTotalCountSet)
+        setTotalNames.add(row.conditionSetTotalCountSet)
+      if (needsUserOwns && row.conditionUserOwnsEnabled) {
+        const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
+        for (const e of entries) { if (e?.ctoonId) ownsIds.add(e.ctoonId) }
+      }
+      if (needsOwnsLessThan && row.conditionOwnsLessThanEnabled && row.ctoonId)
+        lessThanIds.add(row.ctoonId)
+    }
+  }
+
+  // Run all independent inventory queries in parallel
+  const [
+    pointsRow,
+    userTotalCount,
+    uniqueRows,
+    userOwnsRows,
+    lessThanRows,
+  ] = await Promise.all([
+    needsUserPoints
+      ? db.userPoints.findUnique({ where: { userId }, select: { points: true } })
+      : null,
+    needsUserTotal
+      ? db.userCtoon.count({ where: { userId, burnedAt: null } })
+      : null,
+    needsUserUnique
+      ? db.userCtoon.groupBy({ by: ['ctoonId'], where: { userId, burnedAt: null } })
+      : null,
+    (needsUserOwns && ownsIds.size)
+      ? db.userCtoon.groupBy({
+          by: ['ctoonId'],
+          where: { userId, burnedAt: null, ctoonId: { in: Array.from(ownsIds) } },
+          _count: { _all: true }
+        })
+      : null,
+    (needsOwnsLessThan && lessThanIds.size)
+      ? db.userCtoon.groupBy({
+          by: ['ctoonId'],
+          where: { userId, burnedAt: null, ctoonId: { in: Array.from(lessThanIds) } },
+          _count: { _all: true }
+        })
+      : null,
+  ])
+
+  const userPoints         = Number(pointsRow?.points || 0)
+  const userTotalCountVal  = userTotalCount ?? 0
+  const userUniqueCount    = uniqueRows ? uniqueRows.length : 0
+
+  const userOwnsCountMap = new Map()
+  if (userOwnsRows) {
+    for (const row of userOwnsRows)
+      userOwnsCountMap.set(row.ctoonId, row._count._all || 0)
+  }
+
+  const userOwnsLessThanCountMap = new Map()
+  if (lessThanRows) {
+    for (const row of lessThanRows)
+      userOwnsLessThanCountMap.set(row.ctoonId, row._count._all || 0)
+  }
+
+  // Set counts: groupBy ctoonId then resolve set names — run both set types in parallel
+  const allSetNames = new Set([...setUniqueNames, ...setTotalNames])
+  let setCtoonRows = []
+  if (allSetNames.size) {
+    const [uniqueSetGrouped, totalSetGrouped] = await Promise.all([
+      setUniqueNames.size
+        ? db.userCtoon.groupBy({
+            by: ['ctoonId'],
+            where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setUniqueNames) } } }
+          })
+        : null,
+      setTotalNames.size
+        ? db.userCtoon.groupBy({
+            by: ['ctoonId'],
+            where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setTotalNames) } } },
+            _count: { _all: true }
+          })
+        : null,
+    ])
+
+    // Collect all ctoon IDs we need set names for
+    const allCtoonIds = new Set()
+    if (uniqueSetGrouped) for (const r of uniqueSetGrouped) allCtoonIds.add(r.ctoonId)
+    if (totalSetGrouped)  for (const r of totalSetGrouped)  allCtoonIds.add(r.ctoonId)
+
+    const setCtoons = allCtoonIds.size
+      ? await db.ctoon.findMany({ where: { id: { in: Array.from(allCtoonIds) } }, select: { id: true, set: true } })
+      : []
+    const setById = new Map(setCtoons.map(c => [c.id, c.set]))
+
+    const userSetUniqueCountMap = new Map()
+    if (uniqueSetGrouped) {
+      for (const row of uniqueSetGrouped) {
+        const setName = setById.get(row.ctoonId)
+        if (setName) userSetUniqueCountMap.set(setName, (userSetUniqueCountMap.get(setName) || 0) + 1)
+      }
+    }
+
+    const userSetTotalCountMap = new Map()
+    if (totalSetGrouped) {
+      for (const row of totalSetGrouped) {
+        const setName = setById.get(row.ctoonId)
+        if (setName) userSetTotalCountMap.set(setName, (userSetTotalCountMap.get(setName) || 0) + (row._count._all || 0))
+      }
+    }
+
+    const data = {
+      userPoints,
+      userTotalCount: userTotalCountVal,
+      userUniqueCount,
+      userOwnsCountMap: Object.fromEntries(userOwnsCountMap),
+      userOwnsLessThanCountMap: Object.fromEntries(userOwnsLessThanCountMap),
+      userSetUniqueCountMap: Object.fromEntries(userSetUniqueCountMap),
+      userSetTotalCountMap: Object.fromEntries(userSetTotalCountMap),
+    }
+    try { await redis.setex(cacheKey, USER_CONDITION_TTL, JSON.stringify(data)) } catch {}
+    return {
+      userPoints,
+      userTotalCount: userTotalCountVal,
+      userUniqueCount,
+      userOwnsCountMap,
+      userOwnsLessThanCountMap,
+      userSetUniqueCountMap,
+      userSetTotalCountMap,
+    }
+  }
+
+  const data = {
+    userPoints,
+    userTotalCount: userTotalCountVal,
+    userUniqueCount,
+    userOwnsCountMap: Object.fromEntries(userOwnsCountMap),
+    userOwnsLessThanCountMap: Object.fromEntries(userOwnsLessThanCountMap),
+    userSetUniqueCountMap: {},
+    userSetTotalCountMap: {},
+  }
+  try { await redis.setex(cacheKey, USER_CONDITION_TTL, JSON.stringify(data)) } catch {}
+  return {
+    userPoints,
+    userTotalCount: userTotalCountVal,
+    userUniqueCount,
+    userOwnsCountMap,
+    userOwnsLessThanCountMap,
+    userSetUniqueCountMap: new Map(),
+    userSetTotalCountMap: new Map(),
+  }
+}
+
+// Restore Maps from plain objects after Redis deserialization
+function rehydrateConditionData(data) {
+  return {
+    ...data,
+    userOwnsCountMap:        new Map(Object.entries(data.userOwnsCountMap || {})),
+    userOwnsLessThanCountMap: new Map(Object.entries(data.userOwnsLessThanCountMap || {})),
+    userSetUniqueCountMap:   new Map(Object.entries(data.userSetUniqueCountMap || {})),
+    userSetTotalCountMap:    new Map(Object.entries(data.userSetTotalCountMap || {})),
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
@@ -70,21 +258,31 @@ export default defineEventHandler(async (event) => {
   const { username } = event.context.params
   if (!username) throw createError({ statusCode: 400, statusMessage: 'Missing username' })
 
-  const zoneOwner = await db.user.findUnique({
-    where: { username },
-    select: { id: true }
-  })
-  if (!zoneOwner) {
-    throw createError({ statusCode: 404, statusMessage: 'User not found' })
-  }
-  if (zoneOwner.id === userId) {
-    return { items: [] }
+  // Cache zone owner lookup — usernames don't change
+  let zoneOwnerId = null
+  const ownerCacheKey = `czone:owner:${username}`
+  try {
+    const cached = await redis.get(ownerCacheKey)
+    if (cached) zoneOwnerId = cached
+  } catch {}
+
+  if (!zoneOwnerId) {
+    const zoneOwner = await db.user.findUnique({ where: { username }, select: { id: true } })
+    if (!zoneOwner) throw createError({ statusCode: 404, statusMessage: 'User not found' })
+    zoneOwnerId = zoneOwner.id
+    try { await redis.setex(ownerCacheKey, 300, zoneOwnerId) } catch {}
   }
 
-  const zoneRow = await db.cZone.findUnique({
-    where: { userId: zoneOwner.id },
-    select: { layoutData: true, background: true }
-  })
+  if (zoneOwnerId === userId) return { items: [] }
+
+  // Fetch zone layout + active searches in parallel
+  const [zoneRow, searches] = await Promise.all([
+    db.cZone.findUnique({ where: { userId: zoneOwnerId }, select: { layoutData: true, background: true } }),
+    getActiveSearches(),
+  ])
+
+  if (!searches.length) return { items: [] }
+
   const rawLayout = zoneRow?.layoutData
   const baseZone = {
     background: typeof zoneRow?.background === 'string' ? zoneRow.background : '',
@@ -98,227 +296,97 @@ export default defineEventHandler(async (event) => {
   const zoneToonIds = Array.isArray(activeZone?.toons)
     ? activeZone.toons.map(item => item?.id).filter(Boolean)
     : []
-  let zoneCtoonIds = new Set()
-  if (zoneToonIds.length) {
-    const zoneToons = await db.userCtoon.findMany({
-      where: { id: { in: zoneToonIds } },
-      select: { ctoonId: true }
-    })
-    zoneCtoonIds = new Set(zoneToons.map(row => row.ctoonId))
-  }
 
   const now = new Date()
-  const searches = await getActiveSearches()
-
-  if (!searches.length) return { items: [] }
-
-  const needsUserOwns = searches.some(s => s.prizePool.some(p => p.conditionUserOwnsEnabled))
-  const needsUserPoints = searches.some(s => s.prizePool.some(p => p.conditionUserPointsEnabled))
-  const needsUserTotal = searches.some(s => s.prizePool.some(p => p.conditionUserTotalCountEnabled))
-  const needsUserUnique = searches.some(s => s.prizePool.some(p => p.conditionUserUniqueCountEnabled))
-  const needsSetUnique = searches.some(s => s.prizePool.some(p => p.conditionSetUniqueCountEnabled))
-  const needsSetTotal = searches.some(s => s.prizePool.some(p => p.conditionSetTotalCountEnabled))
-  const needsOwnsLessThan = searches.some(s => s.prizePool.some(p => p.conditionOwnsLessThanEnabled))
-  const ownsIds = new Set()
-  if (needsUserOwns) {
-    for (const search of searches) {
-      for (const row of search.prizePool) {
-        if (!row.conditionUserOwnsEnabled) continue
-        const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
-        for (const entry of entries) {
-          if (entry?.ctoonId) ownsIds.add(entry.ctoonId)
-        }
-      }
-    }
-  }
-
-  let userPoints = 0
-  if (needsUserPoints) {
-    const pointsRow = await db.userPoints.findUnique({
-      where: { userId },
-      select: { points: true }
-    })
-    userPoints = Number(pointsRow?.points || 0)
-  }
-
-  let userTotalCount = 0
-  if (needsUserTotal) {
-    userTotalCount = await db.userCtoon.count({
-      where: { userId, burnedAt: null }
-    })
-  }
-
-  let userUniqueCount = 0
-  if (needsUserUnique) {
-    const uniqueRows = await db.userCtoon.groupBy({
-      by: ['ctoonId'],
-      where: { userId, burnedAt: null }
-    })
-    userUniqueCount = uniqueRows.length
-  }
-
-  const setUniqueNames = new Set()
-  const setTotalNames = new Set()
-  if (needsSetUnique || needsSetTotal) {
-    for (const search of searches) {
-      for (const row of search.prizePool) {
-        if (row.conditionSetUniqueCountEnabled && row.conditionSetUniqueCountSet) setUniqueNames.add(row.conditionSetUniqueCountSet)
-        if (row.conditionSetTotalCountEnabled && row.conditionSetTotalCountSet) setTotalNames.add(row.conditionSetTotalCountSet)
-      }
-    }
-  }
-
-  const userSetUniqueCountMap = new Map()
-  if (setUniqueNames.size) {
-    const uniqueSetRows = await db.userCtoon.groupBy({
-      by: ['ctoonId'],
-      where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setUniqueNames) } } }
-    })
-    const ctoonIds = uniqueSetRows.map(row => row.ctoonId)
-    if (ctoonIds.length) {
-      const ctoons = await db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, set: true } })
-      for (const ctoon of ctoons) {
-        const setName = ctoon.set
-        if (!setName) continue
-        userSetUniqueCountMap.set(setName, (userSetUniqueCountMap.get(setName) || 0) + 1)
-      }
-    }
-  }
-
-  const userSetTotalCountMap = new Map()
-  if (setTotalNames.size) {
-    const totalSetRows = await db.userCtoon.groupBy({
-      by: ['ctoonId'],
-      where: { userId, burnedAt: null, ctoon: { set: { in: Array.from(setTotalNames) } } },
-      _count: { _all: true }
-    })
-    const ctoonIds = totalSetRows.map(row => row.ctoonId)
-    if (ctoonIds.length) {
-      const ctoons = await db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, set: true } })
-      const setById = new Map(ctoons.map(ctoon => [ctoon.id, ctoon.set]))
-      for (const row of totalSetRows) {
-        const setName = setById.get(row.ctoonId)
-        if (!setName) continue
-        userSetTotalCountMap.set(setName, (userSetTotalCountMap.get(setName) || 0) + (row._count._all || 0))
-      }
-    }
-  }
-
-  const userOwnsCountMap = new Map()
-  if (needsUserOwns && ownsIds.size) {
-    const ownedCounts = await db.userCtoon.groupBy({
-      by: ['ctoonId'],
-      where: {
-        userId,
-        burnedAt: null,
-        ctoonId: { in: Array.from(ownsIds) }
-      },
-      _count: { _all: true }
-    })
-    for (const row of ownedCounts) {
-      userOwnsCountMap.set(row.ctoonId, row._count._all || 0)
-    }
-  }
-
-  const userOwnsLessThanCountMap = new Map()
-  if (needsOwnsLessThan) {
-    const lessThanCtoonIds = new Set()
-    for (const search of searches) {
-      for (const row of search.prizePool) {
-        if (row.conditionOwnsLessThanEnabled && row.ctoonId) lessThanCtoonIds.add(row.ctoonId)
-      }
-    }
-    if (lessThanCtoonIds.size) {
-      const ownedCounts = await db.userCtoon.groupBy({
-        by: ['ctoonId'],
-        where: {
-          userId,
-          burnedAt: null,
-          ctoonId: { in: Array.from(lessThanCtoonIds) }
-        },
-        _count: { _all: true }
-      })
-      for (const row of ownedCounts) {
-        userOwnsLessThanCountMap.set(row.ctoonId, row._count._all || 0)
-      }
-    }
-  }
-
   const searchIds = searches.map(s => s.id)
-  const lastAppearances = await db.cZoneSearchAppearance.groupBy({
-    by: ['cZoneSearchId'],
-    where: {
-      userId,
-      cZoneSearchId: { in: searchIds }
-    },
-    _max: { createdAt: true }
-  })
-  const lastMap = new Map()
-  for (const row of lastAppearances) {
-    lastMap.set(row.cZoneSearchId, row._max.createdAt)
-  }
-
-  const onceIds = searches.filter(s => s.collectionType === 'ONCE').map(s => s.id)
-  const capturedMap = new Map()
-  if (onceIds.length) {
-    const capturedRows = await db.cZoneSearchCapture.findMany({
-      where: {
-        userId,
-        cZoneSearchId: { in: onceIds }
-      },
-      select: { cZoneSearchId: true, ctoonId: true }
-    })
-    for (const row of capturedRows) {
-      if (!capturedMap.has(row.cZoneSearchId)) {
-        capturedMap.set(row.cZoneSearchId, new Set())
-      }
-      capturedMap.get(row.cZoneSearchId).add(row.ctoonId)
-    }
-  }
-
+  const onceIds   = searches.filter(s => s.collectionType === 'ONCE').map(s => s.id)
+  const customIds = searches.filter(s => s.collectionType === 'CUSTOM_PER_CTOON').map(s => s.id)
   const dailyLimitIds = searches
     .filter(s => (s.resetType || 'COOLDOWN_HOURS') === 'DAILY_AT_RESET')
     .filter(s => Number(s.dailyCollectLimit ?? 0) > 0)
     .map(s => s.id)
-  const dailyCaptureMap = new Map()
+
+  let chicagoBoundaryUtc = null
   if (dailyLimitIds.length) {
     const chicagoNow = DateTime.now().setZone('America/Chicago')
     let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
-    if (chicagoNow < boundaryLocal) {
-      boundaryLocal = boundaryLocal.minus({ days: 1 })
-    }
-    const boundaryUtc = boundaryLocal.toUTC().toJSDate()
-    const dailyCaptureCounts = await db.cZoneSearchCapture.groupBy({
-      by: ['cZoneSearchId'],
-      where: {
-        userId,
-        cZoneSearchId: { in: dailyLimitIds },
-        createdAt: { gte: boundaryUtc }
-      },
-      _count: { _all: true }
-    })
-    for (const row of dailyCaptureCounts) {
-      dailyCaptureMap.set(row.cZoneSearchId, row._count._all || 0)
-    }
+    if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
+    chicagoBoundaryUtc = boundaryLocal.toUTC().toJSDate()
   }
 
-  const customIds = searches.filter(s => s.collectionType === 'CUSTOM_PER_CTOON').map(s => s.id)
+  // Run all independent per-user queries in parallel
+  const [
+    zoneToons,
+    conditionData,
+    lastAppearances,
+    capturedRows,
+    dailyCaptureCounts,
+    customCaptureCounts,
+  ] = await Promise.all([
+    zoneToonIds.length
+      ? db.userCtoon.findMany({ where: { id: { in: zoneToonIds } }, select: { ctoonId: true } })
+      : [],
+    getUserConditionData(userId, searches),
+    db.cZoneSearchAppearance.groupBy({
+      by: ['cZoneSearchId'],
+      where: { userId, cZoneSearchId: { in: searchIds } },
+      _max: { createdAt: true }
+    }),
+    onceIds.length
+      ? db.cZoneSearchCapture.findMany({
+          where: { userId, cZoneSearchId: { in: onceIds } },
+          select: { cZoneSearchId: true, ctoonId: true }
+        })
+      : [],
+    dailyLimitIds.length
+      ? db.cZoneSearchCapture.groupBy({
+          by: ['cZoneSearchId'],
+          where: { userId, cZoneSearchId: { in: dailyLimitIds }, createdAt: { gte: chicagoBoundaryUtc } },
+          _count: { _all: true }
+        })
+      : [],
+    customIds.length
+      ? db.cZoneSearchCapture.groupBy({
+          by: ['cZoneSearchId', 'ctoonId'],
+          where: { userId, cZoneSearchId: { in: customIds } },
+          _count: { _all: true }
+        })
+      : [],
+  ])
+
+  // Rehydrate Maps if data came from Redis (plain objects)
+  const {
+    userPoints,
+    userTotalCount,
+    userUniqueCount,
+    userOwnsCountMap,
+    userOwnsLessThanCountMap,
+    userSetUniqueCountMap,
+    userSetTotalCountMap,
+  } = (conditionData.userOwnsCountMap instanceof Map)
+    ? conditionData
+    : rehydrateConditionData(conditionData)
+
+  const zoneCtoonIds = new Set(zoneToons.map(row => row.ctoonId))
+
+  const lastMap = new Map()
+  for (const row of lastAppearances)
+    lastMap.set(row.cZoneSearchId, row._max.createdAt)
+
+  const capturedMap = new Map()
+  for (const row of capturedRows) {
+    if (!capturedMap.has(row.cZoneSearchId)) capturedMap.set(row.cZoneSearchId, new Set())
+    capturedMap.get(row.cZoneSearchId).add(row.ctoonId)
+  }
+
+  const dailyCaptureMap = new Map()
+  for (const row of dailyCaptureCounts)
+    dailyCaptureMap.set(row.cZoneSearchId, row._count._all || 0)
+
   const customCaptureMap = new Map()
-  if (customIds.length) {
-    const customCaptureCounts = await db.cZoneSearchCapture.groupBy({
-      by: ['cZoneSearchId', 'ctoonId'],
-      where: {
-        userId,
-        cZoneSearchId: { in: customIds }
-      },
-      _count: { _all: true }
-    })
-    for (const row of customCaptureCounts) {
-      if (!customCaptureMap.has(row.cZoneSearchId)) {
-        customCaptureMap.set(row.cZoneSearchId, new Map())
-      }
-      customCaptureMap.get(row.cZoneSearchId).set(row.ctoonId, row._count._all || 0)
-    }
+  for (const row of customCaptureCounts) {
+    if (!customCaptureMap.has(row.cZoneSearchId)) customCaptureMap.set(row.cZoneSearchId, new Map())
+    customCaptureMap.get(row.cZoneSearchId).set(row.ctoonId, row._count._all || 0)
   }
 
   const items = []
@@ -346,6 +414,7 @@ export default defineEventHandler(async (event) => {
     const customCaptured = search.collectionType === 'CUSTOM_PER_CTOON'
       ? (customCaptureMap.get(search.id) || new Map())
       : null
+
     const eligiblePool = search.prizePool.filter((row) => {
       if (!row?.ctoon) return false
       if (search.collectionType === 'ONCE' && capturedSet?.has(row.ctoonId)) return false
@@ -358,7 +427,7 @@ export default defineEventHandler(async (event) => {
       }
       if (row.conditionDateEnabled) {
         const start = String(row.conditionDateStart || '')
-        const end = String(row.conditionDateEnd || '')
+        const end   = String(row.conditionDateEnd   || '')
         if (!start || !end) return false
         if (viewerDate < start || viewerDate > end) return false
       }
@@ -367,7 +436,7 @@ export default defineEventHandler(async (event) => {
         if (!timeOfDay) return false
         const hour = viewerHour
         const matches = timeOfDay === 'MORNING'
-          ? hour >= 6 && hour < 12
+          ? hour >= 6  && hour < 12
           : timeOfDay === 'AFTERNOON'
             ? hour >= 12 && hour < 17
             : timeOfDay === 'EVENING'
@@ -391,9 +460,9 @@ export default defineEventHandler(async (event) => {
         const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
         if (!entries.length) return false
         for (const entry of entries) {
-          const ctoonId = entry?.ctoonId
+          const ctoonId  = entry?.ctoonId
           const required = Number(entry?.count || 0)
-          const owned = userOwnsCountMap.get(ctoonId) || 0
+          const owned    = userOwnsCountMap.get(ctoonId) || 0
           if (!ctoonId || required < 1 || owned < required) return false
         }
       }
@@ -411,14 +480,14 @@ export default defineEventHandler(async (event) => {
       }
       if (row.conditionSetUniqueCountEnabled) {
         const minSetUnique = Number(row.conditionSetUniqueCountMin || 0)
-        const setName = String(row.conditionSetUniqueCountSet || '')
+        const setName      = String(row.conditionSetUniqueCountSet || '')
         if (minSetUnique < 1 || !setName) return false
         const ownedUniqueInSet = userSetUniqueCountMap.get(setName) || 0
         if (ownedUniqueInSet < minSetUnique) return false
       }
       if (row.conditionSetTotalCountEnabled) {
         const minSetTotal = Number(row.conditionSetTotalCountMin || 0)
-        const setName = String(row.conditionSetTotalCountSet || '')
+        const setName     = String(row.conditionSetTotalCountSet || '')
         if (minSetTotal < 1 || !setName) return false
         const ownedTotalInSet = userSetTotalCountMap.get(setName) || 0
         if (ownedTotalInSet < minSetTotal) return false
@@ -439,18 +508,18 @@ export default defineEventHandler(async (event) => {
       data: {
         cZoneSearchId: search.id,
         userId,
-        ctoonId: chosen.ctoonId,
-        zoneOwnerId: zoneOwner.id
+        ctoonId:     chosen.ctoonId,
+        zoneOwnerId: zoneOwnerId
       }
     })
 
     items.push({
-      appearanceId: appearance.id,
+      appearanceId:  appearance.id,
       cZoneSearchId: search.id,
       ctoon: {
-        id: chosen.ctoon.id,
-        name: chosen.ctoon.name,
-        rarity: chosen.ctoon.rarity,
+        id:        chosen.ctoon.id,
+        name:      chosen.ctoon.name,
+        rarity:    chosen.ctoon.rarity,
         assetPath: chosen.ctoon.assetPath
       }
     })

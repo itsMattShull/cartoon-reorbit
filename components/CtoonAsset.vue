@@ -13,7 +13,7 @@
         :image-class="imageClass"
         :placeholder-height="placeholderHeight"
       />
-      <img v-else :src="src" :alt="alt" :class="imageClass" />
+      <img v-else :src="src" :alt="alt" :class="imageClass" loading="lazy" />
       <GtoonOverlay
         v-if="showGtoonOverlay"
         :power="power"

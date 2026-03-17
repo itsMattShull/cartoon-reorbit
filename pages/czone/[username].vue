@@ -142,7 +142,7 @@
                   :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
                   @click="captureCzoneSearchItem(item)"
                 >
-                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
                 </button>
                 <CtoonAsset
                   v-else
@@ -411,7 +411,7 @@
                   :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
                   @click="captureCzoneSearchItem(item)"
                 >
-                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
                 </button>
                 <CtoonAsset
                   v-else
@@ -842,6 +842,7 @@
               :src="capturedCtoon.assetPath"
               :alt="capturedCtoon.name || 'Captured cToon'"
               class="w-full max-h-56 object-contain rounded"
+              loading="lazy"
             />
             <div class="space-y-1">
               <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount }} {{ capturedCtoon.name }}s</p>

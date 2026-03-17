@@ -2737,13 +2737,13 @@ async function sweepStaleState() {
 recordSocketMetrics()
 setInterval(() => {
   recordSocketMetrics()
-}, METRICS_SAMPLE_MS)
+}, METRICS_SAMPLE_MS).unref()
 
 setInterval(() => {
   sweepStaleState().catch((err) => {
     console.error('[socket] stale sweep failed:', err)
   })
-}, SWEEP_INTERVAL_MS)
+}, SWEEP_INTERVAL_MS).unref()
 
 // 2. Periodically scan for ended auctions and finalize them.
 //    Runs every 60s (adjust as desired).
@@ -2887,7 +2887,7 @@ setInterval(async () => {
   } finally {
     auctionClosingInFlight = false
   }
-}, 60 * 1000)
+}, 60 * 1000).unref()
 
 // Auction notifications
 let auctionNotificationInFlight = false
@@ -3051,7 +3051,7 @@ setInterval(async () => {
   } finally {
     auctionNotificationInFlight = false
   }
-}, 60 * 1000)
+}, 60 * 1000).unref()
 
 
 // Boot server only after Prisma is connected to avoid race conditions
