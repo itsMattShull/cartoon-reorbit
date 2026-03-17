@@ -2882,6 +2882,13 @@ setInterval(async () => {
       })
     }
 
+    // Update the server heartbeat so downtime recovery on next boot knows the
+    // last time this interval ran successfully.
+    await db.serverHeartbeat.upsert({
+      where:  { id: 'singleton' },
+      create: { id: 'singleton', lastBeat: new Date() },
+      update: { lastBeat: new Date() }
+    })
   } catch (err) {
     console.error(`Auction closing failed for ${id}:`, err)
   } finally {
@@ -3054,6 +3061,11 @@ setInterval(async () => {
 }, 60 * 1000).unref()
 
 
+// Minimum gap (ms) between last heartbeat and now before we consider it a
+// real downtime event.  One missed 60-second tick is noise; anything longer
+// means the server was actually down.
+const DOWNTIME_THRESHOLD_MS = 90_000
+
 // Boot server only after Prisma is connected to avoid race conditions
 async function boot() {
   try {
@@ -3065,6 +3077,64 @@ async function boot() {
     console.error('[Prisma] Failed to connect at boot:', err)
     process.exit(1)
   }
+
+  // ── Downtime recovery ──────────────────────────────────────────────────────
+  // Check how long the server was down and extend any auctions that would have
+  // ended during that window, giving bidders the time they missed.
+  try {
+    const now = new Date()
+    const heartbeat = await db.serverHeartbeat.findUnique({ where: { id: 'singleton' } })
+
+    if (heartbeat) {
+      const downtimeMs = now.getTime() - heartbeat.lastBeat.getTime()
+
+      if (downtimeMs > DOWNTIME_THRESHOLD_MS) {
+        console.log(`[Boot] Detected downtime of ${Math.round(downtimeMs / 1000)}s. Checking for affected auctions…`)
+
+        // Auctions whose end time fell inside the downtime window are the ones
+        // that users couldn't bid on — extend them by the full downtime duration.
+        const affected = await db.auction.findMany({
+          where: {
+            status: 'ACTIVE',
+            endAt: { gte: heartbeat.lastBeat, lte: now }
+          },
+          select: { id: true, endAt: true }
+        })
+
+        if (affected.length > 0) {
+          console.log(`[Boot] Extending ${affected.length} auction(s) by ${Math.round(downtimeMs / 1000)}s due to downtime.`)
+
+          for (const auc of affected) {
+            const newEndAt = new Date(auc.endAt.getTime() + downtimeMs)
+            // Reset endingSoonNotified so the 5-minute Discord warning fires again
+            // if the new end time is still far enough out.
+            const resetNotified = newEndAt.getTime() - now.getTime() > 5 * 60 * 1000
+            await db.auction.update({
+              where: { id: auc.id },
+              data: {
+                endAt: newEndAt,
+                ...(resetNotified && { endingSoonNotified: false })
+              }
+            })
+            console.log(`[Boot] Auction ${auc.id}: endAt extended to ${newEndAt.toISOString()}`)
+          }
+        } else {
+          console.log('[Boot] No auctions were affected by the downtime.')
+        }
+      }
+    }
+
+    // Record the first heartbeat for this session so the next boot can detect downtime.
+    await db.serverHeartbeat.upsert({
+      where:  { id: 'singleton' },
+      create: { id: 'singleton', lastBeat: now },
+      update: { lastBeat: now }
+    })
+  } catch (err) {
+    // Non-fatal — log and continue booting.
+    console.error('[Boot] Downtime recovery check failed:', err)
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   httpServer.listen(PORT, () => {
     console.log(`Socket server listening on port ${PORT}`)
