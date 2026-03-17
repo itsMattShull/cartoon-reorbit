@@ -107,7 +107,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4) For each cZone, remove any orphaned toons and
-  //    update the DB if we filtered out anything
+  //    update the DB if we filtered out anything (batched)
+  const pendingUpdates = []
   for (const z of user.cZones) {
     if (
       z.layoutData &&
@@ -129,27 +130,28 @@ export default defineEventHandler(async (event) => {
       })
 
       if (dirty) {
-        // Persist the cleaned layoutData back to the database
-        await prisma.cZone.update({
-          where: { id: z.id },
-          data: {
-            layoutData: { zones: cleanedZones }
-          }
-        })
-        // Also update the in-memory copy
         z.layoutData = { zones: cleanedZones }
+        pendingUpdates.push(
+          prisma.cZone.update({
+            where: { id: z.id },
+            data: { layoutData: { zones: cleanedZones } }
+          })
+        )
       }
     } else if (Array.isArray(z.layoutData)) {
       const kept = z.layoutData.filter((item) => ownedSet.has(item?.id))
       if (kept.length !== z.layoutData.length) {
-        await prisma.cZone.update({
-          where: { id: z.id },
-          data: { layoutData: kept }
-        })
         z.layoutData = kept
+        pendingUpdates.push(
+          prisma.cZone.update({
+            where: { id: z.id },
+            data: { layoutData: kept }
+          })
+        )
       }
     }
   }
+  if (pendingUpdates.length) await Promise.all(pendingUpdates)
 
   // 5) Choose the first cZone (if any) to return; otherwise prepare an empty default
   let chosenZone
