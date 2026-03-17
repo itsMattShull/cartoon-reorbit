@@ -876,6 +876,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
 import { useCtoonModal } from '@/composables/useCtoonModal'
+import { useGraphQL } from '@/composables/useGraphQL'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import Toast from '@/components/Toast.vue'
@@ -931,6 +932,53 @@ const router = useRouter()
 const username = ref(route.params.username)
 const { user, fetchSelf } = useAuth()
 const { setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
+
+// ——— GraphQL query strings for two-phase lazy loading ———
+const CZONE_BASIC_QUERY = `
+  query CZoneBasic($username: String!) {
+    czoneBasic(username: $username) {
+      ownerId
+      ownerName
+      avatar
+      isBooster
+      lastActivity
+      czoneId
+      isPublic
+      zones {
+        background
+        toons {
+          id
+          x
+          y
+          width
+          height
+          assetPath
+          name
+          zIndex
+        }
+      }
+    }
+  }
+`
+
+const CZONE_DETAILS_QUERY = `
+  query CZoneDetails($username: String!) {
+    czoneDetails(username: $username) {
+      toonMeta {
+        id
+        mintNumber
+        quantity
+        series
+        rarity
+        isFirstEdition
+        ctoonId
+        isGtoon
+        cost
+        power
+      }
+    }
+  }
+`
 
 // ——— Loading indicator ———
 const loading = ref(true)
@@ -1007,22 +1055,28 @@ watch(holidaySignal, async () => {
 
 async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
   if (showLoading) loading.value = true
+  const { gql } = useGraphQL()
   try {
-    const res = await $fetch(`/api/czone/${username.value}`)
-    ownerName.value = res.ownerName
-    ownerIsBooster.value = res.isBooster
-    ownerAvatar.value = res.avatar || '/avatars/default.png'
-    ownerId.value = res.ownerId
-    ownerLastActivity.value = res.lastActivity ?? null
+    // ── Phase 1: fast – user info + zone backgrounds + toon positions ──────
+    // No UserCtoon DB join required, so this resolves quickly and lets the
+    // zone render immediately with toon images in place.
+    const basicData = await gql(CZONE_BASIC_QUERY, { username: username.value })
+    const basic = basicData.czoneBasic
 
-    if (res.cZone?.zones && Array.isArray(res.cZone.zones) && res.cZone.zones.length >= 1) {
-      zones.value = res.cZone.zones.map(z => ({
+    ownerName.value = basic.ownerName
+    ownerIsBooster.value = basic.isBooster
+    ownerAvatar.value = basic.avatar || '/avatars/default.png'
+    ownerId.value = basic.ownerId
+    ownerLastActivity.value = basic.lastActivity ?? null
+
+    if (Array.isArray(basic.zones) && basic.zones.length >= 1) {
+      zones.value = basic.zones.map(z => ({
         background: typeof z.background === 'string' ? z.background : '',
         toons: Array.isArray(z.toons) ? z.toons : []
       }))
     } else {
       zones.value = [
-        { background: res.cZone?.background || '', toons: res.cZone?.layoutData || [] },
+        { background: '', toons: [] },
         { background: '', toons: [] },
         { background: '', toons: [] }
       ]
@@ -1032,13 +1086,34 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
       currentZoneIndex.value = zones.value.length - 1
     }
 
-    if (awardVisit && user.value && res.ownerId !== user.value.id) {
+    // Zone is ready to display – hide skeleton now, before the slower join
+    if (showLoading) loading.value = false
+
+    if (awardVisit && user.value && basic.ownerId !== user.value.id) {
       await $fetch('/api/points/visit', {
         method: 'POST',
-        body: { zoneOwnerId: res.ownerId }
+        body: { zoneOwnerId: basic.ownerId }
       })
       await fetchSelf({ force: true })
     }
+
+    // ── Phase 2: lazy – enrich toons with metadata (mintNumber, rarity …) ──
+    // Fires in the background after the zone is already visible.  When it
+    // resolves it also prunes any toons the user no longer owns.
+    gql(CZONE_DETAILS_QUERY, { username: username.value })
+      .then(detailsData => {
+        const metaList = detailsData.czoneDetails?.toonMeta ?? []
+        const metaMap = Object.fromEntries(metaList.map(m => [m.id, m]))
+
+        zones.value = zones.value.map(zone => ({
+          ...zone,
+          toons: zone.toons
+            .filter(t => metaMap[t.id] !== undefined)   // remove orphaned toons
+            .map(t => ({ ...t, ...metaMap[t.id] }))     // merge rich metadata
+        }))
+      })
+      .catch(err => console.error('Failed to load cZone details:', err))
+
   } catch (err) {
     console.error('Failed to fetch cZone:', err)
     zones.value = [
@@ -1047,7 +1122,6 @@ async function loadCzone({ showLoading = false, awardVisit = false } = {}) {
       { background: '', toons: [] }
     ]
     ownerAvatar.value = '/avatars/default.png'
-  } finally {
     if (showLoading) loading.value = false
   }
 }
