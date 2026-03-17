@@ -2139,3 +2139,9 @@ model CZoneContestVote {
   @@index([submissionId])
   @@index([userId])
 }
+
+/// Singleton row updated every heartbeat interval so we can detect downtime on restart.
+model ServerHeartbeat {
+  id       String   @id @default("singleton")
+  lastBeat DateTime @updatedAt
+}
