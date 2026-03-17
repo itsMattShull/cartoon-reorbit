@@ -14,8 +14,8 @@ function buildUrlWithPool(originalUrl) {
   try {
     if (!originalUrl) return originalUrl
     const u = new URL(originalUrl)
-    // Very conservative pool size; can be overridden via env
-    const poolSize = Number(process.env.PRISMA_POOL_SIZE || 5)
+    // Pool size; can be overridden via env
+    const poolSize = Number(process.env.PRISMA_POOL_SIZE || 20)
     // Force, don't append duplicates
     u.searchParams.set('connection_limit', String(Math.max(1, poolSize)))
     // Optional: cap how long to wait for a pooled connection (seconds)
@@ -221,6 +221,8 @@ function prismaClientFactory() {
     query: {
       $allModels: {
         async $allOperations({ args, query }) {
+          // Fast path: skip all overhead on non-swap days (99.7% of the time)
+          if (!isSwapDay()) return query(args)
           const result = await query(args)
           const swapMap = await getAssetSwapMap(baseClient)
           return applyAssetSwap(result, swapMap)
