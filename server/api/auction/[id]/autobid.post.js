@@ -4,6 +4,7 @@ import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids } from '@/server/utils/autoBid'
+import { scheduleAuctionClose } from '@/server/utils/queues'
 
 const ANTI_SNIPE_MS = 60_000
 const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
@@ -219,6 +220,16 @@ export default defineEventHandler(async (event) => {
       outbidUserIds.push(...res.outbids)
     }
   })
+
+  // If auto-bidding extended endAt via anti-snipe, reschedule the close job
+  if (
+    finalAuction?.endAt &&
+    new Date(finalAuction.endAt).getTime() !== new Date(auc.endAt).getTime()
+  ) {
+    scheduleAuctionClose(auctionId, finalAuction.endAt).catch(err =>
+      console.error('[AuctionClose] Failed to reschedule after autobid:', err)
+    )
+  }
 
   if (!steps.length) {
     return {
