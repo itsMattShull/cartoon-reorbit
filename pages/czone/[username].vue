@@ -125,7 +125,7 @@
         <div :style="scaleStyle">
           <div
             ref="mobileCanvasRef"
-            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
+            class="relative isolate h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
             :style="canvasBackgroundStyle"
           >
             <div class="absolute inset-0">
@@ -393,7 +393,7 @@
         <div class="flex justify-center overflow-hidden mb-4">
           <div
             ref="desktopCanvasRef"
-            class="relative h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
+            class="relative isolate h-[600px] w-[800px] border border-gray-300 rounded overflow-hidden mx-auto"
             :style="canvasBackgroundStyle"
           >
             <!-- Fixed-size CZone canvas/display -->
