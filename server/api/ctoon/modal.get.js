@@ -5,14 +5,6 @@ function asString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function computeMedian(values) {
-  if (!values.length) return null
-  const sorted = values.slice().sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 1) return sorted[mid]
-  return Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2))
-}
-
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -60,7 +52,7 @@ export default defineEventHandler(async (event) => {
   })
   const highestMint = mintAgg._max.mintNumber ?? ctoon.totalMinted ?? 0
 
-  const [highestSale, lowestSale, overallTradeCount, overallAuctions, ownedCount] = await Promise.all([
+  const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount] = await Promise.all([
     prisma.auction.findFirst({
       where: {
         userCtoon: { ctoonId: ctoon.id },
@@ -85,61 +77,56 @@ export default defineEventHandler(async (event) => {
         ctoons: { some: { userCtoon: { ctoonId: ctoon.id } } }
       }
     }),
-    prisma.auction.findMany({
-      where: {
-        userCtoon: { ctoonId: ctoon.id },
-        status: 'CLOSED',
-        winnerId: { not: null }
-      },
-      select: { highestBid: true }
-    }),
+    prisma.$queryRaw`
+      SELECT
+        COUNT(*)::int                                                            AS count,
+        ROUND(AVG(a."highestBid")::numeric, 2)::float                           AS avg_bid,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY a."highestBid")::float      AS median_bid
+      FROM "Auction" a
+      JOIN "UserCtoon" uc ON a."userCtoonId" = uc.id
+      WHERE uc."ctoonId" = ${ctoon.id}
+        AND a.status = 'CLOSED'
+        AND a."winnerId" IS NOT NULL
+    `,
     prisma.userCtoon.count({
       where: { userId: me.id, ctoonId: ctoon.id }
     })
   ])
 
-  const overallSales = overallAuctions
-    .map(a => a.highestBid)
-    .filter(v => typeof v === 'number')
-  const overallAvgSale = overallSales.length
-    ? Number((overallSales.reduce((sum, v) => sum + v, 0) / overallSales.length).toFixed(2))
-    : null
-  const overallMedianSale = computeMedian(overallSales)
+  const overallRow = overallStats[0] ?? {}
+  const overallSaleCount  = Number(overallRow.count   ?? 0)
+  const overallAvgSale    = overallRow.avg_bid    != null ? Number(overallRow.avg_bid)    : null
+  const overallMedianSale = overallRow.median_bid != null ? Number(overallRow.median_bid) : null
 
   let userStats = null
   if (userCtoon) {
-    const [tradeCount, auctions] = await Promise.all([
+    const [tradeCount, userAuctionStats] = await Promise.all([
       prisma.tradeOffer.count({
         where: {
           status: 'ACCEPTED',
           ctoons: { some: { userCtoonId: userCtoon.id } }
         }
       }),
-      prisma.auction.findMany({
-        where: {
-          userCtoonId: userCtoon.id,
-          status: 'CLOSED',
-          winnerId: { not: null }
-        },
-        select: { highestBid: true }
-      })
+      prisma.$queryRaw`
+        SELECT
+          COUNT(*)::int                                                            AS count,
+          ROUND(AVG("highestBid")::numeric, 2)::float                             AS avg_bid,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "highestBid")::float        AS median_bid
+        FROM "Auction"
+        WHERE "userCtoonId" = ${userCtoon.id}
+          AND status = 'CLOSED'
+          AND "winnerId" IS NOT NULL
+      `
     ])
 
-    const sales = auctions
-      .map(a => a.highestBid)
-      .filter(v => typeof v === 'number')
-    const avgSale = sales.length
-      ? Number((sales.reduce((sum, v) => sum + v, 0) / sales.length).toFixed(2))
-      : null
-    const medianSale = computeMedian(sales)
-
+    const uRow = userAuctionStats[0] ?? {}
     userStats = {
       id: userCtoon.id,
       mintNumber: userCtoon.mintNumber ?? null,
       tradedCount: tradeCount,
-      successfulAuctions: sales.length,
-      avgSale,
-      medianSale
+      successfulAuctions: Number(uRow.count ?? 0),
+      avgSale:    uRow.avg_bid    != null ? Number(uRow.avg_bid)    : null,
+      medianSale: uRow.median_bid != null ? Number(uRow.median_bid) : null
     }
   }
 
@@ -171,7 +158,7 @@ export default defineEventHandler(async (event) => {
       lowestSaleMint: lowestSale?.userCtoon?.mintNumber ?? null,
       lowestSaleEndedAt: lowestSale?.endAt ?? null,
       tradedCount: overallTradeCount,
-      successfulAuctions: overallSales.length,
+      successfulAuctions: overallSaleCount,
       avgSale: overallAvgSale,
       medianSale: overallMedianSale
     },

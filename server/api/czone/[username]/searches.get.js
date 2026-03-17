@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
@@ -390,6 +391,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const items = []
+  const toCreate = []
   for (const search of searches) {
     const resetType = search.resetType || 'COOLDOWN_HOURS'
     if (resetType === 'COOLDOWN_HOURS') {
@@ -504,17 +506,17 @@ export default defineEventHandler(async (event) => {
     const chosen = pickWeighted(eligiblePool)
     if (!chosen) continue
 
-    const appearance = await db.cZoneSearchAppearance.create({
-      data: {
-        cZoneSearchId: search.id,
-        userId,
-        ctoonId:     chosen.ctoonId,
-        zoneOwnerId: zoneOwnerId
-      }
+    const appearanceId = randomUUID()
+    toCreate.push({
+      id:            appearanceId,
+      cZoneSearchId: search.id,
+      userId,
+      ctoonId:       chosen.ctoonId,
+      zoneOwnerId:   zoneOwnerId
     })
 
     items.push({
-      appearanceId:  appearance.id,
+      appearanceId,
       cZoneSearchId: search.id,
       ctoon: {
         id:        chosen.ctoon.id,
@@ -523,6 +525,10 @@ export default defineEventHandler(async (event) => {
         assetPath: chosen.ctoon.assetPath
       }
     })
+  }
+
+  if (toCreate.length > 0) {
+    await db.cZoneSearchAppearance.createMany({ data: toCreate })
   }
 
   return { items }
