@@ -6,6 +6,9 @@ export const requestMetricsEnabled =
 export const wsMetricsEnabled =
   diagEnabled && process.env.DIAG_WS_METRICS === '1'
 
+// Performance metrics are always enabled (no env gate needed — low overhead)
+export const perfMetricsEnabled = true
+
 const requestState = {
   total: 0,
   byStatus: Object.create(null),
@@ -27,6 +30,97 @@ function normalizeRoute(url) {
   const parts = path.split('/').filter(Boolean)
   if (!parts.length) return '/'
   return `/${parts[0]}`
+}
+
+// More detailed normalizer for performance metrics — keeps full path but
+// replaces numeric IDs and UUIDs with placeholders.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const NUMERIC_RE = /^\d+$/
+
+function normalizePerfRoute(url) {
+  if (!url) return '/'
+  const queryIndex = url.indexOf('?')
+  const path = queryIndex === -1 ? url : url.slice(0, queryIndex)
+  const parts = path.split('/').filter(Boolean)
+  if (!parts.length) return '/'
+  const normalized = parts.map(p =>
+    UUID_RE.test(p) ? ':id' : NUMERIC_RE.test(p) ? ':id' : p
+  )
+  return `/${normalized.join('/')}`
+}
+
+// ─── Per-endpoint performance state ─────────────────────────────────────────
+
+const perfState = Object.create(null) // route -> PerfEntry
+
+function ensurePerfEntry(route) {
+  if (!perfState[route]) {
+    perfState[route] = {
+      count: 0,
+      errorCount: 0,
+      totalDurationMs: 0,
+      maxDurationMs: 0,
+      // Running sorted sample for p95 approximation (capped at 1000)
+      _durations: [],
+      heapUsedSum: 0,
+      heapSampleCount: 0
+    }
+  }
+  return perfState[route]
+}
+
+export function recordPerfMetrics({ url, statusCode, durationMs, heapUsedBytes }) {
+  const route = normalizePerfRoute(url)
+  const entry = ensurePerfEntry(route)
+  entry.count += 1
+  if (statusCode >= 500) entry.errorCount += 1
+  entry.totalDurationMs += durationMs
+  if (durationMs > entry.maxDurationMs) entry.maxDurationMs = durationMs
+  if (entry._durations.length < 1000) {
+    entry._durations.push(durationMs)
+  } else {
+    // Replace a random element to keep reservoir sampling
+    const idx = Math.floor(Math.random() * 1000)
+    entry._durations[idx] = durationMs
+  }
+  if (heapUsedBytes != null) {
+    entry.heapUsedSum += heapUsedBytes
+    entry.heapSampleCount += 1
+  }
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return 0
+  const idx = Math.ceil((p / 100) * sorted.length) - 1
+  return sorted[Math.max(0, idx)]
+}
+
+export function getPerfMetrics() {
+  const result = []
+  for (const [route, e] of Object.entries(perfState)) {
+    const sorted = e._durations.slice().sort((a, b) => a - b)
+    const avgDurationMs = e.count > 0 ? e.totalDurationMs / e.count : 0
+    const p95DurationMs = percentile(sorted, 95)
+    const avgHeapUsedMb = e.heapSampleCount > 0
+      ? e.heapUsedSum / e.heapSampleCount / 1024 / 1024
+      : null
+    // Impact score: proportional to total CPU time spent (count * avg latency)
+    const impactScore = e.count * avgDurationMs
+    result.push({
+      route,
+      count: e.count,
+      errorCount: e.errorCount,
+      avgDurationMs: Math.round(avgDurationMs * 10) / 10,
+      p95DurationMs: Math.round(p95DurationMs * 10) / 10,
+      maxDurationMs: Math.round(e.maxDurationMs * 10) / 10,
+      totalDurationMs: Math.round(e.totalDurationMs),
+      avgHeapUsedMb: avgHeapUsedMb != null ? Math.round(avgHeapUsedMb * 10) / 10 : null,
+      impactScore: Math.round(impactScore)
+    })
+  }
+  // Sort highest impact first
+  result.sort((a, b) => b.impactScore - a.impactScore)
+  return result
 }
 
 export function recordRequestMetrics(url, statusCode) {

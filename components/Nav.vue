@@ -313,6 +313,7 @@ const adminGroups = [
       { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
       { label: 'Manage Production', to: '/admin/manage-dev' },
       { label: 'Initiate Trade', to: '/admin/initiate-trade' },
+      { label: 'Performance Monitor', to: '/admin/performance-monitor' },
     ]
   },
       {
