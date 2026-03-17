@@ -7,6 +7,8 @@ import { prisma as db }  from './prisma.js'
 import { DateTime } from 'luxon'
 import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
+import { Worker } from 'bullmq'
+import { redisConnection, scheduleAuctionClose } from './utils/queues.js'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -2745,147 +2747,145 @@ setInterval(() => {
   })
 }, SWEEP_INTERVAL_MS).unref()
 
-// 2. Periodically scan for ended auctions and finalize them.
-//    Runs every 60s (adjust as desired).
-// in your socket‐server.js (or wherever you close auctions):
-let auctionClosingInFlight = false
-setInterval(async () => {
-  if (auctionClosingInFlight) return
-  auctionClosingInFlight = true
-  try {
-    const now = new Date()
-    // find all auctions that have just expired
-    const toClose = await db.auction.findMany({
-      where: { status: 'ACTIVE', endAt: { lte: now } }
+// Extracted close logic — called by the BullMQ worker for each auction job.
+async function performAuctionClose(auctionId) {
+  const auc = await db.auction.findUnique({
+    where: { id: auctionId },
+    select: { id: true, status: true, endAt: true, creatorId: true, userCtoonId: true }
+  })
+
+  // Guard: already closed or cancelled (e.g. duplicate job fire)
+  if (!auc || auc.status !== 'ACTIVE') return
+
+  // Re-check: if endAt is still in the future the job fired too early (shouldn't
+  // normally happen, but guard against clock skew)
+  if (new Date(auc.endAt) > new Date()) return
+
+  const { id, creatorId, userCtoonId } = auc
+  const now = new Date()
+
+  // Resolve seller: creatorId or OFFICIAL_USERNAME
+  let resolvedCreatorId = creatorId
+  if (!resolvedCreatorId && process.env.OFFICIAL_USERNAME) {
+    const official = await db.user.findUnique({
+      where: { username: process.env.OFFICIAL_USERNAME },
+      select: { id: true }
+    })
+    resolvedCreatorId = official?.id || null
+  }
+
+  // Highest bid placed before auction end; earliest timestamp breaks ties
+  const winningBid = await db.bid.findFirst({
+    where: {
+      auctionId: id,
+      createdAt: { lte: auc.endAt }
+    },
+    orderBy: [
+      { amount: 'desc' },
+      { createdAt: 'asc' }
+    ],
+    select: { userId: true, amount: true }
+  })
+
+  await db.$transaction(async tx => {
+    await tx.auction.update({
+      where: { id },
+      data: {
+        status: 'CLOSED',
+        winnerId: winningBid?.userId || null,
+        highestBidderId: winningBid?.userId || null,
+        winnerAt: now,
+        ...(winningBid && { highestBid: winningBid.amount })
+      }
     })
 
-    for (const auc of toClose) {
-      const { id, creatorId, userCtoonId } = auc
-
-      // resolve seller: creatorId or OFFICIAL_USERNAME
-      let resolvedCreatorId = creatorId
-      if (!resolvedCreatorId && process.env.OFFICIAL_USERNAME) {
-        const official = await db.user.findUnique({
-          where: { username: process.env.OFFICIAL_USERNAME },
-          select: { id: true }
-        })
-        resolvedCreatorId = official?.id || null
-      }
-
-      // 1) fetch all bids placed before auction end; highest first, then earliest
-      const winningBid = await db.bid.findFirst({
-        where: {
-          auctionId: id,
-          createdAt: { lte: auc.endAt }
-        },
-        orderBy: [
-          { amount: 'desc' },
-          { createdAt: 'asc' }
-        ],
-        select: { userId: true, amount: true }
+    if (winningBid) {
+      const uc = await tx.userCtoon.update({
+        where:  { id: userCtoonId },
+        data:   { userId: winningBid.userId, isTradeable: true },
+        select: { id: true, ctoonId: true, mintNumber: true }
       })
 
-      // 3) transaction
-      await db.$transaction(async tx => {
-        await tx.auction.update({
-          where: { id },
-          data: {
-            status: 'CLOSED',
-            winnerId: winningBid?.userId || null,
-            highestBidderId: winningBid?.userId || null,
-            winnerAt: now,
-            ...(winningBid && { highestBid: winningBid.amount })
-          }
-        })
-
-        if (winningBid) {
-          // transfer cToon to winner + log ownership
-          const uc = await tx.userCtoon.update({
-            where:  { id: userCtoonId },
-            data:   { userId: winningBid.userId, isTradeable: true },
-            select: { id: true, ctoonId: true, mintNumber: true }
-          })
-
-          await tx.userTradeListItem.deleteMany({
-            where: { userCtoonId, userId: { not: winningBid.userId } }
-          })
-          await tx.ctoonOwnerLog.create({
-            data: {
-              userId:      winningBid.userId,
-              ctoonId:     uc.ctoonId,
-              userCtoonId: uc.id,
-              mintNumber:  uc.mintNumber
-            }
-          })
-
-          // debit winner
-          const loserPts = await tx.userPoints.update({
-            where: { userId: winningBid.userId },
-            data:  { points: { decrement: winningBid.amount } }
-          })
-          await tx.pointsLog.create({
-            data: {
-              userId: winningBid.userId,
-              points: winningBid.amount,
-              total:  loserPts.points,
-              method: 'Auction',
-              direction: 'decrease'
-            }
-          })
-
-          // Consume winner's active locks for this auction; release others just in case
-          await tx.lockedPoints.updateMany({
-            where: { userId: winningBid.userId, status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
-            data:  { status: 'CONSUMED' }
-          })
-          await tx.lockedPoints.updateMany({
-            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
-            data:  { status: 'RELEASED' }
-          })
-
-          // credit seller (creator or OFFICIAL_USERNAME), if resolved
-          if (resolvedCreatorId) {
-            const creatorPts = await tx.userPoints.upsert({
-              where:  { userId: resolvedCreatorId },
-              create: { userId: resolvedCreatorId, points: winningBid.amount },
-              update: { points: { increment: winningBid.amount } }
-            })
-            await tx.pointsLog.create({
-              data: {
-                userId: resolvedCreatorId,
-                points: winningBid.amount,
-                total:  creatorPts.points,
-                method: 'Auction',
-                direction: 'increase'
-              }
-            })
-          }
-        } else {
-          // no winner → just unlock, keep current owner
-          await tx.userCtoon.update({
-            where: { id: userCtoonId },
-            data:  { isTradeable: true }
-          })
-
-          // No winner → release any remaining active locks on this auction
-          await tx.lockedPoints.updateMany({
-            where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
-            data:  { status: 'RELEASED' }
-          })
+      await tx.userTradeListItem.deleteMany({
+        where: { userCtoonId, userId: { not: winningBid.userId } }
+      })
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId:      winningBid.userId,
+          ctoonId:     uc.ctoonId,
+          userCtoonId: uc.id,
+          mintNumber:  uc.mintNumber
         }
       })
 
-      // 5) notify clients
-      io.to(`auction_${id}`).emit('auction-ended', {
-        winnerId:   winningBid?.userId ?? null,
-        winningBid: winningBid?.amount ?? 0
+      const loserPts = await tx.userPoints.update({
+        where: { userId: winningBid.userId },
+        data:  { points: { decrement: winningBid.amount } }
+      })
+      await tx.pointsLog.create({
+        data: {
+          userId:    winningBid.userId,
+          points:    winningBid.amount,
+          total:     loserPts.points,
+          method:    'Auction',
+          direction: 'decrease'
+        }
+      })
+
+      await tx.lockedPoints.updateMany({
+        where: { userId: winningBid.userId, status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+        data:  { status: 'CONSUMED' }
+      })
+      await tx.lockedPoints.updateMany({
+        where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+        data:  { status: 'RELEASED' }
+      })
+
+      if (resolvedCreatorId) {
+        const creatorPts = await tx.userPoints.upsert({
+          where:  { userId: resolvedCreatorId },
+          create: { userId: resolvedCreatorId, points: winningBid.amount },
+          update: { points: { increment: winningBid.amount } }
+        })
+        await tx.pointsLog.create({
+          data: {
+            userId:    resolvedCreatorId,
+            points:    winningBid.amount,
+            total:     creatorPts.points,
+            method:    'Auction',
+            direction: 'increase'
+          }
+        })
+      }
+    } else {
+      await tx.userCtoon.update({
+        where: { id: userCtoonId },
+        data:  { isTradeable: true }
+      })
+      await tx.lockedPoints.updateMany({
+        where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+        data:  { status: 'RELEASED' }
       })
     }
+  })
 
+  io.to(`auction_${id}`).emit('auction-ended', {
+    winnerId:   winningBid?.userId ?? null,
+    winningBid: winningBid?.amount ?? 0
+  })
+}
+
+// Heartbeat interval — keep this independent of auction processing so the
+// timestamp is always fresh even during quiet periods with no auctions ending.
+setInterval(async () => {
+  try {
+    await db.serverHeartbeat.upsert({
+      where:  { id: 'singleton' },
+      create: { id: 'singleton', lastBeat: new Date() },
+      update: { lastBeat: new Date() }
+    })
   } catch (err) {
-    console.error(`Auction closing failed for ${id}:`, err)
-  } finally {
-    auctionClosingInFlight = false
+    console.error('[Heartbeat] Failed to update:', err)
   }
 }, 60 * 1000).unref()
 
@@ -3054,6 +3054,11 @@ setInterval(async () => {
 }, 60 * 1000).unref()
 
 
+// Minimum gap (ms) between last heartbeat and now before we consider it a
+// real downtime event.  One missed 60-second tick is noise; anything longer
+// means the server was actually down.
+const DOWNTIME_THRESHOLD_MS = 90_000
+
 // Boot server only after Prisma is connected to avoid race conditions
 async function boot() {
   try {
@@ -3065,6 +3070,101 @@ async function boot() {
     console.error('[Prisma] Failed to connect at boot:', err)
     process.exit(1)
   }
+
+  // ── Downtime recovery ──────────────────────────────────────────────────────
+  // Check how long the server was down and extend any auctions that would have
+  // ended during that window, giving bidders the time they missed.
+  try {
+    const now = new Date()
+    const heartbeat = await db.serverHeartbeat.findUnique({ where: { id: 'singleton' } })
+
+    if (heartbeat) {
+      const downtimeMs = now.getTime() - heartbeat.lastBeat.getTime()
+
+      if (downtimeMs > DOWNTIME_THRESHOLD_MS) {
+        console.log(`[Boot] Detected downtime of ${Math.round(downtimeMs / 1000)}s. Checking for affected auctions…`)
+
+        // Auctions whose end time fell inside the downtime window are the ones
+        // that users couldn't bid on — extend them by the full downtime duration.
+        const affected = await db.auction.findMany({
+          where: {
+            status: 'ACTIVE',
+            endAt: { gte: heartbeat.lastBeat, lte: now }
+          },
+          select: { id: true, endAt: true }
+        })
+
+        if (affected.length > 0) {
+          console.log(`[Boot] Extending ${affected.length} auction(s) by ${Math.round(downtimeMs / 1000)}s due to downtime.`)
+
+          for (const auc of affected) {
+            const newEndAt = new Date(auc.endAt.getTime() + downtimeMs)
+            // Reset endingSoonNotified so the 5-minute Discord warning fires again
+            // if the new end time is still far enough out.
+            const resetNotified = newEndAt.getTime() - now.getTime() > 5 * 60 * 1000
+            await db.auction.update({
+              where: { id: auc.id },
+              data: {
+                endAt: newEndAt,
+                ...(resetNotified && { endingSoonNotified: false })
+              }
+            })
+            // Reschedule the BullMQ job to the new endAt so it doesn't fire
+            // immediately on a stale "waiting" job from before the restart.
+            await scheduleAuctionClose(auc.id, newEndAt)
+            console.log(`[Boot] Auction ${auc.id}: endAt extended to ${newEndAt.toISOString()}`)
+          }
+        } else {
+          console.log('[Boot] No auctions were affected by the downtime.')
+        }
+      }
+    }
+
+    // Record the first heartbeat for this session so the next boot can detect downtime.
+    await db.serverHeartbeat.upsert({
+      where:  { id: 'singleton' },
+      create: { id: 'singleton', lastBeat: now },
+      update: { lastBeat: now }
+    })
+  } catch (err) {
+    // Non-fatal — log and continue booting.
+    console.error('[Boot] Downtime recovery check failed:', err)
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // ── Backfill BullMQ jobs for any active auctions that have no job yet ───────
+  // Handles the first deploy (existing auctions predate the queue) and any
+  // scenario where Redis was flushed. Safe on every boot — scheduleAuctionClose
+  // is idempotent.
+  try {
+    const activeAuctions = await db.auction.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, endAt: true }
+    })
+    if (activeAuctions.length > 0) {
+      console.log(`[Boot] Backfilling BullMQ close jobs for ${activeAuctions.length} active auction(s)…`)
+      await Promise.all(activeAuctions.map(a => scheduleAuctionClose(a.id, a.endAt)))
+      console.log('[Boot] Backfill complete.')
+    }
+  } catch (err) {
+    console.error('[Boot] Auction job backfill failed:', err)
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Start the BullMQ worker AFTER downtime recovery so extended auctions have
+  // their jobs rescheduled before any processing begins.
+  const auctionCloseWorker = new Worker(
+    process.env.AUCTION_CLOSE_QUEUE_KEY || 'auctionClose',
+    async (job) => {
+      const { auctionId } = job.data
+      await performAuctionClose(auctionId)
+    },
+    { connection: redisConnection, concurrency: 5 }
+  )
+  auctionCloseWorker.on('failed', (job, err) => {
+    console.error(`[AuctionClose] Job ${job?.id} failed:`, err)
+  })
+  console.log('[AuctionClose] BullMQ worker started.')
 
   httpServer.listen(PORT, () => {
     console.log(`Socket server listening on port ${PORT}`)

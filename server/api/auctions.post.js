@@ -7,6 +7,7 @@ import {
 import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
+import { scheduleAuctionClose } from '@/server/utils/queues'
 
 function formatDuration(days, minutes) {
   if (minutes > 0) {
@@ -148,6 +149,9 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
+
+  // 7.5 Schedule the BullMQ job that will close this auction at endAt
+  await scheduleAuctionClose(auction.id, auction.endAt)
 
   // 8. Disable tradeability
   await prisma.userCtoon.update({

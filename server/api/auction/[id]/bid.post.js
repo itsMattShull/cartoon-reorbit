@@ -4,6 +4,7 @@ import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
+import { scheduleAuctionClose } from '@/server/utils/queues'
 
 const ANTI_SNIPE_MS = 60_000
 const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
@@ -228,7 +229,14 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 5) Emit socket events
+  // 5) If endAt was extended by anti-snipe, reschedule the BullMQ close job
+  if (finalEndAt.getTime() !== new Date(pre.endAt).getTime()) {
+    scheduleAuctionClose(auctionId, finalEndAt).catch(err =>
+      console.error('[AuctionClose] Failed to reschedule after bid:', err)
+    )
+  }
+
+  // 6) Emit socket events
   const url = useRuntimeConfig().socketOrigin
 
   const idsForNames = Array.from(new Set(autoSteps.map(s => s.userId)))
@@ -274,7 +282,7 @@ export default defineEventHandler(async (event) => {
     setTimeout(finish, 1500)
   })
 
-  // 6) Notify only the latest outbid leader via Discord DM (non-blocking)
+  // 7) Notify only the latest outbid leader via Discord DM (non-blocking)
   try {
     const { notifyOutbidByUserId } = await import('@/server/utils/discord')
     const final = await db.auction.findUnique({
