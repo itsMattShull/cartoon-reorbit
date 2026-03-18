@@ -9,7 +9,7 @@
 
 import { prisma } from '../server/prisma.js'
 
-const TARGET_NAME = 'Kids WB Static Shock'
+const TARGET_NAME = 'Valentines Day 2026 Participant'
 
 function buildPlan(rows) {
   return rows.map((row, idx) => ({
