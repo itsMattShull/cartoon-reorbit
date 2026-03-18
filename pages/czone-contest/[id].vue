@@ -21,7 +21,17 @@
         <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
           <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
           <div class="p-6 text-slate-900">
-            <h1 class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ contest.name }}</h1>
+            <div class="flex flex-wrap items-center gap-3 mb-1">
+              <h1 class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ contest.name }}</h1>
+              <!-- Status badge -->
+              <span v-if="contest.distributedAt" class="inline-flex items-center gap-1.5 bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                Closed
+              </span>
+              <span v-else class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block"></span>
+                Active
+              </span>
+            </div>
 
             <div class="mt-5 flex flex-wrap gap-8 items-start">
               <!-- Countdown / ended -->
@@ -48,9 +58,10 @@
                   </div>
                 </div>
               </div>
-              <div v-else class="flex items-center">
+              <div v-else>
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Result</p>
                 <span class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 text-sm font-semibold px-3 py-1.5 rounded-full">
-                  Contest ended — prizes distributed
+                  Prizes distributed
                 </span>
               </div>
 
@@ -87,10 +98,19 @@
       <!-- Submission grid -->
       <div v-else class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
-          v-for="submission in shuffledSubmissions"
+          v-for="submission in displayedSubmissions"
           :key="submission.id"
-          class="bg-white rounded-xl shadow overflow-hidden flex flex-col"
+          class="rounded-xl shadow overflow-hidden flex flex-col"
+          :class="submission.isWinner
+            ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-transparent bg-white'
+            : 'bg-white'"
         >
+          <!-- Winner banner -->
+          <div v-if="submission.isWinner" class="bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-400 px-4 py-2 flex items-center gap-2">
+            <span class="text-xl">🏆</span>
+            <span class="text-sm font-bold text-amber-900 uppercase tracking-wide">Winner</span>
+          </div>
+
           <div class="relative w-full" style="aspect-ratio: 800/600">
             <img
               :src="submission.imageUrl"
@@ -98,21 +118,31 @@
               class="absolute inset-0 w-full h-full object-cover"
             />
           </div>
-          <div class="p-4 flex items-center justify-end">
-            <div class="flex gap-2">
-              <!-- Own submission badge -->
-              <template v-if="submission.isOwn">
+          <div class="p-4 flex items-center justify-between">
+            <!-- Submitter username (closed contests) or own-submission badge -->
+            <div class="flex items-center gap-2">
+              <template v-if="contest.distributedAt">
+                <span class="text-sm font-medium text-slate-700">{{ submission.username }}</span>
+              </template>
+              <template v-else-if="submission.isOwn">
                 <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
                   Your submission
                 </span>
               </template>
+            </div>
 
-              <!-- Vote button -->
-              <template v-else-if="me">
+            <!-- Vote count (closed) or vote button (active) -->
+            <div class="flex items-center gap-2">
+              <template v-if="contest.distributedAt">
+                <span class="text-xs text-slate-500 font-medium">
+                  {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
+                </span>
+              </template>
+              <template v-else-if="!submission.isOwn && me">
                 <button
-                  :disabled="!!contest.distributedAt || submission.hasVoted || votesRemaining <= 0 || votingId === submission.id"
+                  :disabled="submission.hasVoted || votesRemaining <= 0 || votingId === submission.id"
                   class="text-sm px-3 py-1 rounded font-medium transition-colors"
-                  :class="!submission.hasVoted && votesRemaining > 0 && !contest.distributedAt
+                  :class="!submission.hasVoted && votesRemaining > 0
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
                   @click="vote(submission)"
@@ -385,6 +415,24 @@ const shuffledSubmissions = computed(() => {
     [arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
+})
+
+const displayedSubmissions = computed(() => {
+  if (!contest.value?.submissions) return []
+  // When the contest is closed (prizes distributed), show winner first then sort by votes desc
+  if (contest.value.distributedAt) {
+    const withWinner = contest.value.submissions.map(s => ({
+      ...s,
+      isWinner: s.id === contest.value.winnerId
+    }))
+    return withWinner.sort((a, b) => {
+      if (a.isWinner && !b.isWinner) return -1
+      if (!a.isWinner && b.isWinner) return 1
+      return b.voteCount - a.voteCount
+    })
+  }
+  // Active contest: shuffle with no winner indicator
+  return shuffledSubmissions.value.map(s => ({ ...s, isWinner: false }))
 })
 
 const toastMessage = ref('')
