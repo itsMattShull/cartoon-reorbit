@@ -31,7 +31,8 @@ export default defineEventHandler(async (event) => {
           zoneIndex: true,
           imageUrl: true,
           createdAt: true,
-          _count: { select: { votes: true } }
+          _count: { select: { votes: true } },
+          user: { select: { username: true } }
         }
       }
     }
@@ -64,7 +65,8 @@ export default defineEventHandler(async (event) => {
       imageUrl: s.imageUrl,
       voteCount: s._count.votes,
       isOwn: s.id === mySubmissionId,
-      hasVoted: myVotedSubmissionIds.has(s.id)
+      hasVoted: myVotedSubmissionIds.has(s.id),
+      username: s.user?.username ?? null
     }))
   )
 
