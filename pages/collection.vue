@@ -237,6 +237,8 @@
             <option value="series">Series (A→Z)</option>
             <option value="set">Set (A→Z)</option>
             <option value="name">Name (A→Z, then Mint #)</option>
+            <option value="mintAsc">Mint # – Ascending (then Name A→Z)</option>
+            <option value="mintDesc">Mint # – Descending (then Name A→Z)</option>
           </select>
         </div>
 
@@ -1060,6 +1062,14 @@ function sortCmp(a, b, { useMintTie = false } = {}) {
     case 'set': {
       const cmp = (a.set || '').localeCompare(b.set || '')
       return cmp || nameTie()
+    }
+    case 'mintAsc': {
+      const primary = numAsc(a.mintNumber, b.mintNumber)
+      return primary || (a.name || '').localeCompare(b.name || '')
+    }
+    case 'mintDesc': {
+      const primary = numDesc(a.mintNumber, b.mintNumber)
+      return primary || (a.name || '').localeCompare(b.name || '')
     }
     case 'name':
     default: {
