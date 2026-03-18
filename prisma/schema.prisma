@@ -310,6 +310,11 @@ model UserCtoon {
 
   // Ensure only one of each mint number exists per cToon
   @@unique([ctoonId, mintNumber])
+  // Performance indexes for high-volume queries
+  @@index([userId])
+  @@index([userId, burnedAt])
+  @@index([userId, ctoonId])
+  @@index([userId, isTradeable, burnedAt])
 }
 
 model UserPoints {
@@ -1001,6 +1006,7 @@ model Auction {
   autoBids AuctionAutoBid[]
 
   @@index([userCtoonId, status])
+  @@index([status, winnerId])
 }
 
 model Bid {

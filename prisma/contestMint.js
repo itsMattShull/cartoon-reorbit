@@ -7,7 +7,7 @@ import { QueueEvents } from 'bullmq'
 import { randomInt } from 'node:crypto'
 
 /** Target cToon */
-const CTOON_ID = '41f8f882-58b6-4de5-b69b-45f0c143d320'
+const CTOON_ID = 'e1b796ed-8ff1-43e6-80fe-9062216ecb50'
 
 /** Behavior flags */
 const RESPECT_STOCK_LIMITS = true
@@ -20,32 +20,33 @@ const redisConnection = {
 
 /** Usernames to mint to */
 const USERNAMES = [
-  'DoodleToonStargazer',
-  'RockinVikingAdventurer',
-  'ChillZebraWarrior',
-  'BraveBeastChampion',
-  'TurboPixelPilot',
-  'HyperTitanAlchemist',
-  'QuirkyDJSuperstar',
-  'RetroWarriorPilot',
-  'LegendaryWarriorGuru',
-  'AwesomeHackerAgent',
-  'ObsidianZombieMystic',
-  'SassyViperStargazer',
-  'CosmicDrifterDreamer',
-  'MightyBeastScholar',
-  'CrystalSparkScholar',
+  'AwesomeAngelAthlete',
+  'SuperSharkSlayer',
+  'RadicalGhostDaredevil',
+  'BlazingDragonChampion',
+  'JanGloopManx',
+  'RetroToonSeeker',
+  'UltraRobotSamurai',
+  'ShadowDragonWarrior',
+  'ScoobyDoobyDoo',
+  'CyberPunkRebel',
+  'BubblyPhantomWhiz',
+  'NeonPhoenixStargazer',
   'CyberLionOverlord',
-  'GalaxyChargerPilot',
-  'RetroSkaterJuggernaut',
-  'BraveCheetahAthlete',
-  'JollyDrifterGuardian',
-  'ChillNomadMystic',
+  'DizzyKnightRanger',
   'MysticAlienVoyager',
+  'ShadowNinjaOverlord',
+  'FrostyStormQueen',
+  'CosmicDrifterDreamer',
+  'OrbitToonMaster',
+  'JollyDrifterGuardian',
+  'AwesomeRocketRebel',
   'LegendaryGhostSuperstar',
   'ShadowNinjaAce',
-  'GrimBravoCourage',
-  'SneakyAlienCommander'
+  'BraveCheetahAthlete',
+  'RadicalGhostDaredevil',
+  'CrimsonDragonDreamer',
+  'CyberPunkRebel'
 ]
 
 const ARGS = new Set(process.argv.slice(2))

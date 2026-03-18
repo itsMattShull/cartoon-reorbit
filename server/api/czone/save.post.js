@@ -3,6 +3,8 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+import { NAV_CACHE_KEY } from './[username]/next.get.js'
 
 export default defineEventHandler(async (event) => {
   // 1. Auth check
@@ -54,9 +56,16 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 3. Fetch all UserCtoon records for this user, including their Ctoon
+  // 3. Fetch only the UserCtoon records being placed (not the entire collection)
+  const requestedIds = new Set()
+  for (const zone of zones) {
+    for (const item of zone.toons) {
+      if (typeof item?.id === 'string') requestedIds.add(item.id)
+    }
+  }
+
   const userCtoons = await prisma.userCtoon.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, id: { in: Array.from(requestedIds) } },
     select: {
       id: true,
       mintNumber: true,
@@ -181,5 +190,9 @@ export default defineEventHandler(async (event) => {
       ...upsertData
     },
   })
+
+  // Invalidate the cZone nav cache so next/previous picks up layout changes
+  try { await redis.del(NAV_CACHE_KEY) } catch {}
+
   return { success: true }
 })
