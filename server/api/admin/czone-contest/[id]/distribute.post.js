@@ -68,8 +68,9 @@ export default defineEventHandler(async (event) => {
 
   // Award points and backgrounds in a transaction
   await prisma.$transaction(async (tx) => {
-    // Winner prizes
+    // Winner prizes (winner also receives participant prizes)
     await awardInTransaction(tx, [winnerUserId], winnerPrizes, 'cZone Contest Winner')
+    await awardInTransaction(tx, [winnerUserId], participantPrizes, 'cZone Contest Participant')
 
     // Participant prizes
     if (participantUserIds.length) {
@@ -92,7 +93,15 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Winner also receives participant ctoons
   const participantCtoons = participantPrizes.ctoons ?? []
+  for (const { ctoonId, qty } of participantCtoons) {
+    const quantity = qty ?? 1
+    for (let i = 0; i < quantity; i++) {
+      await mintQueue.add('mintCtoon', { userId: winnerUserId, ctoonId, isSpecial: true })
+    }
+  }
+
   for (const userId of participantUserIds) {
     for (const { ctoonId, qty } of participantCtoons) {
       const quantity = qty ?? 1
