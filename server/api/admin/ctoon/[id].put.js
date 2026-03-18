@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
   // 3) Extract fields
   const {
     name, series, rarity, price, releaseDate, perUserLimit,
-    quantity, initialQuantity, inCmart, set, characters,
+    quantity, initialQuantity, inCmart, set, description, characters,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty
   } = payload
@@ -116,6 +116,7 @@ export default defineEventHandler(async (event) => {
     initialQuantity: initQtyInt,
     inCmart: inCmartBool,
     set,
+    description: description?.trim() || null,
     characters: charactersArr,
 
     isGtoon:    isGtoonBool,
@@ -185,7 +186,7 @@ export default defineEventHandler(async (event) => {
   try {
     const area = `Ctoon:${id}`
     const keys = [
-      'name','series','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
+      'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty'
     ]
