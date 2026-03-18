@@ -122,6 +122,12 @@
           <input v-model="setField" required class="w-full border rounded p-2" />
         </div>
 
+        <!-- Description -->
+        <div>
+          <label class="block mb-1 font-medium">Description</label>
+          <textarea v-model="description" rows="3" class="w-full border rounded p-2" placeholder="Optional description"></textarea>
+        </div>
+
         <!-- Characters -->
         <div>
           <label class="block mb-1 font-medium">Characters (comma-separated)</label>
@@ -219,6 +225,7 @@ const perUserLimit = ref(null); const quantity = ref(null)
 const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
+const description = ref('')
 
 /* new image refs */
 const newImageFile = ref(null)
@@ -331,6 +338,7 @@ onMounted(async ()=>{
     assetPath.value = ctoon.assetPath
     setField.value = ctoon.set
     characters.value = (ctoon.characters||[]).join(', ')
+    description.value = ctoon.description || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
       const initQty = Number(ctoon.initialReleaseQty)
@@ -413,6 +421,7 @@ async function submitForm(){
     fd.append('initialQuantity', initialQuantity.value ?? '')
     fd.append('inCmart', inCmart.value)
     fd.append('set', setField.value)
+    fd.append('description', description.value.trim())
     fd.append('characters', JSON.stringify(characters.value.split(',').map(s=>s.trim()).filter(Boolean)))
     fd.append('isGtoon', isGtoon.value)
     fd.append('gtoonType', gtoonTypeValue)
@@ -454,6 +463,7 @@ async function submitForm(){
     inCmart:         inCmart.value,
 
     set:             setField.value,
+    description:     description.value.trim() || null,
     characters:      characters.value.split(',').map(s => s.trim()),
 
     isGtoon:         isGtoon.value,
