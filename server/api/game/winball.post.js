@@ -141,7 +141,6 @@ export default defineEventHandler(async (event) => {
 
   if (award.pocket === 'halfCircle2'
       && config.grandPrizeCtoonId
-      && remaining > 0
   ) {
     const existing = await prisma.ctoonOwnerLog.findFirst({
       where: { userId, ctoonId: config.grandPrizeCtoonId }
