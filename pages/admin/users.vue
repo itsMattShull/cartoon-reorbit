@@ -330,28 +330,62 @@
 
   <!-- Dissolve User modal -->
   <div v-if="showDissolveModal" class="fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/50" @click="closeDissolveModal()"></div>
+    <div class="absolute inset-0 bg-black/50" @click="!dissolveWorking && closeDissolveModal()"></div>
     <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
       <h3 class="text-lg font-semibold">Dissolve {{ dissolveTarget?.username || dissolveTarget?.discordTag || 'user' }}</h3>
-      <div class="mt-2 text-sm text-gray-700 space-y-2">
+
+      <!-- Pre-confirm description -->
+      <div v-if="dissolvePhase === 'confirm'" class="mt-2 text-sm text-gray-700 space-y-2">
         <p>
           Confirming will make this user Inactive, transfer all of their points to
           <strong>{{ official?.username || '—' }}</strong>, reassign their cToons to
           <strong>{{ official?.username || '—' }}</strong>, and immediately start 24‑hour auctions for those items.
         </p>
+        <p class="text-xs text-gray-500">Large accounts with many cToons are processed in the background — you'll see progress here.</p>
       </div>
+
+      <!-- Progress bar (queued / active) -->
+      <div v-if="dissolvePhase === 'working'" class="mt-3 space-y-2">
+        <p class="text-sm text-gray-600">{{ dissolveStep || 'Processing…' }}</p>
+        <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+          <div
+            class="h-3 rounded-full bg-rose-500 transition-all duration-500"
+            :style="{ width: dissolvePct + '%' }"
+          ></div>
+        </div>
+        <p class="text-xs text-gray-400 text-right">{{ dissolvePct }}%</p>
+      </div>
+
+      <!-- Success -->
+      <div v-if="dissolvePhase === 'done'" class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 space-y-1">
+        <p class="font-medium">Account dissolved successfully</p>
+        <ul v-if="dissolveSummary" class="text-xs space-y-0.5 mt-1">
+          <li>Points transferred: {{ dissolveSummary.pointsTransferred }}</li>
+          <li>cToons transferred: {{ dissolveSummary.ctoonsTransferred }}</li>
+          <li>Auctions created: {{ dissolveSummary.auctionsCreated }}</li>
+          <li>Bids removed: {{ dissolveSummary.bidsDeleted }}</li>
+        </ul>
+      </div>
+
+      <!-- Error -->
       <div v-if="dissolveError" class="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-1">
         <p class="font-medium">Dissolve failed</p>
         <p>{{ dissolveError }}</p>
         <p class="text-xs text-red-500 select-all">User ID: {{ dissolveTarget?.id }}</p>
       </div>
+
       <div class="mt-4 flex items-center justify-end gap-2">
-        <button class="px-3 py-1 text-sm border rounded-md" @click="closeDissolveModal" :disabled="dissolveWorking">Cancel</button>
         <button
+          v-if="dissolvePhase !== 'working'"
+          class="px-3 py-1 text-sm border rounded-md"
+          @click="closeDissolveModal"
+        >{{ dissolvePhase === 'done' ? 'Close' : 'Cancel' }}</button>
+        <button
+          v-if="dissolvePhase === 'confirm'"
           class="px-3 py-1 text-sm rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
           :disabled="dissolveWorking || !dissolveTarget"
           @click="confirmDissolve"
-        >{{ dissolveWorking ? 'Dissolving…' : 'Confirm' }}</button>
+        >Confirm</button>
       </div>
     </div>
   </div>
@@ -793,23 +827,36 @@ const showDissolveModal = ref(false)
 const dissolveTarget = ref(null)
 const dissolveWorking = ref(false)
 const dissolveError = ref('')
+const dissolvePhase = ref('confirm') // 'confirm' | 'working' | 'done'
+const dissolvePct = ref(0)
+const dissolveStep = ref('')
+const dissolveSummary = ref(null)
+let dissolvePoller = null
 
 function openDissolveModal(u) {
   dissolveTarget.value = u
   dissolveError.value = ''
   dissolveWorking.value = false
+  dissolvePhase.value = 'confirm'
+  dissolvePct.value = 0
+  dissolveStep.value = ''
+  dissolveSummary.value = null
   showDissolveModal.value = true
 }
 function closeDissolveModal() {
+  if (dissolvePoller) { clearInterval(dissolvePoller); dissolvePoller = null }
   showDissolveModal.value = false
   dissolveTarget.value = null
   dissolveWorking.value = false
   dissolveError.value = ''
+  dissolvePhase.value = 'confirm'
+  dissolvePct.value = 0
+  dissolveStep.value = ''
+  dissolveSummary.value = null
 }
 function parseDissolveError(e) {
   const statusMessage = e?.data?.statusMessage || ''
   const low = String(statusMessage || e?.message || '').toLowerCase()
-
   if (statusMessage) return statusMessage
   if (low.includes('p2002') || low.includes('unique constraint')) {
     return 'Dissolve failed: duplicate user record conflict. Please contact engineering with the user ID.'
@@ -819,21 +866,46 @@ function parseDissolveError(e) {
   }
   return 'Failed to dissolve user due to a server error.'
 }
+function startDissolvePolling(userId) {
+  dissolvePoller = setInterval(async () => {
+    try {
+      const status = await $fetch(`/api/admin/users/${userId}/dissolve-status`)
+      dissolvePct.value = status.pct ?? 0
+      dissolveStep.value = status.step ?? ''
+
+      if (status.status === 'completed') {
+        clearInterval(dissolvePoller); dissolvePoller = null
+        dissolveSummary.value = status.summary || null
+        dissolvePhase.value = 'done'
+        dissolveWorking.value = false
+        // Update local user list
+        const idx = users.value.findIndex(x => x.id === userId)
+        if (idx !== -1) {
+          users.value[idx] = { ...users.value[idx], active: false, points: 0 }
+        }
+      } else if (status.status === 'failed') {
+        clearInterval(dissolvePoller); dissolvePoller = null
+        dissolveError.value = status.error || 'Dissolve job failed. Contact engineering.'
+        dissolvePhase.value = 'confirm'
+        dissolveWorking.value = false
+      }
+    } catch {
+      // transient poll error — keep trying
+    }
+  }, 1500)
+}
 async function confirmDissolve() {
   if (!dissolveTarget.value) return
   dissolveWorking.value = true
   dissolveError.value = ''
   try {
-    const res = await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, { method: 'POST' })
-    // Update local state: inactive, zero points
-    const idx = users.value.findIndex(x => x.id === dissolveTarget.value.id)
-    if (idx !== -1) {
-      users.value[idx] = { ...users.value[idx], active: false, points: 0 }
-    }
-    closeDissolveModal()
+    await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, { method: 'POST' })
+    dissolvePhase.value = 'working'
+    dissolvePct.value = 0
+    dissolveStep.value = 'Queued…'
+    startDissolvePolling(dissolveTarget.value.id)
   } catch (e) {
     dissolveError.value = parseDissolveError(e)
-  } finally {
     dissolveWorking.value = false
   }
 }
