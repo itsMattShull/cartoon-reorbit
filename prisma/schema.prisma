@@ -2104,6 +2104,7 @@ model CZoneContest {
   name              String
   startDate         DateTime
   endDate           DateTime
+  endVotingDate     DateTime? // If set: submissions end at endDate, voting ends here; if null: both end at endDate
   maxVotesPerUser   Int       @default(5)
   winnerPrizes      Json      @default("{\"ctoons\":[],\"backgroundIds\":[],\"points\":0}")
   participantPrizes Json      @default("{\"ctoons\":[],\"backgroundIds\":[],\"points\":0}")
