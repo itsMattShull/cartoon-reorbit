@@ -556,16 +556,6 @@ onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
 })
 
-const shuffledSubmissions = computed(() => {
-  if (!contest.value?.submissions) return []
-  const arr = [...contest.value.submissions]
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]]
-  }
-  return arr
-})
-
 const displayedSubmissions = computed(() => {
   if (!contest.value?.submissions) return []
   // When the contest is closed (prizes distributed), show winner first then sort by votes desc
@@ -580,8 +570,10 @@ const displayedSubmissions = computed(() => {
       return b.voteCount - a.voteCount
     })
   }
-  // Active contest: shuffle with no winner indicator
-  return shuffledSubmissions.value.map(s => ({ ...s, isWinner: false }))
+  // Active contest: server already returns submissions in a randomized order.
+  // Do NOT re-shuffle on the client — a second shuffle with different random values
+  // causes an SSR/hydration mismatch that can display the isOwn badge on the wrong card.
+  return contest.value.submissions.map(s => ({ ...s, isWinner: false }))
 })
 
 const toastMessage = ref('')
