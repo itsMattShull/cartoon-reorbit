@@ -4,6 +4,13 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
+function buildDissolvedDiscordId(userId, discordId) {
+  // Guard against null/empty discordId (possible on very early accounts created
+  // before discordId was a required field).
+  const safe = discordId || 'unknown'
+  return `dissolved:${userId}:${safe}`
+}
+
 function rarityFloor(rarityRaw) {
   const r = (rarityRaw || '').trim().toLowerCase()
   if (r === 'common') return 25
@@ -194,13 +201,14 @@ export default defineEventHandler(async (event) => {
     tradeOffersReassigned = toRe.count
 
     // 7) Set account inactive (do not ban).
-    // Also rotate discordId so dissolve is resilient to legacy duplicate rows
+    // Rotate discordId so dissolve is resilient to legacy duplicate rows
     // that can conflict with @@unique([discordId, active]) when active -> false.
+    // buildDissolvedDiscordId guards against null/empty discordId on early accounts.
     await tx.user.update({
       where: { id },
       data: {
         active: false,
-        discordId: `dissolved:${id}:${target.discordId}`,
+        discordId: buildDissolvedDiscordId(id, target.discordId),
         accessToken: null,
         refreshToken: null,
         tokenExpiresAt: null
@@ -237,23 +245,59 @@ export default defineEventHandler(async (event) => {
     })
   })
   } catch (err) {
+    // Always log the real error so engineering can diagnose without guessing.
+    console.error(`[dissolve] Failed for user ${id}:`, err)
+
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      const target = Array.isArray(err.meta?.target) ? err.meta.target.join(', ') : (err.meta?.target || '')
+      const fieldName = err.meta?.field_name || ''
+      const cause = err.meta?.cause || ''
+
       if (err.code === 'P2002') {
+        // Unique constraint — most common for early accounts with duplicate discordId/email/username
+        const field = target || fieldName || 'unknown field'
         throw createError({
           statusCode: 409,
-          statusMessage: 'Dissolve failed: user record conflicts with an existing inactive account. Please contact engineering with this user ID.'
+          statusMessage: `Dissolve failed [${err.code}]: unique constraint violation on "${field}". This user's record conflicts with an existing entry — likely a data integrity issue from an early account. Contact engineering with user ID: ${id}.`
         })
       }
       if (err.code === 'P2003') {
+        // Foreign key constraint — user still has linked records the transaction didn't cover
+        const field = fieldName || target || 'unknown field'
         throw createError({
           statusCode: 409,
-          statusMessage: 'Dissolve failed: this user still has linked records (for example a pending trade or active listing) that must be resolved first.'
+          statusMessage: `Dissolve failed [${err.code}]: foreign key constraint on "${field}". This user still has linked records that weren't reassigned (e.g. a pending trade or active listing). Contact engineering with user ID: ${id}.`
         })
       }
+      if (err.code === 'P2025') {
+        // Record to update/delete was not found — can happen if a related row disappeared mid-transaction
+        throw createError({
+          statusCode: 409,
+          statusMessage: `Dissolve failed [${err.code}]: a required record was not found during the operation (${cause || 'unknown step'}). This may indicate missing related data for an early account. Contact engineering with user ID: ${id}.`
+        })
+      }
+
+      // Other known Prisma error
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Dissolve failed [${err.code}]: database error${target ? ` on "${target}"` : ''}. Contact engineering with user ID: ${id}.`
+      })
     }
+
+    if (err instanceof Prisma.PrismaClientValidationError) {
+      // Prisma rejected the query before it reached the DB — usually a null/wrong-type field on an early account
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Dissolve failed: the dissolve query was rejected due to invalid field data (PrismaClientValidationError). This user likely has a legacy field value that doesn't match the current schema. Contact engineering with user ID: ${id}.`
+      })
+    }
+
+    // Re-throw H3 errors (our own createError calls from guard checks above the transaction)
+    if (err.statusCode) throw err
+
     throw createError({
       statusCode: 500,
-      statusMessage: 'Dissolve failed due to a server data consistency issue. Please retry or contact engineering.'
+      statusMessage: `Dissolve failed due to an unexpected server error (${err?.constructor?.name || 'UnknownError'}). Contact engineering with user ID: ${id}.`
     })
   }
 

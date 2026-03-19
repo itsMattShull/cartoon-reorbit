@@ -343,6 +343,7 @@
       <div v-if="dissolveError" class="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-1">
         <p class="font-medium">Dissolve failed</p>
         <p>{{ dissolveError }}</p>
+        <p class="text-xs text-red-500 select-all">User ID: {{ dissolveTarget?.id }}</p>
       </div>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button class="px-3 py-1 text-sm border rounded-md" @click="closeDissolveModal" :disabled="dissolveWorking">Cancel</button>
