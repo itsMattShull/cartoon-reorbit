@@ -28,6 +28,18 @@ export const achievementsQueue = new Queue(
   }
 )
 
+// Queue for dissolving user accounts (potentially large, runs outside a single transaction)
+export const dissolveQueue = new Queue(
+  process.env.DISSOLVE_QUEUE_KEY || 'dissolveQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail:     { count: 100 },
+    },
+  }
+)
+
 // Queue for closing auctions at their exact endAt time
 export const auctionCloseQueue = new Queue(
   process.env.AUCTION_CLOSE_QUEUE_KEY || 'auctionClose',
