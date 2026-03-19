@@ -307,6 +307,7 @@ model UserCtoon {
   holidayRedemptionAsSource HolidayRedemption? @relation("HolidaySourceUserCtoon")
   auctionOnlyListings       AuctionOnly[]
   tradeListItems            UserTradeListItem[]
+  dissolveAuctionQueue      DissolveAuctionQueue?
 
   // Ensure only one of each mint number exists per cToon
   @@unique([ctoonId, mintNumber])
@@ -1464,6 +1465,16 @@ model AuctionOnly {
 
   @@index([startsAt])
   @@index([endsAt])
+}
+
+model DissolveAuctionQueue {
+  id          String   @id @default(uuid())
+  userCtoonId String   @unique
+  createdAt   DateTime @default(now())
+
+  userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
+
+  @@index([createdAt])
 }
 
 model HomepageConfig {

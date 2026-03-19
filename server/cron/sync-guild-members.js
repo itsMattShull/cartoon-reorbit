@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
-import { achievementsQueue } from '../../server/utils/queues.js'
+import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
@@ -1072,6 +1072,84 @@ async function createDailyFeaturedAuction() {
   }
 }
 
+async function processDissolveAuctionQueue() {
+  const username = process.env.OFFICIAL_USERNAME
+  if (!username) return
+
+  try {
+    const officialUser = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    })
+    if (!officialUser) return
+
+    const rarityFloor = (r) => {
+      const s = (r || '').trim().toLowerCase()
+      if (s === 'common') return 25
+      if (s === 'uncommon') return 50
+      if (s === 'rare') return 100
+      if (s === 'very rare') return 187
+      if (s === 'crazy rare') return 312
+      return 50
+    }
+
+    const batch = await prisma.dissolveAuctionQueue.findMany({
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+      include: {
+        userCtoon: { select: { id: true, ctoon: { select: { rarity: true } } } }
+      }
+    })
+
+    if (!batch.length) return
+
+    const now = new Date()
+    const endAt = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+    for (const row of batch) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          const existing = await tx.auction.findFirst({
+            where: { userCtoonId: row.userCtoonId, status: 'ACTIVE' },
+            select: { id: true }
+          })
+
+          await tx.dissolveAuctionQueue.delete({ where: { id: row.id } })
+
+          if (existing) return null
+
+          const initialBet = rarityFloor(row.userCtoon?.ctoon?.rarity)
+          const created = await tx.auction.create({
+            data: {
+              userCtoonId: row.userCtoonId,
+              initialBet,
+              duration: 1,
+              endAt,
+              creatorId: officialUser.id,
+            },
+            select: { id: true }
+          })
+
+          await tx.userCtoon.update({
+            where: { id: row.userCtoonId },
+            data: { isTradeable: false }
+          })
+
+          return { auctionId: created.id, endAt }
+        })
+
+        if (result) {
+          await scheduleAuctionClose(result.auctionId, result.endAt)
+        }
+      } catch {
+        // swallow per-item errors; continue with rest of batch
+      }
+    }
+  } catch (e) {
+    // swallow in cron context
+  }
+}
+
 async function runTournamentCron() {
   try {
     await runTournamentScheduler(prisma)
@@ -1129,6 +1207,9 @@ async function enqueueAchievementsDaily() {
 
 // await enqueueAchievementsDaily()
 cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
+
+await processDissolveAuctionQueue()
+cron.schedule('0 10 * * *', processDissolveAuctionQueue, { timezone: 'America/Chicago' }) // 10:00 CST daily
 
 await runTournamentCron()
 cron.schedule('*/15 * * * *', runTournamentCron)
