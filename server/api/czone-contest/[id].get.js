@@ -24,6 +24,8 @@ export default defineEventHandler(async (event) => {
       maxVotesPerUser: true,
       distributedAt: true,
       winnerId: true,
+      winnerPrizes: true,
+      participantPrizes: true,
       submissions: {
         select: {
           id: true,
@@ -72,6 +74,29 @@ export default defineEventHandler(async (event) => {
 
   const votesUsed = myVotedSubmissionIds.size
 
+  // Resolve background IDs to image details for prize display
+  const allBgIds = [
+    ...((contest.winnerPrizes?.backgroundIds) || []),
+    ...((contest.participantPrizes?.backgroundIds) || [])
+  ]
+  let bgMap = {}
+  if (allBgIds.length) {
+    const bgs = await prisma.background.findMany({
+      where: { id: { in: allBgIds } },
+      select: { id: true, label: true, imagePath: true }
+    })
+    bgMap = Object.fromEntries(bgs.map(b => [b.id, b]))
+  }
+
+  function resolvePrize(prize) {
+    if (!prize) return { ctoons: [], backgrounds: [], points: 0 }
+    return {
+      ctoons: prize.ctoons || [],
+      backgrounds: (prize.backgroundIds || []).map(id => bgMap[id] || { id, label: id, imagePath: null }),
+      points: prize.points || 0
+    }
+  }
+
   return {
     id: contest.id,
     name: contest.name,
@@ -80,6 +105,8 @@ export default defineEventHandler(async (event) => {
     maxVotesPerUser: contest.maxVotesPerUser,
     distributedAt: contest.distributedAt,
     winnerId: contest.winnerId,
+    winnerPrizes: resolvePrize(contest.winnerPrizes),
+    participantPrizes: resolvePrize(contest.participantPrizes),
     submissions,
     votesUsed,
     votesRemaining: me ? contest.maxVotesPerUser - votesUsed : 0
