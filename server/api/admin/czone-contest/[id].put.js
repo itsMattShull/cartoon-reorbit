@@ -12,11 +12,16 @@ export default defineEventHandler(async (event) => {
   if (!contest) throw createError({ statusCode: 404, statusMessage: 'Contest not found' })
 
   const body = await readBody(event)
-  const { name, startDate, endDate, maxVotesPerUser, winnerPrizes, participantPrizes } = body
+  const { name, startDate, endDate, endVotingDate, maxVotesPerUser, winnerPrizes, participantPrizes } = body
 
   if (name !== undefined && !name?.trim()) throw createError({ statusCode: 400, statusMessage: 'Name cannot be empty' })
-  if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
-    throw createError({ statusCode: 400, statusMessage: 'End date must be after start date' })
+
+  const resolvedEndDate = endDate ? new Date(endDate) : contest.endDate
+  if (startDate && new Date(startDate) >= resolvedEndDate) {
+    throw createError({ statusCode: 400, statusMessage: 'Submission End Date must be after start date' })
+  }
+  if (endVotingDate && new Date(endVotingDate) <= resolvedEndDate) {
+    throw createError({ statusCode: 400, statusMessage: 'End Voting Date must be after the Submission End Date' })
   }
 
   const updated = await prisma.cZoneContest.update({
@@ -25,6 +30,7 @@ export default defineEventHandler(async (event) => {
       ...(name !== undefined && { name: name.trim() }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
+      ...(endVotingDate !== undefined && { endVotingDate: endVotingDate ? new Date(endVotingDate) : null }),
       ...(maxVotesPerUser !== undefined && { maxVotesPerUser: parseInt(maxVotesPerUser, 10) }),
       ...(winnerPrizes !== undefined && { winnerPrizes }),
       ...(participantPrizes !== undefined && { participantPrizes })

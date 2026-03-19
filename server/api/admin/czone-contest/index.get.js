@@ -23,6 +23,7 @@ export default defineEventHandler(async (event) => {
       name: true,
       startDate: true,
       endDate: true,
+      endVotingDate: true,
       maxVotesPerUser: true,
       winnerPrizes: true,
       participantPrizes: true,

@@ -39,9 +39,10 @@
               <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
               <button class="text-red-600 hover:text-red-800" @click="confirmDelete(row)">Delete</button>
               <button
-                :disabled="!!row.distributedAt"
+                :disabled="!!row.distributedAt || isVotingStillOpen(row)"
                 class="hover:text-amber-800"
-                :class="row.distributedAt ? 'text-gray-400 cursor-not-allowed' : 'text-amber-600'"
+                :class="(row.distributedAt || isVotingStillOpen(row)) ? 'text-gray-400 cursor-not-allowed' : 'text-amber-600'"
+                :title="isVotingStillOpen(row) ? 'Cannot distribute until voting has ended' : ''"
                 @click="openDistribute(row)"
               >{{ row.distributedAt ? 'Distributed' : 'Distribute Prizes' }}</button>
             </div>
@@ -78,9 +79,10 @@
                     <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
                     <button class="text-red-600 hover:text-red-800" @click="confirmDelete(row)">Delete</button>
                     <button
-                      :disabled="!!row.distributedAt"
+                      :disabled="!!row.distributedAt || isVotingStillOpen(row)"
                       class="hover:text-amber-800"
-                      :class="row.distributedAt ? 'text-gray-400 cursor-not-allowed' : 'text-amber-600'"
+                      :class="(row.distributedAt || isVotingStillOpen(row)) ? 'text-gray-400 cursor-not-allowed' : 'text-amber-600'"
+                      :title="isVotingStillOpen(row) ? 'Cannot distribute until voting has ended' : ''"
                       @click="openDistribute(row)"
                     >{{ row.distributedAt ? 'Distributed' : 'Distribute Prizes' }}</button>
                   </div>
@@ -116,9 +118,16 @@
                 <input v-model="form.startDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
               </div>
               <div>
-                <label class="block font-medium mb-1">End Date</label>
+                <label class="block font-medium mb-1">Submission End Date</label>
                 <input v-model="form.endDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
               </div>
+            </div>
+
+            <!-- End Voting Date -->
+            <div>
+              <label class="block font-medium mb-1">End Voting Date <span class="text-gray-400 font-normal">(optional)</span></label>
+              <input v-model="form.endVotingDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
+              <p class="text-xs text-gray-500 mt-1">If set, voting opens after Submission End Date and closes at this time. If blank, submissions and voting both end at the Submission End Date.</p>
             </div>
 
             <!-- Max votes -->
@@ -257,6 +266,7 @@ const form = ref({
   name: '',
   startDate: '',
   endDate: '',
+  endVotingDate: '',
   maxVotesPerUser: 5,
   winnerPrizes: emptyPrizes(),
   participantPrizes: emptyPrizes()
@@ -296,11 +306,20 @@ function toDatetimeLocal(dt) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+function isVotingStillOpen(row) {
+  if (!row.endVotingDate) return false
+  return new Date(row.endVotingDate) > new Date()
+}
+
 function statusLabel(row) {
   if (row.distributedAt) return 'Ended'
   const now = new Date()
   if (new Date(row.startDate) > now) return 'Upcoming'
-  if (new Date(row.endDate) < now) return 'Past'
+  if (new Date(row.endDate) < now) {
+    // Past submission end — check if voting is still open
+    if (row.endVotingDate && new Date(row.endVotingDate) >= now) return 'Voting Open'
+    return 'Past'
+  }
   return 'Active'
 }
 
@@ -309,6 +328,7 @@ function statusClass(row) {
   return {
     Active: 'text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium',
     Upcoming: 'text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium',
+    'Voting Open': 'text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium',
     Past: 'text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium',
     Ended: 'text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium'
   }[s] || ''
@@ -328,7 +348,7 @@ async function fetchContests() {
 
 function openCreate() {
   editingContest.value = null
-  form.value = { name: '', startDate: '', endDate: '', maxVotesPerUser: 5, winnerPrizes: emptyPrizes(), participantPrizes: emptyPrizes() }
+  form.value = { name: '', startDate: '', endDate: '', endVotingDate: '', maxVotesPerUser: 5, winnerPrizes: emptyPrizes(), participantPrizes: emptyPrizes() }
   formError.value = ''
   showFormModal.value = true
 }
@@ -339,6 +359,7 @@ function openEdit(row) {
     name: row.name,
     startDate: toDatetimeLocal(row.startDate),
     endDate: toDatetimeLocal(row.endDate),
+    endVotingDate: toDatetimeLocal(row.endVotingDate),
     maxVotesPerUser: row.maxVotesPerUser,
     winnerPrizes: JSON.parse(JSON.stringify(row.winnerPrizes || emptyPrizes())),
     participantPrizes: JSON.parse(JSON.stringify(row.participantPrizes || emptyPrizes()))
@@ -356,7 +377,11 @@ async function saveForm() {
   formError.value = ''
   if (!form.value.name.trim()) { formError.value = 'Name is required'; return }
   if (!form.value.startDate || !form.value.endDate) { formError.value = 'Both dates are required'; return }
-  if (new Date(form.value.startDate) >= new Date(form.value.endDate)) { formError.value = 'End must be after start'; return }
+  if (new Date(form.value.startDate) >= new Date(form.value.endDate)) { formError.value = 'Submission End Date must be after start date'; return }
+  if (form.value.endVotingDate && new Date(form.value.endVotingDate) <= new Date(form.value.endDate)) {
+    formError.value = 'End Voting Date must be after the Submission End Date'
+    return
+  }
 
   formSaving.value = true
   try {
@@ -364,6 +389,7 @@ async function saveForm() {
       name: form.value.name.trim(),
       startDate: new Date(form.value.startDate).toISOString(),
       endDate: new Date(form.value.endDate).toISOString(),
+      endVotingDate: form.value.endVotingDate ? new Date(form.value.endVotingDate).toISOString() : null,
       maxVotesPerUser: form.value.maxVotesPerUser,
       winnerPrizes: form.value.winnerPrizes,
       participantPrizes: form.value.participantPrizes
