@@ -11,15 +11,23 @@ export default defineEventHandler(async (event) => {
   try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch {}
   if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
-  // Verify contest is active
+  // Verify voting is open
   const now = new Date()
   const contest = await prisma.cZoneContest.findUnique({
     where: { id },
-    select: { id: true, startDate: true, endDate: true, distributedAt: true, maxVotesPerUser: true }
+    select: { id: true, startDate: true, endDate: true, endVotingDate: true, distributedAt: true, maxVotesPerUser: true }
   })
   if (!contest) throw createError({ statusCode: 404, statusMessage: 'Contest not found' })
   if (contest.distributedAt) throw createError({ statusCode: 400, statusMessage: 'Contest has ended' })
-  if (now < contest.startDate || now > contest.endDate) throw createError({ statusCode: 400, statusMessage: 'Contest is not active' })
+
+  if (contest.endVotingDate) {
+    // Separate voting phase: voting only allowed after submission end and before voting end
+    if (now <= contest.endDate) throw createError({ statusCode: 400, statusMessage: 'Voting has not opened yet — submissions are still being accepted' })
+    if (now > contest.endVotingDate) throw createError({ statusCode: 400, statusMessage: 'Voting has closed' })
+  } else {
+    // No separate voting date: voting allowed during submission window
+    if (now < contest.startDate || now > contest.endDate) throw createError({ statusCode: 400, statusMessage: 'Contest is not active' })
+  }
 
   // Verify submission belongs to this contest
   const submission = await prisma.cZoneContestSubmission.findUnique({

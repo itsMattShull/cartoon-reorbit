@@ -28,6 +28,10 @@
               <span v-if="contest.distributedAt" class="inline-flex items-center gap-1.5 bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
                 Closed
               </span>
+              <span v-else-if="isVotingPhase" class="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse inline-block"></span>
+                Voting Open
+              </span>
               <span v-else class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
                 <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block"></span>
                 Active
@@ -37,7 +41,7 @@
             <div class="mt-5 flex flex-wrap gap-8 items-start">
               <!-- Countdown / ended -->
               <div v-if="!contest.distributedAt">
-                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Time Remaining</p>
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{{ countdownLabel }}</p>
                 <div class="flex items-end gap-3">
                   <template v-if="countdown.days > 0">
                     <div class="text-center">
@@ -66,8 +70,8 @@
                 </span>
               </div>
 
-              <!-- Votes remaining -->
-              <div v-if="me && !contest.distributedAt">
+              <!-- Votes remaining (only show when voting is open) -->
+              <div v-if="me && !contest.distributedAt && (isVotingPhase || !contest.endVotingDate)">
                 <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Votes Remaining</p>
                 <p class="text-3xl font-bold text-[var(--reorbit-blue)]">
                   {{ votesRemaining }}
@@ -76,10 +80,17 @@
               </div>
             </div>
 
-            <p v-if="!me" class="mt-4 text-sm text-slate-500">
-              <a href="/api/auth/discord" class="text-[var(--reorbit-blue)] hover:underline font-medium">Log in</a> to vote.
+            <p v-if="!me && !contest.distributedAt" class="mt-4 text-sm text-slate-500">
+              <a href="/api/auth/discord" class="text-[var(--reorbit-blue)] hover:underline font-medium">Log in</a> to {{ isVotingPhase ? 'vote' : 'submit or vote' }}.
             </p>
-            <div v-if="me && !contest.distributedAt && !hasOwnSubmission" class="mt-5">
+            <!-- Submissions closed banner (voting phase) -->
+            <div v-if="!contest.distributedAt && isVotingPhase" class="mt-4 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-semibold px-4 py-2 rounded-lg">
+              <span>Submissions Closed</span>
+              <span class="text-amber-500">·</span>
+              <span class="font-normal text-amber-700">Voting is now open</span>
+            </div>
+            <!-- Submit button (submission phase only) -->
+            <div v-else-if="me && !contest.distributedAt && !hasOwnSubmission && !isVotingPhase" class="mt-5">
               <button
                 class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium px-4 py-2 rounded"
                 @click="openSubmitModal"
@@ -163,7 +174,7 @@
                   {{ submission.voteCount }} {{ submission.voteCount === 1 ? 'vote' : 'votes' }}
                 </span>
               </template>
-              <template v-else-if="!submission.isOwn && me">
+              <template v-else-if="!submission.isOwn && me && (isVotingPhase || !contest.endVotingDate)">
                 <button
                   :disabled="submission.hasVoted || votesRemaining <= 0 || votingId === submission.id"
                   class="text-sm px-3 py-1 rounded font-medium transition-colors"
@@ -531,13 +542,39 @@ async function submitCZone() {
   }
 }
 
+// ── Voting phase helpers ───────────────────────────────────────────────────────
+const isVotingPhase = computed(() => {
+  if (!contest.value?.endVotingDate) return false
+  const now = Date.now()
+  return now > new Date(contest.value.endDate).getTime() && now <= new Date(contest.value.endVotingDate).getTime()
+})
+
+const isSubmissionPhase = computed(() => {
+  if (!contest.value) return false
+  const now = Date.now()
+  return now >= new Date(contest.value.startDate).getTime() && now <= new Date(contest.value.endDate).getTime()
+})
+
+const countdownLabel = computed(() => {
+  if (!contest.value) return 'Time Remaining'
+  if (contest.value.endVotingDate) {
+    if (isVotingPhase.value) return 'Time Left Until Voting Ends'
+    return 'Time Left Until Submissions Closed and Voting Opens'
+  }
+  return 'Time Left Until Submissions Close and Voting Ends'
+})
+
 // ── Countdown ─────────────────────────────────────────────────────────────────
 const countdown = ref({ days: 0, hours: 0, minutes: 0 })
 let countdownTimer = null
 
 function updateContestCountdown() {
-  if (!contest.value?.endDate) return
-  const diffMs = new Date(contest.value.endDate) - Date.now()
+  if (!contest.value) return
+  // When in voting phase, count down to endVotingDate; otherwise count down to endDate
+  const targetDate = isVotingPhase.value && contest.value.endVotingDate
+    ? new Date(contest.value.endVotingDate)
+    : new Date(contest.value.endDate)
+  const diffMs = targetDate - Date.now()
   if (diffMs <= 0) { countdown.value = { days: 0, hours: 0, minutes: 0 }; return }
   const totalMinutes = Math.floor(diffMs / 60000)
   countdown.value = {

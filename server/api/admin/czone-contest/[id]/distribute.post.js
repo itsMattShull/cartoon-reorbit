@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
     select: {
       id: true,
       name: true,
+      endVotingDate: true,
       distributedAt: true,
       winnerPrizes: true,
       participantPrizes: true,
@@ -28,6 +29,9 @@ export default defineEventHandler(async (event) => {
 
   if (!contest) throw createError({ statusCode: 404, statusMessage: 'Contest not found' })
   if (contest.distributedAt) throw createError({ statusCode: 400, statusMessage: 'Prizes already distributed for this contest' })
+  if (contest.endVotingDate && new Date() < new Date(contest.endVotingDate)) {
+    throw createError({ statusCode: 400, statusMessage: 'Cannot distribute prizes until the End Voting Date has passed' })
+  }
   if (!contest.submissions.find(s => s.id === winnerId)) {
     throw createError({ statusCode: 400, statusMessage: 'Winner submission not found in this contest' })
   }
