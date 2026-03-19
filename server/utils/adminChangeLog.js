@@ -1,5 +1,5 @@
 // server/utils/adminChangeLog.js
-import { prisma } from '@/server/prisma'
+import { prisma } from '../prisma.js'
 
 function toStr(val) {
   if (val === undefined) return null
