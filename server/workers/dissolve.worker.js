@@ -34,7 +34,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
 
   let pointsTransferred = 0
   let ctoonsTransferred = 0
-  let auctionsCreated = 0
+  let ctoonsQueued = 0
   let auctionsReassigned = 0
   let bidsDeleted = 0
   let bidsReassigned = 0
@@ -44,9 +44,6 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   let tradeOffersReassigned = 0
 
   await progress(job, 0, 'Starting…')
-
-  const now = new Date()
-  const endAt = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
   // Load target user
   const target = await prisma.user.findUnique({
@@ -115,11 +112,12 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       })
       ctoonsTransferred++
 
-      const initialBet = rarityFloor(uc.ctoon?.rarity)
-      await prisma.auction.create({
-        data: { userCtoonId: uc.id, initialBet, duration: 1, endAt, creatorId: officialId }
+      await prisma.dissolveAuctionQueue.upsert({
+        where: { userCtoonId: uc.id },
+        update: {},
+        create: { userCtoonId: uc.id }
       })
-      auctionsCreated++
+      ctoonsQueued++
     }
 
     // Progress from 10% to 70% across all cToons
@@ -221,7 +219,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       userId,
       adminId,
       action: 'DISSOLVE',
-      reason: `Account dissolved by ${adminUsername || adminId}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and auctions created. Active auction bids deleted (${bidsDeleted} bids, ${autoBidsDeleted} auto-bids).`
+      reason: `Account dissolved by ${adminUsername || adminId}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and added to auction queue (${ctoonsQueued}). Active auction bids deleted (${bidsDeleted} bids, ${autoBidsDeleted} auto-bids).`
     }
   })
 
@@ -234,7 +232,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       active: false,
       pointsTransferred,
       ctoonsTransferred,
-      auctionsCreated,
+      ctoonsQueued,
       auctionsReassigned,
       bidsDeleted,
       bidsReassigned,
@@ -250,7 +248,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   return {
     pointsTransferred,
     ctoonsTransferred,
-    auctionsCreated,
+    ctoonsQueued,
     auctionsReassigned,
     bidsDeleted,
     bidsReassigned,
