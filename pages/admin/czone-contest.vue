@@ -35,6 +35,7 @@
               <span :class="statusClass(row)">{{ statusLabel(row) }}</span>
             </div>
             <div class="mt-3 flex gap-3 flex-wrap text-sm">
+              <NuxtLink :to="`/czone-contest/${row.id}`" class="text-green-600 hover:text-green-800" target="_blank">View Contest</NuxtLink>
               <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
               <button class="text-red-600 hover:text-red-800" @click="confirmDelete(row)">Delete</button>
               <button
@@ -73,6 +74,7 @@
                 </td>
                 <td class="py-3 pr-4">
                   <div class="flex gap-3">
+                    <NuxtLink :to="`/czone-contest/${row.id}`" class="text-green-600 hover:text-green-800" target="_blank">View Contest</NuxtLink>
                     <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
                     <button class="text-red-600 hover:text-red-800" @click="confirmDelete(row)">Delete</button>
                     <button
