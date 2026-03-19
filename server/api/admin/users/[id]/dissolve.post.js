@@ -73,8 +73,10 @@ export default defineEventHandler(async (event) => {
   let ctoonsTransferred = 0
   let auctionsCreated = 0
   let auctionsReassigned = 0
+  let bidsDeleted = 0
   let bidsReassigned = 0
   let highestReassigned = 0
+  let autoBidsDeleted = 0
   let autoBidsReassigned = 0
   let tradeOffersReassigned = 0
 
@@ -164,13 +166,54 @@ export default defineEventHandler(async (event) => {
     const aRe = await tx.auction.updateMany({ where: { creatorId: id, status: 'ACTIVE' }, data: { creatorId: official.id } })
     auctionsReassigned += aRe.count
 
-    // 4) Reassign this user's bids to official
+    // 4) Handle bids on active auctions: delete them so the dissolved user can't win.
+    // For auctions where they held the highest bid, recalculate the new top bidder.
+    // Bids on closed/cancelled auctions are reassigned to official for record-keeping.
+
+    // Find active auctions where this user is currently the highest bidder.
+    const topBidAuctions = await tx.auction.findMany({
+      where: { highestBidderId: id, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    const topBidAuctionIds = topBidAuctions.map(a => a.id)
+
+    // Delete all bids this user placed on currently active auctions.
+    const { count: activeBidsDeleted } = await tx.bid.deleteMany({
+      where: { userId: id, auction: { status: 'ACTIVE' } }
+    })
+    bidsDeleted = activeBidsDeleted
+
+    // For each auction where they were the highest bidder, find the new top bid and update.
+    for (const auctionId of topBidAuctionIds) {
+      const newTop = await tx.bid.findFirst({
+        where: { auctionId },
+        orderBy: { amount: 'desc' },
+        select: { userId: true, amount: true }
+      })
+      await tx.auction.update({
+        where: { id: auctionId },
+        data: {
+          highestBid: newTop?.amount ?? 0,
+          highestBidderId: newTop?.userId ?? null
+        }
+      })
+    }
+
+    // Reassign remaining bids (on closed/cancelled auctions) to official.
     const bRe = await tx.bid.updateMany({ where: { userId: id }, data: { userId: official.id } })
     bidsReassigned = bRe.count
+
+    // Safety: reassign highestBidderId on any non-active auctions that still point to this user.
     const hbRe = await tx.auction.updateMany({ where: { highestBidderId: id }, data: { highestBidderId: official.id } })
     highestReassigned = hbRe.count
 
-    // 5) Reassign auto-bids — must avoid unique (auctionId, userId)
+    // 5) Handle auto-bids: delete on active auctions, reassign the rest to official.
+    // Must avoid unique (auctionId, userId) when reassigning.
+    const { count: activeAutoBidsDeleted } = await tx.auctionAutoBid.deleteMany({
+      where: { userId: id, auction: { status: 'ACTIVE' } }
+    })
+    autoBidsDeleted = activeAutoBidsDeleted
+
     const userAutoBids = await tx.auctionAutoBid.findMany({
       where: { userId: id },
       select: { id: true, auctionId: true, maxAmount: true, isActive: true }
@@ -221,7 +264,7 @@ export default defineEventHandler(async (event) => {
         userId: id,
         adminId: me.id,
         action: 'DISSOLVE',
-        reason: `Account dissolved by ${me.username || me.id}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and auctions created.`
+        reason: `Account dissolved by ${me.username || me.id}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and auctions created. Active auction bids deleted (${bidsDeleted} bids, ${autoBidsDeleted} auto-bids).`
       }
     })
 
@@ -237,8 +280,10 @@ export default defineEventHandler(async (event) => {
         ctoonsTransferred,
         auctionsCreated,
         auctionsReassigned,
+        bidsDeleted,
         bidsReassigned,
         highestReassigned,
+        autoBidsDeleted,
         autoBidsReassigned,
         tradeOffersReassigned
       }
@@ -309,8 +354,10 @@ export default defineEventHandler(async (event) => {
       ctoonsTransferred,
       auctionsCreated,
       auctionsReassigned,
+      bidsDeleted,
       bidsReassigned,
       highestReassigned,
+      autoBidsDeleted,
       autoBidsReassigned,
       tradeOffersReassigned
     }
