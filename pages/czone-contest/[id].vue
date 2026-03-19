@@ -20,7 +20,8 @@
       <div class="max-w-6xl mx-auto mb-8">
         <div class="relative overflow-hidden rounded-xl shadow-md border border-[var(--reorbit-border)] bg-white/95 backdrop-blur-sm">
           <div class="h-1 w-full bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)]"></div>
-          <div class="p-6 text-slate-900">
+          <div class="p-6 text-slate-900 flex gap-6 items-start">
+            <div class="flex-1 min-w-0">
             <div class="flex flex-wrap items-center gap-3 mb-1">
               <h1 class="text-3xl font-bold text-[var(--reorbit-blue)]">{{ contest.name }}</h1>
               <!-- Status badge -->
@@ -84,6 +85,30 @@
                 @click="openSubmitModal"
               >
                 Submit Your cZone
+              </button>
+            </div>
+            </div>
+
+            <!-- Prize preview (right side) -->
+            <div v-if="winnerFirstCtoonImage" class="flex-shrink-0 flex flex-col items-center gap-2 pt-1">
+              <img
+                :src="winnerFirstCtoonImage"
+                alt="Prize cToon"
+                class="h-24 w-auto object-contain drop-shadow-md"
+              />
+              <button
+                class="text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--reorbit-blue)] hover:bg-[var(--reorbit-navy)] text-white transition-colors"
+                @click="showPrizesModal = true"
+              >
+                View Prizes
+              </button>
+            </div>
+            <div v-else-if="hasPrizes" class="flex-shrink-0 flex flex-col items-center justify-center gap-2 pt-1">
+              <button
+                class="text-xs font-semibold px-3 py-1.5 rounded-full bg-[var(--reorbit-blue)] hover:bg-[var(--reorbit-navy)] text-white transition-colors"
+                @click="showPrizesModal = true"
+              >
+                View Prizes
               </button>
             </div>
           </div>
@@ -211,6 +236,114 @@
     </div>
   </transition>
 
+  <!-- Prizes Modal -->
+  <transition name="fade">
+    <div
+      v-if="showPrizesModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="showPrizesModal = false"
+    >
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col" style="max-height: min(90vh, 700px)">
+        <!-- Fixed header -->
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0 rounded-t-xl bg-white">
+          <h2 class="text-xl font-bold text-[var(--reorbit-blue)]">Contest Prizes</h2>
+          <button class="text-slate-400 hover:text-slate-600 text-xl leading-none" @click="showPrizesModal = false">✕</button>
+        </div>
+        <!-- Scrollable body -->
+        <div class="overflow-y-auto flex-1 px-6 py-5 space-y-6">
+          <!-- Winner Prizes -->
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-lg">🏆</span>
+              <h3 class="text-base font-bold text-amber-700">Winner Prizes</h3>
+            </div>
+            <div v-if="contest.winnerPrizes && (contest.winnerPrizes.ctoons.length || contest.winnerPrizes.backgrounds.length || contest.winnerPrizes.points)" class="space-y-3">
+              <div v-if="contest.winnerPrizes.ctoons.length" class="flex flex-wrap gap-3">
+                <div
+                  v-for="ct in contest.winnerPrizes.ctoons"
+                  :key="ct.ctoonId"
+                  class="flex flex-col items-center gap-1 bg-amber-50 border border-amber-200 rounded-lg p-2 w-20"
+                >
+                  <img v-if="ct.assetPath" :src="ct.assetPath" :alt="ct.name" class="h-14 w-auto object-contain" />
+                  <span class="text-xs text-center text-slate-700 font-medium leading-tight">{{ ct.name }}</span>
+                  <span v-if="ct.qty > 1" class="text-xs text-amber-700 font-bold">×{{ ct.qty }}</span>
+                </div>
+              </div>
+              <div v-if="contest.winnerPrizes.points" class="flex items-center gap-2 text-sm text-slate-700">
+                <span class="text-base">⭐</span>
+                <span><strong>{{ contest.winnerPrizes.points }}</strong> points</span>
+              </div>
+              <div v-if="contest.winnerPrizes.backgrounds.length" class="space-y-1">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Backgrounds</p>
+                <div class="flex flex-wrap gap-2">
+                  <div
+                    v-for="bg in contest.winnerPrizes.backgrounds"
+                    :key="bg.id"
+                    class="rounded-lg overflow-hidden border border-slate-200 w-28"
+                  >
+                    <img v-if="bg.imagePath" :src="bg.imagePath" :alt="bg.label" class="w-full h-16 object-cover" />
+                    <div class="px-2 py-1 text-xs text-slate-700 truncate bg-slate-50">{{ bg.label || bg.id }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-slate-400">No winner prizes configured.</p>
+          </div>
+
+          <hr class="border-slate-200" />
+
+          <!-- Participant Prizes -->
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-lg">🎁</span>
+              <h3 class="text-base font-bold text-[var(--reorbit-blue)]">Participant Prizes</h3>
+            </div>
+            <div v-if="contest.participantPrizes && (contest.participantPrizes.ctoons.length || contest.participantPrizes.backgrounds.length || contest.participantPrizes.points)" class="space-y-3">
+              <div v-if="contest.participantPrizes.ctoons.length" class="flex flex-wrap gap-3">
+                <div
+                  v-for="ct in contest.participantPrizes.ctoons"
+                  :key="ct.ctoonId"
+                  class="flex flex-col items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg p-2 w-20"
+                >
+                  <img v-if="ct.assetPath" :src="ct.assetPath" :alt="ct.name" class="h-14 w-auto object-contain" />
+                  <span class="text-xs text-center text-slate-700 font-medium leading-tight">{{ ct.name }}</span>
+                  <span v-if="ct.qty > 1" class="text-xs text-[var(--reorbit-blue)] font-bold">×{{ ct.qty }}</span>
+                </div>
+              </div>
+              <div v-if="contest.participantPrizes.points" class="flex items-center gap-2 text-sm text-slate-700">
+                <span class="text-base">⭐</span>
+                <span><strong>{{ contest.participantPrizes.points }}</strong> points</span>
+              </div>
+              <div v-if="contest.participantPrizes.backgrounds.length" class="space-y-1">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Backgrounds</p>
+                <div class="flex flex-wrap gap-2">
+                  <div
+                    v-for="bg in contest.participantPrizes.backgrounds"
+                    :key="bg.id"
+                    class="rounded-lg overflow-hidden border border-slate-200 w-28"
+                  >
+                    <img v-if="bg.imagePath" :src="bg.imagePath" :alt="bg.label" class="w-full h-16 object-cover" />
+                    <div class="px-2 py-1 text-xs text-slate-700 truncate bg-slate-50">{{ bg.label || bg.id }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-slate-400">No participant prizes configured.</p>
+          </div>
+        </div>
+        <!-- Fixed footer -->
+        <div class="px-6 py-4 border-t border-slate-200 flex-shrink-0 rounded-b-xl bg-white">
+          <button
+            class="w-full bg-[var(--reorbit-blue)] hover:bg-[var(--reorbit-navy)] text-white py-2 rounded-lg font-medium transition-colors"
+            @click="showPrizesModal = false"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
   <!-- Hidden off-screen canvas used for html2canvas capture -->
   <div
     v-if="submitModalVisible && myZones.length > 0"
@@ -246,6 +379,22 @@ const { data: contest, pending, error, refresh } = await useFetch(`/api/czone-co
 
 const votesRemaining = computed(() => contest.value?.votesRemaining ?? 0)
 const hasOwnSubmission = computed(() => contest.value?.submissions?.some(s => s.isOwn) ?? false)
+
+// ── Prizes ────────────────────────────────────────────────────────────────────
+const showPrizesModal = ref(false)
+
+const winnerFirstCtoonImage = computed(() => {
+  const ctoons = contest.value?.winnerPrizes?.ctoons
+  if (!ctoons?.length) return null
+  return ctoons[0].assetPath || null
+})
+
+const hasPrizes = computed(() => {
+  const wp = contest.value?.winnerPrizes
+  const pp = contest.value?.participantPrizes
+  return (wp?.ctoons?.length || wp?.backgrounds?.length || wp?.points) ||
+         (pp?.ctoons?.length || pp?.backgrounds?.length || pp?.points)
+})
 
 // ── cZone Submission ──────────────────────────────────────────────────────────
 const hiddenCanvasRef = ref(null)
