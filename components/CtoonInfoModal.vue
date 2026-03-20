@@ -1,6 +1,6 @@
 <template>
-  <Modal v-if="isOpen" :hide-close-button="true" :close-on-backdrop="true" @close="close">
-    <div class="text-white flex flex-col max-h-[80vh] relative overflow-visible">
+  <Modal v-if="isOpen" :hide-close-button="true" :close-on-backdrop="true" :overflow-visible="true" @close="close">
+    <div class="text-white flex flex-col max-h-[65vh] relative overflow-visible">
       <img
         v-if="activeTab === 'info' && statusImage"
         :src="statusImage"
