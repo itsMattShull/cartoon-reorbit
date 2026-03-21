@@ -145,6 +145,8 @@ export default defineEventHandler(async (event) => {
       quantity: ctoon.quantity,
       inCmart: ctoon.inCmart,
       price: ctoon.price,
+      soundPath: ctoon.soundPath ?? null,
+      type: ctoon.type,
       isGtoon: ctoon.isGtoon,
       gtoonType: ctoon.gtoonType,
       cost: ctoon.cost,

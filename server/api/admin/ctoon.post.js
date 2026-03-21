@@ -27,8 +27,10 @@ export default defineEventHandler(async (event) => {
   const parts  = await readMultipartFormData(event)
   const fields = {}
   let imagePart = null
+  let soundPart = null
   for (const part of parts) {
-    if (part.filename) imagePart = part
+    if (part.filename && part.name === 'sound') soundPart = part
+    else if (part.filename) imagePart = part
     else fields[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : part.data
   }
 
@@ -123,6 +125,23 @@ export default defineEventHandler(async (event) => {
     ? `/images/cToons/${safeSeries}/${imagePart.filename}`
     : `/cToons/${safeSeries}/${imagePart.filename}`
 
+  /* 4a. Save sound (optional) -------------------------------- */
+  const ALLOWED_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg'])
+  let soundPath = null
+  if (soundPart) {
+    if (!ALLOWED_AUDIO.has(soundPart.type)) {
+      throw createError({ statusCode: 400, statusMessage: 'Sound must be MP3, WAV, or OGG.' })
+    }
+    const soundUploadDir = process.env.NODE_ENV === 'production'
+      ? join(baseDir, 'cartoon-reorbit-images', 'cToon-sounds', safeSeries)
+      : join(baseDir, 'public', 'cToon-sounds', safeSeries)
+    await mkdir(soundUploadDir, { recursive: true })
+    await writeFile(join(soundUploadDir, soundPart.filename), soundPart.data)
+    soundPath = process.env.NODE_ENV === 'production'
+      ? `/images/cToon-sounds/${safeSeries}/${soundPart.filename}`
+      : `/cToon-sounds/${safeSeries}/${soundPart.filename}`
+  }
+
   /* 5. Persist to DB ---------------------------------------- */
   const newCtoon = await prisma.ctoon.create({
     data: {
@@ -140,6 +159,8 @@ export default defineEventHandler(async (event) => {
       set: setField,
       characters: charactersArr,
       type: type.trim(),
+
+      soundPath,
 
       /* NEW columns */
       isGtoon:    isGtoonBool,

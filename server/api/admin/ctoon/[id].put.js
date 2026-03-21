@@ -31,11 +31,13 @@ export default defineEventHandler(async (event) => {
   const contentType = (getRequestHeader(event, 'content-type') || '').toLowerCase()
   let payload = {}
   let imagePart = null
+  let soundPart = null
 
   if (contentType.includes('multipart/form-data')) {
     const parts = await readMultipartFormData(event)
     for (const part of parts || []) {
-      if (part.filename) imagePart = part
+      if (part.filename && part.name === 'sound') soundPart = part
+      else if (part.filename) imagePart = part
       else payload[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : part.data
     }
   } else {
@@ -47,7 +49,8 @@ export default defineEventHandler(async (event) => {
     name, series, rarity, price, releaseDate, perUserLimit,
     quantity, initialQuantity, inCmart, set, description, characters,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
-    initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty
+    initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
+    clearSound
   } = payload
 
   // 4) Validate basics
@@ -167,6 +170,28 @@ export default defineEventHandler(async (event) => {
     updateData.type = imagePart.type
   }
 
+  // 7b) Optional sound save
+  const ALLOWED_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg'])
+  if (soundPart) {
+    if (!ALLOWED_AUDIO.has(soundPart.type)) {
+      throw createError({ statusCode: 400, statusMessage: 'Sound must be MP3, WAV, or OGG.' })
+    }
+    const safeSeries = series.trim()
+    const soundUploadDir = process.env.NODE_ENV === 'production'
+      ? join(baseDir, 'cartoon-reorbit-images', 'cToon-sounds', safeSeries)
+      : join(baseDir, 'public', 'cToon-sounds', safeSeries)
+    await mkdir(soundUploadDir, { recursive: true })
+    const soundExt = extname(soundPart.filename || '') || '.mp3'
+    const soundBase = basename(soundPart.filename || 'sound', soundExt) || 'sound'
+    const soundFilename = `${soundBase}-${Date.now()}${soundExt}`
+    await writeFile(join(soundUploadDir, soundFilename), soundPart.data)
+    updateData.soundPath = process.env.NODE_ENV === 'production'
+      ? `/images/cToon-sounds/${safeSeries}/${soundFilename}`
+      : `/cToon-sounds/${safeSeries}/${soundFilename}`
+  } else if (String(clearSound) === 'true' || clearSound === true) {
+    updateData.soundPath = null
+  }
+
   // 8) Persist (fetch before and then update)
   const before = await prisma.ctoon.findUnique({ where: { id } })
   const updated = await prisma.ctoon.update({
@@ -187,7 +212,7 @@ export default defineEventHandler(async (event) => {
     const area = `Ctoon:${id}`
     const keys = [
       'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
-      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type',
+      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty'
     ]
     for (const k of keys) {
