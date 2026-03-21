@@ -1,13 +1,13 @@
 <template>
   <NuxtLayout name="template">
+    <template #sidebar-top>
+      <UserInfo />
+    </template>
+    <template #sidebar-middle>
+      <CtoonFilter :show-hide-unavailable="true" />
+    </template>
     <template #main-content>
-      <div class="admin-wrapper">
-        <AdminTabs>
-          <template #ctoons>
-            <ManageCtoons />
-          </template>
-        </AdminTabs>
-      </div>
+      <Cmart />
     </template>
     <template #footer>
       <Footer />
@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true, showSidebar: false, showFooter: false, mainContentBorder: false, middleware: 'auth', requiresAuth: true })
+definePageMeta({ layout: false, showAdbar: true, showNav: true })
 </script>
 
 <style>
@@ -35,13 +35,18 @@ body {
   background: transparent !important;
   min-height: 100vh;
 }
-</style>
 
-<style scoped>
-.admin-wrapper {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
+.sidebar-bottom {
+  display: none;
+}
+
+.main-content {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--OrbitDarkBlue, #336699) transparent;
+}
+
+.sidebar {
+  --sidebar-middle-height: 384px;
 }
 </style>

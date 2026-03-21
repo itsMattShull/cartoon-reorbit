@@ -30,7 +30,7 @@ html, body {
   --site-container-border-thickness: 0px;
   --site-container-border-color:     transparent;
   --site-container-row-gap:          10px;
-  --site-container-column-gap:       var(--topbar-nav-gap);
+  --site-container-column-gap:       8px;
   --site-container-pt:               0px;
   --site-container-pb:               0px;
   --site-container-pl:               0px;
@@ -141,7 +141,7 @@ html, body {
 
   --sidebar-bg:                      var(--OrbitLightBlue);
   --sidebar-height:                  480px;
-  --sidebar-width:                   200px;
+  --sidebar-width:                   225px;
   --sidebar-radius:                  8px;
   --sidebar-border-thickness:        0px;
   --sidebar-border-color:            var(--OrbitLightBlue);
@@ -152,7 +152,7 @@ html, body {
 
   --sidebar-top-bg:                  var(--OrbitDarkBlue);
   --sidebar-top-height:              85px;
-  --sidebar-top-width:               186px;
+  --sidebar-top-width:               217px;
   --sidebar-top-radius:              8px;
   --sidebar-top-border-thickness:    0px;
   --sidebar-top-border-color:        transparent;
@@ -160,14 +160,14 @@ html, body {
   --sidebar-top-pb:                  0px;
   --sidebar-top-pl:                  0px;
   --sidebar-top-pr:                  0px;
-  --sidebar-top-mt:                  8px;
+  --sidebar-top-mt:                  4px;
   --sidebar-top-mb:                  4px;
-  --sidebar-top-ml:                  8px;
-  --sidebar-top-mr:                  8px;
+  --sidebar-top-ml:                  0px;
+  --sidebar-top-mr:                  0px;
 
   --sidebar-middle-bg:               var(--OrbitDarkBlue);
   --sidebar-middle-height:           300px;
-  --sidebar-middle-width:            186px;
+  --sidebar-middle-width:            217px;
   --sidebar-middle-radius:           8px;
   --sidebar-middle-border-thickness: 0px;
   --sidebar-middle-border-color:     transparent;
@@ -175,14 +175,14 @@ html, body {
   --sidebar-middle-pb:               0px;
   --sidebar-middle-pl:               0px;
   --sidebar-middle-pr:               0px;
-  --sidebar-middle-mt:               4px;
-  --sidebar-middle-mb:               4px;
-  --sidebar-middle-ml:               8px;
-  --sidebar-middle-mr:               8px;
+  --sidebar-middle-mt:               0px;
+  --sidebar-middle-mb:               0px;
+  --sidebar-middle-ml:               0px;
+  --sidebar-middle-mr:               0px;
 
   --sidebar-bottom-bg:               var(--OrbitDarkBlue);
   --sidebar-bottom-height:           64px;
-  --sidebar-bottom-width:            186px;
+  --sidebar-bottom-width:            217px;
   --sidebar-bottom-radius:           8px;
   --sidebar-bottom-border-thickness: 0px;
   --sidebar-bottom-border-color:     transparent;
@@ -190,16 +190,16 @@ html, body {
   --sidebar-bottom-pb:               0px;
   --sidebar-bottom-pl:               0px;
   --sidebar-bottom-pr:               0px;
-  --sidebar-bottom-mt:               4px;
-  --sidebar-bottom-mb:               8px;
-  --sidebar-bottom-ml:               8px;
-  --sidebar-bottom-mr:               8px;
+  --sidebar-bottom-mt:               0px;
+  --sidebar-bottom-mb:               0px;
+  --sidebar-bottom-ml:               0px;
+  --sidebar-bottom-mr:               0px;
 
   --main-content-bg:                 transparent;
   --main-content-height:             480px;
-  --main-content-width:              590px;
+  --main-content-width:              567px;
   --main-content-radius:             8px;
-  --main-content-border-thickness:   7px;
+  --main-content-border-thickness:   4px;
   --main-content-border-color:       var(--OrbitLightBlue);
   --main-content-pt:                 0px;
   --main-content-pb:                 0px;
@@ -209,6 +209,9 @@ html, body {
   --footer-bg:                       transparent;
   --footer-height:                   60px;
   --footer-width:                    800px;
+
+  --shortcard-width:                      132px;
+  --shortcard-height:                     176px;
   --footer-radius:                   0px;
   --footer-border-thickness:         0px;
   --footer-border-color:             transparent;
@@ -334,6 +337,9 @@ const scaleStyle = computed(() => {
 .site-container {
   width: var(--site-container-width);
   height: var(--site-container-height);
+  min-width: var(--site-container-width);
+  min-height: var(--site-container-height);
+  flex-shrink: 0;
   background: var(--site-container-bg);
   border-radius: var(--site-container-radius);
   border: var(--site-container-border-thickness) solid var(--site-container-border-color);
@@ -348,6 +354,7 @@ const scaleStyle = computed(() => {
 
 .topbar {
   grid-column: 1 / -1;
+  width: var(--topbar-width);
   height: var(--topbar-height);
   background: var(--topbar-bg);
   border-radius: var(--topbar-radius);
@@ -507,8 +514,8 @@ const scaleStyle = computed(() => {
   border-radius: var(--sidebar-middle-radius);
   border: var(--sidebar-middle-border-thickness) solid var(--sidebar-middle-border-color);
   padding: var(--sidebar-middle-pt) var(--sidebar-middle-pr) var(--sidebar-middle-pb) var(--sidebar-middle-pl);
-  margin-top: auto;
-  margin-bottom: auto;
+  margin-top: var(--sidebar-middle-mt);
+  margin-bottom: var(--sidebar-middle-mb);
   margin-left: var(--sidebar-middle-ml);
   margin-right: var(--sidebar-middle-mr);
   flex-shrink: 0;
@@ -533,7 +540,9 @@ const scaleStyle = computed(() => {
 }
 
 .main-content {
+  width: var(--main-content-width);
   height: var(--main-content-height);
+  flex-shrink: 0;
   background: var(--main-content-bg);
   border-radius: var(--main-content-radius);
   border: var(--main-content-border-thickness) solid var(--main-content-border-color);
@@ -551,9 +560,35 @@ const scaleStyle = computed(() => {
   align-self: stretch;
 }
 
+@media (max-width: 415px) {
+  .site-container,
+  .topbar,
+  .topbar-adbar,
+  .topbar-adbar-logo,
+  .topbar-adbar-adlabel,
+  .topbar-adbar-ad,
+  .topbar-adbar-rewatch,
+  .topbar-nav,
+  .topbar-nav-left,
+  .topbar-nav-right,
+  .sidebar,
+  .sidebar-toggle,
+  .sidebar-top,
+  .sidebar-middle,
+  .sidebar-bottom,
+  .main-content,
+  .footer {
+    flex-shrink: 1;
+    min-width: unset;
+    min-height: unset;
+  }
+}
+
 .footer {
   grid-column: 1 / -1;
+  width: var(--footer-width);
   height: var(--footer-height);
+  flex-shrink: 0;
   background: var(--footer-bg);
   border-radius: var(--footer-radius);
   border: var(--footer-border-thickness) solid var(--footer-border-color);

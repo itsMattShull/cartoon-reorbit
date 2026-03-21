@@ -1,13 +1,13 @@
 <template>
   <NuxtLayout name="template">
+    <template #sidebar-top>
+      <UserInfo />
+    </template>
+    <template #sidebar-bottom>
+      <WinballAd />
+    </template>
     <template #main-content>
-      <div class="admin-wrapper">
-        <AdminTabs>
-          <template #ctoons>
-            <ManageCtoons />
-          </template>
-        </AdminTabs>
-      </div>
+      <GamesHome />
     </template>
     <template #footer>
       <Footer />
@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true, showSidebar: false, showFooter: false, mainContentBorder: false, middleware: 'auth', requiresAuth: true })
+definePageMeta({ layout: false, showAdbar: true, showNav: true })
 </script>
 
 <style>
@@ -34,14 +34,5 @@ html {
 body {
   background: transparent !important;
   min-height: 100vh;
-}
-</style>
-
-<style scoped>
-.admin-wrapper {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
 }
 </style>

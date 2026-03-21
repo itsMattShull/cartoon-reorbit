@@ -13,7 +13,7 @@
     </div>
     <div class="tab-content">
       <template v-for="tab in tabs" :key="tab.id">
-        <div v-if="activeTab === tab.id">
+        <div v-if="activeTab === tab.id" class="tab-panel">
           <slot :name="tab.id" />
         </div>
       </template>
@@ -94,5 +94,15 @@ const activeTab = ref('analytics')
   border-radius: 0;
   overflow: hidden;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 </style>
