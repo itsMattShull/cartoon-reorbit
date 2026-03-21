@@ -21,8 +21,8 @@ export default defineEventHandler(async (event) => {
   if (contest.distributedAt) throw createError({ statusCode: 400, statusMessage: 'Contest has ended' })
 
   if (contest.endVotingDate) {
-    // Separate voting phase: voting only allowed after submission end and before voting end
-    if (now <= contest.endDate) throw createError({ statusCode: 400, statusMessage: 'Voting has not opened yet — submissions are still being accepted' })
+    // Separate voting phase: voting opens at submission end and closes at voting end
+    if (now < contest.endDate) throw createError({ statusCode: 400, statusMessage: 'Voting has not opened yet — submissions are still being accepted' })
     if (now > contest.endVotingDate) throw createError({ statusCode: 400, statusMessage: 'Voting has closed' })
   } else {
     // No separate voting date: voting allowed during submission window
