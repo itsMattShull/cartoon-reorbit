@@ -546,7 +546,7 @@ async function submitCZone() {
 const isVotingPhase = computed(() => {
   if (!contest.value?.endVotingDate) return false
   const now = Date.now()
-  return now > new Date(contest.value.endDate).getTime() && now <= new Date(contest.value.endVotingDate).getTime()
+  return now >= new Date(contest.value.endDate).getTime() && now <= new Date(contest.value.endVotingDate).getTime()
 })
 
 const isSubmissionPhase = computed(() => {
