@@ -35,6 +35,15 @@
           </div>
         </div>
 
+        <!-- Sound Upload (optional) -->
+        <div>
+          <label class="block mb-1 font-medium">Upload cToon Sound (optional)</label>
+          <input type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg" @change="handleSoundFile" class="w-full" />
+          <p class="text-sm text-gray-500">MP3, WAV, or OGG. Plays when the cToon info modal is opened.</p>
+          <p v-if="errors.sound" class="text-red-600 text-sm mt-1">{{ errors.sound }}</p>
+          <p v-if="soundFile" class="text-sm text-green-600 mt-1">Selected: {{ soundFile.name }}</p>
+        </div>
+
         <!-- Type (auto-filled) -->
         <div>
           <label class="block mb-1 font-medium">Type</label>
@@ -296,7 +305,8 @@ watch(abilityKey, () => { abilityParam.value = null })
 // Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
-const errors = reactive({ image: '', name: '', series: '', rarity: '', cost:  '', power: '' })
+const soundFile = ref(null)
+const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '' })
 
 // new: only show suggestions once the user has typed ≥2 chars
 const filteredSeriesOptions = computed(() => {
@@ -361,6 +371,19 @@ watch(rarity, val => {
   codeOnly.value = val === 'Code Only'
   if (val === 'Code Only') inCmart.value = false
 })
+
+function handleSoundFile(e) {
+  errors.sound = ''
+  const file = e.target.files?.[0]
+  if (!file) { soundFile.value = null; return }
+  const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']
+  if (!allowed.includes(file.type)) {
+    errors.sound = 'Only MP3, WAV, or OGG files allowed.'
+    soundFile.value = null
+    return
+  }
+  soundFile.value = file
+}
 
 function handleFile(e) {
   const file = e.target.files[0]
@@ -466,6 +489,8 @@ async function submitForm() {
       : '{}'
     formData.append('abilityData', abilityData)
   }
+
+  if (soundFile.value) formData.append('sound', soundFile.value)
 
   const res = await fetch('/api/admin/ctoon', {
     method: 'POST',
