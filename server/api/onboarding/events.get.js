@@ -40,15 +40,19 @@ export default defineEventHandler(async (event) => {
     db.cZoneContest.findMany({
       where: {
         startDate: { lte: now },
-        endDate: { gte: now },
-        distributedAt: null
+        distributedAt: null,
+        OR: [
+          { endDate: { gte: now } },
+          { endVotingDate: { gte: now } }
+        ]
       },
       orderBy: { endDate: 'asc' },
       select: {
         id: true,
         name: true,
         startDate: true,
-        endDate: true
+        endDate: true,
+        endVotingDate: true
       }
     })
   ])
@@ -71,7 +75,8 @@ export default defineEventHandler(async (event) => {
       id: row.id,
       name: row.name,
       startDate: row.startDate.toISOString(),
-      endDate: row.endDate.toISOString()
+      endDate: row.endDate.toISOString(),
+      endVotingDate: row.endVotingDate ? row.endVotingDate.toISOString() : null
     }))
   }
 })

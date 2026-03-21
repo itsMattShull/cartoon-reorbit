@@ -164,7 +164,12 @@
                       {{ displayName(contest.name, 'cZone Contest') }}
                     </NuxtLink>
                     <p class="text-xs text-slate-500">
-                      Active {{ formatDateRange(contest.startDate, contest.endDate) }}
+                      <template v-if="contest.endVotingDate && new Date() > new Date(contest.endDate)">
+                        Voting open until {{ formatDate(contest.endVotingDate) }}
+                      </template>
+                      <template v-else>
+                        Active {{ formatDateRange(contest.startDate, contest.endDate) }}
+                      </template>
                     </p>
                   </div>
                 </div>
@@ -323,6 +328,12 @@ const tabButtonClass = (tab) => ([
 const displayName = (value, fallback) => {
   const trimmed = String(value || '').trim()
   return trimmed || fallback
+}
+
+const formatDate = (date) => {
+  const d = date ? new Date(date) : null
+  if (!d || Number.isNaN(d.getTime())) return 'date unavailable'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(d)
 }
 
 const formatDateRange = (start, end) => {
