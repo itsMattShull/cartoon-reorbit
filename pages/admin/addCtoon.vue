@@ -107,45 +107,11 @@
           <p class="text-sm text-gray-500">Must be set in the future. Determines when the cToon becomes available.</p>
         </div>
 
-        <!-- Quantities -->
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block mb-1 font-medium">Total Quantity</label>
-            <input v-model.number="totalQuantity" type="number" min="1" class="w-full border rounded p-2" />
-            <p class="text-sm text-gray-500">Maximum number that can be minted. Leave blank for unlimited.</p>
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Initial Quantity</label>
-            <input v-model.number="initialQuantity" type="number" min="0" class="w-full border rounded p-2" />
-            <p class="text-sm text-gray-500">Number of First Editions available. Must be ≤ total quantity.</p>
-          </div>
-        </div>
-
-        <!-- Release schedule (computed, read-only) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
-          <div>
-            <label class="block mb-1 font-medium">Initial Release %</label>
-            <input :value="releasePercent + '%'" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Initial Release Qty</label>
-            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
-            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Final Release Qty</label>
-            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-        </div>
-
-        <!-- Per User Limit -->
-        <div>
-          <label class="block mb-1 font-medium">Per-User Limit</label>
-          <input v-model.number="perUserLimit" type="number" min="0" class="w-full border rounded p-2" />
-          <p class="text-sm text-gray-500">Limit on how many each user can mint within the first 48 hours of release. Leave blank for no limit.</p>
+        <!-- Description -->
+        <div class="border rounded p-4 bg-gray-50">
+          <label class="block mb-1 font-medium">Description</label>
+          <textarea v-model="description" rows="3" class="w-full border rounded p-2 bg-white" placeholder="Optional description for this cToon"></textarea>
+          <p class="text-sm text-gray-500">Displayed in the cToon info modal. Leave blank if not needed.</p>
         </div>
 
         <!-- Code Only / In Cmart -->
@@ -271,6 +237,7 @@ const type = ref('')
 const rarity = ref('')
 const set = ref('')
 const characters = ref('')
+const description = ref('')
 const releaseDate = ref('')
 const totalQuantity = ref(null)
 const initialQuantity = ref(null)
@@ -467,6 +434,7 @@ async function submitForm() {
   } catch {
     formData.append('releaseDate', new Date(releaseDate.value).toISOString())
   }
+  formData.append('description', description.value.trim())
   formData.append('totalQuantity', totalQuantity.value ?? '')
   formData.append('initialQuantity', initialQuantity.value ?? '')
   // advisory schedule fields

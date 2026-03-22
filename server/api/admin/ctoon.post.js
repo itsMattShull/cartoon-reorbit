@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
     name, series, rarity, releaseDate: releaseRaw,
     totalQuantity, initialQuantity, perUserLimit,
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
+    description,
 
     /* NEW G-toon fields */
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
@@ -159,6 +160,7 @@ export default defineEventHandler(async (event) => {
       set: setField,
       characters: charactersArr,
       type: type.trim(),
+      description: description?.trim() || null,
 
       soundPath,
 
