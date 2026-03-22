@@ -38,7 +38,7 @@ async function resizeToAverageSimilarRatio(imageBuffer, mimeType, baseDir) {
       orderBy: { id: 'desc' }
     })
 
-    const similarDims = []
+    const similarLongSides = []
     await Promise.all(ctoons.map(async (c) => {
       try {
         const absPath = ctoonAbsPath(c.assetPath, baseDir)
@@ -47,23 +47,34 @@ async function resizeToAverageSimilarRatio(imageBuffer, mimeType, baseDir) {
         if (!m.width || !m.height) return
         const ratio = m.width / m.height
         if (Math.abs(ratio - uploadedRatio) / uploadedRatio <= RATIO_TOLERANCE) {
-          similarDims.push({ width: m.width, height: m.height })
+          similarLongSides.push(Math.max(m.width, m.height))
         }
       } catch {
         // skip unreadable files
       }
     }))
 
-    if (similarDims.length === 0) return imageBuffer
+    if (similarLongSides.length === 0) return imageBuffer
 
-    const avgWidth = Math.round(similarDims.reduce((s, d) => s + d.width, 0) / similarDims.length)
-    const avgHeight = Math.round(similarDims.reduce((s, d) => s + d.height, 0) / similarDims.length)
+    // Use the median long-side as the target size — more robust than mean against outliers
+    similarLongSides.sort((a, b) => a - b)
+    const mid = Math.floor(similarLongSides.length / 2)
+    const targetLongSide = similarLongSides.length % 2 === 1
+      ? similarLongSides[mid]
+      : Math.round((similarLongSides[mid - 1] + similarLongSides[mid]) / 2)
 
-    // Don't upscale — only resize if the uploaded image is larger than average
-    if (uploadedWidth <= avgWidth && uploadedHeight <= avgHeight) return imageBuffer
+    const uploadedLongSide = Math.max(uploadedWidth, uploadedHeight)
+
+    // Don't upscale — only resize if the uploaded image is larger than the target
+    if (uploadedLongSide <= targetLongSide) return imageBuffer
+
+    // Scale both dimensions by the same factor so the original ratio is preserved exactly
+    const scale = targetLongSide / uploadedLongSide
+    const targetWidth = Math.round(uploadedWidth * scale)
+    const targetHeight = Math.round(uploadedHeight * scale)
 
     const pipeline = sharp(imageBuffer, { animated: isAnimated })
-      .resize(avgWidth, avgHeight, { fit: 'inside', withoutEnlargement: true })
+      .resize(targetWidth, targetHeight)
 
     if (isAnimated) {
       return await pipeline.gif().toBuffer()
