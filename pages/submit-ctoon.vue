@@ -105,10 +105,7 @@
                 <th class="px-3 py-2 min-w-[140px]">Name <span class="text-red-500">*</span></th>
                 <th class="px-3 py-2 min-w-[140px]">Rarity <span class="text-red-500">*</span></th>
                 <th class="px-3 py-2 min-w-[160px]">Characters <span class="text-red-500">*</span></th>
-                <th class="px-3 py-2 min-w-[100px]">Total Qty</th>
-                <th class="px-3 py-2 min-w-[110px]">Initial Qty</th>
-                <th class="px-3 py-2 min-w-[110px]">Per-User Limit</th>
-                <th class="px-3 py-2">Details</th>
+                <th class="px-3 py-2 min-w-[200px]">Description</th>
               </tr>
             </thead>
             <tbody>
@@ -144,19 +141,7 @@
                   <input v-model="f.characters" class="w-full border rounded p-1 text-sm" placeholder="Amy, Bob" />
                 </td>
                 <td class="px-3 py-2">
-                  <input v-model.number="f.totalQuantity" type="number" min="1" class="w-full border rounded p-1 text-sm" placeholder="e.g. 100" />
-                </td>
-                <td class="px-3 py-2">
-                  <input v-model.number="f.initialQuantity" type="number" min="0" class="w-full border rounded p-1 text-sm" />
-                </td>
-                <td class="px-3 py-2">
-                  <input v-model.number="f.perUserLimit" type="number" min="0" class="w-full border rounded p-1 text-sm" />
-                </td>
-                <td class="px-3 py-2">
-                  <button
-                    @click="openModal(i)"
-                    class="text-blue-600 hover:underline text-sm whitespace-nowrap"
-                  >More Details</button>
+                  <textarea v-model="f.description" rows="2" class="w-full border rounded p-1 text-sm" placeholder="Show, characters, scene, etc." />
                 </td>
               </tr>
             </tbody>
@@ -204,26 +189,11 @@
                 <p class="text-xs text-gray-500 mb-1">Comma-separated list of characters shown in this cToon (e.g. "Amy, Bob").</p>
                 <input v-model="f.characters" class="w-full border rounded p-2" placeholder="e.g. Amy, Bob" />
               </div>
-              <div class="grid grid-cols-3 gap-2">
-                <div>
-                  <label class="block text-xs font-medium mb-1">Total Qty</label>
-                  <p class="text-xs text-gray-500 mb-1">Max minted.</p>
-                  <input v-model.number="f.totalQuantity" type="number" min="1" class="w-full border rounded p-2 text-sm" />
-                </div>
-                <div>
-                  <label class="block text-xs font-medium mb-1">Initial Qty</label>
-                  <p class="text-xs text-gray-500 mb-1">First edition #.</p>
-                  <input v-model.number="f.initialQuantity" type="number" min="0" class="w-full border rounded p-2 text-sm" />
-                </div>
-                <div>
-                  <label class="block text-xs font-medium mb-1">Per-User Limit</label>
-                  <p class="text-xs text-gray-500 mb-1">Max per user.</p>
-                  <input v-model.number="f.perUserLimit" type="number" min="0" class="w-full border rounded p-2 text-sm" />
-                </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Description</label>
+                <p class="text-xs text-gray-500 mb-1">The show, characters, scene, etc. Helps admins categorize it correctly.</p>
+                <textarea v-model="f.description" rows="3" class="w-full border rounded p-2 text-sm" placeholder="Describe this cToon — the show, characters, scene, etc." />
               </div>
-              <button @click="openModal(i)" class="w-full text-center text-blue-600 border border-blue-300 rounded p-2 text-sm hover:bg-blue-50">
-                + More Details (description, etc.)
-              </button>
             </div>
           </div>
         </div>
@@ -242,41 +212,6 @@
       </div>
     </div>
 
-    <!-- More Details Modal -->
-    <div v-if="modalIndex !== null" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold">Additional Details</h2>
-          <button @click="closeModal" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
-        </div>
-        <div v-if="modalFile" class="space-y-4">
-          <div class="flex items-center gap-3 bg-gray-50 rounded p-3">
-            <img :src="modalFile.preview" class="h-16 w-16 object-contain rounded border" />
-            <span class="font-medium">{{ modalFile.nameField || '(unnamed)' }}</span>
-          </div>
-
-          <div>
-            <label class="block font-medium mb-1">Description</label>
-            <p class="text-xs text-gray-500 mb-1">
-              Provide context about the cToon — what show or cartoon it's from, who the characters are, notable moments, etc.
-              This helps admins understand and categorize it correctly.
-            </p>
-            <textarea
-              v-model="modalFile.description"
-              rows="4"
-              class="w-full border rounded p-2 text-sm"
-              placeholder="Describe this cToon — the show, characters, scene, etc."
-            />
-          </div>
-
-          <div class="pt-2">
-            <button @click="closeModal" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
-              Save Details
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -302,7 +237,6 @@ const bulkSeries = ref('')
 const bulkReleaseDate = ref('')
 const submitting = ref(false)
 const toasts = ref([])
-const modalIndex = ref(null)
 
 // Autocomplete caches with 5-min TTL
 const setsCache = ref([])
@@ -412,11 +346,6 @@ const canSubmit = computed(() => {
     f.characters?.trim()
   )
 })
-
-const modalFile = computed(() => modalIndex.value !== null ? imageFiles.value[modalIndex.value] : null)
-
-function openModal(i) { modalIndex.value = i }
-function closeModal() { modalIndex.value = null }
 
 const RARITY_PATTERNS = [
   { key: 'Crazy Rare', re: /crazy[\s_]*rare/i },
