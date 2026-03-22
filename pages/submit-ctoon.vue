@@ -14,6 +14,14 @@
 
       <!-- STEP 1: Image Upload -->
       <div v-if="step === 1" class="space-y-4">
+        <!-- Transparency notice -->
+        <div class="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span class="text-blue-500 text-xl mt-0.5">ℹ</span>
+          <div class="text-sm text-blue-800">
+            <p class="font-medium mb-1">Make sure your image has a transparent background.</p>
+            <p class="text-blue-700">cToon images should have a transparent (not white or colored) background so they display correctly in the collection. PNGs and GIFs both support transparency.</p>
+          </div>
+        </div>
         <div>
           <label class="block font-medium mb-1">Select Images (PNG or GIF)</label>
           <p class="text-sm text-gray-500 mb-2">

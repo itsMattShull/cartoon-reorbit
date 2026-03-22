@@ -5,9 +5,74 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
+import sharp from 'sharp'
+
+const RATIO_TOLERANCE = 0.15
+const MAX_CTOONS_SAMPLE = 200
+
+function ctoonAbsPath(assetPath, baseDir) {
+  if (process.env.NODE_ENV === 'production') {
+    return join(baseDir, 'cartoon-reorbit-images', assetPath.replace(/^\/images\//, ''))
+  }
+  return join(baseDir, 'public', assetPath)
+}
+
+async function resizeToAverageSimilarRatio(imageBuffer, mimeType, baseDir) {
+  try {
+    const isAnimated = mimeType === 'image/gif'
+    const meta = await sharp(imageBuffer, { animated: isAnimated }).metadata()
+    const uploadedWidth = meta.width
+    const uploadedHeight = meta.pageHeight ?? meta.height
+    if (!uploadedWidth || !uploadedHeight) return imageBuffer
+
+    const uploadedRatio = uploadedWidth / uploadedHeight
+
+    // Sample existing cToons to find similar-ratio images
+    const ctoons = await prisma.ctoon.findMany({
+      select: { assetPath: true },
+      take: MAX_CTOONS_SAMPLE,
+      orderBy: { id: 'desc' }
+    })
+
+    const similarDims = []
+    await Promise.all(ctoons.map(async (c) => {
+      try {
+        const absPath = ctoonAbsPath(c.assetPath, baseDir)
+        const buf = await readFile(absPath)
+        const m = await sharp(buf, { animated: false }).metadata()
+        if (!m.width || !m.height) return
+        const ratio = m.width / m.height
+        if (Math.abs(ratio - uploadedRatio) / uploadedRatio <= RATIO_TOLERANCE) {
+          similarDims.push({ width: m.width, height: m.height })
+        }
+      } catch {
+        // skip unreadable files
+      }
+    }))
+
+    if (similarDims.length === 0) return imageBuffer
+
+    const avgWidth = Math.round(similarDims.reduce((s, d) => s + d.width, 0) / similarDims.length)
+    const avgHeight = Math.round(similarDims.reduce((s, d) => s + d.height, 0) / similarDims.length)
+
+    // Don't upscale — only resize if the uploaded image is larger than average
+    if (uploadedWidth <= avgWidth && uploadedHeight <= avgHeight) return imageBuffer
+
+    const pipeline = sharp(imageBuffer, { animated: isAnimated })
+      .resize(avgWidth, avgHeight, { fit: 'inside', withoutEnlargement: true })
+
+    if (isAnimated) {
+      return await pipeline.gif().toBuffer()
+    }
+    return await pipeline.png().toBuffer()
+  } catch {
+    return imageBuffer
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -72,10 +137,13 @@ export default defineEventHandler(async (event) => {
 
   await mkdir(uploadDir, { recursive: true })
 
+  // Resize image to match average dimensions of existing cToons with a similar ratio
+  const imageData = await resizeToAverageSimilarRatio(imagePart.data, imagePart.type, baseDir)
+
   // Prefix filename with timestamp to avoid collisions
   const timestamp = Date.now()
   const safeFilename = `${timestamp}_${imagePart.filename}`
-  await writeFile(join(uploadDir, safeFilename), imagePart.data)
+  await writeFile(join(uploadDir, safeFilename), imageData)
 
   const assetPath = process.env.NODE_ENV === 'production'
     ? `/images/submitted-ctoons/${safeSeries}/${safeFilename}`
