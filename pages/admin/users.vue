@@ -66,6 +66,7 @@
             >
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
+              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
               <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
               <button
@@ -149,6 +150,71 @@
       <div class="space-x-2">
         <button class="px-3 py-1 text-sm border rounded-md" :disabled="page <= 1" @click="prevPage">Prev</button>
         <button class="px-3 py-1 text-sm border rounded-md" :disabled="page >= totalPages" @click="nextPage">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending Trades modal -->
+  <div v-if="showPendingTradesModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closePendingTradesModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh]">
+      <!-- Fixed header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+        <h3 class="text-lg font-semibold">Pending Trades — {{ pendingTradesTarget?.username || pendingTradesTarget?.discordTag || 'user' }}</h3>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closePendingTradesModal()">✕</button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="overflow-y-auto flex-1 px-5 py-4">
+        <div v-if="pendingTradesLoading" class="text-sm text-gray-500 py-3">Loading…</div>
+        <div v-else-if="pendingTradesError" class="text-sm text-red-600 py-3">{{ pendingTradesError }}</div>
+        <div v-else-if="!pendingTrades.length" class="text-sm text-gray-500 py-3">No pending trades.</div>
+        <div v-else class="space-y-4">
+          <div v-for="trade in pendingTrades" :key="trade.id" class="border rounded-lg p-4">
+            <div class="flex items-center justify-between text-sm mb-3">
+              <div>
+                <span class="text-gray-500">From:</span>
+                <span class="font-medium ml-1">{{ trade.initiator.username }}</span>
+                <span class="text-gray-400 mx-2">→</span>
+                <span class="text-gray-500">To:</span>
+                <span class="font-medium ml-1">{{ trade.recipient.username }}</span>
+              </div>
+              <div class="text-xs text-gray-400">{{ formatDate(trade.createdAt) }}</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <!-- Offered cToons -->
+              <div>
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Offered</div>
+                <div v-if="trade.pointsOffered" class="mb-2 text-sm font-medium text-blue-700">{{ trade.pointsOffered }} pts</div>
+                <div v-if="trade.ctoonsOffered.length" class="flex flex-wrap gap-2">
+                  <div v-for="ctoon in trade.ctoonsOffered" :key="ctoon.id" class="flex flex-col items-center gap-1">
+                    <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-16 h-16 object-contain rounded border" />
+                    <span class="text-xs text-center text-gray-700 max-w-[4rem] leading-tight">{{ ctoon.name }}</span>
+                  </div>
+                </div>
+                <div v-if="!trade.ctoonsOffered.length && !trade.pointsOffered" class="text-xs text-gray-400 italic">Nothing</div>
+              </div>
+
+              <!-- Requested cToons -->
+              <div>
+                <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Requested</div>
+                <div v-if="trade.ctoonsRequested.length" class="flex flex-wrap gap-2">
+                  <div v-for="ctoon in trade.ctoonsRequested" :key="ctoon.id" class="flex flex-col items-center gap-1">
+                    <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-16 h-16 object-contain rounded border" />
+                    <span class="text-xs text-center text-gray-700 max-w-[4rem] leading-tight">{{ ctoon.name }}</span>
+                  </div>
+                </div>
+                <div v-if="!trade.ctoonsRequested.length" class="text-xs text-gray-400 italic">Nothing</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fixed footer -->
+      <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closePendingTradesModal()">Close</button>
       </div>
     </div>
   </div>
@@ -780,6 +846,36 @@ async function saveUpdateUsername() {
     updateUsernameError.value = e?.data?.statusMessage || e?.message || 'Failed to update username.'
   } finally {
     updateUsernameWorking.value = false
+  }
+}
+
+// Pending Trades state
+const showPendingTradesModal = ref(false)
+const pendingTradesTarget = ref(null)
+const pendingTrades = ref([])
+const pendingTradesLoading = ref(false)
+const pendingTradesError = ref('')
+
+function closePendingTradesModal() {
+  showPendingTradesModal.value = false
+  pendingTradesTarget.value = null
+  pendingTrades.value = []
+  pendingTradesError.value = ''
+}
+
+async function openPendingTrades(u) {
+  pendingTradesTarget.value = u
+  showPendingTradesModal.value = true
+  pendingTrades.value = []
+  pendingTradesError.value = ''
+  pendingTradesLoading.value = true
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/pending-trades`)
+    pendingTrades.value = res?.items || []
+  } catch (e) {
+    pendingTradesError.value = e?.data?.statusMessage || e?.message || 'Failed to load pending trades.'
+  } finally {
+    pendingTradesLoading.value = false
   }
 }
 
