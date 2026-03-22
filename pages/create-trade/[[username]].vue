@@ -262,6 +262,7 @@
                 :key="c.id"
                 :ctoon="c"
                 :selected="selectedTargetCtoonsMap.has(c.id)"
+                :disabled="c.inPendingTrade"
                 :badge="selfOwnedIds.has(c.ctoonId) ? 'Owned' : 'Unowned'"
                 badge-class-owned="bg-green-100 text-green-800"
                 badge-class-unowned="bg-gray-200 text-gray-600"
@@ -405,6 +406,7 @@
                 :key="c.id"
                 :ctoon="c"
                 :selected="selectedInitiatorCtoonsMap.has(c.id)"
+                :disabled="c.inPendingTrade"
                 :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
                 badge-class-owned="bg-blue-100 text-blue-800"
                 badge-class-unowned="bg-gray-200 text-gray-600"
@@ -1048,11 +1050,13 @@ function applyPreselectedTargetCtoon() {
 }
 
 function toggleTargetCtoon(c) {
+  if (c.inPendingTrade) return
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
   if (i >= 0) selectedTargetCtoons.value.splice(i, 1)
   else selectedTargetCtoons.value.push(c)
 }
 function toggleInitiatorCtoon(c) {
+  if (c.inPendingTrade) return
   const i = selectedInitiatorCtoons.value.findIndex(x => x.id === c.id)
   if (i >= 0) selectedInitiatorCtoons.value.splice(i, 1)
   else selectedInitiatorCtoons.value.push(c)

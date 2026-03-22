@@ -14,10 +14,23 @@
           :alt="ctoon.name || 'cToon'"
           class="w-20 h-20 object-contain rounded bg-gray-900/40 p-2"
         />
-        <div>
+        <div class="flex-1">
           <h3 class="text-2xl font-semibold">{{ ctoon.name || 'cToon' }}</h3>
           <p class="text-sm text-gray-300">cToon details</p>
+          <button
+            v-if="ctoon.soundPath"
+            type="button"
+            class="mt-1 flex items-center gap-1 text-xs text-indigo-300 hover:text-indigo-200"
+            @click="replaySound"
+            :aria-label="'Replay ' + (ctoon.name || 'cToon') + ' sound'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+            </svg>
+            Play sound
+          </button>
         </div>
+        <audio ref="audioEl" :src="ctoon.soundPath || ''" preload="auto" class="hidden" />
       </div>
 
       <div class="flex items-center gap-2 pt-4 shrink-0">
@@ -392,7 +405,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import Modal from '@/components/Modal.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import abilities from '@/data/abilities.json'
@@ -463,6 +476,7 @@ const statusImageAlt = computed(() => {
   }
 })
 
+const audioEl = ref(null)
 const activeTab = ref('info')
 const suggestName = ref('')
 const suggestSeries = ref('')
@@ -503,6 +517,12 @@ const canOpenNow = computed(() => {
   const mra = eventMinRevealAt.value ? new Date(eventMinRevealAt.value).getTime() : null
   return mra === null || Date.now() >= mra
 })
+
+function replaySound() {
+  if (!audioEl.value || !ctoon.value?.soundPath) return
+  audioEl.value.currentTime = 0
+  audioEl.value.play().catch(() => {})
+}
 
 function normalizeCharsList(list) {
   if (!Array.isArray(list)) return []
@@ -642,10 +662,22 @@ watch(isOpen, (open) => {
     ownersError.value = ''
     ownersList.value = []
     lastOwnersCtoonId.value = null
+    if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
   activeTab.value = 'info'
   if (!loading.value && ctoon.value?.id) syncSuggestionForm(ctoon.value)
+})
+
+// Auto-play sound once when modal finishes loading
+watch([isOpen, loading], async ([open, isLoading]) => {
+  if (!open || isLoading) return
+  if (!ctoon.value?.soundPath) return
+  await nextTick()
+  if (audioEl.value) {
+    audioEl.value.currentTime = 0
+    audioEl.value.play().catch(() => {})
+  }
 })
 
 watch([isOpen, hasGtoon], ([open, isGtoon]) => {

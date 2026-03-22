@@ -24,6 +24,20 @@
           </div>
         </div>
 
+        <!-- Sound Upload -->
+        <div>
+          <label class="block mb-1 font-medium">cToon Sound (optional)</label>
+          <div v-if="currentSoundPath && !clearSound" class="flex items-center gap-3 mb-2">
+            <audio :src="currentSoundPath" controls class="h-8"></audio>
+            <button type="button" @click="clearSound = true" class="text-sm text-red-600 hover:underline">Remove sound</button>
+          </div>
+          <p v-else-if="clearSound" class="text-sm text-amber-600 mb-2">Sound will be removed on save. <button type="button" @click="clearSound = false" class="underline">Undo</button></p>
+          <input type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg" @change="handleSoundFile" class="w-full" />
+          <p class="text-sm text-gray-500">MP3, WAV, or OGG. Leave blank to keep existing. Uploading a new file replaces the current sound.</p>
+          <p v-if="err.sound" class="text-red-600 text-sm mt-1">{{ err.sound }}</p>
+          <p v-if="newSoundFile" class="text-sm text-green-600 mt-1">Selected: {{ newSoundFile.name }}</p>
+        </div>
+
         <!-- Type (read-only) -->
         <div>
           <label class="block mb-1 font-medium">Type</label>
@@ -231,6 +245,11 @@ const description = ref('')
 const newImageFile = ref(null)
 const newImagePreview = ref('')
 
+/* sound refs */
+const currentSoundPath = ref('')
+const newSoundFile = ref(null)
+const clearSound = ref(false)
+
 /* G-toon refs */
 const isGtoon = ref(false)
 const cost = ref(0); const power = ref(0)
@@ -245,7 +264,7 @@ const selectedAbility = computed(() =>
 )
 
 /* validation errors */
-const err = reactive({ cost:'', power:'', image:'' })
+const err = reactive({ cost:'', power:'', image:'', sound:'' })
 
 /* series + rarity lists */
 const seriesOptions = ref([])
@@ -339,6 +358,7 @@ onMounted(async ()=>{
     setField.value = ctoon.set
     characters.value = (ctoon.characters||[]).join(', ')
     description.value = ctoon.description || ''
+    currentSoundPath.value = ctoon.soundPath || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
       const initQty = Number(ctoon.initialReleaseQty)
@@ -367,6 +387,20 @@ watch(rarity, v => {
   const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
   price.value = map[v]||0
 })
+
+function handleSoundFile(e){
+  err.sound = ''
+  const file = e.target.files?.[0]
+  if (!file){ newSoundFile.value = null; return }
+  const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']
+  if (!allowed.includes(file.type)){
+    err.sound = 'Only MP3, WAV, or OGG files allowed.'
+    newSoundFile.value = null
+    return
+  }
+  newSoundFile.value = file
+  clearSound.value = false
+}
 
 function handleNewFile(e){
   err.image = ''
@@ -407,10 +441,10 @@ async function submitForm(){
   }
   const gtoonTypeValue = isGtoon.value ? gtoonType.value.trim() : ''
 
-  // If a new image is selected, send multipart; else JSON.
-  if (newImageFile.value){
+  // If a new image or sound is selected, send multipart; else JSON.
+  if (newImageFile.value || newSoundFile.value){
     const fd = new FormData()
-    fd.append('image', newImageFile.value)
+    if (newImageFile.value) fd.append('image', newImageFile.value)
     fd.append('name', name.value.trim())
     fd.append('series', series.value.trim())
     fd.append('rarity', rarity.value)
@@ -437,6 +471,9 @@ async function submitForm(){
     fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
     fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
     fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
+
+    if (newSoundFile.value) fd.append('sound', newSoundFile.value)
+    else if (clearSound.value) fd.append('clearSound', 'true')
 
     const res = await fetch(`/api/admin/ctoon/${id}`, {
       method: 'PUT',
@@ -479,7 +516,9 @@ async function submitForm(){
     initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
-    finalReleaseQty:   schedule.value.finalQty ?? null
+    finalReleaseQty:   schedule.value.finalQty ?? null,
+
+    clearSound: clearSound.value || false
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {
