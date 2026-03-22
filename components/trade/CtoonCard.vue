@@ -1,9 +1,11 @@
 <template>
   <button
-    @click="$emit('toggle')"
+    @click="disabled ? undefined : $emit('toggle')"
+    :disabled="disabled"
     :aria-pressed="selected ? 'true' : 'false'"
     :class="[
-      'relative w-full text-left border rounded p-2 hover:shadow transition',
+      'relative w-full text-left border rounded p-2 transition',
+      disabled ? 'opacity-50 cursor-not-allowed' : 'hover:shadow',
       selected ? 'border-indigo-500 bg-indigo-50' : ''
     ]"
   >
@@ -14,6 +16,14 @@
       :class="badgeClassComputed"
     >
       {{ badge }}
+    </span>
+
+    <!-- Pending Trade overlay label -->
+    <span
+      v-if="disabled"
+      class="absolute top-1 left-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300"
+    >
+      In Trade
     </span>
 
     <!-- Thumb -->
@@ -61,6 +71,7 @@ import { computed } from 'vue'
 const props = defineProps({
   ctoon: { type: Object, required: true },
   selected: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
   badge: { type: String, default: '' },
   badgeClassOwned: { type: String, default: 'bg-green-100 text-green-800' },
   badgeClassUnowned: { type: String, default: 'bg-gray-200 text-gray-600' }

@@ -66,6 +66,26 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 4a) Check offered cToons are not in any pending trades
+  if (ctoonIdsOffered.length) {
+    const offeredInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
+      where: {
+        userCtoonId: { in: ctoonIdsOffered },
+        tradeOffer: { status: 'PENDING' }
+      },
+      include: {
+        userCtoon: { include: { ctoon: { select: { name: true } } } }
+      }
+    })
+    if (offeredInPendingTrade) {
+      const ctoonName = offeredInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Your cToon "${ctoonName}" is already part of a pending trade and cannot be offered.`
+      })
+    }
+  }
+
   // 4) Verify initiator has enough AVAILABLE points (total - active locks)
   const initiator = await prisma.user.findUnique({
     where: { id: initiatorId },
@@ -100,28 +120,50 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 5a) Check requested cToons are not in any pending trades
+  if (ctoonIdsRequested.length) {
+    const requestedInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
+      where: {
+        userCtoonId: { in: ctoonIdsRequested },
+        tradeOffer: { status: 'PENDING' }
+      },
+      include: {
+        userCtoon: { include: { ctoon: { select: { name: true } } } }
+      }
+    })
+    if (requestedInPendingTrade) {
+      const ctoonName = requestedInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
+      throw createError({
+        statusCode: 400,
+        statusMessage: `${recipient.username}'s cToon "${ctoonName}" is already part of a pending trade and cannot be requested.`
+      })
+    }
+  }
+
   // 5.5) Prevent trades involving cToons in active auctions
   if (ctoonIdsOffered.length) {
     const offeredActiveAuction = await prisma.auction.findFirst({
       where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
-      select: { id: true }
+      include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
     })
     if (offeredActiveAuction) {
+      const ctoonName = offeredActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
       throw createError({
         statusCode: 400,
-        statusMessage: 'One or more of the cToons you offered is in an active auction.'
+        statusMessage: `Your cToon "${ctoonName}" is currently in an active auction and cannot be offered.`
       })
     }
   }
   if (ctoonIdsRequested.length) {
     const requestedActiveAuction = await prisma.auction.findFirst({
       where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
-      select: { id: true }
+      include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
     })
     if (requestedActiveAuction) {
+      const ctoonName = requestedActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
       throw createError({
         statusCode: 400,
-        statusMessage: 'One or more of the cToons you requested is in an active auction.'
+        statusMessage: `${recipient.username}'s cToon "${ctoonName}" is currently in an active auction and cannot be requested.`
       })
     }
   }
