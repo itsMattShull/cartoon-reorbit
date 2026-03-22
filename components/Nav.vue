@@ -320,6 +320,7 @@ const adminGroups = [
         title: 'Admin — Content',
         items: [
           { label: 'Manage cToons', to: '/admin/ctoons' },
+          { label: 'Submitted cToons', to: '/admin/submitted-ctoons' },
           { label: 'Manage Packs', to: '/admin/packs' },
           { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
           { label: 'Manage Backgrounds', to: '/admin/backgrounds' },

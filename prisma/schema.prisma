@@ -53,6 +53,12 @@ enum CtoonSuggestionStatus {
   REJECTED
 }
 
+enum SubmittedCtoonStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
 enum CZoneSearchCollectionType {
   ONCE
   MULTIPLE
@@ -430,6 +436,9 @@ model User {
 
   ctoonSuggestions CtoonUserSuggestion[]
 
+  submittedCtoons         SubmittedCtoon[]       @relation("SubmittedCtoonByUser")
+  reviewedSubmissions     SubmittedCtoon[]       @relation("SubmittedCtoonReviewedBy")
+
   czoneContestSubmissions CZoneContestSubmission[]
   czoneContestVotes       CZoneContestVote[]
 
@@ -458,6 +467,36 @@ model CtoonUserSuggestion {
   @@index([status, createdAt])
   @@index([ctoonId])
   @@index([userId, createdAt])
+}
+
+model SubmittedCtoon {
+  id               String               @id @default(uuid())
+  userId           String
+  name             String
+  series           String
+  set              String
+  description      String?
+  type             String
+  rarity           String
+  assetPath        String
+  releaseDate      DateTime
+  perUserLimit     Int?
+  inCmart          Boolean              @default(false)
+  price            Int                  @default(0)
+  totalQuantity    Int?
+  initialQuantity  Int?
+  characters       String[]
+  status           SubmittedCtoonStatus @default(PENDING)
+  submittedAt      DateTime             @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+
+  user       User  @relation("SubmittedCtoonByUser", fields: [userId], references: [id])
+  reviewedBy User? @relation("SubmittedCtoonReviewedBy", fields: [reviewedByUserId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([submittedAt])
 }
 
 // ── Ban/Unban auditing ─────────────────────────────────────────────
