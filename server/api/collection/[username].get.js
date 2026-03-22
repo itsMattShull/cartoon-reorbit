@@ -25,11 +25,20 @@ export default defineEventHandler(async (event) => {
   })
   if (!userWithCtoons) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
+  const userCtoonIds = userWithCtoons.ctoons.map(uc => uc.id)
   const ids = userWithCtoons.ctoons.map(uc => uc.ctoonId)
   const holidayRows = ids.length
     ? await prisma.holidayEventItem.findMany({ where: { ctoonId: { in: ids } }, select: { ctoonId: true } })
     : []
   const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
+
+  const pendingTradeRows = userCtoonIds.length
+    ? await prisma.tradeOfferCtoon.findMany({
+        where: { userCtoonId: { in: userCtoonIds }, tradeOffer: { status: 'PENDING' } },
+        select: { userCtoonId: true }
+      })
+    : []
+  const pendingTradeSet = new Set(pendingTradeRows.map(r => r.userCtoonId))
 
   // SORT: by uc.ctoon.name (A–Z, case-insensitive), then uc.ctoonId, then uc.mintNumber (nulls last)
   const rows = userWithCtoons.ctoons.slice().sort((a, b) => {
@@ -60,6 +69,7 @@ export default defineEventHandler(async (event) => {
     mintNumber: uc.mintNumber,
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,
-    isHolidayItem: holidaySet.has(uc.ctoonId)
+    isHolidayItem: holidaySet.has(uc.ctoonId),
+    inPendingTrade: pendingTradeSet.has(uc.id)
   }))
 })
