@@ -38,7 +38,11 @@ export default defineEventHandler(async (event) => {
     select: {
       id: true, status: true, endAt: true,
       highestBid: true, highestBidderId: true, initialBet: true,
-      creatorId: true
+      creatorId: true,
+      isFeatured: true,
+      userCtoon: {
+        select: { ctoonId: true }
+      }
     }
   })
   if (!auc || auc.status !== 'ACTIVE') {
@@ -49,6 +53,42 @@ export default defineEventHandler(async (event) => {
   }
   if (auc.creatorId && auc.creatorId === userId) {
     throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
+  }
+
+  // --- Featured-auction eligibility (pre-upsert) ---
+  // Block if user currently owns >=2 of this cToon OR has owned >=2 in the last 30 days.
+  // This check must happen before the upsert so an ineligible user's auto-bid is never saved.
+  if (auc.isFeatured && auc.userCtoon?.ctoonId) {
+    const currentOwned = await db.userCtoon.count({
+      where: {
+        userId,
+        ctoonId: auc.userCtoon.ctoonId,
+        burnedAt: null,
+      }
+    })
+    if (currentOwned >= 2) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'You are not eligible to bid on this featured auction',
+      })
+    }
+
+    const cutoff = new Date(Date.now() - THIRTY_DAYS_MS)
+    const recentOwnerships = await db.ctoonOwnerLog.findMany({
+      where: {
+        userId,
+        ctoonId: auc.userCtoon.ctoonId,
+        createdAt: { gte: cutoff },
+      },
+      select: { userCtoonId: true },
+      distinct: ['userCtoonId'],
+    })
+    if (recentOwnerships.length >= 2) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'You are not eligible to bid on this featured auction',
+      })
+    }
   }
 
   // --- Available points check for autobid max ---
