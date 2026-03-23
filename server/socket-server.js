@@ -60,11 +60,11 @@ const monsterBattles = new Map();      // battleId -> { state, recordId, actions
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000
-const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
+const PVP_ROOM_IDLE_MS = 10 * 60 * 1000
 const PVP_MATCH_IDLE_MS = 5 * 60 * 1000
 const PVE_MATCH_IDLE_MS = 5 * 60 * 1000
 const MONSTER_BATTLE_IDLE_MS = 5 * 60 * 1000
-const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
+const TRADE_ROOM_IDLE_MS = 10 * 60 * 1000
 
 const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
 const METRICS_HISTORY_LIMIT = Number(process.env.SOCKET_METRICS_HISTORY_LIMIT || 1440)
@@ -152,7 +152,7 @@ function recordSocketMetrics() {
   const sample = getSocketMetricsSnapshot()
   metricsHistory.push(sample)
   if (metricsHistory.length > METRICS_HISTORY_LIMIT) {
-    metricsHistory.splice(0, metricsHistory.length - METRICS_HISTORY_LIMIT)
+    metricsHistory.shift()
   }
   return sample
 }

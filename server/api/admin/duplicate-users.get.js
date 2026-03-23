@@ -20,8 +20,10 @@ export default defineEventHandler(async (event) => {
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
 
-  // 2. Fetch all login logs with user info
+  // 2. Fetch login logs with user info — limit to last 90 days to avoid loading the full table
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const logs = await prisma.loginLog.findMany({
+    where: { createdAt: { gte: since } },
     orderBy: { createdAt: 'desc' },
     include: {
       user: {
