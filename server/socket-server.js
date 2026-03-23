@@ -60,16 +60,11 @@ const monsterBattles = new Map();      // battleId -> { state, recordId, actions
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000
-const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
+const PVP_ROOM_IDLE_MS = 10 * 60 * 1000
 const PVP_MATCH_IDLE_MS = 5 * 60 * 1000
 const PVE_MATCH_IDLE_MS = 5 * 60 * 1000
 const MONSTER_BATTLE_IDLE_MS = 5 * 60 * 1000
-const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
-
-const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
-const METRICS_HISTORY_LIMIT = Number(process.env.SOCKET_METRICS_HISTORY_LIMIT || 1440)
-const METRICS_TOKEN = process.env.SOCKET_METRICS_TOKEN || ''
-const metricsHistory = []
+const TRADE_ROOM_IDLE_MS = 10 * 60 * 1000
 
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
@@ -83,120 +78,6 @@ const touchActivity = (obj) => {
 
 const isIdle = (obj, now, maxMs) => (now - (obj?.lastActivity || 0)) > maxMs
 
-function getSocketMetricsSnapshot() {
-  const zoneNames = Object.keys(zoneSockets)
-  let zoneSocketRefs = 0
-  for (const zone of zoneNames) {
-    const set = zoneSockets[zone]
-    zoneSocketRefs += set ? set.size : 0
-  }
-
-  const tradeRoomNames = Object.keys(tradeRooms)
-  let tradeSpectators = 0
-  for (const roomName of tradeRoomNames) {
-    const room = tradeRooms[roomName]
-    tradeSpectators += room?.spectators?.size || 0
-  }
-
-  const adapterRooms = io.sockets.adapter.rooms
-  const socketIds = new Set(io.sockets.sockets.keys())
-  let auctionSocketMembers = 0
-
-  for (const [roomName, members] of adapterRooms) {
-    if (socketIds.has(roomName)) continue
-    if (roomName.startsWith('auction_')) {
-      auctionSocketMembers += members?.size || 0
-    }
-  }
-
-  let monsterSocketMembers = 0
-  for (const battleId of monsterBattles.keys()) {
-    monsterSocketMembers += roomSize(io, battleId)
-  }
-
-  let clashSocketMembers = 0
-  for (const roomId of pvpRooms.keys()) {
-    clashSocketMembers += roomSize(io, roomId)
-  }
-  for (const roomId of pvpMatches.keys()) {
-    clashSocketMembers += roomSize(io, roomId)
-  }
-  for (const gameId of pveMatches.keys()) {
-    clashSocketMembers += roomSize(io, gameId)
-  }
-
-  const mem = process.memoryUsage()
-
-  return {
-    ts: Date.now(),
-    activeSockets: io.sockets.sockets.size,
-    zoneCount: zoneNames.length,
-    zoneSocketRefs,
-    zoneVisitorCount: Object.values(zoneVisitors).reduce((sum, count) => sum + Number(count || 0), 0),
-    tradeRoomCount: tradeRoomNames.length,
-    tradeSpectators,
-    tradeSocketsCount: Object.keys(tradeSockets).length,
-    auctionSocketMembers,
-    monsterSocketMembers,
-    clashSocketMembers,
-    pvpRoomCount: pvpRooms.size,
-    pvpMatchCount: pvpMatches.size,
-    pveMatchCount: pveMatches.size,
-    monsterBattleCount: monsterBattles.size,
-    rssMb: Math.round(mem.rss / 1024 / 1024),
-    heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024)
-  }
-}
-
-function recordSocketMetrics() {
-  const sample = getSocketMetricsSnapshot()
-  metricsHistory.push(sample)
-  if (metricsHistory.length > METRICS_HISTORY_LIMIT) {
-    metricsHistory.splice(0, metricsHistory.length - METRICS_HISTORY_LIMIT)
-  }
-  return sample
-}
-
-httpServer.on('request', (req, res) => {
-  if (!req?.url) return
-  const host = req.headers.host || 'localhost'
-  const url = new URL(req.url, `http://${host}`)
-  if (url.pathname.startsWith(SOCKET_PATH)) return
-
-  if (url.pathname === '/metrics/socket') {
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, x-metrics-token'
-    }
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, headers)
-      res.end()
-      return
-    }
-
-    const token = Array.isArray(req.headers['x-metrics-token'])
-      ? req.headers['x-metrics-token'][0]
-      : req.headers['x-metrics-token']
-    if (METRICS_TOKEN && token !== METRICS_TOKEN) {
-      res.writeHead(401, headers)
-      res.end(JSON.stringify({ error: 'Unauthorized' }))
-      return
-    }
-
-    if (!metricsHistory.length) recordSocketMetrics()
-    const limit = Number(url.searchParams.get('limit') || METRICS_HISTORY_LIMIT)
-    const samples = metricsHistory.slice(-limit)
-    const latest = samples[samples.length - 1] || metricsHistory[metricsHistory.length - 1] || getSocketMetricsSnapshot()
-
-    res.writeHead(200, { ...headers, 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ intervalMs: METRICS_SAMPLE_MS, latest, samples }))
-    return
-  }
-
-  res.writeHead(404, { 'Content-Type': 'text/plain' })
-  res.end('Not Found')
-})
 
 const ASSET_BASE =
   process.env.ASSET_BASE ||
@@ -2735,11 +2616,6 @@ async function sweepStaleState() {
     delete tradeRooms[roomName]
   }
 }
-
-recordSocketMetrics()
-setInterval(() => {
-  recordSocketMetrics()
-}, METRICS_SAMPLE_MS).unref()
 
 setInterval(() => {
   sweepStaleState().catch((err) => {
