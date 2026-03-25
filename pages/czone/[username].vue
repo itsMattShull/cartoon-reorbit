@@ -1509,6 +1509,10 @@ onMounted(async () => {
 
   // socket listeners
   socket.emit('join-zone', { zone: username.value })
+  // Re-join zone on reconnect (join-zone is idempotent server-side)
+  socket.on('connect', () => {
+    socket.emit('join-zone', { zone: username.value })
+  })
   socket.on('visitor-count', count => {
     visitorCount.value = count
   })

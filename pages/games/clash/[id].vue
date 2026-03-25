@@ -329,6 +329,11 @@ onMounted(async () => {
   socket.emit('joinClashRoom', { roomId, userId: user.value.id })
   // 2) fetch my saved decks for the dropdown
   socket.emit('listClashDecks', { userId: user.value.id })
+  // 3) re-join room on reconnect
+  socket.on('connect', () => {
+    socket.emit('joinClashRoom', { roomId, userId: user.value.id })
+    socket.emit('listClashDecks', { userId: user.value.id })
+  })
 })
 
 async function readyUp() {

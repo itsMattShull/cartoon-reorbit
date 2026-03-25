@@ -417,6 +417,10 @@ async function refreshAvailable() {
 
 onMounted(() => {
   socket.emit('join-trade-room', { room: roomName, user: user.value.username })
+  // Re-join trade room after a socket reconnect
+  socket.on('connect', () => {
+    socket.emit('trade:rejoin', { room: roomName, user: user.value.username })
+  })
 
   socket.on('trade-room-update', ({ traderA: ta, traderB: tb, spectators: spec, offers, confirmed }) => {
     traderA.value = ta

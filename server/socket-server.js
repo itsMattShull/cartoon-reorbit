@@ -3,12 +3,15 @@ dotenv.config()
 
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
+import { createAdapter } from '@socket.io/redis-adapter'
 import { prisma as db }  from './prisma.js'
 import { DateTime } from 'luxon'
 import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
 import { redisConnection, scheduleAuctionClose } from './utils/queues.js'
+import { getRedis } from './utils/redis.js'
+import * as redisState from './utils/redisState.js'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -44,6 +47,29 @@ const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 const io = new Server(httpServer, { cors: { origin: '*' } })
 attachSocketIoMetrics(io)
+
+// ── Redis adapter (pub/sub between instances) ──────────────────────────────
+// Using duplicate() so pub and sub clients are independent connections.
+const _redisPub = getRedis()
+const _redisSub = _redisPub.duplicate()
+io.adapter(createAdapter(_redisPub, _redisSub))
+
+// ── Redis sync helpers (fire-and-forget) ───────────────────────────────────
+// Write to Redis after every mutating Map operation so state survives restarts.
+const syncBattle = (battleId, battle) =>
+  redisState.setBattle(battleId, battle).catch(e => console.error('[redisState] setBattle:', e))
+const syncBattleByUser = (userId, battleId) =>
+  redisState.setBattleByUser(userId, battleId).catch(e => console.error('[redisState] setBattleByUser:', e))
+const syncDeleteBattle = (battleId, userIds = []) =>
+  redisState.delBattle(battleId, userIds).catch(e => console.error('[redisState] delBattle:', e))
+const syncPvpRoom = (roomId, room) =>
+  redisState.setPvpRoom(roomId, room).catch(e => console.error('[redisState] setPvpRoom:', e))
+const syncDeletePvpRoom = (roomId) =>
+  redisState.delPvpRoom(roomId).catch(e => console.error('[redisState] delPvpRoom:', e))
+const syncTradeRoom = (roomName, room) =>
+  redisState.setTradeRoom(roomName, room).catch(e => console.error('[redisState] setTradeRoom:', e))
+const syncDeleteTradeRoom = (roomName) =>
+  redisState.delTradeRoom(roomName).catch(e => console.error('[redisState] delTradeRoom:', e))
 
 /* ────────────────────────────────────────────────────────────
  *  cZone visitors & chat (unchanged)
@@ -236,6 +262,25 @@ const scheduleMonsterTimeouts = (io, battle) => {
   scheduleMonsterActionTimeout(io, battle, 'player2')
 }
 
+// Rebuild in-memory action timers for a battle loaded from Redis on boot.
+// Uses stored deadline timestamps to calculate remaining time.
+const reconstructBattleTimers = (io, battle) => {
+  const now = Date.now()
+  for (const playerKey of ['player1', 'player2']) {
+    const participant = battle.state?.participants?.[playerKey]
+    if (!participant || participant.isAi) continue
+    if (battle.actions?.[playerKey]) continue  // action already submitted
+    const deadline = battle.deadlines?.[playerKey]
+    if (!deadline) continue
+    const remaining = Math.max(1000, deadline - now)
+    battle.timers[playerKey] = setTimeout(() => {
+      handleMonsterForfeit(io, battle, playerKey, 'TIMEOUT').catch(err => {
+        console.error('[battle] reconstructed timer forfeit failed:', err)
+      })
+    }, remaining)
+  }
+}
+
 const persistMonsterBattleState = async (battle) => {
   const p1 = battle.state.participants.player1
   const p2 = battle.state.participants.player2
@@ -264,6 +309,7 @@ const cleanupMonsterBattle = (battle) => {
   if (p1Id) monsterBattleByUser.delete(String(p1Id))
   if (p2Id) monsterBattleByUser.delete(String(p2Id))
   monsterBattles.delete(battle.state.id)
+  syncDeleteBattle(battle.state.id, [p1Id, p2Id].filter(Boolean).map(String))
 }
 
 const finishMonsterBattle = async (io, battle, resultPayload) => {
@@ -370,6 +416,7 @@ const resolveMonsterTurn = async (io, battle) => {
   battle.state.turnNumber += 1
   battle.actions = { player1: null, player2: null }
   scheduleMonsterTimeouts(io, battle)
+  syncBattle(battle.state.id, battle)
   io.to(battle.state.id).emit('battle:state', battlePublicState(battle))
 }
 
@@ -828,14 +875,16 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
 
     if (size <= 0) {
       pvpRooms.delete(roomId)
+      syncDeletePvpRoom(roomId)
       io.emit('roomRemoved', { id: roomId })
     } else if (lobby.players.length === 1) {
       const u = await db.user.findUnique({
         where: { id: lobby.players[0] },
         select: { username: true }
       })
-      io.emit('roomCreated', { 
-        id: roomId, 
+      syncPvpRoom(roomId, lobby)
+      io.emit('roomCreated', {
+        id: roomId,
         owner: u?.username || 'Unknown',
         points: lobby.stakePoints ?? 0
       })
@@ -1335,6 +1384,9 @@ io.on('connection', socket => {
       monsterBattles.set(record.id, battle)
       monsterBattleByUser.set(uid, record.id)
       if (player2UserId) monsterBattleByUser.set(player2UserId, record.id)
+      syncBattle(record.id, battle)
+      syncBattleByUser(uid, record.id)
+      if (player2UserId) syncBattleByUser(player2UserId, record.id)
 
       socket.join(record.id)
       socket.data.monsterBattleId = record.id
@@ -1502,6 +1554,7 @@ io.on('connection', socket => {
       select: { username: true, discordId: true }
     })
     pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
+    syncPvpRoom(roomId, pvpRooms.get(roomId))
     io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown', points: stake })
 
     // ── Discord announce: new gToons Clash PvP room ─────────────────────────
@@ -1862,6 +1915,56 @@ io.on('connection', socket => {
     io.to(zone).emit('chat-message', { user, message })
   })
 
+  // ── Reconnect rejoin handlers ──────────────────────────────────────────────
+  // Emitted by clients on socket reconnect to restore their session.
+
+  // PvP lobby: re-join room and receive current lobby snapshot
+  socket.on('pvp:rejoin', ({ roomId, userId }) => {
+    const room = pvpRooms.get(roomId)
+    if (!room) return
+    const uid = sid(userId)
+    socket.join(roomId)
+    socket.data.roomId = roomId
+    socket.data.userId = uid
+    touchActivity(room)
+    socket.emit('pvpLobbyState', lobbySnapshot(room))
+  })
+
+  // Trade room: re-join and receive current trade state
+  socket.on('trade:rejoin', async ({ room, user }) => {
+    const roomData = tradeRooms[room]
+    if (!roomData) return
+    socket.tradeRoom = room
+    socket.user = user
+    socket.join(room)
+    touchActivity(roomData)
+    // Restore spectator entry if not a named trader
+    if (roomData.traderA !== user && roomData.traderB !== user) {
+      roomData.spectators.add(socket.id)
+    }
+    tradeSockets[socket.id] = room
+    const traderAUser = roomData.traderA
+      ? await db.user.findUnique({
+          where: { username: roomData.traderA },
+          select: { username: true, avatar: true }
+        })
+      : null
+    const traderBUser = roomData.traderB
+      ? await db.user.findUnique({
+          where: { username: roomData.traderB },
+          select: { username: true, avatar: true }
+        })
+      : null
+    socket.emit('trade-room-update', {
+      traderA: traderAUser,
+      traderB: traderBUser,
+      spectators: roomData.spectators.size,
+      offers: roomData.offers,
+      confirmed: roomData.confirmed
+    })
+  })
+  // ──────────────────────────────────────────────────────────────────────────
+
   socket.on('join-trade-room', async ({ room, user }) => {
     socket.tradeRoom = room
     socket.user = user
@@ -1888,6 +1991,7 @@ io.on('connection', socket => {
     }
 
     tradeSockets[socket.id] = room
+    syncTradeRoom(room, roomData)
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -1949,6 +2053,7 @@ io.on('connection', socket => {
           })
         : null;
 
+      syncTradeRoom(room, roomData)
       io.to(room).emit('trade-room-update', {
         traderA: traderAUser,
         traderB: traderBUser,
@@ -1968,6 +2073,7 @@ io.on('connection', socket => {
 
     roomData.offers[user] = ctoons
     roomData.confirmed[user] = false
+    syncTradeRoom(room, roomData)
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -2549,6 +2655,7 @@ async function sweepStaleState() {
   for (const [roomId, room] of pvpRooms.entries()) {
     if (roomSize(io, roomId) === 0 && isIdle(room, now, PVP_ROOM_IDLE_MS)) {
       pvpRooms.delete(roomId)
+      syncDeletePvpRoom(roomId)
     }
   }
 
@@ -2614,6 +2721,7 @@ async function sweepStaleState() {
     if (roomSize(io, roomName) !== 0) continue
     if (!isIdle(roomData, now, TRADE_ROOM_IDLE_MS)) continue
     delete tradeRooms[roomName]
+    syncDeleteTradeRoom(roomName)
   }
 }
 
@@ -3042,19 +3150,47 @@ async function boot() {
   })
   console.log('[AuctionClose] BullMQ worker started.')
 
+  // ── Restore in-memory state from Redis ─────────────────────────────────────
+  // Repopulates Maps from Redis so in-progress sessions survive restarts.
+  try {
+    const [battles, byUser, pvpRoomsData, tradeRoomsData] = await Promise.all([
+      redisState.scanBattles(),
+      redisState.scanBattleByUser(),
+      redisState.scanPvpRooms(),
+      redisState.scanTradeRooms(),
+    ])
+    for (const [id, battle] of battles) {
+      monsterBattles.set(id, battle)
+      if (battle.state?.status === 'active') reconstructBattleTimers(io, battle)
+    }
+    for (const [uid, bid] of byUser) monsterBattleByUser.set(uid, bid)
+    for (const [id, room] of pvpRoomsData) pvpRooms.set(id, room)
+    for (const [name, room] of tradeRoomsData) tradeRooms[name] = room
+    console.log(
+      `[Boot] Redis restore: ${battles.size} battle(s), ${pvpRoomsData.size} pvp room(s), ${tradeRoomsData.size} trade room(s)`
+    )
+  } catch (err) {
+    console.error('[Boot] Redis state restore failed (continuing without it):', err)
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   httpServer.listen(PORT, () => {
     console.log(`Socket server listening on port ${PORT}`)
+    // Signal PM2 that this instance is ready to accept traffic (used by graceful reload)
+    if (process.send) process.send('ready')
   })
 }
 
 boot()
 
-// Graceful shutdown: close Prisma and HTTP server
+// Graceful shutdown: drain Socket.io connections before closing HTTP server
 async function shutdown(signal = 'SIGTERM') {
-  console.log(`\n[Server] Received ${signal}; shutting down…`)
+  console.log(`\n[Server] Received ${signal}; shutting down gracefully…`)
+  // Stop accepting new socket connections and close existing ones
+  io.close()
   httpServer.close(() => process.exit(0))
-  // Fallback if close hangs
-  setTimeout(() => process.exit(0), 5000).unref()
+  // Hard fallback if drain takes too long
+  setTimeout(() => process.exit(0), 8000).unref()
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'))
