@@ -22,7 +22,7 @@
 'use strict'
 
 const DIAG_ENV = {
-  DIAG_ENABLED:           '1',
+  DIAG_ENABLED:           '0',
   DIAG_DIR:               '/var/www/log/cartoon-reorbit/diagnostics',
   DIAG_INTERVAL_SEC:      '60',
   DIAG_LOG_MAX_MB:        '200',
