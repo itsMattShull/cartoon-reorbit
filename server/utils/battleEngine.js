@@ -159,7 +159,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId, _restore = 
 
   // 3) and only now fire every card’s onStart
   ;[...state.playerHand, ...state.aiHand].forEach(card => {
-    const side = state.playerHand.includes(card) ? ‘player’ : ‘ai’;
+    const side = state.playerHand.includes(card) ? 'player' : 'ai';
     abilityRegistry[card.abilityKey]?.onStart?.({
       game: battle,
       side,
