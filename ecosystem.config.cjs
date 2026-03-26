@@ -21,6 +21,12 @@
 
 'use strict'
 
+// Load .env so NUXT_PORT / SOCKET_PORT are available at config-parse time
+require('dotenv').config()
+
+const NUXT_PORT   = process.env.NUXT_PORT   || '3000'
+const SOCKET_PORT = process.env.SOCKET_PORT || '3001'
+
 const DIAG_ENV = {
   DIAG_ENABLED:           '0',
   DIAG_DIR:               '/var/www/log/cartoon-reorbit/diagnostics',
@@ -49,12 +55,14 @@ module.exports = {
       max_memory_restart: '2G',
       env: {
         NODE_ENV:    'production',
-        NITRO_PORT:  '3000',
+        NITRO_PORT:  NUXT_PORT,
+        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
       env_development: {
         NODE_ENV:    'production',
-        NITRO_PORT:  '3002',
+        NITRO_PORT:  NUXT_PORT,
+        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
     },
@@ -74,12 +82,12 @@ module.exports = {
       max_memory_restart: '2G',
       env: {
         NODE_ENV:    'production',
-        SOCKET_PORT: '3001',
+        SOCKET_PORT: SOCKET_PORT,
         ...DIAG_ENV,
       },
       env_development: {
         NODE_ENV:    'production',
-        SOCKET_PORT: '3003',
+        SOCKET_PORT: SOCKET_PORT,
         ...DIAG_ENV,
       },
     },

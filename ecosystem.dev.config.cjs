@@ -1,5 +1,10 @@
 'use strict'
 
+require('dotenv').config()
+
+const NUXT_PORT   = process.env.NUXT_PORT   || '3000'
+const SOCKET_PORT = process.env.SOCKET_PORT || '3001'
+
 /**
  * PM2 ecosystem file — cartoon-reorbit (DEVELOPMENT)
  *
@@ -22,7 +27,8 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV:   'development',
-        NITRO_PORT: '3002',
+        NITRO_PORT: NUXT_PORT,
+        NUXT_PORT:  NUXT_PORT,
       },
     },
 
@@ -34,7 +40,7 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV:    'development',
-        SOCKET_PORT: '3003',
+        SOCKET_PORT: SOCKET_PORT,
       },
     },
 
