@@ -3188,9 +3188,15 @@ async function shutdown(signal = 'SIGTERM') {
   console.log(`\n[Server] Received ${signal}; shutting down gracefully…`)
   // Stop accepting new socket connections and close existing ones
   io.close()
+  // Force-close any lingering keep-alive HTTP connections so the server
+  // releases its port immediately rather than waiting for clients to time out.
+  if (typeof httpServer.closeAllConnections === 'function') {
+    httpServer.closeAllConnections()
+  }
   httpServer.close(() => process.exit(0))
-  // Hard fallback if drain takes too long
-  setTimeout(() => process.exit(0), 8000).unref()
+  // Hard fallback well within PM2's kill_timeout (8 s) so the port is free
+  // before PM2 starts the replacement process.
+  setTimeout(() => process.exit(0), 5000).unref()
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'))
