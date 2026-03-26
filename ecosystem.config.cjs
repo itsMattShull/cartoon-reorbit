@@ -90,7 +90,8 @@ module.exports = {
       script:    'server/workers/mint.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'production' },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -99,7 +100,8 @@ module.exports = {
       script:    'server/workers/dissolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'production' },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -108,7 +110,8 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'production' },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -117,7 +120,8 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'production' },
     },
   ],
 }
