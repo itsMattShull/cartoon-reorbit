@@ -11,13 +11,17 @@
  *   battle:user:{uid}  – userId → battleId lookup
  *   pvproom:{id}       – PvP lobby room
  *   traderoom:{name}   – live trade room
+ *   pvematch:{id}      – active clash PvE game
+ *   pvpmatch:{id}      – active clash PvP game
  */
 
 import { getRedis } from './redis.js'
 
-const BATTLE_TTL   = 3600  // 1 hour  (seconds)
-const PVP_ROOM_TTL = 1800  // 30 min
-const TRADE_TTL    = 1800  // 30 min
+const BATTLE_TTL     = 3600  // 1 hour  (seconds)
+const PVP_ROOM_TTL   = 1800  // 30 min
+const TRADE_TTL      = 1800  // 30 min
+const PVE_MATCH_TTL  = 7200  // 2 hours (active clash PvE game)
+const PVP_MATCH_TTL  = 7200  // 2 hours (active clash PvP game)
 
 // ── Serialisation helpers ────────────────────────────────────────────────────
 
@@ -192,6 +196,97 @@ export async function scanTradeRooms() {
     try {
       const roomName = keys[i].slice('traderoom:'.length)
       results.set(roomName, deserializeTradeRoom(JSON.parse(values[i])))
+    } catch { /* skip corrupt entries */ }
+  }
+  return results
+}
+
+// ── Clash PvE Matches ─────────────────────────────────────────────────────────
+// Stores the serializable parts of an active PvE clash game so the new process
+// can restore the match state after a graceful reload.
+
+function serializePveMatch(match) {
+  return {
+    id:              match.id,
+    recordId:        match.recordId,
+    playerUserId:    match.playerUserId,
+    selectDeadline:  match.selectDeadline,
+    lastActivity:    match.lastActivity,
+    battleState:     match.battle.state,
+    // _pendingActions holds the current-turn selections inside the battle closure
+    pendingActions:  match.battle._pendingActions
+      ? { player: match.battle._pendingActions.player, ai: match.battle._pendingActions.ai }
+      : { player: null, ai: null },
+  }
+}
+
+export async function setPveMatch(gameId, match) {
+  const redis = getRedis()
+  await redis.setex(`pvematch:${gameId}`, PVE_MATCH_TTL, JSON.stringify(serializePveMatch(match)))
+}
+
+export async function delPveMatch(gameId) {
+  const redis = getRedis()
+  await redis.del(`pvematch:${gameId}`)
+}
+
+export async function scanPveMatches() {
+  const redis   = getRedis()
+  const keys    = await scanKeys('pvematch:*')
+  const results = new Map()
+  if (!keys.length) return results
+
+  const values = await redis.mget(...keys)
+  for (let i = 0; i < keys.length; i++) {
+    if (!values[i]) continue
+    try {
+      const gameId = keys[i].slice('pvematch:'.length)
+      results.set(gameId, JSON.parse(values[i]))
+    } catch { /* skip corrupt entries */ }
+  }
+  return results
+}
+
+// ── Clash PvP Matches ─────────────────────────────────────────────────────────
+// Stores the serializable parts of an active PvP clash game.
+
+function serializePvpMatch(match) {
+  return {
+    recordId:       match.recordId,
+    userSide:       match.userSide,
+    pending:        match.pending,
+    confirmed:      match.confirmed,
+    selectDeadline: match.selectDeadline,
+    lastActivity:   match.lastActivity,
+    battleState:    match.battle.state,
+    pendingActions: match.battle._pendingActions
+      ? { player: match.battle._pendingActions.player, ai: match.battle._pendingActions.ai }
+      : { player: null, ai: null },
+  }
+}
+
+export async function setPvpMatch(roomId, match) {
+  const redis = getRedis()
+  await redis.setex(`pvpmatch:${roomId}`, PVP_MATCH_TTL, JSON.stringify(serializePvpMatch(match)))
+}
+
+export async function delPvpMatch(roomId) {
+  const redis = getRedis()
+  await redis.del(`pvpmatch:${roomId}`)
+}
+
+export async function scanPvpMatches() {
+  const redis   = getRedis()
+  const keys    = await scanKeys('pvpmatch:*')
+  const results = new Map()
+  if (!keys.length) return results
+
+  const values = await redis.mget(...keys)
+  for (let i = 0; i < keys.length; i++) {
+    if (!values[i]) continue
+    try {
+      const roomId = keys[i].slice('pvpmatch:'.length)
+      results.set(roomId, JSON.parse(values[i]))
     } catch { /* skip corrupt entries */ }
   }
   return results

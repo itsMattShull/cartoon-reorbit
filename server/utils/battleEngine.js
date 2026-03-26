@@ -29,7 +29,7 @@ const isAbilitySuppressed = (lane, side, card) => {
   )
 }
 
-export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
+export function createBattle ({ playerDeck, aiDeck, lanes, battleId, _restore = null }) {
   /* ───────────── config ───────────── */
   const MAX_TURNS     = 6
   const SELECT_WINDOW = 60_000  // 60 seconds
@@ -39,44 +39,49 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   const draw    = (pile, n = 1) => [...Array(n)].map(() => pile.shift()).filter(Boolean)
 
   /* ───────────── initial state ─────── */
-  const _playerDeck = shuffle([...playerDeck])
-  const _aiDeck     = shuffle([...aiDeck])
+  let state, _pending, _ready
 
-  const state = {
-    id:           battleId,
-    turn:         1,
-    maxTurns:     MAX_TURNS,
-    energy:       1,
-    playerEnergy: 1,
-    aiEnergy:     1,
-    priority:     Math.random() < 0.5 ? 'player' : 'ai', // who reveals first
-    phase:        'select',
-    selectEndsAt: Date.now() + SELECT_WINDOW,
+  if (_restore) {
+    // Restoring from persisted state — skip deck shuffle, hand draw, and ability hooks
+    state    = _restore.state
+    _pending = { ...(_restore.pending || { player: null, ai: null }) }
+    _ready   = { player: false, ai: false }
+  } else {
+    const _playerDeck = shuffle([...playerDeck])
+    const _aiDeck     = shuffle([...aiDeck])
 
-    lanes: shuffle(lanes).slice(0,3).map((l,i) => ({
-      id:         l.id,
-      name:       l.name,
-      desc:       l.desc,
-      abilityKey: l.effect,    // ← turn your “effect” into the key the registry expects
-      revealed:   i===0,
-      player:     [], ai:[]
-    })),
+    state = {
+      id:           battleId,
+      turn:         1,
+      maxTurns:     MAX_TURNS,
+      energy:       1,
+      playerEnergy: 1,
+      aiEnergy:     1,
+      priority:     Math.random() < 0.5 ? 'player' : 'ai', // who reveals first
+      phase:        'select',
+      selectEndsAt: Date.now() + SELECT_WINDOW,
 
-    playerDeck: _playerDeck,
-    aiDeck:     _aiDeck,
-    playerHand: draw(_playerDeck, 4),   // 4‑card starting hand feels nicer
-    aiHand:     draw(_aiDeck, 4),
+      lanes: shuffle(lanes).slice(0,3).map((l,i) => ({
+        id:         l.id,
+        name:       l.name,
+        desc:       l.desc,
+        abilityKey: l.effect,    // ← turn your “effect” into the key the registry expects
+        revealed:   i===0,
+        player:     [], ai:[]
+      })),
 
-    log: []
+      playerDeck: _playerDeck,
+      aiDeck:     _aiDeck,
+      playerHand: draw(_playerDeck, 4),   // 4‑card starting hand feels nicer
+      aiHand:     draw(_aiDeck, 4),
+
+      log: []
+    }
+
+    // selections pending this turn
+    _pending = { player: null, ai: null }
+    _ready   = { player: false, ai: false }
   }
-
-  // selections pending this turn
-  let _pending = {}
-  let _ready   = {}
-  _pending.player = null
-  _pending.ai     = null
-  _ready.player   = false
-  _ready.ai       = false
 
   const battle = {
     /* ---------- information ---------- */
@@ -133,10 +138,11 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
     }
   }
 
-  battle._allLanes = lanes
+  battle._allLanes = _restore ? [] : lanes
   battle._pendingActions = _pending
   battle.log = state.log
 
+  if (!_restore) {
   // 2) now that `battle` exists, do your “always_sneaking_up” deck scan
   for (const side of ['player', 'ai']) {
     const deck = state[side + 'Deck'];
@@ -153,7 +159,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
 
   // 3) and only now fire every card’s onStart
   ;[...state.playerHand, ...state.aiHand].forEach(card => {
-    const side = state.playerHand.includes(card) ? 'player' : 'ai';
+    const side = state.playerHand.includes(card) ? ‘player’ : ‘ai’;
     abilityRegistry[card.abilityKey]?.onStart?.({
       game: battle,
       side,
@@ -161,6 +167,7 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
       card
     });
   });
+  } // end if (!_restore)
 
   /* ───────────── internal helpers ───────────── */
   function applySelections (side) {
@@ -452,10 +459,12 @@ export function createBattle ({ playerDeck, aiDeck, lanes, battleId }) {
   }  
 
   /* ───────────── initial ability onStart hooks ─────────── */
-  ;[...state.playerHand,...state.aiHand].forEach(card=>{
-    const side = state.playerHand.includes(card)?'player':'ai'
-    abilityRegistry[card.abilityKey]?.onStart?.({ game:battle, side, laneIndex:null, card })
-  })
+  if (!_restore) {
+    ;[...state.playerHand,...state.aiHand].forEach(card=>{
+      const side = state.playerHand.includes(card)?'player':'ai'
+      abilityRegistry[card.abilityKey]?.onStart?.({ game:battle, side, laneIndex:null, card })
+    })
+  }
 
   return battle
 }
