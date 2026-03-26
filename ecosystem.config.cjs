@@ -21,6 +21,12 @@
 
 'use strict'
 
+// Load .env so NUXT_PORT / SOCKET_PORT are available at config-parse time
+require('dotenv').config()
+
+const NUXT_PORT   = process.env.NUXT_PORT   || '3000'
+const SOCKET_PORT = process.env.SOCKET_PORT || '3001'
+
 const DIAG_ENV = {
   DIAG_ENABLED:           '0',
   DIAG_DIR:               '/var/www/log/cartoon-reorbit/diagnostics',
@@ -49,12 +55,14 @@ module.exports = {
       max_memory_restart: '2G',
       env: {
         NODE_ENV:    'production',
-        NITRO_PORT:  '3000',
+        NITRO_PORT:  NUXT_PORT,
+        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
       env_development: {
         NODE_ENV:    'production',
-        NITRO_PORT:  '3002',
+        NITRO_PORT:  NUXT_PORT,
+        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
     },
@@ -74,12 +82,12 @@ module.exports = {
       max_memory_restart: '2G',
       env: {
         NODE_ENV:    'production',
-        SOCKET_PORT: '3001',
+        SOCKET_PORT: SOCKET_PORT,
         ...DIAG_ENV,
       },
       env_development: {
         NODE_ENV:    'production',
-        SOCKET_PORT: '3003',
+        SOCKET_PORT: SOCKET_PORT,
         ...DIAG_ENV,
       },
     },
@@ -90,7 +98,8 @@ module.exports = {
       script:    'server/workers/mint.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -99,7 +108,8 @@ module.exports = {
       script:    'server/workers/dissolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -108,7 +118,8 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -117,7 +128,8 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production' },
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
   ],
 }
