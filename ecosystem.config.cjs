@@ -51,8 +51,8 @@ module.exports = {
       wait_ready:         true,
       listen_timeout:     15000,   // ms to wait for 'ready' signal
       kill_timeout:       5000,    // ms to allow in-flight requests to finish
-      node_args:          '--max-old-space-size=2048',
-      max_memory_restart: '2G',
+      node_args:          '--max-old-space-size=1024',
+      max_memory_restart: '1G',
       env: {
         NODE_ENV:    'production',
         NITRO_PORT:  NUXT_PORT,
@@ -78,8 +78,8 @@ module.exports = {
       wait_ready:         true,
       listen_timeout:     15000,
       kill_timeout:       8000,    // extra time to drain active game connections
-      node_args:          '--max-old-space-size=2048',
-      max_memory_restart: '2G',
+      node_args:          '--max-old-space-size=1024',
+      max_memory_restart: '1G',
       env: {
         NODE_ENV:    'production',
         SOCKET_PORT: SOCKET_PORT,
