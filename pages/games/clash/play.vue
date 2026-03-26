@@ -203,6 +203,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClashSocket } from '@/composables/useClashSocket'
+import { useAuth } from '@/composables/useAuth'
 import ClashGameBoard from '@/components/ClashGameBoard.vue'
 import ClashHand from '@/components/ClashHand.vue'
 import Nav from '@/components/Nav.vue'
@@ -212,6 +213,7 @@ definePageMeta({ title: 'gToons Clash Play', middleware: 'auth', layout: 'defaul
 
 // shared Nuxt state
 const { socket, battleState } = useClashSocket()
+const { user } = useAuth()
 const game = computed(() => battleState.value)
 
 const router  = useRouter()
@@ -320,6 +322,15 @@ const laneScores = computed(() => {
 
 // socket handlers
 function wireSocket() {
+  // Re-join an in-progress PvE game after a socket reconnect (e.g. server reload).
+  // battleState still holds the last-known state (module-level ref), so the gameId
+  // and the fact that no summary exists tells us the game was in progress.
+  socket.on('connect', () => {
+    if (battleState.value?.id && !summary.value && user.value?.id) {
+      socket.emit('pve:rejoin', { gameId: battleState.value.id, userId: user.value.id })
+    }
+  })
+
   socket.on('phaseUpdate', state => {
     // write into battleState only:
     battleState.value = state
@@ -414,6 +425,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  socket.off('connect')
   socket.off('phaseUpdate')
   socket.off('gameEnd')
   clearInterval(timerId)
