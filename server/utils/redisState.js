@@ -11,6 +11,8 @@
  *   battle:user:{uid}  – userId → battleId lookup
  *   pvproom:{id}       – PvP lobby room
  *   traderoom:{name}   – live trade room
+ *   pvematch:{id}      – active clash PvE game
+ *   pvpmatch:{id}      – active clash PvP game
  */
 
 import { getRedis } from './redis.js'
