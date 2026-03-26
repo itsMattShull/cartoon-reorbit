@@ -48,7 +48,13 @@ module.exports = {
       node_args:          '--max-old-space-size=2048',
       max_memory_restart: '2G',
       env: {
-        NODE_ENV: 'production',
+        NODE_ENV:    'production',
+        NITRO_PORT:  '3000',
+        ...DIAG_ENV,
+      },
+      env_development: {
+        NODE_ENV:    'production',
+        NITRO_PORT:  '3002',
         ...DIAG_ENV,
       },
     },
@@ -69,6 +75,11 @@ module.exports = {
       env: {
         NODE_ENV:    'production',
         SOCKET_PORT: '3001',
+        ...DIAG_ENV,
+      },
+      env_development: {
+        NODE_ENV:    'production',
+        SOCKET_PORT: '3003',
         ...DIAG_ENV,
       },
     },
