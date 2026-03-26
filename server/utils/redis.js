@@ -7,7 +7,7 @@ export function getRedis() {
   _redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
     port: Number(process.env.REDIS_PORT || 6379),
-    password: process.env.REDIS_PASSWORD || undefined,
+    password: process.env.REDIS_PASSWORD?.trim() || undefined,
     lazyConnect: false,
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
