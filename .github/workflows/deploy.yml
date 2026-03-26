@@ -39,7 +39,6 @@ jobs:
                 [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
                 command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
-                pm2 stop 0 1 2 3 4 5
                 cd /var/www/cartoon-reorbit
                 git pull origin master
 
@@ -48,8 +47,13 @@ jobs:
                 npx prisma generate
                 npm run build
 
-                pm2 restart 0 1 2 3 4 5 --update-env
-              "'
+                # Graceful rolling reload — waits for each process to signal ready
+                # before killing the old instance (zero-downtime for nuxt-server,
+                # clean drain for socket-server and workers).
+                # NOTE: first deploy after adding this file requires:
+                #   pm2 start ecosystem.config.cjs  (one-time manual step on server)
+                pm2 reload ecosystem.config.cjs --update-env
+              "'"
   deploy_development:
     if: ${{ github.ref_name == 'dev' }}
     runs-on: ubuntu-latest
@@ -85,8 +89,6 @@ jobs:
           nvm install 23.10.0 >/dev/null
           nvm use 23.10.0 >/dev/null
 
-          pm2 stop 4 2 3 5 6
-
           cd /var/www/dev.cartoon-reorbit
 
           # Keep repo clean between deploys
@@ -100,5 +102,6 @@ jobs:
           npx prisma generate
           npm run build
 
-          pm2 restart 4 2 3 5 6 --update-env
+          # Graceful rolling reload (see production job for notes)
+          pm2 reload ecosystem.config.cjs --update-env
           EOF
