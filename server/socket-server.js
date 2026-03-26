@@ -3174,10 +3174,41 @@ async function boot() {
   }
   // ───────────────────────────────────────────────────────────────────────────
 
-  httpServer.listen(PORT, () => {
-    console.log(`Socket server listening on port ${PORT}`)
-    // Signal PM2 that this instance is ready to accept traffic (used by graceful reload)
-    if (process.send) process.send('ready')
+  await startListening(PORT)
+}
+
+// Bind the HTTP server, retrying on EADDRINUSE so that PM2 graceful reloads
+// don't crash the incoming process while the outgoing one is still draining.
+function startListening(port, maxRetries = 8, baseDelayMs = 1000) {
+  return new Promise((resolve, reject) => {
+    let attempt = 0
+
+    function tryListen() {
+      const onError = (err) => {
+        if (err.code === 'EADDRINUSE' && attempt < maxRetries) {
+          const delay = baseDelayMs * 2 ** attempt
+          attempt++
+          console.log(
+            `[Boot] Port ${port} busy (EADDRINUSE); retrying in ${delay}ms… ` +
+            `(attempt ${attempt}/${maxRetries})`
+          )
+          setTimeout(tryListen, delay)
+        } else {
+          reject(err)
+        }
+      }
+
+      httpServer.once('error', onError)
+      httpServer.listen(port, () => {
+        httpServer.removeListener('error', onError)
+        console.log(`Socket server listening on port ${port}`)
+        // Signal PM2 that this instance is ready to accept traffic (used by graceful reload)
+        if (process.send) process.send('ready')
+        resolve()
+      })
+    }
+
+    tryListen()
   })
 }
 
