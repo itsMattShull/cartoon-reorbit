@@ -53,7 +53,7 @@ jobs:
                 # NOTE: first deploy after adding this file requires:
                 #   pm2 start ecosystem.config.cjs  (one-time manual step on server)
                 pm2 reload ecosystem.config.cjs --update-env
-              "'"
+              "'
   deploy_development:
     if: ${{ github.ref_name == 'dev' }}
     runs-on: ubuntu-latest
