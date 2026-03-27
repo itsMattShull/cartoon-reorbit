@@ -9,7 +9,7 @@
           class="absolute inset-y-0 left-4 flex items-center gap-3
                 md:left-1/2 md:-translate-x-1/2"
         >
-          <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+          <img :src="currentAdSrc || '/images/newlogo.gif'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
           <span class="sr-only">Cartoon ReOrbit</span>
         </NuxtLink>
 
@@ -400,7 +400,7 @@ const url = useRequestURL()
 const siteName = 'Cartoon ReOrbit'
 const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
 const description = 'Collect cToons, build cZones, and trade through live auctions and mini-games. Free, community-driven remake of Cartoon Orbit. Not affiliated with Cartoon Network.'
-const ogImage = 'https://www.cartoonreorbit.com/images/logo-reorbit.png'
+const ogImage = 'https://www.cartoonreorbit.com/images/newlogo.gif'
 
 useSeoMeta({
   title,
@@ -457,7 +457,7 @@ useHead({
         '@type': 'Organization',
         name: siteName,
         url: url.origin,
-        logo: `${url.origin}/logo-reorbit.png`
+        logo: `${url.origin}/newlogo.gif`
       })
     },
     {

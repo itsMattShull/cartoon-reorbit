@@ -31,7 +31,8 @@ export default defineEventHandler(async (event) => {
     czoneVisitMaxPerDay,
     czoneCount,
     phashDuplicateThreshold,
-    dhashDuplicateThreshold
+    dhashDuplicateThreshold,
+    featuredAuctionsPerDay
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -51,7 +52,8 @@ export default defineEventHandler(async (event) => {
     czoneVisitMaxPerDay:(typeof czoneVisitMaxPerDay=== 'number') ? Number(czoneVisitMaxPerDay): undefined,
     czoneCount:         (typeof czoneCount         === 'number') ? Number(czoneCount)         : undefined,
     phashDuplicateThreshold: (typeof phashDuplicateThreshold === 'number') ? Number(phashDuplicateThreshold) : undefined,
-    dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined
+    dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined,
+    featuredAuctionsPerDay: (typeof featuredAuctionsPerDay === 'number') ? Number(featuredAuctionsPerDay) : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -68,7 +70,8 @@ export default defineEventHandler(async (event) => {
         czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay ?? 10,
         czoneCount: payload.czoneCount ?? 3,
         phashDuplicateThreshold: payload.phashDuplicateThreshold ?? 14,
-        dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16
+        dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16,
+        featuredAuctionsPerDay: payload.featuredAuctionsPerDay ?? 1
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -79,7 +82,8 @@ export default defineEventHandler(async (event) => {
         ...(payload.czoneVisitMaxPerDay !== undefined ? { czoneVisitMaxPerDay: payload.czoneVisitMaxPerDay } : {}),
         ...(payload.czoneCount          !== undefined ? { czoneCount:          payload.czoneCount }          : {}),
         ...(payload.phashDuplicateThreshold !== undefined ? { phashDuplicateThreshold: payload.phashDuplicateThreshold } : {}),
-        ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {})
+        ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {}),
+        ...(payload.featuredAuctionsPerDay !== undefined ? { featuredAuctionsPerDay: payload.featuredAuctionsPerDay } : {})
       }
     })
     // Log field-level changes
@@ -91,7 +95,8 @@ export default defineEventHandler(async (event) => {
       'czoneVisitMaxPerDay',
       'czoneCount',
       'phashDuplicateThreshold',
-      'dhashDuplicateThreshold'
+      'dhashDuplicateThreshold',
+      'featuredAuctionsPerDay'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined

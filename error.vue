@@ -12,7 +12,7 @@
           aria-label="Go to homepage"
         >
           <img
-            src="/images/logo-reorbit.png"
+            src="/images/newlogo.gif"
             alt="Cartoon ReOrbit logo"
             class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none"
           />
@@ -72,9 +72,7 @@ const props = defineProps({
 
 const statusCode = computed(() => props.error?.statusCode || 500)
 const isServerError = computed(() => statusCode.value >= 500)
-const headline = computed(() =>
-  isServerError.value ? 'G-Toons are fixing it.' : 'That page drifted out of orbit.'
-)
+const headline = 'That page drifted out of orbit.'
 const message = computed(() =>
   isServerError.value
     ? 'We hit a server snag. Try again in a moment or head back home.'

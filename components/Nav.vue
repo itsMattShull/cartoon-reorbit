@@ -31,7 +31,7 @@
         to="/dashboard"
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
       >
-        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+        <img :src="currentAdSrc || '/images/newlogo.gif'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
         <span class="sr-only">Cartoon ReOrbit</span>
       </NuxtLink>
       <a
@@ -41,7 +41,7 @@
         rel="noopener noreferrer"
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
       >
-        <img :src="currentAdSrc || '/images/logo-reorbit.png'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
+        <img :src="currentAdSrc || '/images/newlogo.gif'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
         <span class="sr-only">Cartoon ReOrbit</span>
       </a>
 
@@ -70,7 +70,7 @@
     >
       <!-- brand -->
       <div class="h-16 px-5 flex items-center gap-3 border-b border-[color:var(--reorbit-border)]">
-        <img src='/images/logo-reorbit.png' alt="Cartoon ReOrbit" class="h-8 w-auto" />
+        <img src='/images/newlogo.gif' alt="Cartoon ReOrbit" class="h-8 w-auto" />
         <span class="text-sm text-[var(--reorbit-blue)] font-semibold">Cartoon ReOrbit</span>
         <button @click="close" class="ml-auto text-slate-500 hover:text-[var(--reorbit-blue)]" aria-label="Close nav">✕</button>
       </div>

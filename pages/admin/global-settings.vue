@@ -19,6 +19,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Image Duplicates' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Image Duplicates'">Image Duplicates</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Auctions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Auctions'">Auctions</button>
         </nav>
       </div>
 
@@ -166,6 +170,25 @@
         </div>
       </section>
 
+      <!-- Auctions tab -->
+      <section v-if="activeTab==='Auctions'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure daily auction settings.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Featured Auctions Per Day</label>
+            <input type="number" min="0" class="input" v-model.number="featuredAuctionsPerDay" />
+            <p class="text-xs text-gray-500 mt-1">Number of featured auctions placed into live auctions each day. Set to 0 to disable.</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="savingAuctions" @click="saveAuctions">
+            <span v-if="!savingAuctions">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -185,6 +208,7 @@ const toast  = ref(null)
 const savingGlobal = ref(false)
 const savingRarity = ref(false)
 const savingDuplicates = ref(false)
+const savingAuctions = ref(false)
 
 // Global Points state
 const dailyLoginPoints     = ref(500)
@@ -195,6 +219,7 @@ const czoneVisitMaxPerDay  = ref(10)
 const czoneCount           = ref(3)
 const phashDuplicateThreshold = ref(14)
 const dhashDuplicateThreshold = ref(16)
+const featuredAuctionsPerDay = ref(1)
 
 async function loadGlobal() {
   try {
@@ -208,6 +233,7 @@ async function loadGlobal() {
     czoneCount.value           = Number(g?.czoneCount           ?? 3)
     phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
     dhashDuplicateThreshold.value = Number(g?.dhashDuplicateThreshold ?? 16)
+    featuredAuctionsPerDay.value  = Number(g?.featuredAuctionsPerDay  ?? 1)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -277,6 +303,24 @@ async function saveRarity() {
 }
 
 onMounted(loadRarityDefaults)
+
+async function saveAuctions() {
+  savingAuctions.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config', {
+      method: 'POST',
+      body: {
+        dailyPointLimit: Number(dailyPointLimit.value),
+        featuredAuctionsPerDay: Number(featuredAuctionsPerDay.value)
+      }
+    })
+    toast.value = { type: 'ok', msg: 'Auction settings saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    savingAuctions.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
 
 async function saveDuplicateSettings() {
   savingDuplicates.value = true; toast.value = null
