@@ -295,7 +295,7 @@
                         Mint #{{ auction.mintNumber ?? 'N/A' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
-                        Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
+                        Starting Bid: {{ auction.initialBid != null ? Number(auction.initialBid).toLocaleString() + ' points' : '—' }}
                       </p>
                       <p class="text-sm text-gray-600 mb-1">
                         Highest Bid: {{ formatHighestBid(auction) }}
@@ -366,7 +366,7 @@
                     Mint #{{ auction.mintNumber ?? 'N/A' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
-                    Starting Bid: {{ auction.initialBid != null ? auction.initialBid + ' points' : '—' }}
+                    Starting Bid: {{ auction.initialBid != null ? Number(auction.initialBid).toLocaleString() + ' points' : '—' }}
                   </p>
                   <p class="text-sm text-gray-600 mb-1">
                     Highest Bid: {{ formatHighestBid(auction) }}
@@ -491,10 +491,10 @@
 
               <h2 class="text-lg font-semibold mb-1 truncate">{{ bid.name }}</h2>
               <p class="text-sm text-gray-600 mb-1">
-                Your Bid: {{ bid.myBid != null ? bid.myBid + ' points' : '—' }}
+                Your Bid: {{ bid.myBid != null ? Number(bid.myBid).toLocaleString() + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
-                Starting Bid: {{ bid.initialBid != null ? bid.initialBid + ' points' : '—' }}
+                Starting Bid: {{ bid.initialBid != null ? Number(bid.initialBid).toLocaleString() + ' points' : '—' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Highest Bid: {{ formatHighestBid(bid) }}
@@ -602,9 +602,9 @@
               <p v-if="!isEnded(auction.endAt)" class="text-sm text-red-600 mb-1">
                 Ending in: {{ formatRemaining(auction.endAt) }}
               </p>
-              <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ auction.initialBid }} points</p>
+              <p class="text-sm text-gray-600 mb-1">Initial Bid: {{ Number(auction.initialBid).toLocaleString() }} points</p>
               <p class="text-sm text-gray-600 mb-1">
-                Winning Bid: {{ auction.winningBid != null ? auction.winningBid + ' points' : 'No bids' }}
+                Winning Bid: {{ auction.winningBid != null ? Number(auction.winningBid).toLocaleString() + ' points' : 'No bids' }}
               </p>
               <p class="text-sm text-gray-600 mb-1">
                 Bids: {{ auction.bidCount ?? 0 }}
@@ -1167,7 +1167,7 @@ function formatHighestBid(item) {
   if (bidCount < 1) return 'No bids'
 
   const highestBid = item?.highestBid
-  if (highestBid != null) return `${highestBid} points`
+  if (highestBid != null) return `${Number(highestBid).toLocaleString()} points`
 
   return 'No bids'
 }
