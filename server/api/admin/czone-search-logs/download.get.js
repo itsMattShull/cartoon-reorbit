@@ -54,18 +54,22 @@ export default defineEventHandler(async (event) => {
     select: {
       createdAt: true,
       user: { select: { username: true } },
-      capture: { select: { id: true } }
+      capture: { select: { id: true } },
+      ctoon: { select: { name: true } },
+      cZoneSearch: { select: { name: true } }
     },
     orderBy: { createdAt: 'asc' }
   })
 
-  const rows = [['datetime_cst', 'username', 'appearance', 'captured']]
+  const rows = [['datetime_cst', 'username', 'appearance', 'captured', 'ctoon_name', 'czone_search_name']]
   for (const a of appearances) {
     rows.push([
       escapeCsv(toCSTString(a.createdAt)),
       escapeCsv(a.user?.username ?? ''),
       '1',
-      a.capture ? '1' : '0'
+      a.capture ? '1' : '0',
+      escapeCsv(a.ctoon?.name ?? ''),
+      escapeCsv(a.cZoneSearch?.name ?? '')
     ])
   }
 
