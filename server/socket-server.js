@@ -3,12 +3,15 @@ dotenv.config()
 
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
+import { createAdapter } from '@socket.io/redis-adapter'
 import { prisma as db }  from './prisma.js'
 import { DateTime } from 'luxon'
 import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
 import { redisConnection, scheduleAuctionClose } from './utils/queues.js'
+import { getRedis } from './utils/redis.js'
+import * as redisState from './utils/redisState.js'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -45,6 +48,29 @@ const httpServer = createServer()
 const io = new Server(httpServer, { cors: { origin: '*' } })
 attachSocketIoMetrics(io)
 
+// ── Redis adapter (pub/sub between instances) ──────────────────────────────
+// Using duplicate() so pub and sub clients are independent connections.
+const _redisPub = getRedis()
+const _redisSub = _redisPub.duplicate()
+io.adapter(createAdapter(_redisPub, _redisSub))
+
+// ── Redis sync helpers (fire-and-forget) ───────────────────────────────────
+// Write to Redis after every mutating Map operation so state survives restarts.
+const syncBattle = (battleId, battle) =>
+  redisState.setBattle(battleId, battle).catch(e => console.error('[redisState] setBattle:', e))
+const syncBattleByUser = (userId, battleId) =>
+  redisState.setBattleByUser(userId, battleId).catch(e => console.error('[redisState] setBattleByUser:', e))
+const syncDeleteBattle = (battleId, userIds = []) =>
+  redisState.delBattle(battleId, userIds).catch(e => console.error('[redisState] delBattle:', e))
+const syncPvpRoom = (roomId, room) =>
+  redisState.setPvpRoom(roomId, room).catch(e => console.error('[redisState] setPvpRoom:', e))
+const syncDeletePvpRoom = (roomId) =>
+  redisState.delPvpRoom(roomId).catch(e => console.error('[redisState] delPvpRoom:', e))
+const syncTradeRoom = (roomName, room) =>
+  redisState.setTradeRoom(roomName, room).catch(e => console.error('[redisState] setTradeRoom:', e))
+const syncDeleteTradeRoom = (roomName) =>
+  redisState.delTradeRoom(roomName).catch(e => console.error('[redisState] delTradeRoom:', e))
+
 /* ────────────────────────────────────────────────────────────
  *  cZone visitors & chat (unchanged)
  * ────────────────────────────────────────────────────────── */
@@ -60,16 +86,11 @@ const monsterBattles = new Map();      // battleId -> { state, recordId, actions
 const monsterBattleByUser = new Map(); // userId -> battleId
 const MONSTER_ACTION_TIMEOUT_MS = 60_000
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000
-const PVP_ROOM_IDLE_MS = 30 * 60 * 1000
+const PVP_ROOM_IDLE_MS = 10 * 60 * 1000
 const PVP_MATCH_IDLE_MS = 5 * 60 * 1000
 const PVE_MATCH_IDLE_MS = 5 * 60 * 1000
 const MONSTER_BATTLE_IDLE_MS = 5 * 60 * 1000
-const TRADE_ROOM_IDLE_MS = 30 * 60 * 1000
-
-const METRICS_SAMPLE_MS = Number(process.env.SOCKET_METRICS_SAMPLE_MS || 60_000)
-const METRICS_HISTORY_LIMIT = Number(process.env.SOCKET_METRICS_HISTORY_LIMIT || 1440)
-const METRICS_TOKEN = process.env.SOCKET_METRICS_TOKEN || ''
-const metricsHistory = []
+const TRADE_ROOM_IDLE_MS = 10 * 60 * 1000
 
 /* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
@@ -83,120 +104,6 @@ const touchActivity = (obj) => {
 
 const isIdle = (obj, now, maxMs) => (now - (obj?.lastActivity || 0)) > maxMs
 
-function getSocketMetricsSnapshot() {
-  const zoneNames = Object.keys(zoneSockets)
-  let zoneSocketRefs = 0
-  for (const zone of zoneNames) {
-    const set = zoneSockets[zone]
-    zoneSocketRefs += set ? set.size : 0
-  }
-
-  const tradeRoomNames = Object.keys(tradeRooms)
-  let tradeSpectators = 0
-  for (const roomName of tradeRoomNames) {
-    const room = tradeRooms[roomName]
-    tradeSpectators += room?.spectators?.size || 0
-  }
-
-  const adapterRooms = io.sockets.adapter.rooms
-  const socketIds = new Set(io.sockets.sockets.keys())
-  let auctionSocketMembers = 0
-
-  for (const [roomName, members] of adapterRooms) {
-    if (socketIds.has(roomName)) continue
-    if (roomName.startsWith('auction_')) {
-      auctionSocketMembers += members?.size || 0
-    }
-  }
-
-  let monsterSocketMembers = 0
-  for (const battleId of monsterBattles.keys()) {
-    monsterSocketMembers += roomSize(io, battleId)
-  }
-
-  let clashSocketMembers = 0
-  for (const roomId of pvpRooms.keys()) {
-    clashSocketMembers += roomSize(io, roomId)
-  }
-  for (const roomId of pvpMatches.keys()) {
-    clashSocketMembers += roomSize(io, roomId)
-  }
-  for (const gameId of pveMatches.keys()) {
-    clashSocketMembers += roomSize(io, gameId)
-  }
-
-  const mem = process.memoryUsage()
-
-  return {
-    ts: Date.now(),
-    activeSockets: io.sockets.sockets.size,
-    zoneCount: zoneNames.length,
-    zoneSocketRefs,
-    zoneVisitorCount: Object.values(zoneVisitors).reduce((sum, count) => sum + Number(count || 0), 0),
-    tradeRoomCount: tradeRoomNames.length,
-    tradeSpectators,
-    tradeSocketsCount: Object.keys(tradeSockets).length,
-    auctionSocketMembers,
-    monsterSocketMembers,
-    clashSocketMembers,
-    pvpRoomCount: pvpRooms.size,
-    pvpMatchCount: pvpMatches.size,
-    pveMatchCount: pveMatches.size,
-    monsterBattleCount: monsterBattles.size,
-    rssMb: Math.round(mem.rss / 1024 / 1024),
-    heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024)
-  }
-}
-
-function recordSocketMetrics() {
-  const sample = getSocketMetricsSnapshot()
-  metricsHistory.push(sample)
-  if (metricsHistory.length > METRICS_HISTORY_LIMIT) {
-    metricsHistory.splice(0, metricsHistory.length - METRICS_HISTORY_LIMIT)
-  }
-  return sample
-}
-
-httpServer.on('request', (req, res) => {
-  if (!req?.url) return
-  const host = req.headers.host || 'localhost'
-  const url = new URL(req.url, `http://${host}`)
-  if (url.pathname.startsWith(SOCKET_PATH)) return
-
-  if (url.pathname === '/metrics/socket') {
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, x-metrics-token'
-    }
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, headers)
-      res.end()
-      return
-    }
-
-    const token = Array.isArray(req.headers['x-metrics-token'])
-      ? req.headers['x-metrics-token'][0]
-      : req.headers['x-metrics-token']
-    if (METRICS_TOKEN && token !== METRICS_TOKEN) {
-      res.writeHead(401, headers)
-      res.end(JSON.stringify({ error: 'Unauthorized' }))
-      return
-    }
-
-    if (!metricsHistory.length) recordSocketMetrics()
-    const limit = Number(url.searchParams.get('limit') || METRICS_HISTORY_LIMIT)
-    const samples = metricsHistory.slice(-limit)
-    const latest = samples[samples.length - 1] || metricsHistory[metricsHistory.length - 1] || getSocketMetricsSnapshot()
-
-    res.writeHead(200, { ...headers, 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ intervalMs: METRICS_SAMPLE_MS, latest, samples }))
-    return
-  }
-
-  res.writeHead(404, { 'Content-Type': 'text/plain' })
-  res.end('Not Found')
-})
 
 const ASSET_BASE =
   process.env.ASSET_BASE ||
@@ -355,6 +262,25 @@ const scheduleMonsterTimeouts = (io, battle) => {
   scheduleMonsterActionTimeout(io, battle, 'player2')
 }
 
+// Rebuild in-memory action timers for a battle loaded from Redis on boot.
+// Uses stored deadline timestamps to calculate remaining time.
+const reconstructBattleTimers = (io, battle) => {
+  const now = Date.now()
+  for (const playerKey of ['player1', 'player2']) {
+    const participant = battle.state?.participants?.[playerKey]
+    if (!participant || participant.isAi) continue
+    if (battle.actions?.[playerKey]) continue  // action already submitted
+    const deadline = battle.deadlines?.[playerKey]
+    if (!deadline) continue
+    const remaining = Math.max(1000, deadline - now)
+    battle.timers[playerKey] = setTimeout(() => {
+      handleMonsterForfeit(io, battle, playerKey, 'TIMEOUT').catch(err => {
+        console.error('[battle] reconstructed timer forfeit failed:', err)
+      })
+    }, remaining)
+  }
+}
+
 const persistMonsterBattleState = async (battle) => {
   const p1 = battle.state.participants.player1
   const p2 = battle.state.participants.player2
@@ -383,6 +309,7 @@ const cleanupMonsterBattle = (battle) => {
   if (p1Id) monsterBattleByUser.delete(String(p1Id))
   if (p2Id) monsterBattleByUser.delete(String(p2Id))
   monsterBattles.delete(battle.state.id)
+  syncDeleteBattle(battle.state.id, [p1Id, p2Id].filter(Boolean).map(String))
 }
 
 const finishMonsterBattle = async (io, battle, resultPayload) => {
@@ -489,6 +416,7 @@ const resolveMonsterTurn = async (io, battle) => {
   battle.state.turnNumber += 1
   battle.actions = { player1: null, player2: null }
   scheduleMonsterTimeouts(io, battle)
+  syncBattle(battle.state.id, battle)
   io.to(battle.state.id).emit('battle:state', battlePublicState(battle))
 }
 
@@ -709,6 +637,22 @@ function aiChooseSelections(battle) {
 
 const pveMatches = new Map()
 
+// Set to true during graceful shutdown so disconnect handlers don't prematurely
+// end active games — the state has already been saved to Redis.
+let isShuttingDown = false
+
+// Fire-and-forget Redis sync helpers for clash matches
+function syncPveMatch(gameId, match) {
+  redisState.setPveMatch(gameId, match).catch(err =>
+    console.error('[Redis] Failed to sync PvE match', gameId, err)
+  )
+}
+function syncPvpMatch(roomId, match) {
+  redisState.setPvpMatch(roomId, match).catch(err =>
+    console.error('[Redis] Failed to sync PvP match', roomId, err)
+  )
+}
+
 function broadcastPhase(io, match) {
   io.to(match.id).emit('phaseUpdate', match.battle.publicState())
 }
@@ -809,6 +753,7 @@ async function endMatch(io, match, result) {
 
   clearInterval(match.timer);
   pveMatches.delete(match.id);
+  redisState.delPveMatch(match.id).catch(() => {})
 }
 
 
@@ -924,6 +869,7 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
 
     // cleanup
     pvpMatches.delete(roomId)
+    redisState.delPvpMatch(roomId).catch(() => {})
     io.emit('roomRemoved', { id: roomId })
     return
   }
@@ -947,14 +893,16 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
 
     if (size <= 0) {
       pvpRooms.delete(roomId)
+      syncDeletePvpRoom(roomId)
       io.emit('roomRemoved', { id: roomId })
     } else if (lobby.players.length === 1) {
       const u = await db.user.findUnique({
         where: { id: lobby.players[0] },
         select: { username: true }
       })
-      io.emit('roomCreated', { 
-        id: roomId, 
+      syncPvpRoom(roomId, lobby)
+      io.emit('roomCreated', {
+        id: roomId,
         owner: u?.username || 'Unknown',
         points: lobby.stakePoints ?? 0
       })
@@ -1117,6 +1065,8 @@ async function startPvpMatch(roomId) {
     lastActivity: Date.now()
   })
   pvpRooms.delete(roomId); // no longer a lobby entity
+  syncDeletePvpRoom(roomId)  // remove lobby entry from Redis now that match is active
+  syncPvpMatch(roomId, pvpMatches.get(roomId))
 
   (async () => {
     const match = pvpMatches.get(roomId);
@@ -1176,6 +1126,7 @@ function startPvpTimer(io, roomId) {
           });
         }
         pvpMatches.delete(roomId);
+        redisState.delPvpMatch(roomId).catch(() => {})
         return;
       }
 
@@ -1229,6 +1180,7 @@ function startPvpTimer(io, roomId) {
       }
 
       pvpMatches.delete(roomId);
+      redisState.delPvpMatch(roomId).catch(() => {})
       return;
     }
     // -----------------------------------
@@ -1310,6 +1262,7 @@ function startPvpTimer(io, roomId) {
         });
       }
       pvpMatches.delete(roomId);
+      redisState.delPvpMatch(roomId).catch(() => {})
     }
   }, 1000);
 }
@@ -1454,6 +1407,9 @@ io.on('connection', socket => {
       monsterBattles.set(record.id, battle)
       monsterBattleByUser.set(uid, record.id)
       if (player2UserId) monsterBattleByUser.set(player2UserId, record.id)
+      syncBattle(record.id, battle)
+      syncBattleByUser(uid, record.id)
+      if (player2UserId) syncBattleByUser(player2UserId, record.id)
 
       socket.join(record.id)
       socket.data.monsterBattleId = record.id
@@ -1621,6 +1577,7 @@ io.on('connection', socket => {
       select: { username: true, discordId: true }
     })
     pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
+    syncPvpRoom(roomId, pvpRooms.get(roomId))
     io.emit('roomCreated', { id: roomId, owner: u?.username || 'Unknown', points: stake })
 
     // ── Discord announce: new gToons Clash PvP room ─────────────────────────
@@ -1699,6 +1656,25 @@ io.on('connection', socket => {
 
   // --- Join existing PvP room ---
   socket.on('joinClashRoom', async ({ roomId, userId, deck }) => {
+    const uid = sid(userId)
+
+    // If the game has already started (lobby → active match transition), treat this
+    // as a reconnect rather than a new join.  Handles both post-reload rejoins and
+    // the case where a player navigates back to the room URL mid-game.
+    if (pvpMatches.has(roomId)) {
+      const match = pvpMatches.get(roomId)
+      if (match.userSide?.[uid]) {
+        socket.data.roomId = roomId
+        socket.data.userId = uid
+        socket.join(roomId)
+        touchActivity(match)
+        socket.emit('gameStart', viewForUser(match, uid))
+      } else {
+        socket.emit('joinError', { message: 'Room unavailable.' })
+      }
+      return
+    }
+
     const room = pvpRooms.get(roomId);
     if (!room || room.players.length !== 1) {
       socket.emit('joinError', { message: 'Room unavailable.' });
@@ -1707,7 +1683,6 @@ io.on('connection', socket => {
     touchActivity(room)
     socket.join(roomId)
     socket.data.roomId = roomId
-    const uid = sid(userId)
     socket.data.userId = uid
 
     const ownerId = room.players[0]
@@ -1831,6 +1806,9 @@ io.on('connection', socket => {
         }
         s.emit('phaseUpdate', snap);
       }
+
+      // Persist updated match state after each completed turn
+      if (match.battle.state.phase !== 'gameEnd') syncPvpMatch(roomId, match)
     }
   });
 
@@ -1881,6 +1859,7 @@ io.on('connection', socket => {
       }
 
       pveMatches.set(gameId, match)
+      syncPveMatch(gameId, match)
 
       socket.data.gameId = gameId
       socket.join(gameId)
@@ -1927,6 +1906,9 @@ io.on('connection', socket => {
     startSelectTimer(io, match)
     broadcastPhase(io, match)
 
+    // persist updated state after each turn
+    if (match.battle.state.phase !== 'gameEnd') syncPveMatch(match.id, match)
+
     // handle game end
     if (match.battle.state.phase === 'gameEnd') {
       endMatch(io, match, match.battle.state.result)
@@ -1935,6 +1917,9 @@ io.on('connection', socket => {
 
   /* ── Disconnect handling ──────────────────────────────── */
   socket.on('disconnect', () => {
+    // During a graceful server reload the state has been saved to Redis — don't
+    // end the game immediately; the player will rejoin via pve:rejoin.
+    if (isShuttingDown) return
     const gid = socket.data.gameId
     if (!gid) return
     const match = pveMatches.get(gid)
@@ -1981,6 +1966,90 @@ io.on('connection', socket => {
     io.to(zone).emit('chat-message', { user, message })
   })
 
+  // ── Reconnect rejoin handlers ──────────────────────────────────────────────
+  // Emitted by clients on socket reconnect to restore their session.
+
+  // PvP lobby: re-join room and receive current lobby snapshot
+  socket.on('pvp:rejoin', ({ roomId, userId }) => {
+    const room = pvpRooms.get(roomId)
+    if (!room) return
+    const uid = sid(userId)
+    socket.join(roomId)
+    socket.data.roomId = roomId
+    socket.data.userId = uid
+    touchActivity(room)
+    socket.emit('pvpLobbyState', lobbySnapshot(room))
+  })
+
+  // Trade room: re-join and receive current trade state
+  socket.on('trade:rejoin', async ({ room, user }) => {
+    const roomData = tradeRooms[room]
+    if (!roomData) return
+    socket.tradeRoom = room
+    socket.user = user
+    socket.join(room)
+    touchActivity(roomData)
+    // Restore spectator entry if not a named trader
+    if (roomData.traderA !== user && roomData.traderB !== user) {
+      roomData.spectators.add(socket.id)
+    }
+    tradeSockets[socket.id] = room
+    const traderAUser = roomData.traderA
+      ? await db.user.findUnique({
+          where: { username: roomData.traderA },
+          select: { username: true, avatar: true }
+        })
+      : null
+    const traderBUser = roomData.traderB
+      ? await db.user.findUnique({
+          where: { username: roomData.traderB },
+          select: { username: true, avatar: true }
+        })
+      : null
+    socket.emit('trade-room-update', {
+      traderA: traderAUser,
+      traderB: traderBUser,
+      spectators: roomData.spectators.size,
+      offers: roomData.offers,
+      confirmed: roomData.confirmed
+    })
+  })
+
+  // PvE clash match: re-join after socket reconnect / server restart
+  socket.on('pve:rejoin', ({ gameId, userId }) => {
+    const match = pveMatches.get(gameId)
+    if (!match) return
+    const uid = sid(userId)
+    if (match.playerUserId !== uid) return  // security: only the original player may rejoin
+
+    socket.data.gameId = gameId
+    socket.data.userId = uid
+    socket.join(gameId)
+    touchActivity(match)
+
+    // Start the select-phase tick timer if it isn't running yet
+    if (!match.timer) startSelectTimer(io, match)
+
+    socket.emit('gameStart', match.battle.publicState())
+  })
+
+  // PvP active match: re-join after socket reconnect / server restart.
+  // Also reached when joinClashRoom fires for a room that already has an active match.
+  socket.on('pvp:match:rejoin', ({ roomId, userId }) => {
+    const match = pvpMatches.get(roomId)
+    if (!match) return
+    const uid = sid(userId)
+    if (!match.userSide?.[uid]) return  // security: only a participant may rejoin
+
+    socket.data.roomId = roomId
+    socket.data.userId = uid
+    socket.join(roomId)
+    touchActivity(match)
+
+    socket.emit('gameStart', viewForUser(match, uid))
+  })
+  // ──────────────────────────────────────────────────────────────────────────
+
   socket.on('join-trade-room', async ({ room, user }) => {
     socket.tradeRoom = room
     socket.user = user
@@ -2007,6 +2076,7 @@ io.on('connection', socket => {
     }
 
     tradeSockets[socket.id] = room
+    syncTradeRoom(room, roomData)
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -2068,6 +2138,7 @@ io.on('connection', socket => {
           })
         : null;
 
+      syncTradeRoom(room, roomData)
       io.to(room).emit('trade-room-update', {
         traderA: traderAUser,
         traderB: traderBUser,
@@ -2087,6 +2158,7 @@ io.on('connection', socket => {
 
     roomData.offers[user] = ctoons
     roomData.confirmed[user] = false
+    syncTradeRoom(room, roomData)
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -2365,6 +2437,10 @@ io.on('connection', socket => {
   })
 
   socket.on('disconnecting', async () => {
+    // During a graceful server reload state has already been saved to Redis —
+    // skip PvP leave logic so active matches aren't ended prematurely.
+    if (isShuttingDown) return
+
     // Clash PvP cleanup if user leaves the game page / disconnects
     if (socket.data?.roomId) {
       await handleClashLeave(io, {
@@ -2668,6 +2744,7 @@ async function sweepStaleState() {
   for (const [roomId, room] of pvpRooms.entries()) {
     if (roomSize(io, roomId) === 0 && isIdle(room, now, PVP_ROOM_IDLE_MS)) {
       pvpRooms.delete(roomId)
+      syncDeletePvpRoom(roomId)
     }
   }
 
@@ -2682,6 +2759,7 @@ async function sweepStaleState() {
       })
     } catch {}
     pvpMatches.delete(roomId)
+    redisState.delPvpMatch(roomId).catch(() => {})
   }
 
   for (const [gameId, match] of pveMatches.entries()) {
@@ -2733,13 +2811,9 @@ async function sweepStaleState() {
     if (roomSize(io, roomName) !== 0) continue
     if (!isIdle(roomData, now, TRADE_ROOM_IDLE_MS)) continue
     delete tradeRooms[roomName]
+    syncDeleteTradeRoom(roomName)
   }
 }
-
-recordSocketMetrics()
-setInterval(() => {
-  recordSocketMetrics()
-}, METRICS_SAMPLE_MS).unref()
 
 setInterval(() => {
   sweepStaleState().catch((err) => {
@@ -3166,18 +3240,156 @@ async function boot() {
   })
   console.log('[AuctionClose] BullMQ worker started.')
 
-  httpServer.listen(PORT, () => {
-    console.log(`Socket server listening on port ${PORT}`)
+  // ── Restore in-memory state from Redis ─────────────────────────────────────
+  // Repopulates Maps from Redis so in-progress sessions survive restarts.
+  try {
+    const [battles, byUser, pvpRoomsData, tradeRoomsData, pveData, pvpData] = await Promise.all([
+      redisState.scanBattles(),
+      redisState.scanBattleByUser(),
+      redisState.scanPvpRooms(),
+      redisState.scanTradeRooms(),
+      redisState.scanPveMatches(),
+      redisState.scanPvpMatches(),
+    ])
+    for (const [id, battle] of battles) {
+      monsterBattles.set(id, battle)
+      if (battle.state?.status === 'active') reconstructBattleTimers(io, battle)
+    }
+    for (const [uid, bid] of byUser) monsterBattleByUser.set(uid, bid)
+    for (const [id, room] of pvpRoomsData) pvpRooms.set(id, room)
+    for (const [name, room] of tradeRoomsData) tradeRooms[name] = room
+
+    // Restore active PvE clash matches
+    const REJOIN_BUFFER_MS = 90_000  // extend deadlines by 90 s to let players reconnect
+    for (const [gameId, saved] of pveData) {
+      if (saved.battleState?.phase === 'gameEnd') continue  // already finished
+      const battle = createBattle({ _restore: { state: saved.battleState, pending: saved.pendingActions } })
+      const match = {
+        id:              gameId,
+        socketId:        null,  // will be set when player rejoins
+        battle,
+        playerConfirmed: false,
+        recordId:        saved.recordId,
+        aiConfirmed:     false,
+        timer:           null,
+        selectDeadline:  saved.selectDeadline,
+        playerUserId:    saved.playerUserId,
+        lastActivity:    saved.lastActivity ?? Date.now(),
+      }
+      // Extend the deadline so the player has time to reconnect after restart
+      if (!match.selectDeadline || match.selectDeadline < Date.now() + REJOIN_BUFFER_MS) {
+        match.selectDeadline = Date.now() + REJOIN_BUFFER_MS
+        match.battle.state.selectEndsAt = match.selectDeadline
+      }
+      pveMatches.set(gameId, match)
+      // Don't start the per-second tick timer yet; startSelectTimer is called on rejoin
+    }
+
+    // Restore active PvP clash matches
+    for (const [roomId, saved] of pvpData) {
+      if (saved.battleState?.phase === 'gameEnd') continue  // already finished
+      const battle = createBattle({ _restore: { state: saved.battleState, pending: saved.pendingActions } })
+      const match = {
+        battle,
+        recordId:       saved.recordId,
+        userSide:       saved.userSide,
+        pending:        { player: null, ai: null },   // reset; players re-submit after rejoin
+        confirmed:      { player: false, ai: false },
+        timer:          null,
+        selectDeadline: saved.selectDeadline,
+        lastActivity:   saved.lastActivity ?? Date.now(),
+      }
+      // Extend the deadline so both players have time to reconnect after restart
+      if (!match.selectDeadline || match.selectDeadline < Date.now() + REJOIN_BUFFER_MS) {
+        match.selectDeadline = Date.now() + REJOIN_BUFFER_MS
+        match.battle.state.selectEndsAt = match.selectDeadline
+      }
+      pvpMatches.set(roomId, match)
+      startPvpTimer(io, roomId)  // restart the per-second tick timer
+    }
+
+    console.log(
+      `[Boot] Redis restore: ${battles.size} battle(s), ${pvpRoomsData.size} pvp room(s), ` +
+      `${tradeRoomsData.size} trade room(s), ${pveData.size} pve match(es), ${pvpData.size} pvp match(es)`
+    )
+  } catch (err) {
+    console.error('[Boot] Redis state restore failed (continuing without it):', err)
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  await startListening(PORT)
+}
+
+// Bind the HTTP server, retrying on EADDRINUSE so that PM2 graceful reloads
+// don't crash the incoming process while the outgoing one is still draining.
+function startListening(port, maxRetries = 8, baseDelayMs = 1000) {
+  return new Promise((resolve, reject) => {
+    let attempt = 0
+
+    function tryListen() {
+      const onError = (err) => {
+        if (err.code === 'EADDRINUSE' && attempt < maxRetries) {
+          const delay = baseDelayMs * 2 ** attempt
+          attempt++
+          console.log(
+            `[Boot] Port ${port} busy (EADDRINUSE); retrying in ${delay}ms… ` +
+            `(attempt ${attempt}/${maxRetries})`
+          )
+          setTimeout(tryListen, delay)
+        } else {
+          reject(err)
+        }
+      }
+
+      httpServer.once('error', onError)
+      httpServer.listen(port, () => {
+        httpServer.removeListener('error', onError)
+        console.log(`Socket server listening on port ${port}`)
+        // Signal PM2 that this instance is ready to accept traffic (used by graceful reload)
+        if (process.send) process.send('ready')
+        resolve()
+      })
+    }
+
+    tryListen()
   })
 }
 
 boot()
 
-// Graceful shutdown: close Prisma and HTTP server
+// Graceful shutdown: save active clash game state, then drain connections
 async function shutdown(signal = 'SIGTERM') {
-  console.log(`\n[Server] Received ${signal}; shutting down…`)
+  console.log(`\n[Server] Received ${signal}; shutting down gracefully…`)
+
+  // Set flag first so disconnect/disconnecting handlers don't end active games
+  isShuttingDown = true
+
+  // Persist all active clash matches to Redis before disconnecting clients.
+  // The new process will restore them on boot; players rejoin via pve:rejoin /
+  // joinClashRoom and pick up where they left off.
+  try {
+    const saves = [
+      ...[...pveMatches.entries()].map(([id, m]) => redisState.setPveMatch(id, m)),
+      ...[...pvpMatches.entries()].map(([id, m]) => redisState.setPvpMatch(id, m)),
+    ]
+    if (saves.length) {
+      await Promise.all(saves)
+      console.log(`[Server] Saved ${pveMatches.size} PvE and ${pvpMatches.size} PvP clash match(es) to Redis`)
+    }
+  } catch (err) {
+    console.error('[Server] Failed to persist clash matches to Redis during shutdown:', err)
+  }
+
+  // Stop accepting new socket connections and close existing ones
+  io.close()
+  // Force-close any lingering keep-alive HTTP connections so the server
+  // releases its port immediately rather than waiting for clients to time out.
+  if (typeof httpServer.closeAllConnections === 'function') {
+    httpServer.closeAllConnections()
+  }
   httpServer.close(() => process.exit(0))
-  // Fallback if close hangs
+  // Hard fallback well within PM2's kill_timeout (8 s) so the port is free
+  // before PM2 starts the replacement process.
   setTimeout(() => process.exit(0), 5000).unref()
 }
 
