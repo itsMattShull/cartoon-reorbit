@@ -978,6 +978,10 @@ async function createDailyFeaturedAuction() {
   const username = process.env.OFFICIAL_USERNAME
   if (!username) return
 
+  const config = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+  const dailyCap = config?.featuredAuctionsPerDay ?? 1
+  if (dailyCap <= 0) return
+
   const officialUser = await prisma.user.findUnique({
     where: { username },
     select: { id: true }
@@ -1023,7 +1027,7 @@ async function createDailyFeaturedAuction() {
   let createdCount = 0
 
   for (const chosen of shuffled) {
-    if (createdCount >= 3) break
+    if (createdCount >= dailyCap) break
     const initialBet = rarityFloor(chosen.ctoon?.rarity)
 
     const result = await prisma.$transaction(async (tx) => {

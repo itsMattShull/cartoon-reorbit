@@ -906,6 +906,7 @@ model GlobalGameConfig {
   // cToon release settings
   initialReleasePercent  Int      @default(75)
   finalReleaseDelayHours Int      @default(12)
+  featuredAuctionsPerDay Int      @default(1)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

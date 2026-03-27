@@ -83,7 +83,7 @@
               </thead>
               <tbody>
                 <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
-                  <td class="px-4 py-2 break-words">{{ c.code }}</td>
+                  <td class="px-4 py-2 max-w-[15ch] truncate" :title="c.code">{{ c.code }}</td>
                   <td class="px-4 py-2">
                     <span v-if="c.expiresAt">
                       {{ new Date(c.expiresAt).toLocaleDateString() }}
