@@ -72,9 +72,7 @@ const props = defineProps({
 
 const statusCode = computed(() => props.error?.statusCode || 500)
 const isServerError = computed(() => statusCode.value >= 500)
-const headline = computed(() =>
-  isServerError.value ? 'G-Toons are fixing it.' : 'That page drifted out of orbit.'
-)
+const headline = 'That page drifted out of orbit.'
 const message = computed(() =>
   isServerError.value
     ? 'We hit a server snag. Try again in a moment or head back home.'
