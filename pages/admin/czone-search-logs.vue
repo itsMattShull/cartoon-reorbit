@@ -19,6 +19,7 @@
         </select>
 
         <button class="btn-primary" @click="loadAll" :disabled="loading">{{ loading ? 'Loading…' : 'Refresh' }}</button>
+        <button class="btn-secondary" @click="downloadCsv" :disabled="downloading">{{ downloading ? 'Downloading…' : 'Download' }}</button>
       </div>
 
       <!-- KPIs -->
@@ -179,6 +180,7 @@ definePageMeta({ title: 'Admin - cZone Search Logs', middleware: ['auth', 'admin
 const days = ref(30)
 const selectedSearchId = ref('')
 const loading = ref(false)
+const downloading = ref(false)
 
 const analytics = ref({
   totals: { appearances: 0, captures: 0, uniqueViewers: 0, uniqueCaptures: 0, captureRate: 0 },
@@ -259,6 +261,24 @@ async function loadAll() {
   }
 }
 
+async function downloadCsv() {
+  downloading.value = true
+  try {
+    const query = new URLSearchParams({ days: days.value })
+    if (selectedSearchId.value) query.set('searchId', selectedSearchId.value)
+    const response = await fetch(`/api/admin/czone-search-logs/download?${query}`)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'czone-search-logs.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  } finally {
+    downloading.value = false
+  }
+}
+
 onMounted(async () => {
   await loadSearchOptions()
   await loadAll()
@@ -268,6 +288,8 @@ onMounted(async () => {
 <style scoped>
 .btn-primary{ background-color:#2563EB; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
 .btn-primary:disabled{ opacity:.5 }
+.btn-secondary{ background-color:#6B7280; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
+.btn-secondary:disabled{ opacity:.5 }
 .kpi{ background:#f9fafb; border:1px solid #e5e7eb; border-radius:.5rem; padding:.75rem }
 .kpi-label{ font-size:.75rem; color:#6b7280; text-transform:uppercase; letter-spacing:.04em }
 .kpi-value{ font-size:1.25rem; font-weight:600; color:#111827 }
