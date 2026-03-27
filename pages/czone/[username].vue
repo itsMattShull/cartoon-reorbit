@@ -1414,10 +1414,7 @@ const predefinedMessages = [
   'Totally underrated!', 'I wish I had this setup!', 'Nice flex!', "You're a legend!",
   '10/10 would visit again!', 'Mind if I screenshot this?', 'One word: EPIC!'
 ]
-const socket = io(import.meta.env.PROD
-  ? undefined
-  : `http://localhost:${useRuntimeConfig().public.socketPort}`
-)
+let socket
 
 function sendMessage() {
   if (!user.value || !socket) return
@@ -1508,6 +1505,9 @@ onMounted(async () => {
   loadUserTradeList()
 
   // socket listeners
+  socket = io(import.meta.env.PROD
+    ? undefined
+    : `http://localhost:${useRuntimeConfig().public.socketPort}`)
   socket.emit('join-zone', { zone: username.value })
   // Re-join zone on reconnect (join-zone is idempotent server-side)
   socket.on('connect', () => {

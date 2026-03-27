@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) return
 
+  try {
   // 1. Current Chicago time
   const chicagoNow = DateTime.now().setZone('America/Chicago')
 
@@ -86,4 +87,7 @@ export default defineEventHandler(async (event) => {
       })
     }
   })
+  } catch (err) {
+    console.error('[daily-points] error:', err)
+  }
 })

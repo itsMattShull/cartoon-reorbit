@@ -56,13 +56,11 @@ module.exports = {
       env: {
         NODE_ENV:    'production',
         NITRO_PORT:  NUXT_PORT,
-        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
       env_development: {
         NODE_ENV:    'production',
         NITRO_PORT:  NUXT_PORT,
-        NUXT_PORT:   NUXT_PORT,
         ...DIAG_ENV,
       },
     },

@@ -293,38 +293,38 @@ const allPlayerLanesFull = computed(() =>
   !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
 )
 
-const socket = io(
-  import.meta.env.PROD
-    ? undefined
-    : `http://localhost:${useRuntimeConfig().public.socketPort}`
-)
-
-// Handle incoming events
-socket.on('gameStart', state => { 
-  game.value = state 
-  startTimer(state.selectEndsAt)
-})
-socket.on('phaseUpdate', state => { game.value = state })
-socket.on('gameEnd', sum   => { game.value = { ...game.value, summary: sum } })
-socket.on('clashDecks', list => { myDecks.value = list || [] })
-
-socket.on('pvpLobbyState', snap => {
-  // snap = { players, usernames, haveDeck, ready, points? }
-  const me  = String(user.value.id)
-  const opp = (snap.players || []).find(p => p !== me)
-  myReady.value    = !!snap.ready?.[me]
-  oppReady.value   = !!snap.ready?.[opp]
-  oppHasDeck.value = !!snap.haveDeck?.[opp]
-  oppUsername.value = opp
-    ? (snap.usernames?.[opp] || 'Unknown')
-    : 'Waiting…'
-
-  // Accept either `points` or `stakePoints` from server
-  const raw = Number(snap.points ?? snap.stakePoints ?? 0)
-  roomStake.value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
-})
+let socket
 
 onMounted(async () => {
+  socket = io(
+    import.meta.env.PROD
+      ? undefined
+      : `http://localhost:${useRuntimeConfig().public.socketPort}`
+  )
+
+  // Handle incoming events
+  socket.on('gameStart', state => {
+    game.value = state
+    startTimer(state.selectEndsAt)
+  })
+  socket.on('clashDecks', list => { myDecks.value = list || [] })
+
+  socket.on('pvpLobbyState', snap => {
+    // snap = { players, usernames, haveDeck, ready, points? }
+    const me  = String(user.value.id)
+    const opp = (snap.players || []).find(p => p !== me)
+    myReady.value    = !!snap.ready?.[me]
+    oppReady.value   = !!snap.ready?.[opp]
+    oppHasDeck.value = !!snap.haveDeck?.[opp]
+    oppUsername.value = opp
+      ? (snap.usernames?.[opp] || 'Unknown')
+      : 'Waiting…'
+
+    // Accept either `points` or `stakePoints` from server
+    const raw = Number(snap.points ?? snap.stakePoints ?? 0)
+    roomStake.value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
+  })
+
   // 1) join the PvP room (no deck yet)
   socket.emit('joinClashRoom', { roomId, userId: user.value.id })
   // 2) fetch my saved decks for the dropdown
@@ -333,6 +333,32 @@ onMounted(async () => {
   socket.on('connect', () => {
     socket.emit('joinClashRoom', { roomId, userId: user.value.id })
     socket.emit('listClashDecks', { userId: user.value.id })
+  })
+
+  // Real-time sync
+  socket.on('phaseUpdate', state => {
+    const prevTurn = game.value?.turn ?? null
+    game.value = state
+
+    if (state.phase === 'select') {
+      startTimer(state.selectEndsAt)
+
+      if (
+        confirmed.value &&
+        awaitingTurn.value != null &&
+        state.turn > awaitingTurn.value
+      ) {
+        resetLocal()
+        awaitingTurn.value = null
+      }
+    } else {
+      clearInterval(timerId)
+    }
+  })
+
+  socket.on('gameEnd', sum => {
+    summary.value = sum
+    clearInterval(timerId)
   })
 })
 
@@ -508,32 +534,6 @@ function resetLocal() {
   confirmed.value  = false
   selected.value   = null
 }
-
-// — Real-time Sync —
-socket.on('phaseUpdate', state => {
-  const prevTurn = game.value?.turn ?? null
-  game.value = state
-
-  if (state.phase === 'select') {
-    startTimer(state.selectEndsAt)
-
-    if (
-      confirmed.value &&
-      awaitingTurn.value != null &&
-      state.turn > awaitingTurn.value
-    ) {
-      resetLocal()
-      awaitingTurn.value = null
-    }
-  } else {
-    clearInterval(timerId)
-  }
-})
-
-socket.on('gameEnd', sum => {
-  summary.value = sum
-  clearInterval(timerId)
-})
 
 // — Cleanup —
 onBeforeUnmount(() => {
