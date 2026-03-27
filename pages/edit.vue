@@ -56,6 +56,7 @@
             class="cursor-move flex items-start justify-center w-[48%]"
             draggable="true"
             @dragstart="onDragStart(element, $event)"
+            @dragend="cleanupDragImage"
             @click="onSidebarClick(element)"
           >
             <div class="relative inline-flex items-center justify-center">
@@ -443,14 +444,14 @@ let dragImageEl = null
 
 function onDragStart(ctoon, ev) {
   draggingItem.value = ctoon
-  dragImageEl = ev.target.cloneNode(true)
-  dragImageEl.style.position = 'absolute'
-  dragImageEl.style.top = '-9999px'
-  dragImageEl.style.left = '-9999px'
-  dragImageEl.style.width = `${ev.target.clientWidth}px`
-  dragImageEl.style.height = `${ev.target.clientHeight}px`
+  cleanupDragImage()
+  const sourceEl = ev.currentTarget.querySelector('img') ?? ev.currentTarget
+  const w = sourceEl.clientWidth
+  const h = sourceEl.clientHeight
+  dragImageEl = sourceEl.cloneNode(true)
+  dragImageEl.style.cssText = `position:absolute;top:-9999px;left:-9999px;width:${w}px;height:${h}px;`
   document.body.appendChild(dragImageEl)
-  ev.dataTransfer.setDragImage(dragImageEl, 0, 0)
+  ev.dataTransfer.setDragImage(dragImageEl, w / 2, h / 2)
 }
 
 const cleanupDragImage = () => {
