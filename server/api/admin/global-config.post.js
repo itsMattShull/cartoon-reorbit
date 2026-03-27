@@ -32,7 +32,9 @@ export default defineEventHandler(async (event) => {
     czoneCount,
     phashDuplicateThreshold,
     dhashDuplicateThreshold,
-    featuredAuctionsPerDay
+    featuredAuctionsPerDay,
+    firstAdditionalCzoneCost,
+    subsequentAdditionalCzoneCost
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -53,7 +55,9 @@ export default defineEventHandler(async (event) => {
     czoneCount:         (typeof czoneCount         === 'number') ? Number(czoneCount)         : undefined,
     phashDuplicateThreshold: (typeof phashDuplicateThreshold === 'number') ? Number(phashDuplicateThreshold) : undefined,
     dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined,
-    featuredAuctionsPerDay: (typeof featuredAuctionsPerDay === 'number') ? Number(featuredAuctionsPerDay) : undefined
+    featuredAuctionsPerDay: (typeof featuredAuctionsPerDay === 'number') ? Number(featuredAuctionsPerDay) : undefined,
+    firstAdditionalCzoneCost:      (typeof firstAdditionalCzoneCost      === 'number') ? Number(firstAdditionalCzoneCost)      : undefined,
+    subsequentAdditionalCzoneCost: (typeof subsequentAdditionalCzoneCost === 'number') ? Number(subsequentAdditionalCzoneCost) : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -71,7 +75,9 @@ export default defineEventHandler(async (event) => {
         czoneCount: payload.czoneCount ?? 3,
         phashDuplicateThreshold: payload.phashDuplicateThreshold ?? 14,
         dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16,
-        featuredAuctionsPerDay: payload.featuredAuctionsPerDay ?? 1
+        featuredAuctionsPerDay:        payload.featuredAuctionsPerDay        ?? 1,
+        firstAdditionalCzoneCost:      payload.firstAdditionalCzoneCost      ?? 25000,
+        subsequentAdditionalCzoneCost: payload.subsequentAdditionalCzoneCost ?? 50000
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -83,7 +89,9 @@ export default defineEventHandler(async (event) => {
         ...(payload.czoneCount          !== undefined ? { czoneCount:          payload.czoneCount }          : {}),
         ...(payload.phashDuplicateThreshold !== undefined ? { phashDuplicateThreshold: payload.phashDuplicateThreshold } : {}),
         ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {}),
-        ...(payload.featuredAuctionsPerDay !== undefined ? { featuredAuctionsPerDay: payload.featuredAuctionsPerDay } : {})
+        ...(payload.featuredAuctionsPerDay        !== undefined ? { featuredAuctionsPerDay:        payload.featuredAuctionsPerDay }        : {}),
+        ...(payload.firstAdditionalCzoneCost      !== undefined ? { firstAdditionalCzoneCost:      payload.firstAdditionalCzoneCost }      : {}),
+        ...(payload.subsequentAdditionalCzoneCost !== undefined ? { subsequentAdditionalCzoneCost: payload.subsequentAdditionalCzoneCost } : {})
       }
     })
     // Log field-level changes
@@ -96,7 +104,9 @@ export default defineEventHandler(async (event) => {
       'czoneCount',
       'phashDuplicateThreshold',
       'dhashDuplicateThreshold',
-      'featuredAuctionsPerDay'
+      'featuredAuctionsPerDay',
+      'firstAdditionalCzoneCost',
+      'subsequentAdditionalCzoneCost'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined

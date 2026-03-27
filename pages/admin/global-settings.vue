@@ -23,6 +23,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Auctions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Auctions'">Auctions</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='cMart' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='cMart'">cMart</button>
         </nav>
       </div>
 
@@ -189,6 +193,30 @@
         </div>
       </section>
 
+      <!-- cMart tab -->
+      <section v-if="activeTab==='cMart'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure cMart upgrade pricing.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">First additional cZone cost</label>
+            <input type="number" min="0" class="input" v-model.number="firstAdditionalCzoneCost" />
+            <p class="text-xs text-gray-500 mt-1">Cost when a user has 0 additional cZones.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Subsequent additional cZone cost</label>
+            <input type="number" min="0" class="input" v-model.number="subsequentAdditionalCzoneCost" />
+            <p class="text-xs text-gray-500 mt-1">Cost when a user already has 1 or more additional cZones.</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="savingCmart" @click="saveCmart">
+            <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -209,6 +237,7 @@ const savingGlobal = ref(false)
 const savingRarity = ref(false)
 const savingDuplicates = ref(false)
 const savingAuctions = ref(false)
+const savingCmart = ref(false)
 
 // Global Points state
 const dailyLoginPoints     = ref(500)
@@ -220,6 +249,8 @@ const czoneCount           = ref(3)
 const phashDuplicateThreshold = ref(14)
 const dhashDuplicateThreshold = ref(16)
 const featuredAuctionsPerDay = ref(1)
+const firstAdditionalCzoneCost = ref(25000)
+const subsequentAdditionalCzoneCost = ref(50000)
 
 async function loadGlobal() {
   try {
@@ -234,6 +265,8 @@ async function loadGlobal() {
     phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
     dhashDuplicateThreshold.value = Number(g?.dhashDuplicateThreshold ?? 16)
     featuredAuctionsPerDay.value  = Number(g?.featuredAuctionsPerDay  ?? 1)
+    firstAdditionalCzoneCost.value      = Number(g?.firstAdditionalCzoneCost      ?? 25000)
+    subsequentAdditionalCzoneCost.value = Number(g?.subsequentAdditionalCzoneCost ?? 50000)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -319,6 +352,25 @@ async function saveAuctions() {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {
     savingAuctions.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveCmart() {
+  savingCmart.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config', {
+      method: 'POST',
+      body: {
+        dailyPointLimit: Number(dailyPointLimit.value),
+        firstAdditionalCzoneCost:      Number(firstAdditionalCzoneCost.value),
+        subsequentAdditionalCzoneCost: Number(subsequentAdditionalCzoneCost.value)
+      }
+    })
+    toast.value = { type: 'ok', msg: 'cMart settings saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    savingCmart.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
 }
 
