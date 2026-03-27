@@ -6,7 +6,7 @@
     <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
       <!-- Tabs -->
       <div class="border-b mb-6">
-        <nav class="flex gap-4">
+        <nav class="flex gap-4 overflow-x-auto whitespace-nowrap -mb-px hide-scrollbar">
           <button
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Global Points' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
@@ -347,4 +347,6 @@ async function saveDuplicateSettings() {
 .btn-primary:disabled{ opacity:.5 }
 .input { margin-top: .25rem; width: 100%; border: 1px solid #D1D5DB; border-radius: .375rem; padding: .5rem; outline: none }
 .input:focus { border-color: #6366F1; box-shadow: 0 0 0 1px #6366F1 }
+.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
 </style>
