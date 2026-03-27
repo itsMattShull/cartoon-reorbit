@@ -56,16 +56,33 @@
         <section class="space-y-4">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-slate-900">Prize Pool</h2>
-            <p class="text-xs text-slate-500">Conditions listed per cToon</p>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-600 select-none">Only Show Available cToons</span>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="showOnlyAvailable"
+                @click="showOnlyAvailable = !showOnlyAvailable"
+                :class="showOnlyAvailable ? 'bg-blue-600' : 'bg-slate-300'"
+                class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <span
+                  :class="showOnlyAvailable ? 'translate-x-4' : 'translate-x-0.5'"
+                  class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                />
+              </button>
+            </div>
           </div>
 
-          <div v-if="!search?.prizePool?.length" class="rounded-2xl border border-slate-200 bg-white p-6 shadow">
-            <p class="text-sm text-slate-600">No prize pool entries found.</p>
+          <div v-if="!filteredPrizePool.length" class="rounded-2xl border border-slate-200 bg-white p-6 shadow">
+            <p class="text-sm text-slate-600">
+              {{ showOnlyAvailable ? 'No available cToons match your current conditions.' : 'No prize pool entries found.' }}
+            </p>
           </div>
 
           <div v-else class="space-y-4">
             <div
-              v-for="entry in search.prizePool"
+              v-for="entry in filteredPrizePool"
               :key="entry.id"
               class="rounded-2xl border border-slate-200 bg-white p-5 shadow"
             >
@@ -95,6 +112,11 @@
                     >
                       Max {{ entry.maxCaptures }}
                     </span>
+                  </div>
+
+                  <div class="mt-3 flex gap-4 text-sm text-slate-600">
+                    <span>You own: <span class="font-semibold text-slate-800">{{ entry.userOwnedCount }}</span></span>
+                    <span>Captured: <span class="font-semibold text-slate-800">{{ entry.userCaptureCount }}</span></span>
                   </div>
 
                   <div class="mt-4 space-y-3">
@@ -217,7 +239,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Nav from '@/components/Nav.vue'
 
@@ -244,6 +266,92 @@ const search = computed(() => data.value || null)
 const searchName = computed(() => (search.value?.name || '').trim() || 'cZone Search')
 const prizeCount = computed(() => Number(search.value?.prizePool?.length || 0))
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'
+
+const showOnlyAvailable = ref(false)
+
+// Returns the current time-of-day bucket using the user's local clock
+function getCurrentTimeOfDay() {
+  const hour = new Date().getHours()
+  if (hour >= 6 && hour < 12) return 'MORNING'
+  if (hour >= 12 && hour < 17) return 'AFTERNOON'
+  if (hour >= 17 && hour < 22) return 'EVENING'
+  return 'NIGHT'
+}
+
+function isEntryAvailable(entry) {
+  const stats = search.value?.userStats
+  if (!stats) return true
+
+  // Date window condition
+  if (entry.conditionDateEnabled) {
+    const today = new Date().toISOString().split('T')[0]
+    if (entry.conditionDateStart && today < entry.conditionDateStart) return false
+    if (entry.conditionDateEnd && today > entry.conditionDateEnd) return false
+  }
+
+  // Time of day condition
+  if (entry.conditionTimeEnabled && entry.conditionTimeOfDay) {
+    if (getCurrentTimeOfDay() !== entry.conditionTimeOfDay) return false
+  }
+
+  // Background and cToon-in-zone conditions are context-dependent — skip them
+
+  // User must own specific cToons
+  if (entry.conditionUserOwnsEnabled && Array.isArray(entry.conditionUserOwns)) {
+    for (const req of entry.conditionUserOwns) {
+      const owned = stats.userOwnsCountMap[req.ctoonId] || 0
+      if (owned < (req.count || 1)) return false
+    }
+  }
+
+  // User points
+  if (entry.conditionUserPointsEnabled && entry.conditionUserPointsMin != null) {
+    if (stats.userPoints < entry.conditionUserPointsMin) return false
+  }
+
+  // Total cToon count
+  if (entry.conditionUserTotalCountEnabled && entry.conditionUserTotalCountMin != null) {
+    if (stats.userTotalCount < entry.conditionUserTotalCountMin) return false
+  }
+
+  // Unique cToon count
+  if (entry.conditionUserUniqueCountEnabled && entry.conditionUserUniqueCountMin != null) {
+    if (stats.userUniqueCount < entry.conditionUserUniqueCountMin) return false
+  }
+
+  // Set unique count
+  if (entry.conditionSetUniqueCountEnabled && entry.conditionSetUniqueCountSet && entry.conditionSetUniqueCountMin != null) {
+    const count = stats.userSetUniqueCountMap[entry.conditionSetUniqueCountSet] || 0
+    if (count < entry.conditionSetUniqueCountMin) return false
+  }
+
+  // Set total count
+  if (entry.conditionSetTotalCountEnabled && entry.conditionSetTotalCountSet && entry.conditionSetTotalCountMin != null) {
+    const count = stats.userSetTotalCountMap[entry.conditionSetTotalCountSet] || 0
+    if (count < entry.conditionSetTotalCountMin) return false
+  }
+
+  // Owns less than (uses per-prize userOwnedCount)
+  if (entry.conditionOwnsLessThanEnabled && entry.conditionOwnsLessThanCount != null) {
+    if (entry.userOwnedCount >= entry.conditionOwnsLessThanCount) return false
+  }
+
+  // ONCE collection — already captured
+  if (search.value?.collectionType === 'ONCE' && entry.userCaptureCount > 0) return false
+
+  // CUSTOM_PER_CTOON — max captures reached
+  if (search.value?.collectionType === 'CUSTOM_PER_CTOON' && entry.maxCaptures != null) {
+    if (entry.userCaptureCount >= entry.maxCaptures) return false
+  }
+
+  return true
+}
+
+const filteredPrizePool = computed(() => {
+  const pool = search.value?.prizePool || []
+  if (!showOnlyAvailable.value) return pool
+  return pool.filter(isEntryAvailable)
+})
 
 const formatNumber = (value) => {
   const num = Number(value)
