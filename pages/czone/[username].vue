@@ -205,7 +205,7 @@
       <div
         class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm"
       >
-        My Points: {{ user?.points ?? 0 }}
+        My Points: {{ (user?.points ?? 0).toLocaleString() }}
       </div>
     </div>
   </div>
@@ -475,7 +475,7 @@
 
           <!-- Right side: points badge -->
           <div class="bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded shadow text-sm">
-            My Points: {{ user?.points ?? 0 }}
+            My Points: {{ (user?.points ?? 0).toLocaleString() }}
           </div>
         </div>
       </div>
@@ -845,8 +845,8 @@
               loading="lazy"
             />
             <div class="space-y-1">
-              <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount }} {{ capturedCtoon.name }}s</p>
-              <p class="text-sm text-gray-600">You now own {{ capturedCtoon.ownedCount }} {{ capturedCtoon.name }}s</p>
+              <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
+              <p class="text-sm text-gray-600">You now own {{ capturedCtoon.ownedCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
             </div>
             <div class="space-y-1 text-sm">
               <div><span class="text-gray-500">Rarity:</span> <span class="font-medium">{{ capturedCtoon.rarity || '—' }}</span></div>

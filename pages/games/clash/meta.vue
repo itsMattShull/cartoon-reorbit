@@ -70,15 +70,15 @@
       <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="bg-white border rounded-lg p-4 shadow-sm">
           <div class="text-xs uppercase tracking-wide text-gray-500">Games Counted</div>
-          <div class="text-2xl font-semibold">{{ stats?.totalGames ?? 0 }}</div>
+          <div class="text-2xl font-semibold">{{ (stats?.totalGames ?? 0).toLocaleString() }}</div>
         </div>
         <div class="bg-white border rounded-lg p-4 shadow-sm">
           <div class="text-xs uppercase tracking-wide text-gray-500">Decks Tracked</div>
-          <div class="text-2xl font-semibold">{{ stats?.totalDecks ?? 0 }}</div>
+          <div class="text-2xl font-semibold">{{ (stats?.totalDecks ?? 0).toLocaleString() }}</div>
         </div>
         <div class="bg-white border rounded-lg p-4 shadow-sm">
           <div class="text-xs uppercase tracking-wide text-gray-500">Winning Games</div>
-          <div class="text-2xl font-semibold">{{ stats?.totalWins ?? 0 }}</div>
+          <div class="text-2xl font-semibold">{{ (stats?.totalWins ?? 0).toLocaleString() }}</div>
         </div>
       </div>
 

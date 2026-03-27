@@ -282,7 +282,7 @@
               </div>
               <div v-if="contest.winnerPrizes.points" class="flex items-center gap-2 text-sm text-slate-700">
                 <span class="text-base">⭐</span>
-                <span><strong>{{ contest.winnerPrizes.points }}</strong> points</span>
+                <span><strong>{{ Number(contest.winnerPrizes.points).toLocaleString() }}</strong> points</span>
               </div>
               <div v-if="contest.winnerPrizes.backgrounds.length" class="space-y-1">
                 <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Backgrounds</p>
@@ -323,7 +323,7 @@
               </div>
               <div v-if="contest.participantPrizes.points" class="flex items-center gap-2 text-sm text-slate-700">
                 <span class="text-base">⭐</span>
-                <span><strong>{{ contest.participantPrizes.points }}</strong> points</span>
+                <span><strong>{{ Number(contest.participantPrizes.points).toLocaleString() }}</strong> points</span>
               </div>
               <div v-if="contest.participantPrizes.backgrounds.length" class="space-y-1">
                 <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Backgrounds</p>

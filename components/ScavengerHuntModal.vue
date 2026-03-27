@@ -30,7 +30,7 @@
               <p v-if="result.text" class="mt-2 text-sm text-gray-700">{{ result.text }}</p>
             </template>
             <template v-else-if="result.type === 'POINTS'">
-              <p class="text-lg font-semibold">You won {{ result.points }} points! 🎉</p>
+              <p class="text-lg font-semibold">You won {{ Number(result.points).toLocaleString() }} points! 🎉</p>
               <p v-if="result.text" class="mt-2 text-sm text-gray-700">{{ result.text }}</p>
             </template>
             <template v-else>

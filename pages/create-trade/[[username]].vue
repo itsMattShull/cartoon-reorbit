@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Create Trade</h1>
       <div class="text-sm bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded">
-        My Points: {{ user?.points ?? 0 }}
+        My Points: {{ (user?.points ?? 0).toLocaleString() }}
       </div>
     </div>
 
@@ -481,7 +481,7 @@
             <h3 class="font-semibold mb-2">You’re Offering</h3>
             <div class="mb-3 text-sm">
               <span class="font-medium">Points:</span>
-              <span>{{ pointsToOffer }}</span>
+              <span>{{ Number(pointsToOffer).toLocaleString() }}</span>
             </div>
             <div v-if="!selectedInitiatorCtoons.length" class="text-sm text-gray-600">
               No cToons offered.
