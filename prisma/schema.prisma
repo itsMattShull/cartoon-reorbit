@@ -907,6 +907,9 @@ model GlobalGameConfig {
   initialReleasePercent  Int      @default(75)
   finalReleaseDelayHours Int      @default(12)
   featuredAuctionsPerDay Int      @default(1)
+  // cMart upgrade costs
+  firstAdditionalCzoneCost       Int @default(25000)
+  subsequentAdditionalCzoneCost  Int @default(50000)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

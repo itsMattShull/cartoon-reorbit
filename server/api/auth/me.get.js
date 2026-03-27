@@ -44,7 +44,8 @@ export default defineEventHandler(async (event) => {
       isAdmin: true,
       inGuild: true,
       points: true,
-      isBooster: true
+      isBooster: true,
+      additionalCzones: true
     }
   })
 
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
     active: user.active,
     ctoonCount,
     uniqueCtoonCount: uniqueCtoonRows.length,
-    isBooster: user.isBooster
+    isBooster: user.isBooster,
+    additionalCzones: user.additionalCzones ?? 0
   }
 })
