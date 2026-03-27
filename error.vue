@@ -12,7 +12,7 @@
           aria-label="Go to homepage"
         >
           <img
-            src="/images/logo-reorbit.png"
+            src="/images/newlogo.gif"
             alt="Cartoon ReOrbit logo"
             class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none"
           />
