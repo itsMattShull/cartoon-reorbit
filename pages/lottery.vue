@@ -14,7 +14,7 @@
 
       <div class="flex justify-center gap-4">
         <button class="btn-primary" :disabled="buying || remaining===0" @click="buy">
-          {{ buying ? 'Buying…' : `Buy Ticket (${cost} points)` }}
+          {{ buying ? 'Buying…' : `Buy Ticket (${Number(cost).toLocaleString()} points)` }}
         </button>
       </div>
 

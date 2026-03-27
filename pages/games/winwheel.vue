@@ -58,7 +58,7 @@
               Next spin in {{ countdown }}
             </template>
             <template v-else>
-              Spin ({{ spinCost }} pts)
+              Spin ({{ Number(spinCost).toLocaleString() }} pts)
             </template>
           </button>
 
@@ -109,8 +109,8 @@
               <h2 class="text-2xl font-bold">
                 <template v-if="spinResult.type === 'nothing'">You got nothing 😢</template>
                 <template v-else-if="spinResult.type === 'points'">
-                  <span v-if="spinResult.amount < spinCost">Small Prize: +{{ spinResult.amount }} pts! 🎉</span>
-                  <span v-else>You won {{ spinResult.amount }} pts! 🏆</span>
+                  <span v-if="spinResult.amount < spinCost">Small Prize: +{{ Number(spinResult.amount).toLocaleString() }} pts! 🎉</span>
+                  <span v-else>You won {{ Number(spinResult.amount).toLocaleString() }} pts! 🏆</span>
                 </template>
                 <template v-else>You won a cToon! 🎉</template>
               </h2>
@@ -154,12 +154,12 @@
             <!-- Scrollable body -->
             <div class="flex-1 overflow-y-auto p-6">
               <ul class="list-disc list-inside space-y-2 text-sm text-gray-700">
-                <li>Each spin costs <strong>{{ spinCost }} points</strong>.</li>
+                <li>Each spin costs <strong>{{ Number(spinCost).toLocaleString() }} points</strong>.</li>
                 <li>You can spin up to <strong>{{ maxDailySpins }} times</strong> per day (resets at 8&nbsp;AM CST).</li>
                 <li>Possible outcomes:
                   <ul class="list-circle list-inside ml-4">
                     <li><strong>Nothing</strong>: no reward.</li>
-                    <li><strong>Points</strong>: win {{ pointsWon }} points back.</li>
+                    <li><strong>Points</strong>: win {{ Number(pointsWon).toLocaleString() }} points back.</li>
                     <li><strong>Least Desirable cToon</strong>: we pick a common cToon with the fewest mints.</li>
                     <li><strong>Exclusive cToon</strong>: a random exclusive cToon</li>
                   </ul>

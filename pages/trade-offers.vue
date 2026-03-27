@@ -62,7 +62,7 @@
                   {{ offer.recipient.username }}
                 </NuxtLink>
               </td>
-              <td class="px-4 py-2 text-right">{{ offer.pointsOffered }}</td>
+              <td class="px-4 py-2 text-right">{{ Number(offer.pointsOffered).toLocaleString() }}</td>
               <td class="px-4 py-2 text-right">{{ countByRole(offer, 'OFFERED') }}</td>
               <td class="px-4 py-2 text-right">{{ countByRole(offer, 'REQUESTED') }}</td>
               <td class="px-4 py-2">
@@ -121,7 +121,7 @@
               {{ offer.status.toLowerCase() }}
             </span>
           </div>
-          <p class="text-sm mb-1"><strong>Points:</strong> {{ offer.pointsOffered }}</p>
+          <p class="text-sm mb-1"><strong>Points:</strong> {{ Number(offer.pointsOffered).toLocaleString() }}</p>
           <p class="text-sm mb-1">
             <strong>Offered:</strong> {{ countByRole(offer, 'OFFERED') }}
           </p>
@@ -179,7 +179,7 @@
               </NuxtLink>
             </h2>
 
-            <p class="mb-1"><strong>Points Offered:</strong> {{ currentOffer.pointsOffered }}</p>
+            <p class="mb-1"><strong>Points Offered:</strong> {{ Number(currentOffer.pointsOffered).toLocaleString() }}</p>
             <p class="mb-1">
               <strong>Status:</strong>
               <span :class="statusClasses(currentOffer.status)">

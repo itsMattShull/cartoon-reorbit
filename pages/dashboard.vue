@@ -141,12 +141,12 @@
                   >
                     {{ user?.username }}
                   </NuxtLink>
-                  <p class="text-slate-800">{{ user?.points }} Points</p>
+                  <p class="text-slate-800">{{ (user?.points ?? 0).toLocaleString() }} Points</p>
                   <p class="text-slate-800">
-                    {{ collectionSummary.uniqueCount }} unique cToons Collected
+                    {{ collectionSummary.uniqueCount.toLocaleString() }} unique cToons Collected
                   </p>
                   <p class="text-slate-800">
-                    {{ collectionSummary.totalCount }} total cToons Collected
+                    {{ collectionSummary.totalCount.toLocaleString() }} total cToons Collected
                   </p>
                 </div>
               </div>
@@ -453,9 +453,9 @@
                 All ways to gain points in a 24 hour cycle reset at 8pm CST.
               </div>
               <div class="space-y-6">
-                <p>• {{ gc.czoneVisitPoints }} points every 24 hours for every cZone you visit (up to {{ gc.czoneVisitPoints * gc.czoneVisitMaxPerDay }} points per day).</p>
-                <p>• Claim your daily login bonus ({{ gc.dailyLoginPoints }} points) once every 24 hour cycle.</p>
-                <p>• Playing games, such as Winball, will give you up to {{ gc.dailyPointLimit }} points every 24 hours.</p>
+                <p>• {{ gc.czoneVisitPoints.toLocaleString() }} points every 24 hours for every cZone you visit (up to {{ (gc.czoneVisitPoints * gc.czoneVisitMaxPerDay).toLocaleString() }} points per day).</p>
+                <p>• Claim your daily login bonus ({{ gc.dailyLoginPoints.toLocaleString() }} points) once every 24 hour cycle.</p>
+                <p>• Playing games, such as Winball, will give you up to {{ gc.dailyPointLimit.toLocaleString() }} points every 24 hours.</p>
                 <p>• Special codes that can be found in the announcements channel in Discord.</p>
               </div>
               <div class="mt-6 text-right">

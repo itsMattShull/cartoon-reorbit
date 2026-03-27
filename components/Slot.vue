@@ -1,6 +1,6 @@
 <template>
   <div class="h-12 bg-gray-300 rounded text-center flex items-center justify-center font-bold">
-    {{ points }}
+    {{ points.toLocaleString() }}
   </div>
 </template>
 

@@ -113,7 +113,7 @@
                 <tbody>
                   <tr v-for="row in standings" :key="`swiss-${row.userId}`" class="border-t">
                     <td class="py-1 pr-2">{{ row.username }}</td>
-                    <td class="py-1 pr-2">{{ row.points }}</td>
+                    <td class="py-1 pr-2">{{ Number(row.points).toLocaleString() }}</td>
                     <td class="py-1 pr-2">{{ row.swissWins }}-{{ row.swissLosses }}-{{ row.swissTies }}</td>
                     <td class="py-1 pr-2">{{ formatPct(row.opponentMatchWinPct) }}</td>
                     <td class="py-1">{{ formatPct(row.gameWinPct) }}</td>

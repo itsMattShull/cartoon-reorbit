@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Create Trade</h1>
       <div class="text-sm bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded">
-        My Points: {{ user?.points ?? 0 }}
+        My Points: {{ (user?.points ?? 0).toLocaleString() }}
       </div>
     </div>
 

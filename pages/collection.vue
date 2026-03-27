@@ -586,8 +586,8 @@
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-2xl font-semibold capitalize">{{ setName }}</h2>
               <p class="text-gray-700">
-                {{ ownedCountBySet(setName) }} /
-                {{ totalCountBySet(setName) }} owned
+                {{ ownedCountBySet(setName).toLocaleString() }} /
+                {{ totalCountBySet(setName).toLocaleString() }} owned
                 ({{ percentageOwnedBySet(setName) }}%)
               </p>
             </div>
@@ -699,8 +699,8 @@
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-2xl font-semibold capitalize">{{ seriesName }}</h2>
               <p class="text-gray-700">
-                {{ ownedCountBySeries(seriesName) }} /
-                {{ totalCountBySeries(seriesName) }} owned
+                {{ ownedCountBySeries(seriesName).toLocaleString() }} /
+                {{ totalCountBySeries(seriesName).toLocaleString() }} owned
                 ({{ percentageOwnedBySeries(seriesName) }}%)
               </p>
             </div>
