@@ -173,15 +173,51 @@
       <!-- Auctions tab -->
       <section v-if="activeTab==='Auctions'" class="space-y-6">
         <p class="text-sm text-gray-600">
-          Configure daily auction settings.
+          Configure the featured auction schedule. All times are in CST.
         </p>
+
+        <!-- 24-hour grid -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Featured Auction Hours (CST)</label>
+          <div class="grid grid-cols-6 gap-1">
+            <label
+              v-for="h in 24"
+              :key="h - 1"
+              class="flex flex-col items-center gap-1 p-2 rounded border cursor-pointer select-none"
+              :class="featuredAuctionHours.includes(h - 1)
+                ? 'bg-indigo-50 border-indigo-400 text-indigo-700'
+                : 'bg-gray-50 border-gray-200 text-gray-600'"
+            >
+              <input
+                type="checkbox"
+                class="sr-only"
+                :value="h - 1"
+                :checked="featuredAuctionHours.includes(h - 1)"
+                @change="toggleHour(h - 1)"
+              />
+              <span class="text-sm font-mono font-semibold">{{ formatHour(h - 1) }}</span>
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            {{ featuredAuctionHours.length === 0
+              ? 'No hours selected — featured auctions are disabled.'
+              : `${featuredAuctionHours.length} hour(s) selected: ${featuredAuctionHours.slice().sort((a, b) => a - b).map(formatHour).join(', ')}` }}
+          </p>
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
-            <label class="block text-sm font-medium text-gray-700">Featured Auctions Per Day</label>
-            <input type="number" min="0" class="input" v-model.number="featuredAuctionsPerDay" />
-            <p class="text-xs text-gray-500 mt-1">Number of featured auctions placed into live auctions each day. Set to 0 to disable.</p>
+            <label class="block text-sm font-medium text-gray-700">Interval (every N days)</label>
+            <input type="number" min="1" class="input" v-model.number="featuredAuctionIntervalDays" />
+            <p class="text-xs text-gray-500 mt-1">1 = fire every day, 2 = every other day, etc.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Auctions Per Slot</label>
+            <input type="number" min="0" class="input" v-model.number="featuredAuctionsPerSlot" />
+            <p class="text-xs text-gray-500 mt-1">How many featured auctions to create each time a scheduled hour fires. Set to 0 to disable.</p>
           </div>
         </div>
+
         <div>
           <button class="btn-primary" :disabled="savingAuctions" @click="saveAuctions">
             <span v-if="!savingAuctions">Save</span><span v-else>Saving…</span>
@@ -219,7 +255,9 @@ const czoneVisitMaxPerDay  = ref(10)
 const czoneCount           = ref(3)
 const phashDuplicateThreshold = ref(14)
 const dhashDuplicateThreshold = ref(16)
-const featuredAuctionsPerDay = ref(1)
+const featuredAuctionHours        = ref([])
+const featuredAuctionIntervalDays = ref(1)
+const featuredAuctionsPerSlot     = ref(1)
 
 async function loadGlobal() {
   try {
@@ -233,7 +271,9 @@ async function loadGlobal() {
     czoneCount.value           = Number(g?.czoneCount           ?? 3)
     phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
     dhashDuplicateThreshold.value = Number(g?.dhashDuplicateThreshold ?? 16)
-    featuredAuctionsPerDay.value  = Number(g?.featuredAuctionsPerDay  ?? 1)
+    featuredAuctionHours.value        = Array.isArray(g?.featuredAuctionHours) ? g.featuredAuctionHours : []
+    featuredAuctionIntervalDays.value = Number(g?.featuredAuctionIntervalDays ?? 1)
+    featuredAuctionsPerSlot.value     = Number(g?.featuredAuctionsPerSlot ?? 1)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -311,7 +351,9 @@ async function saveAuctions() {
       method: 'POST',
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
-        featuredAuctionsPerDay: Number(featuredAuctionsPerDay.value)
+        featuredAuctionHours: featuredAuctionHours.value,
+        featuredAuctionIntervalDays: Number(featuredAuctionIntervalDays.value),
+        featuredAuctionsPerSlot: Number(featuredAuctionsPerSlot.value)
       }
     })
     toast.value = { type: 'ok', msg: 'Auction settings saved.' }
@@ -320,6 +362,19 @@ async function saveAuctions() {
   } finally {
     savingAuctions.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
+}
+
+function toggleHour(h) {
+  const idx = featuredAuctionHours.value.indexOf(h)
+  if (idx === -1) featuredAuctionHours.value = [...featuredAuctionHours.value, h]
+  else featuredAuctionHours.value = featuredAuctionHours.value.filter(x => x !== h)
+}
+
+function formatHour(h) {
+  if (h === 0) return '12am'
+  if (h < 12) return `${h}am`
+  if (h === 12) return '12pm'
+  return `${h - 12}pm`
 }
 
 async function saveDuplicateSettings() {
