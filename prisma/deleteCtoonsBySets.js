@@ -70,7 +70,10 @@ async function deleteCtoonAndDependencies(ctoonId) {
     // 10. Any GameConfig entries pointing to this as grand prize
     await tx.gameConfig.deleteMany({ where: { grandPrizeCtoonId: ctoonId } })
 
-    // 11. And now the Ctoon itself
+    // 11. User suggestions for this cToon
+    await tx.ctoonUserSuggestion.deleteMany({ where: { ctoonId } })
+
+    // 12. And now the Ctoon itself
     await tx.ctoon.delete({ where: { id: ctoonId } })
   })
 }
