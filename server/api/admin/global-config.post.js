@@ -32,9 +32,9 @@ export default defineEventHandler(async (event) => {
     czoneCount,
     phashDuplicateThreshold,
     dhashDuplicateThreshold,
-    featuredAuctionsPerDay,
-    firstAdditionalCzoneCost,
-    subsequentAdditionalCzoneCost
+    featuredAuctionHours,
+    featuredAuctionIntervalDays,
+    featuredAuctionsPerSlot
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -55,9 +55,11 @@ export default defineEventHandler(async (event) => {
     czoneCount:         (typeof czoneCount         === 'number') ? Number(czoneCount)         : undefined,
     phashDuplicateThreshold: (typeof phashDuplicateThreshold === 'number') ? Number(phashDuplicateThreshold) : undefined,
     dhashDuplicateThreshold: (typeof dhashDuplicateThreshold === 'number') ? Number(dhashDuplicateThreshold) : undefined,
-    featuredAuctionsPerDay: (typeof featuredAuctionsPerDay === 'number') ? Number(featuredAuctionsPerDay) : undefined,
-    firstAdditionalCzoneCost:      (typeof firstAdditionalCzoneCost      === 'number') ? Number(firstAdditionalCzoneCost)      : undefined,
-    subsequentAdditionalCzoneCost: (typeof subsequentAdditionalCzoneCost === 'number') ? Number(subsequentAdditionalCzoneCost) : undefined
+    featuredAuctionHours: Array.isArray(featuredAuctionHours)
+      ? featuredAuctionHours.map(Number).filter(h => h >= 0 && h <= 23)
+      : undefined,
+    featuredAuctionIntervalDays: (typeof featuredAuctionIntervalDays === 'number') ? Math.max(1, featuredAuctionIntervalDays) : undefined,
+    featuredAuctionsPerSlot: (typeof featuredAuctionsPerSlot === 'number') ? Number(featuredAuctionsPerSlot) : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -75,9 +77,9 @@ export default defineEventHandler(async (event) => {
         czoneCount: payload.czoneCount ?? 3,
         phashDuplicateThreshold: payload.phashDuplicateThreshold ?? 14,
         dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16,
-        featuredAuctionsPerDay:        payload.featuredAuctionsPerDay        ?? 1,
-        firstAdditionalCzoneCost:      payload.firstAdditionalCzoneCost      ?? 25000,
-        subsequentAdditionalCzoneCost: payload.subsequentAdditionalCzoneCost ?? 50000
+        featuredAuctionHours: payload.featuredAuctionHours ?? [],
+        featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays ?? 1,
+        featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot ?? 1
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -89,9 +91,9 @@ export default defineEventHandler(async (event) => {
         ...(payload.czoneCount          !== undefined ? { czoneCount:          payload.czoneCount }          : {}),
         ...(payload.phashDuplicateThreshold !== undefined ? { phashDuplicateThreshold: payload.phashDuplicateThreshold } : {}),
         ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {}),
-        ...(payload.featuredAuctionsPerDay        !== undefined ? { featuredAuctionsPerDay:        payload.featuredAuctionsPerDay }        : {}),
-        ...(payload.firstAdditionalCzoneCost      !== undefined ? { firstAdditionalCzoneCost:      payload.firstAdditionalCzoneCost }      : {}),
-        ...(payload.subsequentAdditionalCzoneCost !== undefined ? { subsequentAdditionalCzoneCost: payload.subsequentAdditionalCzoneCost } : {})
+        ...(payload.featuredAuctionHours !== undefined ? { featuredAuctionHours: payload.featuredAuctionHours } : {}),
+        ...(payload.featuredAuctionIntervalDays !== undefined ? { featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays } : {}),
+        ...(payload.featuredAuctionsPerSlot !== undefined ? { featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot } : {})
       }
     })
     // Log field-level changes
@@ -104,9 +106,9 @@ export default defineEventHandler(async (event) => {
       'czoneCount',
       'phashDuplicateThreshold',
       'dhashDuplicateThreshold',
-      'featuredAuctionsPerDay',
-      'firstAdditionalCzoneCost',
-      'subsequentAdditionalCzoneCost'
+      'featuredAuctionHours',
+      'featuredAuctionIntervalDays',
+      'featuredAuctionsPerSlot'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
