@@ -79,13 +79,15 @@ async function main() {
   try {
     const toDelete = await prisma.ctoon.findMany({
       where: {
-        OR: [
-          { series: "Foster's Home for Imaginary Friends", set: 'Originals' },
-          { series: 'Space Ghost Coast to Coast',          set: 'Originals' },
-          { series: 'Powerpuff Girls',                     set: 'March 2026' },
-        ]
+        set: {
+          in: [
+            "Foster's Home for Imaginary Friends Originals",
+            'Space Ghost Coast to Coast Originals',
+            'Powerpuff Girls March 2026',
+          ]
+        }
       },
-      select: { id: true, name: true, series: true, set: true }
+      select: { id: true, name: true, set: true }
     })
 
     if (toDelete.length === 0) {
@@ -95,9 +97,9 @@ async function main() {
 
     console.log(`Found ${toDelete.length} cToon(s) to delete.`)
 
-    for (const { id, name, series, set } of toDelete) {
+    for (const { id, name, set } of toDelete) {
       try {
-        console.log(`Deleting [${series} – ${set}] ${name} (${id})…`)
+        console.log(`Deleting [${set}] ${name} (${id})…`)
         await deleteCtoonAndDependencies(id)
         console.log(`✅ Successfully deleted ${name}`)
       } catch (err) {
