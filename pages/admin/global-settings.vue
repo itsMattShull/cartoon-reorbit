@@ -23,6 +23,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Auctions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Auctions'">Auctions</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='cMart' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='cMart'">cMart</button>
         </nav>
       </div>
 
@@ -225,6 +229,30 @@
         </div>
       </section>
 
+      <!-- cMart tab -->
+      <section v-if="activeTab==='cMart'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure cMart upgrade pricing.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">First additional cZone cost</label>
+            <input type="number" min="0" class="input" v-model.number="firstAdditionalCzoneCost" />
+            <p class="text-xs text-gray-500 mt-1">Cost when a user has 0 additional cZones.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Subsequent additional cZone cost</label>
+            <input type="number" min="0" class="input" v-model.number="subsequentAdditionalCzoneCost" />
+            <p class="text-xs text-gray-500 mt-1">Cost when a user already has 1 or more additional cZones.</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="savingCmart" @click="saveCmart">
+            <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -245,6 +273,7 @@ const savingGlobal = ref(false)
 const savingRarity = ref(false)
 const savingDuplicates = ref(false)
 const savingAuctions = ref(false)
+const savingCmart = ref(false)
 
 // Global Points state
 const dailyLoginPoints     = ref(500)

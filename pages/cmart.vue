@@ -553,6 +553,47 @@
         </div>
       </div>
 
+      <!-- ─── cZONES UPGRADES TAB ──────────────────── -->
+      <div v-if="activeTab === 'cZones Upgrades'">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Additional cZone card -->
+          <div class="bg-white rounded-lg shadow p-4 flex flex-col items-center h-full">
+            <h2 class="text-xl font-semibold mb-4 text-center">Additional cZone</h2>
+
+            <!-- Plus icon in place of an image -->
+            <div class="flex-grow flex items-center justify-center w-full mb-4">
+              <div class="flex items-center justify-center w-24 h-24 rounded-full bg-indigo-100 text-indigo-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+            </div>
+
+            <p class="text-sm text-gray-600 text-center mb-4">
+              Expand your profile with an extra cZone slot.
+            </p>
+
+            <button
+              @click="buyCzone"
+              :disabled="buyingCzone"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
+            >
+              <span v-if="buyingCzone">Purchasing…</span>
+              <span v-else>
+                Buy for
+                {{
+                  ((user?.additionalCzones ?? 0) < 1
+                    ? upgradesConfig.firstAdditionalCzoneCost
+                    : upgradesConfig.subsequentAdditionalCzoneCost
+                  ).toLocaleString()
+                }}
+                Pts
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- PACK OVERLAY & MODAL -->
       <!-- ... existing overlay, glow, Toast ... -->
       <div
@@ -721,6 +762,10 @@ import * as Sentry from '@sentry/nuxt'
 const showFilters = ref(false)
 const buyingCtoons = ref(new Set())
 const buyingPacks  = ref(new Set())
+const buyingCzone  = ref(false)
+
+// ────────── cZones Upgrades ────────────────────
+const upgradesConfig = ref({ firstAdditionalCzoneCost: 25000, subsequentAdditionalCzoneCost: 50000 })
 
 const loading = ref(true)
 
@@ -738,6 +783,7 @@ const activeHoliday = ref(null)
 const tabs = computed(() => {
   const base = ['cToons', 'Packs']
   if (activeHoliday.value?.name) base.push(activeHoliday.value.name)
+  base.push('cZones Upgrades')
   return base
 })
 const activeTab = ref('cToons')
@@ -1158,6 +1204,13 @@ onMounted(async () => {
     activeHoliday.value = null
   }
 
+  // LOAD UPGRADES CONFIG
+  try {
+    upgradesConfig.value = await $fetch('/api/cmart/upgrades-config')
+  } catch (err) {
+    console.error('Failed to load upgrades config:', err)
+  }
+
   _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
 
   loading.value = false
@@ -1269,6 +1322,31 @@ async function buyPack(pack) {
     buyingPacks.value.delete(pack.id)
     await fetchSelf({ force: true })
     await loadOwnedCtoons()
+  }
+}
+
+// ────────── Buy Additional cZone ────────────────
+async function buyCzone() {
+  const currentAdditional = user.value?.additionalCzones ?? 0
+  const cost = currentAdditional < 1
+    ? upgradesConfig.value.firstAdditionalCzoneCost
+    : upgradesConfig.value.subsequentAdditionalCzoneCost
+
+  if ((user.value?.points ?? 0) < cost) {
+    return showToast("You don't have enough points to buy an Additional cZone", 'error')
+  }
+
+  buyingCzone.value = true
+  try {
+    await $fetch('/api/cmart/czones/buy', { method: 'POST' })
+    showToast('Additional cZone purchased successfully!', 'success')
+    await fetchSelf({ force: true })
+  } catch (err) {
+    Sentry.captureException(err)
+    const msg = err?.data?.message || err?.statusMessage || err?.message || 'Failed to purchase Additional cZone'
+    showToast(msg, 'error')
+  } finally {
+    buyingCzone.value = false
   }
 }
 
