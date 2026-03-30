@@ -82,13 +82,10 @@ async function main() {
   try {
     const toDelete = await prisma.ctoon.findMany({
       where: {
-        set: {
-          in: [
-            "Foster's Home for Imaginary Friends Originals",
-            'Space Ghost Coast to Coast Originals',
-            'Powerpuff Girls March 2026',
-          ]
-        }
+        OR: [
+          { set: { contains: 'Home for Imaginary Friends Originals' } },
+          { set: { in: ['Space Ghost Coast to Coast Originals', 'Powerpuff Girls March 2026'] } },
+        ]
       },
       select: { id: true, name: true, set: true }
     })
