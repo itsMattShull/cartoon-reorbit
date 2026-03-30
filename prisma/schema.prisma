@@ -906,7 +906,10 @@ model GlobalGameConfig {
   // cToon release settings
   initialReleasePercent  Int      @default(75)
   finalReleaseDelayHours Int      @default(12)
-  featuredAuctionsPerDay Int      @default(1)
+  featuredAuctionHours         Json     @default("[]")  // int[] of hours 0–23 CST to fire
+  featuredAuctionIntervalDays  Int      @default(1)      // fire every N days
+  featuredAuctionsPerSlot      Int      @default(1)      // auctions created per slot
+  featuredAuctionLastFiredSlot String?                   // idempotency key e.g. "2026-03-30-08"
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

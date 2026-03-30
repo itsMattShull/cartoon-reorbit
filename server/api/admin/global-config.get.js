@@ -38,7 +38,9 @@ export default defineEventHandler(async (event) => {
         czoneCount: 3,
         phashDuplicateThreshold: 14,
         dhashDuplicateThreshold: 16,
-        featuredAuctionsPerDay: 1
+        featuredAuctionHours: [],
+        featuredAuctionIntervalDays: 1,
+        featuredAuctionsPerSlot: 1
       }
     })
   }

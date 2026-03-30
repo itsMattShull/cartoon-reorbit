@@ -979,7 +979,28 @@ async function createDailyFeaturedAuction() {
   if (!username) return
 
   const config = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-  const dailyCap = config?.featuredAuctionsPerDay ?? 1
+
+  // Determine current CST hour and date
+  const nowCST = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+  const cstHour = nowCST.getHours()
+
+  // Check if this hour is in the configured schedule
+  const scheduledHours = Array.isArray(config?.featuredAuctionHours) ? config.featuredAuctionHours : []
+  if (scheduledHours.length === 0 || !scheduledHours.includes(cstHour)) return
+
+  // Check if today is an "on" day based on interval (modulo a fixed CST epoch of Jan 1 2025)
+  const intervalDays = config?.featuredAuctionIntervalDays ?? 1
+  const cstMidnight = new Date(nowCST)
+  cstMidnight.setHours(0, 0, 0, 0)
+  const EPOCH = new Date('2025-01-01T00:00:00').getTime()
+  const dayNum = Math.floor((cstMidnight.getTime() - EPOCH) / 86_400_000)
+  if (dayNum % intervalDays !== 0) return
+
+  // Idempotency: skip if this exact slot already fired
+  const slotKey = `${nowCST.getFullYear()}-${String(nowCST.getMonth() + 1).padStart(2, '0')}-${String(nowCST.getDate()).padStart(2, '0')}-${String(cstHour).padStart(2, '0')}`
+  if (config?.featuredAuctionLastFiredSlot === slotKey) return
+
+  const dailyCap = config?.featuredAuctionsPerSlot ?? 1
   if (dailyCap <= 0) return
 
   const officialUser = await prisma.user.findUnique({
@@ -1073,6 +1094,14 @@ async function createDailyFeaturedAuction() {
     }))
 
     await sendAuctionDiscordAnnouncement(result, isHolidayItem)
+  }
+
+  // Mark this slot as fired so restarts don't double-create
+  if (createdCount > 0) {
+    await prisma.globalGameConfig.update({
+      where: { id: 'singleton' },
+      data: { featuredAuctionLastFiredSlot: slotKey }
+    })
   }
 }
 
@@ -1194,8 +1223,8 @@ cron.schedule('0 * * * *', updateWinballGrandPrizeFromSchedule)  // hourly at mi
 await enforceDormantAccounts()
 cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
 
-// create daily featured auction at 08:00
-cron.schedule("0 8 * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
+// check featured auction schedule every hour
+cron.schedule("0 * * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
 
 // Enqueue daily achievements processing at 03:00 CST
 async function enqueueAchievementsDaily() {
