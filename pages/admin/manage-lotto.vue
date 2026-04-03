@@ -84,7 +84,7 @@
                 <p class="text-xs" :class="ctoon.inCmart ? 'text-green-600' : 'text-blue-600'">
                   <span v-if="ctoon.inCmart">In cMart</span>
                   <span v-else>Not in cMart</span>
-                  <span v-if="ctoon.quantity !== null"> • {{ ctoon.quantity - ctoon.totalMinted }} remaining</span>
+                  <span v-if="ctoon.quantity !== null"> • {{ ctoon.quantity === TIME_BASED_CAP ? '???' : ctoon.quantity - ctoon.totalMinted }} remaining</span>
                 </p>
               </div>
             </div>
@@ -106,6 +106,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 definePageMeta({ title: 'Admin - Manage Lotto', middleware: ['auth','admin'], layout: 'default' })
 

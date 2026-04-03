@@ -11,9 +11,21 @@ const connection = {
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     const { userId, ctoonId, isSpecial = false } = job.data
 
+    const TIME_BASED_CAP = 999999999
+
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
+
+    // ───────────────────── Time-based mint window guard ─────────────────────
+    // If this is a time-based cToon and the mint window has ended but the
+    // worker hasn't yet set the final quantity, reject the mint.
+    if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
+      const mintEndPassed = new Date(ctoon.mintEndDate) <= new Date()
+      if (mintEndPassed && ctoon.quantity === TIME_BASED_CAP) {
+        throw new Error('Minting period has ended')
+      }
+    }
 
     // ───────────────────────── Holiday window guard ─────────────────────────
     // If this cToon is a Holiday Item in ANY event, only allow mint while an
@@ -124,7 +136,8 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
 
       // Window-aware cap (non-special mints only)
-      if (!isSpecial && updatedCtoon.quantity !== null && updatedCtoon.releaseDate) {
+      // Skip two-phase logic for time-based cToons (they don't have initial/final windows)
+      if (!isSpecial && ctoon.mintLimitType !== 'timeBased' && updatedCtoon.quantity !== null && updatedCtoon.releaseDate) {
         const qty = Number(updatedCtoon.quantity)
         const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
         const initialCap = Math.min(

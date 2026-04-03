@@ -73,7 +73,7 @@
           <p class="text-sm font-semibold flex-grow flex items-center text-gray-800">{{ ctoon.name }}</p>
           <!-- <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
           <p class="text-xs text-gray-500">
-            Stock: {{ ctoon.quantity !== null ? ctoon.quantity - ctoon.totalMinted : 'Unlimited' }}
+            Stock: {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity === TIME_BASED_CAP ? '???' : ctoon.quantity - ctoon.totalMinted }}
           </p> -->
         </div>
       </div>
@@ -86,6 +86,7 @@ import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '~/composables/useAuth'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 definePageMeta({ title: 'Lottery', middleware: ['auth'], layout: 'default' })
 

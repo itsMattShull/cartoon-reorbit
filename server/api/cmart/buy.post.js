@@ -36,7 +36,9 @@ export default defineEventHandler(async (event) => {
         totalMinted: true,
         price: true,
         initialReleaseQty: true,
-        finalReleaseAt: true
+        finalReleaseAt: true,
+        mintLimitType: true,
+        mintEndDate: true
       }
     })
 
@@ -62,40 +64,69 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.  Quit being a cheater.' })
     }
 
+    const TIME_BASED_CAP = 999999999
+
+    // Time-based mint window guard
+    if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
+      const mintEndPassed = new Date(ctoon.mintEndDate) <= now
+      if (mintEndPassed && ctoon.quantity === TIME_BASED_CAP) {
+        // Worker hasn't set final quantity yet — reject
+        throw createError({ statusCode: 410, statusMessage: 'Minting period has ended.' })
+      }
+      // If mintEndPassed but quantity is no longer TIME_BASED_CAP, the worker
+      // has set the final cap — fall through to normal sold-out check below.
+    }
+
     const isUnlimited = ctoon.quantity === null
+    const isTimeBased = ctoon.mintLimitType === 'timeBased'
+
     if (!isUnlimited) {
-      // Load global settings
-      let initialPercent = 75
-      let delayHours = 12
-      try {
-        const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-        if (cfg) {
-          if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
-          if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+      if (isTimeBased && ctoon.quantity === TIME_BASED_CAP) {
+        // Time-based cToon still in minting window — skip two-phase logic,
+        // the safety cap (999999999) is effectively unlimited
+      } else {
+        // Standard two-phase logic for defined-limit cToons (or time-based
+        // cToons whose mint window has closed and quantity was set by worker)
+        let initialPercent = 75
+        let delayHours = 12
+        try {
+          const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+          if (cfg) {
+            if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
+            if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
+          }
+        } catch {}
+
+        const qty = Number(ctoon.quantity)
+
+        // Skip two-phase windowing for time-based cToons (already capped by worker)
+        if (isTimeBased) {
+          if (ctoon.totalMinted >= qty) {
+            throw createError({ statusCode: 410, statusMessage: 'cToon already sold out.' })
+          }
+        } else {
+          const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+          const initialCap = Math.min(
+            qty,
+            Math.max(1, Number(ctoon.initialReleaseQty ?? initialCapFromPct))
+          )
+          const finalReleaseAt = ctoon.finalReleaseAt
+            ? new Date(ctoon.finalReleaseAt)
+            : ctoon.releaseDate
+              ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+              : null
+
+          const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
+          const allowedCap = beforeFinal ? initialCap : qty
+
+          // Optional: sold-out fast check before queueing (window-aware)
+          if (ctoon.totalMinted >= allowedCap) {
+            const msg = beforeFinal
+              ? 'Initial window sold out. Please wait for the final release.'
+              : 'cToon already sold out.'
+            throw createError({ statusCode: 410, statusMessage: msg })
+          }
         }
-      } catch {}
-
-      const qty = Number(ctoon.quantity)
-      const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
-      const initialCap = Math.min(
-        qty,
-        Math.max(1, Number(ctoon.initialReleaseQty ?? initialCapFromPct))
-      )
-      const finalReleaseAt = ctoon.finalReleaseAt
-        ? new Date(ctoon.finalReleaseAt)
-        : ctoon.releaseDate
-          ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-          : null
-
-      const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
-      const allowedCap = beforeFinal ? initialCap : qty
-
-      // Optional: sold-out fast check before queueing (window-aware)
-      if (ctoon.totalMinted >= allowedCap) {
-        const msg = beforeFinal
-          ? 'Initial window sold out. Please wait for the final release.'
-          : 'cToon already sold out.'
-        throw createError({ statusCode: 410, statusMessage: msg })
       }
     }
 
@@ -137,7 +168,8 @@ export default defineEventHandler(async (event) => {
       const msg = err.message || 'Unknown error'
       let statusCode = 500
 
-      if (/sold out/i.test(msg))          statusCode = 410
+      if (/sold out/i.test(msg))                statusCode = 410
+      else if (/minting period/i.test(msg))      statusCode = 410
       else if (/insufficient points/i.test(msg)) statusCode = 400
       else if (/purchase limit/i.test(msg))      statusCode = 403
       else if (/not-for-sale/i.test(msg))        statusCode = 404

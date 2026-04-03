@@ -129,7 +129,7 @@
               <td class="px-4 py-2">{{ uc.ctoon.rarity }}</td>
               <td class="px-4 py-2 text-right">{{ uc.ctoon.highestMint }}</td>
               <td class="px-4 py-2 text-right">
-                {{ uc.ctoon.quantity == null ? 'Unlimited' : uc.ctoon.quantity }}
+                {{ formatQuantity(uc.ctoon.quantity) }}
               </td>
               <td class="px-4 py-2 text-center">{{ uc.ctoon.inCmart ? 'Yes' : 'No' }}</td>
             </tr>
@@ -162,7 +162,7 @@
             <li><strong>Release:</strong> {{ formatDate(uc.ctoon.releaseDate) }}</li>
             <li><strong>Rarity:</strong> {{ uc.ctoon.rarity }}</li>
             <li><strong>Highest Mint:</strong> {{ uc.ctoon.highestMint }}</li>
-            <li><strong>Quantity:</strong> {{ uc.ctoon.quantity == null ? 'Unlimited' : uc.ctoon.quantity }}</li>
+            <li><strong>Quantity:</strong> {{ formatQuantity(uc.ctoon.quantity) }}</li>
             <li><strong>In C-mart:</strong> {{ uc.ctoon.inCmart ? 'Yes' : 'No' }}</li>
           </ul>
         </div>
@@ -182,6 +182,7 @@
 definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'default' })
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 const take = 20
 const skip = ref(0)

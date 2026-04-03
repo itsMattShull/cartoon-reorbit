@@ -383,8 +383,8 @@
                   <span class="capitalize">{{ ctoon.set }}</span>
                 </p>
                 <p>
-                  Minted: {{ ctoon.minted }} / 
-                  {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+                  Minted: {{ ctoon.minted }} /
+                  {{ formatQuantity(ctoon.quantity) }}
                 </p>
               </div>
               <div class="mt-6 flex w-full space-x-2">
@@ -419,10 +419,10 @@
                 <button
                   v-else
                   @click="buyCtoon(ctoon)"
-                  :disabled="(ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)) || buyingCtoons.has(ctoon.id)"
+                  :disabled="(ctoon.quantity !== null && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= currentAllowedCap(ctoon)) || buyingCtoons.has(ctoon.id)"
                   class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
                 >
-                  <span v-if="ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
+                  <span v-if="ctoon.quantity !== null && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
                   <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
                   <span v-else>Buy for {{ ctoon.price }} Pts</span>
                 </button>
@@ -488,16 +488,16 @@
               </p>
               <p>
                 Minted: {{ ctoon.minted }} /
-                {{ ctoon.quantity === null ? 'Unlimited' : ctoon.quantity }}
+                {{ formatQuantity(ctoon.quantity) }}
               </p>
             </div>
             <div class="mt-6 flex w-full space-x-2">
               <button
                 @click="buyCtoon(ctoon)"
-                :disabled="(ctoon.quantity && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
+                :disabled="(ctoon.quantity && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= ctoon.quantity) || buyingCtoons.has(ctoon.id)"
                 class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
               >
-                <span v-if="ctoon.quantity && ctoon.minted >= ctoon.quantity">Sold Out</span>
+                <span v-if="ctoon.quantity && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= ctoon.quantity">Sold Out</span>
                 <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
                 <span v-else>Buy for {{ ctoon.price }} Pts</span>
               </button>
@@ -758,6 +758,7 @@ import AddToWishlist from '@/components/AddToWishlist.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import Nav from '@/components/Nav.vue'
 import * as Sentry from '@sentry/nuxt'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 const showFilters = ref(false)
 const buyingCtoons = ref(new Set())

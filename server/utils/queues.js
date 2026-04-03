@@ -68,3 +68,41 @@ export async function scheduleAuctionClose(auctionId, endAt) {
   }
   await auctionCloseQueue.add('close', { auctionId }, { jobId: auctionId, delay })
 }
+
+// Queue for closing time-based mint windows at their mintEndDate
+export const mintEndQueue = new Queue(
+  process.env.MINT_END_QUEUE_KEY || 'mintEndQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500 },
+      removeOnFail:     { count: 500 },
+    },
+  }
+)
+
+/**
+ * Schedule (or reschedule) the delayed BullMQ job that closes a time-based mint window.
+ * Safe to call any time mintEndDate changes — handles all job states.
+ * @param {string} ctoonId
+ * @param {Date|string} mintEndDate
+ */
+export async function scheduleMintEnd(ctoonId, mintEndDate) {
+  const delay = Math.max(0, new Date(mintEndDate).getTime() - Date.now())
+  const existing = await mintEndQueue.getJob(String(ctoonId))
+  if (existing) {
+    const state = await existing.getState()
+    if (state === 'active') return
+    try { await existing.remove() } catch {}
+  }
+  await mintEndQueue.add('closeMint', { ctoonId }, { jobId: String(ctoonId), delay })
+}
+
+/**
+ * Cancel a pending mint-end job (e.g. when switching back to "defined" mode).
+ * @param {string} ctoonId
+ */
+export async function cancelMintEnd(ctoonId) {
+  const existing = await mintEndQueue.getJob(String(ctoonId))
+  if (existing) { try { await existing.remove() } catch {} }
+}
