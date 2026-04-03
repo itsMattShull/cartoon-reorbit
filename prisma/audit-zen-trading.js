@@ -22,6 +22,8 @@ const SUSPECT_USERNAMES = [
   'RockinBotSuperstar',
   'GroovyOtterWizard',
   'UltraGoblinWarrior',
+  'ChillSquirrelAgent',
+  'GlitchyPixelArchitect',
 ]
 
 // Hardcoded fallback prices per rarity (used if GlobalGameConfig row is missing)
