@@ -342,6 +342,7 @@ const adminGroups = [
     title: 'Admin — Logs',
     items: [
       { label: 'Check Cheating', to: '/admin/check-cheating' },
+      { label: 'Cheating Tool', to: '/admin/cheating-tool' },
       { label: 'Auction Logs', to: '/admin/auctions' },
       { label: 'Trade Logs', to: '/admin/trades' },
       { label: 'Auth Logs', to: '/admin/auth-logs' },
