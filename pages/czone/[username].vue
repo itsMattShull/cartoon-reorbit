@@ -723,7 +723,7 @@
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
-                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                  Mint #{{ c.mintNumber }} of {{ formatQuantity(c.quantity) }}
                 </p>
                 <p class="text-xs text-gray-600">
                   {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
@@ -785,7 +785,7 @@
                 <p class="text-sm text-center">{{ c.name }}</p>
                 <p class="text-xs text-gray-600">{{ c.rarity }}</p>
                 <p class="text-xs text-gray-600">
-                  Mint #{{ c.mintNumber }} of {{ c.quantity !== null ? c.quantity : 'Unlimited' }}
+                  Mint #{{ c.mintNumber }} of {{ formatQuantity(c.quantity) }}
                 </p>
                 <p class="text-xs text-gray-600">
                   {{ c.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
@@ -876,6 +876,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/composables/useAuth'
 import { useCtoonModal } from '@/composables/useCtoonModal'
+import { formatQuantity } from '~/utils/formatQuantity'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import Toast from '@/components/Toast.vue'

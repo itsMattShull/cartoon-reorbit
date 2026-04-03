@@ -107,8 +107,21 @@
           <p class="text-sm text-gray-500">Must be set in the future. Determines when the cToon becomes available.</p>
         </div>
 
-        <!-- Quantities -->
-        <div class="grid grid-cols-2 gap-4">
+        <!-- Mint Limit Type -->
+        <div>
+          <label class="block mb-1 font-medium">Mint Limit</label>
+          <select v-model="mintLimitType" class="w-full border rounded p-2 bg-white">
+            <option value="defined">Defined Number Limit</option>
+            <option value="timeBased">Time Based Limit</option>
+          </select>
+          <p class="text-sm text-gray-500">
+            <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
+            <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
+          </p>
+        </div>
+
+        <!-- Quantities (only for Defined Number Limit) -->
+        <div class="grid grid-cols-2 gap-4" v-if="mintLimitType === 'defined'">
           <div>
             <label class="block mb-1 font-medium">Total Quantity</label>
             <input v-model.number="totalQuantity" type="number" min="1" class="w-full border rounded p-2" />
@@ -119,6 +132,18 @@
             <input v-model.number="initialQuantity" type="number" min="0" class="w-full border rounded p-2" />
             <p class="text-sm text-gray-500">Number of First Editions available. Must be ≤ total quantity.</p>
           </div>
+        </div>
+
+        <!-- Mint End Date (only for Time Based Limit) -->
+        <div v-if="mintLimitType === 'timeBased'">
+          <label class="block mb-1 font-medium">Mint End Date/Time (CST)</label>
+          <input v-model="mintEndDate" type="datetime-local" required class="w-full border rounded p-2" />
+          <p class="text-sm text-gray-500">
+            Minting will be open until this date/time, then the quantity will be capped.
+          </p>
+          <p v-if="mintEndDateLocal" class="text-sm text-blue-600 mt-1">
+            (Your time: {{ mintEndDateLocal }})
+          </p>
         </div>
 
         <!-- Release schedule (computed, read-only) -->
@@ -272,6 +297,8 @@ const rarity = ref('')
 const set = ref('')
 const characters = ref('')
 const releaseDate = ref('')
+const mintLimitType = ref('defined')
+const mintEndDate = ref('')
 const totalQuantity = ref(null)
 const initialQuantity = ref(null)
 const perUserLimit = ref(null)
@@ -431,6 +458,28 @@ async function checkDuplicate(file) {
   }
 }
 
+// Compute the user's local timezone display for the mint end date
+const mintEndDateLocal = computed(() => {
+  if (!mintEndDate.value) return ''
+  try {
+    const utc = zonedTimeToUtc(mintEndDate.value, 'America/Chicago')
+    return utc.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, hour12: true })
+  } catch {
+    return ''
+  }
+})
+
+// Auto-set mintEndDate to releaseDate + 7 days when switching to timeBased or when releaseDate changes
+watch([releaseDate, mintLimitType], () => {
+  if (mintLimitType.value === 'timeBased' && releaseDate.value && !mintEndDate.value) {
+    const base = new Date(releaseDate.value)
+    base.setDate(base.getDate() + 7)
+    // Format as datetime-local string (YYYY-MM-DDTHH:mm)
+    const pad = n => String(n).padStart(2, '0')
+    mintEndDate.value = `${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())}T${pad(base.getHours())}:${pad(base.getMinutes())}`
+  }
+})
+
 const schedule = computed(() => {
   const qty = Number(totalQuantity.value)
   const hasQty = Number.isFinite(qty) && qty > 0
@@ -467,8 +516,17 @@ async function submitForm() {
   } catch {
     formData.append('releaseDate', new Date(releaseDate.value).toISOString())
   }
-  formData.append('totalQuantity', totalQuantity.value ?? '')
-  formData.append('initialQuantity', initialQuantity.value ?? '')
+  formData.append('mintLimitType', mintLimitType.value)
+  if (mintLimitType.value === 'timeBased' && mintEndDate.value) {
+    try {
+      const utcMintEnd = zonedTimeToUtc(mintEndDate.value, 'America/Chicago').toISOString()
+      formData.append('mintEndDate', utcMintEnd)
+    } catch {
+      formData.append('mintEndDate', new Date(mintEndDate.value).toISOString())
+    }
+  }
+  formData.append('totalQuantity', mintLimitType.value === 'defined' ? (totalQuantity.value ?? '') : '')
+  formData.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
   // advisory schedule fields
   formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
   formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')

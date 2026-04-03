@@ -93,6 +93,34 @@
           </div>
         </div>
 
+        <!-- Mint Limit Type -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block mb-1 font-medium">Mint Limit</label>
+            <select v-model="bulkMintLimitType" class="w-full border rounded p-2 bg-white">
+              <option value="defined">Defined Number Limit</option>
+              <option value="timeBased">Time Based Limit</option>
+            </select>
+            <p class="text-sm text-gray-500">
+              <template v-if="bulkMintLimitType === 'defined'">Fixed quantity per cToon.</template>
+              <template v-else>Unlimited minting until Mint End Date.</template>
+            </p>
+          </div>
+          <div v-if="bulkMintLimitType === 'timeBased'">
+            <label class="block mb-1 font-medium">Mint End Date/Time (CST)</label>
+            <input
+              v-model="bulkMintEndDate"
+              type="datetime-local"
+              required
+              class="w-full border rounded p-2"
+            />
+            <p class="text-sm text-gray-500">Minting open until this date/time.</p>
+            <p v-if="bulkMintEndDateLocal" class="text-sm text-blue-600 mt-1">
+              (Your time: {{ bulkMintEndDateLocal }})
+            </p>
+          </div>
+        </div>
+
         <!-- Release schedule preview (applies to each row based on its Total Qty) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
           <div>
@@ -126,8 +154,8 @@
                 <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
                 <th class="px-4 py-2">Characters</th>
-                <th class="px-4 py-2">Total Qty</th>
-                <th class="px-4 py-2">Initial Qty</th>
+                <th v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">Total Qty</th>
+                <th v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">Initial Qty</th>
                 <th class="px-4 py-2">Per-User Limit</th>
                 <th class="px-4 py-2">In cMart</th>
                 <th class="px-4 py-2">Price</th>
@@ -195,10 +223,10 @@
                 <td class="px-4 py-2">
                   <input v-model="f.characters" class="w-full border rounded p-1" placeholder="e.g. Amy,Bob"/>
                 </td>
-                <td class="px-4 py-2">
+                <td v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">
                   <input v-model.number="f.totalQuantity" type="number" min="1" class="w-full border rounded p-1" />
                 </td>
-                <td class="px-4 py-2">
+                <td v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">
                   <input v-model.number="f.initialQuantity" type="number" min="0" class="w-full border rounded p-1" />
                 </td>
                 <td class="px-4 py-2">
@@ -330,8 +358,8 @@
                 </p>
               </div>
 
-              <!-- Total Quantity -->
-              <div>
+              <!-- Total Quantity (only for Defined Number Limit) -->
+              <div v-if="bulkMintLimitType === 'defined'">
                 <label class="block mb-1 font-medium">Total Quantity</label>
                 <input
                   v-model.number="f.totalQuantity"
@@ -345,8 +373,8 @@
                 </p>
               </div>
 
-              <!-- Initial Quantity -->
-              <div>
+              <!-- Initial Quantity (only for Defined Number Limit) -->
+              <div v-if="bulkMintLimitType === 'defined'">
                 <label class="block mb-1 font-medium">Initial Quantity</label>
                 <input
                   v-model.number="f.initialQuantity"
@@ -437,9 +465,32 @@ const seriesOptions = ref([])
 const bulkSet = ref('')
 const bulkSeries = ref('')
 const bulkReleaseDate = ref('')
+const bulkMintLimitType = ref('defined')
+const bulkMintEndDate = ref('')
 const uploading = ref(false)
 const releasePercent = ref(75)
 const delayHours = ref(12)
+
+// Compute the user's local timezone display for the bulk mint end date
+const bulkMintEndDateLocal = computed(() => {
+  if (!bulkMintEndDate.value) return ''
+  try {
+    const utc = zonedTimeToUtc(bulkMintEndDate.value, 'America/Chicago')
+    return utc.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, hour12: true })
+  } catch {
+    return ''
+  }
+})
+
+// Auto-set bulkMintEndDate to bulkReleaseDate + 7 days
+watch([bulkReleaseDate, bulkMintLimitType], () => {
+  if (bulkMintLimitType.value === 'timeBased' && bulkReleaseDate.value && !bulkMintEndDate.value) {
+    const base = new Date(bulkReleaseDate.value)
+    base.setDate(base.getDate() + 7)
+    const pad = n => String(n).padStart(2, '0')
+    bulkMintEndDate.value = `${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())}T${pad(base.getHours())}:${pad(base.getMinutes())}`
+  }
+})
 
 function clampReleasePercent() {
   const next = Number(releasePercent.value)
@@ -728,8 +779,16 @@ async function uploadAll() {
     } catch {
       formData.append('releaseDate', new Date(bulkReleaseDate.value).toISOString())
     }
-    formData.append('totalQuantity', f.totalQuantity ?? '')
-    formData.append('initialQuantity', f.initialQuantity ?? '')
+    formData.append('mintLimitType', bulkMintLimitType.value)
+    if (bulkMintLimitType.value === 'timeBased' && bulkMintEndDate.value) {
+      try {
+        formData.append('mintEndDate', zonedTimeToUtc(bulkMintEndDate.value, 'America/Chicago').toISOString())
+      } catch {
+        formData.append('mintEndDate', new Date(bulkMintEndDate.value).toISOString())
+      }
+    }
+    formData.append('totalQuantity', bulkMintLimitType.value === 'defined' ? (f.totalQuantity ?? '') : '')
+    formData.append('initialQuantity', bulkMintLimitType.value === 'defined' ? (f.initialQuantity ?? '') : '')
     // advisory schedule fields per row
     if (f.totalQuantity && bulkReleaseDate.value) {
       const init = Math.max(1, Math.floor((Number(f.totalQuantity) * Number(releasePercent.value)) / 100))

@@ -217,7 +217,7 @@
                     <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
                     <p class="text-xs text-gray-600">
                       Mint #{{ tc.userCtoon.mintNumber }} of
-                      {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
+                      {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}
                     </p>
                     <p class="text-xs text-gray-600">
                       {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
@@ -250,7 +250,7 @@
                     <p class="text-xs text-gray-600">{{ tc.userCtoon.ctoon.rarity }}</p>
                     <p class="text-xs text-gray-600">
                       Mint #{{ tc.userCtoon.mintNumber }} of
-                      {{ tc.userCtoon.ctoon.quantity ?? 'Unlimited' }}
+                      {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}
                     </p>
                     <p class="text-xs text-gray-600">
                       {{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}
@@ -315,6 +315,7 @@ import { ref, onMounted, computed } from 'vue'
 import Nav from '@/components/Nav.vue'
 import Toast from '@/components/Toast.vue'
 import { useAuth } from '@/composables/useAuth'
+import { formatQuantity } from '~/utils/formatQuantity'
 
 definePageMeta({
   title: 'Trade Offers',

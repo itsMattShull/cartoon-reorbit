@@ -126,7 +126,7 @@
               <td class="px-4 py-2">{{ c.rarity }}</td>
               <td class="px-4 py-2 text-right">{{ c.highestMint }}</td>
               <td class="px-4 py-2 text-right">
-                {{ c.quantity == null ? 'Unlimited' : c.quantity }}
+                {{ formatQuantity(c.quantity) }}
               </td>
               <td class="px-4 py-2 text-center">
                 {{ c.inCmart ? 'Yes' : 'No' }}
@@ -194,7 +194,7 @@
                 </p>
                 <p class="text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
                 <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
-                <p class="text-sm"><strong>Quantity:</strong> {{ c.quantity == null ? 'Unlimited' : c.quantity }}</p>
+                <p class="text-sm"><strong>Quantity:</strong> {{ formatQuantity(c.quantity) }}</p>
                 <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
                 <p class="text-sm"><strong>Set:</strong> {{ c.set }}</p>
                 <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
@@ -245,6 +245,7 @@ definePageMeta({ title: 'Admin - cToons', middleware: ['auth','admin'], layout: 
 
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 /* Meta options from API */
 const setsOptions   = ref([])
