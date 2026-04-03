@@ -201,7 +201,10 @@
 
         <!-- Section 4: Pending (informational) -->
         <div class="bg-white border rounded p-4">
-          <h2 class="font-semibold text-base mb-1">Section 4 — Pending Trades <span class="font-normal text-gray-500 text-sm">(informational — not included in totals)</span></h2>
+          <h2 class="font-semibold text-base mb-1">
+            Section 4 — Pending Trades
+            <span class="font-normal text-gray-500 text-sm">(informational — not included in totals)</span>
+          </h2>
           <div class="mt-2 text-sm space-y-1">
             <div v-if="report.pendingRoomsDisplay.length === 0 && report.pendingOffersDisplay.length === 0" class="text-gray-500">No pending trades.</div>
             <div v-if="report.pendingRoomsDisplay.length">
@@ -262,13 +265,13 @@
       </div>
     </div>
 
-    <!-- Confirmation modal -->
+    <!-- Confirmation / Progress / Results modal -->
     <div v-if="showConfirm" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-auto">
         <div class="p-5">
 
-          <!-- Before applying -->
-          <template v-if="!applyOutcome">
+          <!-- ── Phase: review (before applying) ── -->
+          <template v-if="modalPhase === 'review'">
             <h3 class="text-lg font-bold mb-1">Confirm — Move Points &amp; cToons</h3>
             <p class="text-sm text-gray-600 mb-4">
               This will deduct points from <strong>{{ report?.target }}</strong> and add them to
@@ -313,25 +316,63 @@
             <div v-else class="text-sm text-gray-500 mb-4">No cToons to transfer (target no longer holds any).</div>
 
             <div class="flex justify-end gap-2">
-              <button class="px-4 py-2 border rounded hover:bg-gray-50" :disabled="applying" @click="closeConfirm">Cancel</button>
+              <button class="px-4 py-2 border rounded hover:bg-gray-50" @click="closeConfirm">Cancel</button>
               <button
-                class="px-4 py-2 bg-red-600 text-white rounded font-semibold hover:bg-red-700 disabled:opacity-50"
-                :disabled="applying"
+                class="px-4 py-2 bg-red-600 text-white rounded font-semibold hover:bg-red-700"
                 @click="applyChanges"
               >
-                {{ applying ? 'Applying…' : 'Confirm &amp; Apply' }}
+                Confirm &amp; Apply
               </button>
             </div>
           </template>
 
-          <!-- After applying -->
-          <template v-else>
-            <h3 class="text-lg font-bold mb-3">Result</h3>
+          <!-- ── Phase: processing (SSE progress bar) ── -->
+          <template v-if="modalPhase === 'processing'">
+            <h3 class="text-lg font-bold mb-4">Applying Changes…</h3>
 
-            <div v-if="applyError" class="p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm mb-3">
-              {{ applyError }}
+            <!-- Overall progress bar -->
+            <div class="mb-4">
+              <div class="flex justify-between text-sm font-medium mb-1">
+                <span>Progress</span>
+                <span>{{ progressDone }} / {{ progressTotal }} steps</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-5 overflow-hidden">
+                <div
+                  class="h-5 rounded-full transition-all duration-300"
+                  :class="progressHasError ? 'bg-yellow-400' : 'bg-indigo-600'"
+                  :style="{ width: progressPercent + '%' }"
+                />
+              </div>
+              <div class="text-xs text-gray-500 mt-1 text-right">{{ progressPercent }}% complete</div>
             </div>
 
+            <!-- Live step feed -->
+            <div class="border rounded bg-gray-50 max-h-52 overflow-auto p-2 space-y-1 text-sm font-mono">
+              <div
+                v-for="(step, i) in progressSteps"
+                :key="i"
+                class="flex items-start gap-2"
+                :class="step.success ? 'text-green-700' : 'text-red-600'"
+              >
+                <span class="shrink-0">{{ step.success ? '✓' : '✗' }}</span>
+                <span>{{ step.label }}</span>
+              </div>
+              <div v-if="progressSteps.length === 0" class="text-gray-400 italic">Starting…</div>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-3 text-center">Please wait — do not close this window.</p>
+          </template>
+
+          <!-- ── Phase: done (results) ── -->
+          <template v-if="modalPhase === 'done'">
+            <h3 class="text-lg font-bold mb-3">Result</h3>
+
+            <!-- Fatal transport error -->
+            <div v-if="applyFatalError" class="p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm mb-3">
+              {{ applyFatalError }}
+            </div>
+
+            <!-- Summary card -->
             <div v-if="applyResult" class="p-3 rounded mb-3" :class="applyResult.hasErrors ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'">
               <p class="font-semibold mb-2" :class="applyResult.hasErrors ? 'text-yellow-800' : 'text-green-800'">
                 {{ applyResult.hasErrors ? 'Completed with issues' : 'Completed successfully' }}
@@ -342,6 +383,7 @@
               </div>
             </div>
 
+            <!-- Error table -->
             <div v-if="applyResult?.errors?.length" class="mb-3">
               <h4 class="font-semibold text-sm mb-1">Errors</h4>
               <div class="overflow-auto border rounded">
@@ -394,7 +436,7 @@ const loading      = ref(false)
 const error        = ref('')
 const report       = ref(null)
 
-// ── Autocomplete state ──────────────────────────────────────────────────────
+// ── Autocomplete ────────────────────────────────────────────────────────────
 const usersLoaded      = ref(false)
 const allUsers         = ref([])
 const targetFocused    = ref(false)
@@ -441,7 +483,6 @@ function selectTarget(name) {
   targetSuggestions.value = []
   targetFocused.value = false
 }
-
 function addSuspect() {
   const v = suspectInput.value.trim()
   if (!v || suspects.value.includes(v)) return
@@ -449,16 +490,12 @@ function addSuspect() {
   suspectInput.value = ''
   suspectSuggestions.value = []
 }
-
 function addSuspectFromSuggestion(name) {
   if (!suspects.value.includes(name)) suspects.value.push(name)
   suspectInput.value = ''
   suspectSuggestions.value = []
 }
-
-function removeSuspect(i) {
-  suspects.value.splice(i, 1)
-}
+function removeSuspect(i) { suspects.value.splice(i, 1) }
 
 // ── Run report ──────────────────────────────────────────────────────────────
 async function runReport() {
@@ -484,47 +521,147 @@ async function runReport() {
   }
 }
 
-// ── Confirm modal ───────────────────────────────────────────────────────────
-const showConfirm = ref(false)
-const applying    = ref(false)
-const applyResult = ref(null)
-const applyError  = ref('')
-const applyOutcome = computed(() => !!applyError.value || !!applyResult.value)
+// ── Confirm modal + SSE progress ────────────────────────────────────────────
+const showConfirm    = ref(false)
+// 'review' | 'processing' | 'done'
+const modalPhase     = ref('review')
+
+// Progress state
+const progressTotal  = ref(0)
+const progressDone   = ref(0)
+const progressSteps  = ref([])   // { label, success }
+const progressHasError = ref(false)
+const progressPercent = computed(() => {
+  if (!progressTotal.value) return 0
+  return Math.round((progressDone.value / progressTotal.value) * 100)
+})
+
+// Result state
+const applyResult    = ref(null)
+const applyFatalError = ref('')
 
 function openConfirm() {
-  applyResult.value = null
-  applyError.value  = ''
-  showConfirm.value = true
+  modalPhase.value     = 'review'
+  progressTotal.value  = 0
+  progressDone.value   = 0
+  progressSteps.value  = []
+  progressHasError.value = false
+  applyResult.value    = null
+  applyFatalError.value = ''
+  showConfirm.value    = true
 }
 
 function closeConfirm() {
-  if (applying.value) return
+  if (modalPhase.value === 'processing') return  // can't close while running
   showConfirm.value = false
 }
 
 async function applyChanges() {
   if (!report.value) return
-  applying.value = true
-  applyError.value  = ''
-  applyResult.value = null
+  modalPhase.value = 'processing'
+  progressTotal.value = 0
+  progressDone.value  = 0
+  progressSteps.value = []
+  progressHasError.value = false
+  applyResult.value   = null
+  applyFatalError.value = ''
+
   try {
-    const res = await fetch('/api/admin/cheating-tool-apply', {
+    const res = await fetch('/api/admin/cheating-tool-apply-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ target: report.value.target, suspects: report.value.suspects })
     })
+
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
-      throw new Error(j?.statusMessage || `HTTP ${res.status}`)
+      applyFatalError.value = j?.statusMessage || `HTTP ${res.status}`
+      modalPhase.value = 'done'
+      return
     }
-    applyResult.value = await res.json()
-    // Refresh report to reflect applied changes
-    await runReport()
+
+    // Read SSE stream
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // SSE lines are separated by "\n\n"; each line may be "data: {...}"
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop()  // keep any incomplete chunk
+
+      for (const part of parts) {
+        for (const line of part.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            handleStreamEvent(JSON.parse(line.slice(6)))
+          } catch {}
+        }
+      }
+    }
+
+    // Handle any remaining buffer
+    for (const line of buffer.split('\n')) {
+      if (!line.startsWith('data: ')) continue
+      try { handleStreamEvent(JSON.parse(line.slice(6))) } catch {}
+    }
+
   } catch (e) {
-    applyError.value = e.message
-  } finally {
-    applying.value = false
+    applyFatalError.value = e.message
+    modalPhase.value = 'done'
+    return
+  }
+
+  // Refresh report so totals reflect the applied state
+  await runReport()
+}
+
+function handleStreamEvent(data) {
+  if (data.type === 'start') {
+    progressTotal.value = data.totalSteps
+    return
+  }
+
+  if (data.type === 'step') {
+    progressDone.value++
+    const success = data.success !== false
+    if (!success) progressHasError.value = true
+
+    let label = ''
+    if (data.phase === 'points') {
+      if (data.skipped) {
+        label = 'Points — nothing to deduct'
+      } else if (success) {
+        label = `Points — deducted ${data.pointsRemoved?.toLocaleString()} pts`
+      } else {
+        label = `Points — FAILED: ${data.error}`
+      }
+    } else if (data.phase === 'ctoon') {
+      if (success) {
+        label = `Transferred: ${data.name}${data.mintNumber != null ? ` #${data.mintNumber}` : ''} (${data.rarity})`
+      } else {
+        label = `FAILED: ${data.name} — ${data.error}`
+      }
+    }
+
+    progressSteps.value.push({ label, success })
+    return
+  }
+
+  if (data.type === 'complete') {
+    applyResult.value = data
+    modalPhase.value  = 'done'
+    return
+  }
+
+  if (data.type === 'error') {
+    applyFatalError.value = data.message
+    modalPhase.value = 'done'
   }
 }
 
