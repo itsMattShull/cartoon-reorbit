@@ -2,7 +2,7 @@
 
 import { defineEventHandler, readBody, createError } from 'h3'
 
-import { prisma } from '@/server/prisma'
+import { prisma, rawPrisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { NAV_CACHE_KEY } from './[username]/next.get.js'
 
@@ -64,7 +64,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const userCtoons = await prisma.userCtoon.findMany({
+  // Use rawPrisma (unextended client) so April Fools asset swaps are never
+  // persisted into the cZone layout — we always store the real assetPath.
+  const userCtoons = await rawPrisma.userCtoon.findMany({
     where: { userId: user.id, id: { in: Array.from(requestedIds) } },
     select: {
       id: true,

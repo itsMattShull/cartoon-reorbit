@@ -182,6 +182,7 @@ function applyAssetSwap(value, swapMap) {
 
 // Shared factory so dev can persist a single client
 function prismaClientFactory() {
+  let exportedBaseClient
   const baseClient = new PrismaClient({
     datasources: pooledUrl ? { db: { url: pooledUrl } } : undefined,
     errorFormat: 'pretty',
@@ -217,6 +218,8 @@ function prismaClientFactory() {
     process.once('SIGTERM', () => { disconnect().finally(() => process.exit(0)) })
   }
 
+  exportedBaseClient = baseClient
+
   const prisma = baseClient.$extends({
     query: {
       $allModels: {
@@ -231,10 +234,11 @@ function prismaClientFactory() {
     }
   })
 
-  return prisma
+  return { prisma, rawPrisma: exportedBaseClient }
 }
 
 let prisma
-prisma = prismaClientFactory()
+let rawPrisma
+;({ prisma, rawPrisma } = prismaClientFactory())
 
-export { prisma }
+export { prisma, rawPrisma }
