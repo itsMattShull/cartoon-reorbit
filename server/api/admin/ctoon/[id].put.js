@@ -9,6 +9,7 @@ import {
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
+import { scheduleMintEnd, cancelMintEnd } from '@/server/utils/queues'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -50,7 +51,8 @@ export default defineEventHandler(async (event) => {
     quantity, initialQuantity, inCmart, set, description, characters,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
-    clearSound
+    clearSound,
+    mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw
   } = payload
 
   // 4) Validate basics
@@ -68,6 +70,17 @@ export default defineEventHandler(async (event) => {
   const perUserInt  = perUserLimit == null || perUserLimit === '' ? null : Number(perUserLimit)
   const inCmartBool = String(inCmart) === 'true' || inCmart === true
   const isGtoonBool = String(isGtoon) === 'true' || isGtoon === true
+
+  // Mint limit type
+  const TIME_BASED_CAP = 999999999
+  const mintLimitType = mintLimitTypeRaw === 'timeBased' ? 'timeBased' : 'defined'
+  let mintEndDate = null
+  if (mintLimitType === 'timeBased') {
+    mintEndDate = mintEndDateRaw ? new Date(mintEndDateRaw) : null
+    if (!mintEndDate || isNaN(mintEndDate)) {
+      throw createError({ statusCode: 400, statusMessage: 'Mint End Date is required for Time Based Limit.' })
+    }
+  }
 
   // characters
   let charactersArr = characters
@@ -115,8 +128,10 @@ export default defineEventHandler(async (event) => {
     price: priceInt,
     releaseDate: newReleaseDate,
     perUserLimit: perUserInt,
-    quantity: qtyInt,
-    initialQuantity: initQtyInt,
+    quantity: mintLimitType === 'timeBased' ? TIME_BASED_CAP : qtyInt,
+    initialQuantity: mintLimitType === 'timeBased' ? TIME_BASED_CAP : initQtyInt,
+    mintLimitType,
+    mintEndDate,
     inCmart: inCmartBool,
     set,
     description: description?.trim() || null,
@@ -213,7 +228,8 @@ export default defineEventHandler(async (event) => {
     const keys = [
       'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
-      'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty'
+      'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',
+      'mintLimitType','mintEndDate'
     ]
     for (const k of keys) {
       const prev = before ? (before[k] instanceof Date ? before[k].toISOString() : (Array.isArray(before[k]) || typeof before[k] === 'object' ? JSON.stringify(before[k]) : before[k])) : undefined
@@ -229,6 +245,17 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch {}
+
+  // 10) Schedule or cancel mint-end job based on mint limit type change
+  try {
+    if (mintLimitType === 'timeBased' && mintEndDate) {
+      await scheduleMintEnd(id, mintEndDate)
+    } else if (mintLimitType === 'defined') {
+      await cancelMintEnd(id)
+    }
+  } catch (err) {
+    console.error(`[ctoon.put] Failed to manage mint-end job for ${id}:`, err)
+  }
 
   return { success: true, ctoon: updated }
 })

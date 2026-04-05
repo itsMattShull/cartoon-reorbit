@@ -19,6 +19,20 @@
           >
             Bulk Upload cToons
           </NuxtLink>
+
+          <button
+            :disabled="!isSearching"
+            @click="openBulkEdit"
+            :class="[
+              'px-4 py-2 rounded font-medium transition-colors',
+              isSearching
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            ]"
+            :title="isSearching ? 'Bulk edit filtered cToons' : 'Apply a filter or search first to enable bulk edit'"
+          >
+            Bulk Edit cToons
+          </button>
         </div>
       </div>
 
@@ -126,7 +140,7 @@
               <td class="px-4 py-2">{{ c.rarity }}</td>
               <td class="px-4 py-2 text-right">{{ c.highestMint }}</td>
               <td class="px-4 py-2 text-right">
-                {{ c.quantity == null ? 'Unlimited' : c.quantity }}
+                {{ formatQuantity(c.quantity) }}
               </td>
               <td class="px-4 py-2 text-center">
                 {{ c.inCmart ? 'Yes' : 'No' }}
@@ -194,7 +208,7 @@
                 </p>
                 <p class="text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
                 <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
-                <p class="text-sm"><strong>Quantity:</strong> {{ c.quantity == null ? 'Unlimited' : c.quantity }}</p>
+                <p class="text-sm"><strong>Quantity:</strong> {{ formatQuantity(c.quantity) }}</p>
                 <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
                 <p class="text-sm"><strong>Set:</strong> {{ c.set }}</p>
                 <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
@@ -237,6 +251,16 @@
         </button>
       </div>
     </div>
+
+    <!-- Bulk Edit Modal -->
+    <BulkEditCtoonModal
+      v-if="showBulkEditModal"
+      :ctoon-ids="displayedCtoons.map(c => c.id)"
+      :sets-options="setsOptions"
+      :series-options="seriesOptions"
+      @close="showBulkEditModal = false"
+      @saved="onBulkSaved"
+    />
   </div>
 </template>
 
@@ -245,10 +269,29 @@ definePageMeta({ title: 'Admin - cToons', middleware: ['auth','admin'], layout: 
 
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
+import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
+import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 /* Meta options from API */
 const setsOptions   = ref([])
 const seriesOptions = ref([])
+
+/* Bulk edit modal */
+const showBulkEditModal = ref(false)
+function openBulkEdit() {
+  if (!isSearching.value) return
+  showBulkEditModal.value = true
+}
+async function onBulkSaved() {
+  showBulkEditModal.value = false
+  // Re-run current search/browse to reflect updates
+  if (isSearching.value) {
+    const q = String(searchTerm.value || '').trim()
+    await runSearch({ q: q.length >= 3 ? q : '', set: selectedSet.value, series: selectedSeries.value })
+  } else {
+    await loadPage(currentPage.value)
+  }
+}
 
 /* Route helpers */
 const route = useRoute()

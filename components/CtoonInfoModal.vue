@@ -411,6 +411,7 @@ import AddToWishlist from '@/components/AddToWishlist.vue'
 import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useAuth } from '@/composables/useAuth'
+import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
 
 const { isAdmin } = useAuth()
 
@@ -430,9 +431,7 @@ const userCtoon = computed(() => data.value?.userCtoon || null)
 const ownedCount = computed(() => data.value?.ownedCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => {
-  const quantity = ctoon.value?.quantity
-  if (quantity === null || quantity === undefined) return 'Unlimited'
-  return formatValue(quantity)
+  return formatQuantity(ctoon.value?.quantity)
 })
 const statusImage = computed(() => {
   const totalQuantity = ctoon.value?.quantity
@@ -440,7 +439,8 @@ const statusImage = computed(() => {
   const isSoldOut =
     typeof totalQuantity === 'number' &&
     typeof highestMint === 'number' &&
-    totalQuantity === highestMint
+    totalQuantity === highestMint &&
+    totalQuantity !== TIME_BASED_CAP
 
   if (isSoldOut) return '/images/soldout.png'
 

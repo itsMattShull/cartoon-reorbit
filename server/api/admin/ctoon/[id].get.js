@@ -30,6 +30,10 @@ export default defineEventHandler(async (event) => {
         abilityKey: true,
         abilityData:true,
 
+        // mint limit fields
+        mintLimitType: true,
+        mintEndDate: true,
+
         // advisory schedule fields
         initialReleaseAt: true,
         finalReleaseAt:   true,

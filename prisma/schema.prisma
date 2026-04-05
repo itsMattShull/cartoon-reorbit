@@ -229,6 +229,10 @@ model Ctoon {
   characters      String[]
   totalMinted     Int       @default(0)
 
+  // Mint limit mode: "defined" (fixed quantity) or "timeBased" (unlimited until deadline)
+  mintLimitType   String    @default("defined")
+  mintEndDate     DateTime?
+
   // Two-phase release (advisory fields; availability driven by global settings)
   initialReleaseAt DateTime?
   finalReleaseAt   DateTime?

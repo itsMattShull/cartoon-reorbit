@@ -9,7 +9,7 @@ import { DateTime } from 'luxon'
 import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
-import { redisConnection, scheduleAuctionClose } from './utils/queues.js'
+import { redisConnection, scheduleAuctionClose, scheduleMintEnd } from './utils/queues.js'
 import { getRedis } from './utils/redis.js'
 import * as redisState from './utils/redisState.js'
 
@@ -3222,6 +3222,28 @@ async function boot() {
     }
   } catch (err) {
     console.error('[Boot] Auction job backfill failed:', err)
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Backfill BullMQ jobs for time-based mint windows ───────────────────────
+  // Ensures mint-end jobs exist for any cToon with mintLimitType="timeBased"
+  // whose window hasn't been processed yet (quantity still at safety cap).
+  try {
+    const pendingMintEnds = await db.ctoon.findMany({
+      where: { mintLimitType: 'timeBased', quantity: 999999999 },
+      select: { id: true, mintEndDate: true }
+    })
+    if (pendingMintEnds.length > 0) {
+      console.log(`[Boot] Backfilling mint-end jobs for ${pendingMintEnds.length} time-based cToon(s)…`)
+      await Promise.all(
+        pendingMintEnds
+          .filter(c => c.mintEndDate)
+          .map(c => scheduleMintEnd(c.id, c.mintEndDate))
+      )
+      console.log('[Boot] Mint-end backfill complete.')
+    }
+  } catch (err) {
+    console.error('[Boot] Mint-end job backfill failed:', err)
   }
   // ─────────────────────────────────────────────────────────────────────────
 

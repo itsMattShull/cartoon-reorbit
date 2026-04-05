@@ -80,17 +80,40 @@
           <input type="datetime-local" v-model="releaseDate" required class="w-full border rounded p-2" />
         </div>
 
+        <!-- Mint Limit Type -->
+        <div>
+          <label class="block mb-1 font-medium">Mint Limit</label>
+          <select v-model="mintLimitType" class="w-full border rounded p-2 bg-white">
+            <option value="defined">Defined Number Limit</option>
+            <option value="timeBased">Time Based Limit</option>
+          </select>
+          <p class="text-sm text-gray-500">
+            <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
+            <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
+          </p>
+        </div>
+
+        <!-- Mint End Date (only for Time Based Limit) -->
+        <div v-if="mintLimitType === 'timeBased'">
+          <label class="block mb-1 font-medium">Mint End Date/Time (CST)</label>
+          <input v-model="mintEndDate" type="datetime-local" required class="w-full border rounded p-2" />
+          <p class="text-sm text-gray-500">Minting will be open until this date/time, then the quantity will be capped.</p>
+          <p v-if="mintEndDateLocal" class="text-sm text-blue-600 mt-1">
+            (Your time: {{ mintEndDateLocal }})
+          </p>
+        </div>
+
         <!-- Per-User Limit / Quantities -->
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block mb-1 font-medium">Per-User Limit</label>
             <input v-model.number="perUserLimit" type="number" min="0" class="w-full border rounded p-2" />
           </div>
-          <div>
+          <div v-if="mintLimitType === 'defined'">
             <label class="block mb-1 font-medium">Total Quantity</label>
             <input v-model.number="quantity" type="number" min="0" class="w-full border rounded p-2" />
           </div>
-          <div>
+          <div v-if="mintLimitType === 'defined'">
             <label class="block mb-1 font-medium">Initial Quantity</label>
             <input v-model.number="initialQuantity" type="number" min="0" class="w-full border rounded p-2" />
           </div>
@@ -223,6 +246,7 @@ definePageMeta({ title: 'Admin - Edit cToon', middleware:['auth','admin'], layou
 
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { zonedTimeToUtc } from 'date-fns-tz'
 import Nav   from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 import abilityMeta from '~/data/abilities.json'
@@ -235,11 +259,17 @@ const id = route.params.id
 const name = ref(''); const type = ref('')
 const series = ref(''); const rarity = ref('')
 const price = ref(0); const releaseDate = ref('')
+const rarityDefaults = ref(null)
+const ctoonLoaded = ref(false)
 const perUserLimit = ref(null); const quantity = ref(null)
 const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
 const description = ref('')
+
+/* mint limit refs */
+const mintLimitType = ref('defined')
+const mintEndDate = ref('')
 
 /* new image refs */
 const newImageFile = ref(null)
@@ -280,6 +310,17 @@ function clampReleasePercent() {
   }
   releasePercent.value = Math.min(100, Math.max(1, next))
 }
+
+// Compute the user's local timezone display for the mint end date
+const mintEndDateLocal = computed(() => {
+  if (!mintEndDate.value) return ''
+  try {
+    const utc = zonedTimeToUtc(mintEndDate.value, 'America/Chicago')
+    return utc.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, hour12: true })
+  } catch {
+    return ''
+  }
+})
 
 /* toast helpers */
 const showToast = ref(false)
@@ -358,6 +399,8 @@ onMounted(async ()=>{
     setField.value = ctoon.set
     characters.value = (ctoon.characters||[]).join(', ')
     description.value = ctoon.description || ''
+    mintLimitType.value = ctoon.mintLimitType || 'defined'
+    if (ctoon.mintEndDate) mintEndDate.value = toDateTimeLocal(ctoon.mintEndDate)
     currentSoundPath.value = ctoon.soundPath || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
@@ -380,12 +423,26 @@ onMounted(async ()=>{
 
     const sRes = await fetch('/api/admin/series',{credentials:'include'})
     seriesOptions.value = await sRes.json()
+
+    try {
+      const rdRes = await fetch('/api/rarity-defaults')
+      const rdJson = await rdRes.json()
+      rarityDefaults.value = rdJson?.defaults || null
+    } catch {}
+
+    ctoonLoaded.value = true
   }catch{ displayToast('Error loading cToon') }
 })
 
 watch(rarity, v => {
-  const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
-  price.value = map[v]||0
+  if (!ctoonLoaded.value) return
+  const d = rarityDefaults.value?.[v]
+  if (d) {
+    price.value = Number(d.price ?? 0)
+  } else {
+    const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
+    price.value = map[v] || 0
+  }
 })
 
 function handleSoundFile(e){
@@ -450,9 +507,13 @@ async function submitForm(){
     fd.append('rarity', rarity.value)
     fd.append('price', String(price.value))
     fd.append('releaseDate', localToUtcIso(releaseDate.value))
+    fd.append('mintLimitType', mintLimitType.value)
+    if (mintLimitType.value === 'timeBased' && mintEndDate.value) {
+      fd.append('mintEndDate', localToUtcIso(mintEndDate.value))
+    }
     fd.append('perUserLimit', perUserLimit.value ?? '')
-    fd.append('quantity', quantity.value ?? '')
-    fd.append('initialQuantity', initialQuantity.value ?? '')
+    fd.append('quantity', mintLimitType.value === 'defined' ? (quantity.value ?? '') : '')
+    fd.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
     fd.append('inCmart', inCmart.value)
     fd.append('set', setField.value)
     fd.append('description', description.value.trim())
@@ -494,9 +555,12 @@ async function submitForm(){
     price:           price.value,
     releaseDate:     localToUtcIso(releaseDate.value),
 
+    mintLimitType:   mintLimitType.value,
+    mintEndDate:     mintLimitType.value === 'timeBased' && mintEndDate.value
+                       ? localToUtcIso(mintEndDate.value) : null,
     perUserLimit:    perUserLimit.value,
-    quantity:        quantity.value,
-    initialQuantity: initialQuantity.value,
+    quantity:        mintLimitType.value === 'defined' ? quantity.value : null,
+    initialQuantity: mintLimitType.value === 'defined' ? initialQuantity.value : null,
     inCmart:         inCmart.value,
 
     set:             setField.value,

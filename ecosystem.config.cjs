@@ -12,6 +12,7 @@
  *   socket-server     – Standalone Socket.io server, fork mode (single instance,
  *                       coordinates all real-time game state)
  *   worker-mint       – BullMQ worker: NFT minting
+ *   worker-mint-end   – BullMQ worker: time-based mint window closure
  *   worker-dissolve   – BullMQ worker: account dissolution
  *   worker-achieve    – BullMQ worker: daily achievements
  *   guild-checker     – Cron: Discord guild member sync
@@ -96,6 +97,16 @@ module.exports = {
     {
       name:      'worker-mint',
       script:    'server/workers/mint.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
+    },
+
+    // ── BullMQ worker: time-based mint window closure ───────────────────────
+    {
+      name:      'worker-mint-end',
+      script:    'server/workers/mint-end.worker.js',
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },

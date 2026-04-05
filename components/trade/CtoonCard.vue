@@ -60,6 +60,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { formatQuantity } from '~/utils/formatQuantity'
 
 /**
  * Expects a flattened cToon object shaped like your collection responses, e.g.:
@@ -96,6 +97,6 @@ const editionLabel = computed(() =>
  */
 const quantityDisplay = computed(() => {
   if (!('quantity' in props.ctoon)) return ''
-  return props.ctoon.quantity == null ? 'Unlimited' : props.ctoon.quantity
+  return formatQuantity(props.ctoon.quantity)
 })
 </script>
