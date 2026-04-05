@@ -259,6 +259,8 @@ const id = route.params.id
 const name = ref(''); const type = ref('')
 const series = ref(''); const rarity = ref('')
 const price = ref(0); const releaseDate = ref('')
+const rarityDefaults = ref(null)
+const ctoonLoaded = ref(false)
 const perUserLimit = ref(null); const quantity = ref(null)
 const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
@@ -421,12 +423,26 @@ onMounted(async ()=>{
 
     const sRes = await fetch('/api/admin/series',{credentials:'include'})
     seriesOptions.value = await sRes.json()
+
+    try {
+      const rdRes = await fetch('/api/rarity-defaults')
+      const rdJson = await rdRes.json()
+      rarityDefaults.value = rdJson?.defaults || null
+    } catch {}
+
+    ctoonLoaded.value = true
   }catch{ displayToast('Error loading cToon') }
 })
 
 watch(rarity, v => {
-  const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
-  price.value = map[v]||0
+  if (!ctoonLoaded.value) return
+  const d = rarityDefaults.value?.[v]
+  if (d) {
+    price.value = Number(d.price ?? 0)
+  } else {
+    const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
+    price.value = map[v] || 0
+  }
 })
 
 function handleSoundFile(e){
