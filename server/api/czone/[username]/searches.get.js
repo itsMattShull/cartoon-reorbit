@@ -306,6 +306,9 @@ export default defineEventHandler(async (event) => {
     .filter(s => (s.resetType || 'COOLDOWN_HOURS') === 'DAILY_AT_RESET')
     .filter(s => Number(s.dailyCollectLimit ?? 0) > 0)
     .map(s => s.id)
+  const cooldownIds = searches
+    .filter(s => (s.resetType || 'COOLDOWN_HOURS') === 'COOLDOWN_HOURS' && Number(s.cooldownHours ?? 0) > 0)
+    .map(s => s.id)
 
   let chicagoBoundaryUtc = null
   if (dailyLimitIds.length) {
@@ -319,7 +322,7 @@ export default defineEventHandler(async (event) => {
   const [
     zoneToons,
     conditionData,
-    lastAppearances,
+    lastCaptures,
     capturedRows,
     dailyCaptureCounts,
     customCaptureCounts,
@@ -328,11 +331,13 @@ export default defineEventHandler(async (event) => {
       ? db.userCtoon.findMany({ where: { id: { in: zoneToonIds } }, select: { ctoonId: true } })
       : [],
     getUserConditionData(userId, searches),
-    db.cZoneSearchAppearance.groupBy({
-      by: ['cZoneSearchId'],
-      where: { userId, cZoneSearchId: { in: searchIds } },
-      _max: { createdAt: true }
-    }),
+    cooldownIds.length
+      ? db.cZoneSearchCapture.groupBy({
+          by: ['cZoneSearchId'],
+          where: { userId, cZoneSearchId: { in: cooldownIds } },
+          _max: { createdAt: true }
+        })
+      : [],
     onceIds.length
       ? db.cZoneSearchCapture.findMany({
           where: { userId, cZoneSearchId: { in: onceIds } },
@@ -371,7 +376,7 @@ export default defineEventHandler(async (event) => {
   const zoneCtoonIds = new Set(zoneToons.map(row => row.ctoonId))
 
   const lastMap = new Map()
-  for (const row of lastAppearances)
+  for (const row of lastCaptures)
     lastMap.set(row.cZoneSearchId, row._max.createdAt)
 
   const capturedMap = new Map()
