@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
     page = '1',
     limit = '100',
     creator = '',
+    winner = '',
     status = '',
     hasBidder = '',
     ctoonName = '',
@@ -31,6 +32,9 @@ export default defineEventHandler(async (event) => {
   if (status) where.status = String(status)
   if (creator) {
     where.creator = { username: { contains: String(creator), mode: 'insensitive' } }
+  }
+  if (winner) {
+    where.winner = { username: { contains: String(winner), mode: 'insensitive' } }
   }
   if (hasBidder === 'has') where.highestBidderId = { not: null }
   if (hasBidder === 'none') where.highestBidderId = null
@@ -70,6 +74,7 @@ export default defineEventHandler(async (event) => {
         },
         creator: { select: { id: true, username: true } },
         highestBidder: { select: { id: true, username: true } },
+        winner: { select: { id: true, username: true } },
         bids: { select: { id: true } }
       }
     })
@@ -89,6 +94,7 @@ export default defineEventHandler(async (event) => {
       userCtoon: { ctoon: a.userCtoon?.ctoon ?? null },
       creator: a.creator ?? null,
       highestBidder: a.highestBidder ?? null,
+      winner: a.winner ?? null,
       bids: a.bids ?? []
     }))
   }

@@ -326,8 +326,8 @@ function formatList(items) {
 
 export async function announceAchievement(prisma, userId, achievementTitle, rewardSummary = null, roleName = null) {
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true } })
-    if (!user?.discordId) return
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, username: true, inGuild: true } })
+    if (!user?.discordId || user.inGuild === false) return
     const config = await prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: { achievementDiscordChannelId: true }
