@@ -37,15 +37,30 @@
         />
       </div>
 
-      <div>
+      <div class="relative">
         <label for="winnerSearch" class="block text-sm font-medium text-gray-700 mb-1">Winner</label>
         <input
           id="winnerSearch"
           v-model="winnerQuery"
           type="text"
           placeholder="Type a username…"
+          autocomplete="off"
           class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          @blur="hideWinnerSuggestions"
         />
+        <ul
+          v-if="winnerSuggestions.length > 0"
+          class="absolute z-10 mt-1 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto"
+        >
+          <li
+            v-for="user in winnerSuggestions"
+            :key="user.id"
+            class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
+            @mousedown.prevent="selectWinner(user.username)"
+          >
+            {{ user.username }}
+          </li>
+        </ul>
       </div>
 
       <div>
@@ -180,6 +195,7 @@ const ctoonNameQuery = ref('')
 const characterQuery = ref('')
 const creatorQuery = ref('')
 const winnerQuery = ref('')
+const winnerSuggestions = ref([])
 const selectedRarity = ref('')
 const selectedStatus = ref('')
 const selectedHasBidder = ref('')
@@ -228,6 +244,30 @@ function scheduleFilterFetch() {
     await nextTick()
     scrollTop()
   }, 300)
+}
+
+// Winner autocomplete
+let winnerSuggestDebounceId = null
+watch(winnerQuery, (val) => {
+  if (winnerSuggestDebounceId) clearTimeout(winnerSuggestDebounceId)
+  const trimmed = val.trim()
+  if (trimmed.length < 3) {
+    winnerSuggestions.value = []
+    return
+  }
+  winnerSuggestDebounceId = setTimeout(async () => {
+    const results = await $fetch('/api/admin/auction-winners', { query: { q: trimmed } })
+    winnerSuggestions.value = results
+  }, 300)
+})
+
+function selectWinner(username) {
+  winnerQuery.value = username
+  winnerSuggestions.value = []
+}
+
+function hideWinnerSuggestions() {
+  setTimeout(() => { winnerSuggestions.value = [] }, 150)
 }
 
 // React to text filters with debounce
