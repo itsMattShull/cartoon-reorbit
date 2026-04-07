@@ -37,6 +37,32 @@
         />
       </div>
 
+      <div class="relative">
+        <label for="winnerSearch" class="block text-sm font-medium text-gray-700 mb-1">Winner</label>
+        <input
+          id="winnerSearch"
+          v-model="winnerQuery"
+          type="text"
+          placeholder="Type a username…"
+          autocomplete="off"
+          class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          @blur="hideWinnerSuggestions"
+        />
+        <ul
+          v-if="winnerSuggestions.length > 0"
+          class="absolute z-10 mt-1 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto"
+        >
+          <li
+            v-for="user in winnerSuggestions"
+            :key="user.id"
+            class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
+            @mousedown.prevent="selectWinner(user.username)"
+          >
+            {{ user.username }}
+          </li>
+        </ul>
+      </div>
+
       <div>
         <label for="rarityFilter" class="block text-sm font-medium text-gray-700 mb-1">Rarity</label>
         <select
@@ -91,6 +117,7 @@
             <th class="px-4 py-2">Duration</th>
             <th class="px-4 py-2">Hours Left</th>
             <th class="px-4 py-2">Highest Bidder</th>
+            <th class="px-4 py-2">Winner</th>
             <th class="px-4 py-2">Highest Bid</th>
             <th class="px-4 py-2"># of Bids</th>
           </tr>
@@ -106,6 +133,7 @@
             <td class="px-4 py-2">{{ auc.duration }} days</td>
             <td class="px-4 py-2">{{ hoursLeft(auc.endAt) }}</td>
             <td class="px-4 py-2">{{ auc.highestBidder?.username || '—' }}</td>
+            <td class="px-4 py-2">{{ auc.winner?.username || '—' }}</td>
             <td class="px-4 py-2">{{ auc.highestBid }}</td>
             <td class="px-4 py-2">{{ auc.bids.length }}</td>
           </tr>
@@ -129,6 +157,7 @@
           <div><span class="font-medium">Created:</span> {{ formatDate(auc.createdAt) }}</div>
           <div><span class="font-medium">Duration:</span> {{ auc.duration }} days</div>
           <div><span class="font-medium">Top Bidder:</span> {{ auc.highestBidder?.username || '—' }}</div>
+          <div><span class="font-medium">Winner:</span> {{ auc.winner?.username || '—' }}</div>
           <div><span class="font-medium">Highest Bid:</span> {{ auc.highestBid }}</div>
           <div><span class="font-medium"># of Bids:</span> {{ auc.bids.length }}</div>
         </div>
@@ -165,6 +194,8 @@ const auctions = ref([])
 const ctoonNameQuery = ref('')
 const characterQuery = ref('')
 const creatorQuery = ref('')
+const winnerQuery = ref('')
+const winnerSuggestions = ref([])
 const selectedRarity = ref('')
 const selectedStatus = ref('')
 const selectedHasBidder = ref('')
@@ -189,6 +220,7 @@ async function fetchAuctions() {
       page: page.value,
       limit: pageSize,
       creator: creatorQuery.value.trim() || undefined,
+      winner: winnerQuery.value.trim() || undefined,
       ctoonName: ctoonNameQuery.value.trim() || undefined,
       characters: characterQuery.value.trim() || undefined,
       rarity: selectedRarity.value || undefined,
@@ -214,8 +246,32 @@ function scheduleFilterFetch() {
   }, 300)
 }
 
+// Winner autocomplete
+let winnerSuggestDebounceId = null
+watch(winnerQuery, (val) => {
+  if (winnerSuggestDebounceId) clearTimeout(winnerSuggestDebounceId)
+  const trimmed = val.trim()
+  if (trimmed.length < 3) {
+    winnerSuggestions.value = []
+    return
+  }
+  winnerSuggestDebounceId = setTimeout(async () => {
+    const results = await $fetch('/api/admin/auction-winners', { query: { q: trimmed } })
+    winnerSuggestions.value = results
+  }, 300)
+})
+
+function selectWinner(username) {
+  winnerQuery.value = username
+  winnerSuggestions.value = []
+}
+
+function hideWinnerSuggestions() {
+  setTimeout(() => { winnerSuggestions.value = [] }, 150)
+}
+
 // React to text filters with debounce
-watch([ctoonNameQuery, characterQuery, creatorQuery], () => {
+watch([ctoonNameQuery, characterQuery, creatorQuery, winnerQuery], () => {
   scheduleFilterFetch()
 })
 
