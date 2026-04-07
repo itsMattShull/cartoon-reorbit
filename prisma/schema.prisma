@@ -451,6 +451,11 @@ model User {
   userMonsterItems UserMonsterItem[]
   scanEvents       UserScan[]
 
+  // Suspicious Activity Monitor relations
+  suspiciousActivityRules      SuspiciousActivityRule[] @relation("RuleCreatedBy")
+  suspiciousActivityMute       SuspiciousActivityMute?  @relation("SuspiciousMutedUser")
+  suspiciousActivityMutesGiven SuspiciousActivityMute[] @relation("SuspiciousMutedBy")
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -2210,4 +2215,48 @@ model CZoneContestVote {
 model ServerHeartbeat {
   id       String   @id @default("singleton")
   lastBeat DateTime @updatedAt
+}
+
+// ── Suspicious Activity Monitor ───────────────────────────────────────────────
+
+model SuspiciousActivityRule {
+  id             String   @id @default(uuid())
+  name           String
+  description    String   @default("")
+  isActive       Boolean  @default(true)
+  timeWindowDays Int?     // null = all time
+  conditionLogic String   @default("AND") // "AND" or "OR"
+  conditions     SuspiciousActivityCondition[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdById    String
+  createdBy      User     @relation("RuleCreatedBy", fields: [createdById], references: [id])
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model SuspiciousActivityCondition {
+  id        String                 @id @default(uuid())
+  ruleId    String
+  rule      SuspiciousActivityRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  metric    String
+  operator  String   // 'lt' | 'lte' | 'gt' | 'gte' | 'eq'
+  threshold Float
+  order     Int      @default(0)
+
+  @@index([ruleId])
+}
+
+model SuspiciousActivityMute {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  mutedById String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user    User @relation("SuspiciousMutedUser", fields: [userId], references: [id], onDelete: Cascade)
+  mutedBy User @relation("SuspiciousMutedBy", fields: [mutedById], references: [id])
+
+  @@index([createdAt])
 }
