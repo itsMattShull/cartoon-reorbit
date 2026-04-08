@@ -541,8 +541,10 @@ export async function runAllRules(prisma, rules) {
         }),
       })
 
-      // Merge metrics
-      const userMetrics = metricsToUse.get(userId) ?? {}
+      // Merge metrics - always use global (all-time) metrics for display so
+      // they are consistent with the all-time context data (top trade partners,
+      // auction sellers, etc.). metricsToUse is only used for rule evaluation.
+      const userMetrics = globalMetrics.get(userId) ?? {}
       Object.assign(entry.metrics, userMetrics)
     }
   }

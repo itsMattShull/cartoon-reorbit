@@ -46,62 +46,64 @@
         :key="u.id"
         class="bg-white border rounded-lg shadow p-4"
       >
-        <div class="flex items-start justify-between gap-3">
-          <div>
+        <div class="flex flex-col sm:flex-row-reverse sm:items-start sm:justify-between gap-2">
+          <!-- Badges first in DOM: appear above username on mobile, on right on desktop -->
+          <div class="flex items-center gap-2 shrink-0">
+            <span :class="badgeClass(!!u.inGuild)">{{ u.inGuild ? 'Guild' : 'No guild' }}</span>
+            <span :class="badgeClass(!!u.active)">{{ u.active ? 'Active' : 'Disabled' }}</span>
+            <div class="relative">
+              <button
+                class="ml-1 h-7 w-7 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
+                title="More"
+                @click.stop="toggleMenu(u)"
+              >⋮</button>
+              <div
+                v-if="menuOpenId === u.id"
+                class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
+              >
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
+                <button
+                  v-if="!u.isAdmin && !u.banned"
+                  class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                  @click="openActionModal(u, 'BAN'); closeMenu()"
+                >Ban user</button>
+                <button
+                  v-if="!u.isAdmin && u.banned"
+                  class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                  @click="openActionModal(u, 'UNBAN'); closeMenu()"
+                >Unban user</button>
+                <button
+                  v-if="!u.isAdmin && !u.active && !u.banned"
+                  class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                  @click="activateUser(u); closeMenu()"
+                >Activate User</button>
+                <button
+                  v-if="!u.isAdmin && u.active"
+                  class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
+                  @click="openDissolveModal(u); closeMenu()"
+                >Dissolve User</button>
+                <button
+                  v-if="isSuperAdmin && !u.isAdmin"
+                  class="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                  @click="makeAdmin(u); closeMenu()"
+                >Make Admin</button>
+                <button
+                  v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
+                  class="w-full text-left px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+                  @click="removeAdmin(u); closeMenu()"
+                >Remove Admin</button>
+              </div>
+            </div>
+          </div>
+          <!-- Username second in DOM: appears below badges on mobile, on left on desktop -->
+          <div class="min-w-0">
             <div class="font-semibold text-base leading-tight">{{ u.username || '—' }}</div>
             <div class="text-xs text-gray-500">{{ u.discordTag || 'No tag' }}</div>
           </div>
-        <div class="flex items-center gap-2">
-          <span :class="badgeClass(!!u.inGuild)">{{ u.inGuild ? 'Guild' : 'No guild' }}</span>
-          <span :class="badgeClass(!!u.active)">{{ u.active ? 'Active' : 'Disabled' }}</span>
-          <div class="relative">
-            <button
-              class="ml-1 h-7 w-7 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
-              title="More"
-              @click.stop="toggleMenu(u)"
-            >⋮</button>
-            <div
-              v-if="menuOpenId === u.id"
-              class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
-            >
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
-              <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
-              <button
-                v-if="!u.isAdmin && !u.banned"
-                class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-                @click="openActionModal(u, 'BAN'); closeMenu()"
-              >Ban user</button>
-              <button
-                v-if="!u.isAdmin && u.banned"
-                class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
-                @click="openActionModal(u, 'UNBAN'); closeMenu()"
-              >Unban user</button>
-              <button
-                v-if="!u.isAdmin && !u.active && !u.banned"
-                class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
-                @click="activateUser(u); closeMenu()"
-              >Activate User</button>
-              <button
-                v-if="!u.isAdmin && u.active"
-                class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
-                @click="openDissolveModal(u); closeMenu()"
-              >Dissolve User</button>
-              <button
-                v-if="isSuperAdmin && !u.isAdmin"
-                class="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
-                @click="makeAdmin(u); closeMenu()"
-              >Make Admin</button>
-              <button
-                v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
-                class="w-full text-left px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
-                @click="removeAdmin(u); closeMenu()"
-              >Remove Admin</button>
-            </div>
-          </div>
-        </div>
         </div>
 
         <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
