@@ -177,6 +177,7 @@ import { useAuth } from '@/composables/useAuth'
 
 definePageMeta({
   title: 'gToons Clash Tournament',
+  middleware: 'auth',
   layout: 'default'
 })
 
