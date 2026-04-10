@@ -412,7 +412,7 @@
         </p>
         <p class="text-xs text-gray-500">Large accounts are processed in the background — you'll see progress here.</p>
 
-        <div class="mt-3 border-t pt-3 space-y-2">
+        <div class="mt-3 border-t pt-3 space-y-3">
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Release Schedule</p>
 
           <div class="flex items-center gap-2">
@@ -420,25 +420,65 @@
             <input v-model="dissolveSchedule.startAtLocal" type="datetime-local"
                    class="flex-1 text-xs border rounded px-2 py-1" />
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
-            <input v-model.number="dissolveSchedule.cadenceDays" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+
+          <!-- Pokémon category -->
+          <div class="rounded border border-blue-100 bg-blue-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-blue-700">
+              Pokémon
+              <span class="ml-1 font-normal text-blue-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.pokemon : '…' }} sea tunes)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.pokemonCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.pokemonPerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-36 text-xs text-gray-600 shrink-0">Pokémon / cadence</label>
-            <input v-model.number="dissolveSchedule.pokemonPerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+
+          <!-- Crazy Rare category -->
+          <div class="rounded border border-purple-100 bg-purple-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-purple-700">
+              Crazy Rare
+              <span class="ml-1 font-normal text-purple-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.crazyRare : '…' }} sea tunes)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.crazyRareCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.crazyRarePerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-36 text-xs text-gray-600 shrink-0">Crazy Rare / cadence</label>
-            <input v-model.number="dissolveSchedule.crazyRarePerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
-          </div>
-          <div class="flex items-center gap-2">
-            <label class="w-36 text-xs text-gray-600 shrink-0">Other / cadence</label>
-            <input v-model.number="dissolveSchedule.otherPerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+
+          <!-- Other category -->
+          <div class="rounded border border-gray-200 bg-gray-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-gray-700">
+              Other
+              <span class="ml-1 font-normal text-gray-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.other : '…' }} sea tunes)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.otherCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.otherPerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
           </div>
         </div>
       </div>
@@ -963,6 +1003,7 @@ const dissolvePhase = ref('confirm') // 'confirm' | 'working' | 'done'
 const dissolvePct = ref(0)
 const dissolveStep = ref('')
 const dissolveSummary = ref(null)
+const dissolveCategoryCounts = ref(null)
 let dissolvePoller = null
 
 function defaultStartLocal() {
@@ -974,15 +1015,21 @@ function defaultStartLocal() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const dissolveSchedule = ref({
-  startAtLocal:        defaultStartLocal(),
-  cadenceDays:         7,
-  pokemonPerCadence:   2,
-  crazyRarePerCadence: 1,
-  otherPerCadence:     10,
-})
+function defaultDissolveSchedule() {
+  return {
+    startAtLocal:          defaultStartLocal(),
+    pokemonCadenceDays:    7,
+    pokemonPerCadence:     2,
+    crazyRareCadenceDays:  7,
+    crazyRarePerCadence:   1,
+    otherCadenceDays:      7,
+    otherPerCadence:       10,
+  }
+}
 
-function openDissolveModal(u) {
+const dissolveSchedule = ref(defaultDissolveSchedule())
+
+async function openDissolveModal(u) {
   dissolveTarget.value = u
   dissolveError.value = ''
   dissolveWorking.value = false
@@ -990,14 +1037,14 @@ function openDissolveModal(u) {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
-  dissolveSchedule.value = {
-    startAtLocal:        defaultStartLocal(),
-    cadenceDays:         7,
-    pokemonPerCadence:   2,
-    crazyRarePerCadence: 1,
-    otherPerCadence:     10,
-  }
+  dissolveCategoryCounts.value = null
+  dissolveSchedule.value = defaultDissolveSchedule()
   showDissolveModal.value = true
+  try {
+    dissolveCategoryCounts.value = await $fetch(`/api/admin/users/${u.id}/ctoon-categories`)
+  } catch {
+    // non-fatal — counts will show '…'
+  }
 }
 function closeDissolveModal() {
   if (dissolvePoller) { clearInterval(dissolvePoller); dissolvePoller = null }
@@ -1009,13 +1056,8 @@ function closeDissolveModal() {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
-  dissolveSchedule.value = {
-    startAtLocal:        defaultStartLocal(),
-    cadenceDays:         7,
-    pokemonPerCadence:   2,
-    crazyRarePerCadence: 1,
-    otherPerCadence:     10,
-  }
+  dissolveCategoryCounts.value = null
+  dissolveSchedule.value = defaultDissolveSchedule()
 }
 function parseDissolveError(e) {
   const statusMessage = e?.data?.statusMessage || ''
@@ -1067,11 +1109,13 @@ async function confirmDissolve() {
       method: 'POST',
       body: {
         scheduleConfig: {
-          startAtUtc:          new Date(s.startAtLocal).toISOString(),
-          cadenceDays:         s.cadenceDays,
-          pokemonPerCadence:   s.pokemonPerCadence,
-          crazyRarePerCadence: s.crazyRarePerCadence,
-          otherPerCadence:     s.otherPerCadence,
+          startAtUtc:            new Date(s.startAtLocal).toISOString(),
+          pokemonCadenceDays:    s.pokemonCadenceDays,
+          pokemonPerCadence:     s.pokemonPerCadence,
+          crazyRareCadenceDays:  s.crazyRareCadenceDays,
+          crazyRarePerCadence:   s.crazyRarePerCadence,
+          otherCadenceDays:      s.otherCadenceDays,
+          otherPerCadence:       s.otherPerCadence,
         }
       }
     })

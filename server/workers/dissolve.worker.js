@@ -256,13 +256,24 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   // ── Step 9: Schedule dissolve auction launches ───────────────────────────
   const { scheduleConfig } = job.data
   if (scheduleConfig && queuedEntries.length) {
-    const { startAtUtc, cadenceDays, pokemonPerCadence, crazyRarePerCadence, otherPerCadence } = scheduleConfig
+    const {
+      startAtUtc,
+      pokemonCadenceDays,   pokemonPerCadence,
+      crazyRareCadenceDays, crazyRarePerCadence,
+      otherCadenceDays,     otherPerCadence,
+    } = scheduleConfig
     const startMs = new Date(startAtUtc).getTime()
 
     const perCategory = {
-      POKEMON:    Number(pokemonPerCadence)    || 0,
-      CRAZY_RARE: Number(crazyRarePerCadence)  || 0,
-      OTHER:      Number(otherPerCadence)      || 0,
+      POKEMON:    Number(pokemonPerCadence)   || 0,
+      CRAZY_RARE: Number(crazyRarePerCadence) || 0,
+      OTHER:      Number(otherPerCadence)     || 0,
+    }
+
+    const cadenceDaysPerCategory = {
+      POKEMON:    Number(pokemonCadenceDays)   || 0,
+      CRAZY_RARE: Number(crazyRareCadenceDays) || 0,
+      OTHER:      Number(otherCadenceDays)     || 0,
     }
 
     const grouped = { POKEMON: [], CRAZY_RARE: [], OTHER: [] }
@@ -270,8 +281,9 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
 
     for (const [cat, ids] of Object.entries(grouped)) {
       const countPerCadence = perCategory[cat]
-      if (!countPerCadence || !ids.length) continue
-      const intervalMs = (Number(cadenceDays) * 24 * 3600 * 1000) / countPerCadence
+      const cadenceDays     = cadenceDaysPerCategory[cat]
+      if (!countPerCadence || !cadenceDays || !ids.length) continue
+      const intervalMs = (cadenceDays * 24 * 3600 * 1000) / countPerCadence
 
       for (let i = 0; i < ids.length; i++) {
         const scheduledFor = new Date(startMs + i * intervalMs)
