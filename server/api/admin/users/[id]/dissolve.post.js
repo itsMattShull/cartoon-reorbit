@@ -1,5 +1,5 @@
 // server/api/admin/users/[id]/dissolve.post.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { dissolveQueue } from '@/server/utils/queues'
 
@@ -18,6 +18,9 @@ export default defineEventHandler(async (event) => {
 
   const { id } = event.context.params || {}
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing user id' })
+
+  const body = await readBody(event).catch(() => ({})) || {}
+  const { scheduleConfig = null } = body
 
   // Resolve official account
   const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
@@ -58,6 +61,7 @@ export default defineEventHandler(async (event) => {
       officialUsername,
       adminId: me.id,
       adminUsername: me.username || me.id,
+      scheduleConfig,
     },
     { jobId: id }
   )
