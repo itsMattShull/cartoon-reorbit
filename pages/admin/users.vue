@@ -406,10 +406,41 @@
       <div v-if="dissolvePhase === 'confirm'" class="mt-2 text-sm text-gray-700 space-y-2">
         <p>
           Confirming will make this user Inactive, transfer all of their points to
-          <strong>{{ official?.username || '—' }}</strong>, reassign their cToons to
-          <strong>{{ official?.username || '—' }}</strong>, and immediately start 24‑hour auctions for those items.
+          <strong>{{ official?.username || '—' }}</strong>, and reassign their cToons to
+          <strong>{{ official?.username || '—' }}</strong>.
+          Their cToons will be queued for scheduled auction release based on the settings below.
         </p>
-        <p class="text-xs text-gray-500">Large accounts with many cToons are processed in the background — you'll see progress here.</p>
+        <p class="text-xs text-gray-500">Large accounts are processed in the background — you'll see progress here.</p>
+
+        <div class="mt-3 border-t pt-3 space-y-2">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Release Schedule</p>
+
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Start date (local)</label>
+            <input v-model="dissolveSchedule.startAtLocal" type="datetime-local"
+                   class="flex-1 text-xs border rounded px-2 py-1" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+            <input v-model.number="dissolveSchedule.cadenceDays" type="number" min="1"
+                   class="w-24 text-xs border rounded px-2 py-1" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Pokémon / cadence</label>
+            <input v-model.number="dissolveSchedule.pokemonPerCadence" type="number" min="1"
+                   class="w-24 text-xs border rounded px-2 py-1" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Crazy Rare / cadence</label>
+            <input v-model.number="dissolveSchedule.crazyRarePerCadence" type="number" min="1"
+                   class="w-24 text-xs border rounded px-2 py-1" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Other / cadence</label>
+            <input v-model.number="dissolveSchedule.otherPerCadence" type="number" min="1"
+                   class="w-24 text-xs border rounded px-2 py-1" />
+          </div>
+        </div>
       </div>
 
       <!-- Progress bar (queued / active) -->
@@ -430,9 +461,12 @@
         <ul v-if="dissolveSummary" class="text-xs space-y-0.5 mt-1">
           <li>Points transferred: {{ dissolveSummary.pointsTransferred }}</li>
           <li>cToons transferred: {{ dissolveSummary.ctoonsTransferred }}</li>
-          <li>Auctions created: {{ dissolveSummary.auctionsCreated }}</li>
+          <li>cToons queued for auction: {{ dissolveSummary.ctoonsQueued }}</li>
           <li>Bids removed: {{ dissolveSummary.bidsDeleted }}</li>
         </ul>
+        <p class="text-xs mt-2">
+          <a href="/admin/dissolve-queue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
+        </p>
       </div>
 
       <!-- Error -->
@@ -931,6 +965,23 @@ const dissolveStep = ref('')
 const dissolveSummary = ref(null)
 let dissolvePoller = null
 
+function defaultStartLocal() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  d.setHours(10, 0, 0, 0)
+  // datetime-local value format: YYYY-MM-DDTHH:mm
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const dissolveSchedule = ref({
+  startAtLocal:        defaultStartLocal(),
+  cadenceDays:         7,
+  pokemonPerCadence:   2,
+  crazyRarePerCadence: 1,
+  otherPerCadence:     10,
+})
+
 function openDissolveModal(u) {
   dissolveTarget.value = u
   dissolveError.value = ''
@@ -939,6 +990,13 @@ function openDissolveModal(u) {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
+  dissolveSchedule.value = {
+    startAtLocal:        defaultStartLocal(),
+    cadenceDays:         7,
+    pokemonPerCadence:   2,
+    crazyRarePerCadence: 1,
+    otherPerCadence:     10,
+  }
   showDissolveModal.value = true
 }
 function closeDissolveModal() {
@@ -951,6 +1009,13 @@ function closeDissolveModal() {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
+  dissolveSchedule.value = {
+    startAtLocal:        defaultStartLocal(),
+    cadenceDays:         7,
+    pokemonPerCadence:   2,
+    crazyRarePerCadence: 1,
+    otherPerCadence:     10,
+  }
 }
 function parseDissolveError(e) {
   const statusMessage = e?.data?.statusMessage || ''
@@ -997,7 +1062,19 @@ async function confirmDissolve() {
   dissolveWorking.value = true
   dissolveError.value = ''
   try {
-    await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, { method: 'POST' })
+    const s = dissolveSchedule.value
+    await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, {
+      method: 'POST',
+      body: {
+        scheduleConfig: {
+          startAtUtc:          new Date(s.startAtLocal).toISOString(),
+          cadenceDays:         s.cadenceDays,
+          pokemonPerCadence:   s.pokemonPerCadence,
+          crazyRarePerCadence: s.crazyRarePerCadence,
+          otherPerCadence:     s.otherPerCadence,
+        }
+      }
+    })
     dissolvePhase.value = 'working'
     dissolvePct.value = 0
     dissolveStep.value = 'Queued…'
