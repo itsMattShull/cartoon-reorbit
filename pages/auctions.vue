@@ -722,6 +722,15 @@
                   <p class="text-sm text-gray-600 mb-1">
                     Bids: {{ auction.bidCount ?? 0 }}
                   </p>
+                  <p v-if="auction.seller" class="text-sm text-gray-600 mb-1">
+                    Seller:
+                    <NuxtLink
+                      :to="`/czone/${auction.seller}`"
+                      class="text-indigo-600 hover:text-indigo-800 hover:underline"
+                    >
+                      {{ auction.seller }}
+                    </NuxtLink>
+                  </p>
                   <p v-if="auction.winningBidder" class="text-sm text-gray-600 mb-3">
                     Winner:
                     <NuxtLink

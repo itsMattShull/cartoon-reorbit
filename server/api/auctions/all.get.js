@@ -183,6 +183,7 @@ export default defineEventHandler(async (event) => {
             },
           },
         },
+        creator: { select: { username: true } },
         bids: {
           orderBy: { amount: 'desc' },
           take: 1,
@@ -235,6 +236,7 @@ export default defineEventHandler(async (event) => {
       createdAt: a.createdAt.toISOString(),
       endAt: a.endAt.toISOString(),
       initialBid: a.initialBet,
+      seller: a.creator?.username ?? null,
       winningBid: a.bids[0]?.amount ?? null,
       winningBidder: a.bids[0]?.user?.username ?? null,
       bidCount: a._count?.bids ?? 0,
