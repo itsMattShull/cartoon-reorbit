@@ -62,6 +62,15 @@ module.exports = {
       env: { NODE_ENV: 'development' },
     },
 
+    // ── BullMQ worker: dissolve auction launch ────────────────────────────
+    {
+      name:      'worker-dissolve-auction-launch',
+      script:    'server/workers/dissolve-auction-launch.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env: { NODE_ENV: 'development' },
+    },
+
     // ── BullMQ worker: daily achievements ─────────────────────────────────
     {
       name:      'worker-achieve',
