@@ -662,6 +662,62 @@
 
         <!-- All Auctions -->
         <template v-else-if="activeTab === 'all'">
+          <!-- Seller / Winner username filters -->
+          <div class="flex flex-wrap gap-4 mb-4">
+            <!-- Filter by Seller -->
+            <div class="relative">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Seller</label>
+              <input
+                type="text"
+                v-model="sellerFilter"
+                @input="onSellerInput"
+                @focus="showSellerSuggestions = true"
+                @blur="onSellerBlur"
+                placeholder="Seller username…"
+                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 w-52"
+              />
+              <div
+                v-if="showSellerSuggestions && sellerSuggestions.length"
+                class="absolute z-10 w-full bg-white border border-gray-200 rounded mt-1 shadow max-h-48 overflow-auto"
+              >
+                <button
+                  v-for="s in sellerSuggestions"
+                  :key="s"
+                  class="w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50"
+                  @mousedown.prevent="applySellerSuggestion(s)"
+                >
+                  {{ s }}
+                </button>
+              </div>
+            </div>
+            <!-- Filter by Winner -->
+            <div class="relative">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Winner</label>
+              <input
+                type="text"
+                v-model="winnerFilter"
+                @input="onWinnerInput"
+                @focus="showWinnerSuggestions = true"
+                @blur="onWinnerBlur"
+                placeholder="Winner username…"
+                class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 w-52"
+              />
+              <div
+                v-if="showWinnerSuggestions && winnerSuggestions.length"
+                class="absolute z-10 w-full bg-white border border-gray-200 rounded mt-1 shadow max-h-48 overflow-auto"
+              >
+                <button
+                  v-for="s in winnerSuggestions"
+                  :key="s"
+                  class="w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50"
+                  @mousedown.prevent="applyWinnerSuggestion(s)"
+                >
+                  {{ s }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div v-if="isLoadingAll" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <div v-for="n in 6" :key="n" class="bg-white rounded-lg shadow p-4 animate-pulse h-64"></div>
           </div>
@@ -834,6 +890,13 @@ const wishlistCtoonIds = ref([])
 const isLoadingWishlist = ref(false)
 const hasLoadedWishlist = ref(false)
 
+const sellerFilter = ref('')
+const winnerFilter = ref('')
+const sellerSuggestions = ref([])
+const winnerSuggestions = ref([])
+const showSellerSuggestions = ref(false)
+const showWinnerSuggestions = ref(false)
+
 // Route + URL query sync
 const route  = useRoute()
 const router = useRouter()
@@ -879,6 +942,12 @@ function updateUrlQueryFromFilters() {
 
   if (gtoonsOnly.value) newQuery.gtoon = '1'
   else delete newQuery.gtoon
+
+  if (sellerFilter.value.trim()) newQuery.seller = sellerFilter.value.trim()
+  else delete newQuery.seller
+
+  if (winnerFilter.value.trim()) newQuery.winner = winnerFilter.value.trim()
+  else delete newQuery.winner
 
   if (sortBy.value && sortBy.value !== 'endAsc') newQuery.sort = sortBy.value
   else delete newQuery.sort
@@ -933,6 +1002,11 @@ onMounted(() => {
   if (['1','true','yes'].includes(hasBidsParam.toLowerCase())) hasBidsOnly.value = true
   if (['1','true','yes'].includes(gtoonParam.toLowerCase())) gtoonsOnly.value = true
   if (pageParam > 1) currentPage.value = pageParam
+
+  const sellerParam = typeof route.query.seller === 'string' ? route.query.seller : ''
+  const winnerParam = typeof route.query.winner === 'string' ? route.query.winner : ''
+  if (sellerParam.trim()) sellerFilter.value = sellerParam.trim()
+  if (winnerParam.trim()) winnerFilter.value = winnerParam.trim()
 
   // Normalize URL based on initialized values
   updateUrlQueryFromFilters()
@@ -1011,6 +1085,8 @@ function buildFilterParams() {
   if (wishlistOnly.value) params.set('wishlist', '1')
   if (hasBidsOnly.value) params.set('hasBids', '1')
   if (gtoonsOnly.value) params.set('gtoon', '1')
+  if (sellerFilter.value.trim()) params.set('seller', sellerFilter.value.trim())
+  if (winnerFilter.value.trim()) params.set('winner', winnerFilter.value.trim())
   return params
 }
 
@@ -1135,6 +1211,17 @@ watch(wishlistOnly, value => {
   if (value) loadWishlist()
 })
 
+watch([sellerFilter, winnerFilter], () => {
+  const seller = sellerFilter.value.trim()
+  const winner = winnerFilter.value.trim()
+  // Skip reload while user is mid-type (1–2 chars); wait for 0 (cleared) or 3+
+  if ((seller.length > 0 && seller.length < 3) || (winner.length > 0 && winner.length < 3)) return
+  updateUrlQueryFromFilters()
+  if (activeTab.value !== 'all') return
+  if (allPage.value !== 1) allPage.value = 1
+  else loadAllAuctions()
+})
+
 watch(hasBidsOnly, () => {
   loadAuctions()
   loadTrendingAuctions({ force: true })
@@ -1150,6 +1237,49 @@ function resetFilters() {
   wishlistOnly.value = false
   hasBidsOnly.value = false
   gtoonsOnly.value = false
+  sellerFilter.value = ''
+  winnerFilter.value = ''
+}
+
+async function fetchUserSuggestions(q) {
+  try {
+    const data = await $fetch(`/api/users/search?q=${encodeURIComponent(q)}&limit=8`)
+    return (data?.items || []).map(u => u.username)
+  } catch {
+    return []
+  }
+}
+
+async function onSellerInput() {
+  showSellerSuggestions.value = true
+  const q = sellerFilter.value.trim()
+  sellerSuggestions.value = q.length >= 3 ? await fetchUserSuggestions(q) : []
+}
+
+function applySellerSuggestion(username) {
+  sellerFilter.value = username
+  sellerSuggestions.value = []
+  showSellerSuggestions.value = false
+}
+
+function onSellerBlur() {
+  setTimeout(() => { showSellerSuggestions.value = false }, 120)
+}
+
+async function onWinnerInput() {
+  showWinnerSuggestions.value = true
+  const q = winnerFilter.value.trim()
+  winnerSuggestions.value = q.length >= 3 ? await fetchUserSuggestions(q) : []
+}
+
+function applyWinnerSuggestion(username) {
+  winnerFilter.value = username
+  winnerSuggestions.value = []
+  showWinnerSuggestions.value = false
+}
+
+function onWinnerBlur() {
+  setTimeout(() => { showWinnerSuggestions.value = false }, 120)
 }
 
 function isEnded(endAt) {
@@ -1193,7 +1323,9 @@ const hasActiveFilters = computed(() => {
     featuredOnly.value ||
     wishlistOnly.value ||
     hasBidsOnly.value ||
-    gtoonsOnly.value
+    gtoonsOnly.value ||
+    sellerFilter.value.trim() ||
+    winnerFilter.value.trim()
   )
 })
 const filterSources = computed(() => [
