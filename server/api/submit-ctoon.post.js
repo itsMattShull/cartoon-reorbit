@@ -87,7 +87,7 @@ async function resizeToAverageSimilarRatio(imageBuffer, mimeType, baseDir) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..')
+  ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
 const VALID_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']

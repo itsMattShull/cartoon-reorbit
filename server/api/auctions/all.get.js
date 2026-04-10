@@ -89,6 +89,8 @@ export default defineEventHandler(async (event) => {
   const hasBidsOnly = isTruthy(query.hasBids)
   const sort = typeof query.sort === 'string' ? query.sort : 'endAsc'
   const orderBy = buildSortOrder(sort)
+  const seller = typeof query.seller === 'string' ? query.seller.trim() : ''
+  const winner = typeof query.winner === 'string' ? query.winner.trim() : ''
 
   let ownedIds = null
   let ownedSet = null
@@ -153,6 +155,51 @@ export default defineEventHandler(async (event) => {
   if (featuredOnly) where.isFeatured = true
   if (hasBidsOnly) where.bids = { some: {} }
   if (Object.keys(ctoonWhere).length) where.userCtoon = { ctoon: ctoonWhere }
+  if (seller) where.creator = { username: { contains: seller, mode: 'insensitive' } }
+
+  if (winner) {
+    const matchingUsers = await prisma.user.findMany({
+      where: { username: { contains: winner, mode: 'insensitive' } },
+      select: { id: true }
+    })
+    if (!matchingUsers.length) {
+      return { page: pageNum, pageSize: take, total: 0, totalPages: 1, items: [] }
+    }
+    const matchingUserIds = matchingUsers.map(u => u.id)
+
+    // Find auctions where a matching user holds the highest bid
+    const userMaxBids = await prisma.bid.groupBy({
+      by: ['auctionId'],
+      where: { userId: { in: matchingUserIds }, auction: { status: 'CLOSED' } },
+      _max: { amount: true }
+    })
+    if (!userMaxBids.length) {
+      return { page: pageNum, pageSize: take, total: 0, totalPages: 1, items: [] }
+    }
+    const candidateAuctionIds = userMaxBids.map(b => b.auctionId)
+
+    // Get the true max bid per candidate auction
+    const auctionMaxBids = await prisma.bid.groupBy({
+      by: ['auctionId'],
+      where: { auctionId: { in: candidateAuctionIds } },
+      _max: { amount: true }
+    })
+    const maxBidMap = new Map(auctionMaxBids.map(b => [b.auctionId, b._max.amount]))
+
+    // Keep only auctions where the user's max bid equals the auction's max bid
+    const winningAuctionIds = userMaxBids
+      .filter(b => {
+        const userMax = Number(b._max.amount ?? 0)
+        const auctionMax = Number(maxBidMap.get(b.auctionId) ?? 0)
+        return auctionMax > 0 && userMax >= auctionMax
+      })
+      .map(b => b.auctionId)
+
+    if (!winningAuctionIds.length) {
+      return { page: pageNum, pageSize: take, total: 0, totalPages: 1, items: [] }
+    }
+    where.id = { in: winningAuctionIds }
+  }
 
   const [total, auctions] = await Promise.all([
     prisma.auction.count({ where }),
@@ -183,6 +230,7 @@ export default defineEventHandler(async (event) => {
             },
           },
         },
+        creator: { select: { username: true } },
         bids: {
           orderBy: { amount: 'desc' },
           take: 1,
@@ -235,6 +283,7 @@ export default defineEventHandler(async (event) => {
       createdAt: a.createdAt.toISOString(),
       endAt: a.endAt.toISOString(),
       initialBid: a.initialBet,
+      seller: a.creator?.username ?? null,
       winningBid: a.bids[0]?.amount ?? null,
       winningBidder: a.bids[0]?.user?.username ?? null,
       bidCount: a._count?.bids ?? 0,
