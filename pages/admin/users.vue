@@ -416,7 +416,7 @@
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Release Schedule</p>
 
           <div class="flex items-center gap-2">
-            <label class="w-36 text-xs text-gray-600 shrink-0">Start date (local)</label>
+            <label class="w-36 text-xs text-gray-600 shrink-0">Start date (CST)</label>
             <input v-model="dissolveSchedule.startAtLocal" type="datetime-local"
                    class="flex-1 text-xs border rounded px-2 py-1" />
           </div>
@@ -426,7 +426,7 @@
             <p class="text-xs font-medium text-blue-700">
               Pokémon
               <span class="ml-1 font-normal text-blue-500">
-                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.pokemon : '…' }} sea tunes)
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.pokemon : '…' }} cToons)
               </span>
             </p>
             <div class="flex items-center gap-2">
@@ -446,7 +446,7 @@
             <p class="text-xs font-medium text-purple-700">
               Crazy Rare
               <span class="ml-1 font-normal text-purple-500">
-                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.crazyRare : '…' }} sea tunes)
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.crazyRare : '…' }} cToons)
               </span>
             </p>
             <div class="flex items-center gap-2">
@@ -466,7 +466,7 @@
             <p class="text-xs font-medium text-gray-700">
               Other
               <span class="ml-1 font-normal text-gray-500">
-                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.other : '…' }} sea tunes)
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.other : '…' }} cToons)
               </span>
             </p>
             <div class="flex items-center gap-2">
@@ -1007,12 +1007,23 @@ const dissolveCategoryCounts = ref(null)
 let dissolvePoller = null
 
 function defaultStartLocal() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  d.setHours(10, 0, 0, 0)
-  // datetime-local value format: YYYY-MM-DDTHH:mm
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  // Compute tomorrow's date in CST (UTC-6) and default to 10:00 AM
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = fmt.formatToParts(tomorrow)
+  const year  = parts.find(p => p.type === 'year').value
+  const month = parts.find(p => p.type === 'month').value
+  const day   = parts.find(p => p.type === 'day').value
+
+  return `${year}-${month}-${day}T10:00`
 }
 
 function defaultDissolveSchedule() {
@@ -1109,7 +1120,7 @@ async function confirmDissolve() {
       method: 'POST',
       body: {
         scheduleConfig: {
-          startAtUtc:            new Date(s.startAtLocal).toISOString(),
+          startAtUtc:            new Date(s.startAtLocal + ':00-06:00').toISOString(),
           pokemonCadenceDays:    s.pokemonCadenceDays,
           pokemonPerCadence:     s.pokemonPerCadence,
           crazyRareCadenceDays:  s.crazyRareCadenceDays,
