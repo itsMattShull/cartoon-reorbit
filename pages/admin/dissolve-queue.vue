@@ -86,6 +86,7 @@
               <option value="ALL">All Categories</option>
               <option value="POKEMON">Pokémon</option>
               <option value="CRAZY_RARE">Crazy Rare</option>
+              <option value="UNSCHEDULED">Unscheduled</option>
             </select>
           </div>
           <div class="relative w-full sm:w-80">
@@ -152,11 +153,10 @@
               </div>
               <div class="shrink-0">
                 <button
-                  v-if="entry.scheduledFor"
                   @click="cancelEntry(entry.id)"
                   class="text-xs text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
-                >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
+                >{{ cancellingId === entry.id ? '…' : (entry.scheduledFor ? 'Unschedule' : 'Remove') }}</button>
               </div>
             </div>
           </div>
@@ -275,7 +275,9 @@ const categories = [
 // Filter across all entries (not just current page)
 const filteredEntries = computed(() => {
   let result = allEntries.value
-  if (categoryFilter.value !== 'ALL') {
+  if (categoryFilter.value === 'UNSCHEDULED') {
+    result = result.filter(e => !e.scheduledFor)
+  } else if (categoryFilter.value !== 'ALL') {
     result = result.filter(e => e.category === categoryFilter.value)
   }
   if (!searchQuery.value.trim()) return result

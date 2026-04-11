@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Admin with discordTag "mattshull" can see ALL official cToons including non-tradeable ones
-  const isMattShull = me.discordTag === 'mattshull'
+  const isMattShull = me.discordTag?.toLowerCase() === 'mattshull'
 
   const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
   const userWithCtoons = await prisma.user.findUnique({
