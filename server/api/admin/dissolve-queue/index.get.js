@@ -38,26 +38,32 @@ export default defineEventHandler(async (event) => {
     else cat.unscheduled++
   }
 
+  const mapEntry = (e) => ({
+    id:           e.id,
+    category:     e.category,
+    isFeatured:   e.isFeatured,
+    scheduledFor: e.scheduledFor,
+    createdAt:    e.createdAt,
+    ctoonName:    e.userCtoon?.ctoon?.name ?? null,
+    ctoonImage:   e.userCtoon?.ctoon?.assetPath ?? null,
+    rarity:       e.userCtoon?.ctoon?.rarity ?? null,
+    series:       e.userCtoon?.ctoon?.series ?? null,
+    mintNumber:   e.userCtoon?.mintNumber ?? null,
+  })
+
   // Next 20 scheduled entries
   const upcoming = allEntries
     .filter(e => e.scheduledFor)
     .slice(0, 20)
-    .map(e => ({
-      id:          e.id,
-      category:    e.category,
-      isFeatured:  e.isFeatured,
-      scheduledFor: e.scheduledFor,
-      createdAt:   e.createdAt,
-      ctoonName:   e.userCtoon?.ctoon?.name,
-      ctoonImage:  e.userCtoon?.ctoon?.assetPath,
-      rarity:      e.userCtoon?.ctoon?.rarity,
-      series:      e.userCtoon?.ctoon?.series,
-      mintNumber:  e.userCtoon?.mintNumber,
-    }))
+    .map(mapEntry)
+
+  // All entries for search/pagination on the frontend
+  const entries = allEntries.map(mapEntry)
 
   return {
     total: allEntries.length,
     byCategory,
     upcoming,
+    entries,
   }
 })
