@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
         select: {
           id: true,
           mintNumber: true,
-          ctoon: { select: { name: true, rarity: true, series: true } }
+          ctoon: { select: { name: true, rarity: true, series: true, assetPath: true } }
         }
       }
     },
@@ -49,6 +49,7 @@ export default defineEventHandler(async (event) => {
       scheduledFor: e.scheduledFor,
       createdAt:   e.createdAt,
       ctoonName:   e.userCtoon?.ctoon?.name,
+      ctoonImage:  e.userCtoon?.ctoon?.assetPath,
       rarity:      e.userCtoon?.ctoon?.rarity,
       series:      e.userCtoon?.ctoon?.series,
       mintNumber:  e.userCtoon?.mintNumber,

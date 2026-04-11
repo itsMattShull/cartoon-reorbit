@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 p-6 mt-16 md:mt-20">
+  <div class="min-h-screen bg-gray-50 p-3 sm:p-6 mt-16 md:mt-20">
     <Nav />
 
     <div class="max-w-5xl mx-auto mt-6 space-y-6">
@@ -30,60 +30,70 @@
         </div>
         <div v-if="upcoming.length" class="divide-y">
           <div v-for="entry in upcoming" :key="entry.id"
-               class="flex items-center gap-3 px-4 py-3 text-sm">
-            <div class="flex-1 min-w-0">
-              <div class="font-medium truncate">{{ entry.ctoonName || '—' }}</div>
-              <div class="text-xs text-gray-500">
-                {{ entry.rarity }}
-                <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
-                <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
-                      :class="categoryChip(entry.category)">{{ entry.category }}</span>
-                <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+               class="px-4 py-3 text-sm">
+            <div class="flex items-start gap-3">
+              <div class="shrink-0 w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                <img v-if="entry.ctoonImage" :src="entry.ctoonImage" :alt="entry.ctoonName"
+                     class="w-full h-full object-contain" loading="lazy" />
+                <span v-else class="text-gray-300 text-lg">?</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
+                <div class="text-xs text-gray-500 mt-0.5">
+                  {{ entry.rarity }}
+                  <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
+                  <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                        :class="categoryChip(entry.category)">{{ entry.category }}</span>
+                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
+              </div>
+              <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+                <div class="hidden sm:block text-xs text-gray-600">{{ fmtCST(entry.scheduledFor) }}</div>
+                <button
+                  @click="cancelEntry(entry.id)"
+                  class="text-xs text-red-500 hover:text-red-700"
+                  :disabled="cancellingId === entry.id"
+                >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
               </div>
             </div>
-            <div class="text-xs text-gray-600 shrink-0">{{ fmtCST(entry.scheduledFor) }}</div>
-            <button
-              @click="cancelEntry(entry.id)"
-              class="text-xs text-red-500 hover:text-red-700 shrink-0"
-              :disabled="cancellingId === entry.id"
-            >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
           </div>
         </div>
         <div v-else class="p-6 text-center text-sm text-gray-400">No upcoming scheduled auctions</div>
       </div>
 
       <!-- Reschedule All form -->
-      <div class="bg-white rounded-lg shadow p-5">
+      <div class="bg-white rounded-lg shadow p-4 sm:p-5">
         <h2 class="font-semibold mb-1">Reschedule All</h2>
         <p class="text-xs text-gray-500 mb-4">
           Set a new schedule for all unscheduled entries. Toggle "Reschedule all" to also reset existing scheduled entries.
         </p>
 
-        <div class="space-y-3 max-w-sm">
-          <div class="flex items-center gap-2">
-            <label class="w-40 text-xs text-gray-600 shrink-0">Start date (local)</label>
+        <div class="space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Start date (local)</label>
             <input v-model="form.startAtLocal" type="datetime-local"
-                   class="flex-1 text-xs border rounded px-2 py-1" />
+                   class="w-full sm:flex-1 text-xs border rounded px-2 py-1.5" />
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-40 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Cadence (days)</label>
             <input v-model.number="form.cadenceDays" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-40 text-xs text-gray-600 shrink-0">Pokémon / cadence</label>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Pokémon / cadence</label>
             <input v-model.number="form.pokemonPerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-40 text-xs text-gray-600 shrink-0">Crazy Rare / cadence</label>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Crazy Rare / cadence</label>
             <input v-model.number="form.crazyRarePerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
-          <div class="flex items-center gap-2">
-            <label class="w-40 text-xs text-gray-600 shrink-0">Other / cadence</label>
+          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Other / cadence</label>
             <input v-model.number="form.otherPerCadence" type="number" min="1"
-                   class="w-24 text-xs border rounded px-2 py-1" />
+                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
           <div class="flex items-center gap-2">
             <input v-model="form.reschedule" type="checkbox" id="reschedule-all"
@@ -101,7 +111,7 @@
           <button
             @click="applySchedule"
             :disabled="scheduling"
-            class="px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+            class="w-full sm:w-auto px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
           >{{ scheduling ? 'Scheduling…' : 'Apply Schedule' }}</button>
         </div>
       </div>
