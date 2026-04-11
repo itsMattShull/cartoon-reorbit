@@ -86,6 +86,7 @@
               <option value="ALL">All Categories</option>
               <option value="POKEMON">Pokémon</option>
               <option value="CRAZY_RARE">Crazy Rare</option>
+              <option value="UNSCHEDULED">Unscheduled</option>
             </select>
           </div>
           <div class="relative w-full sm:w-80">
@@ -274,7 +275,9 @@ const categories = [
 // Filter across all entries (not just current page)
 const filteredEntries = computed(() => {
   let result = allEntries.value
-  if (categoryFilter.value !== 'ALL') {
+  if (categoryFilter.value === 'UNSCHEDULED') {
+    result = result.filter(e => !e.scheduledFor)
+  } else if (categoryFilter.value !== 'ALL') {
     result = result.filter(e => e.category === categoryFilter.value)
   }
   if (!searchQuery.value.trim()) return result
