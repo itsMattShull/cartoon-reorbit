@@ -3,11 +3,11 @@
     <template #sidebar-top>
       <UserInfo />
     </template>
-    <template #sidebar-middle>
-      <CtoonFilter />
+    <template #sidebar-bottom>
+      <NavRight />
     </template>
     <template #main-content>
-      <MyCollection />
+      <MyAchievements />
     </template>
     <template #footer>
       <Footer />
@@ -20,7 +20,6 @@ definePageMeta({ layout: false, showAdbar: true, showNav: true })
 </script>
 
 <style>
-body.page-mycollection .sidebar-bottom { display: none; }
-body.page-mycollection .sidebar { --sidebar-middle-height: 384px; }
-body.page-mycollection .main-content { overflow-y: auto !important; scrollbar-width: thin; }
+body.page-myachievements .sidebar-middle { display: none; }
+body.page-myachievements .main-content   { overflow: hidden !important; }
 </style>

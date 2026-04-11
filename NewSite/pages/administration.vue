@@ -6,6 +6,12 @@
           <template #ctoons>
             <ManageCtoons />
           </template>
+          <template #content>
+            <ManageBackgrounds />
+          </template>
+          <template #games>
+            <AdminGames />
+          </template>
         </AdminTabs>
       </div>
     </template>

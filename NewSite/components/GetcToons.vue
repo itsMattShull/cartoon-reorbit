@@ -3,7 +3,9 @@
     <NuxtLink to="/newcmart" class="quadrant-link">
       <button class="quadrant quadrant--shop">cMart</button>
     </NuxtLink>
-    <button class="quadrant quadrant--collection">Auctions</button>
+    <NuxtLink to="/AuctionHouse" class="quadrant-link">
+      <button class="quadrant quadrant--collection">Auctions</button>
+    </NuxtLink>
     <button class="quadrant quadrant--games">Trades</button>
     <button class="quadrant quadrant--profile">Placeholder</button>
   </div>

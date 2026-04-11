@@ -36,4 +36,10 @@
     inset 0 1px 0 rgba(0, 0, 0, 0.2),
     0 1px 2px rgba(0, 0, 0, 0.3);
 }
+
+.red-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
 </style>

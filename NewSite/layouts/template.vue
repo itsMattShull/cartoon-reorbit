@@ -181,7 +181,7 @@ html, body {
   --sidebar-middle-mr:               0px;
 
   --sidebar-bottom-bg:               var(--OrbitDarkBlue);
-  --sidebar-bottom-height:           64px;
+  --sidebar-bottom-height:           78px;
   --sidebar-bottom-width:            217px;
   --sidebar-bottom-radius:           8px;
   --sidebar-bottom-border-thickness: 0px;
@@ -191,7 +191,7 @@ html, body {
   --sidebar-bottom-pl:               0px;
   --sidebar-bottom-pr:               0px;
   --sidebar-bottom-mt:               0px;
-  --sidebar-bottom-mb:               0px;
+  --sidebar-bottom-mb:               4px;
   --sidebar-bottom-ml:               0px;
   --sidebar-bottom-mr:               0px;
 
@@ -259,6 +259,12 @@ html, body {
 
 <script setup>
 const route = useRoute()
+const czoneState = useState('czoneState', () => ({ buildMode: false }))
+useHead({ bodyAttrs: { class: computed(() => {
+  const pageClass  = route.name ? `page-${String(route.name).toLowerCase()}` : ''
+  const buildClass = czoneState.value.buildMode ? 'czone-build' : ''
+  return [pageClass, buildClass].filter(Boolean).join(' ')
+}) } })
 const showAdbar = computed(() => route.meta.showAdbar !== false)
 const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)

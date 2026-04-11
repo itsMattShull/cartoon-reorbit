@@ -5,18 +5,17 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { prisma as db } from '@/server/prisma'
 import { imageSize } from 'image-size'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..', '..')
-  : process.cwd()
-
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/gif']
-const ALLOWED_SIZES = [ [510,344], [512,346], [800,600] ]
+
+function bgDir() {
+  return process.env.BASE_UPLOAD_DIRECTORY
+    ? join(process.env.BASE_UPLOAD_DIRECTORY, 'backgrounds')
+    : join(process.cwd(), 'public', 'backgrounds')
+}
 
 function sanitize(name = '') {
   return name.replace(/[^A-Za-z0-9._-]/g, '')
@@ -54,30 +53,19 @@ export default defineEventHandler(async (event) => {
   }
 
   const { width, height } = imageSize(imagePart.data)
-  const isAllowedSize = ALLOWED_SIZES.some(([w,h]) => w === width && h === height)
-  if (!isAllowedSize) {
-    const supported = ALLOWED_SIZES.map(s => s.join('×')).join(' or ')
-    throw createError({ statusCode: 400, statusMessage: `Image must be exactly ${supported}.` })
-  }
 
   const visibilityRaw = (fields.visibility || 'public').toLowerCase()
   const visibility = visibilityRaw === 'code-only' ? 'CODE_ONLY' : 'PUBLIC'
   const label = fields.label?.trim() || null
 
-  // Decide folders & public URL
-  const uploadDir = process.env.NODE_ENV === 'production'
-    ? join(baseDir, 'cartoon-reorbit-images', 'backgrounds')
-    : join(baseDir, 'public', 'backgrounds')
-
+  const uploadDir = bgDir()
   await mkdir(uploadDir, { recursive: true })
   const orig = sanitize(imagePart.filename)
   const filename = `${Date.now()}_${orig}`
   const outPath  = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
 
-  const imagePath = process.env.NODE_ENV === 'production'
-    ? `/images/backgrounds/${filename}`
-    : `/backgrounds/${filename}`
+  const imagePath = `/api/czone-bg/${filename}`
 
   const created = await db.background.create({
     data: {

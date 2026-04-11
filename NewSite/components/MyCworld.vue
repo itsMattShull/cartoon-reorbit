@@ -1,48 +1,42 @@
 <template>
   <div class="mycworld">
-    <button class="quadrant quadrant--shop">My cZone</button>
-    <button class="quadrant quadrant--collection" @click="$router.push('/MyCollection')">My Collection</button>
-    <button class="quadrant quadrant--games">Achievements</button>
-    <button class="quadrant quadrant--profile">Placeholder</button>
+    <div class="mcw-nav">
+      <GreenButton @click="$router.push('/myczone')">My cZone</GreenButton>
+      <GreenButton @click="$router.push('/MyCollection')">My Collection</GreenButton>
+      <GreenButton @click="$router.push('/myachievements')">Achievements</GreenButton>
+      <GreenButton>Placeholder</GreenButton>
+    </div>
+    <div class="mcw-content">
+      <CzoneContest />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .mycworld {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  --mcw-nav-height: 36px;
+
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  gap: 6px;
   padding: 6px;
   box-sizing: border-box;
+  gap: 6px;
 }
 
-.quadrant {
-  border: none;
-  border-radius: 10px;
-  font-size: 1rem;
-  font-weight: bold;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-  transition: filter 0.15s ease, transform 0.1s ease;
-  user-select: none;
+.mcw-nav {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: var(--mcw-nav-height);
+  flex-shrink: 0;
 }
 
-.quadrant:hover {
-  filter: brightness(1.15);
-  transform: scale(1.02);
+.mcw-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
-
-.quadrant:active {
-  filter: brightness(0.9);
-  transform: scale(0.98);
-}
-
-.quadrant--shop       { background: #1a6e3c; }
-.quadrant--collection { background: #1a3e8a; }
-.quadrant--games      { background: #7c2d8a; }
-.quadrant--profile    { background: #8a4a1a; }
 </style>

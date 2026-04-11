@@ -60,11 +60,9 @@
       <div class="cf-section-label">Sort By</div>
       <div class="cf-sort-row">
         <select class="cf-select" v-model="filter.sortField">
-          <option value="name">Name</option>
-          <option value="price">Price</option>
-          <option value="rarity">Rarity</option>
+          <option v-for="o in props.sortOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
         </select>
-        <button class="cf-sort-dir" @click="filter.sortAsc = !filter.sortAsc">
+        <button v-if="props.showSortDir" class="cf-sort-dir" @click="filter.sortAsc = !filter.sortAsc">
           {{ filter.sortAsc ? '▲' : '▼' }}
         </button>
       </div>
@@ -87,8 +85,17 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
+  showSortDir: { type: Boolean, default: true },
+  sortOptions: {
+    type: Array,
+    default: () => [
+      { value: 'name',   label: 'Name'   },
+      { value: 'price',  label: 'Price'  },
+      { value: 'rarity', label: 'Rarity' },
+    ],
+  },
 })
 
 const filter = useCtoonFilter()
@@ -127,7 +134,7 @@ function clearFilters() {
     set:             '',
     priceMin:        '',
     priceMax:        '',
-    sortField:       'name',
+    sortField:       props.sortOptions[0]?.value ?? 'name',
     sortAsc:         true,
     hideUnavailable: false,
   })

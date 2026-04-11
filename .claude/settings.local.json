@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep -l \"reorbit-theme\\\\|--reorbit-\" \"c:\\\\Users\\\\Beached\\\\CartoonReorbit\\\\cartoon-reorbit/components\"/*.vue)",
+      "WebFetch(domain:cartoonreorbit.com)",
+      "WebFetch(domain:fontsinuse.com)",
+      "WebFetch(domain:archive.org)",
+      "WebFetch(domain:www.spriters-resource.com)",
+      "WebFetch(domain:dev.cartoonreorbit.com)",
+      "WebFetch(domain:www.cufonfonts.com)",
+      "WebFetch(domain:gamefaqs.gamespot.com)",
+      "WebFetch(domain:forums.lostmediawiki.com)",
+      "WebFetch(domain:www.toonarific.com)",
+      "WebFetch(domain:spinstadium.tumblr.com)",
+      "WebFetch(domain:www.tapatalk.com)",
+      "Bash(cat server/api/uploads/[...path].get.js)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/TomSomerville/CartoonOrbitRerun/refs/heads/master/app/templates/administration.html\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/TomSomerville/CartoonOrbitRerun/master/app/templates/_ctoon_shortcard.html\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/TomSomerville/CartoonOrbitRerun/master/app/templates/cmart.html\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/TomSomerville/CartoonOrbitRerun/master/app/templates/_ctoon_filter.html\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "Bash(find archived:*)",
+      "Bash(find /c/Users/Beached/CartoonReorbit/cartoon-reorbit -maxdepth 2 -name schema.prisma -o -name *.seed.* -o -name seed*)",
+      "Bash(find /c/Users/Beached/CartoonReorbit/cartoon-reorbit/server -name *queue* -o -name *mint*)",
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(find c:UsersBeachedCartoonReorbitcartoon-reorbit -type f \\\\\\(-name *inball* -o -name *otto* -o -name *inwheel* -o -name *toons* \\\\\\))",
+      "Bash(grep -r \"manage.*winball\\\\|winball.*manage\" c:UsersBeachedCartoonReorbitcartoon-reorbit --include=*.vue --include=*.js)"
+    ]
+  }
+}

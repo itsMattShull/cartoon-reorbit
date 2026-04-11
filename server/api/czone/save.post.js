@@ -150,6 +150,8 @@ export default defineEventHandler(async (event) => {
         id: item.id,
         x: item.x,
         y: item.y,
+        width:  typeof item.width  === 'number' ? item.width  : null,
+        height: typeof item.height === 'number' ? item.height : null,
         mintNumber: rest.mintNumber,
         name: rest.name,
         assetPath: rest.assetPath,

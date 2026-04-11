@@ -4,6 +4,14 @@
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="mc-header">My Collection</div>
 
+    <!-- ── Auction modal ──────────────────────────────────────────── -->
+    <AuctionModal
+      v-if="auctionCtoon"
+      :ctoon="auctionCtoon"
+      @close="auctionCtoon = null"
+      @created="onAuctionCreated"
+    />
+
     <!-- ── Card grid ─────────────────────────────────────────────── -->
     <div class="mc-grid">
       <div v-if="loading" class="mc-status">Loading…</div>
@@ -19,7 +27,7 @@
             <span class="rarity-dot" :style="{ background: rarityColor(c.rarity) }" :title="c.rarity" />
           </template>
           <template #footer-left>
-            <BlueButton class="card-btn">Auction</BlueButton>
+            <BlueButton class="card-btn" @click="openAuction(c)">Auction</BlueButton>
           </template>
           <template #footer-right>
             <GreenButton class="card-btn">Trade List</GreenButton>
@@ -52,9 +60,18 @@ function rarityColor(rarity) {
   return RARITY_COLORS[(rarity || '').toLowerCase()] || '#aaaaaa'
 }
 
-const allCtoons = useState('myCollectionCtoons', () => [])
-const loading   = ref(true)
-const filter    = useCtoonFilter()
+const allCtoons   = useState('myCollectionCtoons', () => [])
+const loading     = ref(true)
+const filter      = useCtoonFilter()
+const auctionCtoon = ref(null)
+
+function openAuction(c) { auctionCtoon.value = c }
+function onAuctionCreated(userCtoonId) {
+  // Mark the ctoon as having an active auction so button could be disabled in future
+  const ctoon = allCtoons.value.find(c => c.id === userCtoonId)
+  if (ctoon) ctoon.hasActiveAuction = true
+  auctionCtoon.value = null
+}
 
 const ctoons = computed(() => {
   const f = filter.value
