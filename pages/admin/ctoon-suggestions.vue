@@ -40,9 +40,17 @@
       </div>
 
       <div v-else>
+        <!-- Mobile cards -->
         <div class="space-y-3 md:hidden">
           <div v-for="s in suggestions" :key="s.id" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
             <div class="flex items-start gap-3">
+              <input
+                v-if="activeTab === 'IN_REVIEW'"
+                type="checkbox"
+                class="mt-1 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-blue-600 cursor-pointer"
+                :checked="selectedIds.has(s.id)"
+                @change="toggleSelection(s.id)"
+              />
               <img
                 v-if="s.ctoon?.assetPath"
                 :src="s.ctoon.assetPath"
@@ -73,10 +81,20 @@
           </div>
         </div>
 
+        <!-- Desktop table -->
         <div class="hidden md:block overflow-x-auto">
           <table class="min-w-full table-auto border-collapse">
             <thead>
               <tr class="bg-gray-100">
+                <th v-if="activeTab === 'IN_REVIEW'" class="px-4 py-2 w-10">
+                  <input
+                    ref="selectAllCheckboxRef"
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                    :checked="allSelected"
+                    @change="toggleAll"
+                  />
+                </th>
                 <th class="px-4 py-2 text-left">cToon</th>
                 <th class="px-4 py-2 text-left">Suggested By</th>
                 <th class="px-4 py-2 text-left">Submitted</th>
@@ -86,6 +104,14 @@
             </thead>
             <tbody>
               <tr v-for="s in suggestions" :key="s.id" class="border-b">
+                <td v-if="activeTab === 'IN_REVIEW'" class="px-4 py-2 w-10">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                    :checked="selectedIds.has(s.id)"
+                    @change="toggleSelection(s.id)"
+                  />
+                </td>
                 <td class="px-4 py-2">
                   <div class="flex items-center gap-3">
                     <img
@@ -143,6 +169,7 @@
       </div>
     </div>
 
+    <!-- Individual review modal -->
     <Modal
       v-if="selectedSuggestion"
       :hide-close-button="true"
@@ -228,23 +255,23 @@
         <div class="pt-4 border-t border-white/10 flex items-center justify-end gap-3 shrink-0">
           <button
             class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm"
-            @click="closeReview"
             :disabled="actionLoading"
+            @click="closeReview"
           >
             Close
           </button>
           <template v-if="canReview">
             <button
               class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
-              @click="rejectSuggestion"
               :disabled="actionLoading"
+              @click="rejectSuggestion"
             >
               {{ actionLoading ? 'Working...' : 'Reject' }}
             </button>
             <button
               class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
-              @click="acceptSuggestion"
               :disabled="actionLoading"
+              @click="acceptSuggestion"
             >
               {{ actionLoading ? 'Working...' : 'Accept' }}
             </button>
@@ -252,13 +279,93 @@
         </div>
       </div>
     </Modal>
+
+    <!-- Bulk reject modal -->
+    <Modal
+      v-if="bulkRejectModalOpen"
+      :hide-close-button="true"
+      :close-on-backdrop="!bulkActionLoading"
+      @close="closeBulkRejectModal"
+    >
+      <div class="text-white flex flex-col">
+        <div class="pb-4 border-b border-white/10">
+          <h3 class="text-xl font-semibold">
+            Bulk Reject {{ selectedIds.size }} Suggestion{{ selectedIds.size !== 1 ? 's' : '' }}
+          </h3>
+          <p class="text-sm text-gray-300 mt-1">This rejection reason will be sent to each user via Discord.</p>
+        </div>
+        <div class="py-4">
+          <label class="block text-xs uppercase text-gray-300 mb-2" for="bulk-reject-reason">
+            Rejection reason (required)
+          </label>
+          <textarea
+            id="bulk-reject-reason"
+            v-model="bulkRejectReason"
+            class="w-full rounded bg-gray-900/70 text-gray-100 p-2 text-sm border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+            rows="4"
+            placeholder="Share the key reason for rejection..."
+            :disabled="bulkActionLoading"
+          />
+          <div v-if="bulkActionError" class="text-sm text-red-300 mt-2">{{ bulkActionError }}</div>
+        </div>
+        <div class="pt-4 border-t border-white/10 flex items-center justify-end gap-3">
+          <button
+            class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+            :disabled="bulkActionLoading"
+            @click="closeBulkRejectModal"
+          >
+            Cancel
+          </button>
+          <button
+            class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+            :disabled="bulkActionLoading"
+            @click="confirmBulkReject"
+          >
+            {{ bulkActionLoading ? 'Rejecting...' : `Reject ${selectedIds.size}` }}
+          </button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Floating bulk action bar -->
+    <Transition name="slide-up">
+      <div
+        v-if="activeTab === 'IN_REVIEW' && selectedIds.size > 0"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl bg-gray-900 px-5 py-3 shadow-2xl border border-gray-700"
+      >
+        <span class="text-sm text-white font-medium whitespace-nowrap">
+          {{ selectedIds.size }} selected
+        </span>
+        <button
+          class="text-xs text-gray-400 hover:text-gray-200 underline whitespace-nowrap"
+          @click="clearSelection"
+        >
+          Clear
+        </button>
+        <div class="w-px h-5 bg-gray-600" />
+        <button
+          class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-md text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+          :disabled="bulkActionLoading"
+          @click="bulkAccept"
+        >
+          {{ bulkActionLoading ? 'Working...' : 'Approve' }}
+        </button>
+        <button
+          class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-md text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+          :disabled="bulkActionLoading"
+          @click="openBulkRejectModal"
+        >
+          Reject
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
 definePageMeta({ title: 'Admin - cToon Suggestions', middleware: ['auth', 'admin'], layout: 'default' })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watchEffect } from 'vue'
 import Nav from '~/components/Nav.vue'
 import Modal from '~/components/Modal.vue'
 
@@ -273,8 +380,22 @@ const selectedSuggestion = ref(null)
 const actionLoading = ref(false)
 const actionError = ref('')
 const rejectReason = ref('')
+
+// Bulk selection state
+const selectedIds = ref(new Set())
+const selectAllCheckboxRef = ref(null)
+const bulkRejectModalOpen = ref(false)
+const bulkRejectReason = ref('')
+const bulkActionLoading = ref(false)
+const bulkActionError = ref('')
+
 const canReview = computed(() => selectedSuggestion.value?.status === 'IN_REVIEW')
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const allSelected = computed(() =>
+  suggestions.value.length > 0 && suggestions.value.every(s => selectedIds.value.has(s.id))
+)
+const someSelected = computed(() => selectedIds.value.size > 0 && !allSelected.value)
+
 const showingRange = computed(() => {
   if (!total.value) return '0-0 of 0'
   const start = (page.value - 1) * pageSize + 1
@@ -286,6 +407,32 @@ const headerDescription = computed(() => (
     ? 'Browse accepted and rejected cToon suggestion history.'
     : 'Review community-submitted updates that are in review.'
 ))
+
+// Keep the select-all checkbox indeterminate when only some rows are checked
+watchEffect(() => {
+  if (selectAllCheckboxRef.value) {
+    selectAllCheckboxRef.value.indeterminate = someSelected.value
+  }
+})
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+function toggleSelection(id) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleAll() {
+  if (allSelected.value) {
+    clearSelection()
+  } else {
+    selectedIds.value = new Set(suggestions.value.map(s => s.id))
+  }
+}
 
 async function fetchSuggestions() {
   loading.value = true
@@ -339,6 +486,7 @@ function setTab(tab) {
   if (activeTab.value === tab) return
   activeTab.value = tab
   page.value = 1
+  clearSelection()
   closeReview()
   fetchSuggestions()
 }
@@ -346,12 +494,14 @@ function setTab(tab) {
 function nextPage() {
   if (page.value >= totalPages.value) return
   page.value += 1
+  clearSelection()
   fetchSuggestions()
 }
 
 function prevPage() {
   if (page.value <= 1) return
   page.value -= 1
+  clearSelection()
   fetchSuggestions()
 }
 
@@ -408,6 +558,74 @@ async function rejectSuggestion() {
   }
 }
 
+function openBulkRejectModal() {
+  bulkActionError.value = ''
+  bulkRejectReason.value = ''
+  bulkRejectModalOpen.value = true
+}
+
+function closeBulkRejectModal() {
+  if (bulkActionLoading.value) return
+  bulkRejectModalOpen.value = false
+  bulkRejectReason.value = ''
+  bulkActionError.value = ''
+}
+
+async function bulkAccept() {
+  if (!selectedIds.value.size || bulkActionLoading.value) return
+  bulkActionLoading.value = true
+  bulkActionError.value = ''
+  try {
+    const res = await fetch('/api/admin/ctoon-suggestions/bulk-accept', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedIds.value] })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.statusMessage || 'Failed to accept suggestions')
+    }
+    clearSelection()
+    await fetchSuggestions()
+  } catch (err) {
+    bulkActionError.value = err?.message || 'Failed to accept suggestions'
+  } finally {
+    bulkActionLoading.value = false
+  }
+}
+
+async function confirmBulkReject() {
+  if (!selectedIds.value.size || bulkActionLoading.value) return
+  const reason = bulkRejectReason.value.trim()
+  if (!reason) {
+    bulkActionError.value = 'Please enter a rejection reason.'
+    return
+  }
+  bulkActionLoading.value = true
+  bulkActionError.value = ''
+  try {
+    const res = await fetch('/api/admin/ctoon-suggestions/bulk-reject', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedIds.value], reason })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.statusMessage || 'Failed to reject suggestions')
+    }
+    bulkRejectModalOpen.value = false
+    bulkRejectReason.value = ''
+    clearSelection()
+    await fetchSuggestions()
+  } catch (err) {
+    bulkActionError.value = err?.message || 'Failed to reject suggestions'
+  } finally {
+    bulkActionLoading.value = false
+  }
+}
+
 function formatValue(value) {
   if (value === null || value === undefined || value === '') return 'N/A'
   return value
@@ -441,3 +659,15 @@ function formatStatus(value) {
 
 onMounted(fetchSuggestions)
 </script>
+
+<style scoped>
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.75rem);
+}
+</style>
