@@ -152,11 +152,10 @@
               </div>
               <div class="shrink-0">
                 <button
-                  v-if="entry.scheduledFor"
                   @click="cancelEntry(entry.id)"
                   class="text-xs text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
-                >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
+                >{{ cancellingId === entry.id ? '…' : (entry.scheduledFor ? 'Unschedule' : 'Remove') }}</button>
               </div>
             </div>
           </div>

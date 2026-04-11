@@ -23,11 +23,8 @@ export default defineEventHandler(async (event) => {
   // Cancel the BullMQ delayed job if one exists
   await cancelDissolveAuctionLaunch(id)
 
-  // Clear scheduledFor so the entry stays in the queue but is unscheduled
-  await prisma.dissolveAuctionQueue.update({
-    where: { id },
-    data:  { scheduledFor: null }
-  })
+  // Remove the entry from the queue entirely
+  await prisma.dissolveAuctionQueue.delete({ where: { id } })
 
   return { ok: true }
 })
