@@ -35,7 +35,7 @@ defineProps({
   --card-border-color:    #1a4a7a;
 
   --header-height:        auto;
-  --header-bg:            url('/api/uploads/infocards/infocardSplash.png') top / 100% auto no-repeat;
+  --header-bg:            url('/images/newsite/infocardSplash.png') top / 100% auto no-repeat;
   --header-radius:        0px;
 
   --middle-height:        18px;
