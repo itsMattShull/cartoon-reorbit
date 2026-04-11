@@ -67,7 +67,7 @@
         <div class="p-4 border-b">
           <h2 class="font-semibold">All Queue Entries</h2>
           <p class="text-xs text-gray-500 mt-0.5">
-            <template v-if="searchQuery.length > 0">
+            <template v-if="searchQuery.length > 0 || categoryFilter !== 'ALL'">
               {{ filteredEntries.length }} of {{ allEntries.length }} entries match
             </template>
             <template v-else>
@@ -76,8 +76,18 @@
           </p>
         </div>
 
-        <!-- Search bar with autocomplete -->
+        <!-- Filters: category + search -->
         <div class="p-4 border-b" ref="searchContainer">
+          <div class="flex flex-wrap items-center gap-3 mb-3">
+            <select
+              v-model="categoryFilter"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="ALL">All Categories</option>
+              <option value="POKEMON">Pokémon</option>
+              <option value="CRAZY_RARE">Crazy Rare</option>
+            </select>
+          </div>
           <div class="relative w-full sm:w-80">
             <input
               v-model="searchQuery"
@@ -152,7 +162,7 @@
           </div>
         </div>
         <div v-else class="p-6 text-center text-sm text-gray-400">
-          {{ searchQuery.length > 0 ? 'No entries match your search' : 'No entries in the dissolve queue' }}
+          {{ (searchQuery.length > 0 || categoryFilter !== 'ALL') ? 'No entries match your filters' : 'No entries in the dissolve queue' }}
         </div>
 
         <!-- Pagination -->
@@ -249,6 +259,9 @@ const searchQuery     = ref('')
 const showSuggestions = ref(false)
 const searchContainer = ref(null)
 
+// Category filter
+const categoryFilter = ref('ALL')
+
 // Pagination
 const currentPage = ref(1)
 const pageSize    = 50
@@ -261,9 +274,13 @@ const categories = [
 
 // Filter across all entries (not just current page)
 const filteredEntries = computed(() => {
-  if (!searchQuery.value.trim()) return allEntries.value
+  let result = allEntries.value
+  if (categoryFilter.value !== 'ALL') {
+    result = result.filter(e => e.category === categoryFilter.value)
+  }
+  if (!searchQuery.value.trim()) return result
   const q = searchQuery.value.trim().toLowerCase()
-  return allEntries.value.filter(e => (e.ctoonName || '').toLowerCase().includes(q))
+  return result.filter(e => (e.ctoonName || '').toLowerCase().includes(q))
 })
 
 // Autocomplete suggestions: up to 8 results, only shown at 3+ chars
@@ -283,6 +300,11 @@ const paginatedEntries = computed(() => {
 watch(searchQuery, (val) => {
   currentPage.value = 1
   showSuggestions.value = val.trim().length >= 3
+})
+
+// Reset to page 1 when category filter changes
+watch(categoryFilter, () => {
+  currentPage.value = 1
 })
 
 function handleDocumentClick(e) {
