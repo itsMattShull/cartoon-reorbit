@@ -62,6 +62,7 @@ import Nav from '@/components/Nav.vue'
 
 definePageMeta({
   title: 'gToons Clash Tournaments',
+  middleware: 'auth',
   layout: 'default'
 })
 

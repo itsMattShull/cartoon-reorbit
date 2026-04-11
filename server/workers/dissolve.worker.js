@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { logAdminChange } from '../utils/adminChangeLog.js'
+import { scheduleDissolveAuctionLaunch } from '../utils/queues.js'
 
 const QUEUE_NAME = process.env.DISSOLVE_QUEUE_KEY || 'dissolveQueue'
 
@@ -80,9 +81,11 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   // ── Step 2: cToons ───────────────────────────────────────────────────────
   const userCtoons = await prisma.userCtoon.findMany({
     where: { userId, burnedAt: null },
-    select: { id: true, ctoon: { select: { id: true, rarity: true } }, mintNumber: true }
+    select: { id: true, ctoon: { select: { id: true, rarity: true, series: true } }, mintNumber: true }
   })
   const total = userCtoons.length
+
+  const queuedEntries = []  // { id, category } — tracked for Step 9 scheduling
 
   for (let i = 0; i < userCtoons.length; i++) {
     const uc = userCtoons[i]
@@ -112,11 +115,18 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       })
       ctoonsTransferred++
 
-      await prisma.dissolveAuctionQueue.upsert({
-        where: { userCtoonId: uc.id },
+      const isPokemon   = (uc.ctoon?.series || '').toLowerCase() === 'pokemon'
+      const isCrazyRare = (uc.ctoon?.rarity || '').toLowerCase() === 'crazy rare'
+      const category    = isPokemon ? 'POKEMON' : (isCrazyRare ? 'CRAZY_RARE' : 'OTHER')
+      const isFeatured  = isPokemon || isCrazyRare
+
+      const queueEntry = await prisma.dissolveAuctionQueue.upsert({
+        where:  { userCtoonId: uc.id },
         update: {},
-        create: { userCtoonId: uc.id }
+        create: { userCtoonId: uc.id, category, isFeatured },
+        select: { id: true, category: true }
       })
+      queuedEntries.push({ id: queueEntry.id, category: queueEntry.category })
       ctoonsQueued++
     }
 
@@ -242,6 +252,49 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       tradeOffersReassigned
     }
   })
+
+  // ── Step 9: Schedule dissolve auction launches ───────────────────────────
+  const { scheduleConfig } = job.data
+  if (scheduleConfig && queuedEntries.length) {
+    const {
+      startAtUtc,
+      pokemonCadenceDays,   pokemonPerCadence,
+      crazyRareCadenceDays, crazyRarePerCadence,
+      otherCadenceDays,     otherPerCadence,
+    } = scheduleConfig
+    const startMs = new Date(startAtUtc).getTime()
+
+    const perCategory = {
+      POKEMON:    Number(pokemonPerCadence)   || 0,
+      CRAZY_RARE: Number(crazyRarePerCadence) || 0,
+      OTHER:      Number(otherPerCadence)     || 0,
+    }
+
+    const cadenceDaysPerCategory = {
+      POKEMON:    Number(pokemonCadenceDays)   || 0,
+      CRAZY_RARE: Number(crazyRareCadenceDays) || 0,
+      OTHER:      Number(otherCadenceDays)     || 0,
+    }
+
+    const grouped = { POKEMON: [], CRAZY_RARE: [], OTHER: [] }
+    for (const e of queuedEntries) grouped[e.category].push(e.id)
+
+    for (const [cat, ids] of Object.entries(grouped)) {
+      const countPerCadence = perCategory[cat]
+      const cadenceDays     = cadenceDaysPerCategory[cat]
+      if (!countPerCadence || !cadenceDays || !ids.length) continue
+      const intervalMs = (cadenceDays * 24 * 3600 * 1000) / countPerCadence
+
+      for (let i = 0; i < ids.length; i++) {
+        const scheduledFor = new Date(startMs + i * intervalMs)
+        await prisma.dissolveAuctionQueue.update({
+          where: { id: ids[i] },
+          data:  { scheduledFor }
+        })
+        await scheduleDissolveAuctionLaunch(ids[i], scheduledFor)
+      }
+    }
+  }
 
   await progress(job, 100, 'Done')
 

@@ -11,11 +11,12 @@
  *   nuxt-server       – Nuxt 3 HTTP server, cluster mode (2 instances, stateless JWT)
  *   socket-server     – Standalone Socket.io server, fork mode (single instance,
  *                       coordinates all real-time game state)
- *   worker-mint       – BullMQ worker: NFT minting
- *   worker-mint-end   – BullMQ worker: time-based mint window closure
- *   worker-dissolve   – BullMQ worker: account dissolution
- *   worker-achieve    – BullMQ worker: daily achievements
- *   guild-checker     – Cron: Discord guild member sync
+ *   worker-mint                   – BullMQ worker: NFT minting
+ *   worker-mint-end               – BullMQ worker: time-based mint window closure
+ *   worker-dissolve               – BullMQ worker: account dissolution
+ *   worker-dissolve-auction-launch – BullMQ worker: dissolve auction launch
+ *   worker-achieve                – BullMQ worker: daily achievements
+ *   guild-checker                 – Cron: Discord guild member sync
  *
  * Workers run as single fork-mode instances to prevent double-processing of jobs.
  */
@@ -117,6 +118,16 @@ module.exports = {
     {
       name:      'worker-dissolve',
       script:    'server/workers/dissolve.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
+    },
+
+    // ── BullMQ worker: dissolve auction launch ────────────────────────────
+    {
+      name:      'worker-dissolve-auction-launch',
+      script:    'server/workers/dissolve-auction-launch.worker.js',
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },

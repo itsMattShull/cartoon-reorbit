@@ -195,6 +195,13 @@
           ✏️ Edit cZone
         </button>
         <button
+          v-if="canAdminEdit"
+          @click="navigateTo(`/admin/edit-czone/${username}`)"
+          class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded flex items-center gap-1"
+        >
+          ✏️ Edit cZone (Admin)
+        </button>
+        <button
           v-if="user?.id === ownerId && activeContests.length > 0"
           @click="openContestModal"
           class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded flex items-center gap-1"
@@ -462,6 +469,13 @@
                 class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded flex items-center gap-1"
               >
                 ✏️ Edit cZone
+              </button>
+              <button
+                v-if="canAdminEdit"
+                @click="navigateTo(`/admin/edit-czone/${username}`)"
+                class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded flex items-center gap-1"
+              >
+                ✏️ Edit cZone (Admin)
               </button>
               <button
                 v-if="user?.id === ownerId && activeContests.length > 0"
@@ -930,7 +944,8 @@ const scaleStyle = computed(() => ({
 const route = useRoute()
 const router = useRouter()
 const username = ref(route.params.username)
-const { user, fetchSelf } = useAuth()
+const { user, isAdmin, fetchSelf } = useAuth()
+const canAdminEdit = computed(() => isAdmin.value && user.value?.id !== ownerId.value)
 const { setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
 
 // ——— Loading indicator ———

@@ -80,7 +80,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Achievements' })
+definePageMeta({ title: 'Achievements', middleware: 'auth' })
 
 const { data: achievements, pending } = await useFetch('/api/achievements')
 

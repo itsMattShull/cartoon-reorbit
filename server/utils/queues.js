@@ -106,3 +106,45 @@ export async function cancelMintEnd(ctoonId) {
   const existing = await mintEndQueue.getJob(String(ctoonId))
   if (existing) { try { await existing.remove() } catch {} }
 }
+
+// Queue for launching individual dissolve-queue auctions at their scheduled time
+export const dissolveAuctionLaunchQueue = new Queue(
+  process.env.DISSOLVE_AUCTION_LAUNCH_QUEUE_KEY || 'dissolveAuctionLaunch',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500 },
+      removeOnFail:     { count: 500 },
+    },
+  }
+)
+
+/**
+ * Schedule (or reschedule) a delayed BullMQ job that creates one dissolve auction.
+ * Uses the DissolveAuctionQueue.id as the BullMQ job ID for easy lookup/cancellation.
+ * @param {string} queueEntryId
+ * @param {Date|string} scheduledFor
+ */
+export async function scheduleDissolveAuctionLaunch(queueEntryId, scheduledFor) {
+  const delay = Math.max(0, new Date(scheduledFor).getTime() - Date.now())
+  const existing = await dissolveAuctionLaunchQueue.getJob(queueEntryId)
+  if (existing) {
+    const state = await existing.getState()
+    if (state === 'active') return
+    try { await existing.remove() } catch {}
+  }
+  await dissolveAuctionLaunchQueue.add(
+    'launch',
+    { queueEntryId },
+    { jobId: queueEntryId, delay }
+  )
+}
+
+/**
+ * Cancel a pending dissolve auction launch job.
+ * @param {string} queueEntryId
+ */
+export async function cancelDissolveAuctionLaunch(queueEntryId) {
+  const existing = await dissolveAuctionLaunchQueue.getJob(queueEntryId)
+  if (existing) { try { await existing.remove() } catch {} }
+}

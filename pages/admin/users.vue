@@ -406,10 +406,81 @@
       <div v-if="dissolvePhase === 'confirm'" class="mt-2 text-sm text-gray-700 space-y-2">
         <p>
           Confirming will make this user Inactive, transfer all of their points to
-          <strong>{{ official?.username || '—' }}</strong>, reassign their cToons to
-          <strong>{{ official?.username || '—' }}</strong>, and immediately start 24‑hour auctions for those items.
+          <strong>{{ official?.username || '—' }}</strong>, and reassign their cToons to
+          <strong>{{ official?.username || '—' }}</strong>.
+          Their cToons will be queued for scheduled auction release based on the settings below.
         </p>
-        <p class="text-xs text-gray-500">Large accounts with many cToons are processed in the background — you'll see progress here.</p>
+        <p class="text-xs text-gray-500">Large accounts are processed in the background — you'll see progress here.</p>
+
+        <div class="mt-3 border-t pt-3 space-y-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Release Schedule</p>
+
+          <div class="flex items-center gap-2">
+            <label class="w-36 text-xs text-gray-600 shrink-0">Start date (CST)</label>
+            <input v-model="dissolveSchedule.startAtLocal" type="datetime-local"
+                   class="flex-1 text-xs border rounded px-2 py-1" />
+          </div>
+
+          <!-- Pokémon category -->
+          <div class="rounded border border-blue-100 bg-blue-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-blue-700">
+              Pokémon
+              <span class="ml-1 font-normal text-blue-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.pokemon : '…' }} cToons)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.pokemonCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.pokemonPerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+          </div>
+
+          <!-- Crazy Rare category -->
+          <div class="rounded border border-purple-100 bg-purple-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-purple-700">
+              Crazy Rare
+              <span class="ml-1 font-normal text-purple-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.crazyRare : '…' }} cToons)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.crazyRareCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.crazyRarePerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+          </div>
+
+          <!-- Other category -->
+          <div class="rounded border border-gray-200 bg-gray-50 p-2 space-y-1.5">
+            <p class="text-xs font-medium text-gray-700">
+              Other
+              <span class="ml-1 font-normal text-gray-500">
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.other : '…' }} cToons)
+              </span>
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <input v-model.number="dissolveSchedule.otherCadenceDays" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <input v-model.number="dissolveSchedule.otherPerCadence" type="number" min="1"
+                     class="w-24 text-xs border rounded px-2 py-1" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Progress bar (queued / active) -->
@@ -430,9 +501,12 @@
         <ul v-if="dissolveSummary" class="text-xs space-y-0.5 mt-1">
           <li>Points transferred: {{ dissolveSummary.pointsTransferred }}</li>
           <li>cToons transferred: {{ dissolveSummary.ctoonsTransferred }}</li>
-          <li>Auctions created: {{ dissolveSummary.auctionsCreated }}</li>
+          <li>cToons queued for auction: {{ dissolveSummary.ctoonsQueued }}</li>
           <li>Bids removed: {{ dissolveSummary.bidsDeleted }}</li>
         </ul>
+        <p class="text-xs mt-2">
+          <a href="/admin/dissolve-queue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
+        </p>
       </div>
 
       <!-- Error -->
@@ -929,9 +1003,44 @@ const dissolvePhase = ref('confirm') // 'confirm' | 'working' | 'done'
 const dissolvePct = ref(0)
 const dissolveStep = ref('')
 const dissolveSummary = ref(null)
+const dissolveCategoryCounts = ref(null)
 let dissolvePoller = null
 
-function openDissolveModal(u) {
+function defaultStartLocal() {
+  // Compute tomorrow's date in CST (UTC-6) and default to 10:00 AM
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = fmt.formatToParts(tomorrow)
+  const year  = parts.find(p => p.type === 'year').value
+  const month = parts.find(p => p.type === 'month').value
+  const day   = parts.find(p => p.type === 'day').value
+
+  return `${year}-${month}-${day}T10:00`
+}
+
+function defaultDissolveSchedule() {
+  return {
+    startAtLocal:          defaultStartLocal(),
+    pokemonCadenceDays:    7,
+    pokemonPerCadence:     2,
+    crazyRareCadenceDays:  7,
+    crazyRarePerCadence:   1,
+    otherCadenceDays:      7,
+    otherPerCadence:       10,
+  }
+}
+
+const dissolveSchedule = ref(defaultDissolveSchedule())
+
+async function openDissolveModal(u) {
   dissolveTarget.value = u
   dissolveError.value = ''
   dissolveWorking.value = false
@@ -939,7 +1048,14 @@ function openDissolveModal(u) {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
+  dissolveCategoryCounts.value = null
+  dissolveSchedule.value = defaultDissolveSchedule()
   showDissolveModal.value = true
+  try {
+    dissolveCategoryCounts.value = await $fetch(`/api/admin/users/${u.id}/ctoon-categories`)
+  } catch {
+    // non-fatal — counts will show '…'
+  }
 }
 function closeDissolveModal() {
   if (dissolvePoller) { clearInterval(dissolvePoller); dissolvePoller = null }
@@ -951,6 +1067,8 @@ function closeDissolveModal() {
   dissolvePct.value = 0
   dissolveStep.value = ''
   dissolveSummary.value = null
+  dissolveCategoryCounts.value = null
+  dissolveSchedule.value = defaultDissolveSchedule()
 }
 function parseDissolveError(e) {
   const statusMessage = e?.data?.statusMessage || ''
@@ -997,7 +1115,21 @@ async function confirmDissolve() {
   dissolveWorking.value = true
   dissolveError.value = ''
   try {
-    await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, { method: 'POST' })
+    const s = dissolveSchedule.value
+    await $fetch(`/api/admin/users/${dissolveTarget.value.id}/dissolve`, {
+      method: 'POST',
+      body: {
+        scheduleConfig: {
+          startAtUtc:            new Date(s.startAtLocal + ':00-06:00').toISOString(),
+          pokemonCadenceDays:    s.pokemonCadenceDays,
+          pokemonPerCadence:     s.pokemonPerCadence,
+          crazyRareCadenceDays:  s.crazyRareCadenceDays,
+          crazyRarePerCadence:   s.crazyRarePerCadence,
+          otherCadenceDays:      s.otherCadenceDays,
+          otherPerCadence:       s.otherPerCadence,
+        }
+      }
+    })
     dissolvePhase.value = 'working'
     dissolvePct.value = 0
     dissolveStep.value = 'Queued…'

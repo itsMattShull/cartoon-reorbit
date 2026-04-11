@@ -11,13 +11,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return
   }
 
-  // Only guard protected pages
-  const needsAuth =
-    to.meta?.requiresAuth ||
-    to.path.startsWith('/dashboard')
-
-  if (!needsAuth) return
-
+  // All non-home routes using this middleware require authentication
   if (!user.value) {
     try { await fetchSelf() } catch {}
   }

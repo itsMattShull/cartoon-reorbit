@@ -1521,13 +1521,18 @@ model AuctionOnly {
 }
 
 model DissolveAuctionQueue {
-  id          String   @id @default(uuid())
-  userCtoonId String   @unique
-  createdAt   DateTime @default(now())
+  id           String    @id @default(uuid())
+  userCtoonId  String    @unique
+  category     String    @default("OTHER")  // "POKEMON" | "CRAZY_RARE" | "OTHER"
+  isFeatured   Boolean   @default(false)
+  scheduledFor DateTime?                     // UTC; null = not yet scheduled
+  createdAt    DateTime  @default(now())
 
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
 
   @@index([createdAt])
+  @@index([category])
+  @@index([scheduledFor])
 }
 
 model HomepageConfig {

@@ -381,6 +381,8 @@
 </template>
 
 <script setup>
+definePageMeta({ middleware: 'auth', layout: 'default' })
+
 const route = useRoute()
 const contestId = route.params.id
 
