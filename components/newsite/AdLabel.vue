@@ -1,6 +1,6 @@
 <template>
   <div class="adlabel">
-    <img :src="'/api/uploads/adlabel/adlabel.gif'" alt="Ad Label" />
+    <img src="/images/newsite/adlabel.gif" alt="Ad Label" />
   </div>
 </template>
 

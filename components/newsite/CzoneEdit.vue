@@ -52,7 +52,7 @@
       <div class="czew-bg-grid">
         <img
           v-for="bg in cz.backgrounds" :key="bg.id"
-          :src="`/api/czone-bg/${bg.filename}`"
+          :src="`/backgrounds/${bg.filename}`"
           :alt="bg.filename"
           class="czew-bg-item"
           :class="{ 'czew-bg-active': currentZoneBg === bg.filename }"

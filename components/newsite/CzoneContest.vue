@@ -371,7 +371,7 @@ const captureBgStyle = computed(() => {
   const bg = zone?.background
   if (!bg) return {}
   return {
-    backgroundImage: `url('/api/czone-bg/${bg}')`,
+    backgroundImage: `url('/backgrounds/${bg}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
   }
@@ -423,7 +423,7 @@ async function doSubmit() {
       await new Promise(resolve => {
         const img = new Image()
         img.onload = img.onerror = resolve
-        img.src = `/api/czone-bg/${zone.background}`
+        img.src = `/backgrounds/${zone.background}`
       })
     }
 

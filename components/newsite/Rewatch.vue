@@ -1,6 +1,6 @@
 <template>
   <a href="https://cartoonrewatch.com/" target="_blank" rel="noopener noreferrer" class="rewatch">
-    <img :src="'/api/uploads/rewatch/logo.gif'" alt="Rewatch Logo" />
+    <img src="/images/newsite/rewatch-logo.gif" alt="Rewatch Logo" />
   </a>
 </template>
 

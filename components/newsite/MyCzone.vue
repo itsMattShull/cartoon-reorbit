@@ -50,11 +50,11 @@
         <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
       </div>
       <div class="cz-nav-buttons">
-        <img :src="'/api/assets/ten_left.gif'"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
-        <img :src="'/api/assets/one_left.gif'"  class="cz-nav-btn" title="Previous"    draggable="false" @click="navigate('previous')"   />
-        <img :src="'/api/assets/rand.gif'"      class="cz-nav-btn" title="Random"      draggable="false" @click="navigate('random')"     />
-        <img :src="'/api/assets/one_right.gif'" class="cz-nav-btn" title="Next"        draggable="false" @click="navigate('next')"        />
-        <img :src="'/api/assets/ten_right.gif'" class="cz-nav-btn" title="Next 10"     draggable="false" @click="navigate('next10')"     />
+        <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
+        <img src="/images/newsite/one_left.gif"  class="cz-nav-btn" title="Previous"    draggable="false" @click="navigate('previous')"   />
+        <img src="/images/newsite/rand.gif"      class="cz-nav-btn" title="Random"      draggable="false" @click="navigate('random')"     />
+        <img src="/images/newsite/one_right.gif" class="cz-nav-btn" title="Next"        draggable="false" @click="navigate('next')"        />
+        <img src="/images/newsite/ten_right.gif" class="cz-nav-btn" title="Next 10"     draggable="false" @click="navigate('next10')"     />
       </div>
     </div>
 
@@ -100,7 +100,7 @@ const currentBg = computed(() => {
   const bg   = currentZone.value.background || DEFAULT_BG
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return `${grid}, url('/api/czone-bg/${bg}')`
+  return `${grid}, url('/backgrounds/${bg}')`
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
