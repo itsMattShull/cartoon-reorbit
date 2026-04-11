@@ -5,6 +5,14 @@ export default defineNuxtConfig({
   },
 
   // ───────────────────────────────────────────────
+  // 0)  Components – register newsite/ without path prefix
+  // ───────────────────────────────────────────────
+  components: [
+    '~/components',
+    { path: '~/components/newsite', pathPrefix: false }
+  ],
+
+  // ───────────────────────────────────────────────
   // 1)  Modules
   // ───────────────────────────────────────────────
   modules: ['@nuxtjs/tailwindcss', '@sentry/nuxt/module'],
@@ -46,7 +54,8 @@ export default defineNuxtConfig({
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,
-      socketPort: process.env.SOCKET_PORT || 3001
+      socketPort: process.env.SOCKET_PORT || 3001,
+      viewNewDesign: process.env.VIEWNEWDESIGN || '0'
     }
   },
 

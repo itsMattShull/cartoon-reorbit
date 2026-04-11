@@ -5,5 +5,9 @@ export default defineNuxtRouteMiddleware( async (to) => {
   try { await fetchSelf() } catch {}
   if (user.value?.active === false) return navigateTo('/join-discord?inactive=1')
   if (user.value?.needsSetup) return navigateTo('/setup-username')
-  if (user.value) return navigateTo('/dashboard')
+  if (user.value) {
+    const { public: { viewNewDesign } } = useRuntimeConfig()
+    if (viewNewDesign === '1') return navigateTo('/newsite/home')
+    return navigateTo('/dashboard')
+  }
 })
