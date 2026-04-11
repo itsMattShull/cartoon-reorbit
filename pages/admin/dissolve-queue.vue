@@ -32,8 +32,13 @@
           <div v-for="entry in upcoming" :key="entry.id"
                class="px-4 py-3 text-sm">
             <div class="flex items-start gap-3">
+              <div class="shrink-0 w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                <img v-if="entry.ctoonImage" :src="entry.ctoonImage" :alt="entry.ctoonName"
+                     class="w-full h-full object-contain" loading="lazy" />
+                <span v-else class="text-gray-300 text-lg">?</span>
+              </div>
               <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">{{ entry.ctoonName || '—' }}</div>
+                <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
                 <div class="text-xs text-gray-500 mt-0.5">
                   {{ entry.rarity }}
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
