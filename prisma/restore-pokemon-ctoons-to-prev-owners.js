@@ -245,18 +245,53 @@ async function main() {
   for (const r of restorations) {
     try {
       await prisma.$transaction(async (tx) => {
-        // Transfer ownership back to the previous owner
+        // ── 1. Cancel active auctions and remove all dependent rows ──────────
+        const activeAuctions = await tx.auction.findMany({
+          where:  { userCtoonId: r.userCtoonId, status: 'ACTIVE' },
+          select: { id: true },
+        })
+        if (activeAuctions.length) {
+          const auctionIds = activeAuctions.map((a) => a.id)
+          await tx.auctionAutoBid.deleteMany({ where: { auctionId: { in: auctionIds } } })
+          await tx.bid.deleteMany({ where: { auctionId: { in: auctionIds } } })
+          await tx.auction.deleteMany({ where: { id: { in: auctionIds } } })
+        }
+
+        // ── 2. Remove AuctionOnly listings ───────────────────────────────────
+        await tx.auctionOnly.deleteMany({ where: { userCtoonId: r.userCtoonId } })
+
+        // ── 3. Remove DissolveAuctionQueue entry ─────────────────────────────
+        await tx.dissolveAuctionQueue.deleteMany({ where: { userCtoonId: r.userCtoonId } })
+
+        // ── 4. Withdraw pending TradeOffers that include this cToon ──────────
+        const linkedOfferCtoons = await tx.tradeOfferCtoon.findMany({
+          where:  { userCtoonId: r.userCtoonId },
+          select: { tradeOfferId: true },
+        })
+        if (linkedOfferCtoons.length) {
+          const offerIds = [...new Set(linkedOfferCtoons.map((c) => c.tradeOfferId))]
+          await tx.tradeOffer.updateMany({
+            where: { id: { in: offerIds }, status: 'PENDING' },
+            data:  { status: 'WITHDRAWN' },
+          })
+          await tx.tradeOfferCtoon.deleteMany({ where: { userCtoonId: r.userCtoonId } })
+        }
+
+        // ── 5. Remove from any active TradeRoom trade sessions ───────────────
+        await tx.tradeCtoon.deleteMany({ where: { userCtoonId: r.userCtoonId } })
+
+        // ── 6. Drop stale trade-list entries ─────────────────────────────────
+        await tx.userTradeListItem.deleteMany({
+          where: { userCtoonId: r.userCtoonId, userId: { not: r.prevUserId } },
+        })
+
+        // ── 7. Transfer ownership back to the previous owner ─────────────────
         await tx.userCtoon.update({
           where: { id: r.userCtoonId },
           data:  { userId: r.prevUserId, isTradeable: true },
         })
 
-        // Drop any stale trade-list entries that belonged to other users
-        await tx.userTradeListItem.deleteMany({
-          where: { userCtoonId: r.userCtoonId, userId: { not: r.prevUserId } },
-        })
-
-        // Record the ownership change in the log
+        // ── 8. Record the ownership change in the log ────────────────────────
         await tx.ctoonOwnerLog.create({
           data: {
             userId:      r.prevUserId,
