@@ -509,7 +509,7 @@ async function bootstrapCollections() {
   try {
     const [target, official] = await Promise.all([
       $fetch(`/api/collection/${targetUser.value.username}`),
-      $fetch(`/api/collection/${officialUser.value.username}`)
+      $fetch('/api/admin/official-collection')
     ])
     targetCtoons.value = Array.isArray(target) ? target : []
     officialCtoons.value = Array.isArray(official) ? official : []
