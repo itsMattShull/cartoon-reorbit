@@ -138,6 +138,7 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
+    cz.value.activeZone  = 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
     router.replace({ query: { user: target } })

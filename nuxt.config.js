@@ -2,8 +2,7 @@ export default defineNuxtConfig({
   extends: ['./NewSite'],
 
   server: {
-    port: process.env.NUXT_PORT || 3000,
-    host: '0.0.0.0'
+    port: process.env.NUXT_PORT || 3000
   },
 
 
