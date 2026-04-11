@@ -74,7 +74,7 @@
             <div class="shrink-0">
               <img
                 :src="sub.assetPath"
-                class="w-24 h-24 object-contain border rounded bg-gray-50"
+                class="max-w-full h-auto border rounded bg-gray-50"
                 :alt="sub.name"
               />
               <div class="mt-2 text-center">
