@@ -1,0 +1,42 @@
+<template>
+  <div class="mycworld">
+    <div class="mcw-nav">
+      <GreenButton @click="$router.push('/myczone')">My cZone</GreenButton>
+      <GreenButton @click="$router.push('/MyCollection')">My Collection</GreenButton>
+      <GreenButton @click="$router.push('/myachievements')">Achievements</GreenButton>
+      <GreenButton>Placeholder</GreenButton>
+    </div>
+    <div class="mcw-content">
+      <CzoneContest />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.mycworld {
+  --mcw-nav-height: 36px;
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+  gap: 6px;
+}
+
+.mcw-nav {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: var(--mcw-nav-height);
+  flex-shrink: 0;
+}
+
+.mcw-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>
