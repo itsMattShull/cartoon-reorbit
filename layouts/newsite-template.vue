@@ -270,7 +270,7 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
-const mobileSidebarCollapsed = ref(false)
+const mobileSidebarCollapsed = ref(true)
 
 const gridColumns = computed(() =>
   isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'
@@ -286,7 +286,7 @@ const gridRows = computed(() => {
 const SITE_WIDTH = 800
 const SITE_HEIGHT = 670
 const SITE_PADDING = 20
-const MOBILE_BREAKPOINT = 415
+const MOBILE_BREAKPOINT = 768
 const MAIN_CONTENT_WIDTH = 590
 const MAIN_CONTENT_HEIGHT = 480
 const scale = ref(1)
@@ -566,7 +566,7 @@ const scaleStyle = computed(() => {
   align-self: stretch;
 }
 
-@media (max-width: 415px) {
+@media (max-width: 768px) {
   .site-container,
   .topbar,
   .topbar-adbar,
