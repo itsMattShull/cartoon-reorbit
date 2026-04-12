@@ -270,7 +270,7 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
-const mobileSidebarCollapsed = ref(false)
+const mobileSidebarCollapsed = ref(true)
 
 const gridColumns = computed(() =>
   isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'
@@ -286,7 +286,7 @@ const gridRows = computed(() => {
 const SITE_WIDTH = 800
 const SITE_HEIGHT = 670
 const SITE_PADDING = 20
-const MOBILE_BREAKPOINT = 415
+const MOBILE_BREAKPOINT = 768
 const MAIN_CONTENT_WIDTH = 590
 const MAIN_CONTENT_HEIGHT = 480
 const scale = ref(1)
@@ -294,9 +294,7 @@ const isMobile = ref(false)
 
 const computeLayout = () => {
   isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
-  if (isMobile.value) {
-    scale.value = Math.min((window.innerWidth - SITE_PADDING) / MOBILE_BREAKPOINT, 1)
-  } else {
+  if (!isMobile.value) {
     const scaleX = (window.innerWidth - SITE_PADDING) / SITE_WIDTH
     const scaleY = (window.innerHeight - SITE_PADDING) / SITE_HEIGHT
     scale.value = Math.min(scaleX, scaleY, 1)
@@ -314,21 +312,17 @@ onUnmounted(() => {
 
 const mainContentMobileStyle = computed(() => {
   if (!isMobile.value) return {}
-  const baseWidth = showSidebar.value ? MAIN_CONTENT_WIDTH : SITE_WIDTH
   return {
-    width: `${baseWidth}px`,
+    width: '100%',
     height: `${MAIN_CONTENT_HEIGHT}px`,
-    zoom: MOBILE_BREAKPOINT / baseWidth,
   }
 })
 
 const scaleStyle = computed(() => {
   if (isMobile.value) {
     return {
-      width: `${MOBILE_BREAKPOINT}px`,
+      width: '100%',
       height: 'auto',
-      transform: `scale(${scale.value})`,
-      transformOrigin: 'top center',
     }
   }
   return {
@@ -566,7 +560,7 @@ const scaleStyle = computed(() => {
   align-self: stretch;
 }
 
-@media (max-width: 415px) {
+@media (max-width: 768px) {
   .site-container,
   .topbar,
   .topbar-adbar,
@@ -587,6 +581,15 @@ const scaleStyle = computed(() => {
     flex-shrink: 1;
     min-width: unset;
     min-height: unset;
+  }
+
+  .site-container {
+    overflow: visible;
+  }
+
+  .main-content {
+    overflow-x: auto;
+    overflow-y: auto;
   }
 }
 
