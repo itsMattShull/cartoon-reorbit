@@ -241,14 +241,14 @@ html, body {
         <div class="topbar-nav-right" :style="isMobile ? { width: '100%' } : {}"><NavRight :isMobile="isMobile" /></div>
       </div>
     </div>
-    <div class="sidebar" :style="[{ display: showSidebar ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto' } : {}]">
+    <div class="sidebar" :style="[{ display: showSidebar ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', boxSizing: 'border-box', paddingLeft: '5px', paddingRight: '5px' } : {}]">
       <button v-if="isMobile" class="sidebar-toggle" @click="mobileSidebarCollapsed = !mobileSidebarCollapsed">
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
-        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 85' } : {}"><slot name="sidebar-top" /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 300', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle" /></div>
-        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 64', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
+        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><slot name="sidebar-top" /></div>
+        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle" /></div>
+        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
       </template>
     </div>
     <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot name="main-content" /></div>
@@ -314,7 +314,7 @@ const mainContentMobileStyle = computed(() => {
   if (!isMobile.value) return {}
   return {
     width: '100%',
-    height: `${MAIN_CONTENT_HEIGHT}px`,
+    height: 'auto',
   }
 })
 
