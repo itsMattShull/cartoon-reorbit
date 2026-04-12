@@ -22,6 +22,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   if (!user.value) return navigateTo('/')
 
+  // Admin routes only need authentication; admin.js handles authorization
+  if (to.path.startsWith('/admin')) return
+
   // Inactive accounts are sent to join-discord with a notice
   if (user.value.active === false && to.path !== '/join-discord') {
     return navigateTo('/join-discord?inactive=1')
