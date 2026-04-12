@@ -761,7 +761,15 @@ function startSelectTimer(io, match) {
   match.selectDeadline = Date.now() + 60_000
   if (match.timer) clearInterval(match.timer)
   match.timer = setInterval(() => {
-    match.battle.tick(Date.now())
+    const now = Date.now()
+    // Player didn't submit before the deadline — they forfeit, AI wins
+    if (now >= match.selectDeadline) {
+      clearInterval(match.timer)
+      match.timer = null
+      endMatch(io, match, { winner: 'ai', playerLanesWon: 0, aiLanesWon: 0 })
+      return
+    }
+    match.battle.tick(now)
     broadcastPhase(io, match)
     if (match.battle.state.phase === 'gameEnd') {
       endMatch(io, match, match.battle.state.result)
