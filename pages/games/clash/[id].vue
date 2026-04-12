@@ -338,9 +338,7 @@ onMounted(async () => {
 
 async function readyUp() {
   if (!selectedDeckId.value) return
-  // set the deck then mark ready
-  socket.emit('setPvpDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
-  socket.emit('readyPvp',   { roomId, userId: user.value.id, ready: true })
+  socket.emit('readyUpWithDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
 }
 
 // — UI State —

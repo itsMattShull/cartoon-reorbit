@@ -1719,7 +1719,10 @@ io.on('connection', socket => {
     socket.emit('clashDecks', payload)
   })
 
-  socket.on('setPvpDeck', async ({ roomId, userId, deckId }) => {
+  // Single atomic handler: sets deck + ready flag together so startPvpMatch
+  // always sees both in a consistent state (fixes race condition where the old
+  // separate setPvpDeck / readyPvp events could be processed out of order).
+  socket.on('readyUpWithDeck', async ({ roomId, userId, deckId }) => {
     const room = pvpRooms.get(roomId)
     const uid = sid(userId)
     if (!room || !room.players.includes(uid)) return
@@ -1746,18 +1749,8 @@ io.on('connection', socket => {
       abilityData: c.abilityData || null
     }))
     room.deckSnapshots[uid] = buildDeckSnapshot(deck)
-
-    io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
-    await startPvpMatch(roomId)
-  })
-
-  socket.on('readyPvp', async ({ roomId, userId, ready }) => {
-    const room = pvpRooms.get(roomId)
-    const uid = sid(userId)
-    if (!room || !room.players.includes(uid)) return
-    touchActivity(room)
     room.ready = room.ready || {}
-    room.ready[uid] = !!ready
+    room.ready[uid] = true
 
     io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
     await startPvpMatch(roomId)
