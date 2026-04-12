@@ -237,6 +237,12 @@ async function buy(ctoon) {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+@media (max-width: 768px) {
+  .cmart-grid {
+    grid-template-columns: repeat(2, var(--shortcard-width));
+  }
+}
+
 /* ── Status ──────────────────────────────────────────────────── */
 .cmart-status {
   grid-column: 1 / -1;
