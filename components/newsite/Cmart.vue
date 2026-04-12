@@ -239,7 +239,14 @@ async function buy(ctoon) {
 
 @media (max-width: 768px) {
   .cmart-grid {
-    grid-template-columns: repeat(2, var(--shortcard-width));
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .cmart-grid :deep(.sc) {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 4;
   }
 }
 
