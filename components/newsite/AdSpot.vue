@@ -1,8 +1,8 @@
 <template>
-  <a v-if="hasUrl" :href="currentUrl" target="_blank" rel="noopener noreferrer" class="adspot">
-    <img :src="currentSrc" alt="Advertisement" />
+  <a v-if="isExternal" :href="linkHref" target="_blank" rel="noopener noreferrer" class="adspot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
   </a>
-  <NuxtLink v-else to="/newsite/home" class="adspot">
+  <NuxtLink v-else :to="linkHref" class="adspot">
     <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
   </NuxtLink>
 </template>
@@ -10,7 +10,19 @@
 <script setup>
 const currentSrc = ref('')
 const currentUrl = ref('')
-const hasUrl = computed(() => !!currentUrl.value)
+const siteOrigin = ref('')
+
+const isExternal = computed(() => {
+  const url = currentUrl.value
+  if (!url) return false
+  try {
+    return new URL(url).origin !== siteOrigin.value
+  } catch {
+    return false
+  }
+})
+
+const linkHref = computed(() => currentUrl.value || '/newsite/home')
 
 let adOrder = []
 let adIdx = 0
@@ -101,10 +113,12 @@ async function scheduleNext() {
   clearTimeout(timer)
   const src = currentSrc.value
   if (!src) return
+  const shownAt = Date.now()
   try {
     if (extOf(src) === 'gif') {
       const ms = await getGifDurationMs(src)
-      timer = setTimeout(nextAd, ms)
+      const remaining = Math.max(ms - (Date.now() - shownAt), 100)
+      timer = setTimeout(nextAd, remaining)
     } else {
       timer = setTimeout(nextAd, 8000)
     }
@@ -132,7 +146,10 @@ async function initAds() {
   }
 }
 
-onMounted(() => { initAds() })
+onMounted(() => {
+  siteOrigin.value = window.location.origin
+  initAds()
+})
 onUnmounted(() => {
   clearTimeout(timer)
   abortCtrl.abort()
@@ -144,11 +161,12 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .adspot img {
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
 }
 </style>
