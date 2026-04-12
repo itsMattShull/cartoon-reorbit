@@ -179,7 +179,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'

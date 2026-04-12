@@ -75,7 +75,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Achievement Logs', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Achievement Logs', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const logs = ref([])
 const total = ref(0)

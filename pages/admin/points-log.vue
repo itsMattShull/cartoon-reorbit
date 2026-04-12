@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Points Log', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Points Log', middleware: ['auth','admin'], layout: 'admin' })
 
 import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '~/components/Nav.vue'

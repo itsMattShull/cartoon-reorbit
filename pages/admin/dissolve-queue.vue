@@ -246,7 +246,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Dissolve Queue', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Dissolve Queue', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
 

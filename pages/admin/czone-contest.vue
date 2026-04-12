@@ -241,7 +241,7 @@
 </template>
 
 <script setup>
-definePageMeta({ middleware: ['auth', 'admin'] })
+definePageMeta({ middleware: ['auth', 'admin'], layout: 'admin' })
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const contests = ref([])

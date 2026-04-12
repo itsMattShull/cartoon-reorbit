@@ -285,7 +285,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Scavenger', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Scavenger', middleware: ['auth', 'admin'], layout: 'admin' })
 
 // Config
 const chance = ref(5)

@@ -167,7 +167,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Manage Homepage', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Homepage', middleware: ['auth','admin'], layout: 'admin' })
 
 const activeTab = ref('Homepage')
 

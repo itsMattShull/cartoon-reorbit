@@ -455,7 +455,7 @@ import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 
-definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const router = useRouter()
 const step = ref(1)

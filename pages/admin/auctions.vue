@@ -183,7 +183,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Auctions', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Auctions', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const pageSize = 100
 const page = ref(1)

@@ -145,7 +145,7 @@
 import { ref, computed } from 'vue'
 import Nav from '~/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Add Auction', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Add Auction', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const search = ref('')
 const results = ref([])

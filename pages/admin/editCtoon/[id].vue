@@ -242,7 +242,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Edit cToon', middleware:['auth','admin'], layout:'default' })
+definePageMeta({ title: 'Admin - Edit cToon', middleware:['auth','admin'], layout:'admin' })
 
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

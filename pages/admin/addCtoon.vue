@@ -281,7 +281,7 @@
 definePageMeta({
   title: 'Admin - Add cToon',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { zonedTimeToUtc } from 'date-fns-tz'

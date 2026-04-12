@@ -425,7 +425,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Cheating Tool',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 // ── Form state ──────────────────────────────────────────────────────────────

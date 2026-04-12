@@ -199,7 +199,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Announcements',
   middleware: ['auth','admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 const showModal = ref(false)
