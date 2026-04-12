@@ -113,10 +113,12 @@ async function scheduleNext() {
   clearTimeout(timer)
   const src = currentSrc.value
   if (!src) return
+  const shownAt = Date.now()
   try {
     if (extOf(src) === 'gif') {
       const ms = await getGifDurationMs(src)
-      timer = setTimeout(nextAd, ms)
+      const remaining = Math.max(ms - (Date.now() - shownAt), 100)
+      timer = setTimeout(nextAd, remaining)
     } else {
       timer = setTimeout(nextAd, 8000)
     }
