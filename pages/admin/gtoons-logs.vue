@@ -110,7 +110,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - gToons Logs',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 /**

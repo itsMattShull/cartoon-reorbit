@@ -363,7 +363,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - cToon Suggestions', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - cToon Suggestions', middleware: ['auth', 'admin'], layout: 'admin' })
 
 import { ref, computed, onMounted, watchEffect } from 'vue'
 import Nav from '~/components/Nav.vue'

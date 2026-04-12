@@ -243,7 +243,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Create Code',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 const router = useRouter()

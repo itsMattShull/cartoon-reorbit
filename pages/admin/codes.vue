@@ -247,7 +247,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Codes',
   middleware: ['auth','admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 // Tab state

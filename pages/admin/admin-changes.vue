@@ -88,7 +88,7 @@
 import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Admin Changes', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Admin Changes', middleware: ['auth','admin'], layout: 'admin' })
 
 const rows = ref([])
 const adminUsers = ref([])

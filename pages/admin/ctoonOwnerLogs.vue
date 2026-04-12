@@ -207,7 +207,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - cToon Owner Logs', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - cToon Owner Logs', middleware: ['auth', 'admin'], layout: 'admin' })
 
 // ── State ─────────────────────────────────────────────────────────────
 const logs = ref([])
