@@ -246,20 +246,34 @@ html, body {
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
-        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 85' } : {}"><slot name="sidebar-top" /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 300', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle" /></div>
-        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 64', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
+        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 85' } : {}"><UserInfo /></div>
+        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 300', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
+          <component v-if="sidebarMiddleComp" :is="sidebarMiddleComp" v-bind="sidebar.middleProps" />
+        </div>
+        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 64', marginTop: 'var(--sidebar-bottom-mt)' } : {}">
+          <component v-if="sidebarBottomComp" :is="sidebarBottomComp" />
+        </div>
       </template>
     </div>
-    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot name="main-content" /></div>
-    <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
-    <slot />
+    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
+    <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><Footer /></div>
   </div>
 </template>
 
 <script setup>
+import SidebarBottom from '../components/SidebarBottom.vue'
+import NavRight      from '../components/NavRight.vue'
+import CtoonFilter   from '../components/CtoonFilter.vue'
+import CzoneEdit     from '../components/CzoneEdit.vue'
+
+const SIDEBAR_MAP = { SidebarBottom, NavRight, CtoonFilter, CzoneEdit }
+
 const route = useRoute()
 const czoneState = useState('czoneState', () => ({ buildMode: false }))
+const sidebar = useSidebar()
+
+const sidebarMiddleComp = computed(() => sidebar.value.middle ? SIDEBAR_MAP[sidebar.value.middle] ?? null : null)
+const sidebarBottomComp = computed(() => sidebar.value.bottom ? SIDEBAR_MAP[sidebar.value.bottom] ?? null : null)
 useHead({ bodyAttrs: { class: computed(() => {
   const pageClass  = route.name ? `page-${String(route.name).toLowerCase()}` : ''
   const buildClass = czoneState.value.buildMode ? 'czone-build' : ''

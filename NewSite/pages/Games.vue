@@ -1,22 +1,11 @@
 <template>
-  <NuxtLayout name="template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballAd />
-    </template>
-    <template #main-content>
-      <GamesHome />
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <GamesHome />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true })
+definePageMeta({ showAdbar: true, showNav: true })
+const sidebar = useSidebar()
+sidebar.value = { middle: null, middleProps: {}, bottom: 'SidebarBottom' }
 </script>
 
 <style>

@@ -1,6 +1,6 @@
 <template>
-  <div class="adspot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" class="adspot-img" />
+  <div class="sb">
+    <img v-if="currentSrc" :src="currentSrc" class="sb-img" alt="" />
   </div>
 </template>
 
@@ -12,7 +12,7 @@ let timer = null
 let mountCount = 0
 const gifDurCache = new Map()
 
-const currentSrc = useState('adspot-src', () => '')
+const currentSrc = useState('sidebar-bottom-src', () => '')
 
 function extOf(filename) {
   return filename.slice(filename.lastIndexOf('.')).toLowerCase()
@@ -77,24 +77,28 @@ async function scheduleNext() {
   clearTimeout(timer)
   const src = currentSrc.value
   if (!src) return
-  const delay = extOf(src) === '.gif' ? await getGifDurationMs(src) : 5000
+  const ext = extOf(src)
+  let delay = 5000
+  if (ext === '.gif') {
+    delay = await getGifDurationMs(src)
+  }
   timer = setTimeout(advance, delay)
 }
 
 function advance() {
   if (!files.length) return
   idx = (idx + 1) % files.length
-  currentSrc.value = `/api/uploads/ads/${files[idx]}`
+  currentSrc.value = `/api/uploads/sidebar_bottom/${files[idx]}`
   scheduleNext()
 }
 
 async function init() {
   try {
-    const { files: list } = await $fetch('/api/ads-dir')
+    const { files: list } = await $fetch('/api/sidebar-bottom')
     if (!list?.length) return
     files = list
     idx = Math.floor(Math.random() * files.length)
-    currentSrc.value = `/api/uploads/ads/${files[idx]}`
+    currentSrc.value = `/api/uploads/sidebar_bottom/${files[idx]}`
     scheduleNext()
   } catch {
     // no files available
@@ -117,13 +121,16 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.adspot {
-  display: block;
+.sb {
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-.adspot-img {
+.sb-img {
   width: 100%;
   height: 100%;
   object-fit: contain;

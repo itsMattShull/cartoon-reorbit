@@ -64,18 +64,16 @@
 
     <!-- ── Actions ── -->
     <div class="czew-actions">
-      <button class="czew-btn czew-save" :disabled="cz.saving" @click="$emit('save')">
+      <button class="czew-btn czew-save" :disabled="cz.saving" @click="cz.saveTrigger++">
         {{ cz.saving ? 'Saving…' : 'Save' }}
       </button>
-      <button class="czew-btn czew-clear" @click="$emit('clear')">Remove All</button>
+      <button class="czew-btn czew-clear" @click="cz.clearTrigger++">Remove All</button>
     </div>
 
   </div>
 </template>
 
 <script setup>
-defineEmits(['save', 'clear'])
-
 const cz = useCzoneState()
 
 const TABS = [

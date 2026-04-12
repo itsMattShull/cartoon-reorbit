@@ -1,28 +1,23 @@
 <template>
-  <NuxtLayout name="template">
-    <template #main-content>
-      <div class="admin-wrapper">
-        <AdminTabs>
-          <template #ctoons>
-            <ManageCtoons />
-          </template>
-          <template #content>
-            <ManageBackgrounds />
-          </template>
-          <template #games>
-            <AdminGames />
-          </template>
-        </AdminTabs>
-      </div>
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <div class="admin-wrapper">
+    <AdminTabs>
+      <template #ctoons>
+        <ManageCtoons />
+      </template>
+      <template #content>
+        <ManageBackgrounds />
+      </template>
+      <template #games>
+        <AdminGames />
+      </template>
+    </AdminTabs>
+  </div>
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true, showSidebar: false, showFooter: false, mainContentBorder: false, middleware: 'auth', requiresAuth: true })
+definePageMeta({ showAdbar: true, showNav: true, showSidebar: false, showFooter: false, mainContentBorder: false, middleware: 'auth', requiresAuth: true })
+const sidebar = useSidebar()
+sidebar.value = { middle: null, middleProps: {}, bottom: null }
 </script>
 
 <style>

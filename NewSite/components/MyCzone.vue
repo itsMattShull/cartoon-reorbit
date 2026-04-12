@@ -288,7 +288,9 @@ function clearZone() {
   currentZone.value.toons = []
 }
 
-defineExpose({ save, clearZone })
+// Respond to CzoneEdit save/clear buttons via shared state triggers
+watch(() => cz.value.saveTrigger,  (v, old) => { if (v !== old) save() })
+watch(() => cz.value.clearTrigger, (v, old) => { if (v !== old) clearZone() })
 </script>
 
 <style scoped>

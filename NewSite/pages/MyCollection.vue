@@ -1,22 +1,11 @@
 <template>
-  <NuxtLayout name="template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter />
-    </template>
-    <template #main-content>
-      <MyCollection />
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <MyCollection />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true })
+definePageMeta({ showAdbar: true, showNav: true })
+const sidebar = useSidebar()
+sidebar.value = { middle: 'CtoonFilter', middleProps: {}, bottom: null }
 </script>
 
 <style>

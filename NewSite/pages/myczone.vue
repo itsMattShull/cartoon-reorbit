@@ -1,28 +1,19 @@
 <template>
-  <NuxtLayout name="template">
-    <template v-if="!cz.buildMode" #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CzoneEdit v-if="cz.buildMode" @save="czoneRef?.save()" @clear="czoneRef?.clearZone()" />
-    </template>
-    <template v-if="!cz.buildMode" #sidebar-bottom>
-      <WinballAd />
-    </template>
-    <template #main-content>
-      <MyCzone ref="czoneRef" />
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <MyCzone />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true })
+definePageMeta({ showAdbar: true, showNav: true })
 
-const cz      = useCzoneState()
-const czoneRef = ref(null)
+const cz = useCzoneState()
+const sidebar = useSidebar()
+
+// Reactively set sidebar-middle based on build mode
+watch(() => cz.value.buildMode, (buildMode) => {
+  sidebar.value.middle = buildMode ? 'CzoneEdit' : null
+}, { immediate: true })
+
+sidebar.value.bottom = 'SidebarBottom'
 
 // Reset build mode on leave so sidebar restores on next visit
 onUnmounted(() => { cz.value.buildMode = false })

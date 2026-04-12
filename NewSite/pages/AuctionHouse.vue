@@ -1,22 +1,9 @@
 <template>
-  <NuxtLayout name="template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" />
-    </template>
-    <template #main-content>
-      <AuctionHouse />
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <AuctionHouse />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true })
+definePageMeta({ showAdbar: true, showNav: true })
 
 const auctionSortOptions = [
   { value: 'endAsc',    label: 'Ending Soon'     },
@@ -29,6 +16,9 @@ const auctionSortOptions = [
   { value: 'priceAsc',  label: 'Price: Low→High'  },
   { value: 'priceDesc', label: 'Price: High→Low'  },
 ]
+
+const sidebar = useSidebar()
+sidebar.value = { middle: 'CtoonFilter', middleProps: { sortOptions: auctionSortOptions, showSortDir: false }, bottom: null }
 </script>
 
 <style>

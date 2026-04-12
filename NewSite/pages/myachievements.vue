@@ -1,22 +1,11 @@
 <template>
-  <NuxtLayout name="template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <NavRight />
-    </template>
-    <template #main-content>
-      <MyAchievements />
-    </template>
-    <template #footer>
-      <Footer />
-    </template>
-  </NuxtLayout>
+  <MyAchievements />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, showAdbar: true, showNav: true })
+definePageMeta({ showAdbar: true, showNav: true })
+const sidebar = useSidebar()
+sidebar.value = { middle: null, middleProps: {}, bottom: 'NavRight' }
 </script>
 
 <style>
