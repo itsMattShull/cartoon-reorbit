@@ -294,9 +294,7 @@ const isMobile = ref(false)
 
 const computeLayout = () => {
   isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
-  if (isMobile.value) {
-    scale.value = Math.min((window.innerWidth - SITE_PADDING) / MOBILE_BREAKPOINT, 1)
-  } else {
+  if (!isMobile.value) {
     const scaleX = (window.innerWidth - SITE_PADDING) / SITE_WIDTH
     const scaleY = (window.innerHeight - SITE_PADDING) / SITE_HEIGHT
     scale.value = Math.min(scaleX, scaleY, 1)
@@ -314,21 +312,17 @@ onUnmounted(() => {
 
 const mainContentMobileStyle = computed(() => {
   if (!isMobile.value) return {}
-  const baseWidth = showSidebar.value ? MAIN_CONTENT_WIDTH : SITE_WIDTH
   return {
-    width: `${baseWidth}px`,
+    width: '100%',
     height: `${MAIN_CONTENT_HEIGHT}px`,
-    zoom: MOBILE_BREAKPOINT / baseWidth,
   }
 })
 
 const scaleStyle = computed(() => {
   if (isMobile.value) {
     return {
-      width: `${MOBILE_BREAKPOINT}px`,
+      width: '100%',
       height: 'auto',
-      transform: `scale(${scale.value})`,
-      transformOrigin: 'top center',
     }
   }
   return {
@@ -587,6 +581,15 @@ const scaleStyle = computed(() => {
     flex-shrink: 1;
     min-width: unset;
     min-height: unset;
+  }
+
+  .site-container {
+    overflow: visible;
+  }
+
+  .main-content {
+    overflow-x: auto;
+    overflow-y: auto;
   }
 }
 
