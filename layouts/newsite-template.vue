@@ -245,7 +245,7 @@ html, body {
       <button v-if="isMobile" class="sidebar-toggle" @click="mobileSidebarCollapsed = !mobileSidebarCollapsed">
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
-      <template v-if="!mobileSidebarCollapsed">
+      <template v-if="!isMobile || !mobileSidebarCollapsed">
         <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 85' } : {}"><slot name="sidebar-top" /></div>
         <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 300', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle" /></div>
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', aspectRatio: '186 / 64', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
