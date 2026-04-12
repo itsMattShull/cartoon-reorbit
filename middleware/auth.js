@@ -37,4 +37,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!user.value.inGuild && to.path !== '/join-discord') {
     return navigateTo('/join-discord')
   }
+
+  if (to.path === '/dashboard') {
+    const { public: { viewNewDesign } } = useRuntimeConfig()
+    if (viewNewDesign === '1') return navigateTo('/newsite/home')
+  }
 })
