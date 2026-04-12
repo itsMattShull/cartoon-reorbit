@@ -16,25 +16,46 @@
       <div v-if="loading" class="cmart-status">Loading…</div>
       <div v-else-if="!ctoons.length" class="cmart-status">No cToons available.</div>
       <template v-else>
-        <ShortCard v-for="c in ctoons" :key="c.id">
+        <ShortCard
+          v-for="c in ctoons"
+          :key="c.id"
+          :style="isSoldOut(c) && !hasCountdown(c)
+            ? { '--footer-left-width': '100%', '--footer-right-width': '0%' }
+            : {}"
+        >
           <template #header>
             <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
           </template>
           <template #middle>
             <span class="card-name">{{ c.name }}</span>
-            <span class="rarity-dot" :style="{ background: rarityColor(c.rarity) }" :title="c.rarity" />
+            <span
+              class="rarity-badge"
+              :style="{ background: rarityInfo(c.rarity).bg, color: rarityInfo(c.rarity).fg }"
+              :title="c.rarity"
+            >{{ rarityInfo(c.rarity).label }}</span>
           </template>
           <template #footer-left>
-            <span class="card-price">{{ c.price }} pts</span>
+            <span v-if="isSoldOut(c) && !hasCountdown(c)" class="card-sold-out">Sold Out</span>
+            <span v-else class="card-price">{{ c.price }} pts</span>
           </template>
           <template #footer-right>
-            <GreenButton
-              class="card-buy"
-              :disabled="buyingIds.includes(c.id)"
-              @click="buy(c)"
-            >
-              {{ buyingIds.includes(c.id) ? '…' : 'Buy' }}
-            </GreenButton>
+            <template v-if="!isSoldOut(c) || hasCountdown(c)">
+              <button
+                v-if="hasCountdown(c)"
+                class="card-countdown"
+                disabled
+              >
+                {{ formatCountdown(c) }}
+              </button>
+              <GreenButton
+                v-else
+                class="card-buy"
+                :disabled="buyingIds.includes(c.id)"
+                @click="buy(c)"
+              >
+                {{ buyingIds.includes(c.id) ? '…' : 'Buy' }}
+              </GreenButton>
+            </template>
           </template>
         </ShortCard>
       </template>
@@ -49,19 +70,19 @@ const RARITY_ORDER = {
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
 }
 
-const RARITY_COLORS = {
-  'common':       '#aaaaaa',
-  'uncommon':     '#33cc33',
-  'rare':         '#3399ff',
-  'very rare':    '#aa44ff',
-  'crazy rare':   '#ffaa00',
-  'prize only':   '#ff3366',
-  'code only':    '#00cccc',
-  'auction only': '#ff6600',
+const RARITIES_MAP = {
+  'common':       { label: 'C',  bg: '#6b7280', fg: '#fff'    },
+  'uncommon':     { label: 'U',  bg: '#e5e7eb', fg: '#111'    },
+  'rare':         { label: 'R',  bg: '#16a34a', fg: '#fff'    },
+  'very rare':    { label: 'VR', bg: '#2563eb', fg: '#fff'    },
+  'crazy rare':   { label: 'CR', bg: '#7c3aed', fg: '#fff'    },
+  'prize only':   { label: 'PO', bg: '#111',    fg: '#e5e7eb' },
+  'code only':    { label: 'CO', bg: '#ea580c', fg: '#fff'    },
+  'auction only': { label: 'AO', bg: '#eab308', fg: '#111'    },
 }
 
-function rarityColor(rarity) {
-  return RARITY_COLORS[(rarity || '').toLowerCase()] || '#aaaaaa'
+function rarityInfo(rarity) {
+  return RARITIES_MAP[(rarity || '').toLowerCase()] || { label: '?', bg: '#aaaaaa', fg: '#fff' }
 }
 
 const allCtoons = useState('cmartCtoons', () => [])
@@ -69,6 +90,64 @@ const loading   = ref(true)
 const buyingIds = ref([])
 const cmartEl   = ref(null)
 const filter    = useNewSiteCtoonFilter()
+
+// ── Reactive clock for countdowns ────────────────────────────
+const nowTs = ref(Date.now())
+let _tick = null
+let _refreshTimer = null
+
+function isSoldOut(c) {
+  return c.quantity != null && c.totalMinted >= c.quantity
+}
+
+function hasCountdown(c) {
+  if (!c.nextReleaseAt) return false
+  return new Date(c.nextReleaseAt).getTime() > nowTs.value
+}
+
+function formatCountdown(c) {
+  if (!c.nextReleaseAt) return ''
+  const ms = new Date(c.nextReleaseAt).getTime() - nowTs.value
+  if (ms <= 0) return ''
+
+  const totalSec = Math.floor(ms / 1000)
+
+  if (ms >= 60 * 60 * 1000) {
+    // >= 60 minutes: show "Xh Ym"
+    const h = Math.floor(totalSec / 3600)
+    const m = Math.floor((totalSec % 3600) / 60)
+    return `${h}h ${m}m`
+  } else {
+    // < 60 minutes: show "Xm Ys"
+    const m = Math.floor(totalSec / 60)
+    const s = totalSec % 60
+    return `${m}m ${s}s`
+  }
+}
+
+// Schedule a data refresh when the next countdown expires
+function scheduleNextRefresh() {
+  if (_refreshTimer) clearTimeout(_refreshTimer)
+
+  const upcoming = allCtoons.value
+    .filter(c => c.nextReleaseAt)
+    .map(c => new Date(c.nextReleaseAt).getTime())
+    .filter(t => t > Date.now())
+
+  if (!upcoming.length) return
+
+  const earliest = Math.min(...upcoming)
+  const delay = Math.max(earliest - Date.now() + 1000, 1000)
+
+  _refreshTimer = setTimeout(async () => {
+    try {
+      allCtoons.value = await $fetch('/api/cmart')
+      scheduleNextRefresh()
+    } catch (err) {
+      console.error('Cmart: failed to refresh', err)
+    }
+  }, delay)
+}
 
 const ctoons = computed(() => {
   const f = filter.value
@@ -131,11 +210,18 @@ function showToast(message, type = 'success') {
 onMounted(async () => {
   try {
     allCtoons.value = await $fetch('/api/cmart')
+    scheduleNextRefresh()
   } catch (err) {
     console.error('Cmart: failed to load', err)
   } finally {
     loading.value = false
   }
+  _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
+})
+
+onUnmounted(() => {
+  if (_tick) clearInterval(_tick)
+  if (_refreshTimer) clearTimeout(_refreshTimer)
 })
 
 async function buy(ctoon) {
@@ -150,6 +236,7 @@ async function buy(ctoon) {
     showToast(`${ctoon.name} purchased!`, 'success')
     // Refresh listing so sold-out states update
     allCtoons.value = await $fetch('/api/cmart')
+    scheduleNextRefresh()
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'Purchase failed.'
     showToast(msg, 'error')
@@ -169,8 +256,7 @@ async function buy(ctoon) {
   box-sizing: border-box;
   overflow: hidden;
 
-  --price-font-size:  1rem;
-  --img-scale:        0.7;
+  --img-scale: 0.7;
 }
 
 .cmart-header {
@@ -260,14 +346,15 @@ async function buy(ctoon) {
 }
 
 /* ── Card contents ───────────────────────────────────────────── */
-.rarity-dot {
-  width: 8px;
-  height: 8px;
-  min-width: 8px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  margin-left: auto;
+.rarity-badge {
+  font-size: 0.55rem;
+  font-weight: bold;
+  padding: 1px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
   flex-shrink: 0;
+  margin-left: 3px;
+  line-height: 1.2;
 }
 
 .card-img {
@@ -278,17 +365,18 @@ async function buy(ctoon) {
 }
 
 .card-name {
-  font-size: 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+  min-width: 0;
   text-align: center;
 }
 
 .card-price {
-  font-size: var(--price-font-size);
+  font-size: 0.8rem;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
@@ -299,12 +387,35 @@ async function buy(ctoon) {
   text-align: center;
 }
 
+.card-sold-out {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #ffaaaa;
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  line-height: 1;
+}
+
 .card-buy {
   width: 100%;
   height: 100%;
   padding: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   border-radius: 4px;
 }
-</style>
 
+.card-countdown {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: bold;
+  border-radius: 4px;
+  border: 1px solid #1a4a7a;
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: default;
+  white-space: nowrap;
+}
+</style>
