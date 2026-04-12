@@ -8,6 +8,9 @@
       </div>
     </Teleport>
 
+    <!-- ── cToon info modal ──────────────────────────────────────── -->
+    <NewSiteCtoonInfoModal />
+
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="cmart-header">Cartoon Reorbit cMart</div>
 
@@ -24,7 +27,13 @@
             : {}"
         >
           <template #header>
-            <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+            <img
+              v-if="c.assetPath"
+              :src="c.assetPath"
+              :alt="c.name"
+              class="card-img"
+              @click="openInfo(c)"
+            />
           </template>
           <template #middle>
             <span class="card-name">{{ c.name }}</span>
@@ -51,7 +60,7 @@
                 v-else
                 class="card-buy"
                 :disabled="buyingIds.includes(c.id)"
-                @click="buy(c)"
+                @click.stop="buy(c)"
               >
                 {{ buyingIds.includes(c.id) ? '…' : 'Buy' }}
               </GreenButton>
@@ -90,6 +99,11 @@ const loading   = ref(true)
 const buyingIds = ref([])
 const cmartEl   = ref(null)
 const filter    = useNewSiteCtoonFilter()
+const modal     = useCtoonModal()
+
+function openInfo(c) {
+  modal.open({ ctoonId: c.id, assetPath: c.assetPath, name: c.name })
+}
 
 // ── Reactive clock for countdowns ────────────────────────────
 const nowTs = ref(Date.now())
@@ -289,6 +303,15 @@ async function buy(ctoon) {
   box-sizing: border-box;
 }
 
+/* Remove pointer cursor from the whole card */
+:deep(.sc) {
+  cursor: default;
+}
+
+/* Middle section needs relative positioning for the badge */
+:deep(.sc-middle) {
+  position: relative;
+}
 
 /* ── Toast ───────────────────────────────────────────────────── */
 :global(.cmart-toast) {
@@ -346,15 +369,20 @@ async function buy(ctoon) {
 }
 
 /* ── Card contents ───────────────────────────────────────────── */
+
+/* Rarity badge: absolutely pinned to the right of the middle row */
 .rarity-badge {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 0.55rem;
   font-weight: bold;
   padding: 1px 3px;
   border-radius: 3px;
   white-space: nowrap;
-  flex-shrink: 0;
-  margin-left: 3px;
   line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .card-img {
@@ -362,6 +390,7 @@ async function buy(ctoon) {
   height: 100%;
   object-fit: contain;
   transform: scale(var(--img-scale));
+  cursor: pointer;
 }
 
 .card-name {
@@ -371,7 +400,8 @@ async function buy(ctoon) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  /* reserve room for the absolutely-positioned badge */
+  width: calc(100% - 28px);
   text-align: center;
 }
 
