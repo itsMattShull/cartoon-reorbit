@@ -1,28 +1,17 @@
 <template>
-  <a v-if="isExternal" :href="linkHref" target="_blank" rel="noopener noreferrer" class="adspot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
-  </a>
-  <NuxtLink v-else :to="linkHref" class="adspot">
+  <NuxtLink v-if="!hasAdUrl" to="/newsite/home" class="adspot">
     <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
   </NuxtLink>
+  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="adspot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
+  </a>
 </template>
 
 <script setup>
 const currentSrc = ref('')
 const currentUrl = ref('')
-const siteOrigin = ref('')
 
-const isExternal = computed(() => {
-  const url = currentUrl.value
-  if (!url) return false
-  try {
-    return new URL(url).origin !== siteOrigin.value
-  } catch {
-    return false
-  }
-})
-
-const linkHref = computed(() => currentUrl.value || '/newsite/home')
+const hasAdUrl = computed(() => !!currentUrl.value)
 
 let adOrder = []
 let adIdx = 0
@@ -147,7 +136,6 @@ async function initAds() {
 }
 
 onMounted(() => {
-  siteOrigin.value = window.location.origin
   initAds()
 })
 onUnmounted(() => {
