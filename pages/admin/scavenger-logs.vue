@@ -158,7 +158,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Scavenger Logs', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Scavenger Logs', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const days = ref(30)
 const analytics = ref({ startedCount: 0, outcomes: { NOTHING: 0, POINTS: 0, EXCLUSIVE_CTOON: 0 }, reasonCounts: {}, triggers: [] })

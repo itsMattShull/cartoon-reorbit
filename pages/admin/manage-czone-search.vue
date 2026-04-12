@@ -509,7 +509,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Manage cZone Search', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage cZone Search', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const searches = ref([])
 const pending = ref(false)

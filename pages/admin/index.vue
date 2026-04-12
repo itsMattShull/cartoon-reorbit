@@ -286,7 +286,7 @@ Chart.register(
 definePageMeta({
   title: 'Admin - Dashboard',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 // --- timeframe & groupBy ---

@@ -110,7 +110,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Manage Ads',
   middleware: ['auth','admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 const showUpload = ref(false)

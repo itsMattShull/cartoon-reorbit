@@ -538,7 +538,7 @@ import { ref, computed, watch } from 'vue'
 import { useAsyncData, useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Users', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Users', middleware: ['auth','admin'], layout: 'admin' })
 
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
 

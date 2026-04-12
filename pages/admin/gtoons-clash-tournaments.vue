@@ -253,7 +253,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - gToons Clash Tournaments', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - gToons Clash Tournaments', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const tournaments = ref([])
 const loading = ref(true)

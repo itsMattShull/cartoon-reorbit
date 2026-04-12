@@ -687,7 +687,7 @@ import Nav from '@/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Games',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 const tabs = [

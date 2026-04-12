@@ -108,7 +108,7 @@ import { ref, onMounted, watch } from 'vue'
 import Nav from '@/components/Nav.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
-definePageMeta({ title: 'Admin - Manage Lotto', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Lotto', middleware: ['auth','admin'], layout: 'admin' })
 
 const baseOdds = ref(1.0)
 const incrementRate = ref(0.02)

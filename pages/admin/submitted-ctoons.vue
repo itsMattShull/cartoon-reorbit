@@ -259,7 +259,7 @@ import { ref, reactive, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 
-definePageMeta({ title: 'Admin - Submitted cToons', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Submitted cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const loading = ref(true)
 const processing = ref(false)

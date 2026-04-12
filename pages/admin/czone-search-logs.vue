@@ -175,7 +175,7 @@
 import { ref, onMounted } from 'vue'
 import Nav from '@/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - cZone Search Logs', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - cZone Search Logs', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const days = ref(30)
 const selectedSearchId = ref('')

@@ -131,7 +131,7 @@
 definePageMeta({
   title: 'Admin - Packs',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 import { ref, computed, onMounted } from 'vue'
 

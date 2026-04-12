@@ -495,7 +495,7 @@
 <script setup>
 import { METRIC_DEFINITIONS, OPERATOR_LABELS } from '~/server/utils/suspiciousActivityMetrics'
 
-definePageMeta({ middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ middleware: ['auth', 'admin'], layout: 'admin' })
 
 // ── Rules state ────────────────────────────────────────────────────────────
 const rules = ref([])

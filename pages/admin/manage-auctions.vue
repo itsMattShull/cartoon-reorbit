@@ -126,7 +126,7 @@
 import { ref, onMounted, computed } from 'vue'
 import Nav from '~/components/Nav.vue'
 
-definePageMeta({ title: 'Admin - Manage Auctions', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Auctions', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const auctions = ref([])
 const upcomingAuctions = computed(() => {

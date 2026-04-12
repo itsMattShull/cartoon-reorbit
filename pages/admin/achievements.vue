@@ -257,7 +257,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Achievements', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Achievements', middleware: ['auth','admin'], layout: 'admin' })
 
 const { data: achievements, pending, refresh } = await useFetch('/api/admin/achievements')
 const { data: ctoonsData } = await useFetch('/api/admin/list-ctoons')

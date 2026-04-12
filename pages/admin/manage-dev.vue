@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Manage Dev', middleware: ['auth','admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Manage Dev', middleware: ['auth','admin'], layout: 'admin' })
 
 import { ref, onMounted } from 'vue'
 import Nav from '~/components/Nav.vue'

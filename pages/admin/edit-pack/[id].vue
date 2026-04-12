@@ -244,7 +244,7 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout:'default' })
+definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout:'admin' })
 
 /* ---------------- imports ---------------- */
 import { ref, reactive, computed, onMounted, watch } from 'vue'

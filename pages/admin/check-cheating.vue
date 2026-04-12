@@ -317,7 +317,7 @@ import Nav from '~/components/Nav.vue'
 definePageMeta({
   title: 'Admin - Check Cheating',
   middleware: ['auth', 'admin'],
-  layout: 'default'
+  layout: 'admin'
 })
 
 const target = ref('')

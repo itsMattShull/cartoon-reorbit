@@ -308,7 +308,7 @@ import FilterBar from '@/components/trade/FilterBar.vue'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
-definePageMeta({ title: 'Admin - Initiate Trade', middleware: ['auth', 'admin'], layout: 'default' })
+definePageMeta({ title: 'Admin - Initiate Trade', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const router = useRouter()
 
