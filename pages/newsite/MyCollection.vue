@@ -21,6 +21,6 @@ definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav:
 
 <style>
 body.page-mycollection .sidebar-bottom { display: none; }
-body.page-mycollection .sidebar { --sidebar-middle-height: 384px; }
+body.page-mycollection .sidebar { --sidebar-middle-height: 504px; }
 body.page-mycollection .main-content { overflow-y: auto !important; scrollbar-width: thin; }
 </style>
