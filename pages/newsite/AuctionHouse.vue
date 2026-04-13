@@ -49,5 +49,5 @@ body {
 }
 
 body.page-auctionhouse .sidebar-bottom { display: none; }
-body.page-auctionhouse .sidebar { --sidebar-middle-height: 384px; }
+body.page-auctionhouse .sidebar { --sidebar-middle-height: 504px; }
 </style>

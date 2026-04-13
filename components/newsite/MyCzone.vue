@@ -22,30 +22,32 @@
       </div>
     </div>
 
-    <!-- ── Canvas ──────────────────────────────────────────── -->
-    <div class="cz-canvas-outer" :style="{ width: CANVAS_W + 'px', height: CANVAS_H + 'px' }">
-      <div
-        class="cz-canvas"
-        ref="canvasEl"
-        :style="{ backgroundImage: currentBg }"
-        @contextmenu.prevent="onContextMenu"
-        @mousedown="onCanvasMouseDown"
-      >
-        <img
-          v-for="toon in currentZone.toons" :key="toon.id"
-          :src="toon.assetPath" :alt="toon.name"
-          class="cz-item"
-          :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
-          :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
-          :title="toon.name"
-          draggable="false"
-        />
+    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ── -->
+    <div class="cz-canvas-outer" :style="outerScaleStyle">
+      <div class="cz-canvas-inner" :style="innerScaleStyle">
+        <div
+          class="cz-canvas"
+          ref="canvasEl"
+          :style="{ backgroundImage: currentBg }"
+          @contextmenu.prevent="onContextMenu"
+          @mousedown="onCanvasMouseDown"
+        >
+          <img
+            v-for="toon in currentZone.toons" :key="toon.id"
+            :src="toon.assetPath" :alt="toon.name"
+            class="cz-item"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
+            :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
+            :title="toon.name"
+            draggable="false"
+          />
+        </div>
       </div>
     </div>
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
-      <GreenButton class="cz-myczone-btn" @click="loadZone(user?.username)">My cZone</GreenButton>
+      <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
       </div>
@@ -74,15 +76,45 @@
 
 <script setup>
 // ── Canvas size variables ─────────────────────────────────────
-const CANVAS_W    = 560   // canvas width in px
-const CANVAS_H    = 400   // canvas height in px
 const TOON_SIZE   = 80    // default toon size in px when dropped
+const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
+const CANVAS_W    = 800   // design-space canvas width
+const CANVAS_H    = 600   // design-space canvas height
+
+// Design-space canvas dimensions (used for clamping toon positions)
+function canvasW() { return CANVAS_W }
+function canvasH() { return CANVAS_H }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
 const route  = useRoute()
 const router = useRouter()
+
+// ── Scale logic (mirrors pages/czone/[username].vue) ──────────
+const scale = ref(1)
+function recalcScale() {
+  if (typeof window === 'undefined') return
+  const gutter = 32 // account for page padding / scrollbar
+  scale.value = Math.min(1, (window.innerWidth - gutter) / CANVAS_W)
+}
+
+// Outer box reserves the scaled visual footprint in layout flow
+const outerScaleStyle = computed(() => ({
+  width:    `${CANVAS_W * scale.value}px`,
+  height:   `${CANVAS_H * scale.value}px`,
+  position: 'relative',
+  overflow: 'hidden',
+  margin:   '0 auto',
+}))
+
+// Inner keeps the true 800×600 layout, visually scaled via transform
+const innerScaleStyle = computed(() => ({
+  transform:       `scale(${scale.value})`,
+  transformOrigin: 'top left',
+  width:           `${CANVAS_W}px`,
+  height:          `${CANVAS_H}px`,
+}))
 
 const canvasEl   = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
@@ -94,36 +126,37 @@ const localDrag = ref(null)  // { toon, offsetX, offsetY }
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
-const DEFAULT_BG = 'ReOrbitDefault.gif'
-
 const currentBg = computed(() => {
-  const bg   = currentZone.value.background || DEFAULT_BG
+  const bg   = currentZone.value.background
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return `${grid}, url('/backgrounds/${bg}')`
+  return bg ? `${grid}, url('/backgrounds/${bg}')` : grid
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
 onMounted(() => {
+  recalcScale()
+  window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
 })
 
 // Load once the user is available (may not be ready at mount time)
-watch(() => user.value?.username, async (username) => {
-  if (username && !viewedUsername.value) {
-    await loadZone(route.query.user || username)
+watch(() => user.value?.username, async (loggedInUsername) => {
+  if (loggedInUsername && !viewedUsername.value) {
+    await loadZone(route.params.username || loggedInUsername)
   }
 }, { immediate: true })
 
-// Support direct URL navigation (e.g. /myczone?user=SomeUser)
-watch(() => route.query.user, async (queryUser) => {
-  const target = queryUser || user.value?.username
+// Support URL navigation changes (e.g. when navigate() pushes a new /newsite/czone/:username)
+watch(() => route.params.username, async (paramUsername) => {
+  const target = paramUsername || user.value?.username
   if (target && target !== viewedUsername.value) await loadZone(target)
 })
 
 
 onUnmounted(() => {
+  window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
   // clear any leftover drag state
@@ -138,9 +171,9 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
+    cz.value.activeZone  = 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
-    router.replace({ query: { user: target } })
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
@@ -151,9 +184,15 @@ async function navigate(type) {
   if (!from) return
   try {
     const { username } = await $fetch(`/api/czone/${from}/${type}`)
-    await loadZone(username)
+    router.push(`/newsite/czone/${username}`)
   } catch (e) {
     console.error('MyCzone: navigate failed', e)
+  }
+}
+
+function goToMyCzone() {
+  if (user.value?.username) {
+    router.push(`/newsite/czone/${user.value.username}`)
   }
 }
 
@@ -188,7 +227,8 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
-  return { x: cx - r.left, y: cy - r.top }
+  const s = scale.value || 1
+  return { x: (cx - r.left) / s, y: (cy - r.top) / s }
 }
 
 function isOverCanvas(cx, cy) {
@@ -223,8 +263,8 @@ function onGlobalMove(e) {
   if (localDrag.value) {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY)
     const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, CANVAS_W - (t.width  || TOON_SIZE))
-    t.y = clamp(y - localDrag.value.offsetY, 0, CANVAS_H - (t.height || TOON_SIZE))
+    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
+    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
   }
 }
 
@@ -241,8 +281,8 @@ function onGlobalUp(e) {
         const h = img.naturalHeight
         currentZone.value.toons.push({
           id: c.id, assetPath: c.assetPath, name: c.name,
-          x: clamp(x - w / 2, 0, CANVAS_W - w),
-          y: clamp(y - h / 2, 0, CANVAS_H - h),
+          x: clamp(x - w / 2, 0, canvasW() - w),
+          y: clamp(y - h / 2, 0, canvasH() - h),
           width: w, height: h,
         })
       }
@@ -295,9 +335,11 @@ defineExpose({ save, clearZone })
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  max-width: 800px;
+  margin: 0 auto;
   user-select: none;
+  position: relative;
+  box-sizing: border-box;
 }
 
 /* ── Top bar ── */
@@ -306,6 +348,8 @@ defineExpose({ save, clearZone })
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  height: v-bind(TOPBAR_H + 'px');
+  box-sizing: border-box;
   padding: 4px 6px;
   gap: 6px;
   background: var(--OrbitLightBlue);
@@ -339,19 +383,24 @@ defineExpose({ save, clearZone })
 
 /* ── Canvas ── */
 .cz-canvas-outer {
+  /* width/height/position/overflow/margin set inline via outerScaleStyle */
   flex-shrink: 0;
-  overflow: hidden;
-  position: relative;
   background: var(--OrbitDarkBlue);
 }
 
+.cz-canvas-inner {
+  /* width/height/transform set inline via innerScaleStyle */
+}
+
 .cz-canvas {
-  width: 100%;
-  height: 100%;
   position: relative;
+  width: 800px;
+  height: 600px;
+  overflow: hidden;
   background-color: var(--OrbitDarkBlue);
   background-size: 40px 40px, 40px 40px, cover;
   background-position: 0 0, 0 0, center;
+  background-repeat: repeat, repeat, no-repeat;
   cursor: default;
 }
 

@@ -24,8 +24,8 @@ html, body {
   --font-family:                     'Nunito', sans-serif;
 
   --site-container-bg:               transparent;
-  --site-container-height:           670px;
-  --site-container-width:            800px;
+  --site-container-height:           862px;
+  --site-container-width:            1040px;
   --site-container-radius:           0px;
   --site-container-border-thickness: 0px;
   --site-container-border-color:     transparent;
@@ -38,7 +38,7 @@ html, body {
 
   --topbar-bg:                       transparent;
   --topbar-height:                   105px;
-  --topbar-width:                    800px;
+  --topbar-width:                    1040px;
   --topbar-radius:                   0px;
   --topbar-border-thickness:         0px;
   --topbar-border-color:             transparent;
@@ -130,7 +130,7 @@ html, body {
 
   --topbar-nav-right-bg:             var(--OrbitDarkBlue);
   --topbar-nav-right-height:         var(--topbar-nav-height);
-  --topbar-nav-right-width:          495px;
+  --topbar-nav-right-width:          735px;
   --topbar-nav-right-radius:         8px;
   --topbar-nav-right-border-thickness: 0px;
   --topbar-nav-right-border-color:   var(--OrbitDarkBlue);
@@ -140,8 +140,8 @@ html, body {
   --topbar-nav-right-pr:             0px;
 
   --sidebar-bg:                      var(--OrbitLightBlue);
-  --sidebar-height:                  480px;
-  --sidebar-width:                   225px;
+  --sidebar-height:                  677px;
+  --sidebar-width:                   232px;
   --sidebar-radius:                  8px;
   --sidebar-border-thickness:        0px;
   --sidebar-border-color:            var(--OrbitLightBlue);
@@ -152,7 +152,7 @@ html, body {
 
   --sidebar-top-bg:                  var(--OrbitDarkBlue);
   --sidebar-top-height:              85px;
-  --sidebar-top-width:               217px;
+  --sidebar-top-width:               224px;
   --sidebar-top-radius:              8px;
   --sidebar-top-border-thickness:    0px;
   --sidebar-top-border-color:        transparent;
@@ -166,8 +166,8 @@ html, body {
   --sidebar-top-mr:                  0px;
 
   --sidebar-middle-bg:               var(--OrbitDarkBlue);
-  --sidebar-middle-height:           300px;
-  --sidebar-middle-width:            217px;
+  --sidebar-middle-height:           490px;
+  --sidebar-middle-width:            224px;
   --sidebar-middle-radius:           8px;
   --sidebar-middle-border-thickness: 0px;
   --sidebar-middle-border-color:     transparent;
@@ -176,13 +176,13 @@ html, body {
   --sidebar-middle-pl:               0px;
   --sidebar-middle-pr:               0px;
   --sidebar-middle-mt:               0px;
-  --sidebar-middle-mb:               0px;
+  --sidebar-middle-mb:               4px;
   --sidebar-middle-ml:               0px;
   --sidebar-middle-mr:               0px;
 
   --sidebar-bottom-bg:               var(--OrbitDarkBlue);
   --sidebar-bottom-height:           78px;
-  --sidebar-bottom-width:            217px;
+  --sidebar-bottom-width:            224px;
   --sidebar-bottom-radius:           8px;
   --sidebar-bottom-border-thickness: 0px;
   --sidebar-bottom-border-color:     transparent;
@@ -196,8 +196,8 @@ html, body {
   --sidebar-bottom-mr:               0px;
 
   --main-content-bg:                 transparent;
-  --main-content-height:             480px;
-  --main-content-width:              567px;
+  --main-content-height:             677px;
+  --main-content-width:              800px;
   --main-content-radius:             8px;
   --main-content-border-thickness:   4px;
   --main-content-border-color:       var(--OrbitLightBlue);
@@ -208,7 +208,7 @@ html, body {
 
   --footer-bg:                       transparent;
   --footer-height:                   60px;
-  --footer-width:                    800px;
+  --footer-width:                    1040px;
 
   --shortcard-width:                      132px;
   --shortcard-height:                     176px;
@@ -283,12 +283,12 @@ const gridRows = computed(() => {
     : 'var(--topbar-height) 1fr'
 })
 
-const SITE_WIDTH = 800
-const SITE_HEIGHT = 670
+const SITE_WIDTH = 1040
+const SITE_HEIGHT = 862
 const SITE_PADDING = 20
 const MOBILE_BREAKPOINT = 768
-const MAIN_CONTENT_WIDTH = 590
-const MAIN_CONTENT_HEIGHT = 480
+const MAIN_CONTENT_WIDTH = 800
+const MAIN_CONTENT_HEIGHT = 669
 const scale = ref(1)
 const isMobile = ref(false)
 
@@ -542,6 +542,7 @@ const scaleStyle = computed(() => {
 .main-content {
   width: var(--main-content-width);
   height: var(--main-content-height);
+  box-sizing: border-box;
   flex-shrink: 0;
   background: var(--main-content-bg);
   border-radius: var(--main-content-radius);

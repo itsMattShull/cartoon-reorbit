@@ -1,7 +1,7 @@
 <template>
   <div class="mycworld">
     <div class="mcw-nav">
-      <GreenButton @click="$router.push('/newsite/myczone')">My cZone</GreenButton>
+      <GreenButton @click="goToCzone">My cZone</GreenButton>
       <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
       <GreenButton>Placeholder</GreenButton>
@@ -11,6 +11,17 @@
     </div>
   </div>
 </template>
+
+<script setup>
+const { user } = useAuth()
+const router = useRouter()
+
+function goToCzone() {
+  if (user.value?.username) {
+    router.push(`/newsite/czone/${user.value.username}`)
+  }
+}
+</script>
 
 <style scoped>
 .mycworld {

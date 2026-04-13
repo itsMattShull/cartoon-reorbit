@@ -1,6 +1,6 @@
 <template>
   <div class="getctoons">
-    <NuxtLink to="/newsite/newcmart" class="quadrant-link">
+    <NuxtLink to="/newsite/cmart" class="quadrant-link">
       <button class="quadrant quadrant--shop">cMart</button>
     </NuxtLink>
     <NuxtLink to="/newsite/AuctionHouse" class="quadrant-link">
