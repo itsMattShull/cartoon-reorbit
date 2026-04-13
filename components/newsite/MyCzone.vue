@@ -1,6 +1,5 @@
 <template>
-  <div class="myczone" ref="wrapperEl">
-    <div class="myczone-content" :style="contentScaleStyle">
+  <div class="myczone">
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
@@ -23,24 +22,26 @@
       </div>
     </div>
 
-    <!-- ── Canvas ──────────────────────────────────────────── -->
-    <div class="cz-canvas-outer">
-      <div
-        class="cz-canvas"
-        ref="canvasEl"
-        :style="{ backgroundImage: currentBg }"
-        @contextmenu.prevent="onContextMenu"
-        @mousedown="onCanvasMouseDown"
-      >
-        <img
-          v-for="toon in currentZone.toons" :key="toon.id"
-          :src="toon.assetPath" :alt="toon.name"
-          class="cz-item"
-          :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
-          :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
-          :title="toon.name"
-          draggable="false"
-        />
+    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ── -->
+    <div class="cz-canvas-outer" :style="outerScaleStyle">
+      <div class="cz-canvas-inner" :style="innerScaleStyle">
+        <div
+          class="cz-canvas"
+          ref="canvasEl"
+          :style="{ backgroundImage: currentBg }"
+          @contextmenu.prevent="onContextMenu"
+          @mousedown="onCanvasMouseDown"
+        >
+          <img
+            v-for="toon in currentZone.toons" :key="toon.id"
+            :src="toon.assetPath" :alt="toon.name"
+            class="cz-item"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
+            :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
+            :title="toon.name"
+            draggable="false"
+          />
+        </div>
       </div>
     </div>
 
@@ -58,8 +59,6 @@
         <img src="/images/newsite/ten_right.gif" class="cz-nav-btn" title="Next 10"     draggable="false" @click="navigate('next10')"     />
       </div>
     </div>
-
-    </div><!-- /myczone-content -->
 
     <!-- ── Ghost (global, for cross-component drag) ─────────── -->
     <Teleport to="body">
@@ -80,35 +79,42 @@
 const TOON_SIZE   = 80    // default toon size in px when dropped
 const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
-const DESIGN_W    = 800   // design canvas width (matches main-content width)
-const DESIGN_H    = 669   // design canvas height (matches main-content height)
+const CANVAS_W    = 800   // design-space canvas width
+const CANVAS_H    = 600   // design-space canvas height
 
-// Reactive canvas dimensions — always the design dimensions (pre-transform)
-function canvasW() { return canvasEl.value?.offsetWidth  ?? DESIGN_W }
-function canvasH() { return canvasEl.value?.offsetHeight ?? (DESIGN_H - TOPBAR_H - BOTTOMBAR_H) }
+// Design-space canvas dimensions (used for clamping toon positions)
+function canvasW() { return CANVAS_W }
+function canvasH() { return CANVAS_H }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
 const route  = useRoute()
 const router = useRouter()
 
-// ── Mobile scaling ────────────────────────────────────────────
-const wrapperEl    = ref(null)
-const contentScale = ref(1)
-
-function updateContentScale() {
-  if (!wrapperEl.value) return
-  const w = wrapperEl.value.offsetWidth
-  contentScale.value = w > 0 ? Math.min(w / DESIGN_W, 1) : 1
+// ── Scale logic (mirrors pages/czone/[username].vue) ──────────
+const scale = ref(1)
+function recalcScale() {
+  if (typeof window === 'undefined') return
+  const gutter = 32 // account for page padding / scrollbar
+  scale.value = Math.min(1, (window.innerWidth - gutter) / CANVAS_W)
 }
 
-const contentScaleStyle = computed(() => {
-  const s = contentScale.value
-  if (s >= 1) return {}
-  return { transform: `scale(${s})`, transformOrigin: 'top left' }
-})
+// Outer box reserves the scaled visual footprint in layout flow
+const outerScaleStyle = computed(() => ({
+  width:    `${CANVAS_W * scale.value}px`,
+  height:   `${CANVAS_H * scale.value}px`,
+  position: 'relative',
+  overflow: 'hidden',
+  margin:   '0 auto',
+}))
 
-let resizeObserver = null
+// Inner keeps the true 800×600 layout, visually scaled via transform
+const innerScaleStyle = computed(() => ({
+  transform:       `scale(${scale.value})`,
+  transformOrigin: 'top left',
+  width:           `${CANVAS_W}px`,
+  height:          `${CANVAS_H}px`,
+}))
 
 const canvasEl   = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
@@ -129,11 +135,8 @@ const currentBg = computed(() => {
 
 // ── Lifecycle ─────────────────────────────────────────────────
 onMounted(() => {
-  resizeObserver = new ResizeObserver(updateContentScale)
-  if (wrapperEl.value) {
-    resizeObserver.observe(wrapperEl.value)
-    updateContentScale()
-  }
+  recalcScale()
+  window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
 })
@@ -153,8 +156,7 @@ watch(() => route.params.username, async (paramUsername) => {
 
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  resizeObserver = null
+  window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
   // clear any leftover drag state
@@ -225,7 +227,7 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
-  const s = contentScale.value
+  const s = scale.value || 1
   return { x: (cx - r.left) / s, y: (cy - r.top) / s }
 }
 
@@ -330,19 +332,14 @@ defineExpose({ save, clearZone })
 
 <style scoped>
 .myczone {
-  width: 100%;
-  aspect-ratio: 800 / 669;
-  overflow: hidden;
-  user-select: none;
-  position: relative;
-}
-
-.myczone-content {
   display: flex;
   flex-direction: column;
-  width: v-bind(DESIGN_W + 'px');
-  height: v-bind(DESIGN_H + 'px');
-  transform-origin: top left;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  user-select: none;
+  position: relative;
+  box-sizing: border-box;
 }
 
 /* ── Top bar ── */
@@ -386,18 +383,20 @@ defineExpose({ save, clearZone })
 
 /* ── Canvas ── */
 .cz-canvas-outer {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
+  /* width/height/position/overflow/margin set inline via outerScaleStyle */
+  flex-shrink: 0;
   background: var(--OrbitDarkBlue);
 }
 
+.cz-canvas-inner {
+  /* width/height/transform set inline via innerScaleStyle */
+}
+
 .cz-canvas {
-  width: 100%;
-  height: 100%;
   position: relative;
+  width: 800px;
+  height: 600px;
+  overflow: hidden;
   background-color: var(--OrbitDarkBlue);
   background-size: 40px 40px, 40px 40px, cover;
   background-position: 0 0, 0 0, center;
