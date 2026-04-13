@@ -27,12 +27,14 @@
             <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
           </template>
           <template #middle>
-            <span class="card-name">{{ c.name }}</span>
-            <span
-              class="rarity-badge"
-              :style="{ background: rarityInfo(c.rarity).bg, color: rarityInfo(c.rarity).fg }"
-              :title="c.rarity"
-            >{{ rarityInfo(c.rarity).label }}</span>
+            <div class="card-middle-row">
+              <span class="card-name">{{ c.name }}</span>
+              <span
+                class="rarity-badge"
+                :style="{ background: rarityInfo(c.rarity).bg, color: rarityInfo(c.rarity).fg }"
+                :title="c.rarity"
+              >{{ rarityInfo(c.rarity).label }}</span>
+            </div>
           </template>
           <template #footer-left>
             <span v-if="isSoldOut(c) && !hasCountdown(c)" class="card-sold-out">Sold Out</span>
@@ -346,14 +348,27 @@ async function buy(ctoon) {
 }
 
 /* ── Card contents ───────────────────────────────────────────── */
+:deep(.sc) {
+  cursor: default;
+}
+
+.card-middle-row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .rarity-badge {
+  position: absolute;
+  right: 0;
   font-size: 0.55rem;
   font-weight: bold;
   padding: 1px 3px;
   border-radius: 3px;
   white-space: nowrap;
   flex-shrink: 0;
-  margin-left: 3px;
   line-height: 1.2;
 }
 
@@ -362,6 +377,7 @@ async function buy(ctoon) {
   height: 100%;
   object-fit: contain;
   transform: scale(var(--img-scale));
+  cursor: pointer;
 }
 
 .card-name {
@@ -371,8 +387,8 @@ async function buy(ctoon) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
   text-align: center;
+  max-width: calc(100% - 24px);
 }
 
 .card-price {
