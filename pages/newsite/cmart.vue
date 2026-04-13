@@ -20,7 +20,8 @@ definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav:
 </script>
 
 <style>
-body.page-newcmart .sidebar-bottom { display: none; }
-body.page-newcmart .sidebar { --sidebar-middle-height: 504px; }
-body.page-newcmart .main-content { overflow-y: auto !important; scrollbar-width: thin; }
+body.page-cmart { --shortcard-width: 154px; }
+body.page-cmart .sidebar-bottom { display: none; }
+body.page-cmart .sidebar { --sidebar-middle-height: 504px; }
+body.page-cmart .main-content { overflow-y: auto !important; scrollbar-width: thin; }
 </style>

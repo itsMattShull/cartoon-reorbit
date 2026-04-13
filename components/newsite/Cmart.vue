@@ -282,7 +282,7 @@ async function buy(ctoon) {
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
   display: grid;
-  grid-template-columns: repeat(4, var(--shortcard-width));
+  grid-template-columns: repeat(5, var(--shortcard-width));
   grid-auto-rows: var(--shortcard-height);
   grid-auto-flow: row;
   gap: 4px;
