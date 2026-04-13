@@ -24,7 +24,7 @@ html, body {
   --font-family:                     'Nunito', sans-serif;
 
   --site-container-bg:               transparent;
-  --site-container-height:           854px;
+  --site-container-height:           862px;
   --site-container-width:            1040px;
   --site-container-radius:           0px;
   --site-container-border-thickness: 0px;
@@ -140,7 +140,7 @@ html, body {
   --topbar-nav-right-pr:             0px;
 
   --sidebar-bg:                      var(--OrbitLightBlue);
-  --sidebar-height:                  669px;
+  --sidebar-height:                  677px;
   --sidebar-width:                   232px;
   --sidebar-radius:                  8px;
   --sidebar-border-thickness:        0px;
@@ -196,7 +196,7 @@ html, body {
   --sidebar-bottom-mr:               0px;
 
   --main-content-bg:                 transparent;
-  --main-content-height:             669px;
+  --main-content-height:             677px;
   --main-content-width:              800px;
   --main-content-radius:             8px;
   --main-content-border-thickness:   4px;
@@ -284,7 +284,7 @@ const gridRows = computed(() => {
 })
 
 const SITE_WIDTH = 1040
-const SITE_HEIGHT = 854
+const SITE_HEIGHT = 862
 const SITE_PADDING = 20
 const MOBILE_BREAKPOINT = 768
 const MAIN_CONTENT_WIDTH = 800
@@ -542,6 +542,7 @@ const scaleStyle = computed(() => {
 .main-content {
   width: var(--main-content-width);
   height: var(--main-content-height);
+  box-sizing: border-box;
   flex-shrink: 0;
   background: var(--main-content-bg);
   border-radius: var(--main-content-radius);
