@@ -75,6 +75,7 @@
 <script setup>
 // ── Canvas size variables ─────────────────────────────────────
 const TOON_SIZE   = 80    // default toon size in px when dropped
+const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
 
 // Reactive canvas dimensions — read from the DOM element at drag time
@@ -314,6 +315,8 @@ defineExpose({ save, clearZone })
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  height: v-bind(TOPBAR_H + 'px');
+  box-sizing: border-box;
   padding: 4px 6px;
   gap: 6px;
   background: var(--OrbitLightBlue);

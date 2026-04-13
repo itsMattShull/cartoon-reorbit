@@ -259,6 +259,7 @@ async function buy(ctoon) {
   overflow: hidden;
 
   --img-scale: 0.7;
+  --shortcard-width: 154px;
 }
 
 .cmart-header {
