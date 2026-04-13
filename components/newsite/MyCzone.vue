@@ -1,5 +1,5 @@
 <template>
-  <div class="myczone" ref="wrapperEl" :style="wrapperStyle">
+  <div class="myczone" ref="wrapperEl">
     <div class="myczone-content" :style="contentScaleStyle">
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
@@ -107,12 +107,6 @@ const contentScaleStyle = computed(() => {
   if (s >= 1) return {}
   return { transform: `scale(${s})`, transformOrigin: 'top left' }
 })
-
-// Wrapper height = scaled design height, so the element self-sizes correctly
-// instead of relying on height:100% which breaks when parent has height:auto
-const wrapperStyle = computed(() => ({
-  height: Math.round(contentScale.value * DESIGN_H) + 'px'
-}))
 
 let resizeObserver = null
 
@@ -337,7 +331,7 @@ defineExpose({ save, clearZone })
 <style scoped>
 .myczone {
   width: 100%;
-  /* height set dynamically via wrapperStyle (scale × DESIGN_H) */
+  aspect-ratio: 800 / 669;
   overflow: hidden;
   user-select: none;
   position: relative;
