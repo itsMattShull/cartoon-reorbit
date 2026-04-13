@@ -45,7 +45,7 @@
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
-      <GreenButton class="cz-myczone-btn" @click="loadZone(user?.username)">My cZone</GreenButton>
+      <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
       </div>
@@ -112,15 +112,15 @@ onMounted(() => {
 })
 
 // Load once the user is available (may not be ready at mount time)
-watch(() => user.value?.username, async (username) => {
-  if (username && !viewedUsername.value) {
-    await loadZone(route.query.user || username)
+watch(() => user.value?.username, async (loggedInUsername) => {
+  if (loggedInUsername && !viewedUsername.value) {
+    await loadZone(route.params.username || loggedInUsername)
   }
 }, { immediate: true })
 
-// Support direct URL navigation (e.g. /myczone?user=SomeUser)
-watch(() => route.query.user, async (queryUser) => {
-  const target = queryUser || user.value?.username
+// Support URL navigation changes (e.g. when navigate() pushes a new /newsite/czone/:username)
+watch(() => route.params.username, async (paramUsername) => {
+  const target = paramUsername || user.value?.username
   if (target && target !== viewedUsername.value) await loadZone(target)
 })
 
@@ -140,9 +140,9 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
+    cz.value.activeZone  = 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
-    router.replace({ query: { user: target } })
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
@@ -153,9 +153,15 @@ async function navigate(type) {
   if (!from) return
   try {
     const { username } = await $fetch(`/api/czone/${from}/${type}`)
-    await loadZone(username)
+    router.push(`/newsite/czone/${username}`)
   } catch (e) {
     console.error('MyCzone: navigate failed', e)
+  }
+}
+
+function goToMyCzone() {
+  if (user.value?.username) {
+    router.push(`/newsite/czone/${user.value.username}`)
   }
 }
 

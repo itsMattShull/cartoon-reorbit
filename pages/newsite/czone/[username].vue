@@ -30,12 +30,12 @@ onUnmounted(() => { cz.value.buildMode = false })
 
 <style>
 /* ── Base page styles ── */
-body.page-myczone .main-content { overflow: auto !important; scrollbar-width: thin; }
+body.page-newsite-czone-username .main-content { overflow: auto !important; scrollbar-width: thin; }
 
 /* ── Build mode: CzoneEdit fills entire sidebar with 4px border ── */
-body.page-myczone.czone-build .sidebar-top    { display: none !important; }
-body.page-myczone.czone-build .sidebar-bottom { display: none !important; }
-body.page-myczone.czone-build .sidebar-middle {
+body.page-newsite-czone-username.czone-build .sidebar-top    { display: none !important; }
+body.page-newsite-czone-username.czone-build .sidebar-bottom { display: none !important; }
+body.page-newsite-czone-username.czone-build .sidebar-middle {
   flex: 1 !important;
   height: auto !important;
   min-height: 0 !important;
