@@ -166,7 +166,7 @@ html, body {
   --sidebar-top-mr:                  0px;
 
   --sidebar-middle-bg:               var(--OrbitDarkBlue);
-  --sidebar-middle-height:           425px;
+  --sidebar-middle-height:           421px;
   --sidebar-middle-width:            224px;
   --sidebar-middle-radius:           8px;
   --sidebar-middle-border-thickness: 0px;
@@ -176,7 +176,7 @@ html, body {
   --sidebar-middle-pl:               0px;
   --sidebar-middle-pr:               0px;
   --sidebar-middle-mt:               0px;
-  --sidebar-middle-mb:               0px;
+  --sidebar-middle-mb:               4px;
   --sidebar-middle-ml:               0px;
   --sidebar-middle-mr:               0px;
 
