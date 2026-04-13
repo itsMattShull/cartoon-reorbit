@@ -23,7 +23,7 @@
     </div>
 
     <!-- ── Canvas ──────────────────────────────────────────── -->
-    <div class="cz-canvas-outer" :style="{ width: CANVAS_W + 'px', height: CANVAS_H + 'px' }">
+    <div class="cz-canvas-outer">
       <div
         class="cz-canvas"
         ref="canvasEl"
@@ -74,10 +74,12 @@
 
 <script setup>
 // ── Canvas size variables ─────────────────────────────────────
-const CANVAS_W    = 560   // canvas width in px
-const CANVAS_H    = 400   // canvas height in px
 const TOON_SIZE   = 80    // default toon size in px when dropped
 const BOTTOMBAR_H = 35    // bottom bar height in px
+
+// Reactive canvas dimensions — read from the DOM element at drag time
+function canvasW() { return canvasEl.value?.offsetWidth  ?? 560 }
+function canvasH() { return canvasEl.value?.offsetHeight ?? 400 }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
@@ -223,8 +225,8 @@ function onGlobalMove(e) {
   if (localDrag.value) {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY)
     const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, CANVAS_W - (t.width  || TOON_SIZE))
-    t.y = clamp(y - localDrag.value.offsetY, 0, CANVAS_H - (t.height || TOON_SIZE))
+    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
+    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
   }
 }
 
@@ -241,8 +243,8 @@ function onGlobalUp(e) {
         const h = img.naturalHeight
         currentZone.value.toons.push({
           id: c.id, assetPath: c.assetPath, name: c.name,
-          x: clamp(x - w / 2, 0, CANVAS_W - w),
-          y: clamp(y - h / 2, 0, CANVAS_H - h),
+          x: clamp(x - w / 2, 0, canvasW() - w),
+          y: clamp(y - h / 2, 0, canvasH() - h),
           width: w, height: h,
         })
       }
@@ -339,7 +341,9 @@ defineExpose({ save, clearZone })
 
 /* ── Canvas ── */
 .cz-canvas-outer {
-  flex-shrink: 0;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   background: var(--OrbitDarkBlue);
