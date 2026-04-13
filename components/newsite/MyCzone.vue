@@ -405,8 +405,8 @@ defineExpose({ save, clearZone })
   height: 600px;
   overflow: hidden;
   background-color: var(--OrbitDarkBlue);
-  background-size: 40px 40px, 40px 40px, cover;
-  background-position: 0 0, 0 0, center;
+  background-size: 40px 40px, 40px 40px, 100% 100%;
+  background-position: 0 0, 0 0, top left;
   background-repeat: repeat, repeat, no-repeat;
   cursor: default;
 }
