@@ -42,6 +42,7 @@ function fitUsername() {
     size -= 0.5
     el.style.fontSize = size + 'px'
   }
+  el.style.visibility = 'visible'
 }
 
 async function fetchCollectionSummary() {
@@ -70,16 +71,16 @@ function updateCountdown() {
 }
 
 onMounted(async () => {
-  await fetchSelf({ force: true })
-  updateCountdown()
-  countdownInterval = setInterval(updateCountdown, 1000)
-  await fetchCollectionSummary()
   await nextTick()
   fitUsername()
   if (detailsEl.value) {
     resizeObserver = new ResizeObserver(() => fitUsername())
     resizeObserver.observe(detailsEl.value)
   }
+  await fetchSelf({ force: true })
+  updateCountdown()
+  countdownInterval = setInterval(updateCountdown, 1000)
+  await fetchCollectionSummary()
 })
 
 onUnmounted(() => {
@@ -128,8 +129,10 @@ onUnmounted(() => {
 .user-info-username {
   font-weight: bold;
   color: white;
+  font-size: 20px;
   line-height: 1.2;
   white-space: nowrap;
+  visibility: hidden;
 }
 
 .user-info-stat {
