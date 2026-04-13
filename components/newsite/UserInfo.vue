@@ -1,21 +1,36 @@
 <template>
   <div class="user-info" v-if="user">
     <div class="user-info-top">
+      <div v-if="!ready" class="skel skel-avatar" />
       <img
+        v-else
         :src="`/avatars/${user.avatar || 'default.png'}`"
         alt="User Avatar"
         class="user-info-avatar"
       />
       <div class="user-info-details" ref="detailsEl">
-        <span class="user-info-username" ref="usernameEl">{{ user.username }}</span>
-        <span class="user-info-stat">{{ user.points }} Points</span>
-        <span class="user-info-stat">{{ collectionSummary.uniqueCount }} Unique cToons</span>
-        <span class="user-info-stat">{{ collectionSummary.totalCount }} Total cToons</span>
+        <template v-if="!ready">
+          <div class="skel skel-username" />
+          <div class="skel skel-stat" />
+          <div class="skel skel-stat" />
+          <div class="skel skel-stat" />
+        </template>
+        <template v-else>
+          <span class="user-info-username" ref="usernameEl">{{ user.username }}</span>
+          <span class="user-info-stat">{{ user.points }} Points</span>
+          <span class="user-info-stat">{{ collectionSummary.uniqueCount }} Unique cToons</span>
+          <span class="user-info-stat">{{ collectionSummary.totalCount }} Total cToons</span>
+        </template>
       </div>
     </div>
     <div class="user-info-divider" />
     <div class="user-info-reset">
-      Daily Points Reset: <span class="user-info-countdown">{{ resetCountdown }}</span>
+      <template v-if="!ready">
+        <div class="skel skel-reset" />
+      </template>
+      <template v-else>
+        Daily Points Reset: <span class="user-info-countdown">{{ resetCountdown }}</span>
+      </template>
     </div>
   </div>
 </template>
@@ -28,6 +43,7 @@ const collectionSummary = ref({ totalCount: 0, uniqueCount: 0 })
 const resetCountdown = ref('--:--:--')
 const detailsEl = ref(null)
 const usernameEl = ref(null)
+const ready = ref(false)
 let countdownInterval = null
 let resizeObserver = null
 
@@ -74,6 +90,7 @@ onMounted(async () => {
   updateCountdown()
   countdownInterval = setInterval(updateCountdown, 1000)
   await fetchCollectionSummary()
+  ready.value = true
   await nextTick()
   fitUsername()
   if (detailsEl.value) {
@@ -128,6 +145,7 @@ onUnmounted(() => {
 .user-info-username {
   font-weight: bold;
   color: white;
+  font-size: 20px;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -156,4 +174,27 @@ onUnmounted(() => {
   font-weight: bold;
   color: white;
 }
+
+/* ── Skeleton loaders ── */
+@keyframes skel-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.skel {
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.08) 25%,
+    rgba(255,255,255,0.18) 50%,
+    rgba(255,255,255,0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+
+.skel-avatar  { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
+.skel-username { height: 14px; width: 70%; margin-bottom: 2px; }
+.skel-stat    { height: 10px; width: 90%; margin-top: 2px; }
+.skel-reset   { height: 10px; width: 60%; margin: 0 auto; }
 </style>

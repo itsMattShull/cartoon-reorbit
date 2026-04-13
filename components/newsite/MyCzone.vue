@@ -1,5 +1,6 @@
 <template>
-  <div class="myczone">
+  <div class="myczone" ref="wrapperEl">
+    <div class="myczone-content" :style="contentScaleStyle">
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
@@ -58,6 +59,8 @@
       </div>
     </div>
 
+    </div><!-- /myczone-content -->
+
     <!-- ── Ghost (global, for cross-component drag) ─────────── -->
     <Teleport to="body">
       <img
@@ -77,15 +80,35 @@
 const TOON_SIZE   = 80    // default toon size in px when dropped
 const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
+const DESIGN_W    = 800   // design canvas width (matches main-content width)
+const DESIGN_H    = 669   // design canvas height (matches main-content height)
 
-// Reactive canvas dimensions — read from the DOM element at drag time
-function canvasW() { return canvasEl.value?.offsetWidth  ?? 560 }
-function canvasH() { return canvasEl.value?.offsetHeight ?? 400 }
+// Reactive canvas dimensions — always the design dimensions (pre-transform)
+function canvasW() { return canvasEl.value?.offsetWidth  ?? DESIGN_W }
+function canvasH() { return canvasEl.value?.offsetHeight ?? (DESIGN_H - TOPBAR_H - BOTTOMBAR_H) }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
 const route  = useRoute()
 const router = useRouter()
+
+// ── Mobile scaling ────────────────────────────────────────────
+const wrapperEl    = ref(null)
+const contentScale = ref(1)
+
+function updateContentScale() {
+  if (!wrapperEl.value) return
+  const w = wrapperEl.value.offsetWidth
+  contentScale.value = w > 0 ? w / DESIGN_W : 1
+}
+
+const contentScaleStyle = computed(() => {
+  const s = contentScale.value
+  if (s >= 1) return {}
+  return { transform: `scale(${s})`, transformOrigin: 'top left' }
+})
+
+let resizeObserver = null
 
 const canvasEl   = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
@@ -97,17 +120,20 @@ const localDrag = ref(null)  // { toon, offsetX, offsetY }
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
-const DEFAULT_BG = 'ReOrbitDefault.gif'
-
 const currentBg = computed(() => {
-  const bg   = currentZone.value.background || DEFAULT_BG
+  const bg   = currentZone.value.background
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return `${grid}, url('/backgrounds/${bg}')`
+  return bg ? `${grid}, url('/backgrounds/${bg}')` : grid
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
 onMounted(() => {
+  resizeObserver = new ResizeObserver(updateContentScale)
+  if (wrapperEl.value) {
+    resizeObserver.observe(wrapperEl.value)
+    updateContentScale()
+  }
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
 })
@@ -127,6 +153,8 @@ watch(() => route.params.username, async (paramUsername) => {
 
 
 onUnmounted(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
   // clear any leftover drag state
@@ -197,7 +225,8 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
-  return { x: cx - r.left, y: cy - r.top }
+  const s = contentScale.value
+  return { x: (cx - r.left) / s, y: (cy - r.top) / s }
 }
 
 function isOverCanvas(cx, cy) {
@@ -301,12 +330,19 @@ defineExpose({ save, clearZone })
 
 <style scoped>
 .myczone {
-  display: flex;
-  flex-direction: column;
   width: 100%;
   height: 100%;
   overflow: hidden;
   user-select: none;
+  position: relative;
+}
+
+.myczone-content {
+  display: flex;
+  flex-direction: column;
+  width: v-bind(DESIGN_W + 'px');
+  height: v-bind(DESIGN_H + 'px');
+  transform-origin: top left;
 }
 
 /* ── Top bar ── */
@@ -365,6 +401,7 @@ defineExpose({ save, clearZone })
   background-color: var(--OrbitDarkBlue);
   background-size: 40px 40px, 40px 40px, cover;
   background-position: 0 0, 0 0, center;
+  background-repeat: repeat, repeat, no-repeat;
   cursor: default;
 }
 
