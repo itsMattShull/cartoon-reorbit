@@ -4,7 +4,7 @@
       <UserInfo />
     </template>
     <template #sidebar-middle>
-      <CtoonFilter :show-hide-unavailable="true" />
+      <CtoonFilter :show-hide-unavailable="true" :sort-options="cmartSortOptions" />
     </template>
     <template #main-content>
       <Cmart />
@@ -17,6 +17,13 @@
 
 <script setup>
 definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+
+const cmartSortOptions = [
+  { value: 'releaseDate', label: 'Release Date' },
+  { value: 'name',        label: 'Name'         },
+  { value: 'price',       label: 'Price'        },
+  { value: 'rarity',      label: 'Rarity'       },
+]
 </script>
 
 <style>
