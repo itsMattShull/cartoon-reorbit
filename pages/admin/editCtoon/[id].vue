@@ -149,7 +149,7 @@
         <!-- In C-mart -->
         <div class="flex items-center">
           <input v-model="inCmart" type="checkbox" class="mr-2"
-                 :disabled="['Prize Only','Code Only','Auction Only'].includes(rarity)" />
+                 :disabled="rarity === 'Prize Only' || rarity === 'Auction Only' || (rarity === 'Code Only' && !inCmart)" />
           <span>In C-mart</span>
         </div>
 
