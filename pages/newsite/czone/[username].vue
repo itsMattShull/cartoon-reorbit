@@ -32,6 +32,13 @@ onUnmounted(() => { cz.value.buildMode = false })
 /* ── Base page styles ── */
 body.page-newsite-czone-username .main-content { overflow: auto !important; scrollbar-width: thin; }
 
+@media (max-width: 768px) {
+  body.page-newsite-czone-username .main-content {
+    aspect-ratio: 800 / 669;
+    min-height: 300px;
+  }
+}
+
 /* ── Build mode: CzoneEdit fills entire sidebar with 4px border ── */
 body.page-newsite-czone-username.czone-build .sidebar-top    { display: none !important; }
 body.page-newsite-czone-username.czone-build .sidebar-bottom { display: none !important; }
