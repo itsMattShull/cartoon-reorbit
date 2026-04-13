@@ -127,7 +127,9 @@ const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { back
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
 const currentBg = computed(() => {
-  const bg   = currentZone.value.background
+  let bg = currentZone.value.background
+  // Normalize legacy paths (e.g. /images/backgrounds/foo.png or /backgrounds/foo.png) → foo.png
+  if (bg) bg = bg.replace(/^.*\/backgrounds\//, '')
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
   return bg ? `${grid}, url('/backgrounds/${bg}')` : grid
