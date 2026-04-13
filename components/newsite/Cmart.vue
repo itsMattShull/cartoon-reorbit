@@ -13,7 +13,14 @@
 
     <!-- ── Card grid ─────────────────────────────────────────────── -->
     <div class="cmart-grid">
-      <div v-if="loading" class="cmart-status">Loading…</div>
+      <template v-if="loading">
+        <ShortCard v-for="n in 100" :key="'skel-' + n" class="skel-card">
+          <template #header><div class="skel-img" /></template>
+          <template #middle><div class="skel-line skel-name" /></template>
+          <template #footer-left><div class="skel-line skel-price" /></template>
+          <template #footer-right><div class="skel-line skel-btn" /></template>
+        </ShortCard>
+      </template>
       <div v-else-if="!ctoons.length" class="cmart-status">No cToons available.</div>
       <template v-else>
         <ShortCard
@@ -177,6 +184,16 @@ const ctoons = computed(() => {
     list = list.filter(c => !c.nextReleaseAt && !(c.quantity != null && c.totalMinted >= c.quantity))
 
   list = [...list].sort((a, b) => {
+    if (f.sortField === 'releaseDate') {
+      const ad = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
+      const bd = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
+      const dateCmp = (f.sortAsc ? 1 : -1) * (ad - bd)
+      if (dateCmp !== 0) return dateCmp
+      // Secondary: rarity ascending (common → uncommon → rare → very rare → crazy rare → others)
+      const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
+      const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99
+      return ar - br
+    }
     let cmp = 0
     if (f.sortField === 'price') {
       cmp = a.price - b.price
@@ -210,6 +227,8 @@ function showToast(message, type = 'success') {
 }
 
 onMounted(async () => {
+  filter.value.sortField = 'releaseDate'
+  filter.value.sortAsc   = false
   try {
     allCtoons.value = await $fetch('/api/cmart')
     scheduleNextRefresh()
@@ -339,6 +358,42 @@ async function buy(ctoon) {
     height: auto;
     aspect-ratio: 3 / 4;
   }
+}
+
+/* ── Skeleton loaders ────────────────────────────────────────── */
+@keyframes skel-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skel-img,
+.skel-line {
+  background: linear-gradient(90deg, #1a3a5a 25%, #2a5a8a 50%, #1a3a5a 75%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+  border-radius: 3px;
+}
+
+.skel-img {
+  width: 100%;
+  height: 100%;
+}
+
+.skel-name {
+  width: 70%;
+  height: 8px;
+}
+
+.skel-price {
+  width: 60%;
+  height: 8px;
+  margin-left: 4px;
+}
+
+.skel-btn {
+  width: 80%;
+  height: 14px;
+  border-radius: 4px;
 }
 
 /* ── Status ──────────────────────────────────────────────────── */
