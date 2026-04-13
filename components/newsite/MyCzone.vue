@@ -126,13 +126,18 @@ const localDrag = ref(null)  // { toon, offsetX, offsetY }
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
+function bgUrl(v) {
+  if (!v) return ''
+  const s = String(v)
+  if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
+  return `/backgrounds/${s}`
+}
+
 const currentBg = computed(() => {
-  let bg = currentZone.value.background
-  // Normalize legacy paths (e.g. /images/backgrounds/foo.png or /backgrounds/foo.png) → foo.png
-  if (bg) bg = bg.replace(/^.*\/backgrounds\//, '')
+  const src  = bgUrl(currentZone.value.background)
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return bg ? `${grid}, url('/backgrounds/${bg}')` : grid
+  return src ? `${grid}, url('${src}')` : grid
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
