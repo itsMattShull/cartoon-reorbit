@@ -140,7 +140,7 @@ html, body {
   --topbar-nav-right-pr:             0px;
 
   --sidebar-bg:                      var(--OrbitLightBlue);
-  --sidebar-height:                  677px;
+  --sidebar-height:                  682px;
   --sidebar-width:                   232px;
   --sidebar-radius:                  8px;
   --sidebar-border-thickness:        0px;
@@ -166,7 +166,7 @@ html, body {
   --sidebar-top-mr:                  0px;
 
   --sidebar-middle-bg:               var(--OrbitDarkBlue);
-  --sidebar-middle-height:           490px;
+  --sidebar-middle-height:           495px;
   --sidebar-middle-width:            224px;
   --sidebar-middle-radius:           8px;
   --sidebar-middle-border-thickness: 0px;
@@ -196,7 +196,7 @@ html, body {
   --sidebar-bottom-mr:               0px;
 
   --main-content-bg:                 transparent;
-  --main-content-height:             677px;
+  --main-content-height:             682px;
   --main-content-width:              800px;
   --main-content-radius:             8px;
   --main-content-border-thickness:   4px;
