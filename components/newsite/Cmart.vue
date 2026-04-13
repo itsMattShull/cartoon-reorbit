@@ -259,7 +259,6 @@ async function buy(ctoon) {
   overflow: hidden;
 
   --img-scale: 0.7;
-  --shortcard-width: 154px;
 }
 
 .cmart-header {
@@ -283,13 +282,16 @@ async function buy(ctoon) {
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
   display: grid;
-  grid-template-columns: repeat(5, var(--shortcard-width));
+  grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: var(--shortcard-height);
   grid-auto-flow: row;
   gap: 4px;
   padding: 4px;
-  justify-content: center;
   box-sizing: border-box;
+}
+
+.cmart-grid :deep(.sc) {
+  width: 100%;
 }
 
 
@@ -328,7 +330,7 @@ async function buy(ctoon) {
 
 @media (max-width: 768px) {
   .cmart-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
   }
 
