@@ -126,11 +126,18 @@ const localDrag = ref(null)  // { toon, offsetX, offsetY }
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
+function bgUrl(v) {
+  if (!v) return ''
+  const s = String(v)
+  if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
+  return `/backgrounds/${s}`
+}
+
 const currentBg = computed(() => {
-  const bg   = currentZone.value.background
+  const src  = bgUrl(currentZone.value.background)
   const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return bg ? `${grid}, url('/backgrounds/${bg}')` : grid
+  return src ? `${grid}, url('${src}')` : grid
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
@@ -398,8 +405,8 @@ defineExpose({ save, clearZone })
   height: 600px;
   overflow: hidden;
   background-color: var(--OrbitDarkBlue);
-  background-size: 40px 40px, 40px 40px, cover;
-  background-position: 0 0, 0 0, center;
+  background-size: 40px 40px, 40px 40px, 100% 100%;
+  background-position: 0 0, 0 0, top left;
   background-repeat: repeat, repeat, no-repeat;
   cursor: default;
 }

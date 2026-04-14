@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   if (!userCtoonId) throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonId' })
 
   const owned = await prisma.userCtoon.findFirst({
-    where: { id: userCtoonId, userId },
+    where: { id: userCtoonId, userId, burnedAt: null },
     select: { id: true }
   })
   if (!owned) {
