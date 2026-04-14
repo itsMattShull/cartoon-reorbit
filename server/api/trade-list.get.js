@@ -15,12 +15,15 @@ export default defineEventHandler(async (event) => {
   await prisma.userTradeListItem.deleteMany({
     where: {
       userId,
-      userCtoon: { userId: { not: userId } }
+      OR: [
+        { userCtoon: { userId: { not: userId } } },
+        { userCtoon: { burnedAt: { not: null } } }
+      ]
     }
   })
 
   return prisma.userTradeListItem.findMany({
-    where: { userId, userCtoon: { userId } },
+    where: { userId, userCtoon: { userId, burnedAt: null } },
     select: { userCtoonId: true }
   })
 })

@@ -54,12 +54,16 @@ export default defineEventHandler(async (event) => {
     select: {
       userId: true,
       ctoonId: true, // needed to check Holiday flag
+      burnedAt: true,
       mintNumber: true,
       ctoon: { select: { rarity: true, name: true, assetPath: true } }
     }
   })
   if (!userCtoonRec || userCtoonRec.userId !== userId) {
     throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
+  }
+  if (userCtoonRec.burnedAt) {
+    throw createError({ statusCode: 400, statusMessage: 'This cToon has been burned and cannot be auctioned' })
   }
 
   // Helper: map rarity -> insta-bid floor (must match client)

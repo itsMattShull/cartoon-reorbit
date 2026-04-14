@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
   // 4) Verify ownership of offered cToons
   if (ctoonIdsOffered.length) {
     const ownedByInitiator = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsOffered }, userId: initiatorId },
+      where: { id: { in: ctoonIdsOffered }, userId: initiatorId, burnedAt: null },
       select: { id: true }
     })
     if (ownedByInitiator.length !== ctoonIdsOffered.length) {
@@ -109,7 +109,7 @@ export default defineEventHandler(async (event) => {
   // 5) Verify ownership of requested cToons
   if (ctoonIdsRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsRequested }, userId: recipient.id },
+      where: { id: { in: ctoonIdsRequested }, userId: recipient.id, burnedAt: null },
       select: { id: true }
     })
     if (ownedByRecipient.length !== ctoonIdsRequested.length) {
