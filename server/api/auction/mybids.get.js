@@ -226,7 +226,10 @@ export default defineEventHandler(async (event) => {
       myBid,
       highestBid,
       bidCount,
-      didWin: ended && !!a.winner && a.winner.id === userId
+      didWin: ended && (
+        (!!a.winner && a.winner.id === userId) ||
+        (!a.winner && myBid != null && myBid === highestFromBids)
+      )
     }
   })
 
