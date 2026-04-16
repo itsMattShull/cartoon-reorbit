@@ -2832,9 +2832,13 @@ async function performAuctionClose(auctionId) {
   // Guard: already closed or cancelled (e.g. duplicate job fire)
   if (!auc || auc.status !== 'ACTIVE') return
 
-  // Re-check: if endAt is still in the future the job fired too early (shouldn't
-  // normally happen, but guard against clock skew)
-  if (new Date(auc.endAt) > new Date()) return
+  // Re-check: if endAt is still in the future the job fired too early (can happen
+  // due to timer imprecision or clock skew). Reschedule rather than silently
+  // completing — a bare `return` would drop the job and leave the auction stuck.
+  if (new Date(auc.endAt) > new Date()) {
+    await scheduleAuctionClose(auctionId, auc.endAt)
+    return
+  }
 
   const { id, creatorId, userCtoonId } = auc
   const now = new Date()
