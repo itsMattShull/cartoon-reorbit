@@ -31,7 +31,13 @@
             : {}"
         >
           <template #header>
-            <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+            <img
+              v-if="c.assetPath"
+              :src="c.assetPath"
+              :alt="c.name"
+              class="card-img"
+              @click.stop="openInfo(c)"
+            />
           </template>
           <template #middle>
             <div class="card-middle-row">
@@ -70,6 +76,8 @@
       </template>
     </div>
 
+    <CtoonInfoCard v-if="ctoonModal.isOpen.value" />
+
   </div>
 </template>
 
@@ -92,6 +100,11 @@ const RARITIES_MAP = {
 
 function rarityInfo(rarity) {
   return RARITIES_MAP[(rarity || '').toLowerCase()] || { label: '?', bg: '#aaaaaa', fg: '#fff' }
+}
+
+const ctoonModal = useCtoonModal()
+function openInfo(c) {
+  ctoonModal.open({ ctoonId: c.id, assetPath: c.assetPath, name: c.name })
 }
 
 const allCtoons = useState('cmartCtoons', () => [])
@@ -276,6 +289,7 @@ async function buy(ctoon) {
   background: white;
   box-sizing: border-box;
   overflow: hidden;
+  position: relative;
 
   --img-scale: 0.7;
 }
