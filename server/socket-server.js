@@ -18,6 +18,7 @@ import path               from 'node:path'
 import { dirname }        from 'node:path'
 import { fileURLToPath }  from 'node:url'
 import { randomUUID }     from 'crypto'
+import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 
 startDiagnostics().catch((err) => {
@@ -1275,6 +1276,69 @@ function startPvpTimer(io, roomId) {
   }, 1000);
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+//  Trade-room auth helpers
+//
+//  The trade-room handlers below transfer cToon ownership, so every event
+//  must be tied to a server-verified user identity. Resolve the caller from
+//  the `session` JWT cookie sent during the websocket handshake instead of
+//  trusting the client-supplied `user` field.
+// ──────────────────────────────────────────────────────────────────────────
+function parseSessionCookie(cookieHeader) {
+  if (!cookieHeader || typeof cookieHeader !== 'string') return null
+  const match = /(?:^|;\s*)session=([^;]+)/.exec(cookieHeader)
+  if (!match) return null
+  try { return decodeURIComponent(match[1]) } catch { return match[1] }
+}
+
+async function resolveSocketUser(socket) {
+  if (socket.data && Object.prototype.hasOwnProperty.call(socket.data, 'authUser')) {
+    return socket.data.authUser
+  }
+  socket.data = socket.data || {}
+
+  const secret = process.env.JWT_SECRET
+  const token = parseSessionCookie(socket.handshake?.headers?.cookie)
+  if (!secret || !token) {
+    socket.data.authUser = null
+    return null
+  }
+
+  let payload
+  try {
+    payload = jwt.verify(token, secret)
+  } catch {
+    socket.data.authUser = null
+    return null
+  }
+
+  const userId = payload?.sub
+  if (!userId) {
+    socket.data.authUser = null
+    return null
+  }
+
+  try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, banned: true }
+    })
+    if (!user || user.banned || !user.username) {
+      socket.data.authUser = null
+      return null
+    }
+    socket.data.authUser = { id: user.id, username: user.username }
+    return socket.data.authUser
+  } catch {
+    socket.data.authUser = null
+    return null
+  }
+}
+
+function isTrader(roomData, username) {
+  return Boolean(username) && (roomData.traderA === username || roomData.traderB === username)
+}
+
 io.on('connection', socket => {
   socket.on('battle:create', async ({ player1UserId, player1MonsterId, opponent }) => {
     try {
@@ -1986,12 +2050,17 @@ io.on('connection', socket => {
   socket.on('trade:rejoin', async ({ room, user }) => {
     const roomData = tradeRooms[room]
     if (!roomData) return
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user)) {
+      socket.emit('trade-error', { message: 'Authentication required to rejoin trade room.' })
+      return
+    }
     socket.tradeRoom = room
-    socket.user = user
+    socket.user = auth.username
     socket.join(room)
     touchActivity(roomData)
     // Restore spectator entry if not a named trader
-    if (roomData.traderA !== user && roomData.traderB !== user) {
+    if (roomData.traderA !== auth.username && roomData.traderB !== auth.username) {
       roomData.spectators.add(socket.id)
     }
     tradeSockets[socket.id] = room
@@ -2052,8 +2121,13 @@ io.on('connection', socket => {
   // ──────────────────────────────────────────────────────────────────────────
 
   socket.on('join-trade-room', async ({ room, user }) => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user)) {
+      socket.emit('trade-error', { message: 'Authentication required to join trade room.' })
+      return
+    }
     socket.tradeRoom = room
-    socket.user = user
+    socket.user = auth.username
     socket.join(room)
     if (!tradeRooms[room]) {
       tradeRooms[room] = {
@@ -2071,8 +2145,8 @@ io.on('connection', socket => {
     touchActivity(roomData)
 
     if (!roomData.traderA) {
-      roomData.traderA = user
-    } else if (roomData.traderA !== user && roomData.traderB !== user) {
+      roomData.traderA = auth.username
+    } else if (roomData.traderA !== auth.username && roomData.traderB !== auth.username) {
       roomData.spectators.add(socket.id)
     }
 
@@ -2107,20 +2181,26 @@ io.on('connection', socket => {
     if (!roomData) return
     touchActivity(roomData)
 
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user)) {
+      socket.emit('trade-error', { message: 'Authentication required to claim Trader B slot.' })
+      return
+    }
+    if (roomData.traderA === auth.username) {
+      socket.emit('become-traderB-failed', { message: 'You are already Trader A in this room.' })
+      return
+    }
+
     if (!roomData.traderB) {
-      roomData.traderB = user
+      roomData.traderB = auth.username
       // Remove from spectators if previously added
       roomData.spectators.delete(socket.id)
       // Persist Trader B to database
       try {
-        // Look up the user ID by username
-        const dbUser = await db.user.findUnique({ where: { username: user } });
-        if (dbUser) {
-          await db.tradeRoom.update({
-            where: { name: room },
-            data: { traderBId: dbUser.id }
-          });
-        }
+        await db.tradeRoom.update({
+          where: { name: room },
+          data: { traderBId: auth.id }
+        });
       } catch (err) {
         console.error('Failed to set traderB in DB:', err);
       }
@@ -2157,8 +2237,40 @@ io.on('connection', socket => {
     if (!roomData) return
     touchActivity(roomData)
 
-    roomData.offers[user] = ctoons
-    roomData.confirmed[user] = false
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user) || !isTrader(roomData, auth.username)) {
+      socket.emit('trade-error', { message: 'Not authorized to modify this offer.' })
+      return
+    }
+
+    if (!Array.isArray(ctoons)) {
+      socket.emit('trade-error', { message: 'Invalid offer payload.' })
+      return
+    }
+    const offerIds = []
+    for (const c of ctoons) {
+      if (!c || typeof c.id !== 'string') {
+        socket.emit('trade-error', { message: 'Invalid offer payload.' })
+        return
+      }
+      offerIds.push(c.id)
+    }
+
+    if (offerIds.length) {
+      const uniqueIds = Array.from(new Set(offerIds))
+      const owned = await db.userCtoon.findMany({
+        where: { id: { in: uniqueIds }, userId: auth.id, burnedAt: null },
+        select: { id: true }
+      })
+      if (owned.length !== uniqueIds.length) {
+        socket.emit('trade-error', { message: 'You can only offer cToons you currently own.' })
+        return
+      }
+    }
+
+    roomData.offers[auth.username] = ctoons
+    roomData.confirmed[auth.username] = false
+    roomData.finalized[auth.username] = false
     syncTradeRoom(room, roomData)
 
     // Load full user info for traders
@@ -2189,8 +2301,15 @@ io.on('connection', socket => {
     if (!roomData) return
     touchActivity(roomData)
 
-    roomData.offers[user] = []
-    roomData.confirmed[user] = false
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user) || !isTrader(roomData, auth.username)) {
+      socket.emit('trade-error', { message: 'Not authorized to modify this offer.' })
+      return
+    }
+
+    roomData.offers[auth.username] = []
+    roomData.confirmed[auth.username] = false
+    roomData.finalized[auth.username] = false
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -2220,7 +2339,13 @@ io.on('connection', socket => {
     if (!roomData) return
     touchActivity(roomData)
 
-    roomData.confirmed[user] = true
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user) || !isTrader(roomData, auth.username)) {
+      socket.emit('trade-error', { message: 'Not authorized to confirm this trade.' })
+      return
+    }
+
+    roomData.confirmed[auth.username] = true
 
     // Load full user info for traders
     const traderAUser = roomData.traderA
@@ -2249,7 +2374,13 @@ io.on('connection', socket => {
     const roomData = tradeRooms[room]
     if (!roomData) return
     touchActivity(roomData)
-  
+
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user) || !isTrader(roomData, auth.username)) {
+      socket.emit('trade-error', { message: 'Not authorized to cancel this trade.' })
+      return
+    }
+
     // Mark this user as un-confirmed
     roomData.confirmed   = {}
     roomData.finalized   = {}
@@ -2284,44 +2415,94 @@ io.on('connection', socket => {
     const roomData = tradeRooms[room]
     if (!roomData) return
     touchActivity(roomData)
-    roomData.finalized[user] = true
+
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user) || !isTrader(roomData, auth.username)) {
+      socket.emit('trade-error', { message: 'Not authorized to finalize this trade.' })
+      return
+    }
+
+    roomData.finalized[auth.username] = true
 
     const a = roomData.traderA, b = roomData.traderB
+    if (!a || !b) return
     if (!(roomData.finalized[a] && roomData.finalized[b])) return
 
+    // Single-execution guard: prevent duplicate finalize events from
+    // re-running the transfer before state is reset below.
+    if (roomData.executing) return
+    roomData.executing = true
+
+    try {
     const recA = await db.user.findUnique({ where: { username: a }, select:{id:true} })
     const recB = await db.user.findUnique({ where: { username: b }, select:{id:true} })
     if (!recA || !recB) return
     const aId = recA.id, bId = recB.id
 
-    const offersA = roomData.offers[a] || []
-    const offersB = roomData.offers[b] || []
+    const offersA = Array.isArray(roomData.offers[a]) ? roomData.offers[a] : []
+    const offersB = Array.isArray(roomData.offers[b]) ? roomData.offers[b] : []
+
+    const aIds = []
+    for (const c of offersA) {
+      if (!c || typeof c.id !== 'string') {
+        io.to(room).emit('trade-error', { message: 'Trade failed: invalid offer entries.' })
+        return
+      }
+      aIds.push(c.id)
+    }
+    const bIds = []
+    for (const c of offersB) {
+      if (!c || typeof c.id !== 'string') {
+        io.to(room).emit('trade-error', { message: 'Trade failed: invalid offer entries.' })
+        return
+      }
+      bIds.push(c.id)
+    }
 
     try {
       // swap + ownership logs
       await db.$transaction(async (tx) => {
+        // Re-verify ownership in the txn so a stale or forged offer cannot
+        // transfer cToons that the offering trader does not currently own.
+        if (aIds.length) {
+          const ownedA = await tx.userCtoon.count({
+            where: { id: { in: Array.from(new Set(aIds)) }, userId: aId, burnedAt: null }
+          })
+          if (ownedA !== new Set(aIds).size) {
+            throw new Error(`Trader ${a} no longer owns all offered cToons.`)
+          }
+        }
+        if (bIds.length) {
+          const ownedB = await tx.userCtoon.count({
+            where: { id: { in: Array.from(new Set(bIds)) }, userId: bId, burnedAt: null }
+          })
+          if (ownedB !== new Set(bIds).size) {
+            throw new Error(`Trader ${b} no longer owns all offered cToons.`)
+          }
+        }
+
         const logs = []
 
-        for (const c of offersA) {
+        for (const id of aIds) {
           const uc = await tx.userCtoon.update({
-            where:  { id: c.id },
+            where:  { id },
             data:   { userId: bId },
             select: { id: true, ctoonId: true, mintNumber: true }
           })
           await tx.userTradeListItem.deleteMany({
-            where: { userCtoonId: c.id, userId: { not: bId } }
+            where: { userCtoonId: id, userId: { not: bId } }
           })
           logs.push({ userId: bId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
 
-        for (const c of offersB) {
+        for (const id of bIds) {
           const uc = await tx.userCtoon.update({
-            where:  { id: c.id },
+            where:  { id },
             data:   { userId: aId },
             select: { id: true, ctoonId: true, mintNumber: true }
           })
           await tx.userTradeListItem.deleteMany({
-            where: { userCtoonId: c.id, userId: { not: aId } }
+            where: { userCtoonId: id, userId: { not: aId } }
           })
           logs.push({ userId: aId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber })
         }
@@ -2406,13 +2587,22 @@ io.on('connection', socket => {
       console.error('Trade execution failed:', err)
       io.to(room).emit('trade-error', { message: 'Trade failed. Please try again.' })
     }
+    } finally {
+      roomData.executing = false
+    }
   })
 
 
-  socket.on('trade-chat', ({ room, user, message }) => {
+  socket.on('trade-chat', async ({ room, user, message }) => {
     const roomData = tradeRooms[room]
-    if (roomData) touchActivity(roomData)
-    io.to(room).emit('trade-chat', { user, message })
+    if (!roomData) return
+    touchActivity(roomData)
+
+    const auth = await resolveSocketUser(socket)
+    if (!auth || (typeof user === 'string' && user && auth.username !== user)) return
+    if (!isTrader(roomData, auth.username) && !roomData.spectators.has(socket.id)) return
+
+    io.to(room).emit('trade-chat', { user: auth.username, message })
   })
 
   socket.on('leave-zone', ({ zone }) => {

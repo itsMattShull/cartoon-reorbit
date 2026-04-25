@@ -28,18 +28,24 @@ export default defineEventHandler(async (event) => {
   let ctoon = null
   let userCtoon = null
 
-  if (userCtoonId) {
+  // Synthetic IDs handed out by the public cZone view are not real UUIDs
+  // (e.g. `cz:0:1:<ctoonId>:<mintNumber>`). Skip the per-instance lookup
+  // for those — and, if the lookup misses for any other reason, fall
+  // through to the ctoonId-only path so the modal still opens.
+  const looksLikeUserCtoonId = !!userCtoonId && !userCtoonId.startsWith('cz:')
+
+  if (looksLikeUserCtoonId) {
     userCtoon = await prisma.userCtoon.findUnique({
       where: { id: userCtoonId },
       include: { ctoon: true }
     })
-    if (!userCtoon) {
-      throw createError({ statusCode: 404, statusMessage: 'User cToon not found' })
-    }
-    ctoon = userCtoon.ctoon
+    if (userCtoon) ctoon = userCtoon.ctoon
   }
 
   if (!ctoon) {
+    if (!ctoonId) {
+      throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
+    }
     ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) {
       throw createError({ statusCode: 404, statusMessage: 'cToon not found' })

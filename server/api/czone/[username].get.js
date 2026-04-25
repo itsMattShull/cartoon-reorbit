@@ -48,6 +48,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // The per-toon `id` field on the public payload is the UserCtoon
+  // record ID. Anyone visiting another user's cZone could harvest those
+  // IDs and feed them into ownership-mutating endpoints (this was the
+  // recon vector for the trade-room exploit). Only return it to the
+  // owner viewing their own cZone — the layout still renders for
+  // everyone else from `ctoonId`, `mintNumber`, asset, etc.
+  const viewerId = event.context.userId || event.context.user?.id || null
+  const viewerIsOwner = !!viewerId && viewerId === user.id
+
   const config = await prisma.globalGameConfig.findUnique({
     where: { id: 'singleton' },
     select: { czoneCount: true }
@@ -175,11 +184,22 @@ export default defineEventHandler(async (event) => {
   )
 
   // 6) Enrich each sub-zone’s toons with metadata
-  const enrichedZones = normalizedZones.map((subZone) => {
-    const enrichedToons = (subZone.toons || []).map((item) => {
+  const enrichedZones = normalizedZones.map((subZone, zoneIdx) => {
+    const enrichedToons = (subZone.toons || []).map((item, itemIdx) => {
       const meta = ctoonMeta[item.id] || {}
+      // Replace `id` (UserCtoon ID) with a synthetic, position-stable token
+      // for non-owner viewers. The cZone page uses `id` for v-for keys and
+      // local drag-comparison logic, so it must remain unique and defined,
+      // but it must not be a real UserCtoon UUID — that was the recon
+      // vector for the trade-room exploit. The token format is intentionally
+      // not a UUID, and the modal endpoint treats unrecognized values as a
+      // missing userCtoonId.
+      const publicId = viewerIsOwner
+        ? item.id
+        : `cz:${zoneIdx}:${itemIdx}:${meta.ctoonId || 'x'}:${meta.mintNumber ?? 'x'}`
       return {
         ...item,
+        id: publicId,
         mintNumber: meta.mintNumber ?? null,
         quantity: meta.quantity ?? null,
         series: meta.series ?? null,
