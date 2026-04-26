@@ -645,7 +645,7 @@ function formatDate(value) {
 <style scoped>
 /* ── Overlay ─────────────────────────────────────────────────── */
 .ctic-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(0, 20, 50, 0.75);
   display: flex;
