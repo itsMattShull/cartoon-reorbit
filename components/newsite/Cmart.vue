@@ -76,8 +76,6 @@
       </template>
     </div>
 
-    <CtoonInfoCard v-if="ctoonModal.isOpen.value" />
-
   </div>
 </template>
 

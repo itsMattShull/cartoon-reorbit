@@ -254,11 +254,13 @@ html, body {
     <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot name="main-content" /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
     <slot />
+    <CtoonInfoCard v-if="ctoonModalIsOpen" />
   </div>
 </template>
 
 <script setup>
 const route = useRoute()
+const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
 useHead({ bodyAttrs: { class: computed(() => {
   const pageClass  = route.name ? `page-${String(route.name).toLowerCase()}` : ''
