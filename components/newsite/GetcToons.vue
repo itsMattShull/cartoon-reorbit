@@ -52,6 +52,12 @@
   text-decoration: none;
 }
 
+@media (max-width: 768px) {
+  .getctoons {
+    height: max(200px, calc(100dvh - 240px));
+  }
+}
+
 .quadrant--shop       { background: #1a6e3c; }
 .quadrant--collection { background: #1a3e8a; }
 .quadrant--games      { background: #7c2d8a; }
