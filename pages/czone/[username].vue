@@ -918,8 +918,7 @@ function bgUrl(v) {
 // ——— Scale logic for mobile ———
 const scale = ref(1)
 const recalcScale = () => {
-  const gutter = 32 // account for page padding
-  scale.value = Math.min(1, (window.innerWidth - gutter) / CANVAS_W)
+  scale.value = Math.min(1, window.innerWidth / CANVAS_W)
 }
 const CANVAS_W = 800
 const CANVAS_H = 600
@@ -929,7 +928,6 @@ const outerScaleStyle = computed(() => ({
   height: `${CANVAS_H * scale.value}px`,
   position: 'relative',
   overflow: 'hidden',
-  margin: '0 auto'
 }))
 
 // apply the transform to the inner wrapper, not the outer
