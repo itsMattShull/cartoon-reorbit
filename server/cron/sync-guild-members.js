@@ -1114,6 +1114,114 @@ async function runTournamentCron() {
   }
 }
 
+const WORDLE_BOT_ID = '1211781489931452447'
+const WORDLE_POINTS = { '1': 500, '2': 400, '3': 300, '4': 200, '5': 100, '6': 50, 'X': 0 }
+
+async function processWordleResults() {
+  if (!BOT_TOKEN || !GUILD_ID) return
+  try {
+    const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
+    const wordleChannelName = process.env.DISCORD_WORDLE_CHANNEL || 'general'
+
+    const channelsRes = await fetch(`${DISCORD_API}/guilds/${GUILD_ID}/channels`, {
+      headers: { Authorization: authHeader }
+    })
+    if (!channelsRes.ok) return
+
+    const channels = await channelsRes.json()
+    const channel = channels.find(ch => ch.type === 0 && ch.name === wordleChannelName)
+    if (!channel) return
+
+    const msgsRes = await fetch(`${DISCORD_API}/channels/${channel.id}/messages?limit=50`, {
+      headers: { Authorization: authHeader }
+    })
+    if (!msgsRes.ok) return
+
+    const messages = await msgsRes.json()
+    const wordleMessages = messages.filter(m =>
+      m.author?.id === WORDLE_BOT_ID &&
+      (m.content?.includes("yesterday's results") || m.content?.includes("Yesterday's results"))
+    )
+
+    for (const msg of wordleMessages) {
+      const alreadyProcessed = await prisma.wordleLog.findFirst({ where: { messageId: msg.id } })
+      if (alreadyProcessed) continue
+
+      // Try to extract Wordle number from content or embeds
+      let wordleNumber = null
+      const allText = [
+        msg.content,
+        ...(msg.embeds || []).map(e => `${e.title || ''} ${e.description || ''}`)
+      ].join(' ')
+      const numMatch = allText.match(/Wordle\s+No\.?\s*#?(\d+)/i)
+      if (numMatch) wordleNumber = parseInt(numMatch[1])
+
+      // Parse score lines: (optional emoji) N/6: <@USER_ID> ...  or  X/6: <@USER_ID> ...
+      const scoreMap = {}
+      const contentToParse = msg.content || msg.embeds?.[0]?.description || ''
+      for (const line of contentToParse.split('\n')) {
+        const scoreMatch = line.match(/([X\d])\/6\s*:(.+)/)
+        if (!scoreMatch) continue
+        const scoreKey = scoreMatch[1]
+        const mentionRegex = /<@!?(\d+)>/g
+        let m
+        while ((m = mentionRegex.exec(scoreMatch[2])) !== null) {
+          scoreMap[m[1]] = scoreKey
+        }
+      }
+
+      if (Object.keys(scoreMap).length === 0) continue
+
+      const users = await prisma.user.findMany({
+        where: { discordId: { in: Object.keys(scoreMap) }, active: true, banned: false },
+        select: { id: true, discordId: true }
+      })
+
+      for (const user of users) {
+        const scoreKey = scoreMap[user.discordId]
+        const points = WORDLE_POINTS[scoreKey] ?? 0
+
+        await prisma.$transaction(async (tx) => {
+          const exists = await tx.wordleLog.findUnique({
+            where: { messageId_userId: { messageId: msg.id, userId: user.id } }
+          })
+          if (exists) return
+
+          if (points > 0) {
+            const up = await tx.userPoints.upsert({
+              where: { userId: user.id },
+              update: { points: { increment: points }, updatedAt: new Date() },
+              create: { userId: user.id, points, updatedAt: new Date() }
+            })
+            await tx.pointsLog.create({
+              data: {
+                userId: user.id,
+                direction: 'increase',
+                points,
+                total: up.points,
+                method: 'Wordle'
+              }
+            })
+          }
+
+          await tx.wordleLog.create({
+            data: {
+              messageId: msg.id,
+              wordleNumber,
+              userId: user.id,
+              discordId: user.discordId,
+              score: `${scoreKey}/6`,
+              pointsAwarded: points
+            }
+          })
+        })
+      }
+    }
+  } catch (e) {
+    // swallow in cron context
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Kickoffs
 await syncGuildMembers()
@@ -1167,3 +1275,6 @@ cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicag
 
 await runTournamentCron()
 cron.schedule('*/15 * * * *', runTournamentCron)
+
+await processWordleResults()
+cron.schedule('0 1 * * *', processWordleResults, { timezone: 'America/Chicago' }) // 01:00 CST daily

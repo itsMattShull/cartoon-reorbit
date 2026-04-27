@@ -439,6 +439,7 @@ model User {
   dailyActivities UserDailyActivity[]
 
   ctoonSuggestions CtoonUserSuggestion[]
+  wordleLogs       WordleLog[]
 
   submittedCtoons         SubmittedCtoon[]       @relation("SubmittedCtoonByUser")
   reviewedSubmissions     SubmittedCtoon[]       @relation("SubmittedCtoonReviewedBy")
@@ -2263,5 +2264,22 @@ model SuspiciousActivityMute {
   user    User @relation("SuspiciousMutedUser", fields: [userId], references: [id], onDelete: Cascade)
   mutedBy User @relation("SuspiciousMutedBy", fields: [mutedById], references: [id])
 
+  @@index([createdAt])
+}
+
+model WordleLog {
+  id            String   @id @default(uuid())
+  messageId     String
+  wordleNumber  Int?
+  userId        String
+  discordId     String
+  score         String
+  pointsAwarded Int
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
