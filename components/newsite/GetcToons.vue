@@ -24,6 +24,8 @@
 }
 
 .quadrant {
+  width: 100%;
+  height: 100%;
   border: none;
   border-radius: 10px;
   font-size: 1rem;
@@ -48,6 +50,12 @@
 .quadrant-link {
   display: contents;
   text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .getctoons {
+    height: max(200px, calc(100dvh - 240px));
+  }
 }
 
 .quadrant--shop       { background: #1a6e3c; }

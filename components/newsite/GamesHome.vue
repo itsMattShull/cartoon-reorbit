@@ -45,4 +45,10 @@
 .quadrant--collection { background: #1a3e8a; }
 .quadrant--games      { background: #7c2d8a; }
 .quadrant--profile    { background: #8a4a1a; }
+
+@media (max-width: 768px) {
+  .gameshome {
+    height: max(200px, calc(100dvh - 240px));
+  }
+}
 </style>
