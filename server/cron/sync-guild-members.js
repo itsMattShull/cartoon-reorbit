@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import cron from 'node-cron'
-import { achievementsQueue } from '../../server/utils/queues.js'
+import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
@@ -1087,6 +1087,8 @@ async function createDailyFeaturedAuction() {
 
     if (!result) continue
     createdCount += 1
+
+    await scheduleAuctionClose(result.auctionId, endAt)
 
     const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
       where: { ctoonId: result.ctoonId },
