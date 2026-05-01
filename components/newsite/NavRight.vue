@@ -13,7 +13,9 @@
     <NuxtLink to="/newsite/Games" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
-<BlueButton v-if="!isMobile" :style="{ height: buttonHeight }">Settings</BlueButton>
+    <NuxtLink v-if="!isMobile" to="/newsite/settings" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
+    </NuxtLink>
   </div>
 </template>
 
