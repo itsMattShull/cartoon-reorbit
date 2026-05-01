@@ -6,7 +6,9 @@
     <NuxtLink v-if="isAdmin" to="/admin">
       <BlueButton :style="{ height: buttonHeight }">Admin</BlueButton>
     </NuxtLink>
-    <BlueButton v-if="isMobile" :style="{ height: buttonHeight }">Settings</BlueButton>
+    <NuxtLink v-if="isMobile" to="/newsite/settings" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
+    </NuxtLink>
     <GreenButton :style="{ height: buttonHeight }" @click="logout">Logout</GreenButton>
   </div>
 </template>
@@ -27,6 +29,11 @@ const { isAdmin, logout } = useAuth()
 </script>
 
 <style scoped>
+.nav-link {
+  text-decoration: none;
+  display: contents;
+}
+
 .nav-left {
   display: flex;
   flex-direction: row;
