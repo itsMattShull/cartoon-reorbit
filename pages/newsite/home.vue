@@ -14,10 +14,11 @@
 
 <script setup>
 definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+useHead({ htmlAttrs: { class: 'newsite-home' } })
 </script>
 
 <style>
-html {
+html.newsite-home {
   min-height: 100vh;
   background: linear-gradient(
     to bottom,
@@ -28,7 +29,7 @@ html {
   ) no-repeat fixed !important;
 }
 
-body {
+html.newsite-home body {
   background: transparent !important;
   min-height: 100vh;
 }

@@ -1,7 +1,8 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300..700&display=swap');
 
-html, body {
+html.newsite-active,
+html.newsite-active body {
   background: var(--bg-color);
   margin: 0;
   padding: 0;
@@ -262,11 +263,14 @@ html, body {
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
-useHead({ bodyAttrs: { class: computed(() => {
-  const pageClass  = route.name ? `page-${String(route.name).toLowerCase()}` : ''
-  const buildClass = czoneState.value.buildMode ? 'czone-build' : ''
-  return [pageClass, buildClass].filter(Boolean).join(' ')
-}) } })
+useHead({
+  htmlAttrs: { class: 'newsite-active' },
+  bodyAttrs: { class: computed(() => {
+    const pageClass  = route.name ? `page-${String(route.name).toLowerCase()}` : ''
+    const buildClass = czoneState.value.buildMode ? 'czone-build' : ''
+    return [pageClass, buildClass].filter(Boolean).join(' ')
+  })
+} })
 const showAdbar = computed(() => route.meta.showAdbar !== false)
 const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
