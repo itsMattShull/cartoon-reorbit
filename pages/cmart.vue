@@ -1287,15 +1287,10 @@ async function buyPack(pack) {
       overlayVisible.value = true
     }
     openingStep.value = 'pack'
-    glowStage.value   = 'hidden'
+    glowStage.value   = ''
     showGlow.value    = true
 
-    // 1) Expand glow after 2s
-    setTimeout(() => {
-      glowStage.value = 'expand'
-    }, 2000)
-
-    // 2) Reveal contents after 3s
+    // After 2s, fetch contents, switch to reveal, then fade the white overlay
     setTimeout(async () => {
       try {
         packContents.value = await $fetch('/api/cmart/open-pack', {
@@ -1307,14 +1302,18 @@ async function buyPack(pack) {
       }
       openingStep.value    = 'reveal'
       revealComplete.value = true
-      glowStage.value      = 'fade'
-    }, 3000)
 
-    // 3) Hide glow after 5s
+      // Start fade after reveal content is rendered
+      nextTick(() => {
+        glowStage.value = 'fade'
+      })
+    }, 2000)
+
+    // Remove glow after fade completes (2s wait + 1.5s fade + small buffer)
     setTimeout(() => {
       showGlow.value  = false
-      glowStage.value = 'hidden'
-    }, 5000)
+      glowStage.value = ''
+    }, 3700)
 
   } catch (err) {
     Sentry.captureException(err)
@@ -1369,46 +1368,22 @@ async function closeOverlay() {
 
 
 <style scoped>
-/* ─── WHITE GLOW KEYFRAME ANIMATION ───────────── */
+/* ─── WHITE OVERLAY FADE ANIMATION ───────────── */
 .glow {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  /* start as a tiny dot */
-  width: 1vw;
-  height: 1vh;
+  inset: 0;
   background: white;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1000;
-
-  /* run two animations in sequence:
-     1) expand for 2s, forwards (leave end state)
-     2) fade for 1s, starting at 2s, forwards */
-  animation:
-    expandGlow 2s ease-out forwards,
-    fadeGlow   1s ease-in 2s forwards;
 }
 
-@keyframes expandGlow {
-  from {
-    width: 1vw;
-    height: 1vh;
-  }
-  to {
-    width: 200vw;
-    height: 200vh;
-  }
+.glow.fade {
+  animation: fadeGlow 1.5s ease-in forwards;
 }
 
 @keyframes fadeGlow {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* highlight cToons that went out of stock (inCmart=false) */
