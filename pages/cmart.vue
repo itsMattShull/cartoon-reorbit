@@ -928,6 +928,9 @@ function updateUrlQueryFromFilters() {
   if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
   else delete newQuery.sort
 
+  if (activeTab.value && activeTab.value !== 'cToons') newQuery.tab = activeTab.value
+  else delete newQuery.tab
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
@@ -1021,27 +1024,47 @@ const filteredCtoons = computed(() => {
 })
 
 // ────────── SORTED (AND FILTERED) ─────────────
+const RARITY_SORT_ORDER = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+
+function rarityRank(rarity) {
+  const idx = RARITY_SORT_ORDER.indexOf(rarity)
+  return idx === -1 ? RARITY_SORT_ORDER.length : idx
+}
+
 const filteredAndSortedCtoons = computed(() => {
   const list = filteredCtoons.value.slice()
 
-  switch (sortBy.value) {
-    case 'releaseDateAsc':
-      return list.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate))
+  const byReleaseDateDesc = (a, b) => {
+    const at = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
+    const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
+    return bt - at
+  }
+  const byRarity = (a, b) => rarityRank(a.rarity) - rarityRank(b.rarity)
+  const byName   = (a, b) => (a.name || '').localeCompare(b.name || '')
+  const tieBrk   = (a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b)
 
+  switch (sortBy.value) {
+    case 'releaseDateAsc': {
+      return list.sort((a, b) => {
+        const at = a.releaseDate ? new Date(a.releaseDate).getTime() : Number.MAX_SAFE_INTEGER
+        const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : Number.MAX_SAFE_INTEGER
+        return (at - bt) || byRarity(a, b) || byName(a, b)
+      })
+    }
     case 'releaseDateDesc':
-      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+      return list.sort((a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b))
 
     case 'priceAsc':
-      return list.sort((a, b) => a.price - b.price)
+      return list.sort((a, b) => (a.price - b.price) || tieBrk(a, b))
 
     case 'priceDesc':
-      return list.sort((a, b) => b.price - a.price)
+      return list.sort((a, b) => (b.price - a.price) || tieBrk(a, b))
 
     case 'series':
-      return list.sort((a, b) => a.series.localeCompare(b.series))
+      return list.sort((a, b) => (a.series || '').localeCompare(b.series || '') || tieBrk(a, b))
 
     default:
-      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+      return list.sort((a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b))
   }
 })
 
@@ -1060,6 +1083,7 @@ watch(
   },
   { deep: true }
 )
+watch(activeTab, () => updateUrlQueryFromFilters())
 
 // Pagination helpers: scroll to top on page change
 function scrollToTop () {
@@ -1203,6 +1227,14 @@ onMounted(async () => {
     activeHoliday.value = await $fetch('/api/holiday/active', { credentials: 'include' })
   } catch (_) {
     activeHoliday.value = null
+  }
+
+  // Initialize active tab from URL (after holiday is loaded so dynamic tab name is known)
+  const tabParam = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (tabParam) {
+    const validTabs = new Set(['cToons', 'Packs', 'cZones Upgrades'])
+    if (activeHoliday.value?.name) validTabs.add(activeHoliday.value.name)
+    if (validTabs.has(tabParam)) activeTab.value = tabParam
   }
 
   // LOAD UPGRADES CONFIG

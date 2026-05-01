@@ -988,6 +988,11 @@ function updateUrlQueryFromFilters() {
 
   if (gtoonsOnly.value) newQuery.gtoon = 'true'; else delete newQuery.gtoon
 
+  if (showUnique.value) newQuery.unique = '1'; else delete newQuery.unique
+
+  if (activeTab.value && activeTab.value !== 'MyCollection') newQuery.tab = activeTab.value
+  else delete newQuery.tab
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
@@ -1342,6 +1347,7 @@ function switchTab(tab) {
   const prevDefault = defaultSortForTab(prevTab)
   const nextDefault = defaultSortForTab(tab)
   if (sortBy.value === prevDefault) sortBy.value = nextDefault
+  updateUrlQueryFromFilters()
 
   if (tab === 'MyCollection') {
     if (!userCtoons.value.length) loadUser()
@@ -1483,7 +1489,9 @@ onMounted(async () => {
     'rarity',
     'series',
     'set',
-    'name'
+    'name',
+    'mintAsc',
+    'mintDesc'
   ]
   if (validSorts.includes(sortParam)) sortBy.value = sortParam
 
@@ -1492,6 +1500,17 @@ onMounted(async () => {
   }
   if (['1', 'true'].includes(gtoonParam?.toLowerCase?.() || gtoonParam)) {
     gtoonsOnly.value = true
+  }
+
+  const uniqueParam = route.query.unique
+  if (['1', 'true'].includes(uniqueParam?.toLowerCase?.() || uniqueParam)) {
+    showUnique.value = true
+  }
+
+  const tabParam = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const validTabs = ['MyCollection', 'MyWishlist', 'MyTradeList', 'AllSets', 'AllSeries']
+  if (validTabs.includes(tabParam) && tabParam !== 'MyCollection') {
+    switchTab(tabParam)
   }
 
   // Normalize URL now to reflect initialized values
