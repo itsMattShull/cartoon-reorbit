@@ -1,117 +1,117 @@
 <template>
-  <div class="ad">
+  <div class="adet">
 
     <!-- ── Header ── -->
-    <div class="ad-header">
-      <button class="ad-back" @click="$emit('back')">‹ Back</button>
-      <span class="ad-title">{{ loading ? 'Auction' : auction.ctoon.name }}</span>
-      <span v-if="!loading && auction.isFeatured" class="ad-feat">★ Featured</span>
+    <div class="adet-header">
+      <button class="adet-back" @click="$emit('back')">‹ Back</button>
+      <span class="adet-title">{{ loading ? 'Auction' : auction.ctoon.name }}</span>
+      <span v-if="!loading && auction.isFeatured" class="adet-feat">★ Featured</span>
     </div>
 
     <!-- ── Loading ── -->
-    <div v-if="loading" class="ad-body ad-loading">
-      <div v-for="n in 6" :key="n" class="ad-skeleton" />
+    <div v-if="loading" class="adet-body adet-loading">
+      <div v-for="n in 6" :key="n" class="adet-skeleton" />
     </div>
 
     <!-- ── Content ── -->
-    <div v-else class="ad-body">
+    <div v-else class="adet-body">
 
       <!-- Top section: image + details + bid actions -->
-      <div class="ad-top">
+      <div class="adet-top">
 
         <!-- cToon image -->
-        <div class="ad-img-wrap">
-          <img class="ad-img" :src="auction.ctoon.assetPath" :alt="auction.ctoon.name" draggable="false" />
-          <div v-if="ended" class="ad-ended-badge">Ended</div>
+        <div class="adet-img-wrap">
+          <img class="adet-img" :src="auction.ctoon.assetPath" :alt="auction.ctoon.name" draggable="false" />
+          <div v-if="ended" class="adet-ended-badge">Ended</div>
         </div>
 
         <!-- Details + actions -->
-        <div class="ad-info">
-          <div class="ad-name">{{ auction.ctoon.name }}</div>
+        <div class="adet-info">
+          <div class="adet-name">{{ auction.ctoon.name }}</div>
 
-          <div class="ad-meta">
-            <span class="ad-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
-            <span v-if="!auction.isHolidayItem && auction.ctoon.mintNumber" class="ad-dim">#{{ auction.ctoon.mintNumber }}</span>
-            <span v-if="auction.ctoon.series" class="ad-dim">{{ auction.ctoon.series }}</span>
+          <div class="adet-meta">
+            <span class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
+            <span v-if="!auction.isHolidayItem && auction.ctoon.mintNumber" class="adet-dim">#{{ auction.ctoon.mintNumber }}</span>
+            <span v-if="auction.ctoon.series" class="adet-dim">{{ auction.ctoon.series }}</span>
           </div>
 
           <!-- Timer / winner -->
-          <div v-if="!ended" class="ad-timer">Ends in {{ formatRemaining(auction.endAt) }}</div>
-          <div v-else class="ad-winner">
+          <div v-if="!ended" class="adet-timer">Ends in {{ formatRemaining(auction.endAt) }}</div>
+          <div v-else class="adet-winner">
             🎉 Winner:
-            <span class="ad-winner-name">{{ displayWinner ?? '—' }}</span>
+            <span class="adet-winner-name">{{ displayWinner ?? '—' }}</span>
           </div>
 
           <!-- Bid info -->
-          <div class="ad-bid-info">
-            <div class="ad-bid-row">
-              <span class="ad-bid-lbl">{{ hasBids ? 'Current Bid' : 'Starting Bid' }}</span>
-              <span class="ad-bid-amt">{{ displayedBid }} pts</span>
+          <div class="adet-bid-info">
+            <div class="adet-bid-row">
+              <span class="adet-bid-lbl">{{ hasBids ? 'Current Bid' : 'Starting Bid' }}</span>
+              <span class="adet-bid-amt">{{ displayedBid }} pts</span>
             </div>
-            <div v-if="hasBids && currentTopBidder" class="ad-bid-row">
-              <span class="ad-bid-lbl">Top Bidder</span>
-              <span class="ad-bid-amt">{{ currentTopBidder }}</span>
+            <div v-if="hasBids && currentTopBidder" class="adet-bid-row">
+              <span class="adet-bid-lbl">Top Bidder</span>
+              <span class="adet-bid-amt">{{ currentTopBidder }}</span>
             </div>
           </div>
 
           <!-- Featured notice -->
-          <div v-if="auction.isFeatured" class="ad-featured-notice">
+          <div v-if="auction.isFeatured" class="adet-featured-notice">
             ⭐ Featured — bidding restricted to users who haven't owned 2 mints in the last 30 days.
           </div>
 
           <!-- ── Place bid ── -->
-          <div v-if="!ended" class="ad-actions">
+          <div v-if="!ended" class="adet-actions">
             <button
-              class="ad-bid-btn"
+              class="adet-bid-btn"
               :disabled="!canBid"
               @click="placeBid"
             >
               {{ hasBids ? `Raise to ${nextBidAmount} pts` : `Bid ${nextBidAmount} pts` }}
             </button>
-            <div v-if="isTopBidder" class="ad-hint">You are the highest bidder.</div>
-            <div v-else-if="!canBid" class="ad-hint warn">Need {{ Math.max(0, nextBidAmount - userPoints) }} more pts (have {{ userPoints }}).</div>
+            <div v-if="isTopBidder" class="adet-hint">You are the highest bidder.</div>
+            <div v-else-if="!canBid" class="adet-hint warn">Need {{ Math.max(0, nextBidAmount - userPoints) }} more pts (have {{ userPoints }}).</div>
           </div>
 
           <!-- ── Auto-bid ── -->
-          <div v-if="!ended" class="ad-autobid">
-            <div class="ad-autobid-label">Max Auto-Bid</div>
-            <div class="ad-autobid-row">
+          <div v-if="!ended" class="adet-autobid">
+            <div class="adet-autobid-label">Max Auto-Bid</div>
+            <div class="adet-autobid-row">
               <input
-                class="ad-autobid-input"
+                class="adet-autobid-input"
                 type="number"
                 v-model.number="autoBidInput"
                 :placeholder="`> ${displayedBid} pts`"
                 min="0"
               />
-              <button class="ad-autobid-set" :disabled="!canSaveAutoBid" @click="saveAutoBid">
+              <button class="adet-autobid-set" :disabled="!canSaveAutoBid" @click="saveAutoBid">
                 {{ myAutoBid ? 'Update' : 'Set' }}
               </button>
-              <button v-if="myAutoBid" class="ad-autobid-dis" @click="disableAutoBid">Off</button>
+              <button v-if="myAutoBid" class="adet-autobid-dis" @click="disableAutoBid">Off</button>
             </div>
-            <div v-if="myAutoBid" class="ad-autobid-current">
+            <div v-if="myAutoBid" class="adet-autobid-current">
               Max: {{ myAutoBid.maxAmount }} pts
-              <span v-if="!myAutoBid.isActive" class="ad-dim"> (inactive)</span>
+              <span v-if="!myAutoBid.isActive" class="adet-dim"> (inactive)</span>
             </div>
           </div>
         </div>
       </div>
 
       <!-- ── Bottom: bid history + recent sales ── -->
-      <div class="ad-bottom">
-        <div class="ad-card">
-          <div class="ad-card-title">Bid History</div>
-          <div v-if="!bids.length" class="ad-empty">No bids yet.</div>
-          <div v-for="(b, i) in bids" :key="i" class="ad-history-row">
-            <span class="ad-history-user">{{ b.user }}</span>
-            <span class="ad-history-amt">{{ b.amount }} pts</span>
+      <div class="adet-bottom">
+        <div class="adet-card">
+          <div class="adet-card-title">Bid History</div>
+          <div v-if="!bids.length" class="adet-empty">No bids yet.</div>
+          <div v-for="(b, i) in bids" :key="i" class="adet-history-row">
+            <span class="adet-history-user">{{ b.user }}</span>
+            <span class="adet-history-amt">{{ b.amount }} pts</span>
           </div>
         </div>
-        <div class="ad-card">
-          <div class="ad-card-title">Recent Sales</div>
-          <div v-if="!recentSales.length" class="ad-empty">No past sales.</div>
-          <div v-for="(s, i) in recentSales" :key="i" class="ad-history-row">
-            <span class="ad-dim">{{ formatDate(s.endedAt) }}</span>
-            <span class="ad-history-amt">{{ s.soldFor }} pts</span>
+        <div class="adet-card">
+          <div class="adet-card-title">Recent Sales</div>
+          <div v-if="!recentSales.length" class="adet-empty">No past sales.</div>
+          <div v-for="(s, i) in recentSales" :key="i" class="adet-history-row">
+            <span class="adet-dim">{{ formatDate(s.endedAt) }}</span>
+            <span class="adet-history-amt">{{ s.soldFor }} pts</span>
           </div>
         </div>
       </div>
@@ -119,7 +119,7 @@
     </div>
 
     <!-- Toast -->
-    <div v-if="toast.message" class="ad-toast" :class="toast.type">{{ toast.message }}</div>
+    <div v-if="toast.message" class="adet-toast" :class="toast.type">{{ toast.message }}</div>
 
     <ScavengerHuntModal v-if="scavenger.isOpen && scavenger.sessionId" />
   </div>
@@ -321,7 +321,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.ad {
+.adet {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -332,7 +332,7 @@ onUnmounted(() => {
 }
 
 /* ── Header ── */
-.ad-header {
+.adet-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -342,7 +342,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.ad-back {
+.adet-back {
   background: none;
   border: 1px solid rgba(255,255,255,0.25);
   border-radius: 4px;
@@ -354,9 +354,9 @@ onUnmounted(() => {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.ad-back:hover { background: rgba(255,255,255,0.1); }
+.adet-back:hover { background: rgba(255,255,255,0.1); }
 
-.ad-title {
+.adet-title {
   font-size: 0.8rem;
   font-weight: bold;
   color: #fff;
@@ -366,7 +366,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
-.ad-feat {
+.adet-feat {
   font-size: 0.62rem;
   font-weight: bold;
   color: #fbbf24;
@@ -374,7 +374,7 @@ onUnmounted(() => {
 }
 
 /* ── Body ── */
-.ad-body {
+.adet-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -387,30 +387,30 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-.ad-loading { gap: 6px; }
-.ad-skeleton {
+.adet-loading { gap: 6px; }
+.adet-skeleton {
   height: 28px;
   border-radius: 4px;
   background: rgba(255,255,255,0.06);
-  animation: ad-pulse 1.2s ease-in-out infinite;
+  animation: adet-pulse 1.2s ease-in-out infinite;
   flex-shrink: 0;
 }
-@keyframes ad-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes adet-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* ── Top section ── */
-.ad-top {
+.adet-top {
   display: flex;
   gap: 10px;
   align-items: flex-start;
 }
 
-.ad-img-wrap {
+.adet-img-wrap {
   position: relative;
   flex-shrink: 0;
   width: 120px;
 }
 
-.ad-img {
+.adet-img {
   width: 120px;
   height: 120px;
   object-fit: contain;
@@ -422,7 +422,7 @@ onUnmounted(() => {
   display: block;
 }
 
-.ad-ended-badge {
+.adet-ended-badge {
   position: absolute;
   bottom: 4px;
   left: 0;
@@ -436,7 +436,7 @@ onUnmounted(() => {
   border-radius: 0 0 4px 4px;
 }
 
-.ad-info {
+.adet-info {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -444,15 +444,15 @@ onUnmounted(() => {
   gap: 5px;
 }
 
-.ad-name {
+.adet-name {
   font-size: 0.85rem;
   font-weight: bold;
   color: #fff;
 }
 
-.ad-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.adet-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
-.ad-rarity {
+.adet-rarity {
   font-size: 0.58rem;
   font-weight: bold;
   padding: 1px 5px;
@@ -468,18 +468,18 @@ onUnmounted(() => {
 .r-code-only    { background: #ea580c; color: #fff; }
 .r-auction-only { background: #eab308; color: #111; }
 
-.ad-dim { font-size: 0.6rem; color: rgba(255,255,255,0.42); }
+.adet-dim { font-size: 0.6rem; color: rgba(255,255,255,0.42); }
 
-.ad-timer { font-size: 0.7rem; font-weight: bold; color: #fca5a5; }
-.ad-winner { font-size: 0.72rem; font-weight: bold; color: var(--OrbitGreen); }
-.ad-winner-name { color: #fff; }
+.adet-timer { font-size: 0.7rem; font-weight: bold; color: #fca5a5; }
+.adet-winner { font-size: 0.72rem; font-weight: bold; color: var(--OrbitGreen); }
+.adet-winner-name { color: #fff; }
 
-.ad-bid-info { display: flex; flex-direction: column; gap: 2px; }
-.ad-bid-row  { display: flex; justify-content: space-between; align-items: center; }
-.ad-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
-.ad-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; }
+.adet-bid-info { display: flex; flex-direction: column; gap: 2px; }
+.adet-bid-row  { display: flex; justify-content: space-between; align-items: center; }
+.adet-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
+.adet-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; }
 
-.ad-featured-notice {
+.adet-featured-notice {
   font-size: 0.6rem;
   color: #fbbf24;
   background: rgba(251,191,36,0.1);
@@ -489,9 +489,9 @@ onUnmounted(() => {
 }
 
 /* ── Bid button ── */
-.ad-actions { display: flex; flex-direction: column; gap: 3px; }
+.adet-actions { display: flex; flex-direction: column; gap: 3px; }
 
-.ad-bid-btn {
+.adet-bid-btn {
   border: none;
   border-radius: 6px;
   background: var(--OrbitLightBlue);
@@ -503,14 +503,14 @@ onUnmounted(() => {
   transition: filter 0.12s;
   align-self: flex-start;
 }
-.ad-bid-btn:not(:disabled):hover { filter: brightness(1.15); }
-.ad-bid-btn:disabled { opacity: 0.4; cursor: default; }
+.adet-bid-btn:not(:disabled):hover { filter: brightness(1.15); }
+.adet-bid-btn:disabled { opacity: 0.4; cursor: default; }
 
-.ad-hint { font-size: 0.6rem; color: rgba(255,255,255,0.45); }
-.ad-hint.warn { color: #fca5a5; }
+.adet-hint { font-size: 0.6rem; color: rgba(255,255,255,0.45); }
+.adet-hint.warn { color: #fca5a5; }
 
 /* ── Auto-bid ── */
-.ad-autobid {
+.adet-autobid {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -520,16 +520,16 @@ onUnmounted(() => {
   border-radius: 6px;
 }
 
-.ad-autobid-label {
+.adet-autobid-label {
   font-size: 0.58rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: rgba(255,255,255,0.4);
 }
 
-.ad-autobid-row { display: flex; gap: 4px; align-items: center; }
+.adet-autobid-row { display: flex; gap: 4px; align-items: center; }
 
-.ad-autobid-input {
+.adet-autobid-input {
   flex: 1;
   min-width: 0;
   background: rgba(0,0,0,0.3);
@@ -540,9 +540,9 @@ onUnmounted(() => {
   padding: 3px 6px;
   outline: none;
 }
-.ad-autobid-input:focus { border-color: var(--OrbitLightBlue); }
+.adet-autobid-input:focus { border-color: var(--OrbitLightBlue); }
 
-.ad-autobid-set {
+.adet-autobid-set {
   border: none;
   border-radius: 4px;
   background: var(--OrbitGreen);
@@ -553,10 +553,10 @@ onUnmounted(() => {
   cursor: pointer;
   white-space: nowrap;
 }
-.ad-autobid-set:disabled { opacity: 0.4; cursor: default; }
-.ad-autobid-set:not(:disabled):hover { filter: brightness(1.1); }
+.adet-autobid-set:disabled { opacity: 0.4; cursor: default; }
+.adet-autobid-set:not(:disabled):hover { filter: brightness(1.1); }
 
-.ad-autobid-dis {
+.adet-autobid-dis {
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 4px;
   background: rgba(255,255,255,0.07);
@@ -565,18 +565,18 @@ onUnmounted(() => {
   padding: 3px 7px;
   cursor: pointer;
 }
-.ad-autobid-dis:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.adet-autobid-dis:hover { background: rgba(255,255,255,0.14); color: #fff; }
 
-.ad-autobid-current { font-size: 0.62rem; color: rgba(255,255,255,0.55); }
+.adet-autobid-current { font-size: 0.62rem; color: rgba(255,255,255,0.55); }
 
 /* ── Bottom cards ── */
-.ad-bottom {
+.adet-bottom {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.ad-card {
+.adet-card {
   background: rgba(0,0,0,0.2);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 6px;
@@ -589,7 +589,7 @@ onUnmounted(() => {
   scrollbar-width: thin;
 }
 
-.ad-card-title {
+.adet-card-title {
   font-size: 0.62rem;
   font-weight: bold;
   text-transform: uppercase;
@@ -599,24 +599,24 @@ onUnmounted(() => {
   margin-bottom: 2px;
 }
 
-.ad-history-row {
+.adet-history-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 0.65rem;
 }
 
-.ad-history-user { color: rgba(255,255,255,0.8); }
-.ad-history-amt  { font-weight: bold; color: #fff; }
+.adet-history-user { color: rgba(255,255,255,0.8); }
+.adet-history-amt  { font-weight: bold; color: #fff; }
 
-.ad-empty {
+.adet-empty {
   font-size: 0.65rem;
   color: rgba(255,255,255,0.35);
   font-style: italic;
 }
 
 /* ── Toast ── */
-.ad-toast {
+.adet-toast {
   position: absolute;
   bottom: 12px;
   left: 50%;
@@ -629,6 +629,6 @@ onUnmounted(() => {
   pointer-events: none;
   z-index: 10;
 }
-.ad-toast.success { background: #16a34a; color: #fff; }
-.ad-toast.error   { background: #dc2626; color: #fff; }
+.adet-toast.success { background: #16a34a; color: #fff; }
+.adet-toast.error   { background: #dc2626; color: #fff; }
 </style>
