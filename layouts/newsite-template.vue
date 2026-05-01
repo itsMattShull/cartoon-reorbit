@@ -248,7 +248,7 @@ html.newsite-active body {
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
         <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><slot name="sidebar-top" /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle" /></div>
+        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle"><MiddleSidebarImages /></slot></div>
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
       </template>
     </div>

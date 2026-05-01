@@ -233,6 +233,53 @@
           </div>
         </div>
 
+        <!-- Middle Sidebar -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Middle Sidebar</h2>
+          <p class="text-sm text-gray-500">Up to 3 images displayed in the middle sidebar area. Each can link to a page or custom URL.</p>
+          <div class="space-y-4">
+            <div v-for="n in 3" :key="n" class="border rounded p-3 space-y-2">
+              <h3 class="font-medium text-sm">Image {{ n }}</h3>
+              <div class="flex items-center gap-4">
+                <div class="w-32 h-20 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+                  <img v-if="previewUrls['middleSidebar' + n] || middleSidebarImages[n].path"
+                    :src="previewUrls['middleSidebar' + n] || middleSidebarImages[n].path"
+                    :alt="'Middle Sidebar Image ' + n"
+                    class="max-h-full max-w-full object-contain" />
+                  <span v-else class="text-gray-400 text-xs">None</span>
+                </div>
+                <div class="space-y-2 flex-1 min-w-0">
+                  <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                    @change="onMiddleSidebarFile(n, $event)" class="block w-full text-xs" />
+                  <p class="text-xs text-gray-500">Max width of 757px.</p>
+                  <div v-if="middleSidebarFiles[n]" class="text-xs text-gray-600 truncate">{{ middleSidebarFiles[n].name }}</div>
+                  <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                          v-if="middleSidebarImages[n].path" @click="clearMiddleSidebar(n)">Clear</button>
+                  <div class="space-y-1">
+                    <label class="text-xs text-gray-600 font-medium">Link to</label>
+                    <select v-model="middleSidebarImages[n].linkPreset" @change="onMiddleSidebarPresetChange(n)" class="block w-full text-sm border rounded p-1.5">
+                      <option value="">— None —</option>
+                      <option value="my-cworld">My cWorld</option>
+                      <option value="cmart">cMart</option>
+                      <option value="games">Games</option>
+                      <option value="win-wheel">Win Wheel</option>
+                      <option value="winball">Winball</option>
+                      <option value="lottery">Lottery</option>
+                      <option value="auctions">Auctions</option>
+                      <option value="gtoons-clash">gToons Clash</option>
+                      <option value="custom">Custom URL…</option>
+                    </select>
+                    <input v-if="middleSidebarImages[n].linkPreset === 'custom'"
+                      type="url" v-model="middleSidebarImages[n].link"
+                      placeholder="https://example.com"
+                      class="block w-full text-sm border rounded p-1.5 mt-1" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-2">
           <button class="btn-primary" :disabled="saving" @click="saveSidebar">
             <span v-if="!saving">Save Sidebar</span><span v-else>Saving…</span>
@@ -291,7 +338,7 @@ const activeTab = ref('Homepage')
 
 const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
 const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null })
+const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null })
 
 const showcasePath = ref('')
 const showcaseFile = ref(null)
@@ -309,6 +356,14 @@ const homeImageFiles = reactive({ 1: null, 2: null, 3: null, 4: null })
 // Bottom spotlight link state
 const bottomSpotlightLink = ref('')
 const bottomSpotlightLinkPreset = ref('')
+
+// Middle sidebar images state (1-indexed, index 0 unused)
+const middleSidebarImages = reactive({
+  1: { path: '', link: '', linkPreset: '' },
+  2: { path: '', link: '', linkPreset: '' },
+  3: { path: '', link: '', linkPreset: '' }
+})
+const middleSidebarFiles = reactive({ 1: null, 2: null, 3: null })
 
 const saving = ref(false)
 const toast  = ref(null)
@@ -379,6 +434,30 @@ function onHomeImageFile(n, e) {
   if (f) previewUrls.value[key] = URL.createObjectURL(f)
 }
 
+function onMiddleSidebarFile(n, e) {
+  const f = e.target.files?.[0] || null
+  const key = `middleSidebar${n}`
+  try { if (previewUrls.value[key]) { URL.revokeObjectURL(previewUrls.value[key]); previewUrls.value[key] = null } } catch (e) {}
+  middleSidebarFiles[n] = f
+  if (f) previewUrls.value[key] = URL.createObjectURL(f)
+}
+
+function clearMiddleSidebar(n) {
+  middleSidebarImages[n].path = ''
+  const key = `middleSidebar${n}`
+  if (previewUrls.value[key]) { try { URL.revokeObjectURL(previewUrls.value[key]) } catch (e) {} ; previewUrls.value[key] = null }
+  middleSidebarFiles[n] = null
+}
+
+function onMiddleSidebarPresetChange(n) {
+  const preset = middleSidebarImages[n].linkPreset
+  if (preset === '') {
+    middleSidebarImages[n].link = ''
+  } else if (preset !== 'custom') {
+    middleSidebarImages[n].link = PAGE_LINKS[preset] ?? ''
+  }
+}
+
 onBeforeUnmount(() => {
   for (const k of Object.keys(previewUrls.value)) {
     const u = previewUrls.value[k]
@@ -405,6 +484,13 @@ async function loadConfig() {
   const rawBottomLink = cfg.bottomRightLink || ''
   bottomSpotlightLink.value = rawBottomLink
   bottomSpotlightLinkPreset.value = detectPreset(rawBottomLink)
+
+  for (let n = 1; n <= 3; n++) {
+    middleSidebarImages[n].path = cfg[`middleSidebar${n}ImagePath`] || ''
+    const rawLink = cfg[`middleSidebar${n}Link`] || ''
+    middleSidebarImages[n].link = rawLink
+    middleSidebarImages[n].linkPreset = detectPreset(rawLink)
+  }
 }
 
 
@@ -484,11 +570,23 @@ async function saveSidebar() {
     fd.append('bottomRightLink', bottomSpotlightLink.value || '')
     if (files.value.bottomRight) fd.append('bottomRight', files.value.bottomRight)
 
+    for (let n = 1; n <= 3; n++) {
+      fd.append(`middleSidebar${n}Path`, middleSidebarImages[n].path || '')
+      fd.append(`middleSidebar${n}Link`, middleSidebarImages[n].link || '')
+      if (middleSidebarFiles[n]) fd.append(`middleSidebar${n}`, middleSidebarFiles[n])
+    }
+
     const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
     paths.value.bottomRight = res.bottomRightImagePath || ''
     bottomSpotlightLink.value = res.bottomRightLink || ''
     bottomSpotlightLinkPreset.value = detectPreset(bottomSpotlightLink.value)
     files.value.bottomRight = null
+
+    for (let n = 1; n <= 3; n++) {
+      middleSidebarImages[n].path = res[`middleSidebar${n}ImagePath`] || ''
+      middleSidebarFiles[n] = null
+    }
+
     toast.value = { type: 'ok', msg: 'Sidebar saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
