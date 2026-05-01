@@ -8,7 +8,7 @@
         alt="User Avatar"
         class="user-info-avatar"
       />
-      <div class="user-info-details" ref="detailsEl">
+      <div class="user-info-details">
         <template v-if="!ready">
           <div class="skel skel-username" />
           <div class="skel skel-stat" />
@@ -16,7 +16,7 @@
           <div class="skel skel-stat" />
         </template>
         <template v-else>
-          <span class="user-info-username" ref="usernameEl">{{ user.username }}</span>
+          <NuxtLink :to="`/newsite/czone/${user.username}`" class="user-info-username">{{ user.username }}</NuxtLink>
           <span class="user-info-stat">{{ user.points }} Points</span>
           <span class="user-info-stat">{{ collectionSummary.uniqueCount }} Unique cToons</span>
           <span class="user-info-stat">{{ collectionSummary.totalCount }} Total cToons</span>
@@ -41,24 +41,8 @@ import { DateTime } from 'luxon'
 const { user, fetchSelf } = useAuth()
 const collectionSummary = ref({ totalCount: 0, uniqueCount: 0 })
 const resetCountdown = ref('--:--:--')
-const detailsEl = ref(null)
-const usernameEl = ref(null)
 const ready = ref(false)
 let countdownInterval = null
-let resizeObserver = null
-
-function fitUsername() {
-  const el = usernameEl.value
-  const container = detailsEl.value
-  if (!el || !container) return
-  const maxWidth = container.offsetWidth
-  let size = 20
-  el.style.fontSize = size + 'px'
-  while (el.scrollWidth > maxWidth && size > 7) {
-    size -= 0.5
-    el.style.fontSize = size + 'px'
-  }
-}
 
 async function fetchCollectionSummary() {
   try {
@@ -91,17 +75,10 @@ onMounted(async () => {
   countdownInterval = setInterval(updateCountdown, 1000)
   await fetchCollectionSummary()
   ready.value = true
-  await nextTick()
-  fitUsername()
-  if (detailsEl.value) {
-    resizeObserver = new ResizeObserver(() => fitUsername())
-    resizeObserver.observe(detailsEl.value)
-  }
 })
 
 onUnmounted(() => {
   if (countdownInterval) clearInterval(countdownInterval)
-  if (resizeObserver) resizeObserver.disconnect()
 })
 </script>
 
@@ -145,15 +122,25 @@ onUnmounted(() => {
 .user-info-username {
   font-weight: bold;
   color: white;
-  font-size: 20px;
+  font-size: 1.15rem;
   line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.user-info-username:hover {
+  text-decoration: underline;
 }
 
 .user-info-stat {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   color: #cce0ff;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-info-divider {
@@ -163,7 +150,7 @@ onUnmounted(() => {
 }
 
 .user-info-reset {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   color: #cce0ff;
   line-height: 1.2;
   width: 100%;
