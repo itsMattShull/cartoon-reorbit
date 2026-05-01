@@ -90,7 +90,11 @@ export default defineEventHandler(async (event) => {
     bottomLeft:  await saveIfPresent('bottomLeft'),
     topRight:    await saveIfPresent('topRight'),
     bottomRight: await saveIfPresent('bottomRight'),
-    showcase:    await saveIfPresent('showcase')
+    showcase:    await saveIfPresent('showcase'),
+    homeImage1:  await saveIfPresent('homeImage1'),
+    homeImage2:  await saveIfPresent('homeImage2'),
+    homeImage3:  await saveIfPresent('homeImage3'),
+    homeImage4:  await saveIfPresent('homeImage4')
   }
 
   // helper: update one slot without touching others unless provided
@@ -112,12 +116,25 @@ export default defineEventHandler(async (event) => {
     return currentValue
   }
 
+  const resolveLink = (textKey, currentValue) => {
+    if (has(textKey)) return norm(text[textKey]) || null
+    return currentValue
+  }
+
   const next = {
     topLeftImagePath:     resolveSlot('topLeftImagePath',     'topLeft',     'topLeftPath',     current.topLeftImagePath),
     bottomLeftImagePath:  resolveSlot('bottomLeftImagePath',  'bottomLeft',  'bottomLeftPath',  current.bottomLeftImagePath),
     topRightImagePath:    resolveSlot('topRightImagePath',    'topRight',    'topRightPath',    current.topRightImagePath),
     bottomRightImagePath: resolveSlot('bottomRightImagePath', 'bottomRight', 'bottomRightPath', current.bottomRightImagePath),
-    showcaseImagePath:    resolveSlot('showcaseImagePath',    'showcase',    'showcasePath',    current.showcaseImagePath)
+    showcaseImagePath:    resolveSlot('showcaseImagePath',    'showcase',    'showcasePath',    current.showcaseImagePath),
+    homeImage1Path:       resolveSlot('homeImage1Path',       'homeImage1',  'homeImage1Path',  current.homeImage1Path),
+    homeImage1Link:       resolveLink('homeImage1Link', current.homeImage1Link),
+    homeImage2Path:       resolveSlot('homeImage2Path',       'homeImage2',  'homeImage2Path',  current.homeImage2Path),
+    homeImage2Link:       resolveLink('homeImage2Link', current.homeImage2Link),
+    homeImage3Path:       resolveSlot('homeImage3Path',       'homeImage3',  'homeImage3Path',  current.homeImage3Path),
+    homeImage3Link:       resolveLink('homeImage3Link', current.homeImage3Link),
+    homeImage4Path:       resolveSlot('homeImage4Path',       'homeImage4',  'homeImage4Path',  current.homeImage4Path),
+    homeImage4Link:       resolveLink('homeImage4Link', current.homeImage4Link)
   }
 
   const cfg = await db.homepageConfig.upsert({
@@ -130,11 +147,10 @@ export default defineEventHandler(async (event) => {
   try {
     const area = 'HomepageConfig'
     const fields = [
-      'topLeftImagePath',
-      'bottomLeftImagePath',
-      'topRightImagePath',
-      'bottomRightImagePath',
-      'showcaseImagePath'
+      'topLeftImagePath', 'bottomLeftImagePath', 'topRightImagePath', 'bottomRightImagePath',
+      'showcaseImagePath',
+      'homeImage1Path', 'homeImage1Link', 'homeImage2Path', 'homeImage2Link',
+      'homeImage3Path', 'homeImage3Link', 'homeImage4Path', 'homeImage4Link'
     ]
     for (const key of fields) {
       const prev = current[key] ?? null
@@ -150,6 +166,14 @@ export default defineEventHandler(async (event) => {
     bottomLeftImagePath:  cfg.bottomLeftImagePath,
     topRightImagePath:    cfg.topRightImagePath,
     bottomRightImagePath: cfg.bottomRightImagePath,
-    showcaseImagePath:    cfg.showcaseImagePath
+    showcaseImagePath:    cfg.showcaseImagePath,
+    homeImage1Path:       cfg.homeImage1Path,
+    homeImage1Link:       cfg.homeImage1Link,
+    homeImage2Path:       cfg.homeImage2Path,
+    homeImage2Link:       cfg.homeImage2Link,
+    homeImage3Path:       cfg.homeImage3Path,
+    homeImage3Link:       cfg.homeImage3Link,
+    homeImage4Path:       cfg.homeImage4Path,
+    homeImage4Link:       cfg.homeImage4Link
   }
 })
