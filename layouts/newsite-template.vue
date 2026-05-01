@@ -597,15 +597,20 @@ const scaleStyle = computed(() => {
     flex-shrink: 1;
     min-width: unset;
     min-height: unset;
+    max-width: 100%;
   }
 
   .site-container {
+    width: 100%;
     overflow: visible;
+    box-sizing: border-box;
   }
 
   .main-content {
     overflow-x: auto;
     overflow-y: auto;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 
