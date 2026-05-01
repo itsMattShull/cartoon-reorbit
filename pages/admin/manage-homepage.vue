@@ -239,6 +239,7 @@
         <div class="border rounded p-4 space-y-3">
           <h2 class="font-semibold">Middle Sidebar</h2>
           <p class="text-sm text-gray-500">Up to 3 images displayed in the middle sidebar area. Each can link to a page or custom URL.</p>
+          <p class="text-sm text-gray-500">Images must be 757px wide. Total height across all uploaded images must equal 1668px. Split evenly: 1 image = 1668px tall, 2 images = 834px each, 3 images = 556px each. You don't have to do evenly split heights, they just need to total up to 1668px.</p>
           <div class="space-y-4">
             <div v-for="n in 3" :key="n" class="border rounded p-3 space-y-2">
               <h3 class="font-medium text-sm">Image {{ n }}</h3>
