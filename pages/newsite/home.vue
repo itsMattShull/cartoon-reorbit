@@ -90,6 +90,22 @@ html.newsite-home body {
   box-sizing: border-box;
 }
 
+@media (max-width: 768px) {
+  .home-images-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, auto);
+    height: auto;
+  }
+
+  .home-image-cell {
+    aspect-ratio: 374 / 292;
+  }
+
+  .home-image {
+    height: auto;
+  }
+}
+
 .home-image-cell {
   display: flex;
   align-items: center;

@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
     bottomLeftImagePath:  null,
     topRightImagePath:    null,
     bottomRightImagePath: null,
+    bottomRightLink:      null,
     showcaseImagePath:    null
   }
 
@@ -126,6 +127,7 @@ export default defineEventHandler(async (event) => {
     bottomLeftImagePath:  resolveSlot('bottomLeftImagePath',  'bottomLeft',  'bottomLeftPath',  current.bottomLeftImagePath),
     topRightImagePath:    resolveSlot('topRightImagePath',    'topRight',    'topRightPath',    current.topRightImagePath),
     bottomRightImagePath: resolveSlot('bottomRightImagePath', 'bottomRight', 'bottomRightPath', current.bottomRightImagePath),
+    bottomRightLink:      resolveLink('bottomRightLink', current.bottomRightLink),
     showcaseImagePath:    resolveSlot('showcaseImagePath',    'showcase',    'showcasePath',    current.showcaseImagePath),
     homeImage1Path:       resolveSlot('homeImage1Path',       'homeImage1',  'homeImage1Path',  current.homeImage1Path),
     homeImage1Link:       resolveLink('homeImage1Link', current.homeImage1Link),
@@ -148,7 +150,7 @@ export default defineEventHandler(async (event) => {
     const area = 'HomepageConfig'
     const fields = [
       'topLeftImagePath', 'bottomLeftImagePath', 'topRightImagePath', 'bottomRightImagePath',
-      'showcaseImagePath',
+      'bottomRightLink', 'showcaseImagePath',
       'homeImage1Path', 'homeImage1Link', 'homeImage2Path', 'homeImage2Link',
       'homeImage3Path', 'homeImage3Link', 'homeImage4Path', 'homeImage4Link'
     ]
@@ -166,6 +168,7 @@ export default defineEventHandler(async (event) => {
     bottomLeftImagePath:  cfg.bottomLeftImagePath,
     topRightImagePath:    cfg.topRightImagePath,
     bottomRightImagePath: cfg.bottomRightImagePath,
+    bottomRightLink:      cfg.bottomRightLink,
     showcaseImagePath:    cfg.showcaseImagePath,
     homeImage1Path:       cfg.homeImage1Path,
     homeImage1Link:       cfg.homeImage1Link,

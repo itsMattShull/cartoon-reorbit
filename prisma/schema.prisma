@@ -1545,6 +1545,7 @@ model HomepageConfig {
   bottomLeftImagePath  String?
   topRightImagePath    String?
   bottomRightImagePath String?
+  bottomRightLink      String?
   showcaseImagePath    String?
   homeImage1Path       String?
   homeImage1Link       String?
