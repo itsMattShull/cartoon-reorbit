@@ -48,7 +48,7 @@
     </Teleport>
 
     <!-- ── Header bar ────────────────────────────────────────────── -->
-    <div class="cmart-header">Cartoon Reorbit cMart</div>
+    <div class="cmart-header">Cartoon ReOrbit cMart</div>
 
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
