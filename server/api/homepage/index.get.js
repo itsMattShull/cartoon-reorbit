@@ -8,6 +8,7 @@ export default defineEventHandler(async () => {
     bottomLeftImagePath:  cfg?.bottomLeftImagePath  ?? null,
     topRightImagePath:    cfg?.topRightImagePath    ?? null,
     bottomRightImagePath: cfg?.bottomRightImagePath ?? null,
+    bottomRightLink:      cfg?.bottomRightLink      ?? null,
     showcaseImagePath:    cfg?.showcaseImagePath    ?? null,
     homeImage1Path:       cfg?.homeImage1Path       ?? null,
     homeImage1Link:       cfg?.homeImage1Link       ?? null,

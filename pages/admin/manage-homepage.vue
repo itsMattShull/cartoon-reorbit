@@ -17,6 +17,10 @@
             @click="activeTab='Home'">Home</button>
           <button
             class="px-3 py-2 border-b-2"
+            :class="activeTab==='Sidebar' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Sidebar'">Sidebar</button>
+          <button
+            class="px-3 py-2 border-b-2"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
 
@@ -32,6 +36,7 @@
           <!-- Top Left -->
           <div class="space-y-3">
             <h2 class="font-semibold">Top Left</h2>
+            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.topLeft && files.topLeft.type && files.topLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topLeft || '')"
                 :src="previewUrls.topLeft || paths.topLeft" :poster="(previewUrls.topLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topLeft)) ? previewUrls.topLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topLeft||'') ? paths.topLeft : '')"
@@ -49,6 +54,7 @@
           <!-- Top Right -->
           <div class="space-y-3">
             <h2 class="font-semibold">Top Right</h2>
+            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.topRight && files.topRight.type && files.topRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topRight || '')"
                 :src="previewUrls.topRight || paths.topRight" :poster="(previewUrls.topRight && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topRight)) ? previewUrls.topRight : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topRight||'') ? paths.topRight : '')"
@@ -66,6 +72,7 @@
           <!-- Bottom Left -->
           <div class="space-y-3">
             <h2 class="font-semibold">Bottom Left</h2>
+            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.bottomLeft && files.bottomLeft.type && files.bottomLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomLeft || '')"
                 :src="previewUrls.bottomLeft || paths.bottomLeft" :poster="(previewUrls.bottomLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.bottomLeft)) ? previewUrls.bottomLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.bottomLeft||'') ? paths.bottomLeft : '')"
@@ -80,21 +87,10 @@
                     v-if="paths.bottomLeft" @click="clearPath('bottomLeft')">Clear</button>
           </div>
 
-          <!-- Bottom Right -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Bottom Right</h2>
-            <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-              <video v-if="(files.bottomRight && files.bottomRight.type && files.bottomRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomRight || '')"
-                :src="previewUrls.bottomRight || paths.bottomRight" :poster="(previewUrls.bottomRight && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.bottomRight)) ? previewUrls.bottomRight : (/\.(png|jpe?g|gif|svg)$/i.test(paths.bottomRight||'') ? paths.bottomRight : '')"
-                controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
-              <img v-else-if="previewUrls.bottomRight || paths.bottomRight" :src="previewUrls.bottomRight || paths.bottomRight" alt="Bottom Right" class="max-h-full max-w-full" />
-              <span v-else class="text-gray-400 text-sm">No image</span>
-            </div>
-                 <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('bottomRight', $event)" class="block w-full text-sm" />
-            <div v-if="files.bottomRight" class="text-xs text-gray-600 truncate">Selected: {{ files.bottomRight.name }}</div>
-            <button type="button" class="px-3 py-1 text-sm rounded border"
-                    v-if="paths.bottomRight" @click="clearPath('bottomRight')">Clear</button>
+          <!-- Bottom Right removed — now managed in the Sidebar tab -->
+          <div class="space-y-3 border rounded p-4 bg-gray-50">
+            <h2 class="font-semibold text-gray-400">Bottom Right</h2>
+            <p class="text-xs text-gray-400">The Bottom Right image has been moved to the <button type="button" class="underline text-indigo-500" @click="activeTab='Sidebar'">Sidebar tab</button> as "Bottom Spotlight".</p>
           </div>
         </div>
 
@@ -152,6 +148,7 @@
                 <div class="space-y-2 flex-1 min-w-0">
                   <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
                     @change="onHomeImageFile(n, $event)" class="block w-full text-xs" />
+                  <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
                   <div v-if="homeImageFiles[n]" class="text-xs text-gray-600 truncate">{{ homeImageFiles[n].name }}</div>
                   <div class="space-y-1">
                     <label class="text-xs text-gray-600 font-medium">Link to</label>
@@ -181,6 +178,65 @@
               <span v-if="!saving">Save Home Images</span><span v-else>Saving…</span>
             </button>
           </div>
+        </div>
+      </section>
+
+      <!-- Sidebar tab -->
+      <section v-if="activeTab==='Sidebar'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure the bottom spotlight image shown in the site sidebar.
+        </p>
+
+        <!-- Bottom Spotlight -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Bottom Spotlight</h2>
+          <p class="text-xs text-gray-500">Size should be 757px by 254px.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-20 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <video v-if="(files.bottomRight && files.bottomRight.type && files.bottomRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomRight || '')"
+                :src="previewUrls.bottomRight || paths.bottomRight"
+                controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
+              <img v-else-if="previewUrls.bottomRight || paths.bottomRight" :src="previewUrls.bottomRight || paths.bottomRight" alt="Bottom Spotlight" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
+                @change="onFile('bottomRight', $event)" class="block w-full text-sm" />
+              <div v-if="files.bottomRight" class="text-xs text-gray-600 truncate">Selected: {{ files.bottomRight.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="paths.bottomRight" @click="clearPath('bottomRight')">Clear</button>
+            </div>
+          </div>
+
+          <!-- Link options -->
+          <div class="space-y-1 mt-2">
+            <label class="text-sm font-medium text-gray-700">Link to</label>
+            <select v-model="bottomSpotlightLinkPreset" @change="onBottomSpotlightPresetChange" class="block w-full text-sm border rounded p-1.5">
+              <option value="">— None —</option>
+              <option value="my-cworld">My cWorld</option>
+              <option value="cmart">cMart</option>
+              <option value="games">Games</option>
+              <option value="win-wheel">Win Wheel</option>
+              <option value="winball">Winball</option>
+              <option value="lottery">Lottery</option>
+              <option value="auctions">Auctions</option>
+              <option value="gtoons-clash">gToons Clash</option>
+              <option value="custom">Custom URL…</option>
+            </select>
+            <input v-if="bottomSpotlightLinkPreset === 'custom'"
+              type="url" v-model="bottomSpotlightLink"
+              placeholder="https://example.com"
+              class="block w-full text-sm border rounded p-1.5 mt-1" />
+            <p v-if="bottomSpotlightLinkPreset === 'winball'" class="text-xs text-indigo-600 mt-1">
+              The Winball prize cToon overlay will be shown on the frontend.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <button class="btn-primary" :disabled="saving" @click="saveSidebar">
+            <span v-if="!saving">Save Sidebar</span><span v-else>Saving…</span>
+          </button>
         </div>
       </section>
 
@@ -250,6 +306,10 @@ const homeImages = reactive({
 })
 const homeImageFiles = reactive({ 1: null, 2: null, 3: null, 4: null })
 
+// Bottom spotlight link state
+const bottomSpotlightLink = ref('')
+const bottomSpotlightLinkPreset = ref('')
+
 const saving = ref(false)
 const toast  = ref(null)
 
@@ -273,6 +333,16 @@ function onLinkPresetChange(n) {
   } else {
     homeImages[n].link = PAGE_LINKS[preset] ?? ''
   }
+}
+
+function onBottomSpotlightPresetChange() {
+  const preset = bottomSpotlightLinkPreset.value
+  if (preset === '') {
+    bottomSpotlightLink.value = ''
+  } else if (preset !== 'custom') {
+    bottomSpotlightLink.value = PAGE_LINKS[preset] ?? ''
+  }
+  // 'custom' keeps whatever is in bottomSpotlightLink
 }
 
 function onFile(key, e) {
@@ -331,6 +401,10 @@ async function loadConfig() {
     homeImages[n].link = rawLink
     homeImages[n].linkPreset = detectPreset(rawLink)
   }
+
+  const rawBottomLink = cfg.bottomRightLink || ''
+  bottomSpotlightLink.value = rawBottomLink
+  bottomSpotlightLinkPreset.value = detectPreset(rawBottomLink)
 }
 
 
@@ -395,6 +469,27 @@ async function saveHomeImages() {
       homeImageFiles[n] = null
     }
     toast.value = { type: 'ok', msg: 'Home images saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveSidebar() {
+  saving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('bottomRightPath', paths.value.bottomRight || '')
+    fd.append('bottomRightLink', bottomSpotlightLink.value || '')
+    if (files.value.bottomRight) fd.append('bottomRight', files.value.bottomRight)
+
+    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
+    paths.value.bottomRight = res.bottomRightImagePath || ''
+    bottomSpotlightLink.value = res.bottomRightLink || ''
+    bottomSpotlightLinkPreset.value = detectPreset(bottomSpotlightLink.value)
+    files.value.bottomRight = null
+    toast.value = { type: 'ok', msg: 'Sidebar saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {

@@ -1,13 +1,17 @@
 <template>
-  <NuxtLink to="/games/winball" class="winball-ad">
-    <img :src="bgSrc" alt="Winball promo" class="winball-ad-bg" />
+  <component
+    :is="linkTag"
+    v-bind="linkProps"
+    class="winball-ad"
+  >
+    <img :src="bgSrc" alt="Bottom spotlight" class="winball-ad-bg" />
     <img
-      v-if="prizeUrl"
+      v-if="showPrize && prizeUrl"
       :src="prizeUrl"
       alt="Current Winball prize"
       class="winball-ad-prize"
     />
-  </NuxtLink>
+  </component>
 </template>
 
 <script setup>
@@ -16,6 +20,32 @@ const { data: prizeData } = await useAsyncData('winball-prize', () => $fetch('/a
 
 const bgSrc = computed(() => hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png')
 const prizeUrl = computed(() => prizeData.value?.prize?.ctoon?.imageUrl || '')
+
+const configuredLink = computed(() => hp.value?.bottomRightLink || null)
+
+const isWinballLink = computed(() => {
+  const link = configuredLink.value
+  if (!link) return false
+  return /winball/i.test(link)
+})
+
+const showPrize = computed(() => isWinballLink.value)
+
+const linkTag = computed(() => {
+  if (!configuredLink.value) return 'div'
+  return 'a'
+})
+
+const linkProps = computed(() => {
+  if (!configuredLink.value) return {}
+  const link = configuredLink.value
+  let target = '_self'
+  try {
+    const url = new URL(link, window.location.href)
+    target = url.origin === window.location.origin ? '_self' : '_blank'
+  } catch {}
+  return { href: link, target }
+})
 </script>
 
 <style scoped>
@@ -26,6 +56,7 @@ const prizeUrl = computed(() => prizeData.value?.prize?.ctoon?.imageUrl || '')
   height: 100%;
   overflow: hidden;
   border-radius: inherit;
+  text-decoration: none;
 }
 
 .winball-ad-bg {
