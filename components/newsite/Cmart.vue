@@ -435,7 +435,7 @@ async function buyPack(pack) {
     setTimeout(() => {
       showGlow.value  = false
       glowStage.value = 'hidden'
-    }, 5000)
+    }, 6000)
 
     await fetchSelf({ force: true })
     await loadOwnedCtoonIds()
@@ -718,11 +718,11 @@ async function closeOverlay() {
 
 @keyframes expandGlow {
   from { width: 1vw; height: 1vh; opacity: 1; }
-  to   { width: 300vw; height: 300vh; opacity: 0.9; }
+  to   { width: 300vw; height: 300vh; opacity: 1; }
 }
 
 @keyframes fadeGlow {
-  from { opacity: 0.9; }
+  from { opacity: 1; }
   to   { opacity: 0; }
 }
 
