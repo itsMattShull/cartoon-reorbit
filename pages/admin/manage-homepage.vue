@@ -150,6 +150,8 @@
                     @change="onHomeImageFile(n, $event)" class="block w-full text-xs" />
                   <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
                   <div v-if="homeImageFiles[n]" class="text-xs text-gray-600 truncate">{{ homeImageFiles[n].name }}</div>
+                  <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                          v-if="homeImages[n].path" @click="clearHomeImage(n)">Clear</button>
                   <div class="space-y-1">
                     <label class="text-xs text-gray-600 font-medium">Link to</label>
                     <select v-model="homeImages[n].linkPreset" @change="onLinkPresetChange(n)" class="block w-full text-sm border rounded p-1.5">
@@ -237,6 +239,7 @@
         <div class="border rounded p-4 space-y-3">
           <h2 class="font-semibold">Middle Sidebar</h2>
           <p class="text-sm text-gray-500">Up to 3 images displayed in the middle sidebar area. Each can link to a page or custom URL.</p>
+          <p class="text-sm text-gray-500">Images must be 757px wide. Total height across all uploaded images must equal 1668px. Split evenly: 1 image = 1668px tall, 2 images = 834px each, 3 images = 556px each. You don't have to do evenly split heights, they just need to total up to 1668px.</p>
           <div class="space-y-4">
             <div v-for="n in 3" :key="n" class="border rounded p-3 space-y-2">
               <h3 class="font-medium text-sm">Image {{ n }}</h3>
@@ -424,6 +427,13 @@ function clearShowcase() {
   showcasePath.value = ''
   if (previewUrls.value.showcase) { try { URL.revokeObjectURL(previewUrls.value.showcase) } catch (e) {} ; previewUrls.value.showcase = null }
   showcaseFile.value = null
+}
+
+function clearHomeImage(n) {
+  homeImages[n].path = ''
+  const key = `homeImage${n}`
+  if (previewUrls.value[key]) { try { URL.revokeObjectURL(previewUrls.value[key]) } catch (e) {} ; previewUrls.value[key] = null }
+  homeImageFiles[n] = null
 }
 
 function onHomeImageFile(n, e) {
