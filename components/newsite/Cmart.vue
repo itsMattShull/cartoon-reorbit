@@ -358,8 +358,6 @@ async function fetchPacks() {
 }
 
 onMounted(async () => {
-  filter.value.sortField = 'releaseDate'
-  filter.value.sortAsc   = false
   try {
     allCtoons.value = await $fetch('/api/cmart')
     scheduleNextRefresh()
