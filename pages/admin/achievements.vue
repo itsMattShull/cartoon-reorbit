@@ -87,6 +87,11 @@
                 <input v-model.number="form.criteria.cumulativeActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
                 <p class="text-xs text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
               </div>
+              <div>
+                <label class="block text-sm">TKO Wins ≥</label>
+                <input v-model.number="form.criteria.tkoWinsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">Counted round wins in the TKO game.</p>
+              </div>
               <div class="md:col-span-3">
                 <label class="block text-sm">User created before</label>
                 <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
@@ -289,6 +294,7 @@ const emptyForm = () => ({
     tradesAcceptedGte: null,
     ctoonSuggestionsAcceptedGte: null,
     cumulativeActiveDaysGte: null,
+    tkoWinsGte: null,
     setsRequired: [],
     ctoonsRequired: [],
     userCreatedBefore: null
@@ -441,6 +447,7 @@ function startEdit(a) {
       tradesAcceptedGte: a.tradesAcceptedGte ?? null,
       ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
+      tkoWinsGte: a.tkoWinsGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null

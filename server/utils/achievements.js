@@ -101,6 +101,14 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     if (accepted < ach.ctoonSuggestionsAcceptedGte) return false
   }
 
+  // TKO round wins (counted rounds only)
+  if (ach.tkoWinsGte != null) {
+    const wins = await db.tkoRound.count({
+      where: { winnerUserId: userId, counted: true }
+    })
+    if (wins < ach.tkoWinsGte) return false
+  }
+
   // Cumulative active days based on activity logs
   if (ach.cumulativeActiveDaysGte != null) {
     const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)

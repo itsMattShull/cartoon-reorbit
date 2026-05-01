@@ -87,6 +87,7 @@ export default defineEventHandler(async (event) => {
       tradesAcceptedGte: criteria?.tradesAcceptedGte ?? null,
       ctoonSuggestionsAcceptedGte: criteria?.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
+      tkoWinsGte: criteria?.tkoWinsGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
       requiredCtoons: {
