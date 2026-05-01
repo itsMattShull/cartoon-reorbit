@@ -31,6 +31,12 @@ export default defineEventHandler(async (event) => {
     homeImage3Link: null,
     homeImage4Path: null,
     homeImage4Link: null,
+    middleSidebar1ImagePath: null,
+    middleSidebar1Link: null,
+    middleSidebar2ImagePath: null,
+    middleSidebar2Link: null,
+    middleSidebar3ImagePath: null,
+    middleSidebar3Link: null,
     updatedAt: null
   }
 
