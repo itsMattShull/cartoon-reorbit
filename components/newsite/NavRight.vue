@@ -3,14 +3,17 @@
     <NuxtLink to="/newsite/MycWorld" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">My cWorld</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/GetcToons" class="nav-link">
-      <BlueButton :style="{ height: buttonHeight }">Get cToons</BlueButton>
+    <NuxtLink to="/newsite/cmart" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">cMart</BlueButton>
     </NuxtLink>
+    <NuxtLink to="/newsite/AuctionHouse" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Auctions</BlueButton>
+    </NuxtLink>
+    <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
     <NuxtLink to="/newsite/Games" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
-    <BlueButton :style="{ height: buttonHeight }">Placeholder 4</BlueButton>
-    <BlueButton v-if="!isMobile" :style="{ height: buttonHeight }">Settings</BlueButton>
+<BlueButton v-if="!isMobile" :style="{ height: buttonHeight }">Settings</BlueButton>
   </div>
 </template>
 

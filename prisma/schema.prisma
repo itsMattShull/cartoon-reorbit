@@ -1545,9 +1545,24 @@ model HomepageConfig {
   bottomLeftImagePath  String?
   topRightImagePath    String?
   bottomRightImagePath String?
+  bottomRightLink      String?
   showcaseImagePath    String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  homeImage1Path       String?
+  homeImage1Link       String?
+  homeImage2Path       String?
+  homeImage2Link       String?
+  homeImage3Path       String?
+  homeImage3Link       String?
+  homeImage4Path           String?
+  homeImage4Link           String?
+  middleSidebar1ImagePath  String?
+  middleSidebar1Link       String?
+  middleSidebar2ImagePath  String?
+  middleSidebar2Link       String?
+  middleSidebar3ImagePath  String?
+  middleSidebar3Link       String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 model AdImage {
