@@ -8,6 +8,14 @@ export default defineEventHandler(async () => {
     bottomLeftImagePath:  cfg?.bottomLeftImagePath  ?? null,
     topRightImagePath:    cfg?.topRightImagePath    ?? null,
     bottomRightImagePath: cfg?.bottomRightImagePath ?? null,
-    showcaseImagePath:    cfg?.showcaseImagePath ?? null,
+    showcaseImagePath:    cfg?.showcaseImagePath    ?? null,
+    homeImage1Path:       cfg?.homeImage1Path       ?? null,
+    homeImage1Link:       cfg?.homeImage1Link       ?? null,
+    homeImage2Path:       cfg?.homeImage2Path       ?? null,
+    homeImage2Link:       cfg?.homeImage2Link       ?? null,
+    homeImage3Path:       cfg?.homeImage3Path       ?? null,
+    homeImage3Link:       cfg?.homeImage3Link       ?? null,
+    homeImage4Path:       cfg?.homeImage4Path       ?? null,
+    homeImage4Link:       cfg?.homeImage4Link       ?? null,
   }
 })

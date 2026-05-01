@@ -1,7 +1,7 @@
 <template>
   <Nav />
   <div class="min-h-screen bg-gray-100 p-6 mt-16 md:mt-20">
-    <h1 class="text-3xl font-bold mb-6">Admin: Homepage & Showcase</h1>
+    <h1 class="text-3xl font-bold mb-6">Admin: Homepage &amp; Showcase</h1>
 
     <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
       <!-- Tabs -->
@@ -13,13 +13,13 @@
             @click="activeTab='Homepage'">Homepage</button>
           <button
             class="px-3 py-2 border-b-2"
-            :class="activeTab==='Showcase' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
-            @click="activeTab='Showcase'">Showcase</button>
+            :class="activeTab==='Home' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Home'">Home</button>
           <button
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
-          
+
         </nav>
       </div>
 
@@ -105,29 +105,80 @@
         </div>
       </section>
 
-      <!-- Showcase tab -->
-      <section v-if="activeTab==='Showcase'" class="space-y-4">
-        <p class="text-sm text-gray-600">
-          Upload a single Showcase image or video. SVG/PNG/JPEG/GIF/MP4.
-        </p>
-        <div class="space-y-3">
-          <h2 class="font-semibold">Showcase Image</h2>
-          <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-                     <video v-if="(showcaseFile && showcaseFile.type && showcaseFile.type.startsWith('video/')) || /\.mp4($|\?)/i.test(showcasePath || '')"
-                       :src="previewUrls.showcase || showcasePath"
-                       :poster="(previewUrls.showcase && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.showcase)) ? previewUrls.showcase : (showcasePosterPath || (/\.(png|jpe?g|gif|svg)$/i.test(showcasePath||'') ? showcasePath : ''))"
-                       controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
-            <img v-else-if="previewUrls.showcase || showcasePath" :src="previewUrls.showcase || showcasePath" alt="Showcase" class="max-h-full max-w-full" />
-            <span v-else class="text-gray-400 text-sm">No image</span>
+      <!-- Home tab (formerly Showcase) -->
+      <section v-if="activeTab==='Home'" class="space-y-6">
+        <!-- Showcase image — compact -->
+        <div class="border rounded p-4 space-y-2">
+          <h2 class="font-semibold text-sm">Showcase Image / Video</h2>
+          <div class="flex items-center gap-4">
+            <div class="w-40 h-24 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <video v-if="(showcaseFile && showcaseFile.type && showcaseFile.type.startsWith('video/')) || /\.mp4($|\?)/i.test(showcasePath || '')"
+                :src="previewUrls.showcase || showcasePath"
+                :poster="(previewUrls.showcase && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.showcase)) ? previewUrls.showcase : (showcasePosterPath || (/\.(png|jpe?g|gif|svg)$/i.test(showcasePath||'') ? showcasePath : ''))"
+                preload="metadata" playsinline class="max-h-full max-w-full object-contain"></video>
+              <img v-else-if="previewUrls.showcase || showcasePath" :src="previewUrls.showcase || showcasePath" alt="Showcase" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">None</span>
+            </div>
+            <div class="space-y-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
+                @change="onShowcaseFile($event)" class="block w-full text-xs" />
+              <div v-if="showcaseFile" class="text-xs text-gray-600 truncate">{{ showcaseFile.name }}</div>
+              <div class="flex gap-2">
+                <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                        v-if="showcasePath" @click="clearShowcase()">Clear</button>
+                <button class="btn-primary text-xs px-3 py-1" :disabled="saving" @click="saveShowcase">
+                  <span v-if="!saving">Save</span><span v-else>Saving…</span>
+                </button>
+              </div>
+            </div>
           </div>
-             <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-               @change="onShowcaseFile($event)" class="block w-full text-sm" />
-          <div v-if="showcaseFile" class="text-xs text-gray-600 truncate">Selected: {{ showcaseFile.name }}</div>
-          <div class="flex gap-3">
-            <button type="button" class="px-3 py-1 text-sm rounded border"
-                    v-if="showcasePath" @click="clearShowcase()">Clear</button>
-            <button class="btn-primary" :disabled="saving" @click="saveShowcase">
-              <span v-if="!saving">Save</span><span v-else>Saving…</span>
+        </div>
+
+        <!-- 4 Home Images -->
+        <div>
+          <h2 class="font-semibold mb-3">Home Page Images</h2>
+          <p class="text-sm text-gray-500 mb-4">These 4 images display in the main content area of the newsite home page. Each can link to a page or custom URL.</p>
+          <div class="space-y-4">
+            <div v-for="n in 4" :key="n" class="border rounded p-4 space-y-3">
+              <h3 class="font-medium text-sm">Image {{ n }}</h3>
+              <div class="flex items-center gap-4">
+                <div class="w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+                  <img v-if="previewUrls['homeImage' + n] || homeImages[n].path"
+                    :src="previewUrls['homeImage' + n] || homeImages[n].path"
+                    :alt="'Home Image ' + n"
+                    class="max-h-full max-w-full object-contain" />
+                  <span v-else class="text-gray-400 text-xs">None</span>
+                </div>
+                <div class="space-y-2 flex-1 min-w-0">
+                  <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                    @change="onHomeImageFile(n, $event)" class="block w-full text-xs" />
+                  <div v-if="homeImageFiles[n]" class="text-xs text-gray-600 truncate">{{ homeImageFiles[n].name }}</div>
+                  <div class="space-y-1">
+                    <label class="text-xs text-gray-600 font-medium">Link to</label>
+                    <select v-model="homeImages[n].linkPreset" @change="onLinkPresetChange(n)" class="block w-full text-sm border rounded p-1.5">
+                      <option value="">— None —</option>
+                      <option value="my-cworld">My cWorld</option>
+                      <option value="cmart">cMart</option>
+                      <option value="games">Games</option>
+                      <option value="win-wheel">Win Wheel</option>
+                      <option value="winball">Winball</option>
+                      <option value="lottery">Lottery</option>
+                      <option value="auctions">Auctions</option>
+                      <option value="gtoons-clash">gToons Clash</option>
+                      <option value="custom">Custom URL…</option>
+                    </select>
+                    <input v-if="homeImages[n].linkPreset === 'custom'"
+                      type="url" v-model="homeImages[n].link"
+                      placeholder="https://example.com"
+                      class="block w-full text-sm border rounded p-1.5 mt-1" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <button class="btn-primary" :disabled="saving" @click="saveHomeImages">
+              <span v-if="!saving">Save Home Images</span><span v-else>Saving…</span>
             </button>
           </div>
         </div>
@@ -153,7 +204,7 @@
         </div>
       </section>
 
-      
+
 
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
@@ -164,20 +215,40 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
 
 definePageMeta({ title: 'Admin - Manage Homepage', middleware: ['auth','admin'], layout: 'admin' })
+
+const PAGE_LINKS = {
+  'my-cworld':   '/newsite/my-cworld',
+  'cmart':       '/newsite/cmart',
+  'games':       '/newsite/games',
+  'win-wheel':   '/newsite/win-wheel',
+  'winball':     '/newsite/winball',
+  'lottery':     '/newsite/lottery',
+  'auctions':    '/newsite/auctions',
+  'gtoons-clash':'/newsite/gtoons-clash'
+}
 
 const activeTab = ref('Homepage')
 
 const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
 const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null })
+const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null })
 
 const showcasePath = ref('')
 const showcaseFile = ref(null)
 const showcasePosterPath = ref('')
+
+// Home images state (1-indexed, index 0 unused)
+const homeImages = reactive({
+  1: { path: '', link: '', linkPreset: '' },
+  2: { path: '', link: '', linkPreset: '' },
+  3: { path: '', link: '', linkPreset: '' },
+  4: { path: '', link: '', linkPreset: '' }
+})
+const homeImageFiles = reactive({ 1: null, 2: null, 3: null, 4: null })
 
 const saving = ref(false)
 const toast  = ref(null)
@@ -186,10 +257,26 @@ const toast  = ref(null)
 const releasePercent = ref(75)
 const delayHours = ref(12)
 
+function detectPreset(link) {
+  if (!link) return ''
+  for (const [preset, path] of Object.entries(PAGE_LINKS)) {
+    if (link === path) return preset
+  }
+  return 'custom'
+}
+
+function onLinkPresetChange(n) {
+  const preset = homeImages[n].linkPreset
+  if (preset === '' || preset === 'custom') {
+    if (preset === '') homeImages[n].link = ''
+    // 'custom' keeps whatever is in link
+  } else {
+    homeImages[n].link = PAGE_LINKS[preset] ?? ''
+  }
+}
 
 function onFile(key, e) {
   const f = e.target.files?.[0] || null
-  // revoke previous preview if present
   try { if (previewUrls.value[key]) { URL.revokeObjectURL(previewUrls.value[key]); previewUrls.value[key] = null } } catch (e) {}
   files.value[key] = f
   if (f) previewUrls.value[key] = URL.createObjectURL(f)
@@ -214,6 +301,14 @@ function clearShowcase() {
   showcaseFile.value = null
 }
 
+function onHomeImageFile(n, e) {
+  const f = e.target.files?.[0] || null
+  const key = `homeImage${n}`
+  try { if (previewUrls.value[key]) { URL.revokeObjectURL(previewUrls.value[key]); previewUrls.value[key] = null } } catch (e) {}
+  homeImageFiles[n] = f
+  if (f) previewUrls.value[key] = URL.createObjectURL(f)
+}
+
 onBeforeUnmount(() => {
   for (const k of Object.keys(previewUrls.value)) {
     const u = previewUrls.value[k]
@@ -228,7 +323,14 @@ async function loadConfig() {
   paths.value.topRight    = cfg.topRightImagePath    || ''
   paths.value.bottomRight = cfg.bottomRightImagePath || ''
   showcasePath.value      = cfg.showcaseImagePath    || ''
-  showcasePosterPath.value = cfg.showcasePosterPath || ''
+  showcasePosterPath.value = cfg.showcasePosterPath  || ''
+
+  for (let n = 1; n <= 4; n++) {
+    homeImages[n].path = cfg[`homeImage${n}Path`] || ''
+    const rawLink = cfg[`homeImage${n}Link`] || ''
+    homeImages[n].link = rawLink
+    homeImages[n].linkPreset = detectPreset(rawLink)
+  }
 }
 
 
@@ -270,8 +372,29 @@ async function saveShowcase() {
     showcasePath.value = res.showcaseImagePath || ''
     showcaseFile.value = null
     toast.value = { type: 'ok', msg: 'Showcase image saved.' }
-    // refresh to pick up any generated poster
     await loadConfig()
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveHomeImages() {
+  saving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    for (let n = 1; n <= 4; n++) {
+      fd.append(`homeImage${n}Path`, homeImages[n].path || '')
+      fd.append(`homeImage${n}Link`, homeImages[n].link || '')
+      if (homeImageFiles[n]) fd.append(`homeImage${n}`, homeImageFiles[n])
+    }
+    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
+    for (let n = 1; n <= 4; n++) {
+      homeImages[n].path = res[`homeImage${n}Path`] || ''
+      homeImageFiles[n] = null
+    }
+    toast.value = { type: 'ok', msg: 'Home images saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {
@@ -309,7 +432,7 @@ async function saveReleaseSettings() {
     saving.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
 }
- 
+
 </script>
 
 <style scoped>
@@ -317,4 +440,4 @@ async function saveReleaseSettings() {
 .btn-primary:disabled{ opacity:.5 }
 </style>
 
- 
+

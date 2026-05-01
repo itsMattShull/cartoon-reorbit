@@ -1546,6 +1546,14 @@ model HomepageConfig {
   topRightImagePath    String?
   bottomRightImagePath String?
   showcaseImagePath    String?
+  homeImage1Path       String?
+  homeImage1Link       String?
+  homeImage2Path       String?
+  homeImage2Link       String?
+  homeImage3Path       String?
+  homeImage3Link       String?
+  homeImage4Path       String?
+  homeImage4Link       String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
