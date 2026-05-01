@@ -668,6 +668,105 @@
           </button>
         </section>
 
+        <!-- TKO -->
+        <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
+          <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
+
+          <div v-if="tkoLoading" class="text-gray-500 py-8 text-center">Loading…</div>
+
+          <template v-else>
+            <!-- Stats -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div class="border rounded-lg p-4 text-center">
+                <p class="text-3xl font-bold text-indigo-600">{{ tkoTotalEvents.toLocaleString() }}</p>
+                <p class="text-sm text-gray-500 mt-1">Total Events</p>
+              </div>
+              <div class="border rounded-lg p-4 text-center">
+                <p class="text-3xl font-bold text-indigo-600">{{ tkoUniqueUsers.toLocaleString() }}</p>
+                <p class="text-sm text-gray-500 mt-1">Unique Reorbit Users</p>
+              </div>
+            </div>
+
+            <h3 class="text-lg font-semibold mb-3">Most Recent 20 Events</h3>
+
+            <div v-if="!tkoEvents.length" class="text-gray-500">No events recorded yet.</div>
+
+            <!-- Desktop table -->
+            <div v-else class="hidden md:block border rounded-lg overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-left">
+                  <tr>
+                    <th class="px-3 py-2 font-medium text-gray-600">Date</th>
+                    <th class="px-3 py-2 font-medium text-gray-600">Match / Round</th>
+                    <th class="px-3 py-2 font-medium text-gray-600">Winner</th>
+                    <th class="px-3 py-2 font-medium text-gray-600">Loser</th>
+                    <th class="px-3 py-2 font-medium text-gray-600">Win Type</th>
+                    <th class="px-3 py-2 font-medium text-gray-600">Counted</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="e in tkoEvents" :key="e.id" class="hover:bg-gray-50">
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ fmtDate(e.endedAt) }}</td>
+                    <td class="px-3 py-2">
+                      <div class="font-mono text-xs text-gray-500 truncate max-w-[140px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
+                      <div class="text-xs text-gray-400">Round {{ e.roundNumber }} of {{ e.bestOf }} · {{ e.match.mode }}</div>
+                    </td>
+                    <td class="px-3 py-2">
+                      <div class="font-medium">{{ e.winnerUsername }}</div>
+                      <div class="text-xs text-gray-400">{{ e.winnerCharacterName }}</div>
+                      <div v-if="!e.winnerUserId" class="text-xs text-amber-500">no account</div>
+                    </td>
+                    <td class="px-3 py-2">
+                      <div class="font-medium">{{ e.loserUsername }}</div>
+                      <div class="text-xs text-gray-400">{{ e.loserCharacterName }}</div>
+                      <div v-if="!e.loserUserId" class="text-xs text-amber-500">no account</div>
+                    </td>
+                    <td class="px-3 py-2 capitalize">{{ e.winType }}</td>
+                    <td class="px-3 py-2">
+                      <span
+                        class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                        :class="e.counted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+                      >{{ e.counted ? 'Yes' : 'No' }}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mobile cards -->
+            <div class="md:hidden space-y-3">
+              <div v-for="e in tkoEvents" :key="e.id" class="border rounded-lg p-4 bg-white space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <div class="text-xs text-gray-400 font-mono truncate max-w-[200px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
+                    <div class="text-xs text-gray-400">Round {{ e.roundNumber }}/{{ e.bestOf }} · {{ e.match.mode }}</div>
+                  </div>
+                  <span
+                    class="shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                    :class="e.counted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+                  >{{ e.counted ? 'Counted' : 'Not counted' }}</span>
+                </div>
+                <div class="text-xs text-gray-500">{{ fmtDate(e.endedAt) }}</div>
+                <div class="grid grid-cols-2 gap-3 pt-1 border-t">
+                  <div>
+                    <div class="text-xs font-semibold text-green-600 mb-0.5">Winner</div>
+                    <div class="font-medium text-sm">{{ e.winnerUsername }}</div>
+                    <div class="text-xs text-gray-400">{{ e.winnerCharacterName }}</div>
+                    <div v-if="!e.winnerUserId" class="text-xs text-amber-500">no account</div>
+                  </div>
+                  <div>
+                    <div class="text-xs font-semibold text-red-500 mb-0.5">Loser</div>
+                    <div class="font-medium text-sm">{{ e.loserUsername }}</div>
+                    <div class="text-xs text-gray-400">{{ e.loserCharacterName }}</div>
+                    <div v-if="!e.loserUserId" class="text-xs text-amber-500">no account</div>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500 pt-1 border-t capitalize">Win type: <span class="font-medium text-gray-700">{{ e.winType }}</span></div>
+              </div>
+            </div>
+          </template>
+        </section>
+
         <!-- Toast -->
         <div
           v-if="toastMessage"
@@ -694,10 +793,14 @@ const tabs = [
   { key: 'Global',   label: 'Global Settings' },
   { key: 'Winball',  label: 'Winball' },
   { key: 'Clash',    label: 'gToon Clash' },
-  { key: 'Winwheel', label: 'Win Wheel' }
+  { key: 'Winwheel', label: 'Win Wheel' },
+  { key: 'TKO',      label: 'TKO' }
 ]
 const activeTab = ref('Global')
-function switchTab(k) { activeTab.value = k }
+async function switchTab(k) {
+  activeTab.value = k
+  if (k === 'TKO' && !tkoLoaded.value) await loadTkoEvents()
+}
 
 // ── Settings state ────────────────────────────
 const globalDailyPointLimit = ref(100)
@@ -1379,6 +1482,36 @@ async function saveClashConfig() {
     toastMessage.value = 'Error saving Clash settings'; toastType.value = 'error'
   } finally {
     loadingClash.value = false
+  }
+}
+
+// ── TKO ──────────────────────────────────────
+const tkoLoaded      = ref(false)
+const tkoLoading     = ref(false)
+const tkoTotalEvents = ref(0)
+const tkoUniqueUsers = ref(0)
+const tkoEvents      = ref([])
+
+function fmtDate(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  })
+}
+
+async function loadTkoEvents() {
+  tkoLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/tko-events')
+    tkoTotalEvents.value = res.totalEvents
+    tkoUniqueUsers.value = res.uniqueReorbitUsers
+    tkoEvents.value      = res.events || []
+    tkoLoaded.value      = true
+  } catch (e) {
+    console.error(e)
+  } finally {
+    tkoLoading.value = false
   }
 }
 

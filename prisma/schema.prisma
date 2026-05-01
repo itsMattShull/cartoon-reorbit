@@ -456,6 +456,10 @@ model User {
   suspiciousActivityMute       SuspiciousActivityMute?  @relation("SuspiciousMutedUser")
   suspiciousActivityMutesGiven SuspiciousActivityMute[] @relation("SuspiciousMutedBy")
 
+  // TKO Game relations
+  tkoRoundsWon  TkoRound[] @relation("TkoRoundWinner")
+  tkoRoundsLost TkoRound[] @relation("TkoRoundLoser")
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -1799,6 +1803,7 @@ model Achievement {
   tradesAcceptedGte Int?
   ctoonSuggestionsAcceptedGte Int?
   cumulativeActiveDaysGte Int?
+  tkoWinsGte      Int?
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName String?
@@ -2220,6 +2225,69 @@ model CZoneContestVote {
 model ServerHeartbeat {
   id       String   @id @default("singleton")
   lastBeat DateTime @updatedAt
+}
+
+// ── TKO Game Integration ──────────────────────────────────────────────────────
+
+model TkoMatch {
+  id             String   @id @default(uuid())
+  externalMatchId String  @unique
+  roomId         Int
+  battleCode     String
+  mode           String
+  isTraining     Boolean  @default(false)
+  isChallenge    Boolean  @default(false)
+  isPrivate      Boolean  @default(false)
+  startedAt      DateTime
+  createdAt      DateTime @default(now())
+
+  rounds TkoRound[]
+
+  @@index([externalMatchId])
+  @@index([createdAt])
+}
+
+model TkoRound {
+  id          String   @id @default(uuid())
+  eventId     String   @unique
+  eventType   String
+  matchId     String
+  match       TkoMatch @relation(fields: [matchId], references: [id])
+
+  roundNumber Int
+  bestOf      Int
+  endedAt     DateTime
+  durationMs  Int
+
+  winnerUserId          String?
+  winner                User?   @relation("TkoRoundWinner", fields: [winnerUserId], references: [id])
+  winnerUsername        String
+  winnerReorbitId       String
+  winnerCharacterId     Int
+  winnerCharacterName   String
+  winnerRemainingHealth Int
+
+  loserUserId          String?
+  loser                User?   @relation("TkoRoundLoser", fields: [loserUserId], references: [id])
+  loserUsername        String
+  loserReorbitId       String
+  loserCharacterId     Int
+  loserCharacterName   String
+  loserRemainingHealth Int
+
+  result     String
+  winType    String
+  counted    Boolean @default(true)
+  disconnect Boolean @default(false)
+  forfeit    Boolean @default(false)
+  timeout    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([matchId])
+  @@index([winnerUserId, counted])
+  @@index([loserUserId])
+  @@index([createdAt])
 }
 
 // ── Suspicious Activity Monitor ───────────────────────────────────────────────
