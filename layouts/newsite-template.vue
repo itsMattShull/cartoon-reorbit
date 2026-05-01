@@ -120,7 +120,7 @@ html.newsite-active body {
 
   --topbar-nav-left-bg:              var(--OrbitLightBlue);
   --topbar-nav-left-height:          var(--topbar-nav-height);
-  --topbar-nav-left-width:           295px;
+  --topbar-nav-left-width:           330px;
   --topbar-nav-left-radius:          8px;
   --topbar-nav-left-border-thickness: 0px;
   --topbar-nav-left-border-color:    var(--OrbitLightBlue);
@@ -131,7 +131,7 @@ html.newsite-active body {
 
   --topbar-nav-right-bg:             var(--OrbitDarkBlue);
   --topbar-nav-right-height:         var(--topbar-nav-height);
-  --topbar-nav-right-width:          735px;
+  --topbar-nav-right-width:          700px;
   --topbar-nav-right-radius:         8px;
   --topbar-nav-right-border-thickness: 0px;
   --topbar-nav-right-border-color:   var(--OrbitDarkBlue);
@@ -494,6 +494,15 @@ const scaleStyle = computed(() => {
   font-family: inherit;
   text-align: center;
   flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    margin-left: -5px;
+    margin-right: -5px;
+    width: calc(100% + 10px);
+  }
 }
 
 .sidebar-toggle:hover {
