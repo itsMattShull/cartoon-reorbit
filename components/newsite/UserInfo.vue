@@ -17,9 +17,9 @@
         </template>
         <template v-else>
           <span class="user-info-username" ref="usernameEl">{{ user.username }}</span>
-          <span class="user-info-stat">{{ user.points }} Points</span>
-          <span class="user-info-stat">{{ collectionSummary.uniqueCount }} Unique cToons</span>
-          <span class="user-info-stat">{{ collectionSummary.totalCount }} Total cToons</span>
+          <span class="user-info-stat">{{ (user.points ?? 0).toLocaleString() }} Points</span>
+          <span class="user-info-stat">{{ (collectionSummary.uniqueCount ?? 0).toLocaleString() }} Unique cToons</span>
+          <span class="user-info-stat">{{ (collectionSummary.totalCount ?? 0).toLocaleString() }} Total cToons</span>
         </template>
       </div>
     </div>
