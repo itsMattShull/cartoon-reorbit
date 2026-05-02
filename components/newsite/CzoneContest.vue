@@ -599,8 +599,8 @@ async function doSubmit() {
   padding: 3px;
 }
 
-.cc-card-img-wrap { aspect-ratio: 800/600; width: 100%; overflow: hidden; }
-.cc-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cc-card-img-wrap { aspect-ratio: 800/600; width: 100%; overflow: hidden; position: relative; }
+.cc-card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .cc-card-foot {
   display: flex;
