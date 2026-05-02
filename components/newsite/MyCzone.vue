@@ -28,7 +28,7 @@
         <div
           class="cz-canvas"
           ref="canvasEl"
-          :style="{ backgroundImage: currentBg }"
+          :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
         >
@@ -133,11 +133,24 @@ function bgUrl(v) {
   return `/backgrounds/${s}`
 }
 
-const currentBg = computed(() => {
-  const src  = bgUrl(currentZone.value.background)
-  const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return src ? `${grid}, url('${src}')` : grid
+const canvasStyle = computed(() => {
+  const src   = bgUrl(currentZone.value.background)
+  const gridH = 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)'
+  const gridV = 'linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)'
+  if (src) {
+    return {
+      backgroundImage:    `${gridH}, ${gridV}, url('${src}')`,
+      backgroundSize:     '40px 40px, 40px 40px, cover',
+      backgroundPosition: '0 0, 0 0, center',
+      backgroundRepeat:   'repeat, repeat, no-repeat',
+    }
+  }
+  return {
+    backgroundImage:    `${gridH}, ${gridV}`,
+    backgroundSize:     '40px 40px',
+    backgroundPosition: '0 0',
+    backgroundRepeat:   'repeat',
+  }
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
@@ -405,9 +418,6 @@ defineExpose({ save, clearZone })
   height: 600px;
   overflow: hidden;
   background-color: var(--OrbitDarkBlue);
-  background-size: 40px 40px, 40px 40px, 100% 100%;
-  background-position: 0 0, 0 0, top left;
-  background-repeat: repeat, repeat, no-repeat;
   cursor: default;
 }
 
