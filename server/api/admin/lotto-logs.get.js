@@ -71,7 +71,14 @@ export default defineEventHandler(async (event) => {
     prisma.lottoLog.findMany({
       where,
       include: {
-        user: { select: { id: true, username: true, discordTag: true } }
+        user: { select: { id: true, username: true, discordTag: true } },
+        userCtoon: {
+          select: {
+            id: true,
+            mintNumber: true,
+            ctoon: { select: { id: true, name: true } }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
       skip,

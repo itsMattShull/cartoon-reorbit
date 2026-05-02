@@ -74,6 +74,7 @@
                   <th class="px-3 py-2 border-b">Time (CDT)</th>
                   <th class="px-3 py-2 border-b">User</th>
                   <th class="px-3 py-2 border-b">Outcome</th>
+                  <th class="px-3 py-2 border-b">Prize</th>
                   <th class="px-3 py-2 border-b">Odds Before</th>
                   <th class="px-3 py-2 border-b">Odds After</th>
                 </tr>
@@ -83,6 +84,7 @@
                   <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(log.createdAt) }}</td>
                   <td class="px-3 py-2">{{ displayUser(log.user) }}</td>
                   <td class="px-3 py-2">{{ labelFor(log.outcome) }}</td>
+                  <td class="px-3 py-2">{{ formatPrize(log) }}</td>
                   <td class="px-3 py-2">{{ formatOdds(log.oddsBefore) }}</td>
                   <td class="px-3 py-2">{{ formatOdds(log.oddsAfter) }}</td>
                 </tr>
@@ -98,6 +100,9 @@
                 <span>{{ labelFor(log.outcome) }}</span>
               </div>
               <div class="mt-1 text-sm font-medium">{{ displayUser(log.user) }}</div>
+              <div v-if="log.outcome === 'CTOON' && log.userCtoon" class="mt-1 text-sm text-indigo-700 font-medium">
+                {{ formatPrize(log) }}
+              </div>
               <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
                 <div><span class="text-gray-500">Odds Before:</span> {{ formatOdds(log.oddsBefore) }}</div>
                 <div><span class="text-gray-500">Odds After:</span> {{ formatOdds(log.oddsAfter) }}</div>
@@ -207,6 +212,13 @@ function labelFor(outcome) {
 
 function displayUser(user) {
   return user?.username || user?.discordTag || user?.id || '—'
+}
+
+function formatPrize(log) {
+  if (log.outcome !== 'CTOON' || !log.userCtoon) return '—'
+  const name = log.userCtoon.ctoon?.name || 'Unknown'
+  const mint = log.userCtoon.mintNumber != null ? `#${log.userCtoon.mintNumber}` : ''
+  return mint ? `${name} ${mint}` : name
 }
 
 async function fetchSummary() {
