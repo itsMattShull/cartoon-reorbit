@@ -138,6 +138,10 @@ const currentBg = computed(() => {
   return src ? `url('${src}')` : ''
 })
 
+const canvasStyle = computed(() => ({
+  backgroundImage: currentBg.value,
+}))
+
 // ── Lifecycle ─────────────────────────────────────────────────
 onMounted(() => {
   recalcScale()
