@@ -9,9 +9,6 @@
     <template #main-content>
       <GamesHome />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

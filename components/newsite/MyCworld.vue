@@ -4,7 +4,6 @@
       <GreenButton @click="goToCzone">My cZone</GreenButton>
       <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
-      <GreenButton>Placeholder</GreenButton>
     </div>
     <div class="mcw-content">
       <CzoneContest />
