@@ -412,7 +412,9 @@ async function doSubmit() {
     for (const toon of (zone?.toons || [])) {
       try {
         const img = await loadImage(toon.assetPath)
-        ctx.drawImage(img, toon.x, toon.y, toon.width, toon.height)
+        const w = toon.width  || img.naturalWidth
+        const h = toon.height || img.naturalHeight
+        ctx.drawImage(img, toon.x, toon.y, w, h)
       } catch { /* skip toons that fail to load */ }
     }
 
