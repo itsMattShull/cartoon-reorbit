@@ -200,16 +200,22 @@
       v-if="submitOpen && myZones.length"
       ref="captureRef"
       class="relative overflow-hidden"
-      style="position:fixed; left:-9999px; top:0; width:800px; height:600px;"
-      :style="captureBgStyle"
+      style="position:fixed; left:-9999px; top:0; width:800px; height:600px; background-color:#003466;"
     >
+      <img
+        v-if="captureBgSrc"
+        :src="captureBgSrc"
+        style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;"
+        alt=""
+        crossorigin="anonymous"
+      />
       <div class="absolute inset-0">
         <div
           v-for="(item, i) in captureZoneToons" :key="i"
           class="absolute"
           :style="{ top: item.y + 'px', left: item.x + 'px' }"
         >
-          <img :src="item.assetPath" :alt="item.name" :style="{ width: item.width + 'px', height: item.height + 'px', objectFit: 'contain', maxWidth: 'initial' }" />
+          <img :src="item.assetPath" :alt="item.name" :style="{ width: item.width + 'px', height: item.height + 'px', objectFit: 'contain', maxWidth: 'initial' }" crossorigin="anonymous" />
         </div>
       </div>
     </div>
@@ -376,16 +382,9 @@ function bgUrl(v) {
   return `/backgrounds/${s}`
 }
 
-const captureBgStyle = computed(() => {
+const captureBgSrc = computed(() => {
   const zone = myZones.value[submitZoneIndex.value]
-  const src = bgUrl(zone?.background)
-  if (!src) return {}
-  return {
-    backgroundImage: `url('${src}')`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-  }
+  return bgUrl(zone?.background)
 })
 
 const captureZoneToons = computed(() => (myZones.value[submitZoneIndex.value]?.toons || []))
@@ -427,17 +426,6 @@ async function doSubmit() {
   try {
     const el = captureRef.value
     if (!el) throw new Error('Canvas not ready')
-
-    // Preload background
-    const zone = myZones.value[submitZoneIndex.value]
-    const bgSrc = bgUrl(zone?.background)
-    if (bgSrc) {
-      await new Promise(resolve => {
-        const img = new Image()
-        img.onload = img.onerror = resolve
-        img.src = bgSrc
-      })
-    }
 
     // Wait for toon images
     const imgs = Array.from(el.querySelectorAll('img'))
