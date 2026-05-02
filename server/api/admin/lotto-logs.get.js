@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const q = getQuery(event)
-  const { start, end, timeframe } = q
+  const { start, end, timeframe, username } = q
 
   let endDate =
     (typeof end === 'string' && parseEndYMD(end)) ||
@@ -62,8 +62,10 @@ export default defineEventHandler(async (event) => {
   const page = Math.max(parseInt(q.page || '1', 10), 1)
   const skip = (page - 1) * limit
 
+  const usernameFilter = typeof username === 'string' && username.trim()
   const where = {
-    createdAt: { gte: startDate, lte: endDate }
+    createdAt: { gte: startDate, lte: endDate },
+    ...(usernameFilter && { user: { username: { contains: usernameFilter, mode: 'insensitive' } } })
   }
 
   const [total, items] = await Promise.all([
@@ -71,7 +73,14 @@ export default defineEventHandler(async (event) => {
     prisma.lottoLog.findMany({
       where,
       include: {
-        user: { select: { id: true, username: true, discordTag: true } }
+        user: { select: { id: true, username: true, discordTag: true } },
+        userCtoon: {
+          select: {
+            id: true,
+            mintNumber: true,
+            ctoon: { select: { id: true, name: true } }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
       skip,

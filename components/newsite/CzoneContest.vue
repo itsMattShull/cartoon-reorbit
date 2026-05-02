@@ -175,9 +175,6 @@
                 <select class="cc-select" v-model="submitZoneIndex">
                   <option v-for="(z, i) in myZones" :key="i" :value="i">Zone {{ i + 1 }}</option>
                 </select>
-                <div v-if="canvasRFP" class="cc-rfp-warning">
-                  Canvas fingerprint protection detected. This may cause artifacts in the snapshot.
-                </div>
                 <div v-if="submitError" class="cc-submit-error">{{ submitError }}</div>
               </div>
             </template>
@@ -195,24 +192,6 @@
       </div>
     </Teleport>
 
-    <!-- Off-screen capture canvas -->
-    <div
-      v-if="submitOpen && myZones.length"
-      ref="captureRef"
-      class="relative overflow-hidden"
-      style="position:fixed; left:-9999px; top:0; width:800px; height:600px;"
-      :style="captureBgStyle"
-    >
-      <div class="absolute inset-0">
-        <div
-          v-for="(item, i) in captureZoneToons" :key="i"
-          class="absolute"
-          :style="{ top: item.y + 'px', left: item.x + 'px' }"
-        >
-          <img :src="item.assetPath" :alt="item.name" :style="{ width: item.width + 'px', height: item.height + 'px', objectFit: 'contain', maxWidth: 'initial' }" />
-        </div>
-      </div>
-    </div>
 
   </div>
 </template>
@@ -359,7 +338,6 @@ const showPrizes = ref(false)
 function hasPrize(p) { return p?.points || p?.ctoons?.length || p?.backgrounds?.length }
 
 // ── Submit modal ──────────────────────────────────────────────
-const captureRef      = ref(null)
 const submitOpen      = ref(false)
 const myZones         = ref([])
 const myZonesLoading  = ref(false)
@@ -367,7 +345,6 @@ const submitZoneIndex = ref(0)
 const submitLoading   = ref(false)
 const submitError     = ref('')
 const submitSuccess   = ref(false)
-const canvasRFP       = ref(false)
 
 function bgUrl(v) {
   if (!v) return ''
@@ -376,38 +353,11 @@ function bgUrl(v) {
   return `/backgrounds/${s}`
 }
 
-const captureBgStyle = computed(() => {
-  const zone = myZones.value[submitZoneIndex.value]
-  const src = bgUrl(zone?.background)
-  if (!src) return {}
-  return {
-    backgroundImage: `url('${src}')`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-  }
-})
-
-const captureZoneToons = computed(() => (myZones.value[submitZoneIndex.value]?.toons || []))
-
-function detectRFP() {
-  try {
-    const c = document.createElement('canvas')
-    c.width = 1; c.height = 1
-    const ctx = c.getContext('2d')
-    ctx.fillStyle = 'rgb(100,150,200)'
-    ctx.fillRect(0, 0, 1, 1)
-    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
-    canvasRFP.value = (r !== 100 || g !== 150 || b !== 200)
-  } catch { canvasRFP.value = false }
-}
-
 async function openSubmit() {
   submitError.value = ''
   submitSuccess.value = false
   submitZoneIndex.value = 0
   submitOpen.value = true
-  detectRFP()
   if (!myZones.value.length) {
     myZonesLoading.value = true
     try {
@@ -421,34 +371,53 @@ async function openSubmit() {
   }
 }
 
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`))
+    img.src = src
+  })
+}
+
 async function doSubmit() {
   submitError.value = ''
   submitLoading.value = true
   try {
-    const el = captureRef.value
-    if (!el) throw new Error('Canvas not ready')
-
-    // Preload background
     const zone = myZones.value[submitZoneIndex.value]
+
+    const canvas = document.createElement('canvas')
+    canvas.width  = 800
+    canvas.height = 600
+    const ctx = canvas.getContext('2d')
+
+    // Fill background colour first so transparent areas aren't white
+    ctx.fillStyle = '#003466'
+    ctx.fillRect(0, 0, 800, 600)
+
+    // Draw background image with cover behaviour
     const bgSrc = bgUrl(zone?.background)
     if (bgSrc) {
-      await new Promise(resolve => {
-        const img = new Image()
-        img.onload = img.onerror = resolve
-        img.src = bgSrc
-      })
+      try {
+        const bgImg = await loadImage(bgSrc)
+        const scale = Math.max(800 / bgImg.naturalWidth, 600 / bgImg.naturalHeight)
+        const w = bgImg.naturalWidth  * scale
+        const h = bgImg.naturalHeight * scale
+        ctx.drawImage(bgImg, (800 - w) / 2, (600 - h) / 2, w, h)
+      } catch { /* background failed — keep dark fill */ }
     }
 
-    // Wait for toon images
-    const imgs = Array.from(el.querySelectorAll('img'))
-    await Promise.all(imgs.map(img =>
-      img.complete && img.naturalHeight
-        ? Promise.resolve()
-        : new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }) })
-    ))
+    // Draw each toon in order
+    for (const toon of (zone?.toons || [])) {
+      try {
+        const img = await loadImage(toon.assetPath)
+        const w = toon.width  || img.naturalWidth
+        const h = toon.height || img.naturalHeight
+        ctx.drawImage(img, toon.x, toon.y, w, h)
+      } catch { /* skip toons that fail to load */ }
+    }
 
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(el, { useCORS: true, allowTaint: true, width: 800, height: 600, scale: 1, scrollX: 0, scrollY: 0 })
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
     if (!blob) throw new Error('Failed to capture')
 
@@ -599,8 +568,8 @@ async function doSubmit() {
   padding: 3px;
 }
 
-.cc-card-img-wrap { aspect-ratio: 800/600; width: 100%; overflow: hidden; }
-.cc-card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cc-card-img-wrap { aspect-ratio: 800/600; width: 100%; overflow: hidden; position: relative; }
+.cc-card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .cc-card-foot {
   display: flex;
@@ -690,6 +659,5 @@ async function doSubmit() {
   border-radius: 4px; outline: none;
 }
 .cc-select option { background: #1a3a58; }
-.cc-rfp-warning  { font-size: 0.65rem; color: #f4a800; background: rgba(244,164,0,0.1); border: 1px solid rgba(244,164,0,0.3); border-radius: 4px; padding: 6px 8px; line-height: 1.4; }
 .cc-submit-error { font-size: 0.68rem; color: #e07a7a; }
 </style>

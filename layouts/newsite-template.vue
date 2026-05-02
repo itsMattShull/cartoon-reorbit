@@ -487,7 +487,7 @@ const scaleStyle = computed(() => {
   background: var(--OrbitDarkBlue);
   color: white;
   border: none;
-  border-radius: 0;
+  border-radius: var(--sidebar-radius) var(--sidebar-radius) 0 0;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: bold;

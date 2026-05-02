@@ -12,9 +12,6 @@
     <template #main-content>
       <MyCzone ref="czoneRef" />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

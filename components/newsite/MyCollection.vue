@@ -157,13 +157,19 @@ onMounted(async () => {
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
   display: grid;
-  grid-template-columns: repeat(4, var(--shortcard-width));
+  grid-template-columns: repeat(6, 1fr);
   grid-auto-rows: var(--shortcard-height);
   grid-auto-flow: row;
   gap: 4px;
   padding: 4px;
-  justify-content: center;
   box-sizing: border-box;
+  --shortcard-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .mc-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* ── Status ──────────────────────────────────────────────────── */

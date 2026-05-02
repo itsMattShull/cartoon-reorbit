@@ -16,7 +16,7 @@
           <div class="skel skel-stat" />
         </template>
         <template v-else>
-          <span class="user-info-username" ref="usernameEl">{{ user.username }}</span>
+          <NuxtLink :to="`/newsite/czone/${user.username}`" class="user-info-username" ref="usernameEl">{{ user.username }}</NuxtLink>
           <span class="user-info-stat">{{ (user.points ?? 0).toLocaleString() }} Points</span>
           <span class="user-info-stat">{{ (collectionSummary.uniqueCount ?? 0).toLocaleString() }} Unique cToons</span>
           <span class="user-info-stat">{{ (collectionSummary.totalCount ?? 0).toLocaleString() }} Total cToons</span>
