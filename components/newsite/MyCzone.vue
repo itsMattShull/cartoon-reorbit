@@ -133,24 +133,9 @@ function bgUrl(v) {
   return `/backgrounds/${s}`
 }
 
-const canvasStyle = computed(() => {
-  const src   = bgUrl(currentZone.value.background)
-  const gridH = 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)'
-  const gridV = 'linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)'
-  if (src) {
-    return {
-      backgroundImage:    `${gridH}, ${gridV}, url('${src}')`,
-      backgroundSize:     '40px 40px, 40px 40px, cover',
-      backgroundPosition: '0 0, 0 0, center',
-      backgroundRepeat:   'repeat, repeat, no-repeat',
-    }
-  }
-  return {
-    backgroundImage:    `${gridH}, ${gridV}`,
-    backgroundSize:     '40px 40px',
-    backgroundPosition: '0 0',
-    backgroundRepeat:   'repeat',
-  }
+const currentBg = computed(() => {
+  const src = bgUrl(currentZone.value.background)
+  return src ? `url('${src}')` : ''
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
@@ -218,8 +203,11 @@ function goToMyCzone() {
 
 async function toggleBuild() {
   if (!isOwnZone.value) return
+  const wasBuilding = cz.value.buildMode
   cz.value.buildMode = !cz.value.buildMode
-  if (cz.value.buildMode) {
+  if (wasBuilding) {
+    await save()
+  } else {
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
       try {
@@ -418,6 +406,9 @@ defineExpose({ save, clearZone })
   height: 600px;
   overflow: hidden;
   background-color: var(--OrbitDarkBlue);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   cursor: default;
 }
 
