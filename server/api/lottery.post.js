@@ -93,6 +93,8 @@ export default defineEventHandler(async (event) => {
   let verificationCode = null
   let verificationHash = null
 
+  let wonUserCtoonId = null
+
   if (ctoonWin) {
     // Grand Prize: Win a cToon from the pool
     const availablePool = settings.ctoonPool.filter(p => p.ctoon.quantity === null || p.ctoon.totalMinted < p.ctoon.quantity)
@@ -101,18 +103,31 @@ export default defineEventHandler(async (event) => {
         const randomIndex = Math.floor(Math.random() * availablePool.length)
         const prizeCtoonInfo = availablePool[randomIndex]
         awardedCtoon = prizeCtoonInfo.ctoon
+        const mintNumber = awardedCtoon.totalMinted + 1
 
         // Mint the new ctoon for the user
-        await tx.userCtoon.create({
+        const newUserCtoon = await tx.userCtoon.create({
           data: {
             userId: me.id,
             ctoonId: awardedCtoon.id,
             isTradeable: true,
-            mintNumber: awardedCtoon.totalMinted + 1
+            mintNumber
           }
         })
+        wonUserCtoonId = newUserCtoon.id
+
         // Increment the total minted count for the ctoon
         await tx.ctoon.update({ where: { id: awardedCtoon.id }, data: { totalMinted: { increment: 1 } } })
+
+        // Record ownership log
+        await tx.ctoonOwnerLog.create({
+          data: {
+            userId: me.id,
+            ctoonId: awardedCtoon.id,
+            userCtoonId: newUserCtoon.id,
+            mintNumber
+          }
+        })
       })
     } else {
       // Fallback to points if pool is empty
@@ -157,7 +172,8 @@ export default defineEventHandler(async (event) => {
         userId: me.id,
         outcome,
         oddsBefore,
-        oddsAfter
+        oddsAfter,
+        ...(wonUserCtoonId ? { userCtoonId: wonUserCtoonId } : {})
       }
     })
     return next

@@ -5,7 +5,7 @@
     <div class="px-6 mt-16 md:mt-20 pb-10">
       <h1 class="text-2xl font-bold mb-4">Lotto Logs</h1>
 
-      <!-- Date range filter -->
+      <!-- Filters -->
       <form class="bg-white border rounded p-4 flex flex-wrap items-end gap-4 mb-6" @submit.prevent="applyRange">
         <div>
           <label class="block text-sm font-medium mb-1">From</label>
@@ -15,8 +15,33 @@
           <label class="block text-sm font-medium mb-1">To</label>
           <input type="date" v-model="to" class="border rounded px-2 py-1" />
         </div>
+        <div class="relative">
+          <label class="block text-sm font-medium mb-1">User</label>
+          <input
+            v-model="userQuery"
+            type="text"
+            class="border rounded px-2 py-1 w-48"
+            placeholder="Type 3+ characters…"
+            autocomplete="off"
+            @input="onUserInput"
+            @blur="hideUserSuggestions"
+            @focus="onUserInput"
+          />
+          <ul
+            v-if="userSuggestions.length && showUserDropdown"
+            class="absolute z-20 left-0 mt-1 w-48 bg-white border rounded shadow max-h-48 overflow-y-auto"
+          >
+            <li
+              v-for="u in userSuggestions"
+              :key="u"
+              class="px-3 py-1.5 text-sm cursor-pointer hover:bg-indigo-50"
+              @mousedown.prevent="selectUser(u)"
+            >{{ u }}</li>
+          </ul>
+        </div>
         <button class="bg-indigo-600 text-white rounded px-4 py-2">Apply</button>
         <button type="button" class="text-sm text-gray-600 underline" @click="setLastNDays(30)">Last 30 days</button>
+        <button v-if="userQuery" type="button" class="text-sm text-red-500 underline" @click="clearUser">Clear user</button>
       </form>
 
       <!-- Breakdown -->
@@ -74,6 +99,7 @@
                   <th class="px-3 py-2 border-b">Time (CDT)</th>
                   <th class="px-3 py-2 border-b">User</th>
                   <th class="px-3 py-2 border-b">Outcome</th>
+                  <th class="px-3 py-2 border-b">Prize</th>
                   <th class="px-3 py-2 border-b">Odds Before</th>
                   <th class="px-3 py-2 border-b">Odds After</th>
                 </tr>
@@ -83,6 +109,7 @@
                   <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(log.createdAt) }}</td>
                   <td class="px-3 py-2">{{ displayUser(log.user) }}</td>
                   <td class="px-3 py-2">{{ labelFor(log.outcome) }}</td>
+                  <td class="px-3 py-2">{{ formatPrize(log) }}</td>
                   <td class="px-3 py-2">{{ formatOdds(log.oddsBefore) }}</td>
                   <td class="px-3 py-2">{{ formatOdds(log.oddsAfter) }}</td>
                 </tr>
@@ -98,6 +125,9 @@
                 <span>{{ labelFor(log.outcome) }}</span>
               </div>
               <div class="mt-1 text-sm font-medium">{{ displayUser(log.user) }}</div>
+              <div v-if="log.outcome === 'CTOON' && log.userCtoon" class="mt-1 text-sm text-indigo-700 font-medium">
+                {{ formatPrize(log) }}
+              </div>
               <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
                 <div><span class="text-gray-500">Odds Before:</span> {{ formatOdds(log.oddsBefore) }}</div>
                 <div><span class="text-gray-500">Odds After:</span> {{ formatOdds(log.oddsAfter) }}</div>
@@ -131,6 +161,9 @@ const from = ref('')
 const to = ref('')
 const page = ref(1)
 const pageSize = 50
+const userQuery = ref('')
+const userSuggestions = ref([])
+const showUserDropdown = ref(false)
 
 const summaryLoading = ref(false)
 const logsLoading = ref(false)
@@ -209,6 +242,13 @@ function displayUser(user) {
   return user?.username || user?.discordTag || user?.id || '—'
 }
 
+function formatPrize(log) {
+  if (log.outcome !== 'CTOON' || !log.userCtoon) return '—'
+  const name = log.userCtoon.ctoon?.name || 'Unknown'
+  const mint = log.userCtoon.mintNumber != null ? `#${log.userCtoon.mintNumber}` : ''
+  return mint ? `${name} ${mint}` : name
+}
+
 async function fetchSummary() {
   summaryLoading.value = true
   try {
@@ -224,11 +264,52 @@ async function fetchSummary() {
   }
 }
 
+let userSuggestTimer = null
+async function fetchUserSuggestions() {
+  const term = userQuery.value.trim()
+  if (term.length < 3) {
+    userSuggestions.value = []
+    return
+  }
+  try {
+    const res = await $fetch('/api/admin/user-mentions', { query: { q: term, limit: 10 } })
+    userSuggestions.value = (res.items || []).map(item => item.username).filter(Boolean)
+  } catch {
+    userSuggestions.value = []
+  }
+}
+
+function onUserInput() {
+  showUserDropdown.value = true
+  if (userSuggestTimer) clearTimeout(userSuggestTimer)
+  userSuggestTimer = setTimeout(fetchUserSuggestions, 200)
+}
+
+function hideUserSuggestions() {
+  setTimeout(() => { showUserDropdown.value = false }, 150)
+}
+
+function selectUser(username) {
+  userQuery.value = username
+  showUserDropdown.value = false
+  userSuggestions.value = []
+  page.value = 1
+  fetchLogs()
+}
+
+function clearUser() {
+  userQuery.value = ''
+  userSuggestions.value = []
+  page.value = 1
+  fetchLogs()
+}
+
 async function fetchLogs() {
   logsLoading.value = true
   try {
+    const username = userQuery.value.trim()
     const res = await $fetch('/api/admin/lotto-logs', {
-      query: { start: from.value, end: to.value, page: page.value, limit: pageSize }
+      query: { start: from.value, end: to.value, page: page.value, limit: pageSize, ...(username && { username }) }
     })
     logs.value = res.items || []
     totalLogs.value = res.total || 0

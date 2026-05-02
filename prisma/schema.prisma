@@ -319,6 +319,7 @@ model UserCtoon {
   auctionOnlyListings       AuctionOnly[]
   tradeListItems            UserTradeListItem[]
   dissolveAuctionQueue      DissolveAuctionQueue?
+  lottoLogs                 LottoLog[]
 
   // Ensure only one of each mint number exists per cToon
   @@unique([ctoonId, mintNumber])
@@ -1759,14 +1760,16 @@ model LottoUser {
 }
 
 model LottoLog {
-  id         String       @id @default(uuid())
-  userId     String
-  outcome    LottoOutcome
-  oddsBefore Float
-  oddsAfter  Float
-  createdAt  DateTime     @default(now())
+  id          String       @id @default(uuid())
+  userId      String
+  outcome     LottoOutcome
+  oddsBefore  Float
+  oddsAfter   Float
+  userCtoonId String?
+  createdAt   DateTime     @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userCtoon UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([userId, createdAt])
