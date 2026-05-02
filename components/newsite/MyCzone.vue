@@ -28,7 +28,7 @@
         <div
           class="cz-canvas"
           ref="canvasEl"
-          :style="{ backgroundImage: currentBg }"
+          :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
         >

@@ -2247,13 +2247,13 @@ model ServerHeartbeat {
 model TkoMatch {
   id             String   @id @default(uuid())
   externalMatchId String  @unique
-  roomId         Int
-  battleCode     String
+  roomId         Int?
+  battleCode     String?
   mode           String
   isTraining     Boolean  @default(false)
   isChallenge    Boolean  @default(false)
   isPrivate      Boolean  @default(false)
-  startedAt      DateTime
+  startedAt      DateTime?
   createdAt      DateTime @default(now())
 
   rounds TkoRound[]
@@ -2272,23 +2272,23 @@ model TkoRound {
   roundNumber Int
   bestOf      Int
   endedAt     DateTime
-  durationMs  Int
+  durationMs  Int?
 
   winnerUserId          String?
   winner                User?   @relation("TkoRoundWinner", fields: [winnerUserId], references: [id])
   winnerUsername        String
-  winnerReorbitId       String
+  winnerReorbitId       String?
   winnerCharacterId     Int
   winnerCharacterName   String
-  winnerRemainingHealth Int
+  winnerRemainingHealth Int?
 
   loserUserId          String?
   loser                User?   @relation("TkoRoundLoser", fields: [loserUserId], references: [id])
   loserUsername        String
-  loserReorbitId       String
+  loserReorbitId       String?
   loserCharacterId     Int
   loserCharacterName   String
-  loserRemainingHealth Int
+  loserRemainingHealth Int?
 
   result     String
   winType    String
