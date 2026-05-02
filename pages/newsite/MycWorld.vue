@@ -9,9 +9,6 @@
     <template #main-content>
       <MyCworld />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

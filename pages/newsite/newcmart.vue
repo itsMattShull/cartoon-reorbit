@@ -9,9 +9,6 @@
     <template #main-content>
       <Cmart />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

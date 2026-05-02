@@ -9,9 +9,6 @@
     <template #main-content>
       <MyCollection />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

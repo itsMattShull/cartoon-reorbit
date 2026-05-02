@@ -9,9 +9,6 @@
     <template #main-content>
       <AuctionHouse />
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 

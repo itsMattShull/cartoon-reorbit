@@ -20,9 +20,6 @@
         </template>
       </div>
     </template>
-    <template #footer>
-      <Footer />
-    </template>
   </NuxtLayout>
 </template>
 
