@@ -199,15 +199,18 @@
     <div
       v-if="submitOpen && myZones.length"
       ref="captureRef"
-      style="position:fixed; left:-9999px; top:0; width:800px; height:600px; overflow:hidden;"
+      class="relative overflow-hidden"
+      style="position:fixed; left:-9999px; top:0; width:800px; height:600px;"
       :style="captureBgStyle"
     >
-      <div
-        v-for="(item, i) in captureZoneToons" :key="i"
-        style="position:absolute;"
-        :style="{ top: item.y + 'px', left: item.x + 'px' }"
-      >
-        <img :src="item.assetPath" :alt="item.name" :style="{ width: item.width + 'px', height: item.height + 'px', objectFit: 'contain' }" />
+      <div class="absolute inset-0">
+        <div
+          v-for="(item, i) in captureZoneToons" :key="i"
+          class="absolute"
+          :style="{ top: item.y + 'px', left: item.x + 'px' }"
+        >
+          <img :src="item.assetPath" :alt="item.name" :style="{ width: item.width + 'px', height: item.height + 'px', objectFit: 'contain', maxWidth: 'initial' }" />
+        </div>
       </div>
     </div>
 
@@ -366,14 +369,22 @@ const submitError     = ref('')
 const submitSuccess   = ref(false)
 const canvasRFP       = ref(false)
 
+function bgUrl(v) {
+  if (!v) return ''
+  const s = String(v)
+  if (/^(https?:)?\/\//.test(s) || s.startsWith('/')) return s
+  return `/backgrounds/${s}`
+}
+
 const captureBgStyle = computed(() => {
   const zone = myZones.value[submitZoneIndex.value]
-  const bg = zone?.background
-  if (!bg) return {}
+  const src = bgUrl(zone?.background)
+  if (!src) return {}
   return {
-    backgroundImage: `url('/backgrounds/${bg}')`,
+    backgroundImage: `url('${src}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
   }
 })
 
@@ -419,11 +430,12 @@ async function doSubmit() {
 
     // Preload background
     const zone = myZones.value[submitZoneIndex.value]
-    if (zone?.background) {
+    const bgSrc = bgUrl(zone?.background)
+    if (bgSrc) {
       await new Promise(resolve => {
         const img = new Image()
         img.onload = img.onerror = resolve
-        img.src = `/backgrounds/${zone.background}`
+        img.src = bgSrc
       })
     }
 
@@ -436,7 +448,7 @@ async function doSubmit() {
     ))
 
     const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(el, { useCORS: true, allowTaint: true, width: 800, height: 600, scale: 1 })
+    const canvas = await html2canvas(el, { useCORS: true, allowTaint: true, width: 800, height: 600, scale: 1, scrollX: 0, scrollY: 0 })
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
     if (!blob) throw new Error('Failed to capture')
 

@@ -48,7 +48,7 @@
     </Teleport>
 
     <!-- ── Header bar ────────────────────────────────────────────── -->
-    <div class="cmart-header">Cartoon Reorbit cMart</div>
+    <div class="cmart-header">Cartoon ReOrbit cMart</div>
 
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
@@ -285,27 +285,37 @@ const ctoons = computed(() => {
   if (f.hideUnavailable)
     list = list.filter(c => !c.nextReleaseAt && !(c.quantity != null && c.totalMinted >= c.quantity))
 
+  const byReleaseDateDesc = (a, b) => {
+    const at = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
+    const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
+    return bt - at
+  }
+  const byRarity = (a, b) => {
+    const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
+    const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99
+    return ar - br
+  }
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '')
+  const tieBrk = (a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b)
+
   list = [...list].sort((a, b) => {
     if (f.sortField === 'releaseDate') {
       const ad = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
       const bd = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
       const dateCmp = (f.sortAsc ? 1 : -1) * (ad - bd)
-      if (dateCmp !== 0) return dateCmp
-      const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
-      const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99
-      return ar - br
+      return dateCmp !== 0 ? dateCmp : byRarity(a, b) || byName(a, b)
     }
-    let cmp = 0
     if (f.sortField === 'price') {
-      cmp = a.price - b.price
-    } else if (f.sortField === 'rarity') {
-      const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
-      const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99
-      cmp = ar - br
-    } else {
-      cmp = a.name.localeCompare(b.name)
+      const cmp = a.price - b.price
+      return (f.sortAsc ? cmp : -cmp) || tieBrk(a, b)
     }
-    return f.sortAsc ? cmp : -cmp
+    if (f.sortField === 'rarity') {
+      const cmp = byRarity(a, b)
+      return (f.sortAsc ? cmp : -cmp) || byReleaseDateDesc(a, b) || byName(a, b)
+    }
+    // name
+    const cmp = byName(a, b)
+    return (f.sortAsc ? cmp : -cmp) || tieBrk(a, b)
   })
 
   return list
@@ -348,8 +358,6 @@ async function fetchPacks() {
 }
 
 onMounted(async () => {
-  filter.value.sortField = 'releaseDate'
-  filter.value.sortAsc   = false
   try {
     allCtoons.value = await $fetch('/api/cmart')
     scheduleNextRefresh()
@@ -435,7 +443,7 @@ async function buyPack(pack) {
     setTimeout(() => {
       showGlow.value  = false
       glowStage.value = 'hidden'
-    }, 5000)
+    }, 6000)
 
     await fetchSelf({ force: true })
     await loadOwnedCtoonIds()
@@ -718,11 +726,11 @@ async function closeOverlay() {
 
 @keyframes expandGlow {
   from { width: 1vw; height: 1vh; opacity: 1; }
-  to   { width: 300vw; height: 300vh; opacity: 0.9; }
+  to   { width: 300vw; height: 300vh; opacity: 1; }
 }
 
 @keyframes fadeGlow {
-  from { opacity: 0.9; }
+  from { opacity: 1; }
   to   { opacity: 0; }
 }
 

@@ -928,6 +928,9 @@ function updateUrlQueryFromFilters() {
   if (sortBy.value && sortBy.value !== 'releaseDateDesc') newQuery.sort = sortBy.value
   else delete newQuery.sort
 
+  if (activeTab.value && activeTab.value !== 'cToons') newQuery.tab = activeTab.value
+  else delete newQuery.tab
+
   const current = JSON.stringify(route.query)
   const next    = JSON.stringify(newQuery)
   if (current !== next) router.replace({ path: route.path, query: newQuery })
@@ -1021,27 +1024,47 @@ const filteredCtoons = computed(() => {
 })
 
 // ────────── SORTED (AND FILTERED) ─────────────
+const RARITY_SORT_ORDER = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+
+function rarityRank(rarity) {
+  const idx = RARITY_SORT_ORDER.indexOf(rarity)
+  return idx === -1 ? RARITY_SORT_ORDER.length : idx
+}
+
 const filteredAndSortedCtoons = computed(() => {
   const list = filteredCtoons.value.slice()
 
-  switch (sortBy.value) {
-    case 'releaseDateAsc':
-      return list.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate))
+  const byReleaseDateDesc = (a, b) => {
+    const at = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
+    const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
+    return bt - at
+  }
+  const byRarity = (a, b) => rarityRank(a.rarity) - rarityRank(b.rarity)
+  const byName   = (a, b) => (a.name || '').localeCompare(b.name || '')
+  const tieBrk   = (a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b)
 
+  switch (sortBy.value) {
+    case 'releaseDateAsc': {
+      return list.sort((a, b) => {
+        const at = a.releaseDate ? new Date(a.releaseDate).getTime() : Number.MAX_SAFE_INTEGER
+        const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : Number.MAX_SAFE_INTEGER
+        return (at - bt) || byRarity(a, b) || byName(a, b)
+      })
+    }
     case 'releaseDateDesc':
-      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+      return list.sort((a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b))
 
     case 'priceAsc':
-      return list.sort((a, b) => a.price - b.price)
+      return list.sort((a, b) => (a.price - b.price) || tieBrk(a, b))
 
     case 'priceDesc':
-      return list.sort((a, b) => b.price - a.price)
+      return list.sort((a, b) => (b.price - a.price) || tieBrk(a, b))
 
     case 'series':
-      return list.sort((a, b) => a.series.localeCompare(b.series))
+      return list.sort((a, b) => (a.series || '').localeCompare(b.series || '') || tieBrk(a, b))
 
     default:
-      return list.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate))
+      return list.sort((a, b) => byReleaseDateDesc(a, b) || byRarity(a, b) || byName(a, b))
   }
 })
 
@@ -1060,6 +1083,7 @@ watch(
   },
   { deep: true }
 )
+watch(activeTab, () => updateUrlQueryFromFilters())
 
 // Pagination helpers: scroll to top on page change
 function scrollToTop () {
@@ -1205,6 +1229,14 @@ onMounted(async () => {
     activeHoliday.value = null
   }
 
+  // Initialize active tab from URL (after holiday is loaded so dynamic tab name is known)
+  const tabParam = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (tabParam) {
+    const validTabs = new Set(['cToons', 'Packs', 'cZones Upgrades'])
+    if (activeHoliday.value?.name) validTabs.add(activeHoliday.value.name)
+    if (validTabs.has(tabParam)) activeTab.value = tabParam
+  }
+
   // LOAD UPGRADES CONFIG
   try {
     upgradesConfig.value = await $fetch('/api/cmart/upgrades-config')
@@ -1287,15 +1319,10 @@ async function buyPack(pack) {
       overlayVisible.value = true
     }
     openingStep.value = 'pack'
-    glowStage.value   = 'hidden'
+    glowStage.value   = ''
     showGlow.value    = true
 
-    // 1) Expand glow after 2s
-    setTimeout(() => {
-      glowStage.value = 'expand'
-    }, 2000)
-
-    // 2) Reveal contents after 3s
+    // After 2s, fetch contents, switch to reveal, then fade the white overlay
     setTimeout(async () => {
       try {
         packContents.value = await $fetch('/api/cmart/open-pack', {
@@ -1307,14 +1334,18 @@ async function buyPack(pack) {
       }
       openingStep.value    = 'reveal'
       revealComplete.value = true
-      glowStage.value      = 'fade'
-    }, 3000)
 
-    // 3) Hide glow after 5s
+      // Start fade after reveal content is rendered
+      nextTick(() => {
+        glowStage.value = 'fade'
+      })
+    }, 2000)
+
+    // Remove glow after fade completes (2s wait + 1.5s fade + small buffer)
     setTimeout(() => {
       showGlow.value  = false
-      glowStage.value = 'hidden'
-    }, 5000)
+      glowStage.value = ''
+    }, 3700)
 
   } catch (err) {
     Sentry.captureException(err)
@@ -1369,46 +1400,22 @@ async function closeOverlay() {
 
 
 <style scoped>
-/* ─── WHITE GLOW KEYFRAME ANIMATION ───────────── */
+/* ─── WHITE OVERLAY FADE ANIMATION ───────────── */
 .glow {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  /* start as a tiny dot */
-  width: 1vw;
-  height: 1vh;
+  inset: 0;
   background: white;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1000;
-
-  /* run two animations in sequence:
-     1) expand for 2s, forwards (leave end state)
-     2) fade for 1s, starting at 2s, forwards */
-  animation:
-    expandGlow 2s ease-out forwards,
-    fadeGlow   1s ease-in 2s forwards;
 }
 
-@keyframes expandGlow {
-  from {
-    width: 1vw;
-    height: 1vh;
-  }
-  to {
-    width: 200vw;
-    height: 200vh;
-  }
+.glow.fade {
+  animation: fadeGlow 1.5s ease-in forwards;
 }
 
 @keyframes fadeGlow {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* highlight cToons that went out of stock (inCmart=false) */

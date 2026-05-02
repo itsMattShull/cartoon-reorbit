@@ -448,7 +448,7 @@ const scaleStyle = computed(() => {
 }
 
 .topbar-nav-left {
-  width: var(--topbar-nav-left-width);
+  width: fit-content;
   height: var(--topbar-nav-left-height);
   background: var(--topbar-nav-left-bg);
   border-radius: var(--topbar-nav-left-radius);
