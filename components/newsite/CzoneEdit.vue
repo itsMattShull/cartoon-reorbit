@@ -52,11 +52,11 @@
       <div class="czew-bg-grid">
         <img
           v-for="bg in cz.backgrounds" :key="bg.id"
-          :src="`/backgrounds/${bg.filename}`"
-          :alt="bg.filename"
+          :src="bg.imagePath"
+          :alt="bg.label || bg.filename"
           class="czew-bg-item"
-          :class="{ 'czew-bg-active': currentZoneBg === bg.filename }"
-          @click="selectBg(bg.filename)"
+          :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
+          @click="selectBg(bg)"
         />
         <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
       </div>
@@ -133,8 +133,8 @@ function startDrag(ctoon, e) {
   cz.value.ghostY     = e.clientY
 }
 
-function selectBg(filename) {
-  cz.value.zones[cz.value.activeZone].background = filename
+function selectBg(bg) {
+  cz.value.zones[cz.value.activeZone].background = bg.imagePath
 }
 </script>
 

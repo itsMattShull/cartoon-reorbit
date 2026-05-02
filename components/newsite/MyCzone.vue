@@ -28,7 +28,7 @@
         <div
           class="cz-canvas"
           ref="canvasEl"
-          :style="{ backgroundImage: currentBg }"
+          :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
         >
@@ -134,10 +134,8 @@ function bgUrl(v) {
 }
 
 const currentBg = computed(() => {
-  const src  = bgUrl(currentZone.value.background)
-  const grid = `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`
-  return src ? `${grid}, url('${src}')` : grid
+  const src = bgUrl(currentZone.value.background)
+  return src ? `url('${src}')` : ''
 })
 
 // ── Lifecycle ─────────────────────────────────────────────────
@@ -205,8 +203,11 @@ function goToMyCzone() {
 
 async function toggleBuild() {
   if (!isOwnZone.value) return
+  const wasBuilding = cz.value.buildMode
   cz.value.buildMode = !cz.value.buildMode
-  if (cz.value.buildMode) {
+  if (wasBuilding) {
+    await save()
+  } else {
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
       try {
@@ -405,9 +406,9 @@ defineExpose({ save, clearZone })
   height: 600px;
   overflow: hidden;
   background-color: var(--OrbitDarkBlue);
-  background-size: 40px 40px, 40px 40px, 100% 100%;
-  background-position: 0 0, 0 0, top left;
-  background-repeat: repeat, repeat, no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   cursor: default;
 }
 
