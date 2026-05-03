@@ -31,6 +31,7 @@
           :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
+          @touchstart.prevent="onCanvasTouchStart"
         >
           <img
             v-for="toon in currentZone.toons" :key="toon.id"
@@ -148,6 +149,8 @@ onMounted(() => {
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
+  window.addEventListener('touchmove', onGlobalTouchMove, { passive: false })
+  window.addEventListener('touchend',  onGlobalTouchEnd)
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -168,6 +171,8 @@ onUnmounted(() => {
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
+  window.removeEventListener('touchmove', onGlobalTouchMove)
+  window.removeEventListener('touchend',  onGlobalTouchEnd)
   // clear any leftover drag state
   cz.value.activeDrag = null
   cz.value.buildMode  = false
@@ -264,6 +269,23 @@ function onCanvasMouseDown(e) {
   }
 }
 
+// ── Canvas touchstart: same as mousedown but for touch ────────
+function onCanvasTouchStart(e) {
+  if (!cz.value.buildMode) return
+  if (e.touches.length !== 1) return
+  const touch = e.touches[0]
+  const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
+  const toons = currentZone.value.toons
+  for (let i = toons.length - 1; i >= 0; i--) {
+    const t = toons[i]
+    const w = t.width || TOON_SIZE, h = t.height || TOON_SIZE
+    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
+      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      return
+    }
+  }
+}
+
 // ── Global mouse move ─────────────────────────────────────────
 function onGlobalMove(e) {
   // Update ghost for cross-component drag from CzoneEdit
@@ -274,6 +296,24 @@ function onGlobalMove(e) {
   // Reposition local canvas drag
   if (localDrag.value) {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY)
+    const t = localDrag.value.toon
+    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
+    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
+  }
+}
+
+// ── Global touch move ─────────────────────────────────────────
+function onGlobalTouchMove(e) {
+  if (!cz.value.activeDrag && !localDrag.value) return
+  e.preventDefault()
+  const touch = e.touches[0]
+  if (!touch) return
+  if (cz.value.activeDrag) {
+    cz.value.ghostX = touch.clientX
+    cz.value.ghostY = touch.clientY
+  }
+  if (localDrag.value) {
+    const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
     const t = localDrag.value.toon
     t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
     t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
@@ -299,6 +339,33 @@ function onGlobalUp(e) {
         })
       }
       img.src = c.assetPath
+    }
+  }
+  cz.value.activeDrag = null
+  localDrag.value     = null
+}
+
+// ── Global touch end ──────────────────────────────────────────
+function onGlobalTouchEnd(e) {
+  if (cz.value.activeDrag) {
+    const touch = e.changedTouches[0]
+    if (touch && isOverCanvas(touch.clientX, touch.clientY)) {
+      const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
+      const c = cz.value.activeDrag.ctoon
+      if (!currentZone.value.toons.some(t => t.id === c.id)) {
+        const img = new Image()
+        img.onload = () => {
+          const w = img.naturalWidth
+          const h = img.naturalHeight
+          currentZone.value.toons.push({
+            id: c.id, assetPath: c.assetPath, name: c.name,
+            x: clamp(x - w / 2, 0, canvasW() - w),
+            y: clamp(y - h / 2, 0, canvasH() - h),
+            width: w, height: h,
+          })
+        }
+        img.src = c.assetPath
+      }
     }
   }
   cz.value.activeDrag = null
@@ -414,6 +481,7 @@ defineExpose({ save, clearZone })
   background-position: center;
   background-repeat: no-repeat;
   cursor: default;
+  touch-action: none;
 }
 
 .cz-item {

@@ -38,6 +38,7 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
+            @touchstart.prevent="!currentZoneToonIds.has(c.id) && startDragTouch(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
@@ -131,6 +132,14 @@ function startDrag(ctoon, e) {
   cz.value.activeDrag = { ctoon }
   cz.value.ghostX     = e.clientX
   cz.value.ghostY     = e.clientY
+}
+
+function startDragTouch(ctoon, e) {
+  if (e.touches.length !== 1) return
+  const touch = e.touches[0]
+  cz.value.activeDrag = { ctoon }
+  cz.value.ghostX     = touch.clientX
+  cz.value.ghostY     = touch.clientY
 }
 
 function selectBg(bg) {
