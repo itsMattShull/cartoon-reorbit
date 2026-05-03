@@ -382,7 +382,7 @@ function filteredAdmin(group) {
 
 /* ──────────────────────────────────────────────────────────────
    Ad image rotation for logo
-   - Pull from /api/promotions
+   - Pull from /api/ads
    - GIF: rotate after one loop duration
    - PNG/JPG/JPEG/WEBP/SVG: rotate every 8s
    ──────────────────────────────────────────────────────────── */
@@ -521,7 +521,7 @@ async function scheduleNext() {
 
 async function initAds() {
   try {
-    const res = await $fetch('/api/promotions', { params: { take: 100 } })
+    const res = await $fetch('/api/ads', { params: { take: 100 } })
     const items = Array.isArray(res?.items) ? res.items : []
     const ads = items
       .filter(i => i?.imagePath)

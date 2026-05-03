@@ -1,9 +1,9 @@
 <template>
-  <NuxtLink v-if="!hasAdUrl" to="/newsite/home" class="promo-spot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Sponsor" />
+  <NuxtLink v-if="!hasAdUrl" to="/newsite/home" class="adspot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
   </NuxtLink>
-  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="promo-spot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Sponsor" />
+  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="adspot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
   </a>
 </template>
 
@@ -118,7 +118,7 @@ async function scheduleNext() {
 
 async function initAds() {
   try {
-    const res = await $fetch('/api/promotions', { params: { take: 100 } })
+    const res = await $fetch('/api/ads', { params: { take: 100 } })
     const items = Array.isArray(res?.items) ? res.items : []
     const ads = items
       .filter(i => i?.imagePath)
@@ -145,7 +145,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.promo-spot {
+.adspot {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,7 +154,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.promo-spot img {
+.adspot img {
   display: block;
   width: 100%;
   height: auto;

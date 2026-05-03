@@ -1,16 +1,16 @@
 <template>
-  <div class="promo-label">
-    <img src="/images/newsite/sponsor-label.gif" alt="" />
+  <div class="adlabel">
+    <img src="/images/newsite/adlabel.gif" alt="Ad Label" />
   </div>
 </template>
 
 <style scoped>
-.promo-label {
+.adlabel {
   width: 100%;
   height: 100%;
 }
 
-.promo-label img {
+.adlabel img {
   width: 100%;
   height: 100%;
   object-fit: fill;
