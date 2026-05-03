@@ -243,10 +243,10 @@ html.newsite-active body {
       </div>
     </div>
     <div class="sidebar" :style="[{ display: showSidebar ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', boxSizing: 'border-box', paddingLeft: '5px', paddingRight: '5px' } : {}]">
-      <button v-if="isMobile" class="sidebar-toggle" @click="mobileSidebarCollapsed = !mobileSidebarCollapsed">
+      <button v-if="isMobile && !czoneState.value.buildMode" class="sidebar-toggle" @click="mobileSidebarCollapsed = !mobileSidebarCollapsed">
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
-      <template v-if="!isMobile || !mobileSidebarCollapsed">
+      <template v-if="!isMobile || !mobileSidebarCollapsed || czoneState.value.buildMode">
         <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><slot name="sidebar-top" /></div>
         <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle"><MiddleSidebarImages /></slot></div>
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
@@ -277,6 +277,10 @@ const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
 const mobileSidebarCollapsed = ref(true)
+
+watch(() => czoneState.value.buildMode, (buildMode) => {
+  if (isMobile.value) mobileSidebarCollapsed.value = !buildMode
+})
 
 const gridColumns = computed(() =>
   isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'

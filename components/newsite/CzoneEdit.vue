@@ -312,6 +312,14 @@ function selectBg(bg) {
   font-style: italic; padding: 6px 2px;
 }
 
+/* ── Mobile: parent has height:auto so flex-1 grids would collapse ── */
+@media (max-width: 767px) {
+  .czew         { height: auto; }
+  .czew-panel   { flex: none; min-height: auto; }
+  .czew-grid    { max-height: 280px; }
+  .czew-bg-grid { max-height: 280px; }
+}
+
 /* ── Actions ── */
 .czew-actions { display: flex; gap: 4px; flex-shrink: 0; }
 

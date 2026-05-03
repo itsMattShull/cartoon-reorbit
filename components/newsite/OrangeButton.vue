@@ -5,7 +5,7 @@
 <style scoped>
 .orange-btn {
   background: #f47b00;
-  color: #fff;
+  color: #111;
   font-weight: bold;
   font-size: 0.72rem;
   border: 2px solid #c05a00;
