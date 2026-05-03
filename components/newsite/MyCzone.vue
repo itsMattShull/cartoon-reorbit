@@ -37,7 +37,7 @@
             v-for="toon in currentZone.toons" :key="toon.id"
             :src="toon.assetPath" :alt="toon.name"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-long-pressing': pendingTouchDrag?.toon?.id === toon.id }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
             :title="toon.name"
             draggable="false"
@@ -50,7 +50,7 @@
     <div class="cz-bottombar">
       <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
-        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
+        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click or hold 2s to remove</template>
       </div>
       <div class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -122,7 +122,11 @@ const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Local drag: repositioning toons already on the canvas
-const localDrag = ref(null)  // { toon, offsetX, offsetY }
+const localDrag         = ref(null)  // { toon, offsetX, offsetY }
+const pendingTouchDrag  = ref(null)  // { toon, startX, startY, offsetX, offsetY }
+const longPressTimer    = ref(null)
+const LONG_PRESS_MS     = 2000
+const DRAG_THRESHOLD    = 10
 
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
@@ -173,6 +177,7 @@ onUnmounted(() => {
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalTouchMove)
   window.removeEventListener('touchend',  onGlobalTouchEnd)
+  if (longPressTimer.value) clearTimeout(longPressTimer.value)
   // clear any leftover drag state
   cz.value.activeDrag = null
   cz.value.buildMode  = false
@@ -269,7 +274,7 @@ function onCanvasMouseDown(e) {
   }
 }
 
-// ── Canvas touchstart: same as mousedown but for touch ────────
+// ── Canvas touchstart: begin pending drag + long-press timer ──
 function onCanvasTouchStart(e) {
   if (!cz.value.buildMode) return
   if (e.touches.length !== 1) return
@@ -280,7 +285,13 @@ function onCanvasTouchStart(e) {
     const t = toons[i]
     const w = t.width || TOON_SIZE, h = t.height || TOON_SIZE
     if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      pendingTouchDrag.value = { toon: t, startX: touch.clientX, startY: touch.clientY, offsetX: x - t.x, offsetY: y - t.y }
+      longPressTimer.value = setTimeout(() => {
+        const idx = currentZone.value.toons.indexOf(t)
+        if (idx !== -1) currentZone.value.toons.splice(idx, 1)
+        pendingTouchDrag.value = null
+        longPressTimer.value   = null
+      }, LONG_PRESS_MS)
       return
     }
   }
@@ -304,10 +315,21 @@ function onGlobalMove(e) {
 
 // ── Global touch move ─────────────────────────────────────────
 function onGlobalTouchMove(e) {
-  if (!cz.value.activeDrag && !localDrag.value) return
-  e.preventDefault()
   const touch = e.touches[0]
   if (!touch) return
+  // If touching a placed toon but not yet dragging, check movement threshold
+  if (pendingTouchDrag.value) {
+    const dx = touch.clientX - pendingTouchDrag.value.startX
+    const dy = touch.clientY - pendingTouchDrag.value.startY
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+      clearTimeout(longPressTimer.value)
+      longPressTimer.value = null
+      localDrag.value = { toon: pendingTouchDrag.value.toon, offsetX: pendingTouchDrag.value.offsetX, offsetY: pendingTouchDrag.value.offsetY }
+      pendingTouchDrag.value = null
+    }
+  }
+  if (!cz.value.activeDrag && !localDrag.value) return
+  e.preventDefault()
   if (cz.value.activeDrag) {
     cz.value.ghostX = touch.clientX
     cz.value.ghostY = touch.clientY
@@ -347,6 +369,11 @@ function onGlobalUp(e) {
 
 // ── Global touch end ──────────────────────────────────────────
 function onGlobalTouchEnd(e) {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+  pendingTouchDrag.value = null
   if (cz.value.activeDrag) {
     const touch = e.changedTouches[0]
     if (touch && isOverCanvas(touch.clientX, touch.clientY)) {
@@ -460,6 +487,21 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 
+@media (max-width: 700px) {
+  .cz-topbar {
+    flex-direction: column;
+    height: auto;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 4px 6px 6px;
+  }
+  .cz-owner-info {
+    order: -1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 /* ── Canvas ── */
 .cz-canvas-outer {
   /* width/height/position/overflow/margin set inline via outerScaleStyle */
@@ -492,6 +534,14 @@ defineExpose({ save, clearZone })
 }
 
 .cz-item.is-dragging { opacity: 0.5; }
+
+@keyframes long-press-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.cz-item.is-long-pressing {
+  animation: long-press-pulse 0.5s ease-in-out 4;
+}
 
 /* ── Bottom bar ── */
 .cz-bottombar {
