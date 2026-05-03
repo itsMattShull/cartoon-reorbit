@@ -555,7 +555,7 @@ defineExpose({ save, clearZone })
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .cz-bring-front-btn:hover { background: white; }
-.cz-bring-front-btn svg { width: 14px; height: 14px; }
+.cz-bring-front-btn svg { width: 14px; height: 14px; color: black; }
 
 .cz-size-cycle-btn {
   position: absolute;
@@ -576,7 +576,7 @@ defineExpose({ save, clearZone })
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .cz-size-cycle-btn:hover { background: white; }
-.cz-size-cycle-btn svg { width: 14px; height: 14px; }
+.cz-size-cycle-btn svg { width: 14px; height: 14px; color: black; }
 
 /* ── Bottom bar ── */
 .cz-bottombar {
