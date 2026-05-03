@@ -248,6 +248,7 @@
           <p>© {{ new Date().getFullYear() }} Cartoon ReOrbit</p>
           <nav class="flex items-center gap-6">
             <NuxtLink to="/privacy" class="hover:text-[var(--reorbit-blue)]">Privacy</NuxtLink>
+            <NuxtLink to="/terms" class="hover:text-[var(--reorbit-blue)]">Terms of Use</NuxtLink>
           </nav>
         </div>
         <p class="mt-4 text-xs text-slate-500">
