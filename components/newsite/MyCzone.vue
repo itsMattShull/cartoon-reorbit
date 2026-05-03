@@ -8,11 +8,13 @@
           {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
         <OrangeButton v-else-if="viewedOwner">Trade</OrangeButton>
-        <button
-          v-for="(_, i) in cz.zones" :key="i"
-          class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
-          @click="cz.activeZone = i"
-        >{{ i + 1 }}</button>
+        <template v-for="(zone, i) in cz.zones" :key="i">
+          <button
+            v-if="cz.buildMode || zone.toons.length > 0"
+            class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
+            @click="cz.activeZone = i"
+          >{{ i + 1 }}</button>
+        </template>
       </div>
       <div class="cz-owner-info" v-if="viewedOwner">
         <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
@@ -31,16 +33,45 @@
           :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
+          @touchstart="onCanvasTouchStart"
         >
-          <img
-            v-for="toon in currentZone.toons" :key="toon.id"
-            :src="toon.assetPath" :alt="toon.name"
+          <div
+            v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
-            :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
-            :title="toon.name"
-            draggable="false"
-          />
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode }"
+            :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
+            @click.stop="onToonClick(toon)"
+          >
+            <img
+              :src="toon.assetPath" :alt="toon.name"
+              class="cz-item-img"
+              :title="toon.name"
+              draggable="false"
+              @load="e => onToonImgLoad(e, toon)"
+            />
+            <button
+              v-if="cz.buildMode"
+              class="cz-bring-front-btn"
+              title="Bring to front"
+              @click.stop="bringToFrontToon(toonIdx)"
+              @mousedown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+              </svg>
+            </button>
+            <button
+              v-if="cz.buildMode"
+              class="cz-size-cycle-btn"
+              :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
+              @click.stop="cycleToonSize(toonIdx)"
+              @mousedown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -81,6 +112,10 @@ const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
 const CANVAS_W    = 800   // design-space canvas width
 const CANVAS_H    = 600   // design-space canvas height
+const SIZE_CYCLE  = [1, 0.5, 2]  // sizeScale cycle: default → half → double
+
+function toonW(t) { return (t.width  || TOON_SIZE) * (t.sizeScale || 1) }
+function toonH(t) { return (t.height || TOON_SIZE) * (t.sizeScale || 1) }
 
 // Design-space canvas dimensions (used for clamping toon positions)
 function canvasW() { return CANVAS_W }
@@ -88,6 +123,7 @@ function canvasH() { return CANVAS_H }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
+const { open: openCtoonModal } = useCtoonModal()
 const route  = useRoute()
 const router = useRouter()
 
@@ -148,6 +184,8 @@ onMounted(() => {
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
+  window.addEventListener('touchmove', onGlobalMove, { passive: false })
+  window.addEventListener('touchend',  onGlobalUp)
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -168,6 +206,8 @@ onUnmounted(() => {
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
+  window.removeEventListener('touchmove', onGlobalMove)
+  window.removeEventListener('touchend',  onGlobalUp)
   // clear any leftover drag state
   cz.value.activeDrag = null
   cz.value.buildMode  = false
@@ -180,7 +220,8 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
-    cz.value.activeZone  = 0
+    const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
+    cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
   } catch (e) {
@@ -211,6 +252,10 @@ async function toggleBuild() {
   cz.value.buildMode = !cz.value.buildMode
   if (wasBuilding) {
     await save()
+    const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
+    if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
+      cz.value.activeZone = firstActive
+    }
   } else {
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
@@ -236,6 +281,12 @@ async function toggleBuild() {
 function canvasRect() { return canvasEl.value?.getBoundingClientRect() }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
+function getCoords(e) {
+  if (e.touches && e.touches.length > 0) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }
+  if (e.changedTouches && e.changedTouches.length > 0) return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY }
+  return { clientX: e.clientX, clientY: e.clientY }
+}
+
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
@@ -248,6 +299,12 @@ function isOverCanvas(cx, cy) {
   return r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom
 }
 
+// ── Toon click: open info modal in view mode ──────────────────
+function onToonClick(toon) {
+  if (cz.value.buildMode || !toon.ctoonId) return
+  openCtoonModal({ ctoonId: toon.ctoonId, assetPath: toon.assetPath, name: toon.name })
+}
+
 // ── Canvas mousedown: reposition placed toons ─────────────────
 function onCanvasMouseDown(e) {
   if (!cz.value.buildMode) return
@@ -255,7 +312,7 @@ function onCanvasMouseDown(e) {
   const toons = currentZone.value.toons
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i]
-    const w = t.width || TOON_SIZE, h = t.height || TOON_SIZE
+    const w = toonW(t), h = toonH(t)
     if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
       localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
       e.preventDefault()
@@ -264,27 +321,46 @@ function onCanvasMouseDown(e) {
   }
 }
 
-// ── Global mouse move ─────────────────────────────────────────
-function onGlobalMove(e) {
-  // Update ghost for cross-component drag from CzoneEdit
-  if (cz.value.activeDrag) {
-    cz.value.ghostX = e.clientX
-    cz.value.ghostY = e.clientY
-  }
-  // Reposition local canvas drag
-  if (localDrag.value) {
-    const { x, y } = toCanvasCoords(e.clientX, e.clientY)
-    const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
-    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
+// ── Canvas touchstart: reposition placed toons (mobile) ───────
+function onCanvasTouchStart(e) {
+  if (!cz.value.buildMode) return
+  const touch = e.touches[0]
+  const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
+  const toons = currentZone.value.toons
+  for (let i = toons.length - 1; i >= 0; i--) {
+    const t = toons[i]
+    const w = toonW(t), h = toonH(t)
+    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
+      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      e.preventDefault()
+      return
+    }
   }
 }
 
-// ── Global mouse up ───────────────────────────────────────────
+// ── Global move (mouse + touch) ───────────────────────────────
+function onGlobalMove(e) {
+  const { clientX, clientY } = getCoords(e)
+  if (cz.value.activeDrag || localDrag.value) {
+    e.preventDefault()  // prevent page scroll during drag
+  }
+  if (cz.value.activeDrag) {
+    cz.value.ghostX = clientX
+    cz.value.ghostY = clientY
+  }
+  if (localDrag.value) {
+    const { x, y } = toCanvasCoords(clientX, clientY)
+    const t = localDrag.value.toon
+    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
+    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
+  }
+}
+
+// ── Global up (mouse + touch) ─────────────────────────────────
 function onGlobalUp(e) {
-  // Drop from CzoneEdit onto canvas
-  if (cz.value.activeDrag && isOverCanvas(e.clientX, e.clientY)) {
-    const { x, y } = toCanvasCoords(e.clientX, e.clientY)
+  const { clientX, clientY } = getCoords(e)
+  if (cz.value.activeDrag && isOverCanvas(clientX, clientY)) {
+    const { x, y } = toCanvasCoords(clientX, clientY)
     const c = cz.value.activeDrag.ctoon
     if (!currentZone.value.toons.some(t => t.id === c.id)) {
       const img = new Image()
@@ -312,10 +388,33 @@ function onContextMenu(e) {
   const toons = currentZone.value.toons
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i]
-    if (x >= t.x && x <= t.x + (t.width || TOON_SIZE) && y >= t.y && y <= t.y + (t.height || TOON_SIZE)) {
+    if (x >= t.x && x <= t.x + toonW(t) && y >= t.y && y <= t.y + toonH(t)) {
       toons.splice(i, 1); return
     }
   }
+}
+
+// ── Bring toon to front (highest z-index = end of array) ─────
+function bringToFrontToon(idx) {
+  const toons = currentZone.value.toons
+  if (idx < 0 || idx >= toons.length) return
+  const [toon] = toons.splice(idx, 1)
+  toons.push(toon)
+}
+
+// ── Cycle toon display size (1× → 0.5× → 2× → 1× …) ─────────
+function cycleToonSize(idx) {
+  const toon = currentZone.value.toons[idx]
+  if (!toon) return
+  const cur = toon.sizeScale || 1
+  const next = SIZE_CYCLE[(SIZE_CYCLE.indexOf(cur) + 1) % SIZE_CYCLE.length]
+  toon.sizeScale = next
+}
+
+// ── Populate toon dimensions from natural image size on load ──
+function onToonImgLoad(e, toon) {
+  if (!toon.width)  toon.width  = e.target.naturalWidth
+  if (!toon.height) toon.height = e.target.naturalHeight
 }
 
 // ── Save / Clear (called from CzoneEdit emits via page) ───────
@@ -393,6 +492,18 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 
+@media (max-width: 768px) {
+  .cz-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    height: auto;
+    gap: 4px;
+  }
+  .cz-owner-info {
+    order: -1;
+  }
+}
+
 /* ── Canvas ── */
 .cz-canvas-outer {
   /* width/height/position/overflow/margin set inline via outerScaleStyle */
@@ -419,11 +530,63 @@ defineExpose({ save, clearZone })
 .cz-item {
   position: absolute;
   cursor: default;
-  image-rendering: pixelated;
   pointer-events: none;
 }
 
 .cz-item.is-dragging { opacity: 0.5; }
+.cz-item.is-viewable { pointer-events: auto; cursor: pointer; }
+.cz-item.is-viewable:hover { filter: brightness(1.1); }
+
+.cz-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  display: block;
+}
+
+.cz-bring-front-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cz-bring-front-btn:hover { background: white; }
+.cz-bring-front-btn svg { width: 14px; height: 14px; color: black; }
+
+.cz-size-cycle-btn {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cz-size-cycle-btn:hover { background: white; }
+.cz-size-cycle-btn svg { width: 14px; height: 14px; color: black; }
 
 /* ── Bottom bar ── */
 .cz-bottombar {

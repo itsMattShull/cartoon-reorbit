@@ -38,6 +38,7 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
+            @touchstart.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
@@ -129,8 +130,9 @@ function toggleRarity(val) {
 
 function startDrag(ctoon, e) {
   cz.value.activeDrag = { ctoon }
-  cz.value.ghostX     = e.clientX
-  cz.value.ghostY     = e.clientY
+  const point = e.touches ? e.touches[0] : e
+  cz.value.ghostX = point.clientX
+  cz.value.ghostY = point.clientY
 }
 
 function selectBg(bg) {
@@ -317,4 +319,18 @@ function selectBg(bg) {
 .czew-save:hover:not(:disabled)  { filter: brightness(1.1); }
 .czew-clear { background: #b03a2e; }
 .czew-clear:hover { filter: brightness(1.1); }
+
+@media (max-width: 768px) {
+  .czew {
+    height: auto;
+  }
+  .czew-panel {
+    flex: none;
+  }
+  .czew-grid,
+  .czew-bg-grid {
+    max-height: 45vh;
+    min-height: 120px;
+  }
+}
 </style>
