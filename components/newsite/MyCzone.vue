@@ -38,8 +38,9 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
+            @click.stop="onToonClick(toon)"
           >
             <img
               :src="toon.assetPath" :alt="toon.name"
@@ -122,6 +123,7 @@ function canvasH() { return CANVAS_H }
 
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
+const { open: openCtoonModal } = useCtoonModal()
 const route  = useRoute()
 const router = useRouter()
 
@@ -295,6 +297,12 @@ function toCanvasCoords(cx, cy) {
 function isOverCanvas(cx, cy) {
   const r = canvasRect()
   return r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom
+}
+
+// ── Toon click: open info modal in view mode ──────────────────
+function onToonClick(toon) {
+  if (cz.value.buildMode || !toon.ctoonId) return
+  openCtoonModal({ ctoonId: toon.ctoonId, assetPath: toon.assetPath, name: toon.name })
 }
 
 // ── Canvas mousedown: reposition placed toons ─────────────────
@@ -526,6 +534,8 @@ defineExpose({ save, clearZone })
 }
 
 .cz-item.is-dragging { opacity: 0.5; }
+.cz-item.is-viewable { pointer-events: auto; cursor: pointer; }
+.cz-item.is-viewable:hover { filter: brightness(1.1); }
 
 .cz-item-img {
   width: 100%;
