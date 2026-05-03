@@ -33,16 +33,43 @@
           :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
-          @touchstart.prevent="onCanvasTouchStart"
         >
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-long-pressing': pendingTouchDrag?.toon?.id === toon.id }"
-            :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
-            :title="toon.name"
-            draggable="false"
-          />
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
+            :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
+          >
+            <img
+              :src="toon.assetPath" :alt="toon.name"
+              class="cz-item-img"
+              :title="toon.name"
+              draggable="false"
+              @load="e => onToonImgLoad(e, toon)"
+            />
+            <button
+              v-if="cz.buildMode"
+              class="cz-bring-front-btn"
+              title="Bring to front"
+              @click.stop="bringToFrontToon(toonIdx)"
+              @mousedown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+              </svg>
+            </button>
+            <button
+              v-if="cz.buildMode"
+              class="cz-size-cycle-btn"
+              :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
+              @click.stop="cycleToonSize(toonIdx)"
+              @mousedown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -51,7 +78,7 @@
     <div class="cz-bottombar">
       <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
-        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click or hold 2s to remove</template>
+        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
       </div>
       <div class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -127,11 +154,7 @@ const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Local drag: repositioning toons already on the canvas
-const localDrag         = ref(null)  // { toon, offsetX, offsetY }
-const pendingTouchDrag  = ref(null)  // { toon, startX, startY, offsetX, offsetY }
-const longPressTimer    = ref(null)
-const LONG_PRESS_MS     = 2000
-const DRAG_THRESHOLD    = 10
+const localDrag = ref(null)  // { toon, offsetX, offsetY }
 
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
@@ -158,8 +181,6 @@ onMounted(() => {
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
-  window.addEventListener('touchmove', onGlobalTouchMove, { passive: false })
-  window.addEventListener('touchend',  onGlobalTouchEnd)
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -180,9 +201,6 @@ onUnmounted(() => {
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
-  window.removeEventListener('touchmove', onGlobalTouchMove)
-  window.removeEventListener('touchend',  onGlobalTouchEnd)
-  if (longPressTimer.value) clearTimeout(longPressTimer.value)
   // clear any leftover drag state
   cz.value.activeDrag = null
   cz.value.buildMode  = false
@@ -284,29 +302,6 @@ function onCanvasMouseDown(e) {
   }
 }
 
-// ── Canvas touchstart: begin pending drag + long-press timer ──
-function onCanvasTouchStart(e) {
-  if (!cz.value.buildMode) return
-  if (e.touches.length !== 1) return
-  const touch = e.touches[0]
-  const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
-  const toons = currentZone.value.toons
-  for (let i = toons.length - 1; i >= 0; i--) {
-    const t = toons[i]
-    const w = t.width || TOON_SIZE, h = t.height || TOON_SIZE
-    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      pendingTouchDrag.value = { toon: t, startX: touch.clientX, startY: touch.clientY, offsetX: x - t.x, offsetY: y - t.y }
-      longPressTimer.value = setTimeout(() => {
-        const idx = currentZone.value.toons.indexOf(t)
-        if (idx !== -1) currentZone.value.toons.splice(idx, 1)
-        pendingTouchDrag.value = null
-        longPressTimer.value   = null
-      }, LONG_PRESS_MS)
-      return
-    }
-  }
-}
-
 // ── Global mouse move ─────────────────────────────────────────
 function onGlobalMove(e) {
   // Update ghost for cross-component drag from CzoneEdit
@@ -320,35 +315,6 @@ function onGlobalMove(e) {
     const t = localDrag.value.toon
     t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
     t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
-  }
-}
-
-// ── Global touch move ─────────────────────────────────────────
-function onGlobalTouchMove(e) {
-  const touch = e.touches[0]
-  if (!touch) return
-  // If touching a placed toon but not yet dragging, check movement threshold
-  if (pendingTouchDrag.value) {
-    const dx = touch.clientX - pendingTouchDrag.value.startX
-    const dy = touch.clientY - pendingTouchDrag.value.startY
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-      clearTimeout(longPressTimer.value)
-      longPressTimer.value = null
-      localDrag.value = { toon: pendingTouchDrag.value.toon, offsetX: pendingTouchDrag.value.offsetX, offsetY: pendingTouchDrag.value.offsetY }
-      pendingTouchDrag.value = null
-    }
-  }
-  if (!cz.value.activeDrag && !localDrag.value) return
-  e.preventDefault()
-  if (cz.value.activeDrag) {
-    cz.value.ghostX = touch.clientX
-    cz.value.ghostY = touch.clientY
-  }
-  if (localDrag.value) {
-    const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
-    const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
-    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
   }
 }
 
@@ -371,38 +337,6 @@ function onGlobalUp(e) {
         })
       }
       img.src = c.assetPath
-    }
-  }
-  cz.value.activeDrag = null
-  localDrag.value     = null
-}
-
-// ── Global touch end ──────────────────────────────────────────
-function onGlobalTouchEnd(e) {
-  if (longPressTimer.value) {
-    clearTimeout(longPressTimer.value)
-    longPressTimer.value = null
-  }
-  pendingTouchDrag.value = null
-  if (cz.value.activeDrag) {
-    const touch = e.changedTouches[0]
-    if (touch && isOverCanvas(touch.clientX, touch.clientY)) {
-      const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
-      const c = cz.value.activeDrag.ctoon
-      if (!currentZone.value.toons.some(t => t.id === c.id)) {
-        const img = new Image()
-        img.onload = () => {
-          const w = img.naturalWidth
-          const h = img.naturalHeight
-          currentZone.value.toons.push({
-            id: c.id, assetPath: c.assetPath, name: c.name,
-            x: clamp(x - w / 2, 0, canvasW() - w),
-            y: clamp(y - h / 2, 0, canvasH() - h),
-            width: w, height: h,
-          })
-        }
-        img.src = c.assetPath
-      }
     }
   }
   cz.value.activeDrag = null
@@ -520,21 +454,6 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 
-@media (max-width: 700px) {
-  .cz-topbar {
-    flex-direction: column;
-    height: auto;
-    align-items: flex-start;
-    gap: 4px;
-    padding: 4px 6px 6px;
-  }
-  .cz-owner-info {
-    order: -1;
-    width: 100%;
-    box-sizing: border-box;
-  }
-}
-
 /* ── Canvas ── */
 .cz-canvas-outer {
   /* width/height/position/overflow/margin set inline via outerScaleStyle */
@@ -556,7 +475,6 @@ defineExpose({ save, clearZone })
   background-position: center;
   background-repeat: no-repeat;
   cursor: default;
-  touch-action: none;
 }
 
 .cz-item {
@@ -567,13 +485,56 @@ defineExpose({ save, clearZone })
 
 .cz-item.is-dragging { opacity: 0.5; }
 
-@keyframes long-press-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.35; }
+.cz-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  display: block;
 }
-.cz-item.is-long-pressing {
-  animation: long-press-pulse 0.5s ease-in-out 4;
+
+.cz-bring-front-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
+.cz-bring-front-btn:hover { background: white; }
+.cz-bring-front-btn svg { width: 14px; height: 14px; }
+
+.cz-size-cycle-btn {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cz-size-cycle-btn:hover { background: white; }
+.cz-size-cycle-btn svg { width: 14px; height: 14px; }
 
 /* ── Bottom bar ── */
 .cz-bottombar {

@@ -2,14 +2,14 @@
   <component
     :is="linkTag"
     v-bind="linkProps"
-    class="winball-promo"
+    class="winball-ad"
   >
-    <img :src="bgSrc" alt="Bottom spotlight" class="winball-promo-bg" />
+    <img :src="bgSrc" alt="Bottom spotlight" class="winball-ad-bg" />
     <img
       v-if="showPrize && prizeUrl"
       :src="prizeUrl"
       alt="Current Winball prize"
-      class="winball-promo-prize"
+      class="winball-ad-prize"
     />
   </component>
 </template>
@@ -49,7 +49,7 @@ const linkProps = computed(() => {
 </script>
 
 <style scoped>
-.winball-promo {
+.winball-ad {
   display: block;
   position: relative;
   width: 100%;
@@ -59,13 +59,13 @@ const linkProps = computed(() => {
   text-decoration: none;
 }
 
-.winball-promo-bg {
+.winball-ad-bg {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.winball-promo-prize {
+.winball-ad-prize {
   position: absolute;
   top: 50%;
   left: 50%;
