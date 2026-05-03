@@ -8,11 +8,13 @@
           {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
         <OrangeButton v-else-if="viewedOwner">Trade</OrangeButton>
-        <button
-          v-for="(_, i) in cz.zones" :key="i"
-          class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
-          @click="cz.activeZone = i"
-        >{{ i + 1 }}</button>
+        <template v-for="(zone, i) in cz.zones" :key="i">
+          <button
+            v-if="cz.buildMode || zone.toons.length > 0"
+            class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
+            @click="cz.activeZone = i"
+          >{{ i + 1 }}</button>
+        </template>
       </div>
       <div class="cz-owner-info" v-if="viewedOwner">
         <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
@@ -180,7 +182,8 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
-    cz.value.activeZone  = 0
+    const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
+    cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
   } catch (e) {
@@ -211,6 +214,10 @@ async function toggleBuild() {
   cz.value.buildMode = !cz.value.buildMode
   if (wasBuilding) {
     await save()
+    const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
+    if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
+      cz.value.activeZone = firstActive
+    }
   } else {
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
