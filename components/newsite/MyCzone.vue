@@ -33,6 +33,7 @@
           :style="canvasStyle"
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
+          @touchstart="onCanvasTouchStart"
         >
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
@@ -181,6 +182,8 @@ onMounted(() => {
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
+  window.addEventListener('touchmove', onGlobalMove, { passive: false })
+  window.addEventListener('touchend',  onGlobalUp)
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -201,6 +204,8 @@ onUnmounted(() => {
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
+  window.removeEventListener('touchmove', onGlobalMove)
+  window.removeEventListener('touchend',  onGlobalUp)
   // clear any leftover drag state
   cz.value.activeDrag = null
   cz.value.buildMode  = false
@@ -274,6 +279,12 @@ async function toggleBuild() {
 function canvasRect() { return canvasEl.value?.getBoundingClientRect() }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
+function getCoords(e) {
+  if (e.touches && e.touches.length > 0) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }
+  if (e.changedTouches && e.changedTouches.length > 0) return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY }
+  return { clientX: e.clientX, clientY: e.clientY }
+}
+
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
@@ -302,27 +313,46 @@ function onCanvasMouseDown(e) {
   }
 }
 
-// ── Global mouse move ─────────────────────────────────────────
-function onGlobalMove(e) {
-  // Update ghost for cross-component drag from CzoneEdit
-  if (cz.value.activeDrag) {
-    cz.value.ghostX = e.clientX
-    cz.value.ghostY = e.clientY
+// ── Canvas touchstart: reposition placed toons (mobile) ───────
+function onCanvasTouchStart(e) {
+  if (!cz.value.buildMode) return
+  const touch = e.touches[0]
+  const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
+  const toons = currentZone.value.toons
+  for (let i = toons.length - 1; i >= 0; i--) {
+    const t = toons[i]
+    const w = toonW(t), h = toonH(t)
+    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
+      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      e.preventDefault()
+      return
+    }
   }
-  // Reposition local canvas drag
+}
+
+// ── Global move (mouse + touch) ───────────────────────────────
+function onGlobalMove(e) {
+  const { clientX, clientY } = getCoords(e)
+  if (cz.value.activeDrag || localDrag.value) {
+    e.preventDefault()  // prevent page scroll during drag
+  }
+  if (cz.value.activeDrag) {
+    cz.value.ghostX = clientX
+    cz.value.ghostY = clientY
+  }
   if (localDrag.value) {
-    const { x, y } = toCanvasCoords(e.clientX, e.clientY)
+    const { x, y } = toCanvasCoords(clientX, clientY)
     const t = localDrag.value.toon
     t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
     t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
   }
 }
 
-// ── Global mouse up ───────────────────────────────────────────
+// ── Global up (mouse + touch) ─────────────────────────────────
 function onGlobalUp(e) {
-  // Drop from CzoneEdit onto canvas
-  if (cz.value.activeDrag && isOverCanvas(e.clientX, e.clientY)) {
-    const { x, y } = toCanvasCoords(e.clientX, e.clientY)
+  const { clientX, clientY } = getCoords(e)
+  if (cz.value.activeDrag && isOverCanvas(clientX, clientY)) {
+    const { x, y } = toCanvasCoords(clientX, clientY)
     const c = cz.value.activeDrag.ctoon
     if (!currentZone.value.toons.some(t => t.id === c.id)) {
       const img = new Image()
@@ -453,6 +483,18 @@ defineExpose({ save, clearZone })
 .cz-owner-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
+
+@media (max-width: 768px) {
+  .cz-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    height: auto;
+    gap: 4px;
+  }
+  .cz-owner-info {
+    order: -1;
+  }
+}
 
 /* ── Canvas ── */
 .cz-canvas-outer {
