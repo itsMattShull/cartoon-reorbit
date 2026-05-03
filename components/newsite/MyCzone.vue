@@ -8,11 +8,13 @@
           {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
         <OrangeButton v-else-if="viewedOwner">Trade</OrangeButton>
-        <button
-          v-for="(_, i) in cz.zones" :key="i"
-          class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
-          @click="cz.activeZone = i"
-        >{{ i + 1 }}</button>
+        <template v-for="(zone, i) in cz.zones" :key="i">
+          <button
+            v-if="cz.buildMode || zone.toons.length > 0"
+            class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
+            @click="cz.activeZone = i"
+          >{{ i + 1 }}</button>
+        </template>
       </div>
       <div class="cz-owner-info" v-if="viewedOwner">
         <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
@@ -33,9 +35,8 @@
           @mousedown="onCanvasMouseDown"
           @touchstart.prevent="onCanvasTouchStart"
         >
-          <img
-            v-for="toon in currentZone.toons" :key="toon.id"
-            :src="toon.assetPath" :alt="toon.name"
+          <div
+            v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
             :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-long-pressing': pendingTouchDrag?.toon?.id === toon.id }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
@@ -82,6 +83,10 @@ const TOPBAR_H    = 34    // top bar height in px
 const BOTTOMBAR_H = 35    // bottom bar height in px
 const CANVAS_W    = 800   // design-space canvas width
 const CANVAS_H    = 600   // design-space canvas height
+const SIZE_CYCLE  = [1, 0.5, 2]  // sizeScale cycle: default → half → double
+
+function toonW(t) { return (t.width  || TOON_SIZE) * (t.sizeScale || 1) }
+function toonH(t) { return (t.height || TOON_SIZE) * (t.sizeScale || 1) }
 
 // Design-space canvas dimensions (used for clamping toon positions)
 function canvasW() { return CANVAS_W }
@@ -190,7 +195,8 @@ async function loadZone(username) {
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
-    cz.value.activeZone  = 0
+    const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
+    cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
   } catch (e) {
@@ -221,6 +227,10 @@ async function toggleBuild() {
   cz.value.buildMode = !cz.value.buildMode
   if (wasBuilding) {
     await save()
+    const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
+    if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
+      cz.value.activeZone = firstActive
+    }
   } else {
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
@@ -265,7 +275,7 @@ function onCanvasMouseDown(e) {
   const toons = currentZone.value.toons
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i]
-    const w = t.width || TOON_SIZE, h = t.height || TOON_SIZE
+    const w = toonW(t), h = toonH(t)
     if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
       localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
       e.preventDefault()
@@ -308,8 +318,8 @@ function onGlobalMove(e) {
   if (localDrag.value) {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY)
     const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - (t.width  || TOON_SIZE))
-    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - (t.height || TOON_SIZE))
+    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
+    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
   }
 }
 
@@ -406,10 +416,33 @@ function onContextMenu(e) {
   const toons = currentZone.value.toons
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i]
-    if (x >= t.x && x <= t.x + (t.width || TOON_SIZE) && y >= t.y && y <= t.y + (t.height || TOON_SIZE)) {
+    if (x >= t.x && x <= t.x + toonW(t) && y >= t.y && y <= t.y + toonH(t)) {
       toons.splice(i, 1); return
     }
   }
+}
+
+// ── Bring toon to front (highest z-index = end of array) ─────
+function bringToFrontToon(idx) {
+  const toons = currentZone.value.toons
+  if (idx < 0 || idx >= toons.length) return
+  const [toon] = toons.splice(idx, 1)
+  toons.push(toon)
+}
+
+// ── Cycle toon display size (1× → 0.5× → 2× → 1× …) ─────────
+function cycleToonSize(idx) {
+  const toon = currentZone.value.toons[idx]
+  if (!toon) return
+  const cur = toon.sizeScale || 1
+  const next = SIZE_CYCLE[(SIZE_CYCLE.indexOf(cur) + 1) % SIZE_CYCLE.length]
+  toon.sizeScale = next
+}
+
+// ── Populate toon dimensions from natural image size on load ──
+function onToonImgLoad(e, toon) {
+  if (!toon.width)  toon.width  = e.target.naturalWidth
+  if (!toon.height) toon.height = e.target.naturalHeight
 }
 
 // ── Save / Clear (called from CzoneEdit emits via page) ───────
@@ -529,7 +562,6 @@ defineExpose({ save, clearZone })
 .cz-item {
   position: absolute;
   cursor: default;
-  image-rendering: pixelated;
   pointer-events: none;
 }
 
