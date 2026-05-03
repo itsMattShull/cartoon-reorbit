@@ -34,15 +34,31 @@
           @contextmenu.prevent="onContextMenu"
           @mousedown="onCanvasMouseDown"
         >
-          <img
-            v-for="toon in currentZone.toons" :key="toon.id"
-            :src="toon.assetPath" :alt="toon.name"
+          <div
+            v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
             :class="{ 'is-dragging': localDrag?.toon?.id === toon.id }"
-            :style="{ left: toon.x + 'px', top: toon.y + 'px' }"
-            :title="toon.name"
-            draggable="false"
-          />
+            :style="{ left: toon.x + 'px', top: toon.y + 'px', width: (toon.width || TOON_SIZE) + 'px', height: (toon.height || TOON_SIZE) + 'px' }"
+          >
+            <img
+              :src="toon.assetPath" :alt="toon.name"
+              class="cz-item-img"
+              :title="toon.name"
+              draggable="false"
+              @load="e => onToonImgLoad(e, toon)"
+            />
+            <button
+              v-if="cz.buildMode"
+              class="cz-bring-front-btn"
+              title="Bring to front"
+              @click.stop="bringToFrontToon(toonIdx)"
+              @mousedown.stop
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -325,6 +341,20 @@ function onContextMenu(e) {
   }
 }
 
+// ── Bring toon to front (highest z-index = end of array) ─────
+function bringToFrontToon(idx) {
+  const toons = currentZone.value.toons
+  if (idx < 0 || idx >= toons.length) return
+  const [toon] = toons.splice(idx, 1)
+  toons.push(toon)
+}
+
+// ── Populate toon dimensions from natural image size on load ──
+function onToonImgLoad(e, toon) {
+  if (!toon.width)  toon.width  = e.target.naturalWidth
+  if (!toon.height) toon.height = e.target.naturalHeight
+}
+
 // ── Save / Clear (called from CzoneEdit emits via page) ───────
 async function save() {
   if (!isOwnZone.value) return
@@ -426,11 +456,40 @@ defineExpose({ save, clearZone })
 .cz-item {
   position: absolute;
   cursor: default;
-  image-rendering: pixelated;
   pointer-events: none;
 }
 
 .cz-item.is-dragging { opacity: 0.5; }
+
+.cz-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+  display: block;
+}
+
+.cz-bring-front-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 10;
+  padding: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cz-bring-front-btn:hover { background: white; }
+.cz-bring-front-btn svg { width: 14px; height: 14px; }
 
 /* ── Bottom bar ── */
 .cz-bottombar {
