@@ -38,6 +38,7 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
+            @touchstart.prevent="!currentZoneToonIds.has(c.id) && startDragTouch(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
@@ -131,6 +132,14 @@ function startDrag(ctoon, e) {
   cz.value.activeDrag = { ctoon }
   cz.value.ghostX     = e.clientX
   cz.value.ghostY     = e.clientY
+}
+
+function startDragTouch(ctoon, e) {
+  if (e.touches.length !== 1) return
+  const touch = e.touches[0]
+  cz.value.activeDrag = { ctoon }
+  cz.value.ghostX     = touch.clientX
+  cz.value.ghostY     = touch.clientY
 }
 
 function selectBg(bg) {
@@ -301,6 +310,14 @@ function selectBg(bg) {
 .czew-empty {
   font-size: 0.7rem; color: rgba(255,255,255,0.4);
   font-style: italic; padding: 6px 2px;
+}
+
+/* ── Mobile: parent has height:auto so flex-1 grids would collapse ── */
+@media (max-width: 767px) {
+  .czew         { height: auto; }
+  .czew-panel   { flex: none; min-height: auto; }
+  .czew-grid    { max-height: 280px; }
+  .czew-bg-grid { max-height: 280px; }
 }
 
 /* ── Actions ── */
