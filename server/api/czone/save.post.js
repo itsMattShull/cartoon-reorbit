@@ -148,7 +148,7 @@ export default defineEventHandler(async (event) => {
       }
       seenCtoonIds.add(baseCtoonId)
 
-      enrichedToons.push({
+      const entry = {
         id: item.id,
         x: item.x,
         y: item.y,
@@ -165,7 +165,12 @@ export default defineEventHandler(async (event) => {
         quantity: rest.quantity,
         isFirstEdition: rest.isFirstEdition,
         characters: rest.characters,
-      })
+      }
+      // Persist display-only properties: size scale and natural image dimensions
+      if (item.sizeScale === 0.5 || item.sizeScale === 2) entry.sizeScale = item.sizeScale
+      if (typeof item.width  === 'number' && item.width  > 0) entry.width  = Math.round(item.width)
+      if (typeof item.height === 'number' && item.height > 0) entry.height = Math.round(item.height)
+      enrichedToons.push(entry)
     }
 
     enrichedZones.push({
