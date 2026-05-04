@@ -3056,7 +3056,23 @@ async function performAuctionClose(auctionId) {
     select: { userId: true, amount: true }
   })
 
+  // Will be set inside the transaction if endAt was extended after our initial read.
+  let extendedEndAt = null
+
   await db.$transaction(async tx => {
+    // Re-check inside the transaction to close the TOCTOU gap: a concurrent bid
+    // with anti-snipe may have extended endAt after our initial read above, but
+    // scheduleAuctionClose skips rescheduling when the job is already 'active'.
+    const current = await tx.auction.findUnique({
+      where: { id },
+      select: { status: true, endAt: true }
+    })
+    if (!current || current.status !== 'ACTIVE') return
+    if (new Date(current.endAt) > now) {
+      extendedEndAt = current.endAt
+      return
+    }
+
     await tx.auction.update({
       where: { id },
       data: {
@@ -3137,6 +3153,12 @@ async function performAuctionClose(auctionId) {
       })
     }
   })
+
+  // endAt was extended by a concurrent anti-snipe bid; reschedule and bail out.
+  if (extendedEndAt) {
+    await scheduleAuctionClose(auctionId, extendedEndAt)
+    return
+  }
 
   io.to(`auction_${id}`).emit('auction-ended', {
     winnerId:   winningBid?.userId ?? null,
