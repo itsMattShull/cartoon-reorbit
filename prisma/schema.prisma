@@ -1562,6 +1562,7 @@ model HomepageConfig {
   middleSidebar2Link       String?
   middleSidebar3ImagePath  String?
   middleSidebar3Link       String?
+  newsImagePath            String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 }

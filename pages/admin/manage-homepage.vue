@@ -23,6 +23,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Other' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Other'">Other</button>
 
         </nav>
       </div>
@@ -312,6 +316,38 @@
 
 
 
+      <!-- Other tab -->
+      <section v-if="activeTab==='Other'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure additional page images.
+        </p>
+
+        <!-- News image -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">News</h2>
+          <p class="text-xs text-gray-500">Image displayed on the News page.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.news || newsPath" :src="previewUrls.news || newsPath" alt="News" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onNewsFile($event)" class="block w-full text-sm" />
+              <div v-if="newsFile" class="text-xs text-gray-600 truncate">Selected: {{ newsFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="newsPath" @click="clearNews()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <button class="btn-primary" :disabled="saving" @click="saveOther">
+            <span v-if="!saving">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -341,7 +377,10 @@ const activeTab = ref('Homepage')
 
 const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
 const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null })
+const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null })
+
+const newsPath = ref('')
+const newsFile = ref(null)
 
 const showcasePath = ref('')
 const showcaseFile = ref(null)
@@ -459,6 +498,19 @@ function clearMiddleSidebar(n) {
   middleSidebarFiles[n] = null
 }
 
+function onNewsFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value.news) { URL.revokeObjectURL(previewUrls.value.news); previewUrls.value.news = null } } catch (e) {}
+  newsFile.value = f
+  if (f) previewUrls.value.news = URL.createObjectURL(f)
+}
+
+function clearNews() {
+  newsPath.value = ''
+  if (previewUrls.value.news) { try { URL.revokeObjectURL(previewUrls.value.news) } catch (e) {} ; previewUrls.value.news = null }
+  newsFile.value = null
+}
+
 function onMiddleSidebarPresetChange(n) {
   const preset = middleSidebarImages[n].linkPreset
   if (preset === '') {
@@ -501,6 +553,8 @@ async function loadConfig() {
     middleSidebarImages[n].link = rawLink
     middleSidebarImages[n].linkPreset = detectPreset(rawLink)
   }
+
+  newsPath.value = cfg.newsImagePath || ''
 }
 
 
@@ -598,6 +652,23 @@ async function saveSidebar() {
     }
 
     toast.value = { type: 'ok', msg: 'Sidebar saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveOther() {
+  saving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('newsPath', newsPath.value || '')
+    if (newsFile.value) fd.append('news', newsFile.value)
+    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
+    newsPath.value = res.newsImagePath || ''
+    newsFile.value = null
+    toast.value = { type: 'ok', msg: 'News image saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {
