@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
     middleSidebar2Link: null,
     middleSidebar3ImagePath: null,
     middleSidebar3Link: null,
+    newsImagePath: null,
     updatedAt: null
   }
 
