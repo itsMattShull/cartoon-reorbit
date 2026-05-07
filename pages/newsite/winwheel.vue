@@ -298,7 +298,8 @@ const canSpin = computed(() =>
 async function spinWheel() {
   if (!canSpin.value) return
   hasShownResult.value = false
-  startSpinSound()
+  // Unlock / pre-load AudioContext while still inside the user-gesture call stack
+  void prepareSpinSoundBuffer()
   user.value.points -= spinCost.value
   spinsLeft.value--
   isSpinning.value = true
@@ -309,6 +310,7 @@ async function spinWheel() {
     await scavenger.maybeTrigger('winwheel_spin', { open: false })
     const fullTurns = 5
     const wedgeMid  = startOffset + sliceAngle / 2 + sliceIndex * sliceAngle
+    startSpinSound()
     rotation.value  = fullTurns * 360 - wedgeMid
     setTimeout(async () => {
       stopSpinSound()
@@ -519,13 +521,12 @@ body {
 
 /* Wheel */
 .wheel-area {
-  position: absolute;
-  bottom: -24%;
-  left: 0;
-  right: 0;
+  flex: 1;
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  overflow: hidden;
+  position: relative;
 }
 
 .wheel-img {
@@ -781,10 +782,6 @@ body {
 @media (max-width: 768px) {
   .wheel-img {
     width: 90%;
-  }
-
-  .wheel-area {
-    bottom: -20%;
   }
 }
 </style>

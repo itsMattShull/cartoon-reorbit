@@ -158,7 +158,7 @@
                     class="ob-event-card rounded-lg border border-white/10 px-3 py-2"
                   >
                     <NuxtLink
-                      :to="`/newsite/MycWorld?contestId=${contest.id}`"
+                      :to="czoneContestPath(contest.id)"
                       class="text-sm font-semibold text-[var(--OrbitLightBlue)] hover:text-white transition"
                     >
                       {{ displayName(contest.name, 'cZone Contest') }}
@@ -214,6 +214,9 @@ const isNewsite = computed(() => route.path.startsWith('/newsite'))
 
 const czoneSearchPath = (id) =>
   isNewsite.value ? `/newsite/czonesearch/${id}` : `/czonesearch/${id}`
+
+const czoneContestPath = (id) =>
+  isNewsite.value ? `/newsite/MycWorld?contestId=${id}` : `/czone-contest/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)
