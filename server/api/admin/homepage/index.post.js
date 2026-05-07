@@ -54,7 +54,8 @@ export default defineEventHandler(async (event) => {
     middleSidebar2Link:      null,
     middleSidebar3ImagePath: null,
     middleSidebar3Link:      null,
-    newsImagePath:           null
+    newsImagePath:           null,
+    earnPointsImagePath:     null
   }
 
   // fs prep
@@ -106,7 +107,8 @@ export default defineEventHandler(async (event) => {
     middleSidebar1:   await saveIfPresent('middleSidebar1'),
     middleSidebar2:   await saveIfPresent('middleSidebar2'),
     middleSidebar3:   await saveIfPresent('middleSidebar3'),
-    news:             await saveIfPresent('news')
+    news:             await saveIfPresent('news'),
+    earnPoints:       await saveIfPresent('earnPoints')
   }
 
   // helper: update one slot without touching others unless provided
@@ -154,7 +156,8 @@ export default defineEventHandler(async (event) => {
     middleSidebar2Link:       resolveLink('middleSidebar2Link', current.middleSidebar2Link),
     middleSidebar3ImagePath:  resolveSlot('middleSidebar3ImagePath',  'middleSidebar3',  'middleSidebar3Path',  current.middleSidebar3ImagePath),
     middleSidebar3Link:       resolveLink('middleSidebar3Link', current.middleSidebar3Link),
-    newsImagePath:            resolveSlot('newsImagePath',            'news',            'newsPath',            current.newsImagePath)
+    newsImagePath:            resolveSlot('newsImagePath',            'news',            'newsPath',            current.newsImagePath),
+    earnPointsImagePath:      resolveSlot('earnPointsImagePath',      'earnPoints',      'earnPointsPath',      current.earnPointsImagePath)
   }
 
   const cfg = await db.homepageConfig.upsert({
@@ -174,7 +177,8 @@ export default defineEventHandler(async (event) => {
       'middleSidebar1ImagePath', 'middleSidebar1Link',
       'middleSidebar2ImagePath', 'middleSidebar2Link',
       'middleSidebar3ImagePath', 'middleSidebar3Link',
-      'newsImagePath'
+      'newsImagePath',
+      'earnPointsImagePath'
     ]
     for (const key of fields) {
       const prev = current[key] ?? null
@@ -206,6 +210,7 @@ export default defineEventHandler(async (event) => {
     middleSidebar2Link:      cfg.middleSidebar2Link,
     middleSidebar3ImagePath: cfg.middleSidebar3ImagePath,
     middleSidebar3Link:      cfg.middleSidebar3Link,
-    newsImagePath:           cfg.newsImagePath
+    newsImagePath:           cfg.newsImagePath,
+    earnPointsImagePath:     cfg.earnPointsImagePath
   }
 })

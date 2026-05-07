@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
     middleSidebar3ImagePath: null,
     middleSidebar3Link: null,
     newsImagePath: null,
+    earnPointsImagePath: null,
     updatedAt: null
   }
 

@@ -1563,6 +1563,7 @@ model HomepageConfig {
   middleSidebar3ImagePath  String?
   middleSidebar3Link       String?
   newsImagePath            String?
+  earnPointsImagePath      String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 }
