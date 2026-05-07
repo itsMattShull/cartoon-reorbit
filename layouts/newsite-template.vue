@@ -499,6 +499,10 @@ const scaleStyle = computed(() => {
 }
 
 @media (max-width: 768px) {
+  .sidebar {
+    background: var(--OrbitDarkBlue);
+  }
+
   .sidebar-toggle {
     margin-left: -5px;
     margin-right: -5px;
