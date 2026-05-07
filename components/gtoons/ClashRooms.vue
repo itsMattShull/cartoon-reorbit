@@ -13,7 +13,7 @@
       <div
         v-for="r in rooms"
         :key="r.id"
-        class="p-3 border rounded-lg shadow-sm bg-white flex items-center justify-between"
+        class="p-3 border rounded-lg shadow-sm bg-white text-gray-900 flex items-center justify-between"
       >
         <div>
           <div class="text-xs uppercase tracking-wide text-gray-500">Player waiting</div>

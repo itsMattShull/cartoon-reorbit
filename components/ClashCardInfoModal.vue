@@ -7,7 +7,7 @@
   >
     <!-- inner dialog stops the click from bubbling up -->
     <div
-      class="bg-white rounded-lg p-6 w-80 relative"
+      class="bg-white text-gray-900 rounded-lg p-6 w-80 relative"
       @click.stop
     >
       <button

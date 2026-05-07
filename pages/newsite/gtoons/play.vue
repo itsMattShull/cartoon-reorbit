@@ -252,14 +252,24 @@ const laneScores = computed(() => {
   })
 })
 
+// Named handler refs so onBeforeUnmount only removes this page's handlers
+let _connectHandler = null
+let _gameStartHandler = null
+let _phaseUpdateHandler = null
+let _gameEndHandler = null
+
 function wireSocket() {
-  socket.on('connect', () => {
+  _connectHandler = () => {
     if (battleState.value?.id && !summary.value && user.value?.id) {
       socket.emit('pve:rejoin', { gameId: battleState.value.id, userId: user.value.id })
     }
-  })
+  }
 
-  socket.on('phaseUpdate', state => {
+  _gameStartHandler = state => {
+    battleState.value = state
+  }
+
+  _phaseUpdateHandler = state => {
     battleState.value = state
     if (state.phase === 'select' || state.phase === 'setup') {
       startTimer(state.selectEndsAt)
@@ -270,12 +280,17 @@ function wireSocket() {
     if ((state.phase === 'select' || state.phase === 'setup') && confirmed.value) {
       resetLocal()
     }
-  })
+  }
 
-  socket.on('gameEnd', sum => {
+  _gameEndHandler = sum => {
     summary.value = sum
     clearInterval(timerId)
-  })
+  }
+
+  socket.on('connect', _connectHandler)
+  socket.on('gameStart', _gameStartHandler)
+  socket.on('phaseUpdate', _phaseUpdateHandler)
+  socket.on('gameEnd', _gameEndHandler)
 }
 
 function handlePlace(laneIdx) {
@@ -333,9 +348,10 @@ function resetLocal() {
 onMounted(() => { wireSocket() })
 
 onBeforeUnmount(() => {
-  socket.off('connect')
-  socket.off('phaseUpdate')
-  socket.off('gameEnd')
+  if (_connectHandler) socket.off('connect', _connectHandler)
+  if (_gameStartHandler) socket.off('gameStart', _gameStartHandler)
+  if (_phaseUpdateHandler) socket.off('phaseUpdate', _phaseUpdateHandler)
+  if (_gameEndHandler) socket.off('gameEnd', _gameEndHandler)
   clearInterval(timerId)
 })
 </script>

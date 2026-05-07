@@ -95,12 +95,16 @@
                 <img :src="c.assetPath" :alt="c.name" class="object-contain h-20" />
                 <GtoonOverlay v-if="c.isGtoon" :power="c.power" :cost="c.cost" />
               </div>
-              <p class="text-xs font-semibold mb-0.5 text-center">{{ c.name }}</p>
-              <p class="text-xs text-gray-300">PWR: {{ c.power }} / Cost: {{ c.cost }}</p>
-              <p v-if="c.abilityKey" class="text-xs font-medium text-indigo-300">
+              <p class="text-xs font-semibold mb-0.5 text-center"
+                 :class="selectedIds.includes(c.id) ? 'text-gray-900' : ''">{{ c.name }}</p>
+              <p class="text-xs"
+                 :class="selectedIds.includes(c.id) ? 'text-gray-600' : 'text-gray-300'">PWR: {{ c.power }} / Cost: {{ c.cost }}</p>
+              <p v-if="c.abilityKey" class="text-xs font-medium"
+                 :class="selectedIds.includes(c.id) ? 'text-indigo-700' : 'text-indigo-300'">
                 {{ abilityLabels[c.abilityKey] || 'Unknown Ability' }}
               </p>
-              <p v-else class="text-xs text-gray-400">No Ability</p>
+              <p v-else class="text-xs"
+                 :class="selectedIds.includes(c.id) ? 'text-gray-600' : 'text-gray-400'">No Ability</p>
             </div>
           </div>
 

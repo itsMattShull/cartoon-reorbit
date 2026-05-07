@@ -1,5 +1,5 @@
 // /composables/useClashSocket.js
-import { ref, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 import { io } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 
@@ -39,13 +39,9 @@ export function useClashSocket() {
     socket.on('battle:state', state => { battleState.value = state })
   }
 
-  onBeforeUnmount(() => {
-    socket.off('gameStart')
-    socket.off('phaseUpdate')
-    socket.off('gameEnd')
-    socket.off('battle:state')
-    // do *not* socket.disconnect() here or you'll break the lobby→play transition
-  })
+  // Module-level handlers are intentionally not removed on component unmount —
+  // they must persist across page navigations to keep battleState in sync.
+  // Individual pages register and clean up their own additional handlers.
 
   return { socket, battleState, isConnected, currentBattleId }
 }
