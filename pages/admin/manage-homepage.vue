@@ -389,7 +389,7 @@ const PAGE_LINKS = {
   'my-cworld':   '/newsite/my-cworld',
   'cmart':       '/newsite/cmart',
   'games':       '/newsite/games',
-  'win-wheel':   '/newsite/win-wheel',
+  'win-wheel':   '/newsite/winwheel',
   'winball':     '/newsite/winball',
   'lottery':     '/newsite/lottery',
   'auctions':    '/newsite/auctions',
