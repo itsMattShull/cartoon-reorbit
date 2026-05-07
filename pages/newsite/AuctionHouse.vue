@@ -4,7 +4,10 @@
       <UserInfo />
     </template>
     <template #sidebar-middle>
-      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" />
+      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" :show-auction-filters="true" />
+    </template>
+    <template #sidebar-bottom>
+      <WinballAd />
     </template>
     <template #main-content>
       <AuctionHouse />
@@ -45,6 +48,5 @@ body {
   min-height: 100vh;
 }
 
-body.page-auctionhouse .sidebar-bottom { display: none; }
-body.page-auctionhouse .sidebar { --sidebar-middle-height: 504px; }
+body.page-auctionhouse .sidebar { --sidebar-middle-height: 495px; }
 </style>
