@@ -284,11 +284,6 @@ function syncCmartCtoons() {
 }
 
 // ── Watchers ──────────────────────────────────────────────────────
-watch(activeTab, tab => {
-  if (tab === 'mine')   loadMyAuctions()
-  if (tab === 'mybids') loadMyBids()
-  if (tab === 'all')    loadAllAuctions()
-})
 
 watch(hasBidsOnly, () => {
   loadAuctions()
@@ -421,7 +416,13 @@ const hasActiveFilters = computed(() => !!(
 ))
 
 // ── Actions ───────────────────────────────────────────────────────
-function switchTab(id) { activeTab.value = id }
+function switchTab(id) {
+  activeTab.value = id
+  if (id === 'current') { loadAuctions(); loadTrendingAuctions() }
+  else if (id === 'mybids') { myBidsPage.value = 1; loadMyBids() }
+  else if (id === 'mine')   { myPage.value = 1;     loadMyAuctions() }
+  else if (id === 'all')    { allPage.value = 1;     loadAllAuctions() }
+}
 
 function toggleWishlist() {
   wishlistOnly.value = !wishlistOnly.value
@@ -574,7 +575,7 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 
 .ah-skeleton {
-  height: 38px;
+  height: 106px;
   border-radius: 4px;
   background: rgba(255,255,255,0.06);
   animation: ah-pulse 1.2s ease-in-out infinite;
@@ -602,7 +603,7 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   background: rgba(0,0,0,0.2);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 4px;
-  min-height: 38px;
+  min-height: 106px;
   flex-shrink: 0;
   transition: background 0.12s;
 }
@@ -610,8 +611,8 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 .ah-row.trending { border-color: rgba(251,191,36,0.35); }
 
 .ah-img {
-  width: 34px;
-  height: 34px;
+  width: 102px;
+  height: 102px;
   object-fit: contain;
   flex-shrink: 0;
   image-rendering: pixelated;
