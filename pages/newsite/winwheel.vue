@@ -365,6 +365,7 @@ function prepareSpinSoundBuffer() {
 
 function playSpinSoundBuffer() {
   if (!spinBuffer || !audioCtx) return false
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
   const src = audioCtx.createBufferSource()
   src.buffer = spinBuffer
   src.connect(audioCtx.destination)
@@ -392,6 +393,7 @@ function playSpinSoundOnce() {
 function startSpinSound() {
   if (!winWheelSoundPath.value) return
   stopSpinSound()
+  ensureAudioContext()
   void prepareSpinSoundBuffer()
   if (winWheelSoundMode.value === 'once') {
     playSpinSoundOnce()
