@@ -1,7 +1,7 @@
 <template>
   <div class="gameshome">
     <button class="quadrant quadrant--shop">Winball</button>
-    <button class="quadrant quadrant--collection">Lotto</button>
+    <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">Lotto</NuxtLink>
     <button class="quadrant quadrant--games">Win Wheel</button>
     <button class="quadrant quadrant--profile">gToons</button>
   </div>
@@ -29,6 +29,10 @@
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.1s ease;
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .quadrant:hover {
