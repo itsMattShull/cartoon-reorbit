@@ -6,6 +6,9 @@
     <template #sidebar-middle>
       <CtoonFilter />
     </template>
+    <template #sidebar-bottom>
+      <WinballAd />
+    </template>
     <template #main-content>
       <MyCollection />
     </template>
@@ -17,7 +20,5 @@ definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav:
 </script>
 
 <style>
-body.page-mycollection .sidebar-bottom { display: none; }
-body.page-mycollection .sidebar { --sidebar-middle-height: 504px; }
 body.page-mycollection .main-content { overflow-y: auto !important; scrollbar-width: thin; }
 </style>
