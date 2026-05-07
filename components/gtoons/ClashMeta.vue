@@ -1,0 +1,253 @@
+<template>
+  <div class="tab-content overflow-y-auto h-full px-4 py-3">
+    <div class="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+      <div>
+        <h2 class="text-xl font-bold">gToons Clash Meta</h2>
+        <p class="text-sm text-gray-300">Track winning decks and the gToons shaping the current meta.</p>
+      </div>
+
+      <div class="md:ml-auto flex flex-wrap items-center gap-2">
+        <select v-model="filter" class="border rounded px-2 py-1 text-sm text-gray-800 bg-white">
+          <option value="all">All Matches</option>
+          <option value="non_tournament">Non-Tournament Only</option>
+          <option value="tournament">Tournament Only</option>
+        </select>
+
+        <select v-model.number="days" class="border rounded px-2 py-1 text-sm text-gray-800 bg-white">
+          <option :value="7">Last 7 Days</option>
+          <option :value="14">Last 14 Days</option>
+          <option :value="30">Last 30 Days</option>
+          <option :value="60">Last 60 Days</option>
+          <option :value="90">Last 90 Days</option>
+        </select>
+
+        <select v-model="sort" class="border rounded px-2 py-1 text-sm text-gray-800 bg-white">
+          <option value="winPct">Sort: Win %</option>
+          <option value="wins">Sort: Wins</option>
+          <option value="games">Sort: Games</option>
+        </select>
+
+        <div class="flex items-center gap-1 text-xs text-gray-300">
+          <span>Min games</span>
+          <input
+            v-model.number="minGames"
+            type="number"
+            min="0"
+            class="w-14 border rounded px-2 py-1 text-sm text-gray-800 bg-white"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div v-if="loading" class="grid grid-cols-3 gap-3 mb-4">
+      <div v-for="i in 3" :key="i" class="bg-white/10 border border-white/20 rounded-lg p-3 animate-pulse">
+        <div class="h-3 w-24 bg-white/20 rounded mb-2"></div>
+        <div class="h-6 w-12 bg-white/20 rounded"></div>
+      </div>
+    </div>
+
+    <div v-else class="grid grid-cols-3 gap-3 mb-4">
+      <div class="bg-white/10 border border-white/20 rounded-lg p-3">
+        <div class="text-xs uppercase tracking-wide text-gray-400">Games Counted</div>
+        <div class="text-xl font-semibold">{{ (stats?.totalGames ?? 0).toLocaleString() }}</div>
+      </div>
+      <div class="bg-white/10 border border-white/20 rounded-lg p-3">
+        <div class="text-xs uppercase tracking-wide text-gray-400">Decks Tracked</div>
+        <div class="text-xl font-semibold">{{ (stats?.totalDecks ?? 0).toLocaleString() }}</div>
+      </div>
+      <div class="bg-white/10 border border-white/20 rounded-lg p-3">
+        <div class="text-xs uppercase tracking-wide text-gray-400">Winning Games</div>
+        <div class="text-xl font-semibold">{{ (stats?.totalWins ?? 0).toLocaleString() }}</div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2">
+        <div class="bg-white/10 border border-white/20 rounded-lg p-3">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-base font-semibold">Top Winning Decks</h3>
+            <span class="text-xs text-gray-400">Click a deck for details</span>
+          </div>
+
+          <div v-if="loading" class="space-y-2 animate-pulse">
+            <div v-for="i in 5" :key="`deck-skel-${i}`" class="grid grid-cols-5 gap-2">
+              <div class="h-4 col-span-2 bg-white/20 rounded"></div>
+              <div class="h-4 bg-white/20 rounded"></div>
+              <div class="h-4 bg-white/20 rounded"></div>
+              <div class="h-4 bg-white/20 rounded"></div>
+            </div>
+          </div>
+          <div v-else-if="!decks.length" class="text-sm text-gray-400">No deck data for this timeframe.</div>
+          <div v-else class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-400 border-b border-white/20">
+                  <th class="py-2 pr-3">Deck</th>
+                  <th class="py-2 pr-3">Win %</th>
+                  <th class="py-2 pr-3">Wins</th>
+                  <th class="py-2 pr-3">Games</th>
+                  <th class="py-2">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="deck in decks"
+                  :key="deck.deckKey"
+                  class="border-b border-white/10 cursor-pointer hover:bg-white/5"
+                  :class="deck.deckKey === selectedDeckKey ? 'bg-indigo-900/30' : ''"
+                  @click="selectDeck(deck)"
+                >
+                  <td class="py-2 pr-3">
+                    <div class="font-semibold">{{ deck.deckName }}</div>
+                    <div class="text-xs text-gray-400">{{ deck.wins }}-{{ deck.losses }}-{{ deck.ties }}</div>
+                  </td>
+                  <td class="py-2 pr-3">{{ formatPct(deck.winPct) }}</td>
+                  <td class="py-2 pr-3">{{ deck.wins }}</td>
+                  <td class="py-2 pr-3">{{ deck.games }}</td>
+                  <td class="py-2">{{ formatPct(deck.sharePct) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="bg-white/10 border border-white/20 rounded-lg p-3">
+          <h3 class="text-base font-semibold mb-2">Winning gToons</h3>
+          <div v-if="loading" class="space-y-2 animate-pulse">
+            <div v-for="i in 5" :key="`gtoon-skel-${i}`" class="border border-white/10 rounded-lg px-3 py-2">
+              <div class="h-4 w-28 bg-white/20 rounded mb-1"></div>
+              <div class="h-3 w-20 bg-white/20 rounded"></div>
+            </div>
+          </div>
+          <div v-else-if="!winningCtoons.length" class="text-sm text-gray-400">No winning data yet.</div>
+          <div v-else class="space-y-2 max-h-64 overflow-y-auto">
+            <div
+              v-for="ctoon in winningCtoons"
+              :key="ctoon.ctoonId"
+              class="flex items-center justify-between border border-white/10 rounded-lg px-3 py-2 text-sm"
+            >
+              <div>
+                <div class="font-semibold">{{ ctoon.name }}</div>
+                <div class="text-xs text-gray-400">{{ ctoon.gtoonType || 'Unknown type' }} - {{ ctoon.deckWins }} wins</div>
+              </div>
+              <div class="text-xs text-gray-400 text-right">
+                {{ formatPct(ctoon.winSharePct) }}
+                <div class="text-[11px]">share</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deck detail modal -->
+    <div
+      v-if="isDeckModalOpen && selectedDeck"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div class="absolute inset-0 bg-black/50" @click="closeDeckModal"></div>
+      <div
+        class="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-lg flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="flex items-start justify-between gap-4 px-4 py-3 border-b bg-white">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800">{{ selectedDeck.deckName }}</h3>
+            <p class="text-xs text-gray-500">{{ selectedDeck.games }} games - {{ formatPct(selectedDeck.winPct) }} win rate</p>
+          </div>
+          <button type="button" class="text-gray-500 hover:text-gray-800 text-xl font-bold" @click="closeDeckModal" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div
+              v-for="card in selectedDeck.cards"
+              :key="`${selectedDeck.deckKey}-${card.ctoonId}`"
+              class="border rounded-lg p-3 text-sm flex gap-3"
+            >
+              <div class="w-16 h-16 shrink-0 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                <img v-if="card.assetPath" :src="card.assetPath" :alt="card.name || 'gToon image'" class="w-full h-full object-contain" loading="lazy" />
+                <div v-else class="text-[10px] text-gray-400">No image</div>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs uppercase tracking-wide text-gray-500">x{{ card.quantity }}</div>
+                <div class="font-semibold truncate text-gray-800">{{ card.name || 'Unknown' }}</div>
+                <div class="text-xs text-gray-500">
+                  {{ card.gtoonType || 'Unknown type' }}
+                  <span v-if="card.cost !== null">- Cost {{ card.cost }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t bg-gray-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+          <div>{{ selectedDeck.wins }} wins / {{ selectedDeck.losses }} losses / {{ selectedDeck.ties }} ties</div>
+          <button type="button" class="px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded" @click="closeDeckModal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted } from 'vue'
+
+const days = ref(30)
+const filter = ref('all')
+const sort = ref('winPct')
+const minGames = ref(3)
+const loading = ref(true)
+const stats = ref(null)
+const selectedDeckKey = ref(null)
+const isDeckModalOpen = ref(false)
+
+const decks = computed(() => stats.value?.decks || [])
+const winningCtoons = computed(() => stats.value?.winningCtoons || [])
+const selectedDeck = computed(() => decks.value.find(d => d.deckKey === selectedDeckKey.value) || null)
+
+function formatPct(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '0%'
+  return `${num.toFixed(1)}%`
+}
+
+function selectDeck(deck) {
+  selectedDeckKey.value = deck.deckKey
+  isDeckModalOpen.value = true
+}
+
+function closeDeckModal() {
+  isDeckModalOpen.value = false
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await fetch(
+      `/api/game/clash/meta?days=${days.value}&filter=${filter.value}&sort=${sort.value}&minGames=${minGames.value}`,
+      { credentials: 'include' }
+    )
+    const data = await res.json()
+    stats.value = data
+    if (!selectedDeckKey.value && data.decks?.length) {
+      selectedDeckKey.value = data.decks[0].deckKey
+    } else if (selectedDeckKey.value && data.decks?.length) {
+      const exists = data.decks.some(d => d.deckKey === selectedDeckKey.value)
+      if (!exists) selectedDeckKey.value = data.decks[0].deckKey
+    }
+  } catch (err) {
+    stats.value = { decks: [], winningCtoons: [], totalGames: 0, totalWins: 0, totalDecks: 0 }
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadData)
+watch([days, filter, sort, minGames], loadData)
+</script>
