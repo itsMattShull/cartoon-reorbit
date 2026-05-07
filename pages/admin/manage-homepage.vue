@@ -168,6 +168,8 @@
                       <option value="lottery">Lottery</option>
                       <option value="auctions">Auctions</option>
                       <option value="gtoons-clash">gToons Clash</option>
+                      <option value="news">News</option>
+                      <option value="earn-points">Earn Points</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="homeImages[n].linkPreset === 'custom'"
@@ -274,6 +276,8 @@
                       <option value="lottery">Lottery</option>
                       <option value="auctions">Auctions</option>
                       <option value="gtoons-clash">gToons Clash</option>
+                      <option value="news">News</option>
+                      <option value="earn-points">Earn Points</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="middleSidebarImages[n].linkPreset === 'custom'"
@@ -389,7 +393,9 @@ const PAGE_LINKS = {
   'winball':     '/newsite/winball',
   'lottery':     '/newsite/lottery',
   'auctions':    '/newsite/auctions',
-  'gtoons-clash':'/newsite/gtoons-clash'
+  'gtoons-clash':'/newsite/gtoons-clash',
+  'news':        '/newsite/news',
+  'earn-points': '/newsite/earnpoints'
 }
 
 const activeTab = ref('Homepage')
