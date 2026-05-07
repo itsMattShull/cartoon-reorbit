@@ -3,7 +3,7 @@
     <NuxtLink to="/newsite/winball" class="quadrant quadrant--shop">Winball</NuxtLink>
     <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">Lotto</NuxtLink>
     <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">Win Wheel</NuxtLink>
-    <button class="quadrant quadrant--profile">gToons</button>
+    <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">gToons Clash</NuxtLink>
   </div>
 </template>
 
