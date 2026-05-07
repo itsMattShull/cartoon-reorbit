@@ -257,6 +257,7 @@ html.newsite-active body {
     <slot />
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
   </div>
+  <Onboarding />
 </template>
 
 <script setup>
