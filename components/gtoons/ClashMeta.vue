@@ -151,7 +151,7 @@
     >
       <div class="absolute inset-0 bg-black/50" @click="closeDeckModal"></div>
       <div
-        class="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-lg flex flex-col overflow-hidden"
+        class="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-lg flex flex-col overflow-hidden text-gray-800"
         role="dialog"
         aria-modal="true"
       >

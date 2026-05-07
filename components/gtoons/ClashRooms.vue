@@ -59,7 +59,7 @@
     >
       <div class="absolute inset-0 bg-black/40" @click="closeStakeModal"></div>
 
-      <div class="relative w-full max-w-md bg-white rounded-xl shadow-xl p-5">
+      <div class="relative w-full max-w-md bg-white rounded-xl shadow-xl p-5 text-gray-800">
         <div class="flex items-start justify-between">
           <h2 class="text-lg font-semibold text-gray-800">Stake Points (optional)</h2>
           <button @click="closeStakeModal" class="text-gray-500 hover:text-gray-700" aria-label="Close">✕</button>

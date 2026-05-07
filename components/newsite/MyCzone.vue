@@ -124,7 +124,7 @@
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           @click.self="closeCaptureModal"
         >
-          <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+          <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col text-gray-800">
             <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
               <h2 class="text-lg font-semibold">cToon Captured</h2>
               <button class="text-gray-500 hover:text-black" @click="closeCaptureModal">✕</button>
