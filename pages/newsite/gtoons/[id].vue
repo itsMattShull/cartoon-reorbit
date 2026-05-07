@@ -442,12 +442,8 @@ onBeforeUnmount(() => {
   if (roomId && user.value?.id) {
     socket.emit('leaveClashRoom', { roomId, userId: user.value.id })
   }
-  socket.off('gameStart')
-  socket.off('phaseUpdate')
-  socket.off('gameEnd')
-  socket.off('pvpLobbyState')
-  socket.off('clashDecks')
   clearInterval(timerId)
+  socket.disconnect()
 })
 </script>
 
