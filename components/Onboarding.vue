@@ -158,7 +158,7 @@
                     class="ob-event-card rounded-lg border border-white/10 px-3 py-2"
                   >
                     <NuxtLink
-                      :to="`/czone-contest/${contest.id}`"
+                      :to="`/newsite/MycWorld?contestId=${contest.id}`"
                       class="text-sm font-semibold text-[var(--OrbitLightBlue)] hover:text-white transition"
                     >
                       {{ displayName(contest.name, 'cZone Contest') }}
