@@ -845,7 +845,7 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       @click.self="closeCaptureModal"
     >
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+      <div class="relative bg-white text-gray-900 rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
         <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
           <h2 class="text-lg font-semibold">cToon Captured</h2>
           <button class="text-gray-500 hover:text-black" @click="closeCaptureModal">✕</button>
@@ -1824,6 +1824,7 @@ watch(isOwnerViewing, async (val) => {
   .booster-bg .border-gray-300    { border-color: #444 !important; }
   .booster-bg .border-blue-500    { border-color: #555 !important; }
   .booster-bg .text-black         { color: #ccc !important; }
+  .booster-bg .text-gray-900      { color: #e0e0e0 !important; }
   .booster-bg .text-gray-600      { color: #aaa !important; }
   .booster-bg .bg-gray-200        { background-color: #2a2a2a !important; }
   .booster-bg .bg-gray-300        { background-color: #333 !important; }
