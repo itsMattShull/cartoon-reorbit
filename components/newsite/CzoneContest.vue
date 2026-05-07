@@ -205,13 +205,21 @@ const contests    = ref([])
 const loadingList = ref(false)
 const activeId    = ref(null)
 
+const route = useRoute()
+
 onMounted(loadContests)
 
 async function loadContests() {
   loadingList.value = true
   try {
     contests.value = await $fetch('/api/czone-contest')
-    if (contests.value.length) selectContest(contests.value[0].id)
+    if (contests.value.length) {
+      const requestedId = route.query.contestId
+        ? Number(route.query.contestId)
+        : null
+      const target = requestedId && contests.value.find(c => c.id === requestedId)
+      selectContest(target ? target.id : contests.value[0].id)
+    }
   } catch (e) {
     console.error('CzoneContest: load failed', e)
   } finally {
