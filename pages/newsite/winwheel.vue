@@ -529,6 +529,7 @@ body {
   align-items: flex-start;
   overflow: hidden;
   position: relative;
+  padding-top: 48px;
 }
 
 .wheel-img {
