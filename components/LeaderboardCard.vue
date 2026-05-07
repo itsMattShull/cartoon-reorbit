@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white border rounded-lg shadow-sm">
+  <div class="bg-white text-gray-900 border rounded-lg shadow-sm">
     <div class="px-4 py-3 border-b">
       <h3 class="font-semibold text-gray-900">{{ title }}</h3>
     </div>
