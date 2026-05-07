@@ -5,7 +5,7 @@ export const useNewSiteCtoonFilter = () => useState('newSiteCtoonFilter', () => 
   set:             '',
   priceMin:        '',
   priceMax:        '',
-  sortField:       'name',
-  sortAsc:         true,
+  sortField:       'acquiredAt',
+  sortAsc:         false,
   hideUnavailable: false,
 }))
