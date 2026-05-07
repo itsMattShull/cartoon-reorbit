@@ -97,7 +97,9 @@ const ctoons = computed(() => {
 
   list = [...list].sort((a, b) => {
     let cmp = 0
-    if (f.sortField === 'price') {
+    if (f.sortField === 'acquiredDate') {
+      cmp = new Date(a.acquiredAt) - new Date(b.acquiredAt)
+    } else if (f.sortField === 'price') {
       cmp = a.price - b.price
     } else if (f.sortField === 'rarity') {
       const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
