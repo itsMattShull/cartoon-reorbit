@@ -321,6 +321,13 @@ body {
   text-align: center;
 }
 
+.prize-card-image {
+  width: 100%;
+  height: 96px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
+
 .prize-card-name {
   font-size: 0.78rem;
   font-weight: 600;
@@ -370,6 +377,12 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+.modal-ctoon-image {
+  height: 128px;
+  width: auto;
+  border-radius: 6px;
 }
 
 .modal-ctoon-name {
