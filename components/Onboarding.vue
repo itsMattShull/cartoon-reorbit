@@ -133,7 +133,7 @@
                   >
                     <NuxtLink
                       v-if="search.linkInOnboarding"
-                      :to="`/czonesearch/${search.id}`"
+                      :to="czoneSearchPath(search.id)"
                       class="text-sm font-semibold text-[var(--OrbitLightBlue)] hover:text-white transition"
                     >
                       {{ displayName(search.name, 'cZone Search') }}
@@ -208,6 +208,12 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+
+const route = useRoute()
+const isNewsite = computed(() => route.path.startsWith('/newsite'))
+
+const czoneSearchPath = (id) =>
+  isNewsite.value ? `/newsite/czonesearch/${id}` : `/czonesearch/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)
