@@ -4,7 +4,7 @@
       <UserInfo />
     </template>
     <template #sidebar-bottom>
-      <NavRight />
+      <WinballAd />
     </template>
     <template #main-content>
       <MyAchievements />
