@@ -4,7 +4,7 @@
       <UserInfo />
     </template>
     <template #sidebar-middle>
-      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" />
+      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" :show-auction-filters="true" />
     </template>
     <template #sidebar-bottom>
       <WinballAd />

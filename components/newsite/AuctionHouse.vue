@@ -11,7 +11,7 @@
     <!-- ── List view ─────────────────────────────────────────────── -->
     <template v-if="!selectedAuctionId">
 
-    <!-- ── Tabs + Sort ─────────────────────────────────────────── -->
+    <!-- ── Tabs + View toggle ─────────────────────────────────── -->
     <div class="ah-topbar">
       <div class="ah-tabs">
         <button
@@ -20,22 +20,14 @@
           @click="switchTab(t.id)"
         >{{ t.label }}</button>
       </div>
-    </div>
-
-    <!-- ── Auction-specific filters ───────────────────────────── -->
-    <div class="ah-xfilters">
-      <button class="ah-pill" :class="{ active: featuredOnly  }" @click="featuredOnly  = !featuredOnly" >★ Feat.</button>
-      <button class="ah-pill" :class="{ active: hasBidsOnly   }" @click="hasBidsOnly   = !hasBidsOnly"  >Has Bids</button>
-      <button class="ah-pill" :class="{ active: gtoonsOnly    }" @click="gtoonsOnly    = !gtoonsOnly"   >gToons</button>
-      <button class="ah-pill" :class="{ active: wishlistOnly  }" @click="toggleWishlist">Wishlist</button>
-      <div class="ah-owned">
-        <button class="ah-owned-opt" :class="{ active: selectedOwned === 'all'     }" @click="selectedOwned = 'all'"    >All</button>
-        <button class="ah-owned-opt" :class="{ active: selectedOwned === 'owned'   }" @click="selectedOwned = 'owned'"  >Owned</button>
-        <button class="ah-owned-opt" :class="{ active: selectedOwned === 'unowned' }" @click="selectedOwned = 'unowned'">Unowned</button>
+      <div class="ah-view-toggle">
+        <button class="ah-vt-btn" :class="{ active: viewMode === 'list' }" @click="setView('list')">&#9776; List</button>
+        <button class="ah-vt-btn" :class="{ active: viewMode === 'card' }" @click="setView('card')">&#8859; Cards</button>
       </div>
     </div>
 
-    <!-- ── Auction list ────────────────────────────────────────── -->
+    <!-- ── List view ─────────────────────────────────────────── -->
+    <template v-if="viewMode === 'list'">
     <div class="ah-list">
 
       <!-- Loading skeletons -->
@@ -97,6 +89,56 @@
         </div>
       </template>
     </div>
+    </template>
+
+    <!-- ── Card view ─────────────────────────────────────────── -->
+    <template v-else>
+    <div class="ah-card-grid">
+
+      <!-- Loading skeletons -->
+      <template v-if="isLoadingActive">
+        <div v-for="n in 15" :key="n" class="ah-card-skeleton" />
+      </template>
+
+      <!-- Empty state -->
+      <div v-else-if="paginatedItems.length === 0" class="ah-empty ah-card-empty">
+        {{ hasActiveFilters ? 'No auctions match your filters.' : emptyMessage }}
+      </div>
+
+      <!-- Cards -->
+      <template v-else>
+        <ShortCard
+          v-for="item in paginatedItems" :key="item.id"
+          :style="{ '--footer-left-width': '60%', '--footer-right-width': '40%' }"
+          @click="selectedAuctionId = item.id"
+        >
+          <template #header>
+            <div class="ah-card-header">
+              <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="ah-card-img" draggable="false" />
+              <div class="ah-card-time-badge" :class="{ ended: isEnded(item.endAt) }">
+                <template v-if="!isEnded(item.endAt)">{{ formatRemaining(item.endAt) }}</template>
+                <template v-else>Ended</template>
+              </div>
+            </div>
+          </template>
+          <template #middle>
+            <div class="ah-card-middle">
+              <span class="ah-card-name">{{ item.name }}</span>
+              <span class="ah-rarity ah-card-rarity" :class="`r-${rarityKey(item.rarity)}`">{{ rarityShort(item.rarity) }}</span>
+            </div>
+          </template>
+          <template #footer-left>
+            <span class="ah-card-bid-val">
+              {{ Number(item.bidCount ?? 0) > 0 ? formatHighestBid(item) : (item.initialBid != null ? item.initialBid + ' pts' : '—') }}
+            </span>
+          </template>
+          <template #footer-right>
+            <button class="ah-card-view-btn" @click.stop="selectedAuctionId = item.id">View</button>
+          </template>
+        </ShortCard>
+      </template>
+    </div>
+    </template>
 
     <!-- ── Pagination ───────────────────────────────────────────── -->
     <div class="ah-pagination">
@@ -111,7 +153,8 @@
 </template>
 
 <script setup>
-const filter      = useNewSiteCtoonFilter()
+const filter   = useNewSiteCtoonFilter()
+const aFilters = useAuctionHouseFilters()
 const cmartCtoons = useState('cmartCtoons', () => [])
 
 const selectedAuctionId = ref(null)
@@ -124,6 +167,14 @@ const TABS = [
 ]
 
 const PAGE_SIZE = 20
+
+// ── View mode ─────────────────────────────────────────────────────
+const viewMode = ref('list')
+
+function setView(mode) {
+  viewMode.value = mode
+  if (import.meta.client) localStorage.setItem('auctionHouseView', mode)
+}
 
 // ── Tab ──────────────────────────────────────────────────────────
 const activeTab = ref('current')
@@ -153,13 +204,6 @@ const allTotalPages    = ref(1)
 // ── Client-side pagination (current) ─────────────────────────────
 const currentPage = ref(1)
 
-// ── Auction-specific filters ──────────────────────────────────────
-const featuredOnly  = ref(false)
-const wishlistOnly  = ref(false)
-const hasBidsOnly   = ref(false)
-const gtoonsOnly    = ref(false)
-const selectedOwned = ref('all')
-
 // ── Wishlist ──────────────────────────────────────────────────────
 const wishlistCtoonIds  = ref([])
 const isLoadingWishlist = ref(false)
@@ -171,6 +215,9 @@ const now = ref(new Date())
 let timer = null
 
 onMounted(() => {
+  if (import.meta.client) {
+    viewMode.value = localStorage.getItem('auctionHouseView') || 'list'
+  }
   timer = setInterval(() => { now.value = new Date() }, 1000)
   loadAuctions()
   loadTrendingAuctions()
@@ -181,22 +228,22 @@ onUnmounted(() => clearInterval(timer))
 function buildFilterParams() {
   const params = new URLSearchParams()
   const q = String(filter.value.name || '').trim()
-  if (q)                              params.set('q',        q)
-  if (filter.value.rarities.length)   params.set('rarity',   filter.value.rarities.join(','))
-  if (filter.value.series)            params.set('series',   filter.value.series)
-  if (filter.value.set)               params.set('set',      filter.value.set)
-  if (selectedOwned.value !== 'all')  params.set('owned',    selectedOwned.value)
-  if (featuredOnly.value)             params.set('featured', '1')
-  if (wishlistOnly.value)             params.set('wishlist', '1')
-  if (hasBidsOnly.value)              params.set('hasBids',  '1')
-  if (gtoonsOnly.value)               params.set('gtoon',    '1')
+  if (q)                                          params.set('q',        q)
+  if (filter.value.rarities.length)               params.set('rarity',   filter.value.rarities.join(','))
+  if (filter.value.series)                        params.set('series',   filter.value.series)
+  if (filter.value.set)                           params.set('set',      filter.value.set)
+  if (aFilters.value.selectedOwned !== 'all')     params.set('owned',    aFilters.value.selectedOwned)
+  if (aFilters.value.featuredOnly)                params.set('featured', '1')
+  if (aFilters.value.wishlistOnly)                params.set('wishlist', '1')
+  if (aFilters.value.hasBidsOnly)                 params.set('hasBids',  '1')
+  if (aFilters.value.gtoonsOnly)                  params.set('gtoon',    '1')
   return params
 }
 
 function loadAuctions() {
   isLoading.value = true
   const params = new URLSearchParams()
-  if (hasBidsOnly.value) params.set('hasBids', '1')
+  if (aFilters.value.hasBidsOnly) params.set('hasBids', '1')
   const qs = params.toString()
   $fetch(qs ? `/api/auctions?${qs}` : '/api/auctions')
     .then(data => { auctions.value = Array.isArray(data) ? data : []; syncCmartCtoons() })
@@ -285,11 +332,6 @@ function syncCmartCtoons() {
 
 // ── Watchers ──────────────────────────────────────────────────────
 
-watch(hasBidsOnly, () => {
-  loadAuctions()
-  loadTrendingAuctions()
-})
-
 watch(() => filter.value.sortField, () => {
   if (activeTab.value === 'mine')   { myPage.value = 1;      loadMyAuctions() }
   if (activeTab.value === 'mybids') { myBidsPage.value = 1;  loadMyBids()     }
@@ -300,11 +342,23 @@ watch(myPage,     () => { if (activeTab.value === 'mine')   loadMyAuctions() })
 watch(myBidsPage, () => { if (activeTab.value === 'mybids') loadMyBids()     })
 watch(allPage,    () => { if (activeTab.value === 'all')    loadAllAuctions()})
 
+watch(() => aFilters.value.hasBidsOnly, () => {
+  loadAuctions()
+  loadTrendingAuctions()
+})
+
+watch(() => aFilters.value.wishlistOnly, val => {
+  if (val) loadWishlist()
+})
+
 // Sidebar filter changes → reset + reload server-side tabs, reset client page
 watch(
-  [() => filter.value.name, () => filter.value.rarities, () => filter.value.series, () => filter.value.set,
-   () => filter.value.priceMin, () => filter.value.priceMax,
-   featuredOnly, wishlistOnly, gtoonsOnly, selectedOwned],
+  [
+    () => filter.value.name, () => filter.value.rarities, () => filter.value.series, () => filter.value.set,
+    () => filter.value.priceMin, () => filter.value.priceMax,
+    () => aFilters.value.featuredOnly, () => aFilters.value.wishlistOnly,
+    () => aFilters.value.gtoonsOnly,   () => aFilters.value.selectedOwned,
+  ],
   () => {
     currentPage.value = 1
     if (activeTab.value === 'mine')   { myPage.value = 1;     loadMyAuctions() }
@@ -329,16 +383,16 @@ function applyFilters(items) {
           !chars.some(c => String(c || '').toLowerCase().includes(term))) return false
     }
     if (rarities.length && !rarities.includes((item.rarity || '').toLowerCase()))    return false
-    if (series && item.series !== series)                       return false
-    if (set    && item.set    !== set)                          return false
-    if (featuredOnly.value  && !item.isFeatured)               return false
-    if (selectedOwned.value === 'owned'   && !item.isOwned)    return false
-    if (selectedOwned.value === 'unowned' && item.isOwned)     return false
-    if (wishlistOnly.value) {
+    if (series && item.series !== series)                                             return false
+    if (set    && item.set    !== set)                                                return false
+    if (aFilters.value.featuredOnly  && !item.isFeatured)                            return false
+    if (aFilters.value.selectedOwned === 'owned'   && !item.isOwned)                 return false
+    if (aFilters.value.selectedOwned === 'unowned' && item.isOwned)                  return false
+    if (aFilters.value.wishlistOnly) {
       if (!hasLoadedWishlist.value || !wishlistCtoonIdSet.value.has(item.ctoonId)) return false
     }
-    if (hasBidsOnly.value && Number(item.bidCount ?? 0) < 1) return false
-    if (gtoonsOnly.value  && !item.isGtoon)                  return false
+    if (aFilters.value.hasBidsOnly && Number(item.bidCount ?? 0) < 1)               return false
+    if (aFilters.value.gtoonsOnly  && !item.isGtoon)                                 return false
     const currentPrice = Number(item.highestBid > 0 ? item.highestBid : item.initialBid) || 0
     if (filter.value.priceMin !== '' && currentPrice < Number(filter.value.priceMin)) return false
     if (filter.value.priceMax !== '' && currentPrice > Number(filter.value.priceMax)) return false
@@ -411,8 +465,8 @@ const emptyMessage = computed(() => ({
 
 const hasActiveFilters = computed(() => !!(
   filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set ||
-  featuredOnly.value || wishlistOnly.value || hasBidsOnly.value || gtoonsOnly.value ||
-  selectedOwned.value !== 'all'
+  aFilters.value.featuredOnly || aFilters.value.wishlistOnly || aFilters.value.hasBidsOnly ||
+  aFilters.value.gtoonsOnly   || aFilters.value.selectedOwned !== 'all'
 ))
 
 // ── Actions ───────────────────────────────────────────────────────
@@ -422,11 +476,6 @@ function switchTab(id) {
   else if (id === 'mybids') { myBidsPage.value = 1; loadMyBids() }
   else if (id === 'mine')   { myPage.value = 1;     loadMyAuctions() }
   else if (id === 'all')    { allPage.value = 1;     loadAllAuctions() }
-}
-
-function toggleWishlist() {
-  wishlistOnly.value = !wishlistOnly.value
-  if (wishlistOnly.value) loadWishlist()
 }
 
 function prevPage() {
@@ -515,51 +564,28 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 .ah-tab.active { background: var(--OrbitLightBlue); color: #fff; }
 .ah-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
 
-/* ── Extra filters ── */
-.ah-xfilters {
+/* ── View toggle ── */
+.ah-view-toggle {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  background: rgba(0,0,0,0.12);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  overflow: hidden;
   flex-shrink: 0;
 }
 
-.ah-pill {
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 10px;
-  background: transparent;
-  color: rgba(255,255,255,0.5);
-  font-size: 0.58rem;
-  font-weight: bold;
-  padding: 1px 7px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-.ah-pill.active { background: var(--OrbitLightBlue); border-color: var(--OrbitLightBlue); color: #fff; }
-.ah-pill:not(.active):hover { color: rgba(255,255,255,0.85); }
-
-.ah-owned {
-  display: flex;
-  margin-left: auto;
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.ah-owned-opt {
+.ah-vt-btn {
   border: none;
-  background: transparent;
+  background: rgba(0,0,0,0.2);
   color: rgba(255,255,255,0.45);
-  font-size: 0.58rem;
+  font-size: 0.6rem;
   font-weight: bold;
-  padding: 1px 6px;
+  padding: 3px 8px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
-.ah-owned-opt.active { background: var(--OrbitLightBlue); color: #fff; }
+.ah-vt-btn.active  { background: var(--OrbitLightBlue); color: #fff; }
+.ah-vt-btn:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
 
 /* ── List ── */
 .ah-list {
@@ -702,6 +728,114 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   transition: background 0.12s;
 }
 .ah-view:hover { background: var(--OrbitLightBlue); }
+
+/* ── Card grid ── */
+.ah-card-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--OrbitDarkBlue) transparent;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: var(--shortcard-height);
+  gap: 4px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.ah-card-grid :deep(.sc) { width: 100%; cursor: pointer; }
+
+.ah-card-skeleton {
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  animation: ah-pulse 1.2s ease-in-out infinite;
+}
+
+.ah-card-empty {
+  grid-column: 1 / -1;
+}
+
+/* Card internals */
+.ah-card-header {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.ah-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(0.7);
+  image-rendering: pixelated;
+}
+
+.ah-card-time-badge {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.52rem;
+  font-weight: bold;
+  background: rgba(0,0,0,0.65);
+  color: #fca5a5;
+  padding: 1px 5px;
+  border-radius: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ah-card-time-badge.ended { color: rgba(255,255,255,0.45); }
+
+.ah-card-middle {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  gap: 3px;
+}
+
+.ah-card-name {
+  font-size: 0.6rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  text-align: center;
+}
+
+.ah-card-rarity {
+  flex-shrink: 0;
+}
+
+.ah-card-bid-val {
+  font-size: 0.62rem;
+  font-weight: bold;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.ah-card-view-btn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--OrbitLightBlue);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ah-card-view-btn:hover { background: var(--OrbitLightBlue); }
 
 /* ── Pagination ── */
 .ah-pagination {

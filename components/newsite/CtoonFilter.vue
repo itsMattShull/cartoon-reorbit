@@ -68,6 +68,25 @@
       </div>
     </div>
 
+    <!-- Auction-specific filters -->
+    <template v-if="showAuctionFilters">
+      <hr class="cf-divider" />
+      <div>
+        <div class="cf-section-label">Filters</div>
+        <div class="cf-pill-row">
+          <button class="cf-pill" :class="{ active: aFilters.featuredOnly }" @click="aFilters.featuredOnly = !aFilters.featuredOnly">★ Feat.</button>
+          <button class="cf-pill" :class="{ active: aFilters.hasBidsOnly  }" @click="aFilters.hasBidsOnly  = !aFilters.hasBidsOnly" >Has Bids</button>
+          <button class="cf-pill" :class="{ active: aFilters.gtoonsOnly   }" @click="aFilters.gtoonsOnly   = !aFilters.gtoonsOnly"  >gToons</button>
+          <button class="cf-pill" :class="{ active: aFilters.wishlistOnly }" @click="aFilters.wishlistOnly = !aFilters.wishlistOnly">Wishlist</button>
+        </div>
+        <div class="cf-owned-row">
+          <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'all'     }" @click="aFilters.selectedOwned = 'all'"    >All</button>
+          <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'owned'   }" @click="aFilters.selectedOwned = 'owned'"  >Owned</button>
+          <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'unowned' }" @click="aFilters.selectedOwned = 'unowned'">Unowned</button>
+        </div>
+      </div>
+    </template>
+
     <template v-if="showHideUnavailable">
       <hr class="cf-divider" />
       <div class="cf-page-filters">
@@ -87,7 +106,8 @@
 <script setup>
 const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
-  showSortDir: { type: Boolean, default: true },
+  showSortDir:         { type: Boolean, default: true  },
+  showAuctionFilters:  { type: Boolean, default: false },
   sortOptions: {
     type: Array,
     default: () => [
@@ -98,8 +118,9 @@ const props = defineProps({
   },
 })
 
-const filter = useNewSiteCtoonFilter()
-const ctoons = useState('cmartCtoons', () => [])
+const filter   = useNewSiteCtoonFilter()
+const aFilters = useAuctionHouseFilters()
+const ctoons   = useState('cmartCtoons', () => [])
 
 const RARITIES = [
   { value: 'common',       label: 'C',  cls: 'cf-rb-common'        },
@@ -138,6 +159,15 @@ function clearFilters() {
     sortAsc:         true,
     hideUnavailable: false,
   })
+  if (props.showAuctionFilters) {
+    Object.assign(aFilters.value, {
+      featuredOnly:  false,
+      hasBidsOnly:   false,
+      gtoonsOnly:    false,
+      wishlistOnly:  false,
+      selectedOwned: 'all',
+    })
+  }
 }
 </script>
 
@@ -318,4 +348,50 @@ function clearFilters() {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   margin: 0;
 }
+
+/* ── Auction filter pills ── */
+.cf-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.cf-pill {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.58rem;
+  font-weight: bold;
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.cf-pill.active                { background: var(--OrbitLightBlue); border-color: var(--OrbitLightBlue); color: #fff; }
+.cf-pill:not(.active):hover    { color: rgba(255, 255, 255, 0.85); }
+
+.cf-owned-row {
+  display: flex;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.cf-owned-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.58rem;
+  font-weight: bold;
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.cf-owned-btn.active { background: var(--OrbitLightBlue); color: #fff; }
 </style>
