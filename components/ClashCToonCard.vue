@@ -35,7 +35,7 @@
     <!-- name only when large -->
     <span
       v-if="!isSmall"
-      class="font-semibold truncate w-full px-1 mt-1 leading-none text-[11px]"
+      class="font-semibold truncate w-full px-1 mt-1 leading-none text-[11px] text-gray-800"
     >
       {{ card.name }}
     </span>
