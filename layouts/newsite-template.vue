@@ -235,7 +235,7 @@ html.newsite-active body {
       <div class="topbar-nav"
         :style="[
           { visibility: showNav ? 'visible' : 'hidden' },
-          isMobile ? { flexDirection: 'column', height: 'calc(var(--topbar-nav-height) * 2 + 4px)', overflow: 'visible', gap: '4px', width: '100%' } : {}
+          isMobile ? { flexDirection: 'column', height: 'auto', overflow: 'visible', gap: '4px', width: '100%' } : {}
         ]"
       >
         <div class="topbar-nav-left" :style="isMobile ? { width: '100%' } : {}"><NavLeft :isMobile="isMobile" /></div>
@@ -609,6 +609,17 @@ const scaleStyle = computed(() => {
     width: 100%;
     overflow: visible;
     box-sizing: border-box;
+  }
+
+  .topbar-primary {
+    overflow: visible;
+    height: auto;
+  }
+
+  .topbar-nav-left,
+  .topbar-nav-right {
+    overflow: visible;
+    height: auto;
   }
 
   .main-content {

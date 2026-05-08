@@ -44,4 +44,12 @@ const { isAdmin, logout } = useAuth()
   padding: 0 6px;
   box-sizing: border-box;
 }
+
+@media (max-width: 768px) {
+  .nav-left {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 6px;
+  }
+}
 </style>

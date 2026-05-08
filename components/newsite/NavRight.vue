@@ -51,4 +51,12 @@ const props = defineProps({
   padding: 0 6px;
   box-sizing: border-box;
 }
+
+@media (max-width: 768px) {
+  .nav-right {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 6px;
+  }
+}
 </style>
