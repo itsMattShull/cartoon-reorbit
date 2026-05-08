@@ -49,63 +49,63 @@ html.newsite-active body {
   --topbar-pl:                       0px;
   --topbar-pr:                       0px;
 
-  --topbar-adbar-bg:                 var(--OrbitDarkBlue);
-  --topbar-adbar-height:             65px;
-  --topbar-adbar-radius:             8px;
-  --topbar-adbar-border-thickness:   2px;
-  --topbar-adbar-border-color:       var(--OrbitDarkBlue);
-  --topbar-adbar-pt:                 0px;
-  --topbar-adbar-pb:                 0px;
-  --topbar-adbar-pl:                 0px;
-  --topbar-adbar-pr:                 0px;
+  --topbar-primary-bg:                 var(--OrbitDarkBlue);
+  --topbar-primary-height:             65px;
+  --topbar-primary-radius:             8px;
+  --topbar-primary-border-thickness:   2px;
+  --topbar-primary-border-color:       var(--OrbitDarkBlue);
+  --topbar-primary-pt:                 0px;
+  --topbar-primary-pb:                 0px;
+  --topbar-primary-pl:                 0px;
+  --topbar-primary-pr:                 0px;
 
-  --topbar-adbar-logo-bg:            #000000;
-  --topbar-adbar-logo-height:        var(--topbar-adbar-height);
-  --topbar-adbar-logo-width:         200px;
-  --topbar-adbar-logo-scale-x:       1;
-  --topbar-adbar-logo-scale-y:       1.1;
-  --topbar-adbar-logo-radius:        0px;
-  --topbar-adbar-logo-border-thickness: 0px;
-  --topbar-adbar-logo-border-color:  transparent;
-  --topbar-adbar-logo-pt:            0px;
-  --topbar-adbar-logo-pb:            0px;
-  --topbar-adbar-logo-pl:            0px;
-  --topbar-adbar-logo-pr:            8px;
+  --topbar-primary-logo-bg:            #000000;
+  --topbar-primary-logo-height:        var(--topbar-primary-height);
+  --topbar-primary-logo-width:         200px;
+  --topbar-primary-logo-scale-x:       1;
+  --topbar-primary-logo-scale-y:       1.1;
+  --topbar-primary-logo-radius:        0px;
+  --topbar-primary-logo-border-thickness: 0px;
+  --topbar-primary-logo-border-color:  transparent;
+  --topbar-primary-logo-pt:            0px;
+  --topbar-primary-logo-pb:            0px;
+  --topbar-primary-logo-pl:            0px;
+  --topbar-primary-logo-pr:            8px;
 
-  --topbar-adbar-promolabel-bg:         transparent;
-  --topbar-adbar-promolabel-height:     var(--topbar-adbar-height);
-  --topbar-adbar-promolabel-width:      20px;
-  --topbar-adbar-promolabel-scale-x:    1;
-  --topbar-adbar-promolabel-scale-y:    1;
-  --topbar-adbar-promolabel-radius:     0px;
-  --topbar-adbar-promolabel-border-thickness: 0px;
-  --topbar-adbar-promolabel-border-color: transparent;
-  --topbar-adbar-promolabel-pt:         0px;
-  --topbar-adbar-promolabel-pb:         0px;
-  --topbar-adbar-promolabel-pl:         0px;
-  --topbar-adbar-promolabel-pr:         0px;
+  --topbar-primary-promolabel-bg:         transparent;
+  --topbar-primary-promolabel-height:     var(--topbar-primary-height);
+  --topbar-primary-promolabel-width:      20px;
+  --topbar-primary-promolabel-scale-x:    1;
+  --topbar-primary-promolabel-scale-y:    1;
+  --topbar-primary-promolabel-radius:     0px;
+  --topbar-primary-promolabel-border-thickness: 0px;
+  --topbar-primary-promolabel-border-color: transparent;
+  --topbar-primary-promolabel-pt:         0px;
+  --topbar-primary-promolabel-pb:         0px;
+  --topbar-primary-promolabel-pl:         0px;
+  --topbar-primary-promolabel-pr:         0px;
 
-  --topbar-adbar-promo-bg:              transparent;
-  --topbar-adbar-promo-height:          var(--topbar-adbar-height);
-  --topbar-adbar-promo-width:           460px;
-  --topbar-adbar-promo-radius:          0px;
-  --topbar-adbar-promo-border-thickness: 0px;
-  --topbar-adbar-promo-border-color:    transparent;
-  --topbar-adbar-promo-pt:              0px;
-  --topbar-adbar-promo-pb:              0px;
-  --topbar-adbar-promo-pl:              0px;
-  --topbar-adbar-promo-pr:              0px;
+  --topbar-primary-promo-bg:              transparent;
+  --topbar-primary-promo-height:          var(--topbar-primary-height);
+  --topbar-primary-promo-width:           460px;
+  --topbar-primary-promo-radius:          0px;
+  --topbar-primary-promo-border-thickness: 0px;
+  --topbar-primary-promo-border-color:    transparent;
+  --topbar-primary-promo-pt:              0px;
+  --topbar-primary-promo-pb:              0px;
+  --topbar-primary-promo-pl:              0px;
+  --topbar-primary-promo-pr:              0px;
 
-  --topbar-adbar-rewatch-bg:         transparent;
-  --topbar-adbar-rewatch-height:     var(--topbar-adbar-height);
-  --topbar-adbar-rewatch-width:      100px;
-  --topbar-adbar-rewatch-radius:     0px;
-  --topbar-adbar-rewatch-border-thickness: 0px;
-  --topbar-adbar-rewatch-border-color: transparent;
-  --topbar-adbar-rewatch-pt:         0px;
-  --topbar-adbar-rewatch-pb:         0px;
-  --topbar-adbar-rewatch-pl:         0px;
-  --topbar-adbar-rewatch-pr:         0px;
+  --topbar-primary-rewatch-bg:         transparent;
+  --topbar-primary-rewatch-height:     var(--topbar-primary-height);
+  --topbar-primary-rewatch-width:      100px;
+  --topbar-primary-rewatch-radius:     0px;
+  --topbar-primary-rewatch-border-thickness: 0px;
+  --topbar-primary-rewatch-border-color: transparent;
+  --topbar-primary-rewatch-pt:         0px;
+  --topbar-primary-rewatch-pb:         0px;
+  --topbar-primary-rewatch-pl:         0px;
+  --topbar-primary-rewatch-pr:         0px;
 
   --topbar-nav-bg:                   transparent;
   --topbar-nav-height:               30px;
@@ -226,11 +226,11 @@ html.newsite-active body {
 <template>
   <div class="site-container" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
-      <div class="topbar-adbar" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
-        <div v-if="!isMobile" class="topbar-adbar-logo"><ReorbitLogo /></div>
-        <div class="topbar-adbar-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
-        <div class="topbar-adbar-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
-        <div v-if="!isMobile" class="topbar-adbar-rewatch"><Rewatch /></div>
+      <div class="topbar-primary" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
+        <div v-if="!isMobile" class="topbar-primary-logo"><ReorbitLogo /></div>
+        <div class="topbar-primary-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
+        <div class="topbar-primary-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
+        <div v-if="!isMobile" class="topbar-primary-rewatch"><Rewatch /></div>
       </div>
       <div class="topbar-nav"
         :style="[
@@ -374,63 +374,63 @@ const scaleStyle = computed(() => {
   gap: var(--topbar-gap);
 }
 
-.topbar-adbar {
-  height: var(--topbar-adbar-height);
-  background: var(--topbar-adbar-bg);
-  border-radius: var(--topbar-adbar-radius);
-  border: var(--topbar-adbar-border-thickness) solid var(--topbar-adbar-border-color);
+.topbar-primary {
+  height: var(--topbar-primary-height);
+  background: var(--topbar-primary-bg);
+  border-radius: var(--topbar-primary-radius);
+  border: var(--topbar-primary-border-thickness) solid var(--topbar-primary-border-color);
   align-items: center;
   overflow: hidden;
-  padding: var(--topbar-adbar-pt) var(--topbar-adbar-pr) var(--topbar-adbar-pb) var(--topbar-adbar-pl);
+  padding: var(--topbar-primary-pt) var(--topbar-primary-pr) var(--topbar-primary-pb) var(--topbar-primary-pl);
   display: flex;
   flex-direction: row;
   flex-shrink: 0;
 }
 
-.topbar-adbar-logo {
-  width: var(--topbar-adbar-logo-width);
-  height: var(--topbar-adbar-logo-height);
-  background: var(--topbar-adbar-logo-bg);
-  transform: scale(var(--topbar-adbar-logo-scale-x), var(--topbar-adbar-logo-scale-y));
-  border-radius: var(--topbar-adbar-logo-radius);
-  border: var(--topbar-adbar-logo-border-thickness) solid var(--topbar-adbar-logo-border-color);
-  padding: var(--topbar-adbar-logo-pt) var(--topbar-adbar-logo-pr) var(--topbar-adbar-logo-pb) var(--topbar-adbar-logo-pl);
+.topbar-primary-logo {
+  width: var(--topbar-primary-logo-width);
+  height: var(--topbar-primary-logo-height);
+  background: var(--topbar-primary-logo-bg);
+  transform: scale(var(--topbar-primary-logo-scale-x), var(--topbar-primary-logo-scale-y));
+  border-radius: var(--topbar-primary-logo-radius);
+  border: var(--topbar-primary-logo-border-thickness) solid var(--topbar-primary-logo-border-color);
+  padding: var(--topbar-primary-logo-pt) var(--topbar-primary-logo-pr) var(--topbar-primary-logo-pb) var(--topbar-primary-logo-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-promolabel {
+.topbar-primary-promolabel {
   margin-left: auto;
-  width: var(--topbar-adbar-promolabel-width);
-  height: var(--topbar-adbar-promolabel-height);
-  background: var(--topbar-adbar-promolabel-bg);
-  transform: scale(var(--topbar-adbar-promolabel-scale-x), var(--topbar-adbar-promolabel-scale-y));
-  border-radius: var(--topbar-adbar-promolabel-radius);
-  border: var(--topbar-adbar-promolabel-border-thickness) solid var(--topbar-adbar-promolabel-border-color);
-  padding: var(--topbar-adbar-promolabel-pt) var(--topbar-adbar-promolabel-pr) var(--topbar-adbar-promolabel-pb) var(--topbar-adbar-promolabel-pl);
+  width: var(--topbar-primary-promolabel-width);
+  height: var(--topbar-primary-promolabel-height);
+  background: var(--topbar-primary-promolabel-bg);
+  transform: scale(var(--topbar-primary-promolabel-scale-x), var(--topbar-primary-promolabel-scale-y));
+  border-radius: var(--topbar-primary-promolabel-radius);
+  border: var(--topbar-primary-promolabel-border-thickness) solid var(--topbar-primary-promolabel-border-color);
+  padding: var(--topbar-primary-promolabel-pt) var(--topbar-primary-promolabel-pr) var(--topbar-primary-promolabel-pb) var(--topbar-primary-promolabel-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-promo {
-  width: var(--topbar-adbar-promo-width);
-  height: var(--topbar-adbar-promo-height);
-  background: var(--topbar-adbar-promo-bg);
-  border-radius: var(--topbar-adbar-promo-radius);
-  border: var(--topbar-adbar-promo-border-thickness) solid var(--topbar-adbar-promo-border-color);
-  padding: var(--topbar-adbar-promo-pt) var(--topbar-adbar-promo-pr) var(--topbar-adbar-promo-pb) var(--topbar-adbar-promo-pl);
+.topbar-primary-promo {
+  width: var(--topbar-primary-promo-width);
+  height: var(--topbar-primary-promo-height);
+  background: var(--topbar-primary-promo-bg);
+  border-radius: var(--topbar-primary-promo-radius);
+  border: var(--topbar-primary-promo-border-thickness) solid var(--topbar-primary-promo-border-color);
+  padding: var(--topbar-primary-promo-pt) var(--topbar-primary-promo-pr) var(--topbar-primary-promo-pb) var(--topbar-primary-promo-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-rewatch {
+.topbar-primary-rewatch {
   margin-left: auto;
-  width: var(--topbar-adbar-rewatch-width);
-  height: var(--topbar-adbar-rewatch-height);
-  background: var(--topbar-adbar-rewatch-bg);
-  border-radius: var(--topbar-adbar-rewatch-radius);
-  border: var(--topbar-adbar-rewatch-border-thickness) solid var(--topbar-adbar-rewatch-border-color);
-  padding: var(--topbar-adbar-rewatch-pt) var(--topbar-adbar-rewatch-pr) var(--topbar-adbar-rewatch-pb) var(--topbar-adbar-rewatch-pl);
+  width: var(--topbar-primary-rewatch-width);
+  height: var(--topbar-primary-rewatch-height);
+  background: var(--topbar-primary-rewatch-bg);
+  border-radius: var(--topbar-primary-rewatch-radius);
+  border: var(--topbar-primary-rewatch-border-thickness) solid var(--topbar-primary-rewatch-border-color);
+  padding: var(--topbar-primary-rewatch-pt) var(--topbar-primary-rewatch-pr) var(--topbar-primary-rewatch-pb) var(--topbar-primary-rewatch-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -584,11 +584,11 @@ const scaleStyle = computed(() => {
 @media (max-width: 768px) {
   .site-container,
   .topbar,
-  .topbar-adbar,
-  .topbar-adbar-logo,
-  .topbar-adbar-promolabel,
-  .topbar-adbar-promo,
-  .topbar-adbar-rewatch,
+  .topbar-primary,
+  .topbar-primary-logo,
+  .topbar-primary-promolabel,
+  .topbar-primary-promo,
+  .topbar-primary-rewatch,
   .topbar-nav,
   .topbar-nav-left,
   .topbar-nav-right,

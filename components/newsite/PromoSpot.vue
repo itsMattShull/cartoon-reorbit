@@ -1,9 +1,9 @@
 <template>
-  <NuxtLink v-if="!hasPromoUrl" to="/newsite/home" class="promo-spot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Sponsored" />
+  <NuxtLink v-if="!hasPromoUrl" to="/newsite/home" class="orbit-spot">
+    <img v-if="currentSrc" :src="currentSrc" alt="" />
   </NuxtLink>
-  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="promo-spot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Sponsored" />
+  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="orbit-spot">
+    <img v-if="currentSrc" :src="currentSrc" alt="" />
   </a>
 </template>
 
@@ -145,7 +145,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.promo-spot {
+.orbit-spot {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,7 +154,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.promo-spot img {
+.orbit-spot img {
   display: block;
   width: 100%;
   height: auto;

@@ -1,16 +1,16 @@
 <template>
-  <div class="promo-label">
-    <img src="/images/newsite/promo-label.gif" alt="Sponsored" />
+  <div class="orbit-label">
+    <img src="/images/newsite/orbit-label.gif" alt="" />
   </div>
 </template>
 
 <style scoped>
-.promo-label {
+.orbit-label {
   width: 100%;
   height: 100%;
 }
 
-.promo-label img {
+.orbit-label img {
   width: 100%;
   height: 100%;
   object-fit: fill;
