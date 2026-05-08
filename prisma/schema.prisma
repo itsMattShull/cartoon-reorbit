@@ -686,18 +686,19 @@ model TradeSpectator {
 }
 
 model Pack {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  price       Int      @default(0)
-  imagePath   String?
-  inCmart     Boolean  @default(false)
-  scheduledAt DateTime?
-  sentAt      DateTime?
-  scheduledOffAt DateTime?
-  sellOutBehavior PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  name               String
+  description        String?
+  price              Int      @default(0)
+  imagePath          String?
+  inCmart            Boolean  @default(false)
+  scheduledAt        DateTime?
+  sentAt             DateTime?
+  scheduledOffAt     DateTime?
+  sellOutBehavior    PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
+  dailyPurchaseLimit Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   rarityConfigs PackRarityConfig[]
   ctoonOptions  PackCtoonOption[]

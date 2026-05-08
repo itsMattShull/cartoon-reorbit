@@ -8,6 +8,8 @@
 // • user must be logged-in
 // • pack must exist + be inCmart = true
 // • user must have ≥ pack.price points
+// • if pack.dailyPurchaseLimit is set, user must not have hit the limit
+//   for the current 8pm–7:59pm CST daily window
 // • deduct points, create a UserPack row (sealed)
 
 import {
@@ -18,6 +20,58 @@ import {
 } from 'h3'
 
 import { prisma as db } from '@/server/prisma'
+
+/**
+ * Returns the start of the current 8pm–7:59pm CST daily window as a UTC Date.
+ * If it's before 8pm Chicago time, the window started yesterday at 8pm.
+ */
+function getDailyWindowStart() {
+  const now = new Date()
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', hour12: false
+  })
+  const parts = Object.fromEntries(
+    fmt.formatToParts(now)
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, p.value])
+  )
+
+  let year = +parts.year, month = +parts.month - 1, day = +parts.day
+  const hour = +parts.hour
+
+  if (hour < 20) {
+    // Before 8pm Chicago — window started yesterday at 8pm
+    const d = new Date(Date.UTC(year, month, day))
+    d.setUTCDate(d.getUTCDate() - 1)
+    year  = d.getUTCFullYear()
+    month = d.getUTCMonth()
+    day   = d.getUTCDate()
+  }
+
+  // Convert "YYYY-MM-DD 20:00 Chicago" → UTC using the same offset-correction
+  // trick used elsewhere in this codebase.
+  const utcGuessMs = Date.UTC(year, month, day, 20, 0, 0)
+  const fmtCheck = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  })
+  const displayed = Object.fromEntries(
+    fmtCheck.formatToParts(new Date(utcGuessMs))
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, p.value])
+  )
+  const zonalMs = Date.UTC(
+    +displayed.year, +displayed.month - 1, +displayed.day,
+    +displayed.hour, +displayed.minute, +displayed.second
+  )
+  const offsetMs = zonalMs - utcGuessMs
+  return new Date(utcGuessMs - offsetMs)
+}
 
 
 export default defineEventHandler(async (event) => {
@@ -38,47 +92,68 @@ export default defineEventHandler(async (event) => {
 
   /* 3.  lookup pack & user points --------------------------------------- */
   const [pack, userPts, activeLocks] = await Promise.all([
-    db.pack.findUnique({ where: { id: packId }, select: { id: true, price: true, inCmart: true } }),
+    db.pack.findUnique({
+      where:  { id: packId },
+      select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true }
+    }),
     db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } }),
     db.lockedPoints.findMany({
-      where: { userId: me.id, status: 'ACTIVE' },
+      where:  { userId: me.id, status: 'ACTIVE' },
       select: { amount: true }
     })
   ])
   if (!pack || !pack.inCmart) {
     throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
   }
-  const totalPoints = userPts?.points || 0
-  const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+  const totalPoints    = userPts?.points || 0
+  const lockedSum      = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
   const availablePoints = totalPoints - lockedSum
   if (availablePoints < pack.price) {
     throw createError({ statusCode: 400, statusMessage: 'Not enough available points' })
   }
 
-  /* 4.  transaction: deduct points + create sealed pack ----------------- */
+  /* 4.  daily purchase limit check --------------------------------------- */
+  if (pack.dailyPurchaseLimit != null) {
+    const windowStart = getDailyWindowStart()
+    const purchasedToday = await db.userPack.count({
+      where: {
+        userId:    me.id,
+        packId:    pack.id,
+        createdAt: { gte: windowStart }
+      }
+    })
+    if (purchasedToday >= pack.dailyPurchaseLimit) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: `Daily limit reached — you can buy ${pack.dailyPurchaseLimit} of this pack per day (resets at 8pm CST)`
+      })
+    }
+  }
+
+  /* 5.  transaction: deduct points + create sealed pack ----------------- */
   const result = await db.$transaction(async (tx) => {
-    // 4-a  deduct points
+    // 5-a  deduct points
     const updated = await tx.userPoints.update({
       where: { userId: me.id },
-      data: { points: { decrement: pack.price } }
+      data:  { points: { decrement: pack.price } }
     })
 
     await tx.pointsLog.create({
       data: { userId: me.id, points: pack.price, total: updated.points, method: "Bought Pack", direction: 'decrease' }
-    });
+    })
 
-    // 4-b  create UserPack (sealed)
+    // 5-b  create UserPack (sealed)
     const userPack = await tx.userPack.create({
       data: {
         userId: me.id,
         packId: pack.id,
-        opened: false   // unopened
+        opened: false
       }
     })
 
     return userPack
   })
 
-  /* 5.  success response ------------------------------------------------- */
+  /* 6.  success response ------------------------------------------------- */
   return { success: true, userPackId: result.id }
 })
