@@ -7,14 +7,6 @@
       <WinballPromo />
     </template>
     <template #main-content>
-      <!-- Jingle audio -->
-      <audio
-        v-if="winWheelSoundPath"
-        ref="spinAudio"
-        :src="winWheelSoundPath"
-        preload="auto"
-      ></audio>
-
       <div class="winwheel-content">
         <!-- Skeleton state -->
         <template v-if="loading">
@@ -193,7 +185,7 @@ const { user, fetchSelf } = useAuth()
 
 const loading = ref(true)
 
-const spinAudio = ref(null)
+let fallbackAudio = null
 let spinSoundTimer = null
 let audioCtx = null
 let spinBuffer = null
@@ -254,6 +246,7 @@ async function fetchStatus() {
   if (winWheelSoundPath.value !== prevSoundPath) {
     spinBuffer = null
     spinBufferPromise = null
+    fallbackAudio = null
   }
   winWheelSoundMode.value  = soundMode || 'repeat'
   exclusivePool.value      = Array.isArray(pool) ? pool : []
@@ -373,13 +366,22 @@ function playSpinSoundBuffer() {
   return true
 }
 
+function getFallbackAudio() {
+  if (!fallbackAudio && winWheelSoundPath.value) {
+    fallbackAudio = new Audio(winWheelSoundPath.value)
+    fallbackAudio.preload = 'auto'
+  }
+  return fallbackAudio
+}
+
 function playSpinSoundOnce() {
   try {
     if (playSpinSoundBuffer()) return
-    if (!spinAudio.value) return
-    spinAudio.value.pause()
-    spinAudio.value.currentTime = 0
-    const playPromise = spinAudio.value.play()
+    const audio = getFallbackAudio()
+    if (!audio) return
+    audio.pause()
+    audio.currentTime = 0
+    const playPromise = audio.play()
     if (playPromise && typeof playPromise.then === 'function') {
       playPromise.catch(err => { console.warn('Spin audio play prevented by browser:', err) })
     }
@@ -422,7 +424,7 @@ function stopSpinSound() {
     activeSpinSources.forEach(src => { try { src.stop(0) } catch {} })
     activeSpinSources.clear()
   }
-  if (spinAudio.value) { spinAudio.value.pause(); spinAudio.value.currentTime = 0 }
+  if (fallbackAudio) { fallbackAudio.pause(); fallbackAudio.currentTime = 0 }
 }
 </script>
 
