@@ -364,6 +364,25 @@
           </div>
         </div>
 
+        <!-- Label image -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Label Image</h2>
+          <p class="text-xs text-gray-500">Image displayed as the orbit label on the newsite template (replaces the default orbit-label.gif).</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.label || labelPath" :src="previewUrls.label || labelPath" alt="Label" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image (uses default)</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onLabelFile($event)" class="block w-full text-sm" />
+              <div v-if="labelFile" class="text-xs text-gray-600 truncate">Selected: {{ labelFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="labelPath" @click="clearLabel()">Clear</button>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-2">
           <button class="btn-primary" :disabled="saving" @click="saveOther">
             <span v-if="!saving">Save</span><span v-else>Saving…</span>
@@ -402,13 +421,16 @@ const activeTab = ref('Homepage')
 
 const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
 const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null, earnPoints:null })
+const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null, earnPoints:null, label:null })
 
 const newsPath = ref('')
 const newsFile = ref(null)
 
 const earnPointsPath = ref('')
 const earnPointsFile = ref(null)
+
+const labelPath = ref('')
+const labelFile = ref(null)
 
 const showcasePath = ref('')
 const showcaseFile = ref(null)
@@ -552,6 +574,19 @@ function clearEarnPoints() {
   earnPointsFile.value = null
 }
 
+function onLabelFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value.label) { URL.revokeObjectURL(previewUrls.value.label); previewUrls.value.label = null } } catch (e) {}
+  labelFile.value = f
+  if (f) previewUrls.value.label = URL.createObjectURL(f)
+}
+
+function clearLabel() {
+  labelPath.value = ''
+  if (previewUrls.value.label) { try { URL.revokeObjectURL(previewUrls.value.label) } catch (e) {} ; previewUrls.value.label = null }
+  labelFile.value = null
+}
+
 function onMiddleSidebarPresetChange(n) {
   const preset = middleSidebarImages[n].linkPreset
   if (preset === '') {
@@ -597,6 +632,7 @@ async function loadConfig() {
 
   newsPath.value = cfg.newsImagePath || ''
   earnPointsPath.value = cfg.earnPointsImagePath || ''
+  labelPath.value = cfg.labelImagePath || ''
 }
 
 
@@ -709,11 +745,15 @@ async function saveOther() {
     if (newsFile.value) fd.append('news', newsFile.value)
     fd.append('earnPointsPath', earnPointsPath.value || '')
     if (earnPointsFile.value) fd.append('earnPoints', earnPointsFile.value)
+    fd.append('labelPath', labelPath.value || '')
+    if (labelFile.value) fd.append('label', labelFile.value)
     const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
     newsPath.value = res.newsImagePath || ''
     newsFile.value = null
     earnPointsPath.value = res.earnPointsImagePath || ''
     earnPointsFile.value = null
+    labelPath.value = res.labelImagePath || ''
+    labelFile.value = null
     toast.value = { type: 'ok', msg: 'Images saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
