@@ -9,6 +9,9 @@
     <NuxtLink v-if="isMobile" to="/newsite/settings" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
     </NuxtLink>
+    <NuxtLink v-if="isMobile" to="/newsite/redeem" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
+    </NuxtLink>
     <GreenButton :style="{ height: buttonHeight }" @click="logout">Logout</GreenButton>
   </div>
 </template>
