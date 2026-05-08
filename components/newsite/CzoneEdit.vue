@@ -38,7 +38,7 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
-            @touchstart.prevent="!currentZoneToonIds.has(c.id) && onToonTouchStart(c, $event)"
+            @touchstart="!currentZoneToonIds.has(c.id) && onToonTouchStart(c, $event)"
             @touchend="!currentZoneToonIds.has(c.id) && onToonTouchEnd(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
