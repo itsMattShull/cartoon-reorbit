@@ -744,7 +744,7 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   box-sizing: border-box;
 }
 
-.ah-card-grid :deep(.sc) { width: 100%; cursor: pointer; }
+.ah-card-grid :deep(.sc) { width: 100%; cursor: pointer; --header-bg: url('/images/newsite/infocardSplash.png') top / 100% 100% no-repeat; }
 
 .ah-card-skeleton {
   border-radius: 8px;
