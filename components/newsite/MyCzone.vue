@@ -38,7 +38,7 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode }"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
             @click.stop="onToonClick(toon)"
           >
@@ -96,7 +96,10 @@
     <div class="cz-bottombar">
       <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
-        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
+        <template v-if="cz.buildMode">
+          <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
+          <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
+        </template>
       </div>
       <div class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -221,6 +224,17 @@ const viewedUsername = ref(null)   // username whose zone is currently displayed
 // Local drag: repositioning toons already on the canvas
 const localDrag = ref(null)  // { toon, offsetX, offsetY }
 
+// Long-press (mobile): hold 2s on a canvas toon to remove it
+const LONG_PRESS_DURATION  = 2000
+const LONG_PRESS_MOVE_THRESHOLD = 10
+const longPressTimer  = ref(null)
+const longPressToon   = ref(null)  // { toon, toons, startClientX, startClientY }
+
+function cancelLongPress() {
+  if (longPressTimer.value) { clearTimeout(longPressTimer.value); longPressTimer.value = null }
+  longPressToon.value = null
+}
+
 // ── cZone Search state ────────────────────────────────────────
 const czoneSearchItems  = ref([])
 const captureModalVisible = ref(false)
@@ -278,6 +292,7 @@ onUnmounted(() => {
   window.removeEventListener('touchmove', onGlobalMove)
   window.removeEventListener('touchend',  onGlobalUp)
   // clear any leftover drag state
+  cancelLongPress()
   cz.value.activeDrag = null
   cz.value.buildMode  = false
 })
@@ -410,7 +425,21 @@ function onCanvasTouchStart(e) {
     const t = toons[i]
     const w = toonW(t), h = toonH(t)
     if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      if (window.innerWidth <= 768) {
+        // Mobile: start long-press timer; drag will begin only if finger moves
+        longPressToon.value = { toon: t, toons, startClientX: touch.clientX, startClientY: touch.clientY, canvasX: x, canvasY: y }
+        longPressTimer.value = setTimeout(() => {
+          if (!longPressToon.value) return
+          const { toon: lpt, toons: lptoons } = longPressToon.value
+          const idx = lptoons.indexOf(lpt)
+          if (idx !== -1) lptoons.splice(idx, 1)
+          longPressToon.value = null
+          longPressTimer.value = null
+          localDrag.value = null
+        }, LONG_PRESS_DURATION)
+      } else {
+        localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      }
       e.preventDefault()
       return
     }
@@ -420,6 +449,16 @@ function onCanvasTouchStart(e) {
 // ── Global move (mouse + touch) ───────────────────────────────
 function onGlobalMove(e) {
   const { clientX, clientY } = getCoords(e)
+  // Cancel long-press if finger moved beyond threshold; start drag instead
+  if (longPressToon.value) {
+    const dx = Math.abs(clientX - longPressToon.value.startClientX)
+    const dy = Math.abs(clientY - longPressToon.value.startClientY)
+    if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+      const { toon, canvasX, canvasY } = longPressToon.value
+      cancelLongPress()
+      localDrag.value = { toon, offsetX: canvasX - toon.x, offsetY: canvasY - toon.y }
+    }
+  }
   if (cz.value.activeDrag || localDrag.value) {
     e.preventDefault()  // prevent page scroll during drag
   }
@@ -437,6 +476,7 @@ function onGlobalMove(e) {
 
 // ── Global up (mouse + touch) ─────────────────────────────────
 function onGlobalUp(e) {
+  cancelLongPress()
   const { clientX, clientY } = getCoords(e)
   if (cz.value.activeDrag && isOverCanvas(clientX, clientY)) {
     const { x, y } = toCanvasCoords(clientX, clientY)
@@ -709,6 +749,15 @@ defineExpose({ save, clearZone })
 .cz-item.is-dragging { opacity: 0.5; }
 .cz-item.is-viewable { pointer-events: auto; cursor: pointer; }
 .cz-item.is-viewable:hover { filter: brightness(1.1); }
+.cz-item.is-long-pressing {
+  animation: cz-long-press-shrink 2s linear forwards;
+  transform-origin: center;
+}
+@keyframes cz-long-press-shrink {
+  0%   { transform: scale(1);    filter: brightness(1); }
+  60%  { transform: scale(0.85); filter: brightness(1.25) drop-shadow(0 0 6px rgba(255,80,80,0.8)); }
+  100% { transform: scale(0.65); filter: brightness(1.5)  drop-shadow(0 0 10px rgba(255,80,80,1)); }
+}
 
 .cz-item-img {
   width: 100%;
@@ -781,6 +830,12 @@ defineExpose({ save, clearZone })
   color: rgba(255,255,255,0.7);
   text-align: center;
   flex: 1;
+}
+.cz-build-hint-mobile  { display: none; }
+.cz-build-hint-desktop { display: inline; }
+@media (max-width: 768px) {
+  .cz-build-hint-mobile  { display: inline; }
+  .cz-build-hint-desktop { display: none; }
 }
 
 .cz-nav-buttons {
