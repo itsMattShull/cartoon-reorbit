@@ -957,6 +957,15 @@ body {
   background: transparent !important;
   min-height: 100vh;
 }
+
+@media (max-width: 768px) {
+  body.page-newsite-winball .main-content {
+    min-height: calc(100svh - 190px);
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+}
 </style>
 
 <style scoped>
@@ -971,6 +980,14 @@ body {
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
+}
+
+@media (max-width: 768px) {
+  .game-container {
+    min-height: calc(100svh - 190px);
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 .game-canvas {
