@@ -1,9 +1,9 @@
 <template>
-  <NuxtLink v-if="!hasAdUrl" to="/newsite/home" class="adspot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
+  <NuxtLink v-if="!hasPromoUrl" to="/newsite/home" class="promo-spot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Sponsored" />
   </NuxtLink>
-  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="adspot">
-    <img v-if="currentSrc" :src="currentSrc" alt="Advertisement" />
+  <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="promo-spot">
+    <img v-if="currentSrc" :src="currentSrc" alt="Sponsored" />
   </a>
 </template>
 
@@ -11,10 +11,10 @@
 const currentSrc = ref('')
 const currentUrl = ref('')
 
-const hasAdUrl = computed(() => !!currentUrl.value)
+const hasPromoUrl = computed(() => !!currentUrl.value)
 
-let adOrder = []
-let adIdx = 0
+let promoOrder = []
+let promoIdx = 0
 let timer = null
 const gifDurCache = new Map()
 const abortCtrl = new AbortController()
@@ -28,10 +28,10 @@ function shuffle(arr) {
   return a
 }
 
-function nextAd() {
-  if (!adOrder.length) return
-  adIdx = (adIdx + 1) % adOrder.length
-  const current = adOrder[adIdx]
+function nextPromo() {
+  if (!promoOrder.length) return
+  promoIdx = (promoIdx + 1) % promoOrder.length
+  const current = promoOrder[promoIdx]
   currentSrc.value = current?.imagePath || ''
   currentUrl.value = (current?.url || '').trim()
   scheduleNext()
@@ -107,36 +107,36 @@ async function scheduleNext() {
     if (extOf(src) === 'gif') {
       const ms = await getGifDurationMs(src)
       const remaining = Math.max(ms - (Date.now() - shownAt), 100)
-      timer = setTimeout(nextAd, remaining)
+      timer = setTimeout(nextPromo, remaining)
     } else {
-      timer = setTimeout(nextAd, 8000)
+      timer = setTimeout(nextPromo, 8000)
     }
   } catch {
-    timer = setTimeout(nextAd, 8000)
+    timer = setTimeout(nextPromo, 8000)
   }
 }
 
-async function initAds() {
+async function initPromos() {
   try {
-    const res = await $fetch('/api/ads', { params: { take: 100 } })
+    const res = await $fetch('/api/promotions', { params: { take: 100 } })
     const items = Array.isArray(res?.items) ? res.items : []
-    const ads = items
+    const promos = items
       .filter(i => i?.imagePath)
       .map(i => ({ imagePath: i.imagePath, url: i?.url || '' }))
-    if (!ads.length) return
-    adOrder = shuffle(ads)
-    adIdx = Math.floor(Math.random() * adOrder.length)
-    const current = adOrder[adIdx]
+    if (!promos.length) return
+    promoOrder = shuffle(promos)
+    promoIdx = Math.floor(Math.random() * promoOrder.length)
+    const current = promoOrder[promoIdx]
     currentSrc.value = current?.imagePath || ''
     currentUrl.value = (current?.url || '').trim()
     scheduleNext()
   } catch {
-    // no ads available
+    // no promos available
   }
 }
 
 onMounted(() => {
-  initAds()
+  initPromos()
 })
 onUnmounted(() => {
   clearTimeout(timer)
@@ -145,7 +145,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.adspot {
+.promo-spot {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,7 +154,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.adspot img {
+.promo-spot img {
   display: block;
   width: 100%;
   height: auto;

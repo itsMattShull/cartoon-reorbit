@@ -72,29 +72,29 @@ html.newsite-active body {
   --topbar-adbar-logo-pl:            0px;
   --topbar-adbar-logo-pr:            8px;
 
-  --topbar-adbar-adlabel-bg:         transparent;
-  --topbar-adbar-adlabel-height:     var(--topbar-adbar-height);
-  --topbar-adbar-adlabel-width:      20px;
-  --topbar-adbar-adlabel-scale-x:    1;
-  --topbar-adbar-adlabel-scale-y:    1;
-  --topbar-adbar-adlabel-radius:     0px;
-  --topbar-adbar-adlabel-border-thickness: 0px;
-  --topbar-adbar-adlabel-border-color: transparent;
-  --topbar-adbar-adlabel-pt:         0px;
-  --topbar-adbar-adlabel-pb:         0px;
-  --topbar-adbar-adlabel-pl:         0px;
-  --topbar-adbar-adlabel-pr:         0px;
+  --topbar-adbar-promolabel-bg:         transparent;
+  --topbar-adbar-promolabel-height:     var(--topbar-adbar-height);
+  --topbar-adbar-promolabel-width:      20px;
+  --topbar-adbar-promolabel-scale-x:    1;
+  --topbar-adbar-promolabel-scale-y:    1;
+  --topbar-adbar-promolabel-radius:     0px;
+  --topbar-adbar-promolabel-border-thickness: 0px;
+  --topbar-adbar-promolabel-border-color: transparent;
+  --topbar-adbar-promolabel-pt:         0px;
+  --topbar-adbar-promolabel-pb:         0px;
+  --topbar-adbar-promolabel-pl:         0px;
+  --topbar-adbar-promolabel-pr:         0px;
 
-  --topbar-adbar-ad-bg:              transparent;
-  --topbar-adbar-ad-height:          var(--topbar-adbar-height);
-  --topbar-adbar-ad-width:           460px;
-  --topbar-adbar-ad-radius:          0px;
-  --topbar-adbar-ad-border-thickness: 0px;
-  --topbar-adbar-ad-border-color:    transparent;
-  --topbar-adbar-ad-pt:              0px;
-  --topbar-adbar-ad-pb:              0px;
-  --topbar-adbar-ad-pl:              0px;
-  --topbar-adbar-ad-pr:              0px;
+  --topbar-adbar-promo-bg:              transparent;
+  --topbar-adbar-promo-height:          var(--topbar-adbar-height);
+  --topbar-adbar-promo-width:           460px;
+  --topbar-adbar-promo-radius:          0px;
+  --topbar-adbar-promo-border-thickness: 0px;
+  --topbar-adbar-promo-border-color:    transparent;
+  --topbar-adbar-promo-pt:              0px;
+  --topbar-adbar-promo-pb:              0px;
+  --topbar-adbar-promo-pl:              0px;
+  --topbar-adbar-promo-pr:              0px;
 
   --topbar-adbar-rewatch-bg:         transparent;
   --topbar-adbar-rewatch-height:     var(--topbar-adbar-height);
@@ -228,8 +228,8 @@ html.newsite-active body {
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
       <div class="topbar-adbar" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
         <div v-if="!isMobile" class="topbar-adbar-logo"><ReorbitLogo /></div>
-        <div class="topbar-adbar-adlabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><AdLabel /></div>
-        <div class="topbar-adbar-ad" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><AdSpot /></div>
+        <div class="topbar-adbar-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
+        <div class="topbar-adbar-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
         <div v-if="!isMobile" class="topbar-adbar-rewatch"><Rewatch /></div>
       </div>
       <div class="topbar-nav"
@@ -399,26 +399,26 @@ const scaleStyle = computed(() => {
   overflow: hidden;
 }
 
-.topbar-adbar-adlabel {
+.topbar-adbar-promolabel {
   margin-left: auto;
-  width: var(--topbar-adbar-adlabel-width);
-  height: var(--topbar-adbar-adlabel-height);
-  background: var(--topbar-adbar-adlabel-bg);
-  transform: scale(var(--topbar-adbar-adlabel-scale-x), var(--topbar-adbar-adlabel-scale-y));
-  border-radius: var(--topbar-adbar-adlabel-radius);
-  border: var(--topbar-adbar-adlabel-border-thickness) solid var(--topbar-adbar-adlabel-border-color);
-  padding: var(--topbar-adbar-adlabel-pt) var(--topbar-adbar-adlabel-pr) var(--topbar-adbar-adlabel-pb) var(--topbar-adbar-adlabel-pl);
+  width: var(--topbar-adbar-promolabel-width);
+  height: var(--topbar-adbar-promolabel-height);
+  background: var(--topbar-adbar-promolabel-bg);
+  transform: scale(var(--topbar-adbar-promolabel-scale-x), var(--topbar-adbar-promolabel-scale-y));
+  border-radius: var(--topbar-adbar-promolabel-radius);
+  border: var(--topbar-adbar-promolabel-border-thickness) solid var(--topbar-adbar-promolabel-border-color);
+  padding: var(--topbar-adbar-promolabel-pt) var(--topbar-adbar-promolabel-pr) var(--topbar-adbar-promolabel-pb) var(--topbar-adbar-promolabel-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-ad {
-  width: var(--topbar-adbar-ad-width);
-  height: var(--topbar-adbar-ad-height);
-  background: var(--topbar-adbar-ad-bg);
-  border-radius: var(--topbar-adbar-ad-radius);
-  border: var(--topbar-adbar-ad-border-thickness) solid var(--topbar-adbar-ad-border-color);
-  padding: var(--topbar-adbar-ad-pt) var(--topbar-adbar-ad-pr) var(--topbar-adbar-ad-pb) var(--topbar-adbar-ad-pl);
+.topbar-adbar-promo {
+  width: var(--topbar-adbar-promo-width);
+  height: var(--topbar-adbar-promo-height);
+  background: var(--topbar-adbar-promo-bg);
+  border-radius: var(--topbar-adbar-promo-radius);
+  border: var(--topbar-adbar-promo-border-thickness) solid var(--topbar-adbar-promo-border-color);
+  padding: var(--topbar-adbar-promo-pt) var(--topbar-adbar-promo-pr) var(--topbar-adbar-promo-pb) var(--topbar-adbar-promo-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -586,8 +586,8 @@ const scaleStyle = computed(() => {
   .topbar,
   .topbar-adbar,
   .topbar-adbar-logo,
-  .topbar-adbar-adlabel,
-  .topbar-adbar-ad,
+  .topbar-adbar-promolabel,
+  .topbar-adbar-promo,
   .topbar-adbar-rewatch,
   .topbar-nav,
   .topbar-nav-left,

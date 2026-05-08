@@ -4,7 +4,7 @@
       <UserInfo />
     </template>
     <template #sidebar-bottom>
-      <WinballAd />
+      <WinballPromo />
     </template>
     <template #main-content>
       <div class="tournament-detail overflow-y-auto h-full px-4 py-3">

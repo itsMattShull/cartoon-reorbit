@@ -17,7 +17,7 @@ const baseDir = process.env.NODE_ENV === 'production'
 const ALLOWED = new Set(['image/png','image/jpeg','image/jpg','image/gif'])
 
 const publicAssetPath = (filename) =>
-  process.env.NODE_ENV === 'production' ? `/images/ad-images/${filename}` : `/ad-images/${filename}`
+  process.env.NODE_ENV === 'production' ? `/images/promo-images/${filename}` : `/promo-images/${filename}`
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -41,13 +41,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const uploadDir = process.env.NODE_ENV === 'production'
-    ? join(baseDir, 'cartoon-reorbit-images', 'ad-images')
-    : join(baseDir, 'public', 'ad-images')
+    ? join(baseDir, 'cartoon-reorbit-images', 'promo-images')
+    : join(baseDir, 'public', 'promo-images')
   await mkdir(uploadDir, { recursive: true })
 
   const ext = extname(filePart.filename || '').toLowerCase() ||
     (filePart.type === 'image/svg+xml' ? '.svg' : filePart.type === 'image/png' ? '.png' : '.jpg')
-  const filename = `ad-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+  const filename = `promo-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
 
   await writeFile(join(uploadDir, filename), filePart.data)
 

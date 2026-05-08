@@ -7,7 +7,7 @@
       <CzoneEdit v-if="cz.buildMode" @save="czoneRef?.save()" @clear="czoneRef?.clearZone()" />
     </template>
     <template v-if="!cz.buildMode" #sidebar-bottom>
-      <WinballAd />
+      <WinballPromo />
     </template>
     <template #main-content>
       <MyCzone ref="czoneRef" />

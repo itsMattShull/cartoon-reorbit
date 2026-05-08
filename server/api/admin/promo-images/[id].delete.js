@@ -10,8 +10,8 @@ const baseDir = process.env.NODE_ENV === 'production'
   : process.cwd()
 
 const uploadDir = process.env.NODE_ENV === 'production'
-  ? join(baseDir, 'cartoon-reorbit-images', 'ad-images')
-  : join(baseDir, 'public', 'ad-images')
+  ? join(baseDir, 'cartoon-reorbit-images', 'promo-images')
+  : join(baseDir, 'public', 'promo-images')
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')

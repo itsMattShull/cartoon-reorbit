@@ -291,7 +291,7 @@ function formatNumber(value) {
 }
 
 /* ── Ad logo rotation (new) ───────────────────────────────────
-   - Uses /api/ads to get image list
+   - Uses /api/promotions to get image list
    - GIF: advance after one loop
    - PNG/JPG/JPEG/WEBP/SVG: advance every 8s
 */
@@ -384,7 +384,7 @@ async function scheduleNext() {
 }
 async function initAds() {
   try {
-    const res = await $fetch('/api/ads', { params: { take: 100 } })
+    const res = await $fetch('/api/promotions', { params: { take: 100 } })
     const urls = (res?.items || []).map(i => i.imagePath).filter(Boolean)
     if (!urls.length) return
     adList = shuffle(urls)

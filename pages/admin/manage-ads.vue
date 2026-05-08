@@ -120,7 +120,7 @@ const linkUrl = ref('')
 const uploadError = ref('')
 const uploading = ref(false)
 
-const { data: images, pending, error, refresh } = await useFetch('/api/admin/ad-images')
+const { data: images, pending, error, refresh } = await useFetch('/api/admin/promo-images')
 
 function openUpload() {
   uploadError.value = ''
@@ -145,7 +145,7 @@ async function upload() {
     fd.append('image', file)
     if (label.value) fd.append('label', label.value)
     if (linkUrl.value?.trim()) fd.append('url', linkUrl.value.trim())
-    await $fetch('/api/admin/ad-images', { method: 'POST', body: fd })
+    await $fetch('/api/admin/promo-images', { method: 'POST', body: fd })
     await refresh()
     showUpload.value = false
   } catch (e) {
@@ -159,7 +159,7 @@ async function upload() {
 async function del(id) {
   if (!confirm('Delete this image?')) return
   try {
-    await $fetch(`/api/admin/ad-images/${id}`, { method: 'DELETE' })
+    await $fetch(`/api/admin/promo-images/${id}`, { method: 'DELETE' })
     await refresh()
   } catch (e) {
     alert(e?.data?.message || e?.message || 'Delete failed')
