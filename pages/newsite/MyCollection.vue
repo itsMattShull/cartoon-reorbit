@@ -7,7 +7,7 @@
       <CtoonFilter :sort-options="myCollectionSortOptions" />
     </template>
     <template #sidebar-bottom>
-      <WinballAd />
+      <WinballPromo />
     </template>
     <template #main-content>
       <MyCollection />
