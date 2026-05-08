@@ -1,8 +1,13 @@
 <template>
   <div class="orbit-label">
-    <img src="/images/newsite/orbit-label.gif" alt="" />
+    <img :src="labelSrc" alt="" />
   </div>
 </template>
+
+<script setup>
+const { data } = await useFetch('/api/homepage')
+const labelSrc = computed(() => data.value?.labelImagePath || '/images/newsite/orbit-label.gif')
+</script>
 
 <style scoped>
 .orbit-label {

@@ -38,7 +38,8 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
-            @touchstart.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
+            @touchstart.prevent="!currentZoneToonIds.has(c.id) && onToonTouchStart(c, $event)"
+            @touchend="!currentZoneToonIds.has(c.id) && onToonTouchEnd(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
@@ -133,6 +134,59 @@ function startDrag(ctoon, e) {
   const point = e.touches ? e.touches[0] : e
   cz.value.ghostX = point.clientX
   cz.value.ghostY = point.clientY
+}
+
+const isMobile = ref(false)
+let touchStartX = 0
+let touchStartY = 0
+
+function updateMobile() {
+  isMobile.value = window.innerWidth <= 768
+}
+
+onMounted(() => {
+  updateMobile()
+  window.addEventListener('resize', updateMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMobile)
+})
+
+function onToonTouchStart(c, e) {
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  if (!isMobile.value) {
+    startDrag(c, e)
+  }
+}
+
+function onToonTouchEnd(c, e) {
+  if (!isMobile.value) return
+  const touch = e.changedTouches[0]
+  const dx = Math.abs(touch.clientX - touchStartX)
+  const dy = Math.abs(touch.clientY - touchStartY)
+  if (dx < 10 && dy < 10) {
+    addToonToTopLeft(c)
+  }
+}
+
+function addToonToTopLeft(c) {
+  const zone = cz.value.zones[cz.value.activeZone]
+  if (!zone || zone.toons.some(t => t.id === c.id)) return
+  const img = new Image()
+  img.onload = () => {
+    zone.toons.push({
+      id: c.id,
+      assetPath: c.assetPath,
+      name: c.name,
+      x: 0,
+      y: 0,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    })
+  }
+  img.src = c.assetPath
 }
 
 function selectBg(bg) {
