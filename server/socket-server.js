@@ -198,8 +198,8 @@ function buildMarblesWorld() {
 
   const trackMat  = new CANNON.Material('mbl_track')
   const marbleMat = new CANNON.Material('mbl_marble')
-  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.3 }))
-  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.45 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.55 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.6 }))
 
   const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
   const WALL_T  = 0.3  // wall half-thickness
@@ -370,16 +370,19 @@ function buildMarblesWorld() {
     world.addBody(cap)
   }
 
-  // Pegs – denser spacing (every 5 samples), spread throughout, cycling left/center/right/center
-  const PEG_PATTERN = [-1, 0, 1, 0]
-  for (let i = 5; i < samples.length - 7; i += 5) {
+  // Pegs – dense spacing (every 3 samples) with randomized lateral offsets each race
+  // Stagger base positions so every lane hits at least one peg, then add jitter for variety
+  const PEG_BASE = [-0.8, -0.3, 0.3, 0.8, 0, -0.6, 0.6]
+  for (let i = 3; i < samples.length - 5; i += 3) {
     const [px, pz] = samples[i]
     const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
     const ddx = nx - px, ddz = nz - pz
     const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
     if (dlen < 0.001) continue
-    const side = PEG_PATTERN[Math.floor(i / 5) % PEG_PATTERN.length]
-    const off  = side * (COURSE_HALF_W * 0.45)
+    const baseOff = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
+    const jitter  = (Math.random() - 0.5) * 0.5
+    const side    = Math.max(-0.9, Math.min(0.9, baseOff + jitter))
+    const off     = side * (COURSE_HALF_W * 0.8)
     const b = new CANNON.Body({ mass: 0, material: trackMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
     b.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
@@ -393,21 +396,26 @@ function getMarbleStartPositions(count) {
   const [s0x, s0z] = COURSE_SPINE[0]
   const cols = Math.min(count, 4)
   const rows = Math.ceil(count / cols)
-  return Array.from({ length: count }, (_, i) => {
+  const slots = Array.from({ length: count }, (_, i) => {
     const row  = Math.floor(i / cols)
     const col  = i % cols
-    // Distance along approach axis: row 0 near the open end, last row near course start
     const dist = rows > 1 ? (FUNNEL_LENGTH - 3) - row * (FUNNEL_LENGTH - 5) / (rows - 1) : FUNNEL_LENGTH / 2
     const t    = dist / FUNNEL_LENGTH
     const hw   = COURSE_HALF_W + (FUNNEL_OPEN_HALF_W - COURSE_HALF_W) * t
     const usHW = (hw - MBL_RADIUS - 0.2) * 0.9
     const side = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
     return {
-      x: s0x + FUNNEL_AP_DX * dist + FUNNEL_AP_LX * side + (Math.random() - 0.5) * 0.2,
+      x: s0x + FUNNEL_AP_DX * dist + FUNNEL_AP_LX * side + (Math.random() - 0.5) * 0.4,
       y: 2,
-      z: s0z + FUNNEL_AP_DZ * dist + FUNNEL_AP_LZ * side + (Math.random() - 0.5) * 0.3,
+      z: s0z + FUNNEL_AP_DZ * dist + FUNNEL_AP_LZ * side + (Math.random() - 0.5) * 0.5,
     }
   })
+  // Shuffle so join order gives no positional advantage
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]]
+  }
+  return slots
 }
 
 function stopMarblesPhysics() {
@@ -428,6 +436,13 @@ function startMarblesPhysics() {
     const body = new CANNON.Body({ mass: 1, material: marbleMat, linearDamping: 0.03, angularDamping: 0.1 })
     body.addShape(new CANNON.Sphere(MBL_RADIUS))
     body.position.set(positions[i].x, positions[i].y, positions[i].z)
+    // Random lateral kick so marbles don't all follow the same initial path
+    const lateralImpulse = (Math.random() - 0.5) * 5
+    body.velocity.set(
+      FUNNEL_AP_LX * lateralImpulse,
+      0,
+      FUNNEL_AP_LZ * lateralImpulse,
+    )
     world.addBody(body)
     return body
   })
