@@ -46,6 +46,6 @@ body {
 }
 
 body.page-newsite-trade .sidebar {
-  --sidebar-middle-height: 560px;
+  --sidebar-middle-height: 490px;
 }
 </style>

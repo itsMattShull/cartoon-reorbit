@@ -227,8 +227,6 @@
                     :selected="selectedTargetCtoonsMap.has(c.id)"
                     :disabled="c.inPendingTrade"
                     :badge="selfOwnedIdsCreate.has(c.ctoonId) ? 'Owned' : 'Unowned'"
-                    badge-class-owned="bg-green-100 text-green-800"
-                    badge-class-unowned="bg-gray-200 text-gray-600"
                     @toggle="toggleTargetCtoon(c)"
                   />
                 </div>
@@ -300,8 +298,7 @@
                     :selected="selectedInitiatorCtoonsMap.has(c.id)"
                     :disabled="c.inPendingTrade"
                     :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
-                    badge-class-owned="bg-blue-100 text-blue-800"
-                    badge-class-unowned="bg-gray-200 text-gray-600"
+                    badge-class-owned="tc-badge--blue"
                     @toggle="toggleInitiatorCtoon(c)"
                   />
                 </div>
@@ -1247,13 +1244,12 @@ onBeforeUnmount(() => {
 .tr-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: var(--shortcard-height, 176px);
   gap: 6px;
   flex-shrink: 0;
 }
 .tr-card-wrap {
-  background: white;
-  border-radius: 6px;
-  overflow: hidden;
+  min-height: 0;
 }
 
 /* ── Confirm ── */
