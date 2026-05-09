@@ -201,7 +201,12 @@ function selectBg(bg) {
 .czew {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* flex:1 fills the flex-column .sidebar-middle in build mode.
+     Avoids height:100% which collapses to 0 when the parent has no
+     explicit px height (e.g. flex-grown height isn't "definite" for
+     percentage resolution in all browsers). */
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
   padding: 4px;
   box-sizing: border-box;
@@ -379,6 +384,7 @@ function selectBg(bg) {
 
 @media (max-width: 768px) {
   .czew {
+    flex: none;  /* revert to content-height on mobile */
     height: auto;
   }
   .czew-panel {
