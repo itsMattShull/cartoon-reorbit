@@ -19,6 +19,11 @@
           :disabled="raceState.phase !== 'waiting' || raceState.marbles.length === 0"
           @click="doStart"
         >Start</button>
+        <button
+          class="mbl-btn focus-btn"
+          :disabled="raceState.phase !== 'racing'"
+          @click="focusLeader"
+        >1st</button>
       </div>
 
       <!-- ── Non-admin Join button (top-right) ── -->
@@ -47,7 +52,8 @@
 
       <!-- ── Camera hint ── -->
       <div v-if="raceState.phase === 'racing'" class="cam-hint">
-        Drag to look around &nbsp;·&nbsp; Auto-following leader
+        <template v-if="isAdmin">Drag to look &nbsp;·&nbsp; "1st" focuses leader</template>
+        <template v-else>Following your marble…</template>
       </div>
 
       <!-- ── Winner modal ── -->
@@ -116,9 +122,19 @@ const MBL_PEGS = [
   [-11,-40],[-5,-43],[-8,-47],[-11,-51],[-5,-55],[-8,-59],[-11,-63],[-5,-67],[-8,-71],
 ]
 
+// Transition connectors: [cx, cz, halfW, halfLen] — thin bridges between diagonal segments
+const MBL_TRANSITIONS = [
+  [ 3, 50, 9, 1],   // seg0→seg1
+  [ 3, 30, 9, 1],   // seg1→seg2
+  [ 4,-15, 11, 1],  // seg2→seg3
+  [-4,-35, 11, 1],  // seg3→seg4
+  [-6,-75, 9, 1],   // seg4→seg5
+  [-2,-90, 8, 1],   // seg5→seg6
+]
+
 // ─── Three.js internals ────────────────────────────────────────────────────
 let renderer, scene, camera, animId
-let marbleMeshMap = new Map()   // marble id → { mesh, label, targetPos }
+let marbleMeshMap = new Map()   // marble id → { mesh, targetPos, username }
 let labelDivMap   = new Map()   // marble id → DOM label div
 let labelContainer = null
 
@@ -145,7 +161,6 @@ function connectSocket() {
     raceState.value = state
 
     if (prevPhase !== 'waiting' && state.phase === 'waiting') {
-      // Race was cleared — rebuild scene to starting state
       resetScene()
       cameraMode = 'static'
       userOverride = false
@@ -225,15 +240,17 @@ function initThree() {
   buildFinishLine()
   buildLabelContainer()
 
-  // Mouse / touch camera controls
-  canvas.addEventListener('mousedown',  onMouseDown)
-  canvas.addEventListener('mousemove',  onMouseMove)
-  canvas.addEventListener('mouseup',    onMouseUp)
-  canvas.addEventListener('mouseleave', onMouseUp)
-  canvas.addEventListener('wheel',      onWheel, { passive: true })
-  canvas.addEventListener('touchstart', onTouchStart, { passive: true })
-  canvas.addEventListener('touchmove',  onTouchMove,  { passive: false })
-  canvas.addEventListener('touchend',   onMouseUp)
+  // Camera controls – admin only
+  if (isAdmin.value) {
+    canvas.addEventListener('mousedown',  onMouseDown)
+    canvas.addEventListener('mousemove',  onMouseMove)
+    canvas.addEventListener('mouseup',    onMouseUp)
+    canvas.addEventListener('mouseleave', onMouseUp)
+    canvas.addEventListener('wheel',      onWheel, { passive: true })
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true })
+    canvas.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    canvas.addEventListener('touchend',   onMouseUp)
+  }
 
   animate()
 }
@@ -242,11 +259,17 @@ function buildTrackMeshes() {
   const floorMat = new THREE.MeshStandardMaterial({
     color: 0x2d6a4f, roughness: 0.8, metalness: 0.1,
   })
+  const channelMat = new THREE.MeshStandardMaterial({
+    color: 0x1e5c3a, roughness: 0.9, metalness: 0,
+  })
   const wallMat = new THREE.MeshStandardMaterial({
-    color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.75,
+    color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85,
   })
   const pegMat = new THREE.MeshStandardMaterial({
     color: 0xffd60a, roughness: 0.3, metalness: 0.5, emissive: 0x554400,
+  })
+  const transitionMat = new THREE.MeshStandardMaterial({
+    color: 0x245c40, roughness: 0.85, metalness: 0.05,
   })
 
   // Floor segments
@@ -257,7 +280,6 @@ function buildTrackMeshes() {
     mesh.receiveShadow = true
     scene.add(mesh)
 
-    // Subtle lane lines on floor
     const lineGeo = new THREE.PlaneGeometry(halfW * 2 - 0.2, halfLen * 2 - 0.2)
     const lineMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 1 })
     const lineMesh = new THREE.Mesh(lineGeo, lineMat)
@@ -266,31 +288,51 @@ function buildTrackMeshes() {
     scene.add(lineMesh)
   }
 
-  // Walls
+  // Transition connector floors — bridges the X-shift between segments
+  for (const [cx, cz, halfW, halfLen] of MBL_TRANSITIONS) {
+    const geo = new THREE.BoxGeometry(halfW * 2, 1, halfLen * 2)
+    const mesh = new THREE.Mesh(geo, transitionMat)
+    mesh.position.set(cx, -0.5, cz)
+    mesh.receiveShadow = true
+    scene.add(mesh)
+  }
+
+  // Walls – tall (center Y=4, height=8) with inner curved channel slopes
   for (const [si, lx, rx] of MBL_WALL_PAIRS) {
     const [cx, cz, , halfLen] = MBL_FLOOR_SEGS[si]
     for (const wx of [lx, rx]) {
-      const geo = new THREE.BoxGeometry(0.6, 3, halfLen * 2)
+      // Main tall outer wall
+      const geo = new THREE.BoxGeometry(0.6, 8, halfLen * 2)
       const mesh = new THREE.Mesh(geo, wallMat)
-      mesh.position.set(wx, 1.5, cz)
+      mesh.position.set(wx, 4, cz)
       mesh.receiveShadow = true
       mesh.castShadow = true
       scene.add(mesh)
+
+      // Inner angled slope panel — gives the curved-channel appearance
+      const slopeW = 1.4
+      const slopeGeo = new THREE.BoxGeometry(slopeW, 0.35, halfLen * 2)
+      const slope = new THREE.Mesh(slopeGeo, channelMat)
+      // Tilt the slope inward toward the center of the segment
+      const rotSign = (wx > cx) ? 1 : -1
+      slope.rotation.z = rotSign * (Math.PI / 5)
+      const inward = (wx < cx) ? 1 : -1
+      slope.position.set(wx + inward * slopeW * 0.45, 0.55, cz)
+      scene.add(slope)
     }
   }
 
-  // Pegs
-  const pegGeo = new THREE.SphereGeometry(0.6, 10, 8)
+  // Pegs – tall cylinders (match physics: radius=0.45, height=3, center Y=1.5)
+  const pegGeo = new THREE.CylinderGeometry(0.45, 0.45, 3, 10)
   for (const [px, pz] of MBL_PEGS) {
     const mesh = new THREE.Mesh(pegGeo, pegMat)
-    mesh.position.set(px, 0.6, pz)
+    mesh.position.set(px, 1.5, pz)
     mesh.castShadow = true
     scene.add(mesh)
   }
 }
 
 function buildFinishLine() {
-  // Chequered finish line stripe
   const stripeGeo = new THREE.PlaneGeometry(16, 2)
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff, emissive: 0x888888, roughness: 0.4,
@@ -300,7 +342,6 @@ function buildFinishLine() {
   stripe.position.set(0, 0.02, FINISH_Z)
   scene.add(stripe)
 
-  // Glowing post markers
   const postGeo = new THREE.CylinderGeometry(0.3, 0.3, 6, 8)
   const postMat = new THREE.MeshStandardMaterial({
     color: 0xff0044, emissive: 0x880022, roughness: 0.3,
@@ -311,7 +352,6 @@ function buildFinishLine() {
     scene.add(post)
   }
 
-  // Banner between posts
   const bannerGeo = new THREE.PlaneGeometry(16, 1.2)
   const bannerMat = new THREE.MeshStandardMaterial({
     color: 0xff0044, emissive: 0x550011, side: THREE.DoubleSide,
@@ -331,7 +371,6 @@ function buildLabelContainer() {
 function syncMarbleMeshes(marbles) {
   const newIds = new Set(marbles.map(m => m.id))
 
-  // Remove departed
   for (const [id, entry] of marbleMeshMap) {
     if (!newIds.has(id)) {
       scene.remove(entry.mesh)
@@ -346,7 +385,6 @@ function syncMarbleMeshes(marbles) {
     }
   }
 
-  // Add new
   const spreadMax = Math.min(marbles.length - 1, 10) * 1.8
   const step = marbles.length > 1 ? spreadMax / (marbles.length - 1) : 0
 
@@ -365,7 +403,6 @@ function syncMarbleMeshes(marbles) {
     mesh.castShadow = true
     scene.add(mesh)
 
-    // Label div
     const div = document.createElement('div')
     div.textContent = m.username
     div.style.cssText = `
@@ -383,7 +420,7 @@ function syncMarbleMeshes(marbles) {
     labelContainer?.appendChild(div)
     labelDivMap.set(m.id, div)
 
-    marbleMeshMap.set(m.id, { mesh, targetPos: mesh.position.clone() })
+    marbleMeshMap.set(m.id, { mesh, targetPos: mesh.position.clone(), username: m.username })
   })
 }
 
@@ -428,6 +465,23 @@ function getLeaderPosition() {
   return leader
 }
 
+function getMyMarblePosition() {
+  const myUsername = user.value?.username
+  if (!myUsername) return null
+  for (const [, entry] of marbleMeshMap) {
+    if (entry.username === myUsername) return entry.targetPos
+  }
+  return null
+}
+
+function focusLeader() {
+  const leader = getLeaderPosition()
+  if (!leader) return
+  camTarget.set(leader.x, 0, leader.z)
+  camDist = 55
+  applyCameraOrbit()
+}
+
 // ─── Animation loop ────────────────────────────────────────────────────────
 const _tmpVec = new THREE.Vector3()
 
@@ -436,12 +490,10 @@ function animate() {
 
   const lerpSpeed = 0.25
 
-  // Lerp marble meshes toward latest physics positions
-  for (const [id, entry] of marbleMeshMap) {
+  for (const [, entry] of marbleMeshMap) {
     entry.mesh.position.lerp(entry.targetPos, lerpSpeed)
   }
 
-  // Update HTML labels to follow marble positions
   if (labelContainer) {
     const W = renderer.domElement.clientWidth
     const H = renderer.domElement.clientHeight
@@ -460,11 +512,11 @@ function animate() {
     }
   }
 
-  // Follow camera
   if (cameraMode === 'follow' && !userOverride) {
-    const leader = getLeaderPosition()
-    if (leader) {
-      const tgt = new THREE.Vector3(leader.x, 0, leader.z)
+    // Admins follow the race leader; non-admins are locked to their own marble
+    const followPos = isAdmin.value ? getLeaderPosition() : getMyMarblePosition()
+    if (followPos) {
+      const tgt = new THREE.Vector3(followPos.x, 0, followPos.z)
       camTarget.lerp(tgt, 0.04)
       camDist = THREE.MathUtils.lerp(camDist, 55, 0.02)
       applyCameraOrbit()
@@ -474,7 +526,7 @@ function animate() {
   renderer.render(scene, camera)
 }
 
-// ─── Mouse / touch controls ────────────────────────────────────────────────
+// ─── Mouse / touch controls (admin only) ──────────────────────────────────
 function onMouseDown(e) {
   isDragging = true
   lastMouseX = e.clientX
@@ -572,12 +624,20 @@ onUnmounted(() => {
   background: #1a1a2e;
 }
 
+@media (max-width: 768px) {
+  .marbles-root {
+    height: calc(100dvh - 120px);
+    min-height: 320px;
+  }
+}
+
 .race-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
 }
+
+/* Admin has cursor: grab since they can drag; non-admin gets default */
 .race-canvas:active { cursor: grabbing; }
 
 /* ── Admin controls – stacked vertically in top-left ── */
@@ -656,6 +716,7 @@ onUnmounted(() => {
 .clear-btn   { background: #ef476f; color: #fff; }
 .start-btn   { background: #06d6a0; color: #000; }
 .join-btn    { background: #ffd60a; color: #000; }
+.focus-btn   { background: #ff9500; color: #000; }
 .dismiss-btn { background: #3a86ff; color: #fff; margin-top: 8px; }
 
 /* ── Winner modal ── */
