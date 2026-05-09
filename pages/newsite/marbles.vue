@@ -101,15 +101,6 @@ const FINISH_Z           = -118
 const FUNNEL_OPEN_HALF_W = 14
 const FUNNEL_LENGTH      = 19
 
-// Funnel approach direction — reverse of the first course segment, so the funnel aligns with the track
-const _fDx = COURSE_SPINE[1][0] - COURSE_SPINE[0][0]
-const _fDz = COURSE_SPINE[1][1] - COURSE_SPINE[0][1]
-const _fL  = Math.sqrt(_fDx * _fDx + _fDz * _fDz)
-const FUNNEL_AP_DX = -_fDx / _fL
-const FUNNEL_AP_DZ = -_fDz / _fL
-const FUNNEL_AP_LX = -FUNNEL_AP_DZ
-const FUNNEL_AP_LZ =  FUNNEL_AP_DX
-
 // Curved course — Catmull-Rom spine [x, z]
 const COURSE_SPINE = [
   [ 0,   90],
@@ -128,6 +119,15 @@ const COURSE_SPINE = [
 ]
 const COURSE_HALF_W = 5
 const COURSE_N_SEGS = 120
+
+// Funnel approach direction — reverse of the first course segment, so the funnel aligns with the track
+const _fDx = COURSE_SPINE[1][0] - COURSE_SPINE[0][0]
+const _fDz = COURSE_SPINE[1][1] - COURSE_SPINE[0][1]
+const _fL  = Math.sqrt(_fDx * _fDx + _fDz * _fDz)
+const FUNNEL_AP_DX = -_fDx / _fL
+const FUNNEL_AP_DZ = -_fDz / _fL
+const FUNNEL_AP_LX = -FUNNEL_AP_DZ
+const FUNNEL_AP_LZ =  FUNNEL_AP_DX
 
 function crSample(pts, t) {
   const n   = pts.length - 1
