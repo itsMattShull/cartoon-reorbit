@@ -264,22 +264,54 @@ function buildTrackMeshes() {
   const wallMat  = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85 })
   const pegMat   = new THREE.MeshStandardMaterial({ color: 0xffd60a, roughness: 0.3, metalness: 0.5, emissive: 0x554400 })
 
-  const samples  = buildCourseSamples()
-  const WALL_H   = 3
-  const WALL_T   = 0.3
-  const pegGeo   = new THREE.CylinderGeometry(0.45, 0.45, 3, 10)
+  const samples = buildCourseSamples()
+  const WALL_H  = 3
+  const WALL_T  = 0.3
+  const pegGeo  = new THREE.CylinderGeometry(0.45, 0.45, 3, 10)
 
-  for (let i = 0; i < samples.length - 1; i++) {
+  const nSegs = samples.length - 1
+
+  // Pre-compute per-segment direction data
+  const sDx    = new Array(nSegs)
+  const sDz    = new Array(nSegs)
+  const sLen   = new Array(nSegs)
+  const sAngle = new Array(nSegs)
+  for (let i = 0; i < nSegs; i++) {
     const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
-    const midX = (x1 + x2) / 2, midZ = (z1 + z2) / 2
     const dx = x2 - x1, dz = z2 - z1
     const len = Math.sqrt(dx * dx + dz * dz)
+    sDx[i] = dx; sDz[i] = dz; sLen[i] = len
+    sAngle[i] = Math.atan2(dx, dz)
+  }
+
+  // Miter extension needed at the joint between segment a and segment b
+  // so their rectangular boxes overlap flush rather than leaving a triangular gap
+  function miterExt(a, b) {
+    if (a < 0 || b >= nSegs) return 0.1
+    let delta = sAngle[b] - sAngle[a]
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    return Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+  }
+
+  for (let i = 0; i < nSegs; i++) {
+    const dx = sDx[i], dz = sDz[i], len = sLen[i]
     if (len < 0.001) continue
-    const angle   = Math.atan2(dx, dz)
-    const segLen  = len + 0.16   // slight overlap
+    const angle = sAngle[i]
+
+    // Extend each end to the miter plane of its neighbouring segment
+    const extBack  = miterExt(i - 1, i)
+    const extFront = miterExt(i, i + 1)
+    const totalLen = len + extBack + extFront
+
+    // Shift the box centre so it still straddles the spine segment
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const shift = (extFront - extBack) / 2
+    const midX = (x1 + x2) / 2 + (dx / len) * shift
+    const midZ = (z1 + z2) / 2 + (dz / len) * shift
 
     // Floor
-    const floorGeo  = new THREE.BoxGeometry(COURSE_HALF_W * 2, 1, segLen)
+    const floorGeo  = new THREE.BoxGeometry(COURSE_HALF_W * 2, 1, totalLen)
     const floorMesh = new THREE.Mesh(floorGeo, floorMat)
     floorMesh.position.set(midX, -0.5, midZ)
     floorMesh.rotation.y = angle
@@ -287,7 +319,7 @@ function buildTrackMeshes() {
     scene.add(floorMesh)
 
     // Left wall
-    const wallGeo  = new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, segLen)
+    const wallGeo = new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, totalLen)
     const lx = midX + (-dz / len) * (COURSE_HALF_W + WALL_T)
     const lz = midZ + ( dx / len) * (COURSE_HALF_W + WALL_T)
     const lw = new THREE.Mesh(wallGeo, wallMat)
@@ -323,27 +355,53 @@ function buildTrackMeshes() {
 }
 
 function buildFinishLine() {
-  const finishW = COURSE_HALF_W * 2
-  const stripeGeo = new THREE.PlaneGeometry(finishW, 2)
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888, roughness: 0.4 })
-  const stripe = new THREE.Mesh(stripeGeo, mat)
-  stripe.rotation.x = -Math.PI / 2
-  stripe.position.set(0, 0.02, FINISH_Z)
-  scene.add(stripe)
+  // Determine approach direction from the last two course samples
+  const samples = buildCourseSamples()
+  const lastIdx = samples.length - 1
+  const [finX, finZ] = samples[lastIdx]
+  const [prevX, prevZ] = samples[lastIdx - 1]
+  const adx = finX - prevX, adz = finZ - prevZ
+  const approachAngle = Math.atan2(adx, adz)
 
+  // Everything lives in a group so a single rotation aligns all pieces
+  const group = new THREE.Group()
+  group.position.set(finX, 0, finZ)
+  group.rotation.y = approachAngle
+  scene.add(group)
+
+  const finishW = COURSE_HALF_W * 2
+
+  // Floor stripe (perpendicular to approach direction)
+  const stripeGeo = new THREE.PlaneGeometry(finishW, 2)
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888, roughness: 0.4 })
+  const stripe = new THREE.Mesh(stripeGeo, stripeMat)
+  stripe.rotation.x = -Math.PI / 2
+  stripe.position.y = 0.02
+  group.add(stripe)
+
+  // Posts on each side
   const postGeo = new THREE.CylinderGeometry(0.3, 0.3, 6, 8)
   const postMat = new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0x880022, roughness: 0.3 })
-  for (const px of [-(COURSE_HALF_W + 0.3), COURSE_HALF_W + 0.3]) {
+  for (const postX of [-(COURSE_HALF_W + 0.3), COURSE_HALF_W + 0.3]) {
     const post = new THREE.Mesh(postGeo, postMat)
-    post.position.set(px, 3, FINISH_Z)
-    scene.add(post)
+    post.position.set(postX, 3, 0)
+    group.add(post)
   }
 
+  // Banner above the posts
   const bannerGeo = new THREE.PlaneGeometry(finishW + 0.6, 1.2)
   const bannerMat = new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0x550011, side: THREE.DoubleSide })
   const banner = new THREE.Mesh(bannerGeo, bannerMat)
-  banner.position.set(0, 6.4, FINISH_Z)
-  scene.add(banner)
+  banner.position.set(0, 6.4, 0)
+  group.add(banner)
+
+  // End-cap wall across the full track width just past the finish line,
+  // preventing marbles from escaping or getting pinched in the closing walls
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85 })
+  const capGeo = new THREE.BoxGeometry(finishW + 0.6, 6, 0.6)
+  const cap = new THREE.Mesh(capGeo, capMat)
+  cap.position.set(0, 3, 1)
+  group.add(cap)
 }
 
 function buildLabelContainer() {
