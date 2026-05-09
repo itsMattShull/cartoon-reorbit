@@ -395,9 +395,15 @@ async function toggleBuild() {
       cz.value.activeZone = firstActive
     }
   } else {
-    // If the background prefetch is still in flight, wait for it so we don't
-    // start duplicate requests and so data is ready when the sidebar renders.
-    if (prefetchPromise.value) await prefetchPromise.value
+    // If the prefetch is still in flight, wait for it (max 5 s) so we don't
+    // start duplicate requests. The timeout prevents an ad-blocker-stalled
+    // prefetch from blocking build mode indefinitely.
+    if (prefetchPromise.value) {
+      await Promise.race([
+        prefetchPromise.value,
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ])
+    }
 
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
