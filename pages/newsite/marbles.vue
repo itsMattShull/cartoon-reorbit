@@ -284,29 +284,13 @@ function buildTrackMeshes() {
     sAngle[i] = Math.atan2(dx, dz)
   }
 
-  // Unsigned miter for floors — fills gaps; overlapping coplanar meshes have no visible artifact
+  // Unsigned miter — extends each segment to fill corner gaps; overlapping transparent meshes have no visible artifact
   function miterExt(a, b) {
     if (a < 0 || b >= nSegs) return 0.1
     let delta = sAngle[b] - sAngle[a]
     if (delta >  Math.PI) delta -= 2 * Math.PI
     if (delta < -Math.PI) delta += 2 * Math.PI
     return Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
-  }
-  // Signed miter for walls: positive = extend (outer/convex corner fills gap),
-  // negative = truncate (inner/concave corner — avoids the overlapping-box spike artifact)
-  function wallMiterLeft(a, b) {
-    if (a < 0 || b >= nSegs) return 0.05
-    let delta = sAngle[b] - sAngle[a]
-    if (delta >  Math.PI) delta -= 2 * Math.PI
-    if (delta < -Math.PI) delta += 2 * Math.PI
-    return Math.max(-COURSE_HALF_W, Math.min(COURSE_HALF_W, -COURSE_HALF_W * Math.tan(delta / 2)))
-  }
-  function wallMiterRight(a, b) {
-    if (a < 0 || b >= nSegs) return 0.05
-    let delta = sAngle[b] - sAngle[a]
-    if (delta >  Math.PI) delta -= 2 * Math.PI
-    if (delta < -Math.PI) delta += 2 * Math.PI
-    return Math.max(-COURSE_HALF_W, Math.min(COURSE_HALF_W,  COURSE_HALF_W * Math.tan(delta / 2)))
   }
 
   for (let i = 0; i < nSegs; i++) {
@@ -316,47 +300,36 @@ function buildTrackMeshes() {
     const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
     const rawMidX = (x1 + x2) / 2, rawMidZ = (z1 + z2) / 2
 
-    // Floor: unsigned miter fills all corner gaps
-    const floorBk  = miterExt(i - 1, i), floorFt = miterExt(i, i + 1)
-    const floorLen  = len + floorBk + floorFt
-    const floorSh   = (floorFt - floorBk) / 2
-    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(COURSE_HALF_W * 2, 1, floorLen), floorMat)
-    floorMesh.position.set(rawMidX + (dx / len) * floorSh, -0.5, rawMidZ + (dz / len) * floorSh)
+    // Floor + walls all use unsigned miter so corners are always filled
+    const bk  = miterExt(i - 1, i), ft = miterExt(i, i + 1)
+    const tot  = len + bk + ft
+    const sh   = (ft - bk) / 2
+
+    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(COURSE_HALF_W * 2, 1, tot), floorMat)
+    floorMesh.position.set(rawMidX + (dx / len) * sh, -0.5, rawMidZ + (dz / len) * sh)
     floorMesh.rotation.y = angle
     floorMesh.receiveShadow = true
     scene.add(floorMesh)
 
-    // Left wall: signed miter — truncates inner concave corners, eliminating the spike overlap
-    const lBk = wallMiterLeft(i - 1, i), lFt = wallMiterLeft(i, i + 1)
-    const lTot = len + lBk + lFt
-    if (lTot > 0.1) {
-      const lSh = (lFt - lBk) / 2
-      const lw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, lTot), wallMat)
-      lw.position.set(
-        rawMidX + (dx / len) * lSh + (-dz / len) * (COURSE_HALF_W + WALL_T),
-        WALL_H,
-        rawMidZ + (dz / len) * lSh + ( dx / len) * (COURSE_HALF_W + WALL_T)
-      )
-      lw.rotation.y = angle
-      lw.castShadow = true
-      scene.add(lw)
-    }
+    const lw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, tot), wallMat)
+    lw.position.set(
+      rawMidX + (dx / len) * sh + (-dz / len) * (COURSE_HALF_W + WALL_T),
+      WALL_H,
+      rawMidZ + (dz / len) * sh + ( dx / len) * (COURSE_HALF_W + WALL_T)
+    )
+    lw.rotation.y = angle
+    lw.castShadow = true
+    scene.add(lw)
 
-    // Right wall: signed miter — truncates inner concave corners, eliminating the spike overlap
-    const rBk = wallMiterRight(i - 1, i), rFt = wallMiterRight(i, i + 1)
-    const rTot = len + rBk + rFt
-    if (rTot > 0.1) {
-      const rSh = (rFt - rBk) / 2
-      const rw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, rTot), wallMat)
-      rw.position.set(
-        rawMidX + (dx / len) * rSh + ( dz / len) * (COURSE_HALF_W + WALL_T),
-        WALL_H,
-        rawMidZ + (dz / len) * rSh + (-dx / len) * (COURSE_HALF_W + WALL_T)
-      )
-      rw.rotation.y = angle
-      rw.castShadow = true
-      scene.add(rw)
-    }
+    const rw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, tot), wallMat)
+    rw.position.set(
+      rawMidX + (dx / len) * sh + ( dz / len) * (COURSE_HALF_W + WALL_T),
+      WALL_H,
+      rawMidZ + (dz / len) * sh + (-dx / len) * (COURSE_HALF_W + WALL_T)
+    )
+    rw.rotation.y = angle
+    rw.castShadow = true
+    scene.add(rw)
   }
 
   // Pegs — same logic as server (denser, every 5 samples, cycling left/center/right/center)
