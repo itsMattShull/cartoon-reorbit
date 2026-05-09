@@ -960,6 +960,14 @@ function onGlobalClick(e) {
 }
 
 onMounted(async () => {
+  // Redirect /create-trade/:username → /newsite/trade?username=:username
+  const param = route.params.username
+  const raw = Array.isArray(param) ? param[0] : param
+  if (raw) {
+    await navigateTo(`/newsite/trade?username=${encodeURIComponent(String(raw).trim())}`, { replace: true })
+    return
+  }
+
   if (process.client) window.addEventListener('click', onGlobalClick)
   // Autofill from /create-trade/:username (optional)
   await initFromRoute()
