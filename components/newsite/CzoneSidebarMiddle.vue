@@ -4,6 +4,7 @@
     @save="czoneActions.save()"
     @clear="czoneActions.clearZone()"
   />
+  <MiddleSidebarImages v-else />
 </template>
 
 <script setup>
