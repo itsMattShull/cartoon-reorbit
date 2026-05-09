@@ -94,6 +94,29 @@ const MONSTER_BATTLE_IDLE_MS = 5 * 60 * 1000
 const TRADE_ROOM_IDLE_MS = 10 * 60 * 1000
 
 /* ────────────────────────────────────────────────────────────
+ *  Marble Race Game (in-memory, no DB)
+ * ────────────────────────────────────────────────────────── */
+const MARBLE_COLOR_PALETTE = [
+  '#FF4444', '#4488FF', '#44FF88', '#FFAA00', '#FF44FF',
+  '#00FFCC', '#FF8844', '#AA44FF', '#FF4499', '#44EEFF',
+  '#FFFF44', '#88FF44',
+]
+
+const marbleGame = {
+  phase: 'waiting', // 'waiting' | 'allowed' | 'racing' | 'finished'
+  marbles: [],      // [{ username, color }]
+  winner: null,
+}
+
+function getNextMarbleColor(existingMarbles) {
+  const used = new Set(existingMarbles.map(m => m.color))
+  for (const c of MARBLE_COLOR_PALETTE) {
+    if (!used.has(c)) return c
+  }
+  return MARBLE_COLOR_PALETTE[existingMarbles.length % MARBLE_COLOR_PALETTE.length]
+}
+
+/* ────────────────────────────────────────────────────────────
  *  Trade rooms (unchanged)
  * ────────────────────────────────────────────────────────── */
 const tradeRooms   = {}
@@ -1321,13 +1344,13 @@ async function resolveSocketUser(socket) {
   try {
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, banned: true }
+      select: { id: true, username: true, banned: true, isAdmin: true }
     })
     if (!user || user.banned || !user.username) {
       socket.data.authUser = null
       return null
     }
-    socket.data.authUser = { id: user.id, username: user.username }
+    socket.data.authUser = { id: user.id, username: user.username, isAdmin: Boolean(user.isAdmin) }
     return socket.data.authUser
   } catch {
     socket.data.authUser = null
@@ -2909,6 +2932,60 @@ io.on('connection', socket => {
   // leave that auction room
   socket.on('leave-auction', ({ auctionId }) => {
     socket.leave(`auction_${auctionId}`)
+  })
+
+  // ─── Marble Race Game ──────────────────────────────────────────────────────
+  socket.on('marble:getState', () => {
+    socket.emit('marble:state', {
+      phase: marbleGame.phase,
+      marbles: marbleGame.marbles,
+      winner: marbleGame.winner,
+    })
+  })
+
+  socket.on('marble:join', async () => {
+    if (marbleGame.phase !== 'allowed') return
+    const user = await resolveSocketUser(socket)
+    if (!user) return
+    if (marbleGame.marbles.find(m => m.username === user.username)) return
+    const color = getNextMarbleColor(marbleGame.marbles)
+    const marble = { username: user.username, color }
+    marbleGame.marbles.push(marble)
+    io.emit('marble:joined', marble)
+  })
+
+  socket.on('marble:allow', async () => {
+    const user = await resolveSocketUser(socket)
+    if (!user?.isAdmin) return
+    if (marbleGame.phase !== 'waiting') return
+    marbleGame.phase = 'allowed'
+    io.emit('marble:phaseChange', { phase: 'allowed' })
+  })
+
+  socket.on('marble:clear', async () => {
+    const user = await resolveSocketUser(socket)
+    if (!user?.isAdmin) return
+    marbleGame.phase = 'waiting'
+    marbleGame.marbles = []
+    marbleGame.winner = null
+    io.emit('marble:cleared')
+  })
+
+  socket.on('marble:start', async () => {
+    const user = await resolveSocketUser(socket)
+    if (!user?.isAdmin) return
+    if (marbleGame.phase !== 'allowed') return
+    marbleGame.phase = 'racing'
+    io.emit('marble:started', { marbles: marbleGame.marbles })
+  })
+
+  socket.on('marble:winner', async ({ winner }) => {
+    if (marbleGame.phase !== 'racing') return
+    if (marbleGame.winner) return
+    if (!marbleGame.marbles.find(m => m.username === winner)) return
+    marbleGame.winner = winner
+    marbleGame.phase = 'finished'
+    io.emit('marble:won', { winner })
   })
 })
 
