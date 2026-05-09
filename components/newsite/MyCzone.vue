@@ -7,7 +7,9 @@
         <OrangeButton v-if="isOwnZone" @click="toggleBuild">
           {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
-        <OrangeButton v-else-if="viewedOwner">Trade</OrangeButton>
+        <NuxtLink v-else-if="viewedOwner" :to="`/newsite/trade?username=${encodeURIComponent(viewedOwner.username)}`" style="text-decoration:none;display:contents;">
+          <OrangeButton>Trade</OrangeButton>
+        </NuxtLink>
         <template v-for="(zone, i) in cz.zones" :key="i">
           <button
             v-if="cz.buildMode || zone.toons.length > 0"
