@@ -460,13 +460,13 @@ const scaleStyle = computed(() => {
 }
 
 .topbar-nav-right {
-  width: var(--topbar-nav-right-width);
+  flex: 1;
+  min-width: 0;
   height: var(--topbar-nav-right-height);
   background: var(--topbar-nav-right-bg);
   border-radius: var(--topbar-nav-right-radius);
   border: var(--topbar-nav-right-border-thickness) solid var(--topbar-nav-right-border-color);
   padding: var(--topbar-nav-right-pt) var(--topbar-nav-right-pr) var(--topbar-nav-right-pb) var(--topbar-nav-right-pl);
-  flex-shrink: 0;
   overflow: hidden;
 }
 

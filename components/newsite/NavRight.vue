@@ -47,7 +47,7 @@ const props = defineProps({
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  justify-content: space-evenly;
   width: 100%;
   height: 100%;
   padding: 0 6px;
