@@ -1,19 +1,12 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballAd />
-    </template>
-    <template #main-content>
-      <GamesHome />
-    </template>
-  </NuxtLayout>
+  <GamesHome />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 </script>
 
 <style>

@@ -49,63 +49,63 @@ html.newsite-active body {
   --topbar-pl:                       0px;
   --topbar-pr:                       0px;
 
-  --topbar-adbar-bg:                 var(--OrbitDarkBlue);
-  --topbar-adbar-height:             65px;
-  --topbar-adbar-radius:             8px;
-  --topbar-adbar-border-thickness:   2px;
-  --topbar-adbar-border-color:       var(--OrbitDarkBlue);
-  --topbar-adbar-pt:                 0px;
-  --topbar-adbar-pb:                 0px;
-  --topbar-adbar-pl:                 0px;
-  --topbar-adbar-pr:                 0px;
+  --topbar-primary-bg:                 var(--OrbitDarkBlue);
+  --topbar-primary-height:             65px;
+  --topbar-primary-radius:             8px;
+  --topbar-primary-border-thickness:   2px;
+  --topbar-primary-border-color:       var(--OrbitDarkBlue);
+  --topbar-primary-pt:                 0px;
+  --topbar-primary-pb:                 0px;
+  --topbar-primary-pl:                 0px;
+  --topbar-primary-pr:                 0px;
 
-  --topbar-adbar-logo-bg:            #000000;
-  --topbar-adbar-logo-height:        var(--topbar-adbar-height);
-  --topbar-adbar-logo-width:         200px;
-  --topbar-adbar-logo-scale-x:       1;
-  --topbar-adbar-logo-scale-y:       1.1;
-  --topbar-adbar-logo-radius:        0px;
-  --topbar-adbar-logo-border-thickness: 0px;
-  --topbar-adbar-logo-border-color:  transparent;
-  --topbar-adbar-logo-pt:            0px;
-  --topbar-adbar-logo-pb:            0px;
-  --topbar-adbar-logo-pl:            0px;
-  --topbar-adbar-logo-pr:            8px;
+  --topbar-primary-logo-bg:            #000000;
+  --topbar-primary-logo-height:        var(--topbar-primary-height);
+  --topbar-primary-logo-width:         200px;
+  --topbar-primary-logo-scale-x:       1;
+  --topbar-primary-logo-scale-y:       1.1;
+  --topbar-primary-logo-radius:        8px 0 0 8px;
+  --topbar-primary-logo-border-thickness: 0px;
+  --topbar-primary-logo-border-color:  transparent;
+  --topbar-primary-logo-pt:            0px;
+  --topbar-primary-logo-pb:            0px;
+  --topbar-primary-logo-pl:            0px;
+  --topbar-primary-logo-pr:            8px;
 
-  --topbar-adbar-adlabel-bg:         transparent;
-  --topbar-adbar-adlabel-height:     var(--topbar-adbar-height);
-  --topbar-adbar-adlabel-width:      20px;
-  --topbar-adbar-adlabel-scale-x:    1;
-  --topbar-adbar-adlabel-scale-y:    1;
-  --topbar-adbar-adlabel-radius:     0px;
-  --topbar-adbar-adlabel-border-thickness: 0px;
-  --topbar-adbar-adlabel-border-color: transparent;
-  --topbar-adbar-adlabel-pt:         0px;
-  --topbar-adbar-adlabel-pb:         0px;
-  --topbar-adbar-adlabel-pl:         0px;
-  --topbar-adbar-adlabel-pr:         0px;
+  --topbar-primary-promolabel-bg:         transparent;
+  --topbar-primary-promolabel-height:     var(--topbar-primary-height);
+  --topbar-primary-promolabel-width:      20px;
+  --topbar-primary-promolabel-scale-x:    1;
+  --topbar-primary-promolabel-scale-y:    1;
+  --topbar-primary-promolabel-radius:     0px;
+  --topbar-primary-promolabel-border-thickness: 0px;
+  --topbar-primary-promolabel-border-color: transparent;
+  --topbar-primary-promolabel-pt:         0px;
+  --topbar-primary-promolabel-pb:         0px;
+  --topbar-primary-promolabel-pl:         0px;
+  --topbar-primary-promolabel-pr:         0px;
 
-  --topbar-adbar-ad-bg:              transparent;
-  --topbar-adbar-ad-height:          var(--topbar-adbar-height);
-  --topbar-adbar-ad-width:           460px;
-  --topbar-adbar-ad-radius:          0px;
-  --topbar-adbar-ad-border-thickness: 0px;
-  --topbar-adbar-ad-border-color:    transparent;
-  --topbar-adbar-ad-pt:              0px;
-  --topbar-adbar-ad-pb:              0px;
-  --topbar-adbar-ad-pl:              0px;
-  --topbar-adbar-ad-pr:              0px;
+  --topbar-primary-promo-bg:              transparent;
+  --topbar-primary-promo-height:          var(--topbar-primary-height);
+  --topbar-primary-promo-width:           460px;
+  --topbar-primary-promo-radius:          0px;
+  --topbar-primary-promo-border-thickness: 0px;
+  --topbar-primary-promo-border-color:    transparent;
+  --topbar-primary-promo-pt:              0px;
+  --topbar-primary-promo-pb:              0px;
+  --topbar-primary-promo-pl:              0px;
+  --topbar-primary-promo-pr:              0px;
 
-  --topbar-adbar-rewatch-bg:         transparent;
-  --topbar-adbar-rewatch-height:     var(--topbar-adbar-height);
-  --topbar-adbar-rewatch-width:      100px;
-  --topbar-adbar-rewatch-radius:     0px;
-  --topbar-adbar-rewatch-border-thickness: 0px;
-  --topbar-adbar-rewatch-border-color: transparent;
-  --topbar-adbar-rewatch-pt:         0px;
-  --topbar-adbar-rewatch-pb:         0px;
-  --topbar-adbar-rewatch-pl:         0px;
-  --topbar-adbar-rewatch-pr:         0px;
+  --topbar-primary-rewatch-bg:         transparent;
+  --topbar-primary-rewatch-height:     var(--topbar-primary-height);
+  --topbar-primary-rewatch-width:      100px;
+  --topbar-primary-rewatch-radius:     0px;
+  --topbar-primary-rewatch-border-thickness: 0px;
+  --topbar-primary-rewatch-border-color: transparent;
+  --topbar-primary-rewatch-pt:         0px;
+  --topbar-primary-rewatch-pb:         0px;
+  --topbar-primary-rewatch-pl:         0px;
+  --topbar-primary-rewatch-pr:         0px;
 
   --topbar-nav-bg:                   transparent;
   --topbar-nav-height:               30px;
@@ -226,16 +226,16 @@ html.newsite-active body {
 <template>
   <div class="site-container" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
-      <div class="topbar-adbar" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
-        <div v-if="!isMobile" class="topbar-adbar-logo"><ReorbitLogo /></div>
-        <div class="topbar-adbar-adlabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><AdLabel /></div>
-        <div class="topbar-adbar-ad" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><AdSpot /></div>
-        <div v-if="!isMobile" class="topbar-adbar-rewatch"><Rewatch /></div>
+      <div class="topbar-primary" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
+        <div v-if="!isMobile" class="topbar-primary-logo"><ReorbitLogo /></div>
+        <div class="topbar-primary-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
+        <div class="topbar-primary-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
+        <div v-if="!isMobile" class="topbar-primary-rewatch"><Rewatch /></div>
       </div>
       <div class="topbar-nav"
         :style="[
           { visibility: showNav ? 'visible' : 'hidden' },
-          isMobile ? { flexDirection: 'column', height: 'calc(var(--topbar-nav-height) * 2 + 4px)', overflow: 'visible', gap: '4px', width: '100%' } : {}
+          isMobile ? { flexDirection: 'column', height: 'auto', overflow: 'visible', gap: '4px', width: '100%' } : {}
         ]"
       >
         <div class="topbar-nav-left" :style="isMobile ? { width: '100%' } : {}"><NavLeft :isMobile="isMobile" /></div>
@@ -247,21 +247,30 @@ html.newsite-active body {
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
-        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><slot name="sidebar-top" /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle"><MiddleSidebarImages /></slot></div>
-        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
+        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><UserInfo /></div>
+        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
+          <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
+          <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
+          <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
+          <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
+          <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
+          <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
+          <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
+        </div>
+        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
       </template>
     </div>
-    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot name="main-content" /></div>
+    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
-    <slot />
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
   </div>
+  <Onboarding />
 </template>
 
 <script setup>
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
+const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
 useHead({
   htmlAttrs: { class: 'newsite-active' },
@@ -276,7 +285,7 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
-const mobileSidebarCollapsed = ref(true)
+
 
 const gridColumns = computed(() =>
   isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'
@@ -373,63 +382,63 @@ const scaleStyle = computed(() => {
   gap: var(--topbar-gap);
 }
 
-.topbar-adbar {
-  height: var(--topbar-adbar-height);
-  background: var(--topbar-adbar-bg);
-  border-radius: var(--topbar-adbar-radius);
-  border: var(--topbar-adbar-border-thickness) solid var(--topbar-adbar-border-color);
+.topbar-primary {
+  height: var(--topbar-primary-height);
+  background: var(--topbar-primary-bg);
+  border-radius: var(--topbar-primary-radius);
+  border: var(--topbar-primary-border-thickness) solid var(--topbar-primary-border-color);
   align-items: center;
   overflow: hidden;
-  padding: var(--topbar-adbar-pt) var(--topbar-adbar-pr) var(--topbar-adbar-pb) var(--topbar-adbar-pl);
+  padding: var(--topbar-primary-pt) var(--topbar-primary-pr) var(--topbar-primary-pb) var(--topbar-primary-pl);
   display: flex;
   flex-direction: row;
   flex-shrink: 0;
 }
 
-.topbar-adbar-logo {
-  width: var(--topbar-adbar-logo-width);
-  height: var(--topbar-adbar-logo-height);
-  background: var(--topbar-adbar-logo-bg);
-  transform: scale(var(--topbar-adbar-logo-scale-x), var(--topbar-adbar-logo-scale-y));
-  border-radius: var(--topbar-adbar-logo-radius);
-  border: var(--topbar-adbar-logo-border-thickness) solid var(--topbar-adbar-logo-border-color);
-  padding: var(--topbar-adbar-logo-pt) var(--topbar-adbar-logo-pr) var(--topbar-adbar-logo-pb) var(--topbar-adbar-logo-pl);
+.topbar-primary-logo {
+  width: var(--topbar-primary-logo-width);
+  height: var(--topbar-primary-logo-height);
+  background: var(--topbar-primary-logo-bg);
+  transform: scale(var(--topbar-primary-logo-scale-x), var(--topbar-primary-logo-scale-y));
+  border-radius: var(--topbar-primary-logo-radius);
+  border: var(--topbar-primary-logo-border-thickness) solid var(--topbar-primary-logo-border-color);
+  padding: var(--topbar-primary-logo-pt) var(--topbar-primary-logo-pr) var(--topbar-primary-logo-pb) var(--topbar-primary-logo-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-adlabel {
+.topbar-primary-promolabel {
   margin-left: auto;
-  width: var(--topbar-adbar-adlabel-width);
-  height: var(--topbar-adbar-adlabel-height);
-  background: var(--topbar-adbar-adlabel-bg);
-  transform: scale(var(--topbar-adbar-adlabel-scale-x), var(--topbar-adbar-adlabel-scale-y));
-  border-radius: var(--topbar-adbar-adlabel-radius);
-  border: var(--topbar-adbar-adlabel-border-thickness) solid var(--topbar-adbar-adlabel-border-color);
-  padding: var(--topbar-adbar-adlabel-pt) var(--topbar-adbar-adlabel-pr) var(--topbar-adbar-adlabel-pb) var(--topbar-adbar-adlabel-pl);
+  width: var(--topbar-primary-promolabel-width);
+  height: var(--topbar-primary-promolabel-height);
+  background: var(--topbar-primary-promolabel-bg);
+  transform: scale(var(--topbar-primary-promolabel-scale-x), var(--topbar-primary-promolabel-scale-y));
+  border-radius: var(--topbar-primary-promolabel-radius);
+  border: var(--topbar-primary-promolabel-border-thickness) solid var(--topbar-primary-promolabel-border-color);
+  padding: var(--topbar-primary-promolabel-pt) var(--topbar-primary-promolabel-pr) var(--topbar-primary-promolabel-pb) var(--topbar-primary-promolabel-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-ad {
-  width: var(--topbar-adbar-ad-width);
-  height: var(--topbar-adbar-ad-height);
-  background: var(--topbar-adbar-ad-bg);
-  border-radius: var(--topbar-adbar-ad-radius);
-  border: var(--topbar-adbar-ad-border-thickness) solid var(--topbar-adbar-ad-border-color);
-  padding: var(--topbar-adbar-ad-pt) var(--topbar-adbar-ad-pr) var(--topbar-adbar-ad-pb) var(--topbar-adbar-ad-pl);
+.topbar-primary-promo {
+  width: var(--topbar-primary-promo-width);
+  height: var(--topbar-primary-promo-height);
+  background: var(--topbar-primary-promo-bg);
+  border-radius: var(--topbar-primary-promo-radius);
+  border: var(--topbar-primary-promo-border-thickness) solid var(--topbar-primary-promo-border-color);
+  padding: var(--topbar-primary-promo-pt) var(--topbar-primary-promo-pr) var(--topbar-primary-promo-pb) var(--topbar-primary-promo-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.topbar-adbar-rewatch {
+.topbar-primary-rewatch {
   margin-left: auto;
-  width: var(--topbar-adbar-rewatch-width);
-  height: var(--topbar-adbar-rewatch-height);
-  background: var(--topbar-adbar-rewatch-bg);
-  border-radius: var(--topbar-adbar-rewatch-radius);
-  border: var(--topbar-adbar-rewatch-border-thickness) solid var(--topbar-adbar-rewatch-border-color);
-  padding: var(--topbar-adbar-rewatch-pt) var(--topbar-adbar-rewatch-pr) var(--topbar-adbar-rewatch-pb) var(--topbar-adbar-rewatch-pl);
+  width: var(--topbar-primary-rewatch-width);
+  height: var(--topbar-primary-rewatch-height);
+  background: var(--topbar-primary-rewatch-bg);
+  border-radius: var(--topbar-primary-rewatch-radius);
+  border: var(--topbar-primary-rewatch-border-thickness) solid var(--topbar-primary-rewatch-border-color);
+  padding: var(--topbar-primary-rewatch-pt) var(--topbar-primary-rewatch-pr) var(--topbar-primary-rewatch-pb) var(--topbar-primary-rewatch-pl);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -459,13 +468,13 @@ const scaleStyle = computed(() => {
 }
 
 .topbar-nav-right {
-  width: var(--topbar-nav-right-width);
+  flex: 1;
+  min-width: 0;
   height: var(--topbar-nav-right-height);
   background: var(--topbar-nav-right-bg);
   border-radius: var(--topbar-nav-right-radius);
   border: var(--topbar-nav-right-border-thickness) solid var(--topbar-nav-right-border-color);
   padding: var(--topbar-nav-right-pt) var(--topbar-nav-right-pr) var(--topbar-nav-right-pb) var(--topbar-nav-right-pl);
-  flex-shrink: 0;
   overflow: hidden;
 }
 
@@ -498,6 +507,10 @@ const scaleStyle = computed(() => {
 }
 
 @media (max-width: 768px) {
+  .sidebar {
+    background: var(--OrbitDarkBlue);
+  }
+
   .sidebar-toggle {
     margin-left: -5px;
     margin-right: -5px;
@@ -579,11 +592,11 @@ const scaleStyle = computed(() => {
 @media (max-width: 768px) {
   .site-container,
   .topbar,
-  .topbar-adbar,
-  .topbar-adbar-logo,
-  .topbar-adbar-adlabel,
-  .topbar-adbar-ad,
-  .topbar-adbar-rewatch,
+  .topbar-primary,
+  .topbar-primary-logo,
+  .topbar-primary-promolabel,
+  .topbar-primary-promo,
+  .topbar-primary-rewatch,
   .topbar-nav,
   .topbar-nav-left,
   .topbar-nav-right,
@@ -604,6 +617,17 @@ const scaleStyle = computed(() => {
     width: 100%;
     overflow: visible;
     box-sizing: border-box;
+  }
+
+  .topbar-primary {
+    overflow: visible;
+    height: auto;
+  }
+
+  .topbar-nav-left,
+  .topbar-nav-right {
+    overflow: visible;
+    height: auto;
   }
 
   .main-content {

@@ -70,13 +70,18 @@
             : {}"
         >
           <template #header>
-            <img
-              v-if="c.assetPath"
-              :src="c.assetPath"
-              :alt="c.name"
-              class="card-img"
-              @click.stop="openInfo(c)"
-            />
+            <div class="card-header-wrap" @click.stop="openInfo(c)">
+              <img
+                v-if="c.assetPath"
+                :src="c.assetPath"
+                :alt="c.name"
+                class="card-img"
+              />
+              <span
+                class="owned-badge"
+                :class="originalOwnedSet.has(c.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
+              >{{ originalOwnedSet.has(c.id) ? 'Owned' : 'Unowned' }}</span>
+            </div>
           </template>
           <template #middle>
             <div class="card-middle-row">
@@ -863,12 +868,40 @@ async function closeOverlay() {
   line-height: 1.2;
 }
 
+.card-header-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
 .card-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   transform: scale(var(--img-scale));
-  cursor: pointer;
+}
+
+.owned-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.5rem;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.owned-badge--owned {
+  background: #16a34a;
+  color: #fff;
+}
+
+.owned-badge--unowned {
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .card-name {

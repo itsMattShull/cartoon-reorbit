@@ -23,6 +23,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Other' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Other'">Other</button>
 
         </nav>
       </div>
@@ -164,6 +168,8 @@
                       <option value="lottery">Lottery</option>
                       <option value="auctions">Auctions</option>
                       <option value="gtoons-clash">gToons Clash</option>
+                      <option value="news">News</option>
+                      <option value="earn-points">Earn Points</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="homeImages[n].linkPreset === 'custom'"
@@ -270,6 +276,8 @@
                       <option value="lottery">Lottery</option>
                       <option value="auctions">Auctions</option>
                       <option value="gtoons-clash">gToons Clash</option>
+                      <option value="news">News</option>
+                      <option value="earn-points">Earn Points</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="middleSidebarImages[n].linkPreset === 'custom'"
@@ -312,6 +320,76 @@
 
 
 
+      <!-- Other tab -->
+      <section v-if="activeTab==='Other'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure additional page images.
+        </p>
+
+        <!-- News image -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">News</h2>
+          <p class="text-xs text-gray-500">Image displayed on the News page.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.news || newsPath" :src="previewUrls.news || newsPath" alt="News" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onNewsFile($event)" class="block w-full text-sm" />
+              <div v-if="newsFile" class="text-xs text-gray-600 truncate">Selected: {{ newsFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="newsPath" @click="clearNews()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Earn Points image -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Earn Points</h2>
+          <p class="text-xs text-gray-500">Image displayed on the Earn Points page.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.earnPoints || earnPointsPath" :src="previewUrls.earnPoints || earnPointsPath" alt="Earn Points" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onEarnPointsFile($event)" class="block w-full text-sm" />
+              <div v-if="earnPointsFile" class="text-xs text-gray-600 truncate">Selected: {{ earnPointsFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="earnPointsPath" @click="clearEarnPoints()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Label image -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Label Image</h2>
+          <p class="text-xs text-gray-500">Image displayed as the orbit label on the newsite template (replaces the default orbit-label.gif).</p>
+          <div class="flex items-center gap-4">
+            <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.label || labelPath" :src="previewUrls.label || labelPath" alt="Label" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image (uses default)</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onLabelFile($event)" class="block w-full text-sm" />
+              <div v-if="labelFile" class="text-xs text-gray-600 truncate">Selected: {{ labelFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="labelPath" @click="clearLabel()">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <button class="btn-primary" :disabled="saving" @click="saveOther">
+            <span v-if="!saving">Save</span><span v-else>Saving…</span>
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -330,18 +408,29 @@ const PAGE_LINKS = {
   'my-cworld':   '/newsite/my-cworld',
   'cmart':       '/newsite/cmart',
   'games':       '/newsite/games',
-  'win-wheel':   '/newsite/win-wheel',
+  'win-wheel':   '/newsite/winwheel',
   'winball':     '/newsite/winball',
   'lottery':     '/newsite/lottery',
   'auctions':    '/newsite/auctions',
-  'gtoons-clash':'/newsite/gtoons-clash'
+  'gtoons-clash':'/newsite/gtoons-clash',
+  'news':        '/newsite/news',
+  'earn-points': '/newsite/earnpoints'
 }
 
 const activeTab = ref('Homepage')
 
 const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
 const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null })
+const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null, earnPoints:null, label:null })
+
+const newsPath = ref('')
+const newsFile = ref(null)
+
+const earnPointsPath = ref('')
+const earnPointsFile = ref(null)
+
+const labelPath = ref('')
+const labelFile = ref(null)
 
 const showcasePath = ref('')
 const showcaseFile = ref(null)
@@ -459,6 +548,45 @@ function clearMiddleSidebar(n) {
   middleSidebarFiles[n] = null
 }
 
+function onNewsFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value.news) { URL.revokeObjectURL(previewUrls.value.news); previewUrls.value.news = null } } catch (e) {}
+  newsFile.value = f
+  if (f) previewUrls.value.news = URL.createObjectURL(f)
+}
+
+function clearNews() {
+  newsPath.value = ''
+  if (previewUrls.value.news) { try { URL.revokeObjectURL(previewUrls.value.news) } catch (e) {} ; previewUrls.value.news = null }
+  newsFile.value = null
+}
+
+function onEarnPointsFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value.earnPoints) { URL.revokeObjectURL(previewUrls.value.earnPoints); previewUrls.value.earnPoints = null } } catch (e) {}
+  earnPointsFile.value = f
+  if (f) previewUrls.value.earnPoints = URL.createObjectURL(f)
+}
+
+function clearEarnPoints() {
+  earnPointsPath.value = ''
+  if (previewUrls.value.earnPoints) { try { URL.revokeObjectURL(previewUrls.value.earnPoints) } catch (e) {} ; previewUrls.value.earnPoints = null }
+  earnPointsFile.value = null
+}
+
+function onLabelFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value.label) { URL.revokeObjectURL(previewUrls.value.label); previewUrls.value.label = null } } catch (e) {}
+  labelFile.value = f
+  if (f) previewUrls.value.label = URL.createObjectURL(f)
+}
+
+function clearLabel() {
+  labelPath.value = ''
+  if (previewUrls.value.label) { try { URL.revokeObjectURL(previewUrls.value.label) } catch (e) {} ; previewUrls.value.label = null }
+  labelFile.value = null
+}
+
 function onMiddleSidebarPresetChange(n) {
   const preset = middleSidebarImages[n].linkPreset
   if (preset === '') {
@@ -501,6 +629,10 @@ async function loadConfig() {
     middleSidebarImages[n].link = rawLink
     middleSidebarImages[n].linkPreset = detectPreset(rawLink)
   }
+
+  newsPath.value = cfg.newsImagePath || ''
+  earnPointsPath.value = cfg.earnPointsImagePath || ''
+  labelPath.value = cfg.labelImagePath || ''
 }
 
 
@@ -598,6 +730,31 @@ async function saveSidebar() {
     }
 
     toast.value = { type: 'ok', msg: 'Sidebar saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveOther() {
+  saving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('newsPath', newsPath.value || '')
+    if (newsFile.value) fd.append('news', newsFile.value)
+    fd.append('earnPointsPath', earnPointsPath.value || '')
+    if (earnPointsFile.value) fd.append('earnPoints', earnPointsFile.value)
+    fd.append('labelPath', labelPath.value || '')
+    if (labelFile.value) fd.append('label', labelFile.value)
+    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
+    newsPath.value = res.newsImagePath || ''
+    newsFile.value = null
+    earnPointsPath.value = res.earnPointsImagePath || ''
+    earnPointsFile.value = null
+    labelPath.value = res.labelImagePath || ''
+    labelFile.value = null
+    toast.value = { type: 'ok', msg: 'Images saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {

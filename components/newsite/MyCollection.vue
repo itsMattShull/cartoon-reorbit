@@ -19,7 +19,7 @@
       <template v-else>
         <ShortCard v-for="c in ctoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
           <template #header>
-            <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+            <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
           </template>
           <template #middle>
             <span class="card-mint">#{{ c.mintNumber ?? '?' }}</span>
@@ -40,6 +40,12 @@
 </template>
 
 <script setup>
+const { open: openCtoonModal } = useCtoonModal()
+
+function openInfo(c) {
+  openCtoonModal({ ctoonId: c.ctoonId, userCtoonId: c.id, assetPath: c.assetPath, name: c.name })
+}
+
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
@@ -97,12 +103,18 @@ const ctoons = computed(() => {
 
   list = [...list].sort((a, b) => {
     let cmp = 0
-    if (f.sortField === 'price') {
+    if (f.sortField === 'acquiredDate') {
+      cmp = new Date(a.acquiredAt) - new Date(b.acquiredAt)
+    } else if (f.sortField === 'price') {
       cmp = a.price - b.price
     } else if (f.sortField === 'rarity') {
       const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
       const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99
       cmp = ar - br
+    } else if (f.sortField === 'acquiredAt') {
+      const at = a.acquiredAt ? new Date(a.acquiredAt).getTime() : 0
+      const bt = b.acquiredAt ? new Date(b.acquiredAt).getTime() : 0
+      cmp = at - bt
     } else {
       cmp = a.name.localeCompare(b.name)
     }
@@ -196,6 +208,13 @@ onMounted(async () => {
   height: 100%;
   object-fit: contain;
   transform: scale(var(--img-scale));
+}
+
+.card-img--clickable {
+  cursor: pointer;
+}
+.card-img--clickable:hover {
+  filter: brightness(1.12);
 }
 
 .card-btn {

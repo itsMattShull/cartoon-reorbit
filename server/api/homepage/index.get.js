@@ -24,5 +24,8 @@ export default defineEventHandler(async () => {
     middleSidebar2Link:      cfg?.middleSidebar2Link      ?? null,
     middleSidebar3ImagePath: cfg?.middleSidebar3ImagePath ?? null,
     middleSidebar3Link:      cfg?.middleSidebar3Link      ?? null,
+    newsImagePath:           cfg?.newsImagePath           ?? null,
+    earnPointsImagePath:     cfg?.earnPointsImagePath     ?? null,
+    labelImagePath:          cfg?.labelImagePath          ?? null,
   }
 })

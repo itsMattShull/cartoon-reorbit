@@ -38,7 +38,8 @@
             class="czew-toon-wrap"
             :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
             @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
-            @touchstart.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
+            @touchstart="!currentZoneToonIds.has(c.id) && onToonTouchStart(c, $event)"
+            @touchend="!currentZoneToonIds.has(c.id) && onToonTouchEnd(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
@@ -51,15 +52,18 @@
     <!-- ── Background panel ── -->
     <div v-show="activeTab === 'bg'" class="czew-panel">
       <div class="czew-bg-grid">
-        <img
-          v-for="bg in cz.backgrounds" :key="bg.id"
-          :src="bg.imagePath"
-          :alt="bg.label || bg.filename"
-          class="czew-bg-item"
-          :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
-          @click="selectBg(bg)"
-        />
-        <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
+        <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
+        <template v-else>
+          <img
+            v-for="bg in cz.backgrounds" :key="bg.id"
+            :src="bg.imagePath"
+            :alt="bg.label || bg.filename"
+            class="czew-bg-item"
+            :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
+            @click="selectBg(bg)"
+          />
+          <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
+        </template>
       </div>
     </div>
 
@@ -135,6 +139,59 @@ function startDrag(ctoon, e) {
   cz.value.ghostY = point.clientY
 }
 
+const isMobile = ref(false)
+let touchStartX = 0
+let touchStartY = 0
+
+function updateMobile() {
+  isMobile.value = window.innerWidth <= 768
+}
+
+onMounted(() => {
+  updateMobile()
+  window.addEventListener('resize', updateMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMobile)
+})
+
+function onToonTouchStart(c, e) {
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  if (!isMobile.value) {
+    startDrag(c, e)
+  }
+}
+
+function onToonTouchEnd(c, e) {
+  if (!isMobile.value) return
+  const touch = e.changedTouches[0]
+  const dx = Math.abs(touch.clientX - touchStartX)
+  const dy = Math.abs(touch.clientY - touchStartY)
+  if (dx < 10 && dy < 10) {
+    addToonToTopLeft(c)
+  }
+}
+
+function addToonToTopLeft(c) {
+  const zone = cz.value.zones[cz.value.activeZone]
+  if (!zone || zone.toons.some(t => t.id === c.id)) return
+  const img = new Image()
+  img.onload = () => {
+    zone.toons.push({
+      id: c.id,
+      assetPath: c.assetPath,
+      name: c.name,
+      x: 0,
+      y: 0,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    })
+  }
+  img.src = c.assetPath
+}
+
 function selectBg(bg) {
   cz.value.zones[cz.value.activeZone].background = bg.imagePath
 }
@@ -144,7 +201,12 @@ function selectBg(bg) {
 .czew {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* flex:1 fills the flex-column .sidebar-middle in build mode.
+     Avoids height:100% which collapses to 0 when the parent has no
+     explicit px height (e.g. flex-grown height isn't "definite" for
+     percentage resolution in all browsers). */
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
   padding: 4px;
   box-sizing: border-box;
@@ -322,6 +384,7 @@ function selectBg(bg) {
 
 @media (max-width: 768px) {
   .czew {
+    flex: none;  /* revert to content-height on mobile */
     height: auto;
   }
   .czew-panel {

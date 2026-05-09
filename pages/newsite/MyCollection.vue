@@ -1,23 +1,27 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter />
-    </template>
-    <template #main-content>
-      <MyCollection />
-    </template>
-  </NuxtLayout>
+  <MyCollection />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('MyCollectionSidebar')
+
+const filter = useNewSiteCtoonFilter()
+Object.assign(filter.value, {
+  name:            '',
+  rarities:        [],
+  series:          '',
+  set:             '',
+  priceMin:        '',
+  priceMax:        '',
+  sortField:       'acquiredDate',
+  sortAsc:         false,
+  hideUnavailable: false,
+})
 </script>
 
 <style>
-body.page-mycollection .sidebar-bottom { display: none; }
-body.page-mycollection .sidebar { --sidebar-middle-height: 504px; }
 body.page-mycollection .main-content { overflow-y: auto !important; scrollbar-width: thin; }
 </style>

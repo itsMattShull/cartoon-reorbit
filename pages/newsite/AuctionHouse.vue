@@ -1,31 +1,12 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter :sort-options="auctionSortOptions" :show-sort-dir="false" />
-    </template>
-    <template #main-content>
-      <AuctionHouse />
-    </template>
-  </NuxtLayout>
+  <AuctionHouse />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
 
-const auctionSortOptions = [
-  { value: 'endAsc',    label: 'Ending Soon'     },
-  { value: 'endNewest', label: 'End: Latest'      },
-  { value: 'nameAsc',   label: 'Name A→Z'         },
-  { value: 'nameDesc',  label: 'Name Z→A'         },
-  { value: 'mintAsc',   label: 'Mint # ↑'         },
-  { value: 'mintDesc',  label: 'Mint # ↓'         },
-  { value: 'rarity',    label: 'Rarity'            },
-  { value: 'priceAsc',  label: 'Price: Low→High'  },
-  { value: 'priceDesc', label: 'Price: High→Low'  },
-]
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('AuctionHouseSidebar')
 </script>
 
 <style>
@@ -45,6 +26,5 @@ body {
   min-height: 100vh;
 }
 
-body.page-auctionhouse .sidebar-bottom { display: none; }
-body.page-auctionhouse .sidebar { --sidebar-middle-height: 504px; }
+body.page-auctionhouse .sidebar { --sidebar-middle-height: 495px; }
 </style>

@@ -9,9 +9,14 @@
     <NuxtLink to="/newsite/AuctionHouse" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Auctions</BlueButton>
     </NuxtLink>
-    <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
+    <NuxtLink to="/newsite/trade" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
+    </NuxtLink>
     <NuxtLink to="/newsite/Games" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
+    </NuxtLink>
+    <NuxtLink v-if="!isMobile" to="/newsite/redeem" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
     </NuxtLink>
     <NuxtLink v-if="!isMobile" to="/newsite/settings" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
@@ -42,10 +47,18 @@ const props = defineProps({
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  justify-content: space-evenly;
   width: 100%;
   height: 100%;
   padding: 0 6px;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .nav-right {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 6px;
+  }
 }
 </style>

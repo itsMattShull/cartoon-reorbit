@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 dotenv.config()
+import * as CANNON from 'cannon-es'
 
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
@@ -81,6 +82,418 @@ const zoneSockets  = {}        // zone → Set(socketId)
 // near top, alongside pveMatches:
 const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
 const pvpMatches = new Map();    // roomId -> { battle, recordId }
+
+/* ── Spin the Wheel (pure in-memory, no DB) ──────────────── */
+const STW_ROOM = 'spin-the-wheel'
+const spinWheelState = {
+  participants: [],   // [{ username }]
+  isOpen: false,
+  sessionId: randomUUID(),
+  spinning: false
+}
+
+function stwSnapshot() {
+  return {
+    participants: [...spinWheelState.participants],
+    isOpen: spinWheelState.isOpen,
+    sessionId: spinWheelState.sessionId,
+    spinning: spinWheelState.spinning
+  }
+}
+
+/* ── Marble Race ─────────────────────────────────────────── */
+const MARBLES_ROOM = 'marbles-race'
+const MARBLE_COLORS = [
+  '#FF4444', '#44CCFF', '#44FF66', '#FFD700', '#FF44DD',
+  '#00FFCC', '#FF8844', '#AA44FF', '#AAFFAA', '#FF88CC',
+  '#88CCFF', '#FFCC44', '#CC44FF', '#44FFD0', '#FF6688',
+  '#66FF44', '#FF4488', '#44AAFF', '#FFAA66', '#AA88FF',
+]
+
+const marblesState = {
+  marbles: [],      // { id, username, color }
+  isOpen: false,
+  phase: 'waiting', // 'waiting' | 'racing' | 'finished'
+  sessionId: randomUUID(),
+  winner: null,
+}
+
+let marblesWorld = null
+let marbleBodies = []     // parallel array to marblesState.marbles
+let marblesFinished = new Set()
+let marblesPhysInterval = null
+let marblesBroadcastInterval = null
+
+const MBL_RADIUS   = 0.8
+const MBL_FINISH_Z = -118  // world-Z at finish line
+
+// Curved course definition — Catmull-Rom spine control points [x, z]
+const COURSE_SPINE = [
+  [ 0,   90],
+  [15,   72],
+  [ 0,   54],
+  [-15,  36],
+  [ 0,   18],
+  [15,    0],
+  [ 0,  -18],
+  [-15, -36],
+  [ 0,  -54],
+  [15,  -72],
+  [ 0,  -90],
+  [ -7, -108],
+  [ 0,  -118],
+]
+const COURSE_HALF_W      = 5   // half-width of channel
+const COURSE_N_SEGS      = 120 // number of approximation segments
+const FUNNEL_OPEN_HALF_W = 14  // half-width at the funnel's open end
+const FUNNEL_LENGTH      = 19  // distance from course start to funnel open end
+
+// Funnel approach direction — unit vector pointing from course start backward into the funnel,
+// derived from the first spine segment so the funnel aligns with the track.
+{
+  const _dx = COURSE_SPINE[1][0] - COURSE_SPINE[0][0]  // 15
+  const _dz = COURSE_SPINE[1][1] - COURSE_SPINE[0][1]  // -18
+  const _l  = Math.sqrt(_dx * _dx + _dz * _dz)
+  var FUNNEL_AP_DX = -_dx / _l   // approach X  (unit)
+  var FUNNEL_AP_DZ = -_dz / _l   // approach Z  (unit)
+  var FUNNEL_AP_LX = -FUNNEL_AP_DZ  // left-normal X of approach
+  var FUNNEL_AP_LZ =  FUNNEL_AP_DX  // left-normal Z of approach
+}
+
+function crSample(pts, t) {
+  const n   = pts.length - 1
+  const seg = Math.min(Math.floor(t * n), n - 1)
+  const lt  = t * n - seg
+  const i0 = Math.max(0, seg - 1), i1 = seg
+  const i2 = Math.min(n, seg + 1),  i3 = Math.min(n, seg + 2)
+  const [p0, p1, p2, p3] = [pts[i0], pts[i1], pts[i2], pts[i3]]
+  const t2 = lt * lt, t3 = t2 * lt
+  return [
+    0.5 * (2*p1[0] + (-p0[0]+p2[0])*lt + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+    0.5 * (2*p1[1] + (-p0[1]+p2[1])*lt + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3),
+  ]
+}
+
+function buildCourseSamples() {
+  return Array.from({ length: COURSE_N_SEGS }, (_, i) => crSample(COURSE_SPINE, i / (COURSE_N_SEGS - 1)))
+}
+
+function marblesSnapshot() {
+  return {
+    marbles:   marblesState.marbles.map(m => ({ ...m })),
+    isOpen:    marblesState.isOpen,
+    phase:     marblesState.phase,
+    sessionId: marblesState.sessionId,
+    winner:    marblesState.winner,
+  }
+}
+
+// ─── Track segments ────────────────────────────────────────────────────────
+// Each entry: [cx, cz, halfW, halfLen, rotY]  (floor boxes, Y=floor surface=0)
+function buildMarblesWorld() {
+  const world = new CANNON.World()
+  world.gravity.set(0, -4, -10)
+  world.broadphase = new CANNON.SAPBroadphase(world)
+  world.allowSleep = false
+
+  const trackMat  = new CANNON.Material('mbl_track')
+  const marbleMat = new CANNON.Material('mbl_marble')
+  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.55 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.6 }))
+
+  const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
+  const WALL_T  = 0.3  // wall half-thickness
+  const FLOOR_H = 0.5  // floor half-height
+
+  const samples = buildCourseSamples()
+  const nSegs = samples.length - 1
+
+  // Pre-compute per-segment direction data for miter joint calculation
+  const segData = []
+  for (let i = 0; i < nSegs; i++) {
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const dx = x2 - x1, dz = z2 - z1
+    const len = Math.sqrt(dx * dx + dz * dz)
+    segData.push({ dx, dz, len, angle: Math.atan2(dx, dz) })
+  }
+
+  // Unsigned miter — always extends segments to fill corner gaps; overlapping static bodies are harmless
+  function miterExt(a, b) {
+    if (a < 0 || b >= nSegs) return 0.1
+    let delta = segData[b].angle - segData[a].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    return Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+  }
+
+  for (let i = 0; i < nSegs; i++) {
+    const { dx, dz, len, angle } = segData[i]
+    if (len < 0.001) continue
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const rawMidX = (x1 + x2) / 2, rawMidZ = (z1 + z2) / 2
+
+    const bk = miterExt(i - 1, i), ft = miterExt(i, i + 1)
+    const tot = len + bk + ft
+    const sh  = (ft - bk) / 2
+
+    const floor = new CANNON.Body({ mass: 0, material: trackMat })
+    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, tot / 2)))
+    floor.position.set(rawMidX + (dx / len) * sh, -FLOOR_H, rawMidZ + (dz / len) * sh)
+    floor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(floor)
+
+    const lw = new CANNON.Body({ mass: 0, material: trackMat })
+    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, tot / 2)))
+    lw.position.set(
+      rawMidX + (dx / len) * sh + (-dz / len) * (COURSE_HALF_W + WALL_T),
+      WALL_H,
+      rawMidZ + (dz / len) * sh + ( dx / len) * (COURSE_HALF_W + WALL_T)
+    )
+    lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(lw)
+
+    const rw = new CANNON.Body({ mass: 0, material: trackMat })
+    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, tot / 2)))
+    rw.position.set(
+      rawMidX + (dx / len) * sh + ( dz / len) * (COURSE_HALF_W + WALL_T),
+      WALL_H,
+      rawMidZ + (dz / len) * sh + (-dx / len) * (COURSE_HALF_W + WALL_T)
+    )
+    rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(rw)
+  }
+
+  // Junction cylinder posts — one at each sample point along both wall edges.
+  // A convex cylinder at the joint fills the wedge pocket that forms when two rotated
+  // box segments meet at an angle, so marbles deflect smoothly instead of getting stuck.
+  {
+    const POST_R = WALL_T + 0.05
+    for (let i = 0; i <= nSegs; i++) {
+      const [px, pz] = samples[i]
+      const si = Math.min(i, nSegs - 1)
+      const { dx, dz, len } = segData[si]
+      const nx = -dz / len, nz = dx / len  // left-side unit normal
+
+      const lp = new CANNON.Body({ mass: 0, material: trackMat })
+      lp.addShape(new CANNON.Cylinder(POST_R, POST_R, WALL_H * 2, 8))
+      lp.position.set(px + nx * COURSE_HALF_W, WALL_H, pz + nz * COURSE_HALF_W)
+      world.addBody(lp)
+
+      const rp = new CANNON.Body({ mass: 0, material: trackMat })
+      rp.addShape(new CANNON.Cylinder(POST_R, POST_R, WALL_H * 2, 8))
+      rp.position.set(px - nx * COURSE_HALF_W, WALL_H, pz - nz * COURSE_HALF_W)
+      world.addBody(rp)
+    }
+  }
+
+  // Corner filler walls — at each concave inner junction a box oriented along the
+  // angle bisector closes the triangular overlap pocket so marbles can't get trapped.
+  for (let i = 1; i < nSegs; i++) {
+    let delta = segData[i].angle - segData[i - 1].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    if (Math.abs(delta) < 0.05) continue
+
+    const pocketLen = Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+    if (pocketLen < 0.05) continue
+
+    const [px, pz] = samples[i]
+    const dx1 = segData[i - 1].dx / segData[i - 1].len, dz1 = segData[i - 1].dz / segData[i - 1].len
+    const dx2 = segData[i].dx     / segData[i].len,     dz2 = segData[i].dz     / segData[i].len
+    const bDx = dx1 + dx2, bDz = dz1 + dz2
+    const bLen = Math.sqrt(bDx * bDx + bDz * bDz) || 1
+    const bisAngle = Math.atan2(bDx / bLen, bDz / bLen)
+    const bnx = -(bDz / bLen), bnz = bDx / bLen  // left normal of bisector
+
+    // delta > 0 → left wall is concave inner; delta < 0 → right wall is concave inner
+    const side = delta > 0 ? 1 : -1
+    const cx = px + side * bnx * (COURSE_HALF_W + WALL_T)
+    const cz = pz + side * bnz * (COURSE_HALF_W + WALL_T)
+
+    const fw = new CANNON.Body({ mass: 0, material: trackMat })
+    fw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, pocketLen + WALL_T / 2)))
+    fw.position.set(cx, WALL_H, cz)
+    fw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), bisAngle)
+    world.addBody(fw)
+  }
+
+  // Funnel — V-shaped staging area oriented along the reverse of the course start direction.
+  {
+    const [s0x, s0z] = COURSE_SPINE[0]  // [0, 90]
+    // Open-end centre point
+    const fCx = s0x + FUNNEL_AP_DX * FUNNEL_LENGTH
+    const fCz = s0z + FUNNEL_AP_DZ * FUNNEL_LENGTH
+    // Four corners of the trapezoid
+    const nLx = s0x + FUNNEL_AP_LX * COURSE_HALF_W,      nLz = s0z + FUNNEL_AP_LZ * COURSE_HALF_W
+    const nRx = s0x - FUNNEL_AP_LX * COURSE_HALF_W,      nRz = s0z - FUNNEL_AP_LZ * COURSE_HALF_W
+    const fLx = fCx + FUNNEL_AP_LX * FUNNEL_OPEN_HALF_W, fLz = fCz + FUNNEL_AP_LZ * FUNNEL_OPEN_HALF_W
+    const fRx = fCx - FUNNEL_AP_LX * FUNNEL_OPEN_HALF_W, fRz = fCz - FUNNEL_AP_LZ * FUNNEL_OPEN_HALF_W
+
+    // Helper — add a static wall body between two endpoint positions
+    function addFunnelWall(x1, z1, x2, z2, hw) {
+      const dx = x2 - x1, dz = z2 - z1
+      const len = Math.sqrt(dx * dx + dz * dz)
+      const body = new CANNON.Body({ mass: 0, material: trackMat })
+      body.addShape(new CANNON.Box(new CANNON.Vec3(hw, WALL_H, len / 2)))
+      body.position.set((x1 + x2) / 2, WALL_H, (z1 + z2) / 2)
+      body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(dx, dz))
+      world.addBody(body)
+    }
+
+    addFunnelWall(nLx, nLz, fLx, fLz, WALL_T)  // left angled wall
+    addFunnelWall(nRx, nRz, fRx, fRz, WALL_T)  // right angled wall
+    addFunnelWall(fLx, fLz, fRx, fRz, WALL_T)  // back wall across open end
+
+    // Floor: wide box along the approach axis
+    const fFloor = new CANNON.Body({ mass: 0, material: trackMat })
+    fFloor.addShape(new CANNON.Box(new CANNON.Vec3(FUNNEL_OPEN_HALF_W, FLOOR_H, FUNNEL_LENGTH / 2)))
+    fFloor.position.set(
+      s0x + FUNNEL_AP_DX * FUNNEL_LENGTH / 2,
+      -FLOOR_H,
+      s0z + FUNNEL_AP_DZ * FUNNEL_LENGTH / 2
+    )
+    fFloor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(FUNNEL_AP_DX, FUNNEL_AP_DZ))
+    world.addBody(fFloor)
+  }
+
+  // End-cap wall at the finish line — solid physics body matching the visual cap
+  {
+    const lastIdx = samples.length - 1
+    const [finX, finZ] = samples[lastIdx]
+    const [prevX, prevZ] = samples[lastIdx - 1]
+    const adx = finX - prevX, adz = finZ - prevZ
+    const approachAngle = Math.atan2(adx, adz)
+    const cap = new CANNON.Body({ mass: 0, material: trackMat })
+    cap.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W + 1, WALL_H, WALL_T)))
+    cap.position.set(finX, WALL_H, finZ)
+    cap.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), approachAngle)
+    world.addBody(cap)
+  }
+
+  // Pegs – dense spacing (every 3 samples) with randomized lateral offsets each race
+  // Stagger base positions so every lane hits at least one peg, then add jitter for variety
+  const PEG_BASE = [-0.8, -0.3, 0.3, 0.8, 0, -0.6, 0.6]
+  for (let i = 3; i < samples.length - 5; i += 3) {
+    const [px, pz] = samples[i]
+    const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
+    const ddx = nx - px, ddz = nz - pz
+    const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
+    if (dlen < 0.001) continue
+    const baseOff = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
+    const jitter  = (Math.random() - 0.5) * 0.5
+    const rawSide = baseOff + jitter
+    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
+    // its surface and the wall — preventing marbles from getting wedged against the wall.
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
+    const off     = Math.max(-MAX_OFF, Math.min(MAX_OFF, rawSide * (COURSE_HALF_W * 0.8)))
+    const b = new CANNON.Body({ mass: 0, material: trackMat })
+    b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
+    b.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
+    world.addBody(b)
+  }
+
+  return { world, marbleMat }
+}
+
+function getMarbleStartPositions(count) {
+  const [s0x, s0z] = COURSE_SPINE[0]
+  const cols = Math.min(count, 4)
+  const rows = Math.ceil(count / cols)
+  const slots = Array.from({ length: count }, (_, i) => {
+    const row  = Math.floor(i / cols)
+    const col  = i % cols
+    const dist = rows > 1 ? (FUNNEL_LENGTH - 3) - row * (FUNNEL_LENGTH - 5) / (rows - 1) : FUNNEL_LENGTH / 2
+    const t    = dist / FUNNEL_LENGTH
+    const hw   = COURSE_HALF_W + (FUNNEL_OPEN_HALF_W - COURSE_HALF_W) * t
+    const usHW = (hw - MBL_RADIUS - 0.2) * 0.9
+    const side = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
+    return {
+      x: s0x + FUNNEL_AP_DX * dist + FUNNEL_AP_LX * side + (Math.random() - 0.5) * 0.4,
+      y: 2,
+      z: s0z + FUNNEL_AP_DZ * dist + FUNNEL_AP_LZ * side + (Math.random() - 0.5) * 0.5,
+    }
+  })
+  // Shuffle so join order gives no positional advantage
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]]
+  }
+  return slots
+}
+
+function stopMarblesPhysics() {
+  if (marblesPhysInterval)      { clearInterval(marblesPhysInterval);      marblesPhysInterval = null }
+  if (marblesBroadcastInterval) { clearInterval(marblesBroadcastInterval); marblesBroadcastInterval = null }
+  marblesWorld = null
+  marbleBodies = []
+  marblesFinished = new Set()
+}
+
+function startMarblesPhysics() {
+  const { world, marbleMat } = buildMarblesWorld()
+  marblesWorld = world
+  marblesFinished = new Set()
+
+  const positions = getMarbleStartPositions(marblesState.marbles.length)
+  marbleBodies = marblesState.marbles.map((_, i) => {
+    const body = new CANNON.Body({ mass: 1, material: marbleMat, linearDamping: 0.03, angularDamping: 0.1 })
+    body.addShape(new CANNON.Sphere(MBL_RADIUS))
+    body.position.set(positions[i].x, positions[i].y, positions[i].z)
+    // Random lateral kick so marbles don't all follow the same initial path
+    const lateralImpulse = (Math.random() - 0.5) * 5
+    body.velocity.set(
+      FUNNEL_AP_LX * lateralImpulse,
+      0,
+      FUNNEL_AP_LZ * lateralImpulse,
+    )
+    world.addBody(body)
+    return body
+  })
+
+  const FIXED_STEP = 1 / 60
+  marblesPhysInterval = setInterval(() => {
+    world.step(FIXED_STEP, FIXED_STEP, 3)
+
+    if (marblesState.phase !== 'racing') return
+    for (let i = 0; i < marbleBodies.length; i++) {
+      if (marblesFinished.has(i)) continue
+      if (marbleBodies[i].position.z <= MBL_FINISH_Z) {
+        marblesFinished.add(i)
+
+        // Freeze the finished marble in place
+        const body = marbleBodies[i]
+        body.velocity.set(0, 0, 0)
+        body.angularVelocity.set(0, 0, 0)
+        body.type = CANNON.Body.STATIC
+        body.updateMassProperties()
+
+        if (marblesFinished.size === 1) {
+          // First marble across = winner
+          marblesState.winner = marblesState.marbles[i].username
+          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+          io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
+        }
+
+        if (marblesFinished.size >= marbleBodies.length) {
+          marblesState.phase = 'finished'
+          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+          stopMarblesPhysics()
+          return
+        }
+      }
+    }
+  }, 1000 / 60)
+
+  marblesBroadcastInterval = setInterval(() => {
+    const positions = marbleBodies.map((body, i) => ({
+      id: marblesState.marbles[i].id,
+      x:  +body.position.x.toFixed(3),
+      y:  +body.position.y.toFixed(3),
+      z:  +body.position.z.toFixed(3),
+    }))
+    io.to(MARBLES_ROOM).emit('marbles:tick', { positions })
+  }, 1000 / 20)
+}
 
 /* ── Monster Battles (1v1) ───────────────────────────────── */
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
@@ -2909,6 +3322,129 @@ io.on('connection', socket => {
   // leave that auction room
   socket.on('leave-auction', ({ auctionId }) => {
     socket.leave(`auction_${auctionId}`)
+  })
+
+  // ── Spin the Wheel events ───────────────────────────────────────────────
+  socket.on('stw:subscribe', () => {
+    socket.join(STW_ROOM)
+    socket.emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:join', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    if (!spinWheelState.isOpen) return socket.emit('stw:error', { message: 'Joining is not open.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Wheel is spinning.' })
+    if (spinWheelState.participants.some(p => p.username === auth.username)) {
+      return socket.emit('stw:error', { message: 'Already on wheel.' })
+    }
+    spinWheelState.participants.push({ username: auth.username })
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:allow', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Wheel is spinning.' })
+    spinWheelState.isOpen = true
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:clear', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    spinWheelState.participants = []
+    spinWheelState.isOpen = false
+    spinWheelState.spinning = false
+    spinWheelState.sessionId = randomUUID()
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:spin', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Already spinning.' })
+    if (spinWheelState.participants.length === 0) return socket.emit('stw:error', { message: 'No participants.' })
+
+    spinWheelState.isOpen = false
+    spinWheelState.spinning = true
+
+    const winnerIdx = Math.floor(Math.random() * spinWheelState.participants.length)
+    const winner = spinWheelState.participants[winnerIdx].username
+
+    io.to(STW_ROOM).emit('stw:spinning', {
+      ...stwSnapshot(),
+      winner,
+      winnerIdx
+    })
+
+    // After the client animation completes (~6.5s), announce winner and reset spinning flag
+    setTimeout(() => {
+      spinWheelState.spinning = false
+      io.to(STW_ROOM).emit('stw:winner', { username: winner })
+      io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+    }, 7000)
+  })
+
+  // ── Marble Race handlers ─────────────────────────────────────────────────
+  socket.on('marbles:subscribe', () => {
+    socket.join(MARBLES_ROOM)
+    socket.emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:join', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    if (!marblesState.isOpen)                       return socket.emit('marbles:error', { message: 'Joining is not open.' })
+    if (marblesState.phase !== 'waiting')           return socket.emit('marbles:error', { message: 'Race already in progress.' })
+    if (marblesState.marbles.some(m => m.username === auth.username))
+      return socket.emit('marbles:error', { message: 'Already joined.' })
+    const color = MARBLE_COLORS[marblesState.marbles.length % MARBLE_COLORS.length]
+    marblesState.marbles.push({ id: randomUUID(), username: auth.username, color })
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:allow', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Race not in waiting phase.' })
+    marblesState.isOpen = true
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:clear', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('marbles:error', { message: 'Admin only.' })
+    stopMarblesPhysics()
+    marblesState.marbles   = []
+    marblesState.isOpen    = false
+    marblesState.phase     = 'waiting'
+    marblesState.winner    = null
+    marblesState.sessionId = randomUUID()
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:start', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Already started.' })
+    if (marblesState.marbles.length === 0) return socket.emit('marbles:error', { message: 'No marbles to race.' })
+    marblesState.isOpen = false
+    marblesState.phase  = 'racing'
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+    startMarblesPhysics()
   })
 })
 

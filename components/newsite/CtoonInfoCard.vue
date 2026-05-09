@@ -333,7 +333,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
@@ -581,7 +581,16 @@ watch(suggestSet, (next) => {
   }, 250)
 })
 
+function onKeydown(e) {
+  if (e.key === 'Escape') close()
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', onKeydown)
+})
+
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown)
   if (seriesSuggestTimer) clearTimeout(seriesSuggestTimer)
   if (setSuggestTimer) clearTimeout(setSuggestTimer)
   if (audioEl.value) audioEl.value.pause()

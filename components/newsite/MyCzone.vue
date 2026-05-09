@@ -4,10 +4,12 @@
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
       <div class="cz-topbar-left">
-        <OrangeButton v-if="isOwnZone" @click="toggleBuild">
-          {{ cz.buildMode ? 'Exit Build' : 'Build' }}
+        <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
+          {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
         </OrangeButton>
-        <OrangeButton v-else-if="viewedOwner">Trade</OrangeButton>
+        <NuxtLink v-else-if="viewedOwner" :to="`/newsite/trade?username=${encodeURIComponent(viewedOwner.username)}`" style="text-decoration:none;display:contents;">
+          <OrangeButton>Trade</OrangeButton>
+        </NuxtLink>
         <template v-for="(zone, i) in cz.zones" :key="i">
           <button
             v-if="cz.buildMode || zone.toons.length > 0"
@@ -38,10 +40,11 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode }"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
             @click.stop="onToonClick(toon)"
           >
+
             <img
               :src="toon.assetPath" :alt="toon.name"
               class="cz-item-img"
@@ -72,6 +75,21 @@
               </svg>
             </button>
           </div>
+
+          <!-- ── cZone Search items (zone 0 only, visitor only) ── -->
+          <template v-if="!cz.buildMode && cz.activeZone === 0">
+            <button
+              v-for="item in czoneSearchItems"
+              :key="item.key"
+              type="button"
+              class="czone-search-ctoon"
+              :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
+              :style="{ position: 'absolute', top: item.y + 'px', left: item.x + 'px', width: item.size + 'px', height: item.size + 'px', zIndex: 60 }"
+              @click="captureCzoneSearchItem(item)"
+            >
+              <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -80,7 +98,10 @@
     <div class="cz-bottombar">
       <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
-        <template v-if="cz.buildMode">Drag cToons from sidebar · Right-click canvas to remove</template>
+        <template v-if="cz.buildMode">
+          <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
+          <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
+        </template>
       </div>
       <div class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -100,6 +121,51 @@
         :style="{ left: cz.ghostX + 'px', top: cz.ghostY + 'px' }"
         draggable="false"
       />
+
+      <!-- ── cZone Search: capture modal ── -->
+      <transition name="cz-fade">
+        <div
+          v-if="captureModalVisible"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          @click.self="closeCaptureModal"
+        >
+          <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col text-gray-800">
+            <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+              <h2 class="text-lg font-semibold">cToon Captured</h2>
+              <button class="text-gray-500 hover:text-black" @click="closeCaptureModal">✕</button>
+            </div>
+            <div class="p-4 overflow-y-auto flex-1">
+              <div v-if="capturedCtoon" class="space-y-4">
+                <img
+                  :src="capturedCtoon.assetPath"
+                  :alt="capturedCtoon.name || 'Captured cToon'"
+                  class="w-full max-h-56 object-contain rounded"
+                  loading="lazy"
+                />
+                <div class="space-y-1">
+                  <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
+                  <p class="text-sm text-gray-600">You now own {{ capturedCtoon.ownedCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
+                </div>
+                <div class="space-y-1 text-sm">
+                  <div><span class="text-gray-500">Rarity:</span> <span class="font-medium">{{ capturedCtoon.rarity || '—' }}</span></div>
+                  <div><span class="text-gray-500">Series:</span> <span class="font-medium">{{ capturedCtoon.series || '—' }}</span></div>
+                  <div><span class="text-gray-500">Set:</span> <span class="font-medium">{{ capturedCtoon.set || '—' }}</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="px-4 py-3 border-t flex justify-end gap-2 flex-shrink-0">
+              <button class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700" @click="closeCaptureModal">Close</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- ── cZone Search: toast ── -->
+      <transition name="cz-fade">
+        <div v-if="searchToast.visible" class="cz-search-toast" :class="searchToast.type">
+          {{ searchToast.message }}
+        </div>
+      </transition>
     </Teleport>
 
   </div>
@@ -107,12 +173,13 @@
 
 <script setup>
 // ── Canvas size variables ─────────────────────────────────────
-const TOON_SIZE   = 80    // default toon size in px when dropped
-const TOPBAR_H    = 34    // top bar height in px
-const BOTTOMBAR_H = 35    // bottom bar height in px
-const CANVAS_W    = 800   // design-space canvas width
-const CANVAS_H    = 600   // design-space canvas height
-const SIZE_CYCLE  = [1, 0.5, 2]  // sizeScale cycle: default → half → double
+const TOON_SIZE        = 80    // default toon size in px when dropped
+const TOPBAR_H         = 34    // top bar height in px
+const BOTTOMBAR_H      = 35    // bottom bar height in px
+const CANVAS_W         = 800   // design-space canvas width
+const CANVAS_H         = 600   // design-space canvas height
+const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
+const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
 function toonW(t) { return (t.width  || TOON_SIZE) * (t.sizeScale || 1) }
 function toonH(t) { return (t.height || TOON_SIZE) * (t.sizeScale || 1) }
@@ -152,12 +219,33 @@ const innerScaleStyle = computed(() => ({
   height:          `${CANVAS_H}px`,
 }))
 
-const canvasEl   = ref(null)
+const canvasEl       = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
+// True while build-mode data is loading (prevents double-click and shows spinner on button)
+const buildLoading = ref(false)
+
 // Local drag: repositioning toons already on the canvas
 const localDrag = ref(null)  // { toon, offsetX, offsetY }
+
+// Long-press (mobile): hold 2s on a canvas toon to remove it
+const LONG_PRESS_DURATION  = 2000
+const LONG_PRESS_MOVE_THRESHOLD = 10
+const longPressTimer  = ref(null)
+const longPressToon   = ref(null)  // { toon, toons, startClientX, startClientY }
+
+function cancelLongPress() {
+  if (longPressTimer.value) { clearTimeout(longPressTimer.value); longPressTimer.value = null }
+  longPressToon.value = null
+}
+
+// ── cZone Search state ────────────────────────────────────────
+const czoneSearchItems  = ref([])
+const captureModalVisible = ref(false)
+const capturedCtoon       = ref(null)
+const searchToast         = reactive({ visible: false, message: '', type: 'success' })
+let   searchToastTimer    = null
 
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
@@ -179,7 +267,10 @@ const canvasStyle = computed(() => ({
 }))
 
 // ── Lifecycle ─────────────────────────────────────────────────
+const czoneActions = useCzoneActions()
+
 onMounted(() => {
+  czoneActions.register(save, clearZone)
   recalcScale()
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
@@ -203,12 +294,14 @@ watch(() => route.params.username, async (paramUsername) => {
 
 
 onUnmounted(() => {
+  czoneActions.unregister()
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalMove)
   window.removeEventListener('touchend',  onGlobalUp)
   // clear any leftover drag state
+  cancelLongPress()
   cz.value.activeDrag = null
   cz.value.buildMode  = false
 })
@@ -224,10 +317,20 @@ async function loadZone(username) {
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
+    loadCzoneSearchItems()
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
 }
+
+// Reload search items when switching to zone 0; clear them on other zones
+watch(() => cz.value.activeZone, (newZone) => {
+  if (newZone === 0) {
+    loadCzoneSearchItems()
+  } else {
+    czoneSearchItems.value = []
+  }
+})
 
 async function navigate(type) {
   const from = viewedUsername.value ?? user.value?.username
@@ -247,33 +350,34 @@ function goToMyCzone() {
 }
 
 async function toggleBuild() {
-  if (!isOwnZone.value) return
-  const wasBuilding = cz.value.buildMode
-  cz.value.buildMode = !cz.value.buildMode
-  if (wasBuilding) {
+  if (!isOwnZone.value || buildLoading.value) return
+  if (cz.value.buildMode) {
+    // Exit build mode: save first, then switch
+    cz.value.buildMode = false
     await save()
     const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
     if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
       cz.value.activeZone = firstActive
     }
   } else {
-    if (!cz.value.collection.length) {
-      cz.value.loadingCollection = true
-      try {
-        cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
-      } catch (e) {
-        console.error('MyCzone: failed to load collection', e)
-      } finally {
-        cz.value.loadingCollection = false
+    // Enter build mode: always fetch fresh data first so the sidebar is never blank.
+    buildLoading.value = true
+    try {
+      const username = user.value?.username
+      if (username) {
+        await Promise.all([
+          $fetch(`/api/collection/${username}`)
+            .then(data => { cz.value.collection = Array.isArray(data) ? data : [] })
+            .catch(e => { console.error('MyCzone: failed to load collection', e); if (!Array.isArray(cz.value.collection)) cz.value.collection = [] }),
+          $fetch('/api/czone/backgrounds-available')
+            .then(data => { cz.value.backgrounds = Array.isArray(data) ? data : [] })
+            .catch(e => { console.error('MyCzone: failed to load backgrounds', e); if (!Array.isArray(cz.value.backgrounds)) cz.value.backgrounds = [] }),
+        ])
       }
+    } finally {
+      buildLoading.value = false
     }
-    if (!cz.value.backgrounds.length) {
-      try {
-        cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
-      } catch (e) {
-        console.error('MyCzone: failed to load backgrounds', e)
-      }
-    }
+    cz.value.buildMode = true
   }
 }
 
@@ -331,7 +435,21 @@ function onCanvasTouchStart(e) {
     const t = toons[i]
     const w = toonW(t), h = toonH(t)
     if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      if (window.innerWidth <= 768) {
+        // Mobile: start long-press timer; drag will begin only if finger moves
+        longPressToon.value = { toon: t, toons, startClientX: touch.clientX, startClientY: touch.clientY, canvasX: x, canvasY: y }
+        longPressTimer.value = setTimeout(() => {
+          if (!longPressToon.value) return
+          const { toon: lpt, toons: lptoons } = longPressToon.value
+          const idx = lptoons.indexOf(lpt)
+          if (idx !== -1) lptoons.splice(idx, 1)
+          longPressToon.value = null
+          longPressTimer.value = null
+          localDrag.value = null
+        }, LONG_PRESS_DURATION)
+      } else {
+        localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
+      }
       e.preventDefault()
       return
     }
@@ -341,6 +459,16 @@ function onCanvasTouchStart(e) {
 // ── Global move (mouse + touch) ───────────────────────────────
 function onGlobalMove(e) {
   const { clientX, clientY } = getCoords(e)
+  // Cancel long-press if finger moved beyond threshold; start drag instead
+  if (longPressToon.value) {
+    const dx = Math.abs(clientX - longPressToon.value.startClientX)
+    const dy = Math.abs(clientY - longPressToon.value.startClientY)
+    if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+      const { toon, canvasX, canvasY } = longPressToon.value
+      cancelLongPress()
+      localDrag.value = { toon, offsetX: canvasX - toon.x, offsetY: canvasY - toon.y }
+    }
+  }
   if (cz.value.activeDrag || localDrag.value) {
     e.preventDefault()  // prevent page scroll during drag
   }
@@ -358,6 +486,7 @@ function onGlobalMove(e) {
 
 // ── Global up (mouse + touch) ─────────────────────────────────
 function onGlobalUp(e) {
+  cancelLongPress()
   const { clientX, clientY } = getCoords(e)
   if (cz.value.activeDrag && isOverCanvas(clientX, clientY)) {
     const { x, y } = toCanvasCoords(clientX, clientY)
@@ -415,6 +544,100 @@ function cycleToonSize(idx) {
 function onToonImgLoad(e, toon) {
   if (!toon.width)  toon.width  = e.target.naturalWidth
   if (!toon.height) toon.height = e.target.naturalHeight
+}
+
+// ── cZone Search helpers ──────────────────────────────────────
+function showSearchToast(message, type = 'success') {
+  if (searchToastTimer) clearTimeout(searchToastTimer)
+  searchToast.message = message
+  searchToast.type    = type
+  searchToast.visible = true
+  searchToastTimer = setTimeout(() => { searchToast.visible = false }, 2500)
+}
+
+function randomSearchPosition(size) {
+  const maxX = Math.max(0, CANVAS_W - size)
+  const maxY = Math.max(0, CANVAS_H - size)
+  return {
+    x: Math.floor(Math.random() * (maxX + 1)),
+    y: Math.floor(Math.random() * (maxY + 1))
+  }
+}
+
+function buildSearchItems(items) {
+  return items.map((entry) => {
+    const size = SEARCH_TOON_SIZE
+    const pos  = randomSearchPosition(size)
+    return {
+      appearanceId: entry.appearanceId,
+      cZoneSearchId: entry.cZoneSearchId,
+      ctoonId: entry.ctoon?.id,
+      name: entry.ctoon?.name || 'cToon',
+      assetPath: entry.ctoon?.assetPath,
+      rarity: entry.ctoon?.rarity,
+      series: entry.ctoon?.series,
+      set: entry.ctoon?.set,
+      x: pos.x,
+      y: pos.y,
+      size,
+      isCapturing: false,
+      key: `search-${entry.appearanceId}`
+    }
+  }).filter(item => item.ctoonId && item.assetPath)
+}
+
+async function loadCzoneSearchItems() {
+  czoneSearchItems.value = []
+  if (!user.value?.id || !viewedUsername.value) return
+  if (user.value.username === viewedUsername.value) return
+  try {
+    const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const res = await $fetch(`/api/czone/${viewedUsername.value}/searches`, {
+      query: { tz, zoneIndex: 0 }
+    })
+    const items = Array.isArray(res?.items) ? res.items : []
+    czoneSearchItems.value = buildSearchItems(items)
+  } catch (err) {
+    console.error('MyCzone: failed to load cZone search items', err)
+    czoneSearchItems.value = []
+  }
+}
+
+async function captureCzoneSearchItem(item) {
+  if (!item || item.isCapturing) return
+  item.isCapturing = true
+  try {
+    const res  = await $fetch('/api/czone/searches/capture', {
+      method: 'POST',
+      body: { appearanceId: item.appearanceId }
+    })
+    const name = res?.ctoon?.name || item.name
+    showSearchToast(`Captured ${name}!`, 'success')
+    capturedCtoon.value = res?.ctoon ? { ...res.ctoon } : {
+      name: item.name,
+      assetPath: item.assetPath,
+      rarity: item.rarity,
+      series: item.series,
+      set: item.set,
+      captureCount: 1,
+      ownedCount: 1
+    }
+    captureModalVisible.value = true
+    czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+  } catch (err) {
+    const message = err?.data?.statusMessage || 'Failed to capture cToon.'
+    showSearchToast(message, 'error')
+    if (String(message).toLowerCase().includes('already')) {
+      czoneSearchItems.value = czoneSearchItems.value.filter(i => i.appearanceId !== item.appearanceId)
+      return
+    }
+    item.isCapturing = false
+  }
+}
+
+function closeCaptureModal() {
+  captureModalVisible.value = false
+  capturedCtoon.value = null
 }
 
 // ── Save / Clear (called from CzoneEdit emits via page) ───────
@@ -536,6 +759,15 @@ defineExpose({ save, clearZone })
 .cz-item.is-dragging { opacity: 0.5; }
 .cz-item.is-viewable { pointer-events: auto; cursor: pointer; }
 .cz-item.is-viewable:hover { filter: brightness(1.1); }
+.cz-item.is-long-pressing {
+  animation: cz-long-press-shrink 2s linear forwards;
+  transform-origin: center;
+}
+@keyframes cz-long-press-shrink {
+  0%   { transform: scale(1);    filter: brightness(1); }
+  60%  { transform: scale(0.85); filter: brightness(1.25) drop-shadow(0 0 6px rgba(255,80,80,0.8)); }
+  100% { transform: scale(0.65); filter: brightness(1.5)  drop-shadow(0 0 10px rgba(255,80,80,1)); }
+}
 
 .cz-item-img {
   width: 100%;
@@ -609,6 +841,12 @@ defineExpose({ save, clearZone })
   text-align: center;
   flex: 1;
 }
+.cz-build-hint-mobile  { display: none; }
+.cz-build-hint-desktop { display: inline; }
+@media (max-width: 768px) {
+  .cz-build-hint-mobile  { display: inline; }
+  .cz-build-hint-desktop { display: none; }
+}
 
 .cz-nav-buttons {
   display: flex;
@@ -644,4 +882,66 @@ defineExpose({ save, clearZone })
   z-index: 9999;
   image-rendering: pixelated;
 }
+
+/* ── cZone Search ── */
+.czone-search-ctoon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.czone-search-ctoon::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.75) 0%, rgba(255, 215, 0, 0.15) 55%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  filter: blur(2px);
+  animation: czone-search-pulse 2.6s ease-in-out infinite;
+  z-index: 0;
+}
+.czone-search-image {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+@keyframes czone-search-pulse {
+  0%   { transform: scale(0.9); opacity: 0.65; }
+  50%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.65; }
+}
+
+/* ── cZone Search: toast ── */
+.cz-search-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.cz-search-toast.success { background: #16a34a; }
+.cz-search-toast.error   { background: #dc2626; }
+
+/* ── cZone Search: capture modal fade ── */
+.cz-fade-enter-active,
+.cz-fade-leave-active { transition: opacity 0.2s; }
+.cz-fade-enter-from,
+.cz-fade-leave-to    { opacity: 0; }
 </style>

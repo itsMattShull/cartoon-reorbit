@@ -10,7 +10,7 @@
         @click="onLaneClick(idx)"
         :class="[
           'relative', // so we can show a small 'Full' badge
-          'flex flex-row md:flex-col items-center bg-white rounded-lg shadow-lg p-4 transition',
+          'flex flex-row md:flex-col items-center bg-white rounded-lg shadow-lg p-4 transition text-gray-800',
           'w-full md:w-1/3',
           (phase!=='select' || confirmed)
             ? 'pointer-events-none opacity-70'

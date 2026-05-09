@@ -53,7 +53,10 @@ export default defineEventHandler(async (event) => {
     middleSidebar2ImagePath: null,
     middleSidebar2Link:      null,
     middleSidebar3ImagePath: null,
-    middleSidebar3Link:      null
+    middleSidebar3Link:      null,
+    newsImagePath:           null,
+    earnPointsImagePath:     null,
+    labelImagePath:          null
   }
 
   // fs prep
@@ -104,7 +107,10 @@ export default defineEventHandler(async (event) => {
     homeImage4:       await saveIfPresent('homeImage4'),
     middleSidebar1:   await saveIfPresent('middleSidebar1'),
     middleSidebar2:   await saveIfPresent('middleSidebar2'),
-    middleSidebar3:   await saveIfPresent('middleSidebar3')
+    middleSidebar3:   await saveIfPresent('middleSidebar3'),
+    news:             await saveIfPresent('news'),
+    earnPoints:       await saveIfPresent('earnPoints'),
+    label:            await saveIfPresent('label')
   }
 
   // helper: update one slot without touching others unless provided
@@ -151,7 +157,10 @@ export default defineEventHandler(async (event) => {
     middleSidebar2ImagePath:  resolveSlot('middleSidebar2ImagePath',  'middleSidebar2',  'middleSidebar2Path',  current.middleSidebar2ImagePath),
     middleSidebar2Link:       resolveLink('middleSidebar2Link', current.middleSidebar2Link),
     middleSidebar3ImagePath:  resolveSlot('middleSidebar3ImagePath',  'middleSidebar3',  'middleSidebar3Path',  current.middleSidebar3ImagePath),
-    middleSidebar3Link:       resolveLink('middleSidebar3Link', current.middleSidebar3Link)
+    middleSidebar3Link:       resolveLink('middleSidebar3Link', current.middleSidebar3Link),
+    newsImagePath:            resolveSlot('newsImagePath',            'news',            'newsPath',            current.newsImagePath),
+    earnPointsImagePath:      resolveSlot('earnPointsImagePath',      'earnPoints',      'earnPointsPath',      current.earnPointsImagePath),
+    labelImagePath:           resolveSlot('labelImagePath',           'label',           'labelPath',           current.labelImagePath)
   }
 
   const cfg = await db.homepageConfig.upsert({
@@ -170,7 +179,10 @@ export default defineEventHandler(async (event) => {
       'homeImage3Path', 'homeImage3Link', 'homeImage4Path', 'homeImage4Link',
       'middleSidebar1ImagePath', 'middleSidebar1Link',
       'middleSidebar2ImagePath', 'middleSidebar2Link',
-      'middleSidebar3ImagePath', 'middleSidebar3Link'
+      'middleSidebar3ImagePath', 'middleSidebar3Link',
+      'newsImagePath',
+      'earnPointsImagePath',
+      'labelImagePath'
     ]
     for (const key of fields) {
       const prev = current[key] ?? null
@@ -201,6 +213,9 @@ export default defineEventHandler(async (event) => {
     middleSidebar2ImagePath: cfg.middleSidebar2ImagePath,
     middleSidebar2Link:      cfg.middleSidebar2Link,
     middleSidebar3ImagePath: cfg.middleSidebar3ImagePath,
-    middleSidebar3Link:      cfg.middleSidebar3Link
+    middleSidebar3Link:      cfg.middleSidebar3Link,
+    newsImagePath:           cfg.newsImagePath,
+    earnPointsImagePath:     cfg.earnPointsImagePath,
+    labelImagePath:          cfg.labelImagePath
   }
 })

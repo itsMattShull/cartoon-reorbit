@@ -113,6 +113,22 @@
             </p>
           </div>
 
+          <!-- daily purchase limit -->
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label class="text-sm font-medium">Daily purchase limit per user</label>
+            <input
+              v-model.number="dailyPurchaseLimit"
+              type="number"
+              min="1"
+              placeholder="Leave blank for unlimited"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+              @input="onDailyLimitInput"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              Max purchases per user per day (8pm–7:59pm CST window). Leave blank for unlimited.
+            </p>
+          </div>
+
           <!-- sell-out behavior -->
           <div class="lg:col-span-2 space-y-2">
             <p class="text-sm font-medium">Pack sell-out behavior</p>
@@ -262,13 +278,19 @@ const { data: packData, pending, error } = await useFetch(`/api/admin/packs/${id
 const loadedOk = computed(() => !pending.value && !error.value)
 
 /* ---------------- basic meta refs ---------------- */
-const name        = ref('')
-const price       = ref(0)
-const description = ref('')
-const inCmart     = ref(false)
-const scheduledAtLocal = ref('')
+const name               = ref('')
+const price              = ref(0)
+const description        = ref('')
+const inCmart            = ref(false)
+const scheduledAtLocal   = ref('')
 const scheduledOffAtLocal = ref('')
-const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
+const sellOutBehavior    = ref('REMOVE_ON_ANY_RARITY_EMPTY')
+const dailyPurchaseLimit = ref(null)
+
+function onDailyLimitInput(e) {
+  const raw = e.target.value
+  dailyPurchaseLimit.value = raw === '' ? null : Math.max(1, Math.floor(Number(raw)))
+}
 
 /* ---------------- thumbnail upload ---------------- */
 const fileInput    = ref(null)
@@ -465,7 +487,8 @@ onMounted(async () => {
     price.value       = p.price
     description.value = p.description
     inCmart.value     = p.inCmart
-    sellOutBehavior.value = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
+    sellOutBehavior.value    = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
+    dailyPurchaseLimit.value = p.dailyPurchaseLimit ?? null
     imagePreview.value= p.imagePath
     scheduledAtLocal.value = p.scheduledAt ? centralDateTimeValue(new Date(p.scheduledAt)) : ''
     scheduledOffAtLocal.value = p.scheduledOffAt ? centralDateTimeValue(new Date(p.scheduledOffAt)) : ''
@@ -515,6 +538,7 @@ async function submit () {
     scheduledAtLocal: scheduledAtLocal.value || '',
     scheduledOffAtLocal: scheduledOffAtLocal.value || '',
     sellOutBehavior: sellOutBehavior.value,
+    dailyPurchaseLimit: dailyPurchaseLimit.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({
       ctoonId: id,

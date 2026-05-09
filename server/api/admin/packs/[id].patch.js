@@ -181,11 +181,12 @@ export default defineEventHandler(async (event) => {
     await tx.pack.update({
       where: { id: packId },
       data: {
-        name:        meta.name.trim(),
-        price:       meta.price ?? 0,
-        description: meta.description ?? null,
-        inCmart:     !!meta.inCmart,
-        sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
+        name:               meta.name.trim(),
+        price:              meta.price ?? 0,
+        description:        meta.description ?? null,
+        inCmart:            !!meta.inCmart,
+        sellOutBehavior:    meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
+        dailyPurchaseLimit: meta.dailyPurchaseLimit != null ? Number(meta.dailyPurchaseLimit) : null,
         scheduledOffAt,
         scheduledAt,
         ...(imagePath ? { imagePath } : {})
