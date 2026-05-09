@@ -59,12 +59,12 @@ html.newsite-active body {
   --topbar-primary-pl:                 0px;
   --topbar-primary-pr:                 0px;
 
-  --topbar-primary-logo-bg:            transparent;
+  --topbar-primary-logo-bg:            #000000;
   --topbar-primary-logo-height:        var(--topbar-primary-height);
   --topbar-primary-logo-width:         200px;
   --topbar-primary-logo-scale-x:       1;
   --topbar-primary-logo-scale-y:       1.1;
-  --topbar-primary-logo-radius:        0px;
+  --topbar-primary-logo-radius:        8px 0 0 8px;
   --topbar-primary-logo-border-thickness: 0px;
   --topbar-primary-logo-border-color:  transparent;
   --topbar-primary-logo-pt:            0px;
