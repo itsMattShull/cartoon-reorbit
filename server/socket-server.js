@@ -143,10 +143,22 @@ const COURSE_SPINE = [
   [-15, -108],
   [ 0,  -118],
 ]
-const COURSE_HALF_W = 5   // half-width of channel
-const COURSE_N_SEGS = 120 // number of approximation segments
-const FUNNEL_Z_OPEN     = 109  // z-position of the open (top) end of the staging funnel
-const FUNNEL_OPEN_HALF_W = 14  // half-width of the funnel at its open end
+const COURSE_HALF_W      = 5   // half-width of channel
+const COURSE_N_SEGS      = 120 // number of approximation segments
+const FUNNEL_OPEN_HALF_W = 14  // half-width at the funnel's open end
+const FUNNEL_LENGTH      = 19  // distance from course start to funnel open end
+
+// Funnel approach direction — unit vector pointing from course start backward into the funnel,
+// derived from the first spine segment so the funnel aligns with the track.
+{
+  const _dx = COURSE_SPINE[1][0] - COURSE_SPINE[0][0]  // 15
+  const _dz = COURSE_SPINE[1][1] - COURSE_SPINE[0][1]  // -18
+  const _l  = Math.sqrt(_dx * _dx + _dz * _dz)
+  var FUNNEL_AP_DX = -_dx / _l   // approach X  (unit)
+  var FUNNEL_AP_DZ = -_dz / _l   // approach Z  (unit)
+  var FUNNEL_AP_LX = -FUNNEL_AP_DZ  // left-normal X of approach
+  var FUNNEL_AP_LZ =  FUNNEL_AP_DX  // left-normal Z of approach
+}
 
 function crSample(pts, t) {
   const n   = pts.length - 1
@@ -305,41 +317,43 @@ function buildMarblesWorld() {
     world.addBody(fw)
   }
 
-  // Funnel — V-shaped staging area attached to the start of the course.
-  // Marbles wait here before the race; the open end is at FUNNEL_Z_OPEN.
+  // Funnel — V-shaped staging area oriented along the reverse of the course start direction.
   {
-    const F_Z0 = 90, F_Z1 = FUNNEL_Z_OPEN
-    const F_HW0 = COURSE_HALF_W, F_HW1 = FUNNEL_OPEN_HALF_W
+    const [s0x, s0z] = COURSE_SPINE[0]  // [0, 90]
+    // Open-end centre point
+    const fCx = s0x + FUNNEL_AP_DX * FUNNEL_LENGTH
+    const fCz = s0z + FUNNEL_AP_DZ * FUNNEL_LENGTH
+    // Four corners of the trapezoid
+    const nLx = s0x + FUNNEL_AP_LX * COURSE_HALF_W,      nLz = s0z + FUNNEL_AP_LZ * COURSE_HALF_W
+    const nRx = s0x - FUNNEL_AP_LX * COURSE_HALF_W,      nRz = s0z - FUNNEL_AP_LZ * COURSE_HALF_W
+    const fLx = fCx + FUNNEL_AP_LX * FUNNEL_OPEN_HALF_W, fLz = fCz + FUNNEL_AP_LZ * FUNNEL_OPEN_HALF_W
+    const fRx = fCx - FUNNEL_AP_LX * FUNNEL_OPEN_HALF_W, fRz = fCz - FUNNEL_AP_LZ * FUNNEL_OPEN_HALF_W
 
-    // Floor covering the entire funnel area
+    // Helper — add a static wall body between two endpoint positions
+    function addFunnelWall(x1, z1, x2, z2, hw) {
+      const dx = x2 - x1, dz = z2 - z1
+      const len = Math.sqrt(dx * dx + dz * dz)
+      const body = new CANNON.Body({ mass: 0, material: trackMat })
+      body.addShape(new CANNON.Box(new CANNON.Vec3(hw, WALL_H, len / 2)))
+      body.position.set((x1 + x2) / 2, WALL_H, (z1 + z2) / 2)
+      body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(dx, dz))
+      world.addBody(body)
+    }
+
+    addFunnelWall(nLx, nLz, fLx, fLz, WALL_T)  // left angled wall
+    addFunnelWall(nRx, nRz, fRx, fRz, WALL_T)  // right angled wall
+    addFunnelWall(fLx, fLz, fRx, fRz, WALL_T)  // back wall across open end
+
+    // Floor: wide box along the approach axis
     const fFloor = new CANNON.Body({ mass: 0, material: trackMat })
-    fFloor.addShape(new CANNON.Box(new CANNON.Vec3(F_HW1, FLOOR_H, (F_Z1 - F_Z0) / 2)))
-    fFloor.position.set(0, -FLOOR_H, (F_Z0 + F_Z1) / 2)
+    fFloor.addShape(new CANNON.Box(new CANNON.Vec3(FUNNEL_OPEN_HALF_W, FLOOR_H, FUNNEL_LENGTH / 2)))
+    fFloor.position.set(
+      s0x + FUNNEL_AP_DX * FUNNEL_LENGTH / 2,
+      -FLOOR_H,
+      s0z + FUNNEL_AP_DZ * FUNNEL_LENGTH / 2
+    )
+    fFloor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(FUNNEL_AP_DX, FUNNEL_AP_DZ))
     world.addBody(fFloor)
-
-    // Left angled wall: from (-F_HW0, F_Z0) to (-F_HW1, F_Z1)
-    const ldx = -(F_HW1 - F_HW0), ldz = F_Z1 - F_Z0
-    const llen = Math.sqrt(ldx * ldx + ldz * ldz)
-    const lw = new CANNON.Body({ mass: 0, material: trackMat })
-    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, llen / 2)))
-    lw.position.set(-(F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
-    lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(ldx, ldz))
-    world.addBody(lw)
-
-    // Right angled wall: from (F_HW0, F_Z0) to (F_HW1, F_Z1)
-    const rdx = F_HW1 - F_HW0, rdz = F_Z1 - F_Z0
-    const rlen = Math.sqrt(rdx * rdx + rdz * rdz)
-    const rw = new CANNON.Body({ mass: 0, material: trackMat })
-    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, rlen / 2)))
-    rw.position.set((F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
-    rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(rdx, rdz))
-    world.addBody(rw)
-
-    // Back wall across the open end of the funnel
-    const bw = new CANNON.Body({ mass: 0, material: trackMat })
-    bw.addShape(new CANNON.Box(new CANNON.Vec3(F_HW1 + WALL_T, WALL_H, WALL_T)))
-    bw.position.set(0, WALL_H, F_Z1)
-    world.addBody(bw)
   }
 
   // End-cap wall at the finish line — solid physics body matching the visual cap
@@ -376,19 +390,23 @@ function buildMarblesWorld() {
 }
 
 function getMarbleStartPositions(count) {
-  const cols  = Math.min(count, 4)
-  const rows  = Math.ceil(count / cols)
-  const zTop  = FUNNEL_Z_OPEN - 2
-  const zBot  = 93
+  const [s0x, s0z] = COURSE_SPINE[0]
+  const cols = Math.min(count, 4)
+  const rows = Math.ceil(count / cols)
   return Array.from({ length: count }, (_, i) => {
     const row  = Math.floor(i / cols)
     const col  = i % cols
-    const z    = rows > 1 ? zTop - row * (zTop - zBot) / (rows - 1) : (zTop + zBot) / 2
-    const t    = (z - 90) / (FUNNEL_Z_OPEN - 90)
+    // Distance along approach axis: row 0 near the open end, last row near course start
+    const dist = rows > 1 ? (FUNNEL_LENGTH - 3) - row * (FUNNEL_LENGTH - 5) / (rows - 1) : FUNNEL_LENGTH / 2
+    const t    = dist / FUNNEL_LENGTH
     const hw   = COURSE_HALF_W + (FUNNEL_OPEN_HALF_W - COURSE_HALF_W) * t
     const usHW = (hw - MBL_RADIUS - 0.2) * 0.9
-    const x    = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
-    return { x: x + (Math.random() - 0.5) * 0.2, y: 2, z: z + (Math.random() - 0.5) * 0.3 }
+    const side = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
+    return {
+      x: s0x + FUNNEL_AP_DX * dist + FUNNEL_AP_LX * side + (Math.random() - 0.5) * 0.2,
+      y: 2,
+      z: s0z + FUNNEL_AP_DZ * dist + FUNNEL_AP_LZ * side + (Math.random() - 0.5) * 0.3,
+    }
   })
 }
 
