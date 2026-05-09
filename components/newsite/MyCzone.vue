@@ -330,7 +330,7 @@ async function loadZone(username) {
 
 async function prefetchEditResources() {
   const fetches = []
-  if (!cz.value.collection.length && !cz.value.loadingCollection) {
+  if (!cz.value.collection?.length && !cz.value.loadingCollection) {
     fetches.push(
       (async () => {
         cz.value.loadingCollection = true
@@ -344,7 +344,7 @@ async function prefetchEditResources() {
       })()
     )
   }
-  if (!cz.value.backgrounds.length) {
+  if (!cz.value.backgrounds?.length) {
     fetches.push(
       (async () => {
         cz.value.loadingBackgrounds = true
@@ -410,7 +410,7 @@ async function toggleBuild() {
       }
 
       const fetches = []
-      if (!cz.value.collection.length) {
+      if (!cz.value.collection?.length) {
         fetches.push(
           (async () => {
             try {
@@ -421,7 +421,7 @@ async function toggleBuild() {
           })()
         )
       }
-      if (!cz.value.backgrounds.length) {
+      if (!cz.value.backgrounds?.length) {
         fetches.push(
           (async () => {
             try {
