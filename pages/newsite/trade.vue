@@ -1,31 +1,12 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <TradeSidebar v-if="showTradeFilters" />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <Trade />
-    </template>
-  </NuxtLayout>
+  <Trade />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: ['auth', 'newsite'], showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: ['auth', 'newsite'], showAdbar: true, showNav: true })
 
-const { tradeActiveTab, tradeTargetUser, tradeCurrentStep } = useTradePageFilters()
-
-const showTradeFilters = computed(() =>
-  tradeActiveTab.value === 'create' &&
-  tradeTargetUser.value !== null &&
-  tradeCurrentStep.value >= 1 &&
-  tradeCurrentStep.value <= 2
-)
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('TradeSidebarWrapper')
 </script>
 
 <style>

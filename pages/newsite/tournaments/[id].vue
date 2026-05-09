@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="tournament-detail overflow-y-auto h-full px-4 py-3">
+  <div class="tournament-detail overflow-y-auto h-full px-4 py-3">
         <div class="mb-3">
           <NuxtLink
             to="/newsite/gtoons"
@@ -172,8 +164,6 @@
           </div>
         </template>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
@@ -181,7 +171,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const route = useRoute()
 const tournament = ref(null)

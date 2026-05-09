@@ -1,7 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #main-content>
-      <div class="play-wrapper">
+  <div class="play-wrapper">
         <!-- Pregame: deck select + ready -->
         <div v-if="!game" class="pregame-panel">
           <div class="max-w-2xl mx-auto bg-white/10 border border-white/20 rounded-lg p-5">
@@ -222,8 +220,6 @@
           </transition>
         </div>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
@@ -237,7 +233,7 @@ import ClashHand from '@/components/ClashHand.vue'
 import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'newsite-template',
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
@@ -245,6 +241,9 @@ definePageMeta({
   showFooter: false,
   mainContentBorder: false,
 })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const { user, fetchSelf } = useAuth()
 await fetchSelf()

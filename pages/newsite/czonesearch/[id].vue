@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="czs-wrap">
+  <div class="czs-wrap">
         <div v-if="pending" class="czs-card">
           <div class="h-6 w-48 rounded bg-white/10 animate-pulse"></div>
           <div class="mt-4 h-4 w-72 rounded bg-white/10 animate-pulse"></div>
@@ -237,12 +229,13 @@
           </section>
         </div>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const route = useRoute()
 const rawId = route.params.id

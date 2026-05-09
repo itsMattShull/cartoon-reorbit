@@ -1,29 +1,12 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter :sort-options="myCollectionSortOptions" />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <MyCollection />
-    </template>
-  </NuxtLayout>
+  <MyCollection />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
 
-const myCollectionSortOptions = [
-  { value: 'acquiredDate', label: 'Acquired Date' },
-  { value: 'name',         label: 'Name'          },
-  { value: 'price',        label: 'Price'         },
-  { value: 'rarity',       label: 'Rarity'        },
-]
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('MyCollectionSidebar')
 
 const filter = useNewSiteCtoonFilter()
 Object.assign(filter.value, {

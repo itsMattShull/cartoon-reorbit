@@ -1,33 +1,26 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
+  <div class="home-images-grid">
+    <template v-for="n in 4" :key="n">
+      <component
+        :is="imageLink(n) ? 'a' : 'div'"
+        v-bind="imageLink(n) ? { href: imageLink(n), target: linkTarget(n) } : {}"
+        class="home-image-cell"
+      >
+        <img v-if="imagePath(n)" :src="imagePath(n)" :alt="'Home image ' + n" class="home-image" />
+        <div v-else class="home-image-placeholder"></div>
+      </component>
     </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="home-images-grid">
-        <template v-for="n in 4" :key="n">
-          <component
-            :is="imageLink(n) ? 'a' : 'div'"
-            v-bind="imageLink(n) ? { href: imageLink(n), target: linkTarget(n) } : {}"
-            class="home-image-cell"
-          >
-            <img v-if="imagePath(n)" :src="imagePath(n)" :alt="'Home image ' + n" class="home-image" />
-            <div v-else class="home-image-placeholder"></div>
-          </component>
-        </template>
-      </div>
-    </template>
-  </NuxtLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
 useHead({ htmlAttrs: { class: 'newsite-home' } })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const cfg = ref(null)
 

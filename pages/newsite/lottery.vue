@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="lottery-content">
+  <div class="lottery-content">
         <div class="lottery-header-bar">
           <span class="lottery-header-title">Lottery</span>
         </div>
@@ -87,8 +79,6 @@
           </div>
         </div>
       </transition>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
@@ -96,7 +86,10 @@ import { ref, onMounted } from 'vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '~/composables/useAuth'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const { fetchSelf } = useAuth()
 

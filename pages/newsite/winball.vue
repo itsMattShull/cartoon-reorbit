@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div ref="gameContainer" class="game-container">
+  <div ref="gameContainer" class="game-container">
         <button class="reset-btn" @click="resetBall">Reset Ball</button>
         <canvas ref="canvas" class="game-canvas"></canvas>
 
@@ -29,14 +21,15 @@
         <!-- Scavenger Hunt Modal (defer until Winball result modal closed) -->
         <ScavengerHuntModal v-if="!modal.open && scavenger.isOpen && scavenger.sessionId" />
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
 import { useHead } from '#imports'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 useHead({
   meta: [
