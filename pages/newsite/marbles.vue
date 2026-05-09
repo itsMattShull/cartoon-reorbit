@@ -96,41 +96,45 @@ const hasJoined = computed(() =>
 const threeCanvas = ref(null)
 
 // ─── Marble race constants (must match server) ──────────────────────────────
-const MBL_RADIUS   = 0.8
-const FINISH_Z     = -105
-const MBL_FLOOR_SEGS = [
-  [  0,  70,  6, 20],
-  [  4,  40,  8, 10],
-  [  8,   7,  5, 22.5],
-  [  0, -25, 10, 10],
-  [ -8, -55,  5, 20],
-  [ -4,-82.5, 8, 7.5],
-  [  0,-100,  7, 10],
-]
-const MBL_WALL_PAIRS = [
-  [0, -6.3,  6.3],
-  [1, -4.5, 12.5],
-  [2,  2.7, 13.3],
-  [3,-10.5, 10.5],
-  [4,-13.3, -2.7],
-  [5,-12.5,  4.5],
-  [6, -7.3,  7.3],
-]
-const MBL_PEGS = [
-  [-3,78],[3,75],[0,72],[-2,68],[2,64],[-3,60],[3,57],[0,54],
-  [5,25],[11,22],[8,18],[5,14],[11,10],[8,6],[5,2],[11,-2],[8,-7],[5,-11],
-  [-11,-40],[-5,-43],[-8,-47],[-11,-51],[-5,-55],[-8,-59],[-11,-63],[-5,-67],[-8,-71],
-]
+const MBL_RADIUS  = 0.8
+const FINISH_Z    = -118
 
-// Transition connectors: [cx, cz, halfW, halfLen] — thin bridges between diagonal segments
-const MBL_TRANSITIONS = [
-  [ 3, 50, 9, 1],   // seg0→seg1
-  [ 3, 30, 9, 1],   // seg1→seg2
-  [ 4,-15, 11, 1],  // seg2→seg3
-  [-4,-35, 11, 1],  // seg3→seg4
-  [-6,-75, 9, 1],   // seg4→seg5
-  [-2,-90, 8, 1],   // seg5→seg6
+// Curved course — Catmull-Rom spine [x, z]
+const COURSE_SPINE = [
+  [ 0,   90],
+  [15,   72],
+  [ 0,   54],
+  [-15,  36],
+  [ 0,   18],
+  [15,    0],
+  [ 0,  -18],
+  [-15, -36],
+  [ 0,  -54],
+  [15,  -72],
+  [ 0,  -90],
+  [-15, -108],
+  [ 0,  -118],
 ]
+const COURSE_HALF_W = 5
+const COURSE_N_SEGS = 120
+
+function crSample(pts, t) {
+  const n   = pts.length - 1
+  const seg = Math.min(Math.floor(t * n), n - 1)
+  const lt  = t * n - seg
+  const i0 = Math.max(0, seg - 1), i1 = seg
+  const i2 = Math.min(n, seg + 1),  i3 = Math.min(n, seg + 2)
+  const [p0, p1, p2, p3] = [pts[i0], pts[i1], pts[i2], pts[i3]]
+  const t2 = lt * lt, t3 = t2 * lt
+  return [
+    0.5 * (2*p1[0] + (-p0[0]+p2[0])*lt + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+    0.5 * (2*p1[1] + (-p0[1]+p2[1])*lt + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3),
+  ]
+}
+
+function buildCourseSamples() {
+  return Array.from({ length: COURSE_N_SEGS }, (_, i) => crSample(COURSE_SPINE, i / (COURSE_N_SEGS - 1)))
+}
 
 // ─── Three.js internals ────────────────────────────────────────────────────
 let renderer, scene, camera, animId
@@ -141,7 +145,7 @@ let labelContainer = null
 // Camera control state
 let isDragging = false, lastMouseX = 0, lastMouseY = 0
 let camTheta = Math.PI, camPhi = Math.PI / 4
-let camDist = 60, camTarget = new THREE.Vector3(0, 0, 70)
+let camDist = 60, camTarget = new THREE.Vector3(0, 0, 75)
 let userOverride = false, userOverrideTimer = null
 let cameraMode = 'static'  // 'static' | 'follow'
 
@@ -256,106 +260,87 @@ function initThree() {
 }
 
 function buildTrackMeshes() {
-  const floorMat = new THREE.MeshStandardMaterial({
-    color: 0x2d6a4f, roughness: 0.8, metalness: 0.1,
-  })
-  const channelMat = new THREE.MeshStandardMaterial({
-    color: 0x1e5c3a, roughness: 0.9, metalness: 0,
-  })
-  const wallMat = new THREE.MeshStandardMaterial({
-    color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85,
-  })
-  const pegMat = new THREE.MeshStandardMaterial({
-    color: 0xffd60a, roughness: 0.3, metalness: 0.5, emissive: 0x554400,
-  })
-  const transitionMat = new THREE.MeshStandardMaterial({
-    color: 0x245c40, roughness: 0.85, metalness: 0.05,
-  })
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8, metalness: 0.1 })
+  const wallMat  = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85 })
+  const pegMat   = new THREE.MeshStandardMaterial({ color: 0xffd60a, roughness: 0.3, metalness: 0.5, emissive: 0x554400 })
 
-  // Floor segments
-  for (const [cx, cz, halfW, halfLen] of MBL_FLOOR_SEGS) {
-    const geo = new THREE.BoxGeometry(halfW * 2, 1, halfLen * 2)
-    const mesh = new THREE.Mesh(geo, floorMat)
-    mesh.position.set(cx, -0.5, cz)
-    mesh.receiveShadow = true
-    scene.add(mesh)
+  const samples  = buildCourseSamples()
+  const WALL_H   = 3
+  const WALL_T   = 0.3
+  const pegGeo   = new THREE.CylinderGeometry(0.45, 0.45, 3, 10)
 
-    const lineGeo = new THREE.PlaneGeometry(halfW * 2 - 0.2, halfLen * 2 - 0.2)
-    const lineMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 1 })
-    const lineMesh = new THREE.Mesh(lineGeo, lineMat)
-    lineMesh.rotation.x = -Math.PI / 2
-    lineMesh.position.set(cx, 0.01, cz)
-    scene.add(lineMesh)
+  for (let i = 0; i < samples.length - 1; i++) {
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const midX = (x1 + x2) / 2, midZ = (z1 + z2) / 2
+    const dx = x2 - x1, dz = z2 - z1
+    const len = Math.sqrt(dx * dx + dz * dz)
+    if (len < 0.001) continue
+    const angle   = Math.atan2(dx, dz)
+    const segLen  = len + 0.16   // slight overlap
+
+    // Floor
+    const floorGeo  = new THREE.BoxGeometry(COURSE_HALF_W * 2, 1, segLen)
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat)
+    floorMesh.position.set(midX, -0.5, midZ)
+    floorMesh.rotation.y = angle
+    floorMesh.receiveShadow = true
+    scene.add(floorMesh)
+
+    // Left wall
+    const wallGeo  = new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, segLen)
+    const lx = midX + (-dz / len) * (COURSE_HALF_W + WALL_T)
+    const lz = midZ + ( dx / len) * (COURSE_HALF_W + WALL_T)
+    const lw = new THREE.Mesh(wallGeo, wallMat)
+    lw.position.set(lx, WALL_H, lz)
+    lw.rotation.y = angle
+    lw.castShadow = true
+    scene.add(lw)
+
+    // Right wall
+    const rx = midX + ( dz / len) * (COURSE_HALF_W + WALL_T)
+    const rz = midZ + (-dx / len) * (COURSE_HALF_W + WALL_T)
+    const rw = new THREE.Mesh(wallGeo.clone(), wallMat)
+    rw.position.set(rx, WALL_H, rz)
+    rw.rotation.y = angle
+    rw.castShadow = true
+    scene.add(rw)
   }
 
-  // Transition connector floors — bridges the X-shift between segments
-  for (const [cx, cz, halfW, halfLen] of MBL_TRANSITIONS) {
-    const geo = new THREE.BoxGeometry(halfW * 2, 1, halfLen * 2)
-    const mesh = new THREE.Mesh(geo, transitionMat)
-    mesh.position.set(cx, -0.5, cz)
-    mesh.receiveShadow = true
-    scene.add(mesh)
-  }
-
-  // Walls – tall (center Y=4, height=8) with inner curved channel slopes
-  for (const [si, lx, rx] of MBL_WALL_PAIRS) {
-    const [cx, cz, , halfLen] = MBL_FLOOR_SEGS[si]
-    for (const wx of [lx, rx]) {
-      // Main tall outer wall
-      const geo = new THREE.BoxGeometry(0.6, 8, halfLen * 2)
-      const mesh = new THREE.Mesh(geo, wallMat)
-      mesh.position.set(wx, 4, cz)
-      mesh.receiveShadow = true
-      mesh.castShadow = true
-      scene.add(mesh)
-
-      // Inner angled slope panel — gives the curved-channel appearance
-      const slopeW = 1.4
-      const slopeGeo = new THREE.BoxGeometry(slopeW, 0.35, halfLen * 2)
-      const slope = new THREE.Mesh(slopeGeo, channelMat)
-      // Tilt the slope inward toward the center of the segment
-      const rotSign = (wx > cx) ? 1 : -1
-      slope.rotation.z = rotSign * (Math.PI / 5)
-      const inward = (wx < cx) ? 1 : -1
-      slope.position.set(wx + inward * slopeW * 0.45, 0.55, cz)
-      scene.add(slope)
-    }
-  }
-
-  // Pegs – tall cylinders (match physics: radius=0.45, height=3, center Y=1.5)
-  const pegGeo = new THREE.CylinderGeometry(0.45, 0.45, 3, 10)
-  for (const [px, pz] of MBL_PEGS) {
+  // Pegs — same logic as server
+  for (let i = 5; i < samples.length - 5; i += 8) {
+    const [px, pz] = samples[i]
+    const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
+    const ddx = nx - px, ddz = nz - pz
+    const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
+    if (dlen < 0.001) continue
+    const side = ((Math.floor(i / 8)) % 3) - 1
+    const off  = side * (COURSE_HALF_W * 0.45)
     const mesh = new THREE.Mesh(pegGeo, pegMat)
-    mesh.position.set(px, 1.5, pz)
+    mesh.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
     mesh.castShadow = true
     scene.add(mesh)
   }
 }
 
 function buildFinishLine() {
-  const stripeGeo = new THREE.PlaneGeometry(16, 2)
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xffffff, emissive: 0x888888, roughness: 0.4,
-  })
+  const finishW = COURSE_HALF_W * 2
+  const stripeGeo = new THREE.PlaneGeometry(finishW, 2)
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888, roughness: 0.4 })
   const stripe = new THREE.Mesh(stripeGeo, mat)
   stripe.rotation.x = -Math.PI / 2
   stripe.position.set(0, 0.02, FINISH_Z)
   scene.add(stripe)
 
   const postGeo = new THREE.CylinderGeometry(0.3, 0.3, 6, 8)
-  const postMat = new THREE.MeshStandardMaterial({
-    color: 0xff0044, emissive: 0x880022, roughness: 0.3,
-  })
-  for (const px of [-8, 8]) {
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0x880022, roughness: 0.3 })
+  for (const px of [-(COURSE_HALF_W + 0.3), COURSE_HALF_W + 0.3]) {
     const post = new THREE.Mesh(postGeo, postMat)
     post.position.set(px, 3, FINISH_Z)
     scene.add(post)
   }
 
-  const bannerGeo = new THREE.PlaneGeometry(16, 1.2)
-  const bannerMat = new THREE.MeshStandardMaterial({
-    color: 0xff0044, emissive: 0x550011, side: THREE.DoubleSide,
-  })
+  const bannerGeo = new THREE.PlaneGeometry(finishW + 0.6, 1.2)
+  const bannerMat = new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0x550011, side: THREE.DoubleSide })
   const banner = new THREE.Mesh(bannerGeo, bannerMat)
   banner.position.set(0, 6.4, FINISH_Z)
   scene.add(banner)
@@ -385,7 +370,8 @@ function syncMarbleMeshes(marbles) {
     }
   }
 
-  const spreadMax = Math.min(marbles.length - 1, 10) * 1.8
+  const maxSpread = (COURSE_HALF_W - MBL_RADIUS - 0.3) * 2
+  const spreadMax = Math.min((marbles.length - 1) * 1.5, maxSpread)
   const step = marbles.length > 1 ? spreadMax / (marbles.length - 1) : 0
 
   marbles.forEach((m, i) => {
@@ -439,7 +425,7 @@ function resetScene() {
 
 // ─── Camera helpers ────────────────────────────────────────────────────────
 function snapCameraToStart() {
-  camTarget.set(0, 0, 70)
+  camTarget.set(0, 0, 75)
   camTheta = Math.PI
   camPhi   = Math.PI / 4.5
   camDist  = 65

@@ -124,8 +124,45 @@ let marblesFinished = new Set()
 let marblesPhysInterval = null
 let marblesBroadcastInterval = null
 
-const MBL_RADIUS  = 0.8
-const MBL_FINISH_Z = -105  // world-Z at finish line
+const MBL_RADIUS   = 0.8
+const MBL_FINISH_Z = -118  // world-Z at finish line
+
+// Curved course definition — Catmull-Rom spine control points [x, z]
+const COURSE_SPINE = [
+  [ 0,   90],
+  [15,   72],
+  [ 0,   54],
+  [-15,  36],
+  [ 0,   18],
+  [15,    0],
+  [ 0,  -18],
+  [-15, -36],
+  [ 0,  -54],
+  [15,  -72],
+  [ 0,  -90],
+  [-15, -108],
+  [ 0,  -118],
+]
+const COURSE_HALF_W = 5   // half-width of channel
+const COURSE_N_SEGS = 120 // number of approximation segments
+
+function crSample(pts, t) {
+  const n   = pts.length - 1
+  const seg = Math.min(Math.floor(t * n), n - 1)
+  const lt  = t * n - seg
+  const i0 = Math.max(0, seg - 1), i1 = seg
+  const i2 = Math.min(n, seg + 1),  i3 = Math.min(n, seg + 2)
+  const [p0, p1, p2, p3] = [pts[i0], pts[i1], pts[i2], pts[i3]]
+  const t2 = lt * lt, t3 = t2 * lt
+  return [
+    0.5 * (2*p1[0] + (-p0[0]+p2[0])*lt + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+    0.5 * (2*p1[1] + (-p0[1]+p2[1])*lt + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3),
+  ]
+}
+
+function buildCourseSamples() {
+  return Array.from({ length: COURSE_N_SEGS }, (_, i) => crSample(COURSE_SPINE, i / (COURSE_N_SEGS - 1)))
+}
 
 function marblesSnapshot() {
   return {
@@ -138,46 +175,7 @@ function marblesSnapshot() {
 }
 
 // ─── Track segments ────────────────────────────────────────────────────────
-// Flat in XZ plane.  Gravity = (0,-4,-10) drives marbles from Z=+95 → Z=-110.
 // Each entry: [cx, cz, halfW, halfLen, rotY]  (floor boxes, Y=floor surface=0)
-const MBL_FLOOR_SEGS = [
-  // section 1 – straight, centred X=0
-  [  0,  70,  6, 20, 0],
-  // diagonal transition → X=+8
-  [  4,  40,  8, 10, 0],
-  // section 2 – straight, centred X=+8
-  [  8,   7,  5, 22.5, 0],
-  // diagonal transition → X=-8
-  [  0, -25, 10, 10, 0],
-  // section 3 – straight, centred X=-8
-  [ -8, -55,  5, 20, 0],
-  // diagonal transition → X=0
-  [ -4,-82.5, 8, 7.5, 0],
-  // finish straight – centred X=0
-  [  0,-100,  7, 10, 0],
-]
-
-// Left/right wall pairs for each segment: [segIdx, leftX, rightX]
-const MBL_WALL_PAIRS = [
-  [0,  -6.3,  6.3],
-  [1,  -4.5, 12.5],
-  [2,   2.7, 13.3],
-  [3,  -10.5, 10.5],
-  [4, -13.3, -2.7],
-  [5, -12.5,  4.5],
-  [6,  -7.3,  7.3],
-]
-
-// Peg positions [x, z]
-const MBL_PEGS = [
-  // section 1 (around X=0)
-  [-3,78],[3,75],[0,72],[-2,68],[2,64],[-3,60],[3,57],[0,54],
-  // section 2 (around X=+8)
-  [5,25],[11,22],[8,18],[5,14],[11,10],[8,6],[5,2],[11,-2],[8,-7],[5,-11],
-  // section 3 (around X=-8)
-  [-11,-40],[-5,-43],[-8,-47],[-11,-51],[-5,-55],[-8,-59],[-11,-63],[-5,-67],[-8,-71],
-]
-
 function buildMarblesWorld() {
   const world = new CANNON.World()
   world.gravity.set(0, -4, -10)
@@ -186,41 +184,62 @@ function buildMarblesWorld() {
 
   const trackMat  = new CANNON.Material('mbl_track')
   const marbleMat = new CANNON.Material('mbl_marble')
+  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.35, restitution: 0.35 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.1,  restitution: 0.55 }))
 
-  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, {
-    friction: 0.35, restitution: 0.35,
-  }))
-  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, {
-    friction: 0.1, restitution: 0.55,
-  }))
+  const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
+  const WALL_T  = 0.3  // wall half-thickness
+  const FLOOR_H = 0.5  // floor half-height
 
-  const FLOOR_Y = -0.5
-  const WALL_H  = 4
+  const samples = buildCourseSamples()
 
-  // Floor segments
-  for (const [cx, cz, halfW, halfLen] of MBL_FLOOR_SEGS) {
-    const b = new CANNON.Body({ mass: 0, material: trackMat })
-    b.addShape(new CANNON.Box(new CANNON.Vec3(halfW, 0.5, halfLen)))
-    b.position.set(cx, FLOOR_Y, cz)
-    world.addBody(b)
+  for (let i = 0; i < samples.length - 1; i++) {
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const midX = (x1 + x2) / 2, midZ = (z1 + z2) / 2
+    const dx = x2 - x1, dz = z2 - z1
+    const len = Math.sqrt(dx * dx + dz * dz)
+    if (len < 0.001) continue
+    const angle = Math.atan2(dx, dz)
+    const halfSeg = len / 2 + 0.08  // slight overlap to seal gaps between boxes
+
+    // Floor
+    const floor = new CANNON.Body({ mass: 0, material: trackMat })
+    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, halfSeg)))
+    floor.position.set(midX, -FLOOR_H, midZ)
+    floor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(floor)
+
+    // Left wall  (perpendicular-left: (-dz, 0, dx) / len)
+    const lx = midX + (-dz / len) * (COURSE_HALF_W + WALL_T)
+    const lz = midZ + ( dx / len) * (COURSE_HALF_W + WALL_T)
+    const lw = new CANNON.Body({ mass: 0, material: trackMat })
+    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfSeg)))
+    lw.position.set(lx, WALL_H, lz)
+    lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(lw)
+
+    // Right wall (perpendicular-right: (dz, 0, -dx) / len)
+    const rx = midX + ( dz / len) * (COURSE_HALF_W + WALL_T)
+    const rz = midZ + (-dx / len) * (COURSE_HALF_W + WALL_T)
+    const rw = new CANNON.Body({ mass: 0, material: trackMat })
+    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfSeg)))
+    rw.position.set(rx, WALL_H, rz)
+    rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+    world.addBody(rw)
   }
 
-  // Walls
-  for (const [si, lx, rx] of MBL_WALL_PAIRS) {
-    const [cx, cz, , halfLen] = MBL_FLOOR_SEGS[si]
-    for (const wx of [lx, rx]) {
-      const b = new CANNON.Body({ mass: 0, material: trackMat })
-      b.addShape(new CANNON.Box(new CANNON.Vec3(0.3, WALL_H, halfLen)))
-      b.position.set(wx, WALL_H, cz)
-      world.addBody(b)
-    }
-  }
-
-  // Pegs – tall cylinders so marbles must collide and deflect
-  for (const [px, pz] of MBL_PEGS) {
+  // Pegs – alternating sides every 8th sample point
+  for (let i = 5; i < samples.length - 5; i += 8) {
+    const [px, pz] = samples[i]
+    const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
+    const ddx = nx - px, ddz = nz - pz
+    const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
+    if (dlen < 0.001) continue
+    const side = ((Math.floor(i / 8)) % 3) - 1  // -1, 0, +1
+    const off  = side * (COURSE_HALF_W * 0.45)
     const b = new CANNON.Body({ mass: 0, material: trackMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
-    b.position.set(px, 1.5, pz)   // center Y=1.5 → extends Y=0 to Y=3
+    b.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
     world.addBody(b)
   }
 
@@ -228,12 +247,13 @@ function buildMarblesWorld() {
 }
 
 function getMarbleStartPositions(count) {
-  const spread = Math.min(count - 1, 10) * 1.8
-  const step   = count > 1 ? spread / (count - 1) : 0
+  const maxSpread = (COURSE_HALF_W - MBL_RADIUS - 0.3) * 2
+  const spread    = Math.min((count - 1) * 1.5, maxSpread)
+  const step      = count > 1 ? spread / (count - 1) : 0
   return Array.from({ length: count }, (_, i) => ({
     x: -spread / 2 + i * step + (Math.random() - 0.5) * 0.2,
     y: 2,
-    z: 87 + (Math.random() - 0.5) * 2,
+    z: 87 + (Math.random() - 0.5) * 1.5,
   }))
 }
 
