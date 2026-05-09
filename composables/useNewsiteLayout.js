@@ -1,5 +1,6 @@
 export const useNewsiteLayout = () => {
   const sidebarMiddleComponent = useState('newsiteSidebarMiddle', () => null)
+  const mobileSidebarCollapsed = useState('newsiteMobileSidebarCollapsed', () => true)
 
   const setSidebarMiddle = (componentName) => {
     sidebarMiddleComponent.value = componentName
@@ -9,5 +10,5 @@ export const useNewsiteLayout = () => {
     sidebarMiddleComponent.value = null
   }
 
-  return { sidebarMiddleComponent, setSidebarMiddle, clearSidebarMiddle }
+  return { sidebarMiddleComponent, setSidebarMiddle, clearSidebarMiddle, mobileSidebarCollapsed }
 }

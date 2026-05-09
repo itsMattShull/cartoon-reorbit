@@ -270,7 +270,7 @@ html.newsite-active body {
 <script setup>
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
-const { sidebarMiddleComponent } = useNewsiteLayout()
+const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
 useHead({
   htmlAttrs: { class: 'newsite-active' },
@@ -285,7 +285,7 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
-const mobileSidebarCollapsed = ref(true)
+
 
 const gridColumns = computed(() =>
   isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'

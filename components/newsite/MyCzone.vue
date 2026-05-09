@@ -191,6 +191,7 @@ function canvasH() { return CANVAS_H }
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
 const { open: openCtoonModal } = useCtoonModal()
+const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
 
@@ -378,6 +379,10 @@ async function toggleBuild() {
       buildLoading.value = false
     }
     cz.value.buildMode = true
+    // On mobile, expand the sidebar so the ctoons/backgrounds panel is visible
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      mobileSidebarCollapsed.value = false
+    }
   }
 }
 
