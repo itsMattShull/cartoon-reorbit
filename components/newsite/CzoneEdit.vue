@@ -52,15 +52,18 @@
     <!-- ── Background panel ── -->
     <div v-show="activeTab === 'bg'" class="czew-panel">
       <div class="czew-bg-grid">
-        <img
-          v-for="bg in cz.backgrounds" :key="bg.id"
-          :src="bg.imagePath"
-          :alt="bg.label || bg.filename"
-          class="czew-bg-item"
-          :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
-          @click="selectBg(bg)"
-        />
-        <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
+        <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
+        <template v-else>
+          <img
+            v-for="bg in cz.backgrounds" :key="bg.id"
+            :src="bg.imagePath"
+            :alt="bg.label || bg.filename"
+            class="czew-bg-item"
+            :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
+            @click="selectBg(bg)"
+          />
+          <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
+        </template>
       </div>
     </div>
 

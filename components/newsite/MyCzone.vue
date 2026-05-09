@@ -223,6 +223,9 @@ const canvasEl       = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
+// Track in-flight prefetch so toggleBuild can await it instead of double-fetching
+const prefetchPromise = ref(null)
+
 // Local drag: repositioning toons already on the canvas
 const localDrag = ref(null)  // { toon, offsetX, offsetY }
 
@@ -311,9 +314,11 @@ async function loadZone(username) {
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
     loadCzoneSearchItems()
-    // Pre-fetch edit resources so the Build sidebar is ready without a blank flash
+    // Pre-fetch edit resources so the Build sidebar is ready without a blank flash.
+    // Store the promise so toggleBuild can await it if the user clicks Build before it completes.
     if (user.value?.username && target === user.value.username) {
-      prefetchEditResources()
+      prefetchPromise.value = prefetchEditResources()
+      prefetchPromise.value.finally(() => { prefetchPromise.value = null })
     }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
@@ -339,10 +344,13 @@ async function prefetchEditResources() {
   if (!cz.value.backgrounds.length) {
     fetches.push(
       (async () => {
+        cz.value.loadingBackgrounds = true
         try {
           cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
         } catch (e) {
           console.error('MyCzone: failed to pre-load backgrounds', e)
+        } finally {
+          cz.value.loadingBackgrounds = false
         }
       })()
     )
@@ -387,6 +395,10 @@ async function toggleBuild() {
       cz.value.activeZone = firstActive
     }
   } else {
+    // If the background prefetch is still in flight, wait for it so we don't
+    // start duplicate requests and so data is ready when the sidebar renders.
+    if (prefetchPromise.value) await prefetchPromise.value
+
     if (!cz.value.collection.length) {
       cz.value.loadingCollection = true
       try {
@@ -398,10 +410,13 @@ async function toggleBuild() {
       }
     }
     if (!cz.value.backgrounds.length) {
+      cz.value.loadingBackgrounds = true
       try {
         cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
       } catch (e) {
         console.error('MyCzone: failed to load backgrounds', e)
+      } finally {
+        cz.value.loadingBackgrounds = false
       }
     }
   }
