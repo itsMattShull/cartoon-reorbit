@@ -29,4 +29,12 @@ body.page-newsite-czone-username.czone-build .sidebar-middle {
   overflow: hidden !important;
   padding: 0 !important;
 }
+
+@media (max-width: 768px) {
+  body.page-newsite-czone-username.czone-build .sidebar-middle {
+    flex: none !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+}
 </style>

@@ -25,4 +25,10 @@ body.page-myczone.czone-build .sidebar-middle {
   width: calc(100% - 8px) !important;
   box-sizing: border-box;
 }
+
+@media (max-width: 768px) {
+  body.page-myczone.czone-build .sidebar-middle {
+    flex: none !important;
+  }
+}
 </style>
