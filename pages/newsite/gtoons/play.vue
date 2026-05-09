@@ -1,7 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #main-content>
-      <div class="play-wrapper">
+  <div class="play-wrapper">
         <!-- Mobile-only sticky timer + instructions -->
         <div
           v-if="game"
@@ -162,8 +160,6 @@
           </transition>
         </div>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
@@ -175,7 +171,7 @@ import ClashHand from '@/components/ClashHand.vue'
 import CardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'newsite-template',
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
@@ -183,6 +179,9 @@ definePageMeta({
   showFooter: false,
   mainContentBorder: false,
 })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const { socket, battleState } = useClashSocket()
 const { user } = useAuth()

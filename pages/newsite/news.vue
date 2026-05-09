@@ -1,24 +1,17 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="news-content">
-        <img v-if="newsImagePath" :src="newsImagePath" alt="News" class="news-image" />
-        <div v-else class="news-placeholder"></div>
-      </div>
-    </template>
-  </NuxtLayout>
+  <div class="news-content">
+    <img v-if="newsImagePath" :src="newsImagePath" alt="News" class="news-image" />
+    <div v-else class="news-placeholder"></div>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 useHead({ htmlAttrs: { class: 'newsite-news' } })
 
 const newsImagePath = ref(null)

@@ -1,19 +1,12 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <CtoonFilter :show-hide-unavailable="true" />
-    </template>
-    <template #main-content>
-      <Cmart />
-    </template>
-  </NuxtLayout>
+  <Cmart />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('NewcmartSidebar')
 </script>
 
 <style>

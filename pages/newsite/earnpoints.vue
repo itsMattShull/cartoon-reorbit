@@ -1,24 +1,17 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="earnpoints-content">
-        <img v-if="earnPointsImagePath" :src="earnPointsImagePath" alt="Earn Points" class="earnpoints-image" />
-        <div v-else class="earnpoints-placeholder"></div>
-      </div>
-    </template>
-  </NuxtLayout>
+  <div class="earnpoints-content">
+    <img v-if="earnPointsImagePath" :src="earnPointsImagePath" alt="Earn Points" class="earnpoints-image" />
+    <div v-else class="earnpoints-placeholder"></div>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 useHead({ htmlAttrs: { class: 'newsite-earnpoints' } })
 
 const earnPointsImagePath = ref(null)

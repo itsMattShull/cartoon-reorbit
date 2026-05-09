@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="settings-content">
+  <div class="settings-content">
         <div class="settings-id-bar">
           <span class="settings-id-label">ReOrbit ID:</span>
           <span class="settings-id-value">{{ user?.id ?? '—' }}</span>
@@ -107,12 +99,13 @@
           </div>
         </div>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 import { ref, onMounted } from 'vue'
 

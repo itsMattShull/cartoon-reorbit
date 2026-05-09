@@ -267,7 +267,10 @@ const canvasStyle = computed(() => ({
 }))
 
 // ── Lifecycle ─────────────────────────────────────────────────
+const czoneActions = useCzoneActions()
+
 onMounted(() => {
+  czoneActions.register(save, clearZone)
   recalcScale()
   window.addEventListener('resize',    recalcScale)
   window.addEventListener('mousemove', onGlobalMove)
@@ -291,6 +294,7 @@ watch(() => route.params.username, async (paramUsername) => {
 
 
 onUnmounted(() => {
+  czoneActions.unregister()
   window.removeEventListener('resize',    recalcScale)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)

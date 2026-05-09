@@ -1,49 +1,17 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-middle>
-      <div class="cmart-sidebar-middle">
-        <div class="cmart-tab-bar">
-          <button
-            class="cmart-tab"
-            :class="{ active: cmartTab === 'ctoons' }"
-            @click="cmartTab = 'ctoons'"
-          >cToons</button>
-          <button
-            class="cmart-tab"
-            :class="{ active: cmartTab === 'packs' }"
-            @click="cmartTab = 'packs'"
-          >Packs</button>
-        </div>
-        <CtoonFilter
-          v-if="cmartTab === 'ctoons'"
-          :show-hide-unavailable="true"
-          :sort-options="cmartSortOptions"
-        />
-      </div>
-    </template>
-    <template #main-content>
-      <Cmart />
-    </template>
-  </NuxtLayout>
+  <Cmart />
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { setSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('CmartSidebar')
 
 const cmartTab = useState('newSiteCmartTab', () => 'ctoons')
 const filter   = useNewSiteCtoonFilter()
 const route    = useRoute()
 const router   = useRouter()
-
-const cmartSortOptions = [
-  { value: 'releaseDate', label: 'Release Date' },
-  { value: 'name',        label: 'Name'         },
-  { value: 'price',       label: 'Price'        },
-  { value: 'rarity',      label: 'Rarity'       },
-]
 
 // ── Initialize filter state (reset then apply URL params) ──────────────────
 Object.assign(filter.value, {
@@ -105,43 +73,3 @@ body.page-cmart .sidebar { --sidebar-middle-height: 504px; }
 body.page-cmart .main-content { overflow-y: auto !important; scrollbar-width: thin; }
 </style>
 
-<style scoped>
-.cmart-sidebar-middle {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.cmart-tab-bar {
-  display: flex;
-  flex-direction: row;
-  flex-shrink: 0;
-  width: 100%;
-}
-
-.cmart-tab {
-  flex: 1;
-  padding: 5px 4px;
-  font-size: 0.75rem;
-  font-weight: bold;
-  font-family: inherit;
-  color: rgba(255, 255, 255, 0.55);
-  background: rgba(0, 0, 0, 0.2);
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-.cmart-tab:hover {
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.cmart-tab.active {
-  color: #ffffff;
-  background: rgba(0, 0, 0, 0.1);
-  border-bottom-color: var(--OrbitLightBlue, #3399CC);
-}
-</style>

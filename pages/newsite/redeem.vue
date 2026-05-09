@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="rd-wrap">
+  <div class="rd-wrap">
         <!-- Balloons -->
         <div v-if="showBalloons" class="rd-balloons">
           <span
@@ -86,12 +78,13 @@
           </ClientOnly>
         </div>
       </div>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const rawHTML = '<!-- My special production comment for this page -->'
 

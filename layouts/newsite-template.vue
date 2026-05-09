@@ -247,14 +247,21 @@ html.newsite-active body {
         {{ mobileSidebarCollapsed ? '▼ Show Sidebar' : '▲ Hide Sidebar' }}
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
-        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><slot name="sidebar-top" /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}"><slot name="sidebar-middle"><MiddleSidebarImages /></slot></div>
-        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><slot name="sidebar-bottom" /></div>
+        <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><UserInfo /></div>
+        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
+          <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
+          <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
+          <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
+          <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
+          <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
+          <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
+          <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
+        </div>
+        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
       </template>
     </div>
-    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot name="main-content" /></div>
+    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
-    <slot />
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
   </div>
   <Onboarding />
@@ -263,6 +270,7 @@ html.newsite-active body {
 <script setup>
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
+const { sidebarMiddleComponent } = useNewsiteLayout()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
 useHead({
   htmlAttrs: { class: 'newsite-active' },

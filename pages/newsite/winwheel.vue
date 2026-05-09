@@ -1,13 +1,5 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #sidebar-bottom>
-      <WinballPromo />
-    </template>
-    <template #main-content>
-      <div class="winwheel-content">
+  <div class="winwheel-content">
         <!-- Skeleton state -->
         <template v-if="loading">
           <div class="controls-area">
@@ -163,8 +155,6 @@
           </div>
         </div>
       </transition>
-    </template>
-  </NuxtLayout>
 </template>
 
 <script setup>
@@ -174,7 +164,10 @@ import { useAuth } from '@/composables/useAuth'
 import ScavengerHuntModal from '@/components/ScavengerHuntModal.vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+
+const { clearSidebarMiddle } = useNewsiteLayout()
+clearSidebarMiddle()
 
 const sliceCount     = 6
 const sliceAngle     = 360 / sliceCount
