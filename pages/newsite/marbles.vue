@@ -170,7 +170,10 @@ function connectSocket() {
       userOverride = false
       snapCameraToStart()
     }
-    if (prevPhase === 'waiting' && state.phase === 'racing') {
+    if (state.phase === 'racing') {
+      // Covers both the waiting→racing transition and late joiners/refreshers
+      // arriving while the race is already in progress.
+      syncMarbleMeshes(state.marbles)
       cameraMode = 'follow'
     }
     if (state.phase === 'waiting') {
