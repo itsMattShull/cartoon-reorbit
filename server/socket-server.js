@@ -198,8 +198,10 @@ function buildMarblesWorld() {
 
   const trackMat  = new CANNON.Material('mbl_track')
   const marbleMat = new CANNON.Material('mbl_marble')
+  const pegMat    = new CANNON.Material('mbl_peg')
   world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.55 }))
   world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.6 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(pegMat, marbleMat,   { friction: 0.4, restitution: 0.95 }))
 
   const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
   const WALL_T  = 0.3  // wall half-thickness
@@ -382,17 +384,17 @@ function buildMarblesWorld() {
     const baseOff = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
     const jitter  = (Math.random() - 0.5) * 0.5
     const rawSide = baseOff + jitter
-    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
-    // its surface and the wall — preventing marbles from getting wedged against the wall.
-    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
+    // Clamp so the peg always leaves a generous gap (1.5 buffer) between
+    // its surface and the wall — a marble physically cannot fit in the remaining space.
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 1.5  // 1.45
     const off     = Math.max(-MAX_OFF, Math.min(MAX_OFF, rawSide * (COURSE_HALF_W * 0.8)))
-    const b = new CANNON.Body({ mass: 0, material: trackMat })
+    const b = new CANNON.Body({ mass: 0, material: pegMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
     b.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
     world.addBody(b)
   }
 
-  return { world, marbleMat }
+  return { world, marbleMat, pegMat }
 }
 
 function getMarbleStartPositions(count) {
@@ -452,7 +454,7 @@ function startMarblesPhysics() {
 
   const FIXED_STEP = 1 / 60
   marblesPhysInterval = setInterval(() => {
-    world.step(FIXED_STEP, FIXED_STEP, 3)
+    world.step(FIXED_STEP, FIXED_STEP, 6)
 
     if (marblesState.phase !== 'racing') return
     for (let i = 0; i < marbleBodies.length; i++) {

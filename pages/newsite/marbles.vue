@@ -409,9 +409,9 @@ function buildTrackMeshes() {
     const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
     if (dlen < 0.001) continue
     const side = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
-    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
-    // its surface and the wall — preventing marbles from getting wedged against the wall.
-    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
+    // Clamp so the peg always leaves a generous gap (1.5 buffer) between
+    // its surface and the wall — a marble physically cannot fit in the remaining space.
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 1.5  // 1.45
     const off  = Math.max(-MAX_OFF, Math.min(MAX_OFF, side * (COURSE_HALF_W * 0.8)))
     const mesh = new THREE.Mesh(pegGeo, pegMat)
     mesh.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
