@@ -203,7 +203,7 @@ function buildMarblesWorld() {
     segData.push({ dx, dz, len, angle: Math.atan2(dx, dz) })
   }
 
-  // Miter extension at the joint between segment a and b so boxes overlap flush
+  // Unsigned miter for floors — fills gaps; overlapping coplanar static bodies are harmless
   function miterExt(a, b) {
     if (a < 0 || b >= nSegs) return 0.1
     let delta = segData[b].angle - segData[a].angle
@@ -211,44 +211,70 @@ function buildMarblesWorld() {
     if (delta < -Math.PI) delta += 2 * Math.PI
     return Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
   }
+  // Signed miter for walls: positive = extend (outer/convex corner fills gap),
+  // negative = truncate (inner/concave corner avoids overlap pocket that traps marbles)
+  function wallMiterLeft(a, b) {
+    if (a < 0 || b >= nSegs) return 0.05
+    let delta = segData[b].angle - segData[a].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    return Math.max(-COURSE_HALF_W, Math.min(COURSE_HALF_W, -COURSE_HALF_W * Math.tan(delta / 2)))
+  }
+  function wallMiterRight(a, b) {
+    if (a < 0 || b >= nSegs) return 0.05
+    let delta = segData[b].angle - segData[a].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    return Math.max(-COURSE_HALF_W, Math.min(COURSE_HALF_W,  COURSE_HALF_W * Math.tan(delta / 2)))
+  }
 
   for (let i = 0; i < nSegs; i++) {
     const { dx, dz, len, angle } = segData[i]
     if (len < 0.001) continue
     const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+    const rawMidX = (x1 + x2) / 2, rawMidZ = (z1 + z2) / 2
 
-    const extBack  = miterExt(i - 1, i)
-    const extFront = miterExt(i, i + 1)
-    const halfLen  = (len + extBack + extFront) / 2
-
-    const shift = (extFront - extBack) / 2
-    const midX = (x1 + x2) / 2 + (dx / len) * shift
-    const midZ = (z1 + z2) / 2 + (dz / len) * shift
-
-    // Floor
+    // Floor: unsigned miter fills all corner gaps
+    const floorBk = miterExt(i - 1, i), floorFt = miterExt(i, i + 1)
+    const floorHL = (len + floorBk + floorFt) / 2
+    const floorSh = (floorFt - floorBk) / 2
     const floor = new CANNON.Body({ mass: 0, material: trackMat })
-    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, halfLen)))
-    floor.position.set(midX, -FLOOR_H, midZ)
+    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, floorHL)))
+    floor.position.set(rawMidX + (dx / len) * floorSh, -FLOOR_H, rawMidZ + (dz / len) * floorSh)
     floor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
     world.addBody(floor)
 
-    // Left wall  (perpendicular-left: (-dz, 0, dx) / len)
-    const lx = midX + (-dz / len) * (COURSE_HALF_W + WALL_T)
-    const lz = midZ + ( dx / len) * (COURSE_HALF_W + WALL_T)
-    const lw = new CANNON.Body({ mass: 0, material: trackMat })
-    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfLen)))
-    lw.position.set(lx, WALL_H, lz)
-    lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
-    world.addBody(lw)
+    // Left wall: signed miter — truncates inner concave corners, no wedge pocket
+    const lBk = wallMiterLeft(i - 1, i), lFt = wallMiterLeft(i, i + 1)
+    const lTot = len + lBk + lFt
+    if (lTot > 0.1) {
+      const lSh = (lFt - lBk) / 2
+      const lw = new CANNON.Body({ mass: 0, material: trackMat })
+      lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, lTot / 2)))
+      lw.position.set(
+        rawMidX + (dx / len) * lSh + (-dz / len) * (COURSE_HALF_W + WALL_T),
+        WALL_H,
+        rawMidZ + (dz / len) * lSh + ( dx / len) * (COURSE_HALF_W + WALL_T)
+      )
+      lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+      world.addBody(lw)
+    }
 
-    // Right wall (perpendicular-right: (dz, 0, -dx) / len)
-    const rx = midX + ( dz / len) * (COURSE_HALF_W + WALL_T)
-    const rz = midZ + (-dx / len) * (COURSE_HALF_W + WALL_T)
-    const rw = new CANNON.Body({ mass: 0, material: trackMat })
-    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfLen)))
-    rw.position.set(rx, WALL_H, rz)
-    rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
-    world.addBody(rw)
+    // Right wall: signed miter — truncates inner concave corners, no wedge pocket
+    const rBk = wallMiterRight(i - 1, i), rFt = wallMiterRight(i, i + 1)
+    const rTot = len + rBk + rFt
+    if (rTot > 0.1) {
+      const rSh = (rFt - rBk) / 2
+      const rw = new CANNON.Body({ mass: 0, material: trackMat })
+      rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, rTot / 2)))
+      rw.position.set(
+        rawMidX + (dx / len) * rSh + ( dz / len) * (COURSE_HALF_W + WALL_T),
+        WALL_H,
+        rawMidZ + (dz / len) * rSh + (-dx / len) * (COURSE_HALF_W + WALL_T)
+      )
+      rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
+      world.addBody(rw)
+    }
   }
 
   // End-cap wall at the finish line — solid physics body matching the visual cap
