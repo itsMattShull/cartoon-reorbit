@@ -382,9 +382,9 @@ function buildMarblesWorld() {
     const baseOff = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
     const jitter  = (Math.random() - 0.5) * 0.5
     const rawSide = baseOff + jitter
-    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.2 buffer) between
+    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
     // its surface and the wall — preventing marbles from getting wedged against the wall.
-    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.2  // 2.75
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
     const off     = Math.max(-MAX_OFF, Math.min(MAX_OFF, rawSide * (COURSE_HALF_W * 0.8)))
     const b = new CANNON.Body({ mass: 0, material: trackMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
