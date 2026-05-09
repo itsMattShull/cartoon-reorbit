@@ -311,9 +311,43 @@ async function loadZone(username) {
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
     loadCzoneSearchItems()
+    // Pre-fetch edit resources so the Build sidebar is ready without a blank flash
+    if (user.value?.username && target === user.value.username) {
+      prefetchEditResources()
+    }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
+}
+
+async function prefetchEditResources() {
+  const fetches = []
+  if (!cz.value.collection.length && !cz.value.loadingCollection) {
+    fetches.push(
+      (async () => {
+        cz.value.loadingCollection = true
+        try {
+          cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
+        } catch (e) {
+          console.error('MyCzone: failed to pre-load collection', e)
+        } finally {
+          cz.value.loadingCollection = false
+        }
+      })()
+    )
+  }
+  if (!cz.value.backgrounds.length) {
+    fetches.push(
+      (async () => {
+        try {
+          cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
+        } catch (e) {
+          console.error('MyCzone: failed to pre-load backgrounds', e)
+        }
+      })()
+    )
+  }
+  await Promise.all(fetches)
 }
 
 // Reload search items when switching to zone 0; clear them on other zones

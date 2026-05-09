@@ -1,7 +1,7 @@
 <template>
   <div class="nav-left">
     <NuxtLink to="/newsite/home">
-      <BlueButton :style="{ height: buttonHeight }">Reorbit Home</BlueButton>
+      <BlueButton :style="{ height: buttonHeight }">ReOrbit Home</BlueButton>
     </NuxtLink>
     <NuxtLink v-if="isAdmin" to="/admin">
       <BlueButton :style="{ height: buttonHeight }">Admin</BlueButton>

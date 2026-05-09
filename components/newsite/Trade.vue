@@ -1273,6 +1273,12 @@ onBeforeUnmount(() => {
 .tr-loading { font-size: 0.72rem; color: rgba(255,255,255,0.5); padding: 16px 8px; text-align: center; flex-shrink: 0; }
 .tr-empty { font-size: 0.7rem; color: rgba(255,255,255,0.4); font-style: italic; padding: 16px 8px; text-align: center; flex-shrink: 0; }
 
+@media (max-width: 768px) {
+  .tr-content {
+    padding-bottom: 220px;
+  }
+}
+
 /* ── Page toast ── */
 .tr-page-toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
