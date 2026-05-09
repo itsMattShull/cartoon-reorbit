@@ -82,6 +82,24 @@ const zoneSockets  = {}        // zone → Set(socketId)
 const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
 const pvpMatches = new Map();    // roomId -> { battle, recordId }
 
+/* ── Spin the Wheel (pure in-memory, no DB) ──────────────── */
+const STW_ROOM = 'spin-the-wheel'
+const spinWheelState = {
+  participants: [],   // [{ username }]
+  isOpen: false,
+  sessionId: randomUUID(),
+  spinning: false
+}
+
+function stwSnapshot() {
+  return {
+    participants: [...spinWheelState.participants],
+    isOpen: spinWheelState.isOpen,
+    sessionId: spinWheelState.sessionId,
+    spinning: spinWheelState.spinning
+  }
+}
+
 /* ── Monster Battles (1v1) ───────────────────────────────── */
 const monsterBattles = new Map();      // battleId -> { state, recordId, actions, timers }
 const monsterBattleByUser = new Map(); // userId -> battleId
@@ -2909,6 +2927,74 @@ io.on('connection', socket => {
   // leave that auction room
   socket.on('leave-auction', ({ auctionId }) => {
     socket.leave(`auction_${auctionId}`)
+  })
+
+  // ── Spin the Wheel events ───────────────────────────────────────────────
+  socket.on('stw:subscribe', () => {
+    socket.join(STW_ROOM)
+    socket.emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:join', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    if (!spinWheelState.isOpen) return socket.emit('stw:error', { message: 'Joining is not open.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Wheel is spinning.' })
+    if (spinWheelState.participants.some(p => p.username === auth.username)) {
+      return socket.emit('stw:error', { message: 'Already on wheel.' })
+    }
+    spinWheelState.participants.push({ username: auth.username })
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:allow', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Wheel is spinning.' })
+    spinWheelState.isOpen = true
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:clear', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    spinWheelState.participants = []
+    spinWheelState.isOpen = false
+    spinWheelState.spinning = false
+    spinWheelState.sessionId = randomUUID()
+    io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+  })
+
+  socket.on('stw:spin', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Already spinning.' })
+    if (spinWheelState.participants.length === 0) return socket.emit('stw:error', { message: 'No participants.' })
+
+    spinWheelState.isOpen = false
+    spinWheelState.spinning = true
+
+    const winnerIdx = Math.floor(Math.random() * spinWheelState.participants.length)
+    const winner = spinWheelState.participants[winnerIdx].username
+
+    io.to(STW_ROOM).emit('stw:spinning', {
+      ...stwSnapshot(),
+      winner,
+      winnerIdx
+    })
+
+    // After the client animation completes (~6.5s), announce winner and reset spinning flag
+    setTimeout(() => {
+      spinWheelState.spinning = false
+      io.to(STW_ROOM).emit('stw:winner', { username: winner })
+      io.to(STW_ROOM).emit('stw:state', stwSnapshot())
+    }, 7000)
   })
 })
 
