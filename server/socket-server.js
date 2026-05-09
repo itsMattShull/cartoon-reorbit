@@ -274,6 +274,37 @@ function buildMarblesWorld() {
     }
   }
 
+  // Corner filler walls — at each concave inner junction a box oriented along the
+  // angle bisector closes the triangular overlap pocket so marbles can't get trapped.
+  for (let i = 1; i < nSegs; i++) {
+    let delta = segData[i].angle - segData[i - 1].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    if (Math.abs(delta) < 0.05) continue
+
+    const pocketLen = Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+    if (pocketLen < 0.05) continue
+
+    const [px, pz] = samples[i]
+    const dx1 = segData[i - 1].dx / segData[i - 1].len, dz1 = segData[i - 1].dz / segData[i - 1].len
+    const dx2 = segData[i].dx     / segData[i].len,     dz2 = segData[i].dz     / segData[i].len
+    const bDx = dx1 + dx2, bDz = dz1 + dz2
+    const bLen = Math.sqrt(bDx * bDx + bDz * bDz) || 1
+    const bisAngle = Math.atan2(bDx / bLen, bDz / bLen)
+    const bnx = -(bDz / bLen), bnz = bDx / bLen  // left normal of bisector
+
+    // delta > 0 → left wall is concave inner; delta < 0 → right wall is concave inner
+    const side = delta > 0 ? 1 : -1
+    const cx = px + side * bnx * (COURSE_HALF_W + WALL_T)
+    const cz = pz + side * bnz * (COURSE_HALF_W + WALL_T)
+
+    const fw = new CANNON.Body({ mass: 0, material: trackMat })
+    fw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, pocketLen + WALL_T / 2)))
+    fw.position.set(cx, WALL_H, cz)
+    fw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), bisAngle)
+    world.addBody(fw)
+  }
+
   // Funnel — V-shaped staging area attached to the start of the course.
   // Marbles wait here before the race; the open end is at FUNNEL_Z_OPEN.
   {

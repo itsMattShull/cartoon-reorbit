@@ -359,6 +359,38 @@ function buildTrackMeshes() {
     }
   }
 
+  // Corner filler walls — bisector-aligned boxes that close the triangular overlap
+  // pocket at each concave inner junction so marbles deflect cleanly off the wall.
+  for (let i = 1; i < nSegs; i++) {
+    let delta = sAngle[i] - sAngle[i - 1]
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    if (Math.abs(delta) < 0.05) continue
+
+    const pocketLen = Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+    if (pocketLen < 0.05) continue
+
+    const [px, pz] = samples[i]
+    const dx1 = sDx[i - 1] / sLen[i - 1], dz1 = sDz[i - 1] / sLen[i - 1]
+    const dx2 = sDx[i]     / sLen[i],     dz2 = sDz[i]     / sLen[i]
+    const bDx = dx1 + dx2, bDz = dz1 + dz2
+    const bLen = Math.sqrt(bDx * bDx + bDz * bDz) || 1
+    const bisAngle = Math.atan2(bDx / bLen, bDz / bLen)
+    const bnx = -(bDz / bLen), bnz = bDx / bLen
+
+    const side = delta > 0 ? 1 : -1
+    const cx = px + side * bnx * (COURSE_HALF_W + WALL_T)
+    const cz = pz + side * bnz * (COURSE_HALF_W + WALL_T)
+
+    const fw = new THREE.Mesh(
+      new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, pocketLen * 2 + WALL_T),
+      wallMat
+    )
+    fw.position.set(cx, WALL_H, cz)
+    fw.rotation.y = bisAngle
+    scene.add(fw)
+  }
+
   // Pegs — same logic as server (denser, every 5 samples, cycling left/center/right/center)
   const PEG_PATTERN = [-1, 0, 1, 0]
   for (let i = 5; i < samples.length - 7; i += 5) {
