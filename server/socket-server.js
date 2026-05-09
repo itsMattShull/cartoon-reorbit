@@ -120,6 +120,7 @@ const marblesState = {
 
 let marblesWorld = null
 let marbleBodies = []     // parallel array to marblesState.marbles
+let marblesFinished = new Set()
 let marblesPhysInterval = null
 let marblesBroadcastInterval = null
 
@@ -194,7 +195,7 @@ function buildMarblesWorld() {
   }))
 
   const FLOOR_Y = -0.5
-  const WALL_H  = 1.5
+  const WALL_H  = 4
 
   // Floor segments
   for (const [cx, cz, halfW, halfLen] of MBL_FLOOR_SEGS) {
@@ -215,11 +216,11 @@ function buildMarblesWorld() {
     }
   }
 
-  // Pegs
+  // Pegs – tall cylinders so marbles must collide and deflect
   for (const [px, pz] of MBL_PEGS) {
     const b = new CANNON.Body({ mass: 0, material: trackMat })
-    b.addShape(new CANNON.Sphere(0.6))
-    b.position.set(px, 0.6, pz)
+    b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
+    b.position.set(px, 1.5, pz)   // center Y=1.5 → extends Y=0 to Y=3
     world.addBody(b)
   }
 
@@ -241,11 +242,13 @@ function stopMarblesPhysics() {
   if (marblesBroadcastInterval) { clearInterval(marblesBroadcastInterval); marblesBroadcastInterval = null }
   marblesWorld = null
   marbleBodies = []
+  marblesFinished = new Set()
 }
 
 function startMarblesPhysics() {
   const { world, marbleMat } = buildMarblesWorld()
   marblesWorld = world
+  marblesFinished = new Set()
 
   const positions = getMarbleStartPositions(marblesState.marbles.length)
   marbleBodies = marblesState.marbles.map((_, i) => {
@@ -262,13 +265,30 @@ function startMarblesPhysics() {
 
     if (marblesState.phase !== 'racing') return
     for (let i = 0; i < marbleBodies.length; i++) {
-      if (marbleBodies[i].position.z < MBL_FINISH_Z) {
-        marblesState.phase  = 'finished'
-        marblesState.winner = marblesState.marbles[i].username
-        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
-        io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
-        stopMarblesPhysics()
-        return
+      if (marblesFinished.has(i)) continue
+      if (marbleBodies[i].position.z <= MBL_FINISH_Z) {
+        marblesFinished.add(i)
+
+        // Freeze the finished marble in place
+        const body = marbleBodies[i]
+        body.velocity.set(0, 0, 0)
+        body.angularVelocity.set(0, 0, 0)
+        body.type = CANNON.Body.STATIC
+        body.updateMassProperties()
+
+        if (marblesFinished.size === 1) {
+          // First marble across = winner
+          marblesState.winner = marblesState.marbles[i].username
+          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+          io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
+        }
+
+        if (marblesFinished.size >= marbleBodies.length) {
+          marblesState.phase = 'finished'
+          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+          stopMarblesPhysics()
+          return
+        }
       }
     }
   }, 1000 / 60)
