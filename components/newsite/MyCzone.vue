@@ -223,9 +223,6 @@ const canvasEl       = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
-// Track in-flight prefetch so toggleBuild can await it instead of double-fetching
-const prefetchPromise = ref(null)
-
 // True while build-mode data is loading (prevents double-click and shows spinner on button)
 const buildLoading = ref(false)
 
@@ -317,48 +314,9 @@ async function loadZone(username) {
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
     loadCzoneSearchItems()
-    // Pre-fetch edit resources so the Build sidebar is ready without a blank flash.
-    // Store the promise so toggleBuild can await it if the user clicks Build before it completes.
-    if (user.value?.username && target === user.value.username) {
-      prefetchPromise.value = prefetchEditResources()
-      prefetchPromise.value.finally(() => { prefetchPromise.value = null })
-    }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
-}
-
-async function prefetchEditResources() {
-  const fetches = []
-  if (!cz.value.collection.length && !cz.value.loadingCollection) {
-    fetches.push(
-      (async () => {
-        cz.value.loadingCollection = true
-        try {
-          cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
-        } catch (e) {
-          console.error('MyCzone: failed to pre-load collection', e)
-        } finally {
-          cz.value.loadingCollection = false
-        }
-      })()
-    )
-  }
-  if (!cz.value.backgrounds.length) {
-    fetches.push(
-      (async () => {
-        cz.value.loadingBackgrounds = true
-        try {
-          cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
-        } catch (e) {
-          console.error('MyCzone: failed to pre-load backgrounds', e)
-        } finally {
-          cz.value.loadingBackgrounds = false
-        }
-      })()
-    )
-  }
-  await Promise.all(fetches)
 }
 
 // Reload search items when switching to zone 0; clear them on other zones
@@ -398,41 +356,20 @@ async function toggleBuild() {
       cz.value.activeZone = firstActive
     }
   } else {
-    // Enter build mode: load data FIRST, then reveal sidebar so it's never blank.
+    // Enter build mode: always fetch fresh data first so the sidebar is never blank.
     buildLoading.value = true
     try {
-      // Wait for any in-flight prefetch (max 5 s) before deciding what to fetch.
-      if (prefetchPromise.value) {
-        await Promise.race([
-          prefetchPromise.value,
-          new Promise(resolve => setTimeout(resolve, 5000))
+      const username = user.value?.username
+      if (username) {
+        await Promise.all([
+          $fetch(`/api/collection/${username}`)
+            .then(data => { cz.value.collection = Array.isArray(data) ? data : [] })
+            .catch(e => { console.error('MyCzone: failed to load collection', e); if (!Array.isArray(cz.value.collection)) cz.value.collection = [] }),
+          $fetch('/api/czone/backgrounds-available')
+            .then(data => { cz.value.backgrounds = Array.isArray(data) ? data : [] })
+            .catch(e => { console.error('MyCzone: failed to load backgrounds', e); if (!Array.isArray(cz.value.backgrounds)) cz.value.backgrounds = [] }),
         ])
       }
-
-      const fetches = []
-      if (!cz.value.collection.length) {
-        fetches.push(
-          (async () => {
-            try {
-              cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
-            } catch (e) {
-              console.error('MyCzone: failed to load collection', e)
-            }
-          })()
-        )
-      }
-      if (!cz.value.backgrounds.length) {
-        fetches.push(
-          (async () => {
-            try {
-              cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
-            } catch (e) {
-              console.error('MyCzone: failed to load backgrounds', e)
-            }
-          })()
-        )
-      }
-      await Promise.all(fetches)
     } finally {
       buildLoading.value = false
     }
