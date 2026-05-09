@@ -59,7 +59,7 @@ html.newsite-active body {
   --topbar-primary-pl:                 0px;
   --topbar-primary-pr:                 0px;
 
-  --topbar-primary-logo-bg:            #000000;
+  --topbar-primary-logo-bg:            transparent;
   --topbar-primary-logo-height:        var(--topbar-primary-height);
   --topbar-primary-logo-width:         200px;
   --topbar-primary-logo-scale-x:       1;
