@@ -9,7 +9,9 @@
     <NuxtLink to="/newsite/AuctionHouse" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Auctions</BlueButton>
     </NuxtLink>
-    <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
+    <NuxtLink to="/newsite/trade" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
+    </NuxtLink>
     <NuxtLink to="/newsite/Games" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
