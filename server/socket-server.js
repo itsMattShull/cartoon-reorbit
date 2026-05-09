@@ -145,6 +145,8 @@ const COURSE_SPINE = [
 ]
 const COURSE_HALF_W = 5   // half-width of channel
 const COURSE_N_SEGS = 120 // number of approximation segments
+const FUNNEL_Z_OPEN     = 109  // z-position of the open (top) end of the staging funnel
+const FUNNEL_OPEN_HALF_W = 14  // half-width of the funnel at its open end
 
 function crSample(pts, t) {
   const n   = pts.length - 1
@@ -249,6 +251,66 @@ function buildMarblesWorld() {
     world.addBody(rw)
   }
 
+  // Junction cylinder posts — one at each sample point along both wall edges.
+  // A convex cylinder at the joint fills the wedge pocket that forms when two rotated
+  // box segments meet at an angle, so marbles deflect smoothly instead of getting stuck.
+  {
+    const POST_R = WALL_T + 0.05
+    for (let i = 0; i <= nSegs; i++) {
+      const [px, pz] = samples[i]
+      const si = Math.min(i, nSegs - 1)
+      const { dx, dz, len } = segData[si]
+      const nx = -dz / len, nz = dx / len  // left-side unit normal
+
+      const lp = new CANNON.Body({ mass: 0, material: trackMat })
+      lp.addShape(new CANNON.Cylinder(POST_R, POST_R, WALL_H * 2, 8))
+      lp.position.set(px + nx * COURSE_HALF_W, WALL_H, pz + nz * COURSE_HALF_W)
+      world.addBody(lp)
+
+      const rp = new CANNON.Body({ mass: 0, material: trackMat })
+      rp.addShape(new CANNON.Cylinder(POST_R, POST_R, WALL_H * 2, 8))
+      rp.position.set(px - nx * COURSE_HALF_W, WALL_H, pz - nz * COURSE_HALF_W)
+      world.addBody(rp)
+    }
+  }
+
+  // Funnel — V-shaped staging area attached to the start of the course.
+  // Marbles wait here before the race; the open end is at FUNNEL_Z_OPEN.
+  {
+    const F_Z0 = 90, F_Z1 = FUNNEL_Z_OPEN
+    const F_HW0 = COURSE_HALF_W, F_HW1 = FUNNEL_OPEN_HALF_W
+
+    // Floor covering the entire funnel area
+    const fFloor = new CANNON.Body({ mass: 0, material: trackMat })
+    fFloor.addShape(new CANNON.Box(new CANNON.Vec3(F_HW1, FLOOR_H, (F_Z1 - F_Z0) / 2)))
+    fFloor.position.set(0, -FLOOR_H, (F_Z0 + F_Z1) / 2)
+    world.addBody(fFloor)
+
+    // Left angled wall: from (-F_HW0, F_Z0) to (-F_HW1, F_Z1)
+    const ldx = -(F_HW1 - F_HW0), ldz = F_Z1 - F_Z0
+    const llen = Math.sqrt(ldx * ldx + ldz * ldz)
+    const lw = new CANNON.Body({ mass: 0, material: trackMat })
+    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, llen / 2)))
+    lw.position.set(-(F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
+    lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(ldx, ldz))
+    world.addBody(lw)
+
+    // Right angled wall: from (F_HW0, F_Z0) to (F_HW1, F_Z1)
+    const rdx = F_HW1 - F_HW0, rdz = F_Z1 - F_Z0
+    const rlen = Math.sqrt(rdx * rdx + rdz * rdz)
+    const rw = new CANNON.Body({ mass: 0, material: trackMat })
+    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, rlen / 2)))
+    rw.position.set((F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
+    rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.atan2(rdx, rdz))
+    world.addBody(rw)
+
+    // Back wall across the open end of the funnel
+    const bw = new CANNON.Body({ mass: 0, material: trackMat })
+    bw.addShape(new CANNON.Box(new CANNON.Vec3(F_HW1 + WALL_T, WALL_H, WALL_T)))
+    bw.position.set(0, WALL_H, F_Z1)
+    world.addBody(bw)
+  }
+
   // End-cap wall at the finish line — solid physics body matching the visual cap
   {
     const lastIdx = samples.length - 1
@@ -283,14 +345,20 @@ function buildMarblesWorld() {
 }
 
 function getMarbleStartPositions(count) {
-  const maxSpread = (COURSE_HALF_W - MBL_RADIUS - 0.3) * 2
-  const spread    = Math.min((count - 1) * 1.5, maxSpread)
-  const step      = count > 1 ? spread / (count - 1) : 0
-  return Array.from({ length: count }, (_, i) => ({
-    x: -spread / 2 + i * step + (Math.random() - 0.5) * 0.2,
-    y: 2,
-    z: 87 + (Math.random() - 0.5) * 1.5,
-  }))
+  const cols  = Math.min(count, 4)
+  const rows  = Math.ceil(count / cols)
+  const zTop  = FUNNEL_Z_OPEN - 2
+  const zBot  = 93
+  return Array.from({ length: count }, (_, i) => {
+    const row  = Math.floor(i / cols)
+    const col  = i % cols
+    const z    = rows > 1 ? zTop - row * (zTop - zBot) / (rows - 1) : (zTop + zBot) / 2
+    const t    = (z - 90) / (FUNNEL_Z_OPEN - 90)
+    const hw   = COURSE_HALF_W + (FUNNEL_OPEN_HALF_W - COURSE_HALF_W) * t
+    const usHW = (hw - MBL_RADIUS - 0.2) * 0.9
+    const x    = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
+    return { x: x + (Math.random() - 0.5) * 0.2, y: 2, z: z + (Math.random() - 0.5) * 0.3 }
+  })
 }
 
 function stopMarblesPhysics() {

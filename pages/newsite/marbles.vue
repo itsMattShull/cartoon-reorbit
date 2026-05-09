@@ -96,8 +96,10 @@ const hasJoined = computed(() =>
 const threeCanvas = ref(null)
 
 // ─── Marble race constants (must match server) ──────────────────────────────
-const MBL_RADIUS  = 0.8
-const FINISH_Z    = -118
+const MBL_RADIUS         = 0.8
+const FINISH_Z           = -118
+const FUNNEL_Z_OPEN      = 109
+const FUNNEL_OPEN_HALF_W = 14
 
 // Curved course — Catmull-Rom spine [x, z]
 const COURSE_SPINE = [
@@ -244,6 +246,7 @@ function initThree() {
   scene.add(fill)
 
   buildTrackMeshes()
+  buildFunnelMeshes()
   buildFinishLine()
   buildLabelContainer()
 
@@ -335,6 +338,27 @@ function buildTrackMeshes() {
     scene.add(rw)
   }
 
+  // Junction cylinder posts — placed at every wall-edge junction to fill the wedge
+  // pocket formed where two rotated box segments meet, so marbles deflect smoothly.
+  {
+    const POST_R = WALL_T + 0.05
+    const postGeoJ = new THREE.CylinderGeometry(POST_R, POST_R, WALL_H * 2, 8)
+    for (let i = 0; i <= nSegs; i++) {
+      const [px, pz] = samples[i]
+      const si = Math.min(i, nSegs - 1)
+      const { dx, dz, len } = { dx: sDx[si], dz: sDz[si], len: sLen[si] }
+      const nx = -dz / len, nz = dx / len
+
+      const lp = new THREE.Mesh(postGeoJ, wallMat)
+      lp.position.set(px + nx * COURSE_HALF_W, WALL_H, pz + nz * COURSE_HALF_W)
+      scene.add(lp)
+
+      const rp = new THREE.Mesh(postGeoJ, wallMat)
+      rp.position.set(px - nx * COURSE_HALF_W, WALL_H, pz - nz * COURSE_HALF_W)
+      scene.add(rp)
+    }
+  }
+
   // Pegs — same logic as server (denser, every 5 samples, cycling left/center/right/center)
   const PEG_PATTERN = [-1, 0, 1, 0]
   for (let i = 5; i < samples.length - 7; i += 5) {
@@ -350,6 +374,45 @@ function buildTrackMeshes() {
     mesh.castShadow = true
     scene.add(mesh)
   }
+}
+
+function buildFunnelMeshes() {
+  const WALL_H = 3, WALL_T = 0.3
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8, metalness: 0.1 })
+  const wallMat  = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.6, metalness: 0.2, transparent: true, opacity: 0.85 })
+
+  const F_Z0 = 90, F_Z1 = FUNNEL_Z_OPEN
+  const F_HW0 = COURSE_HALF_W, F_HW1 = FUNNEL_OPEN_HALF_W
+
+  // Floor
+  const fFloor = new THREE.Mesh(new THREE.BoxGeometry(F_HW1 * 2, 1, F_Z1 - F_Z0), floorMat)
+  fFloor.position.set(0, -0.5, (F_Z0 + F_Z1) / 2)
+  fFloor.receiveShadow = true
+  scene.add(fFloor)
+
+  // Left angled wall
+  const ldx = -(F_HW1 - F_HW0), ldz = F_Z1 - F_Z0
+  const llen = Math.sqrt(ldx * ldx + ldz * ldz)
+  const lw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, llen), wallMat)
+  lw.position.set(-(F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
+  lw.rotation.y = Math.atan2(ldx, ldz)
+  lw.castShadow = true
+  scene.add(lw)
+
+  // Right angled wall
+  const rdx = F_HW1 - F_HW0, rdz = F_Z1 - F_Z0
+  const rlen = Math.sqrt(rdx * rdx + rdz * rdz)
+  const rw = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 2, WALL_H * 2, rlen), wallMat)
+  rw.position.set((F_HW0 + F_HW1) / 2, WALL_H, (F_Z0 + F_Z1) / 2)
+  rw.rotation.y = Math.atan2(rdx, rdz)
+  rw.castShadow = true
+  scene.add(rw)
+
+  // Back wall across the open end
+  const bw = new THREE.Mesh(new THREE.BoxGeometry((F_HW1 + WALL_T) * 2, WALL_H * 2, WALL_T * 2), wallMat)
+  bw.position.set(0, WALL_H, F_Z1)
+  bw.castShadow = true
+  scene.add(bw)
 }
 
 function buildFinishLine() {
@@ -426,9 +489,11 @@ function syncMarbleMeshes(marbles) {
     }
   }
 
-  const maxSpread = (COURSE_HALF_W - MBL_RADIUS - 0.3) * 2
-  const spreadMax = Math.min((marbles.length - 1) * 1.5, maxSpread)
-  const step = marbles.length > 1 ? spreadMax / (marbles.length - 1) : 0
+  const count = marbles.length
+  const cols  = Math.min(count, 4)
+  const rows  = Math.ceil(count / cols)
+  const zTop  = FUNNEL_Z_OPEN - 2
+  const zBot  = 93
 
   marbles.forEach((m, i) => {
     if (marbleMeshMap.has(m.id)) return
@@ -440,8 +505,14 @@ function syncMarbleMeshes(marbles) {
       envMapIntensity: 1,
     })
     const mesh = new THREE.Mesh(geo, mat)
-    const startX = -spreadMax / 2 + i * step
-    mesh.position.set(startX, MBL_RADIUS, 87)
+    const row  = Math.floor(i / cols)
+    const col  = i % cols
+    const z    = rows > 1 ? zTop - row * (zTop - zBot) / (rows - 1) : (zTop + zBot) / 2
+    const t    = (z - 90) / (FUNNEL_Z_OPEN - 90)
+    const hw   = COURSE_HALF_W + (FUNNEL_OPEN_HALF_W - COURSE_HALF_W) * t
+    const usHW = (hw - MBL_RADIUS - 0.2) * 0.9
+    const startX = cols > 1 ? -usHW + col * (usHW * 2) / (cols - 1) : 0
+    mesh.position.set(startX, MBL_RADIUS, z)
     mesh.castShadow = true
     scene.add(mesh)
 
@@ -481,10 +552,10 @@ function resetScene() {
 
 // ─── Camera helpers ────────────────────────────────────────────────────────
 function snapCameraToStart() {
-  camTarget.set(0, 0, 75)
+  camTarget.set(0, 0, 90)
   camTheta = Math.PI
   camPhi   = Math.PI / 4.5
-  camDist  = 65
+  camDist  = 75
   applyCameraOrbit()
 }
 
