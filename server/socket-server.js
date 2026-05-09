@@ -457,31 +457,41 @@ function startMarblesPhysics() {
     world.step(FIXED_STEP, FIXED_STEP, 6)
 
     if (marblesState.phase !== 'racing') return
+
+    // Collect all marbles that crossed the finish line this step, then sort by
+    // Z ascending (most negative = furthest past the line = physically first).
+    // Without this, index order (join order) would break ties instead of position.
+    const crossedThisStep = []
     for (let i = 0; i < marbleBodies.length; i++) {
       if (marblesFinished.has(i)) continue
       if (marbleBodies[i].position.z <= MBL_FINISH_Z) {
-        marblesFinished.add(i)
+        crossedThisStep.push({ i, z: marbleBodies[i].position.z })
+      }
+    }
+    crossedThisStep.sort((a, b) => a.z - b.z)
 
-        // Freeze the finished marble in place
-        const body = marbleBodies[i]
-        body.velocity.set(0, 0, 0)
-        body.angularVelocity.set(0, 0, 0)
-        body.type = CANNON.Body.STATIC
-        body.updateMassProperties()
+    for (const { i } of crossedThisStep) {
+      marblesFinished.add(i)
 
-        if (marblesFinished.size === 1) {
-          // First marble across = winner
-          marblesState.winner = marblesState.marbles[i].username
-          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
-          io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
-        }
+      // Freeze the finished marble in place
+      const body = marbleBodies[i]
+      body.velocity.set(0, 0, 0)
+      body.angularVelocity.set(0, 0, 0)
+      body.type = CANNON.Body.STATIC
+      body.updateMassProperties()
 
-        if (marblesFinished.size >= marbleBodies.length) {
-          marblesState.phase = 'finished'
-          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
-          stopMarblesPhysics()
-          return
-        }
+      if (marblesFinished.size === 1) {
+        // First marble across = winner
+        marblesState.winner = marblesState.marbles[i].username
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
+      }
+
+      if (marblesFinished.size >= marbleBodies.length) {
+        marblesState.phase = 'finished'
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        stopMarblesPhysics()
+        return
       }
     }
   }, 1000 / 60)
