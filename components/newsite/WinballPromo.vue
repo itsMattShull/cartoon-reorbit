@@ -65,6 +65,15 @@ const linkProps = computed(() => {
   object-fit: cover;
 }
 
+@media (max-width: 768px) {
+  .winball-promo {
+    height: auto;
+  }
+  .winball-promo-bg {
+    height: auto;
+  }
+}
+
 .winball-promo-prize {
   position: absolute;
   top: 50%;
