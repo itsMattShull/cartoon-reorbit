@@ -184,27 +184,50 @@ function buildMarblesWorld() {
 
   const trackMat  = new CANNON.Material('mbl_track')
   const marbleMat = new CANNON.Material('mbl_marble')
-  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.35, restitution: 0.35 }))
-  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.1,  restitution: 0.55 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.3 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.45 }))
 
   const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
   const WALL_T  = 0.3  // wall half-thickness
   const FLOOR_H = 0.5  // floor half-height
 
   const samples = buildCourseSamples()
+  const nSegs = samples.length - 1
 
-  for (let i = 0; i < samples.length - 1; i++) {
+  // Pre-compute per-segment direction data for miter joint calculation
+  const segData = []
+  for (let i = 0; i < nSegs; i++) {
     const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
-    const midX = (x1 + x2) / 2, midZ = (z1 + z2) / 2
     const dx = x2 - x1, dz = z2 - z1
     const len = Math.sqrt(dx * dx + dz * dz)
+    segData.push({ dx, dz, len, angle: Math.atan2(dx, dz) })
+  }
+
+  // Miter extension at the joint between segment a and b so boxes overlap flush
+  function miterExt(a, b) {
+    if (a < 0 || b >= nSegs) return 0.1
+    let delta = segData[b].angle - segData[a].angle
+    if (delta >  Math.PI) delta -= 2 * Math.PI
+    if (delta < -Math.PI) delta += 2 * Math.PI
+    return Math.min(COURSE_HALF_W * Math.abs(Math.tan(delta / 2)), COURSE_HALF_W)
+  }
+
+  for (let i = 0; i < nSegs; i++) {
+    const { dx, dz, len, angle } = segData[i]
     if (len < 0.001) continue
-    const angle = Math.atan2(dx, dz)
-    const halfSeg = len / 2 + 0.08  // slight overlap to seal gaps between boxes
+    const [x1, z1] = samples[i], [x2, z2] = samples[i + 1]
+
+    const extBack  = miterExt(i - 1, i)
+    const extFront = miterExt(i, i + 1)
+    const halfLen  = (len + extBack + extFront) / 2
+
+    const shift = (extFront - extBack) / 2
+    const midX = (x1 + x2) / 2 + (dx / len) * shift
+    const midZ = (z1 + z2) / 2 + (dz / len) * shift
 
     // Floor
     const floor = new CANNON.Body({ mass: 0, material: trackMat })
-    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, halfSeg)))
+    floor.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W, FLOOR_H, halfLen)))
     floor.position.set(midX, -FLOOR_H, midZ)
     floor.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
     world.addBody(floor)
@@ -213,7 +236,7 @@ function buildMarblesWorld() {
     const lx = midX + (-dz / len) * (COURSE_HALF_W + WALL_T)
     const lz = midZ + ( dx / len) * (COURSE_HALF_W + WALL_T)
     const lw = new CANNON.Body({ mass: 0, material: trackMat })
-    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfSeg)))
+    lw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfLen)))
     lw.position.set(lx, WALL_H, lz)
     lw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
     world.addBody(lw)
@@ -222,20 +245,35 @@ function buildMarblesWorld() {
     const rx = midX + ( dz / len) * (COURSE_HALF_W + WALL_T)
     const rz = midZ + (-dx / len) * (COURSE_HALF_W + WALL_T)
     const rw = new CANNON.Body({ mass: 0, material: trackMat })
-    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfSeg)))
+    rw.addShape(new CANNON.Box(new CANNON.Vec3(WALL_T, WALL_H, halfLen)))
     rw.position.set(rx, WALL_H, rz)
     rw.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle)
     world.addBody(rw)
   }
 
-  // Pegs – alternating sides every 8th sample point
-  for (let i = 5; i < samples.length - 5; i += 8) {
+  // End-cap wall at the finish line — solid physics body matching the visual cap
+  {
+    const lastIdx = samples.length - 1
+    const [finX, finZ] = samples[lastIdx]
+    const [prevX, prevZ] = samples[lastIdx - 1]
+    const adx = finX - prevX, adz = finZ - prevZ
+    const approachAngle = Math.atan2(adx, adz)
+    const cap = new CANNON.Body({ mass: 0, material: trackMat })
+    cap.addShape(new CANNON.Box(new CANNON.Vec3(COURSE_HALF_W + 1, WALL_H, WALL_T)))
+    cap.position.set(finX, WALL_H, finZ)
+    cap.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), approachAngle)
+    world.addBody(cap)
+  }
+
+  // Pegs – denser spacing (every 5 samples), spread throughout, cycling left/center/right/center
+  const PEG_PATTERN = [-1, 0, 1, 0]
+  for (let i = 5; i < samples.length - 7; i += 5) {
     const [px, pz] = samples[i]
     const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
     const ddx = nx - px, ddz = nz - pz
     const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
     if (dlen < 0.001) continue
-    const side = ((Math.floor(i / 8)) % 3) - 1  // -1, 0, +1
+    const side = PEG_PATTERN[Math.floor(i / 5) % PEG_PATTERN.length]
     const off  = side * (COURSE_HALF_W * 0.45)
     const b = new CANNON.Body({ mass: 0, material: trackMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
@@ -281,7 +319,7 @@ function startMarblesPhysics() {
 
   const FIXED_STEP = 1 / 60
   marblesPhysInterval = setInterval(() => {
-    world.step(FIXED_STEP)
+    world.step(FIXED_STEP, FIXED_STEP, 3)
 
     if (marblesState.phase !== 'racing') return
     for (let i = 0; i < marbleBodies.length; i++) {

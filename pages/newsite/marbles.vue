@@ -338,14 +338,15 @@ function buildTrackMeshes() {
     scene.add(rw)
   }
 
-  // Pegs — same logic as server
-  for (let i = 5; i < samples.length - 5; i += 8) {
+  // Pegs — same logic as server (denser, every 5 samples, cycling left/center/right/center)
+  const PEG_PATTERN = [-1, 0, 1, 0]
+  for (let i = 5; i < samples.length - 7; i += 5) {
     const [px, pz] = samples[i]
     const [nx, nz] = samples[Math.min(i + 1, samples.length - 1)]
     const ddx = nx - px, ddz = nz - pz
     const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
     if (dlen < 0.001) continue
-    const side = ((Math.floor(i / 8)) % 3) - 1
+    const side = PEG_PATTERN[Math.floor(i / 5) % PEG_PATTERN.length]
     const off  = side * (COURSE_HALF_W * 0.45)
     const mesh = new THREE.Mesh(pegGeo, pegMat)
     mesh.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
