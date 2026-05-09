@@ -4,8 +4,8 @@
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
       <div class="cz-topbar-left">
-        <OrangeButton v-if="isOwnZone" @click="toggleBuild">
-          {{ cz.buildMode ? 'Exit Build' : 'Build' }}
+        <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
+          {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
         </OrangeButton>
         <NuxtLink v-else-if="viewedOwner" :to="`/newsite/trade?username=${encodeURIComponent(viewedOwner.username)}`" style="text-decoration:none;display:contents;">
           <OrangeButton>Trade</OrangeButton>
@@ -226,6 +226,9 @@ const viewedUsername = ref(null)   // username whose zone is currently displayed
 // Track in-flight prefetch so toggleBuild can await it instead of double-fetching
 const prefetchPromise = ref(null)
 
+// True while build-mode data is loading (prevents double-click and shows spinner on button)
+const buildLoading = ref(false)
+
 // Local drag: repositioning toons already on the canvas
 const localDrag = ref(null)  // { toon, offsetX, offsetY }
 
@@ -385,46 +388,55 @@ function goToMyCzone() {
 }
 
 async function toggleBuild() {
-  if (!isOwnZone.value) return
-  const wasBuilding = cz.value.buildMode
-  cz.value.buildMode = !cz.value.buildMode
-  if (wasBuilding) {
+  if (!isOwnZone.value || buildLoading.value) return
+  if (cz.value.buildMode) {
+    // Exit build mode: save first, then switch
+    cz.value.buildMode = false
     await save()
     const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
     if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
       cz.value.activeZone = firstActive
     }
   } else {
-    // If the prefetch is still in flight, wait for it (max 5 s) so we don't
-    // start duplicate requests. The timeout prevents an ad-blocker-stalled
-    // prefetch from blocking build mode indefinitely.
-    if (prefetchPromise.value) {
-      await Promise.race([
-        prefetchPromise.value,
-        new Promise(resolve => setTimeout(resolve, 5000))
-      ])
-    }
+    // Enter build mode: load data FIRST, then reveal sidebar so it's never blank.
+    buildLoading.value = true
+    try {
+      // Wait for any in-flight prefetch (max 5 s) before deciding what to fetch.
+      if (prefetchPromise.value) {
+        await Promise.race([
+          prefetchPromise.value,
+          new Promise(resolve => setTimeout(resolve, 5000))
+        ])
+      }
 
-    if (!cz.value.collection.length) {
-      cz.value.loadingCollection = true
-      try {
-        cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
-      } catch (e) {
-        console.error('MyCzone: failed to load collection', e)
-      } finally {
-        cz.value.loadingCollection = false
+      const fetches = []
+      if (!cz.value.collection.length) {
+        fetches.push(
+          (async () => {
+            try {
+              cz.value.collection = await $fetch(`/api/collection/${user.value.username}`)
+            } catch (e) {
+              console.error('MyCzone: failed to load collection', e)
+            }
+          })()
+        )
       }
-    }
-    if (!cz.value.backgrounds.length) {
-      cz.value.loadingBackgrounds = true
-      try {
-        cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
-      } catch (e) {
-        console.error('MyCzone: failed to load backgrounds', e)
-      } finally {
-        cz.value.loadingBackgrounds = false
+      if (!cz.value.backgrounds.length) {
+        fetches.push(
+          (async () => {
+            try {
+              cz.value.backgrounds = await $fetch('/api/czone/backgrounds-available')
+            } catch (e) {
+              console.error('MyCzone: failed to load backgrounds', e)
+            }
+          })()
+        )
       }
+      await Promise.all(fetches)
+    } finally {
+      buildLoading.value = false
     }
+    cz.value.buildMode = true
   }
 }
 
