@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
 dotenv.config()
+import * as CANNON from 'cannon-es'
 
 import { createServer }  from 'http'
 import { Server }        from 'socket.io'
@@ -98,6 +99,189 @@ function stwSnapshot() {
     sessionId: spinWheelState.sessionId,
     spinning: spinWheelState.spinning
   }
+}
+
+/* ── Marble Race ─────────────────────────────────────────── */
+const MARBLES_ROOM = 'marbles-race'
+const MARBLE_COLORS = [
+  '#FF4444', '#44CCFF', '#44FF66', '#FFD700', '#FF44DD',
+  '#00FFCC', '#FF8844', '#AA44FF', '#AAFFAA', '#FF88CC',
+  '#88CCFF', '#FFCC44', '#CC44FF', '#44FFD0', '#FF6688',
+  '#66FF44', '#FF4488', '#44AAFF', '#FFAA66', '#AA88FF',
+]
+
+const marblesState = {
+  marbles: [],      // { id, username, color }
+  isOpen: false,
+  phase: 'waiting', // 'waiting' | 'racing' | 'finished'
+  sessionId: randomUUID(),
+  winner: null,
+}
+
+let marblesWorld = null
+let marbleBodies = []     // parallel array to marblesState.marbles
+let marblesPhysInterval = null
+let marblesBroadcastInterval = null
+
+const MBL_RADIUS  = 0.8
+const MBL_FINISH_Z = -105  // world-Z at finish line
+
+function marblesSnapshot() {
+  return {
+    marbles:   marblesState.marbles.map(m => ({ ...m })),
+    isOpen:    marblesState.isOpen,
+    phase:     marblesState.phase,
+    sessionId: marblesState.sessionId,
+    winner:    marblesState.winner,
+  }
+}
+
+// ─── Track segments ────────────────────────────────────────────────────────
+// Flat in XZ plane.  Gravity = (0,-4,-10) drives marbles from Z=+95 → Z=-110.
+// Each entry: [cx, cz, halfW, halfLen, rotY]  (floor boxes, Y=floor surface=0)
+const MBL_FLOOR_SEGS = [
+  // section 1 – straight, centred X=0
+  [  0,  70,  6, 20, 0],
+  // diagonal transition → X=+8
+  [  4,  40,  8, 10, 0],
+  // section 2 – straight, centred X=+8
+  [  8,   7,  5, 22.5, 0],
+  // diagonal transition → X=-8
+  [  0, -25, 10, 10, 0],
+  // section 3 – straight, centred X=-8
+  [ -8, -55,  5, 20, 0],
+  // diagonal transition → X=0
+  [ -4,-82.5, 8, 7.5, 0],
+  // finish straight – centred X=0
+  [  0,-100,  7, 10, 0],
+]
+
+// Left/right wall pairs for each segment: [segIdx, leftX, rightX]
+const MBL_WALL_PAIRS = [
+  [0,  -6.3,  6.3],
+  [1,  -4.5, 12.5],
+  [2,   2.7, 13.3],
+  [3,  -10.5, 10.5],
+  [4, -13.3, -2.7],
+  [5, -12.5,  4.5],
+  [6,  -7.3,  7.3],
+]
+
+// Peg positions [x, z]
+const MBL_PEGS = [
+  // section 1 (around X=0)
+  [-3,78],[3,75],[0,72],[-2,68],[2,64],[-3,60],[3,57],[0,54],
+  // section 2 (around X=+8)
+  [5,25],[11,22],[8,18],[5,14],[11,10],[8,6],[5,2],[11,-2],[8,-7],[5,-11],
+  // section 3 (around X=-8)
+  [-11,-40],[-5,-43],[-8,-47],[-11,-51],[-5,-55],[-8,-59],[-11,-63],[-5,-67],[-8,-71],
+]
+
+function buildMarblesWorld() {
+  const world = new CANNON.World()
+  world.gravity.set(0, -4, -10)
+  world.broadphase = new CANNON.SAPBroadphase(world)
+  world.allowSleep = false
+
+  const trackMat  = new CANNON.Material('mbl_track')
+  const marbleMat = new CANNON.Material('mbl_marble')
+
+  world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, {
+    friction: 0.35, restitution: 0.35,
+  }))
+  world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, {
+    friction: 0.1, restitution: 0.55,
+  }))
+
+  const FLOOR_Y = -0.5
+  const WALL_H  = 1.5
+
+  // Floor segments
+  for (const [cx, cz, halfW, halfLen] of MBL_FLOOR_SEGS) {
+    const b = new CANNON.Body({ mass: 0, material: trackMat })
+    b.addShape(new CANNON.Box(new CANNON.Vec3(halfW, 0.5, halfLen)))
+    b.position.set(cx, FLOOR_Y, cz)
+    world.addBody(b)
+  }
+
+  // Walls
+  for (const [si, lx, rx] of MBL_WALL_PAIRS) {
+    const [cx, cz, , halfLen] = MBL_FLOOR_SEGS[si]
+    for (const wx of [lx, rx]) {
+      const b = new CANNON.Body({ mass: 0, material: trackMat })
+      b.addShape(new CANNON.Box(new CANNON.Vec3(0.3, WALL_H, halfLen)))
+      b.position.set(wx, WALL_H, cz)
+      world.addBody(b)
+    }
+  }
+
+  // Pegs
+  for (const [px, pz] of MBL_PEGS) {
+    const b = new CANNON.Body({ mass: 0, material: trackMat })
+    b.addShape(new CANNON.Sphere(0.6))
+    b.position.set(px, 0.6, pz)
+    world.addBody(b)
+  }
+
+  return { world, marbleMat }
+}
+
+function getMarbleStartPositions(count) {
+  const spread = Math.min(count - 1, 10) * 1.8
+  const step   = count > 1 ? spread / (count - 1) : 0
+  return Array.from({ length: count }, (_, i) => ({
+    x: -spread / 2 + i * step + (Math.random() - 0.5) * 0.2,
+    y: 2,
+    z: 87 + (Math.random() - 0.5) * 2,
+  }))
+}
+
+function stopMarblesPhysics() {
+  if (marblesPhysInterval)      { clearInterval(marblesPhysInterval);      marblesPhysInterval = null }
+  if (marblesBroadcastInterval) { clearInterval(marblesBroadcastInterval); marblesBroadcastInterval = null }
+  marblesWorld = null
+  marbleBodies = []
+}
+
+function startMarblesPhysics() {
+  const { world, marbleMat } = buildMarblesWorld()
+  marblesWorld = world
+
+  const positions = getMarbleStartPositions(marblesState.marbles.length)
+  marbleBodies = marblesState.marbles.map((_, i) => {
+    const body = new CANNON.Body({ mass: 1, material: marbleMat, linearDamping: 0.03, angularDamping: 0.1 })
+    body.addShape(new CANNON.Sphere(MBL_RADIUS))
+    body.position.set(positions[i].x, positions[i].y, positions[i].z)
+    world.addBody(body)
+    return body
+  })
+
+  const FIXED_STEP = 1 / 60
+  marblesPhysInterval = setInterval(() => {
+    world.step(FIXED_STEP)
+
+    if (marblesState.phase !== 'racing') return
+    for (let i = 0; i < marbleBodies.length; i++) {
+      if (marbleBodies[i].position.z < MBL_FINISH_Z) {
+        marblesState.phase  = 'finished'
+        marblesState.winner = marblesState.marbles[i].username
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
+        stopMarblesPhysics()
+        return
+      }
+    }
+  }, 1000 / 60)
+
+  marblesBroadcastInterval = setInterval(() => {
+    const positions = marbleBodies.map((body, i) => ({
+      id: marblesState.marbles[i].id,
+      x:  +body.position.x.toFixed(3),
+      y:  +body.position.y.toFixed(3),
+      z:  +body.position.z.toFixed(3),
+    }))
+    io.to(MARBLES_ROOM).emit('marbles:tick', { positions })
+  }, 1000 / 20)
 }
 
 /* ── Monster Battles (1v1) ───────────────────────────────── */
@@ -2995,6 +3179,61 @@ io.on('connection', socket => {
       io.to(STW_ROOM).emit('stw:winner', { username: winner })
       io.to(STW_ROOM).emit('stw:state', stwSnapshot())
     }, 7000)
+  })
+
+  // ── Marble Race handlers ─────────────────────────────────────────────────
+  socket.on('marbles:subscribe', () => {
+    socket.join(MARBLES_ROOM)
+    socket.emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:join', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    if (!marblesState.isOpen)                       return socket.emit('marbles:error', { message: 'Joining is not open.' })
+    if (marblesState.phase !== 'waiting')           return socket.emit('marbles:error', { message: 'Race already in progress.' })
+    if (marblesState.marbles.some(m => m.username === auth.username))
+      return socket.emit('marbles:error', { message: 'Already joined.' })
+    const color = MARBLE_COLORS[marblesState.marbles.length % MARBLE_COLORS.length]
+    marblesState.marbles.push({ id: randomUUID(), username: auth.username, color })
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:allow', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Race not in waiting phase.' })
+    marblesState.isOpen = true
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:clear', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin) return socket.emit('marbles:error', { message: 'Admin only.' })
+    stopMarblesPhysics()
+    marblesState.marbles   = []
+    marblesState.isOpen    = false
+    marblesState.phase     = 'waiting'
+    marblesState.winner    = null
+    marblesState.sessionId = randomUUID()
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+  })
+
+  socket.on('marbles:start', async () => {
+    const auth = await resolveSocketUser(socket)
+    if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
+    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Already started.' })
+    if (marblesState.marbles.length === 0) return socket.emit('marbles:error', { message: 'No marbles to race.' })
+    marblesState.isOpen = false
+    marblesState.phase  = 'racing'
+    io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+    startMarblesPhysics()
   })
 })
 
