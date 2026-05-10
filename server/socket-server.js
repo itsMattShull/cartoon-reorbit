@@ -125,7 +125,6 @@ let marblesPhysInterval = null
 let marblesBroadcastInterval = null
 
 const MBL_RADIUS   = 0.8
-const MBL_FINISH_Z = -118  // world-Z at finish line
 
 // Curved course definition — Catmull-Rom spine control points [x, z]
 const COURSE_SPINE = [
@@ -147,6 +146,23 @@ const COURSE_HALF_W      = 5   // half-width of channel
 const COURSE_N_SEGS      = 120 // number of approximation segments
 const FUNNEL_OPEN_HALF_W = 14  // half-width at the funnel's open end
 const FUNNEL_LENGTH      = 19  // distance from course start to funnel open end
+
+// Finish-line detection plane — derived from the last COURSE_SPINE segment so detection
+// matches the angled end-cap wall at every lane.  The wall is rotated to follow the
+// course direction, so its world-Z spans from ≈-114 on one side to ≈-121 on the other.
+// A raw z <= -118 threshold misses every marble that stops against the "high" side of the
+// wall; the dot-product test fires correctly regardless of which lane the marble crosses.
+{
+  const _fs  = COURSE_SPINE[COURSE_SPINE.length - 1]   // [x, z] of finish centre
+  const _fsp = COURSE_SPINE[COURSE_SPINE.length - 2]   // [x, z] one step before
+  const _fdx = _fs[0] - _fsp[0], _fdz = _fs[1] - _fsp[1]
+  const _fl  = Math.sqrt(_fdx * _fdx + _fdz * _fdz)
+  var FINISH_NORM_X     = _fdx / _fl   // finish approach normal  X (unit)
+  var FINISH_NORM_Z     = _fdz / _fl   // finish approach normal  Z (unit)
+  // Threshold = projection of finish wall centre onto approach normal, minus (wall
+  // half-thickness 0.3 + marble radius).  Fires when marble surface reaches wall face.
+  var FINISH_DETECT_DOT = (_fs[0] * FINISH_NORM_X + _fs[1] * FINISH_NORM_Z) - (0.3 + MBL_RADIUS)
+}
 
 // Funnel approach direction — unit vector pointing from course start backward into the funnel,
 // derived from the first spine segment so the funnel aligns with the track.
@@ -458,17 +474,18 @@ function startMarblesPhysics() {
 
     if (marblesState.phase !== 'racing') return
 
-    // Collect all marbles that crossed the finish line this step, then sort by
-    // Z ascending (most negative = furthest past the line = physically first).
-    // Without this, index order (join order) would break ties instead of position.
+    // Collect all marbles that reached the finish this step using the approach-plane
+    // dot-product test (see FINISH_NORM_X/Z constants).  Sort by dot descending so
+    // the marble furthest past the finish wall is processed first and wins ties.
     const crossedThisStep = []
     for (let i = 0; i < marbleBodies.length; i++) {
       if (marblesFinished.has(i)) continue
-      if (marbleBodies[i].position.z <= MBL_FINISH_Z) {
-        crossedThisStep.push({ i, z: marbleBodies[i].position.z })
+      const dot = marbleBodies[i].position.x * FINISH_NORM_X + marbleBodies[i].position.z * FINISH_NORM_Z
+      if (dot >= FINISH_DETECT_DOT) {
+        crossedThisStep.push({ i, dot })
       }
     }
-    crossedThisStep.sort((a, b) => a.z - b.z)
+    crossedThisStep.sort((a, b) => b.dot - a.dot)
 
     for (const { i } of crossedThisStep) {
       marblesFinished.add(i)
