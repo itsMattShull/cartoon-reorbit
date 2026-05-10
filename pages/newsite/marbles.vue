@@ -153,6 +153,11 @@ let marbleMeshMap = new Map()   // marble id → { mesh, targetPos, username }
 let labelDivMap   = new Map()   // marble id → DOM label div
 let labelContainer = null
 
+// Marbles whose Y dropped below the course floor are considered dead and
+// excluded from rankings/camera. Floor top surface is at Y = 0.
+const DEATH_Y = -5
+let deadMarbles = new Set()   // marble ids that have fallen off the course
+
 // Camera control state
 let isDragging = false, lastMouseX = 0, lastMouseY = 0
 let camTheta = Math.PI, camPhi = Math.PI / 4
@@ -197,6 +202,13 @@ function connectSocket() {
       const entry = marbleMeshMap.get(pos.id)
       if (entry) {
         entry.targetPos.set(pos.x, pos.y, pos.z)
+        if (!deadMarbles.has(pos.id) && pos.y < DEATH_Y) {
+          deadMarbles.add(pos.id)
+          // Grey out the marble mesh so it's visually distinct
+          entry.mesh.material.color.set(0x444444)
+          entry.mesh.material.opacity = 0.35
+          entry.mesh.material.transparent = true
+        }
       }
     }
   })
@@ -599,6 +611,7 @@ function resetScene() {
     labelContainer?.removeChild(div)
   }
   labelDivMap.clear()
+  deadMarbles.clear()
 }
 
 // ─── Camera helpers ────────────────────────────────────────────────────────
@@ -620,7 +633,8 @@ function applyCameraOrbit() {
 
 function getLeaderPosition() {
   let minZ = Infinity, leader = null
-  for (const [, entry] of marbleMeshMap) {
+  for (const [id, entry] of marbleMeshMap) {
+    if (deadMarbles.has(id)) continue
     if (entry.targetPos.z < minZ) {
       minZ = entry.targetPos.z
       leader = entry.targetPos
@@ -632,8 +646,11 @@ function getLeaderPosition() {
 function getMyMarblePosition() {
   const myUsername = user.value?.username
   if (!myUsername) return null
-  for (const [, entry] of marbleMeshMap) {
-    if (entry.username === myUsername) return entry.targetPos
+  for (const [id, entry] of marbleMeshMap) {
+    if (entry.username === myUsername) {
+      // If own marble is dead, fall back to following the leader
+      return deadMarbles.has(id) ? getLeaderPosition() : entry.targetPos
+    }
   }
   return null
 }
@@ -670,7 +687,7 @@ function animate() {
       const sx = ( _tmpVec.x * 0.5 + 0.5) * W
       const sy = (-_tmpVec.y * 0.5 + 0.5) * H
       const behind = _tmpVec.z > 1
-      div.style.display = behind ? 'none' : 'block'
+      div.style.display = (behind || deadMarbles.has(id)) ? 'none' : 'block'
       div.style.left = sx + 'px'
       div.style.top  = sy + 'px'
     }
