@@ -9,7 +9,7 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
-    const { userId, ctoonId, isSpecial = false } = job.data
+    const { userId, ctoonId, isSpecial = false, effectivePrice } = job.data
 
     const TIME_BASED_CAP = 999999999
 
@@ -79,7 +79,8 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     const totalPoints = wallet?.points ?? 0
     const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
     const availablePoints = totalPoints - lockedSum
-    if (!isSpecial && availablePoints < ctoon.price) {
+    const chargePrice = (typeof effectivePrice === 'number' && effectivePrice >= 0) ? effectivePrice : ctoon.price
+    if (!isSpecial && availablePoints < chargePrice) {
       throw new Error('Insufficient points')
     }
 
@@ -162,12 +163,12 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       if (!isSpecial) {
         const updated = await tx.userPoints.update({
           where: { userId },
-          data:  { points: { decrement: ctoon.price } }
+          data:  { points: { decrement: chargePrice } }
         })
         await tx.pointsLog.create({
           data: {
             userId,
-            points: ctoon.price,
+            points: chargePrice,
             total: updated.points,
             method: 'Bought cToon',
             direction: 'decrease'

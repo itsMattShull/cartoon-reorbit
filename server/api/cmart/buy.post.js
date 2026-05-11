@@ -130,6 +130,15 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // — Resolve effective price (apply global half-price discount if active)
+    let effectivePrice = ctoon.price
+    try {
+      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartHalfPriceEnabled: true } })
+      if (cfg?.cmartHalfPriceEnabled === true) {
+        effectivePrice = Math.floor(ctoon.price / 2)
+      }
+    } catch {}
+
     // — Verify available points (total - active locks)
     const [wallet, activeLocks] = await Promise.all([
       prisma.userPoints.findUnique({
@@ -144,12 +153,12 @@ export default defineEventHandler(async (event) => {
     const totalPoints = wallet?.points ?? 0
     const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
     const availablePoints = totalPoints - lockedSum
-    if (ctoon.price > availablePoints) {
+    if (effectivePrice > availablePoints) {
       throw createError({ statusCode: 400, statusMessage: 'Not enough available points.' })
     }
 
     // — Enqueue the mint job
-    const job = await mintQueue.add('mintCtoon', { userId, ctoonId })
+    const job = await mintQueue.add('mintCtoon', { userId, ctoonId, effectivePrice })
 
     // — Set up a QueueEvents listener on the same queue
     queueEvents = new QueueEvents(mintQueue.name, { connection: redisConnection })

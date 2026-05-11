@@ -246,6 +246,29 @@
             <p class="text-xs text-gray-500 mt-1">Cost when a user already has 1 or more additional cZones.</p>
           </div>
         </div>
+
+        <!-- Global Price Changes -->
+        <div class="border-t pt-5">
+          <h2 class="text-base font-semibold text-gray-800 mb-1">Global Price Changes</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            When enabled, all cToon and pack prices in cMart will be cut in half at purchase time.
+            Prices shown to users will reflect the discount.
+          </p>
+          <label class="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              v-model="cmartHalfPriceEnabled"
+              class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+            />
+            <span class="text-sm font-medium text-gray-700">
+              Enable 50% off all cToons &amp; packs
+            </span>
+          </label>
+          <p v-if="cmartHalfPriceEnabled" class="mt-2 text-xs text-indigo-600 font-medium">
+            Half-price mode is currently ON. Users will be charged half the listed price.
+          </p>
+        </div>
+
         <div>
           <button class="btn-primary" :disabled="savingCmart" @click="saveCmart">
             <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
@@ -275,6 +298,11 @@ const savingDuplicates = ref(false)
 const savingAuctions = ref(false)
 const savingCmart = ref(false)
 
+// cMart state
+const firstAdditionalCzoneCost      = ref(25000)
+const subsequentAdditionalCzoneCost = ref(50000)
+const cmartHalfPriceEnabled         = ref(false)
+
 // Global Points state
 const dailyLoginPoints     = ref(500)
 const dailyNewUserPoints   = ref(1000)
@@ -303,6 +331,7 @@ async function loadGlobal() {
     featuredAuctionHours.value        = Array.isArray(g?.featuredAuctionHours) ? g.featuredAuctionHours : []
     featuredAuctionIntervalDays.value = Number(g?.featuredAuctionIntervalDays ?? 1)
     featuredAuctionsPerSlot.value     = Number(g?.featuredAuctionsPerSlot ?? 1)
+    cmartHalfPriceEnabled.value = Boolean(g?.cmartHalfPriceEnabled ?? false)
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -404,6 +433,29 @@ function formatHour(h) {
   if (h < 12) return `${h}am`
   if (h === 12) return '12pm'
   return `${h - 12}pm`
+}
+
+async function saveCmart() {
+  savingCmart.value = true; toast.value = null
+  if (typeof cmartHalfPriceEnabled.value !== 'boolean') {
+    toast.value = { type: 'error', msg: 'Invalid value for half-price toggle.' }
+    savingCmart.value = false
+    return
+  }
+  try {
+    await $fetch('/api/admin/global-config', {
+      method: 'POST',
+      body: {
+        dailyPointLimit: Number(dailyPointLimit.value),
+        cmartHalfPriceEnabled: cmartHalfPriceEnabled.value
+      }
+    })
+    toast.value = { type: 'ok', msg: 'cMart settings saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
+  } finally {
+    savingCmart.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
 }
 
 async function saveDuplicateSettings() {
