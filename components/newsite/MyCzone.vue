@@ -353,6 +353,9 @@ async function toggleBuild() {
   if (cz.value.buildMode) {
     // Exit build mode: save first, then switch
     cz.value.buildMode = false
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      mobileSidebarCollapsed.value = true
+    }
     await save()
     const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
     if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
