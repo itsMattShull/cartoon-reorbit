@@ -49,6 +49,7 @@
 
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="cmart-header">Cartoon ReOrbit cMart</div>
+    <div v-if="cmartHalfPriceEnabled" class="cmart-sale-banner">🏷️ 50% Off Sale! All prices are half price.</div>
 
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
@@ -95,7 +96,9 @@
           </template>
           <template #footer-left>
             <span v-if="isSoldOut(c) && !hasCountdown(c)" class="card-sold-out">Sold Out</span>
-            <span v-else class="card-price">{{ c.price.toLocaleString() }} pts</span>
+            <template v-else>
+              <span class="card-price" :class="{ 'card-price--sale': cmartHalfPriceEnabled }">{{ displayPrice(c.price).toLocaleString() }} pts</span>
+            </template>
           </template>
           <template #footer-right>
             <template v-if="!isSoldOut(c) || hasCountdown(c)">
@@ -150,7 +153,12 @@
             :disabled="buyingPackIds.includes(pack.id)"
             @click="buyPack(pack)"
           >
-            {{ buyingPackIds.includes(pack.id) ? 'Purchasing…' : `Buy for ${pack.price.toLocaleString()} pts` }}
+            <template v-if="buyingPackIds.includes(pack.id)">Purchasing…</template>
+            <template v-else-if="cmartHalfPriceEnabled">
+              Buy for {{ displayPrice(pack.price).toLocaleString() }} pts
+              <span class="pack-price-original">{{ pack.price.toLocaleString() }}</span>
+            </template>
+            <template v-else>Buy for {{ pack.price.toLocaleString() }} pts</template>
           </GreenButton>
         </div>
       </template>
@@ -192,6 +200,13 @@ const loading    = ref(true)
 const buyingIds  = ref([])
 const cmartEl    = ref(null)
 const filter     = useNewSiteCtoonFilter()
+
+// ── Half-price setting ─────────────────────────────────────────
+const cmartHalfPriceEnabled = ref(false)
+
+function displayPrice(originalPrice) {
+  return cmartHalfPriceEnabled.value ? Math.floor(originalPrice / 2) : originalPrice
+}
 
 // ── Packs state ──────────────────────────────────────────────
 const packs          = ref([])
@@ -364,7 +379,12 @@ async function fetchPacks() {
 
 onMounted(async () => {
   try {
-    allCtoons.value = await $fetch('/api/cmart')
+    const [ctoonRes, upgradesRes] = await Promise.all([
+      $fetch('/api/cmart'),
+      $fetch('/api/cmart/upgrades-config').catch(() => ({}))
+    ])
+    allCtoons.value = ctoonRes
+    cmartHalfPriceEnabled.value = upgradesRes?.cmartHalfPriceEnabled === true
     scheduleNextRefresh()
   } catch (err) {
     console.error('Cmart: failed to load', err)
@@ -383,6 +403,10 @@ onUnmounted(() => {
 
 async function buy(ctoon) {
   if (buyingIds.value.includes(ctoon.id)) return
+  if (user.value && user.value.points < displayPrice(ctoon.price)) {
+    showToast("You don't have enough points", 'error')
+    return
+  }
   buyingIds.value = [...buyingIds.value, ctoon.id]
 
   try {
@@ -391,7 +415,12 @@ async function buy(ctoon) {
       body: { ctoonId: ctoon.id },
     })
     showToast(`${ctoon.name} purchased!`, 'success')
-    allCtoons.value = await $fetch('/api/cmart')
+    const [ctoonRes] = await Promise.all([
+      $fetch('/api/cmart'),
+      fetchSelf({ force: true }),
+      loadOwnedCtoonIds()
+    ])
+    allCtoons.value = ctoonRes
     scheduleNextRefresh()
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'Purchase failed.'
@@ -412,7 +441,7 @@ function resetPackSequence() {
 
 async function buyPack(pack) {
   if (buyingPackIds.value.includes(pack.id)) return
-  if (user.value && user.value.points < pack.price) {
+  if (user.value && user.value.points < displayPrice(pack.price)) {
     showToast("You don't have enough points", 'error')
     return
   }
@@ -495,6 +524,32 @@ async function closeOverlay() {
   color: #ffffff;
   background: var(--OrbitLightBlue);
   box-sizing: border-box;
+}
+
+.cmart-sale-banner {
+  flex-shrink: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #fff;
+  background: #b91c1c;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-price--sale {
+  color: #ffd700;
+}
+
+.pack-price-original {
+  text-decoration: line-through;
+  opacity: 0.6;
+  font-size: 0.65em;
+  margin-left: 3px;
 }
 
 /* ── cToons grid ─────────────────────────────────────────────── */
