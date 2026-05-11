@@ -787,8 +787,8 @@ defineExpose({ save, clearZone })
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.85);
   border: none;
@@ -798,18 +798,18 @@ defineExpose({ save, clearZone })
   justify-content: center;
   pointer-events: auto;
   z-index: 10;
-  padding: 2px;
+  padding: 3px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .cz-bring-front-btn:hover { background: white; }
-.cz-bring-front-btn svg { width: 14px; height: 14px; color: black; }
+.cz-bring-front-btn svg { width: 16px; height: 16px; color: black; }
 
 .cz-size-cycle-btn {
   position: absolute;
   bottom: 2px;
   right: 2px;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.85);
   border: none;
@@ -819,11 +819,25 @@ defineExpose({ save, clearZone })
   justify-content: center;
   pointer-events: auto;
   z-index: 10;
-  padding: 2px;
+  padding: 3px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .cz-size-cycle-btn:hover { background: white; }
-.cz-size-cycle-btn svg { width: 14px; height: 14px; color: black; }
+.cz-size-cycle-btn svg { width: 16px; height: 16px; color: black; }
+
+@media (max-width: 768px) {
+  .cz-bring-front-btn,
+  .cz-size-cycle-btn {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+  }
+  .cz-bring-front-btn svg,
+  .cz-size-cycle-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}
 
 /* ── Bottom bar ── */
 .cz-bottombar {
