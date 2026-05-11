@@ -29,9 +29,22 @@
           />
         </div>
 
+        <!-- Available At -->
+        <div>
+          <label class="block font-medium mb-1">Available At (CST)</label>
+          <input
+            v-model="startsAt"
+            type="datetime-local"
+            class="w-full border rounded p-2"
+          />
+          <p class="text-sm text-gray-500">
+            Leave blank or set to any date/time (including past) — users can only redeem on or after this time. Defaults to now (CST).
+          </p>
+        </div>
+
         <!-- Expires At -->
         <div>
-          <label class="block font-medium mb-1">Expires At</label>
+          <label class="block font-medium mb-1">Expires At (CST)</label>
           <input
             v-model="expiresAt"
             type="datetime-local"
@@ -248,9 +261,36 @@ definePageMeta({
 
 const router = useRouter()
 
+function isoToCSTLocal(iso) {
+  const date = new Date(iso)
+  const parts = date.toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).split(', ')
+  const [m, d, y] = parts[0].split('/')
+  const time = parts[1]
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${time}`
+}
+
+function cstLocalToISO(localStr) {
+  if (!localStr) return null
+  const approxUTC = new Date(localStr + ':00Z')
+  const cstStr = approxUTC.toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).split(', ')
+  const [m2, d2, y2] = cstStr[0].split('/')
+  const cstEquivStr = `${y2}-${m2}-${d2}T${cstStr[1]}`
+  const diffMs = new Date(localStr + ':00Z') - new Date(cstEquivStr + ':00Z')
+  return new Date(approxUTC.getTime() + diffMs).toISOString()
+}
+
 // form state
 const code = ref('')
 const maxClaims = ref(1)
+const startsAt = ref(isoToCSTLocal(new Date().toISOString()))
 const expiresAt = ref('')        // datetime-local string, optional
 const points = ref(0)
 const ctoonRewards = ref([
@@ -376,6 +416,8 @@ async function submitForm() {
     error.value = 'Max Claims must be at least 1.'
     return
   }
+  const startsIso = cstLocalToISO(startsAt.value)
+
   let expiresIso = null
   if (expiresAt.value) {
     const dt = new Date(expiresAt.value)
@@ -467,6 +509,7 @@ async function submitForm() {
     code: code.value.trim(),
     maxClaims: maxClaims.value,
     prerequisites: validPrereqs,
+    startsAt: startsIso,
     expiresAt: expiresIso,
     rewards: [rewardBlock]
   }

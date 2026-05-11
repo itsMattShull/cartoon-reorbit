@@ -9,10 +9,17 @@ export default defineEventHandler(async (event) => {
   try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
-  const { code, maxClaims, expiresAt, rewards, prerequisites } = await readBody(event)
+  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites } = await readBody(event)
 
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   if (typeof maxClaims !== 'number' || maxClaims < 1) throw createError({ statusCode: 400, statusMessage: 'maxClaims must be >= 1.' })
+
+  let startsDate = null
+  if (startsAt) {
+    const dt = new Date(startsAt)
+    if (isNaN(dt.getTime())) throw createError({ statusCode: 400, statusMessage: 'Invalid startsAt.' })
+    startsDate = dt
+  }
 
   let expiresDate = null
   if (expiresAt) {
@@ -99,7 +106,7 @@ export default defineEventHandler(async (event) => {
     prisma.claimCodePrerequisite.deleteMany({ where: { codeId } }),
     prisma.claimCode.update({
       where: { code },
-      data: { maxClaims, expiresAt: expiresDate, rewards: { create: rewardCreates }, prerequisites: { create: prereqCreates } }
+      data: { maxClaims, startsAt: startsDate, expiresAt: expiresDate, rewards: { create: rewardCreates }, prerequisites: { create: prereqCreates } }
     })
   ])
   const updated = await prisma.claimCode.findUnique({
@@ -114,6 +121,7 @@ export default defineEventHandler(async (event) => {
   function simplify(cc) {
     return {
       maxClaims: cc.maxClaims,
+      startsAt: cc.startsAt ? new Date(cc.startsAt).toISOString() : null,
       expiresAt: cc.expiresAt ? new Date(cc.expiresAt).toISOString() : null,
       rewards: (cc.rewards || []).map(r => ({
         points: r.points ?? 0,
@@ -130,6 +138,11 @@ export default defineEventHandler(async (event) => {
     // scalar diffs
     if (existing.maxClaims !== maxClaims) {
       await logAdminChange(prisma, { userId: me.id, area, key: 'maxClaims', prevValue: existing.maxClaims, newValue: maxClaims })
+    }
+    const prevStarts = existing.startsAt ? new Date(existing.startsAt).toISOString() : null
+    const nextStarts = startsDate ? new Date(startsDate).toISOString() : null
+    if (prevStarts !== nextStarts) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'startsAt', prevValue: existing.startsAt, newValue: startsDate })
     }
     const prevExp = existing.expiresAt ? new Date(existing.expiresAt).toISOString() : null
     const nextExp = expiresDate ? new Date(expiresDate).toISOString() : null
