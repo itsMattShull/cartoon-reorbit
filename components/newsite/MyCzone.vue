@@ -191,6 +191,7 @@ function canvasH() { return CANVAS_H }
 const { user } = useAuth()
 const cz = useNewSiteCzoneState()
 const { open: openCtoonModal } = useCtoonModal()
+const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
 
@@ -378,6 +379,7 @@ async function toggleBuild() {
       buildLoading.value = false
     }
     cz.value.buildMode = true
+    mobileSidebarCollapsed.value = false
   }
 }
 
