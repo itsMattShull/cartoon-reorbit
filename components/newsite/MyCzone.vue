@@ -57,7 +57,6 @@
               class="cz-bring-front-btn"
               title="Bring to front"
               @click.stop="bringToFrontToon(toonIdx)"
-              @mousedown.stop
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
@@ -68,7 +67,6 @@
               class="cz-size-cycle-btn"
               :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
               @click.stop="cycleToonSize(toonIdx)"
-              @mousedown.stop
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
@@ -414,6 +412,7 @@ function onToonClick(toon) {
 // ── Canvas mousedown: reposition placed toons ─────────────────
 function onCanvasMouseDown(e) {
   if (!cz.value.buildMode) return
+  if (e.target.closest('.cz-bring-front-btn, .cz-size-cycle-btn')) return
   const { x, y } = toCanvasCoords(e.clientX, e.clientY)
   const toons = currentZone.value.toons
   for (let i = toons.length - 1; i >= 0; i--) {
@@ -430,6 +429,7 @@ function onCanvasMouseDown(e) {
 // ── Canvas touchstart: reposition placed toons (mobile) ───────
 function onCanvasTouchStart(e) {
   if (!cz.value.buildMode) return
+  if (e.target.closest('.cz-bring-front-btn, .cz-size-cycle-btn')) return
   const touch = e.touches[0]
   const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
   const toons = currentZone.value.toons
@@ -540,6 +540,9 @@ function cycleToonSize(idx) {
   const cur = toon.sizeScale || 1
   const next = SIZE_CYCLE[(SIZE_CYCLE.indexOf(cur) + 1) % SIZE_CYCLE.length]
   toon.sizeScale = next
+  // Re-clamp position so the toon never escapes canvas bounds after growing
+  toon.x = clamp(toon.x, 0, canvasW() - toonW(toon))
+  toon.y = clamp(toon.y, 0, canvasH() - toonH(toon))
 }
 
 // ── Populate toon dimensions from natural image size on load ──
