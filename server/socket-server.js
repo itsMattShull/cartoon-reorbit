@@ -125,7 +125,6 @@ let marblesPhysInterval = null
 let marblesBroadcastInterval = null
 
 const MBL_RADIUS   = 0.8
-const MBL_FINISH_Z = -118  // world-Z at finish line
 
 // Curved course definition — Catmull-Rom spine control points [x, z]
 const COURSE_SPINE = [
@@ -147,6 +146,23 @@ const COURSE_HALF_W      = 5   // half-width of channel
 const COURSE_N_SEGS      = 120 // number of approximation segments
 const FUNNEL_OPEN_HALF_W = 14  // half-width at the funnel's open end
 const FUNNEL_LENGTH      = 19  // distance from course start to funnel open end
+
+// Finish-line detection plane — derived from the last COURSE_SPINE segment so detection
+// matches the angled end-cap wall at every lane.  The wall is rotated to follow the
+// course direction, so its world-Z spans from ≈-114 on one side to ≈-121 on the other.
+// A raw z <= -118 threshold misses every marble that stops against the "high" side of the
+// wall; the dot-product test fires correctly regardless of which lane the marble crosses.
+{
+  const _fs  = COURSE_SPINE[COURSE_SPINE.length - 1]   // [x, z] of finish centre
+  const _fsp = COURSE_SPINE[COURSE_SPINE.length - 2]   // [x, z] one step before
+  const _fdx = _fs[0] - _fsp[0], _fdz = _fs[1] - _fsp[1]
+  const _fl  = Math.sqrt(_fdx * _fdx + _fdz * _fdz)
+  var FINISH_NORM_X     = _fdx / _fl   // finish approach normal  X (unit)
+  var FINISH_NORM_Z     = _fdz / _fl   // finish approach normal  Z (unit)
+  // Threshold = projection of finish wall centre onto approach normal, minus (wall
+  // half-thickness 0.3 + marble radius).  Fires when marble surface reaches wall face.
+  var FINISH_DETECT_DOT = (_fs[0] * FINISH_NORM_X + _fs[1] * FINISH_NORM_Z) - (0.3 + MBL_RADIUS)
+}
 
 // Funnel approach direction — unit vector pointing from course start backward into the funnel,
 // derived from the first spine segment so the funnel aligns with the track.
@@ -198,8 +214,10 @@ function buildMarblesWorld() {
 
   const trackMat  = new CANNON.Material('mbl_track')
   const marbleMat = new CANNON.Material('mbl_marble')
+  const pegMat    = new CANNON.Material('mbl_peg')
   world.addContactMaterial(new CANNON.ContactMaterial(trackMat, marbleMat, { friction: 0.4, restitution: 0.55 }))
   world.addContactMaterial(new CANNON.ContactMaterial(marbleMat, marbleMat, { friction: 0.2, restitution: 0.6 }))
+  world.addContactMaterial(new CANNON.ContactMaterial(pegMat, marbleMat,   { friction: 0.4, restitution: 0.95 }))
 
   const WALL_H  = 3    // wall half-height (total wall = 6 units tall)
   const WALL_T  = 0.3  // wall half-thickness
@@ -382,17 +400,17 @@ function buildMarblesWorld() {
     const baseOff = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
     const jitter  = (Math.random() - 0.5) * 0.5
     const rawSide = baseOff + jitter
-    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
-    // its surface and the wall — preventing marbles from getting wedged against the wall.
-    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
+    // Clamp so the peg always leaves a generous gap (1.5 buffer) between
+    // its surface and the wall — a marble physically cannot fit in the remaining space.
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 1.5  // 1.45
     const off     = Math.max(-MAX_OFF, Math.min(MAX_OFF, rawSide * (COURSE_HALF_W * 0.8)))
-    const b = new CANNON.Body({ mass: 0, material: trackMat })
+    const b = new CANNON.Body({ mass: 0, material: pegMat })
     b.addShape(new CANNON.Cylinder(0.45, 0.45, 3, 8))
     b.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
     world.addBody(b)
   }
 
-  return { world, marbleMat }
+  return { world, marbleMat, pegMat }
 }
 
 function getMarbleStartPositions(count) {
@@ -452,34 +470,45 @@ function startMarblesPhysics() {
 
   const FIXED_STEP = 1 / 60
   marblesPhysInterval = setInterval(() => {
-    world.step(FIXED_STEP, FIXED_STEP, 3)
+    world.step(FIXED_STEP, FIXED_STEP, 6)
 
     if (marblesState.phase !== 'racing') return
+
+    // Collect all marbles that reached the finish this step using the approach-plane
+    // dot-product test (see FINISH_NORM_X/Z constants).  Sort by dot descending so
+    // the marble furthest past the finish wall is processed first and wins ties.
+    const crossedThisStep = []
     for (let i = 0; i < marbleBodies.length; i++) {
       if (marblesFinished.has(i)) continue
-      if (marbleBodies[i].position.z <= MBL_FINISH_Z) {
-        marblesFinished.add(i)
+      const dot = marbleBodies[i].position.x * FINISH_NORM_X + marbleBodies[i].position.z * FINISH_NORM_Z
+      if (dot >= FINISH_DETECT_DOT) {
+        crossedThisStep.push({ i, dot })
+      }
+    }
+    crossedThisStep.sort((a, b) => b.dot - a.dot)
 
-        // Freeze the finished marble in place
-        const body = marbleBodies[i]
-        body.velocity.set(0, 0, 0)
-        body.angularVelocity.set(0, 0, 0)
-        body.type = CANNON.Body.STATIC
-        body.updateMassProperties()
+    for (const { i } of crossedThisStep) {
+      marblesFinished.add(i)
 
-        if (marblesFinished.size === 1) {
-          // First marble across = winner
-          marblesState.winner = marblesState.marbles[i].username
-          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
-          io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
-        }
+      // Freeze the finished marble in place
+      const body = marbleBodies[i]
+      body.velocity.set(0, 0, 0)
+      body.angularVelocity.set(0, 0, 0)
+      body.type = CANNON.Body.STATIC
+      body.updateMassProperties()
 
-        if (marblesFinished.size >= marbleBodies.length) {
-          marblesState.phase = 'finished'
-          io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
-          stopMarblesPhysics()
-          return
-        }
+      if (marblesFinished.size === 1) {
+        // First marble across = winner
+        marblesState.winner = marblesState.marbles[i].username
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
+      }
+
+      if (marblesFinished.size >= marbleBodies.length) {
+        marblesState.phase = 'finished'
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        stopMarblesPhysics()
+        return
       }
     }
   }, 1000 / 60)

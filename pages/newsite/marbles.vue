@@ -153,6 +153,11 @@ let marbleMeshMap = new Map()   // marble id → { mesh, targetPos, username }
 let labelDivMap   = new Map()   // marble id → DOM label div
 let labelContainer = null
 
+// Marbles whose Y dropped below the course floor are considered dead and
+// excluded from rankings/camera. Floor top surface is at Y = 0.
+const DEATH_Y = -5
+let deadMarbles = new Set()   // marble ids that have fallen off the course
+
 // Camera control state
 let isDragging = false, lastMouseX = 0, lastMouseY = 0
 let camTheta = Math.PI, camPhi = Math.PI / 4
@@ -197,6 +202,13 @@ function connectSocket() {
       const entry = marbleMeshMap.get(pos.id)
       if (entry) {
         entry.targetPos.set(pos.x, pos.y, pos.z)
+        if (!deadMarbles.has(pos.id) && pos.y < DEATH_Y) {
+          deadMarbles.add(pos.id)
+          // Grey out the marble mesh so it's visually distinct
+          entry.mesh.material.color.set(0x444444)
+          entry.mesh.material.opacity = 0.35
+          entry.mesh.material.transparent = true
+        }
       }
     }
   })
@@ -409,9 +421,9 @@ function buildTrackMeshes() {
     const dlen = Math.sqrt(ddx * ddx + ddz * ddz)
     if (dlen < 0.001) continue
     const side = PEG_BASE[Math.floor(i / 3) % PEG_BASE.length]
-    // Clamp so the peg always leaves a full marble-diameter gap (plus 0.5 buffer) between
-    // its surface and the wall — preventing marbles from getting wedged against the wall.
-    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 0.5  // 2.45
+    // Clamp so the peg always leaves a generous gap (1.5 buffer) between
+    // its surface and the wall — a marble physically cannot fit in the remaining space.
+    const MAX_OFF = COURSE_HALF_W - 0.45 - MBL_RADIUS * 2 - 1.5  // 1.45
     const off  = Math.max(-MAX_OFF, Math.min(MAX_OFF, side * (COURSE_HALF_W * 0.8)))
     const mesh = new THREE.Mesh(pegGeo, pegMat)
     mesh.position.set(px + (-ddz / dlen) * off, 1.5, pz + (ddx / dlen) * off)
@@ -599,6 +611,7 @@ function resetScene() {
     labelContainer?.removeChild(div)
   }
   labelDivMap.clear()
+  deadMarbles.clear()
 }
 
 // ─── Camera helpers ────────────────────────────────────────────────────────
@@ -620,7 +633,8 @@ function applyCameraOrbit() {
 
 function getLeaderPosition() {
   let minZ = Infinity, leader = null
-  for (const [, entry] of marbleMeshMap) {
+  for (const [id, entry] of marbleMeshMap) {
+    if (deadMarbles.has(id)) continue
     if (entry.targetPos.z < minZ) {
       minZ = entry.targetPos.z
       leader = entry.targetPos
@@ -632,8 +646,11 @@ function getLeaderPosition() {
 function getMyMarblePosition() {
   const myUsername = user.value?.username
   if (!myUsername) return null
-  for (const [, entry] of marbleMeshMap) {
-    if (entry.username === myUsername) return entry.targetPos
+  for (const [id, entry] of marbleMeshMap) {
+    if (entry.username === myUsername) {
+      // If own marble is dead, fall back to following the leader
+      return deadMarbles.has(id) ? getLeaderPosition() : entry.targetPos
+    }
   }
   return null
 }
@@ -670,7 +687,7 @@ function animate() {
       const sx = ( _tmpVec.x * 0.5 + 0.5) * W
       const sy = (-_tmpVec.y * 0.5 + 0.5) * H
       const behind = _tmpVec.z > 1
-      div.style.display = behind ? 'none' : 'block'
+      div.style.display = (behind || deadMarbles.has(id)) ? 'none' : 'block'
       div.style.left = sx + 'px'
       div.style.top  = sy + 'px'
     }
