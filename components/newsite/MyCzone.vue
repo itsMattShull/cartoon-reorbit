@@ -55,30 +55,26 @@
               draggable="false"
               @load="e => onToonImgLoad(e, toon)"
             />
-            <button
-              v-if="cz.buildMode"
-              class="cz-bring-front-btn"
-              title="Bring to front"
-              @click.stop="bringToFrontToon(toonIdx)"
-              @mousedown.stop
-              @touchstart.stop
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
-              </svg>
-            </button>
-            <button
-              v-if="cz.buildMode"
-              class="cz-size-cycle-btn"
-              :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
-              @click.stop="cycleToonSize(toonIdx)"
-              @mousedown.stop
-              @touchstart.stop
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            </button>
+            <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
+              <button
+                class="cz-bring-front-btn"
+                title="Bring to front"
+                @click.stop="bringToFrontToon(toonIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+                </svg>
+              </button>
+              <button
+                class="cz-size-cycle-btn"
+                :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
+                @click.stop="cycleToonSize(toonIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- ── cZone Search items (zone 0 only, visitor only) ── -->
@@ -790,31 +786,19 @@ defineExpose({ save, clearZone })
   display: block;
 }
 
-.cz-bring-front-btn {
+.cz-item-btns {
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  cursor: pointer;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
+  flex-direction: column;
+  gap: 2px;
   z-index: 10;
-  padding: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
 }
-.cz-bring-front-btn:hover { background: white; }
-.cz-bring-front-btn svg { width: 16px; height: 16px; color: black; }
 
+.cz-bring-front-btn,
 .cz-size-cycle-btn {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -824,15 +808,17 @@ defineExpose({ save, clearZone })
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto;
-  z-index: 10;
   padding: 3px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
+.cz-bring-front-btn:hover,
 .cz-size-cycle-btn:hover { background: white; }
+.cz-bring-front-btn svg,
 .cz-size-cycle-btn svg { width: 16px; height: 16px; color: black; }
 
 @media (max-width: 768px) {
+  .cz-item-btns { gap: 4px; }
   .cz-bring-front-btn,
   .cz-size-cycle-btn {
     width: 36px;
