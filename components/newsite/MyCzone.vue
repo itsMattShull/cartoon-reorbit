@@ -40,9 +40,12 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id }"
+            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
             @click.stop="onToonClick(toon)"
+            @mousedown="cz.buildMode && onItemMouseDown(toon, $event)"
+            @touchstart="cz.buildMode && onItemTouchStart(toon, $event)"
+            @contextmenu.prevent.stop="cz.buildMode && removeToon(toon)"
           >
 
             <img
@@ -52,26 +55,26 @@
               draggable="false"
               @load="e => onToonImgLoad(e, toon)"
             />
-            <button
-              v-if="cz.buildMode"
-              class="cz-bring-front-btn"
-              title="Bring to front"
-              @click.stop="bringToFrontToon(toonIdx)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
-              </svg>
-            </button>
-            <button
-              v-if="cz.buildMode"
-              class="cz-size-cycle-btn"
-              :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
-              @click.stop="cycleToonSize(toonIdx)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            </button>
+            <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
+              <button
+                class="cz-bring-front-btn"
+                title="Bring to front"
+                @click.stop="bringToFrontToon(toonIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17h10M9 13h6M12 6v7M9 9l3-3 3 3" />
+                </svg>
+              </button>
+              <button
+                class="cz-size-cycle-btn"
+                :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
+                @click.stop="cycleToonSize(toonIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- ── cZone Search items (zone 0 only, visitor only) ── -->
@@ -353,6 +356,9 @@ async function toggleBuild() {
   if (cz.value.buildMode) {
     // Exit build mode: save first, then switch
     cz.value.buildMode = false
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      mobileSidebarCollapsed.value = true
+    }
     await save()
     const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
     if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
@@ -409,54 +415,49 @@ function onToonClick(toon) {
   openCtoonModal({ ctoonId: toon.ctoonId, assetPath: toon.assetPath, name: toon.name })
 }
 
-// ── Canvas mousedown: reposition placed toons ─────────────────
-function onCanvasMouseDown(e) {
-  if (!cz.value.buildMode) return
-  if (e.target.closest('.cz-bring-front-btn, .cz-size-cycle-btn')) return
+// ── Item mousedown: reposition placed toon (desktop drag) ─────
+function onItemMouseDown(toon, e) {
   const { x, y } = toCanvasCoords(e.clientX, e.clientY)
-  const toons = currentZone.value.toons
-  for (let i = toons.length - 1; i >= 0; i--) {
-    const t = toons[i]
-    const w = toonW(t), h = toonH(t)
-    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
-      e.preventDefault()
-      return
-    }
-  }
+  localDrag.value = { toon, offsetX: x - toon.x, offsetY: y - toon.y }
+  e.preventDefault()
+  e.stopPropagation()
 }
 
-// ── Canvas touchstart: reposition placed toons (mobile) ───────
-function onCanvasTouchStart(e) {
-  if (!cz.value.buildMode) return
-  if (e.target.closest('.cz-bring-front-btn, .cz-size-cycle-btn')) return
+// ── Item touchstart: reposition placed toon (touch drag / long-press) ──
+function onItemTouchStart(toon, e) {
   const touch = e.touches[0]
   const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
-  const toons = currentZone.value.toons
-  for (let i = toons.length - 1; i >= 0; i--) {
-    const t = toons[i]
-    const w = toonW(t), h = toonH(t)
-    if (x >= t.x && x <= t.x + w && y >= t.y && y <= t.y + h) {
-      if (window.innerWidth <= 768) {
-        // Mobile: start long-press timer; drag will begin only if finger moves
-        longPressToon.value = { toon: t, toons, startClientX: touch.clientX, startClientY: touch.clientY, canvasX: x, canvasY: y }
-        longPressTimer.value = setTimeout(() => {
-          if (!longPressToon.value) return
-          const { toon: lpt, toons: lptoons } = longPressToon.value
-          const idx = lptoons.indexOf(lpt)
-          if (idx !== -1) lptoons.splice(idx, 1)
-          longPressToon.value = null
-          longPressTimer.value = null
-          localDrag.value = null
-        }, LONG_PRESS_DURATION)
-      } else {
-        localDrag.value = { toon: t, offsetX: x - t.x, offsetY: y - t.y }
-      }
-      e.preventDefault()
-      return
-    }
+  if (window.innerWidth <= 768) {
+    // Mobile: start long-press timer; drag will begin only if finger moves
+    longPressToon.value = { toon, toons: currentZone.value.toons, startClientX: touch.clientX, startClientY: touch.clientY, canvasX: x, canvasY: y }
+    longPressTimer.value = setTimeout(() => {
+      if (!longPressToon.value) return
+      const { toon: lpt, toons: lptoons } = longPressToon.value
+      const idx = lptoons.indexOf(lpt)
+      if (idx !== -1) lptoons.splice(idx, 1)
+      longPressToon.value = null
+      longPressTimer.value = null
+      localDrag.value = null
+    }, LONG_PRESS_DURATION)
+  } else {
+    localDrag.value = { toon, offsetX: x - toon.x, offsetY: y - toon.y }
   }
+  e.preventDefault()
+  e.stopPropagation()
 }
+
+// ── Remove a specific toon (right-click on item) ──────────────
+function removeToon(toon) {
+  const toons = currentZone.value.toons
+  const idx = toons.indexOf(toon)
+  if (idx !== -1) toons.splice(idx, 1)
+}
+
+// ── Canvas mousedown: no-op (toon drag handled at item level) ─
+function onCanvasMouseDown(e) {}
+
+// ── Canvas touchstart: no-op (toon touch handled at item level) ─
+function onCanvasTouchStart(e) {}
 
 // ── Global move (mouse + touch) ───────────────────────────────
 function onGlobalMove(e) {
@@ -764,6 +765,8 @@ defineExpose({ save, clearZone })
 .cz-item.is-dragging { opacity: 0.5; }
 .cz-item.is-viewable { pointer-events: auto; cursor: pointer; }
 .cz-item.is-viewable:hover { filter: brightness(1.1); }
+.cz-item.is-build { pointer-events: auto; cursor: grab; }
+.cz-item.is-build.is-dragging { cursor: grabbing; }
 .cz-item.is-long-pressing {
   animation: cz-long-press-shrink 2s linear forwards;
   transform-origin: center;
@@ -783,31 +786,19 @@ defineExpose({ save, clearZone })
   display: block;
 }
 
-.cz-bring-front-btn {
+.cz-item-btns {
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  cursor: pointer;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
+  flex-direction: column;
+  gap: 2px;
   z-index: 10;
-  padding: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
 }
-.cz-bring-front-btn:hover { background: white; }
-.cz-bring-front-btn svg { width: 16px; height: 16px; color: black; }
 
+.cz-bring-front-btn,
 .cz-size-cycle-btn {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -817,15 +808,17 @@ defineExpose({ save, clearZone })
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: auto;
-  z-index: 10;
   padding: 3px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
+.cz-bring-front-btn:hover,
 .cz-size-cycle-btn:hover { background: white; }
+.cz-bring-front-btn svg,
 .cz-size-cycle-btn svg { width: 16px; height: 16px; color: black; }
 
 @media (max-width: 768px) {
+  .cz-item-btns { gap: 4px; }
   .cz-bring-front-btn,
   .cz-size-cycle-btn {
     width: 36px;
