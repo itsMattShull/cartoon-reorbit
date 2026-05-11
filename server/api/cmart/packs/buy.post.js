@@ -91,7 +91,7 @@ export default defineEventHandler(async (event) => {
   }
 
   /* 3.  lookup pack & user points --------------------------------------- */
-  const [pack, userPts, activeLocks] = await Promise.all([
+  const [pack, userPts, activeLocks, globalCfg] = await Promise.all([
     db.pack.findUnique({
       where:  { id: packId },
       select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true }
@@ -100,15 +100,19 @@ export default defineEventHandler(async (event) => {
     db.lockedPoints.findMany({
       where:  { userId: me.id, status: 'ACTIVE' },
       select: { amount: true }
-    })
+    }),
+    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartHalfPriceEnabled: true } })
   ])
   if (!pack || !pack.inCmart) {
     throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
   }
+  const effectivePackPrice = globalCfg?.cmartHalfPriceEnabled === true
+    ? Math.floor(pack.price / 2)
+    : pack.price
   const totalPoints    = userPts?.points || 0
   const lockedSum      = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
   const availablePoints = totalPoints - lockedSum
-  if (availablePoints < pack.price) {
+  if (availablePoints < effectivePackPrice) {
     throw createError({ statusCode: 400, statusMessage: 'Not enough available points' })
   }
 
@@ -135,11 +139,11 @@ export default defineEventHandler(async (event) => {
     // 5-a  deduct points
     const updated = await tx.userPoints.update({
       where: { userId: me.id },
-      data:  { points: { decrement: pack.price } }
+      data:  { points: { decrement: effectivePackPrice } }
     })
 
     await tx.pointsLog.create({
-      data: { userId: me.id, points: pack.price, total: updated.points, method: "Bought Pack", direction: 'decrease' }
+      data: { userId: me.id, points: effectivePackPrice, total: updated.points, method: "Bought Pack", direction: 'decrease' }
     })
 
     // 5-b  create UserPack (sealed)

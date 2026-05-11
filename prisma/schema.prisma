@@ -926,6 +926,7 @@ model GlobalGameConfig {
   featuredAuctionIntervalDays  Int      @default(1)      // fire every N days
   featuredAuctionsPerSlot      Int      @default(1)      // auctions created per slot
   featuredAuctionLastFiredSlot String?                   // idempotency key e.g. "2026-03-30-08"
+  cmartHalfPriceEnabled        Boolean  @default(false)   // halves cToon and pack prices in cMart
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

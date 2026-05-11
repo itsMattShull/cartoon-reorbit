@@ -174,6 +174,14 @@
         </div>
       </div>
 
+      <!-- Half-price banner -->
+      <div
+        v-if="cmartHalfPriceEnabled"
+        class="mb-4 rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-3 text-sm text-indigo-800 font-medium"
+      >
+        🏷️ <strong>50% Off Sale!</strong> All cToon and pack prices are currently half price.
+      </div>
+
       <!-- ──────── LAYOUT: SIDEBAR + CONTENT ──────── -->
       <button
         class="lg:hidden mb-4 px-4 py-2 bg-indigo-600 text-white rounded"
@@ -424,7 +432,10 @@
                 >
                   <span v-if="ctoon.quantity !== null && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
                   <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
-                  <span v-else>Buy for {{ ctoon.price }} Pts</span>
+                  <span v-else>
+                    Buy for {{ displayPrice(ctoon.price) }} Pts
+                    <span v-if="cmartHalfPriceEnabled" class="ml-1 line-through text-indigo-200 text-xs">{{ ctoon.price }}</span>
+                  </span>
                 </button>
               </div>
             </div>
@@ -499,7 +510,10 @@
               >
                 <span v-if="ctoon.quantity && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= ctoon.quantity">Sold Out</span>
                 <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
-                <span v-else>Buy for {{ ctoon.price }} Pts</span>
+                <span v-else>
+                  Buy for {{ displayPrice(ctoon.price) }} Pts
+                  <span v-if="cmartHalfPriceEnabled" class="ml-1 line-through text-indigo-200 text-xs">{{ ctoon.price }}</span>
+                </span>
               </button>
             </div>
           </div>
@@ -543,7 +557,8 @@
               Purchasing…
             </span>
             <span v-else>
-              Buy Pack for {{ pack.price }} Pts
+              Buy Pack for {{ displayPrice(pack.price) }} Pts
+              <span v-if="cmartHalfPriceEnabled" class="ml-1 line-through text-indigo-200 text-xs">{{ pack.price }}</span>
             </span>
             </button>
           </div>
@@ -670,7 +685,8 @@
               class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
               @click.stop="buyPack(packDetails)"
             >
-              Buy Pack for {{ packDetails?.price }} Pts
+              Buy Pack for {{ displayPrice(packDetails?.price) }} Pts
+              <span v-if="cmartHalfPriceEnabled && packDetails?.price" class="ml-1 line-through text-indigo-200 text-xs">{{ packDetails?.price }}</span>
             </button>
           </template>
 
@@ -766,7 +782,13 @@ const buyingPacks  = ref(new Set())
 const buyingCzone  = ref(false)
 
 // ────────── cZones Upgrades ────────────────────
-const upgradesConfig = ref({ firstAdditionalCzoneCost: 25000, subsequentAdditionalCzoneCost: 50000 })
+const upgradesConfig = ref({ firstAdditionalCzoneCost: 25000, subsequentAdditionalCzoneCost: 50000, cmartHalfPriceEnabled: false })
+
+const cmartHalfPriceEnabled = computed(() => upgradesConfig.value.cmartHalfPriceEnabled === true)
+
+function displayPrice(originalPrice) {
+  return cmartHalfPriceEnabled.value ? Math.floor(originalPrice / 2) : originalPrice
+}
 
 const loading = ref(true)
 
@@ -1258,7 +1280,7 @@ onUnmounted(() => {
 
 // ────────── BUY SINGLE cToon ────────────────────
 async function buyCtoon(ctoon) {
-  if (user.value.points < ctoon.price) {
+  if (user.value.points < displayPrice(ctoon.price)) {
     return showToast("You don't have enough points")
   }
   buyingCtoons.value.add(ctoon.id)
@@ -1300,7 +1322,7 @@ async function openPackModal(pack) {
 
 // ────────── Buy Pack & Start Animation ──────────
 async function buyPack(pack) {
-  if (user.value.points < pack.price) {
+  if (user.value.points < displayPrice(pack.price)) {
     return showToast("You don't have enough points")
   }
   buyingPacks.value.add(pack.id)
