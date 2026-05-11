@@ -74,6 +74,7 @@
               <thead>
                 <tr class="bg-gray-100">
                   <th class="px-4 py-2 text-left">Code</th>
+                  <th class="px-4 py-2 text-left">Available At (CST)</th>
                   <th class="px-4 py-2 text-left">Expires At</th>
                   <th class="px-4 py-2 text-right"># cToons</th>
                   <th class="px-4 py-2 text-right"># of Backgrounds</th>
@@ -84,6 +85,12 @@
               <tbody>
                 <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
                   <td class="px-4 py-2 max-w-[15ch] truncate" :title="c.code">{{ c.code }}</td>
+                  <td class="px-4 py-2">
+                    <span v-if="c.startsAt">
+                      {{ formatCST(c.startsAt) }}
+                    </span>
+                    <span v-else class="text-gray-500">Immediately</span>
+                  </td>
                   <td class="px-4 py-2">
                     <span v-if="c.expiresAt">
                       {{ new Date(c.expiresAt).toLocaleDateString() }}
@@ -118,6 +125,11 @@
             >
               <div class="space-y-2">
                 <p><strong>Code:</strong> {{ c.code }}</p>
+                <p>
+                  <strong>Available At:</strong>
+                  <span v-if="c.startsAt">{{ formatCST(c.startsAt) }}</span>
+                  <span v-else>Immediately</span>
+                </p>
                 <p>
                   <strong>Expires:</strong>
                   <span v-if="c.expiresAt">
@@ -373,6 +385,14 @@ function prevClaimedPage() {
   if (claimedPage.value <= 1) return
   claimedPage.value -= 1
   fetchClaimedCodes()
+}
+
+function formatCST(iso) {
+  return new Date(iso).toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'numeric', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  }) + ' CST'
 }
 
 function countBackgrounds(code) {

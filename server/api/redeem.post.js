@@ -13,8 +13,9 @@ export default defineEventHandler(async (event) => {
   const { code } = await readBody(event)
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required' })
 
-  const claimCode = await prisma.claimCode.findUnique({ where: { code }, select: { id: true, maxClaims: true, expiresAt: true } })
+  const claimCode = await prisma.claimCode.findUnique({ where: { code }, select: { id: true, maxClaims: true, startsAt: true, expiresAt: true } })
   if (!claimCode) throw createError({ statusCode: 404, statusMessage: 'Invalid code' })
+  if (claimCode.startsAt && claimCode.startsAt > new Date()) throw createError({ statusCode: 400, statusMessage: 'This code is not yet available' })
   if (claimCode.expiresAt && claimCode.expiresAt < new Date()) throw createError({ statusCode: 400, statusMessage: 'Code expired' })
 
   const prereqs = await prisma.claimCodePrerequisite.findMany({

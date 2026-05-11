@@ -73,6 +73,7 @@ export default defineEventHandler(async (event) => {
       select: {
         code: true,
         maxClaims: true,
+        startsAt: true,
         expiresAt: true,
         prerequisites: {
           select: {
