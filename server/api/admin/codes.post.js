@@ -10,10 +10,16 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
   const body = await readBody(event)
-  const { code, maxClaims, expiresAt, rewards, prerequisites, backgrounds: topLevelBackgrounds, backgroundIds: topLevelBackgroundIds } = body || {}
+  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites, backgrounds: topLevelBackgrounds, backgroundIds: topLevelBackgroundIds } = body || {}
 
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   if (typeof maxClaims !== 'number' || maxClaims < 1) throw createError({ statusCode: 400, statusMessage: 'maxClaims must be a positive integer.' })
+
+  let startsDate = null
+  if (startsAt) {
+    startsDate = new Date(startsAt)
+    if (isNaN(startsDate.getTime())) throw createError({ statusCode: 400, statusMessage: 'Invalid startsAt.' })
+  }
 
   let expiresDate = null
   if (expiresAt) {
@@ -97,6 +103,7 @@ export default defineEventHandler(async (event) => {
       data: {
         code: code.trim(),
         maxClaims,
+        startsAt: startsDate,
         expiresAt: expiresDate,
         rewards: { create: rewardCreates },
         prerequisites: { create: prereqCreates }
@@ -112,7 +119,7 @@ export default defineEventHandler(async (event) => {
       area: `ClaimCode:${created.code}`,
       key: 'create',
       prevValue: null,
-      newValue: { code: created.code, maxClaims: created.maxClaims, expiresAt: created.expiresAt }
+      newValue: { code: created.code, maxClaims: created.maxClaims, startsAt: created.startsAt, expiresAt: created.expiresAt }
     })
   } catch {}
   return created

@@ -564,6 +564,7 @@ model ClaimCode {
   showInFrontend Boolean   @default(true)
   maxClaims      Int
   createdAt      DateTime  @default(now())
+  startsAt       DateTime?
   expiresAt      DateTime?
 
   claims                Claim[]
