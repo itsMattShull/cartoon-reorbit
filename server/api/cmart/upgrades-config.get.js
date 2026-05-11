@@ -17,7 +17,8 @@ export default defineEventHandler(async () => {
 
   _cache = {
     firstAdditionalCzoneCost:      cfg?.firstAdditionalCzoneCost      ?? 25000,
-    subsequentAdditionalCzoneCost: cfg?.subsequentAdditionalCzoneCost ?? 50000
+    subsequentAdditionalCzoneCost: cfg?.subsequentAdditionalCzoneCost ?? 50000,
+    cmartHalfPriceEnabled:         cfg?.cmartHalfPriceEnabled         ?? false
   }
   _cacheAt = now
   return _cache

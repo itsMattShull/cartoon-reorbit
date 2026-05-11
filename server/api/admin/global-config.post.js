@@ -34,7 +34,8 @@ export default defineEventHandler(async (event) => {
     dhashDuplicateThreshold,
     featuredAuctionHours,
     featuredAuctionIntervalDays,
-    featuredAuctionsPerSlot
+    featuredAuctionsPerSlot,
+    cmartHalfPriceEnabled
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -59,7 +60,8 @@ export default defineEventHandler(async (event) => {
       ? featuredAuctionHours.map(Number).filter(h => h >= 0 && h <= 23)
       : undefined,
     featuredAuctionIntervalDays: (typeof featuredAuctionIntervalDays === 'number') ? Math.max(1, featuredAuctionIntervalDays) : undefined,
-    featuredAuctionsPerSlot: (typeof featuredAuctionsPerSlot === 'number') ? Number(featuredAuctionsPerSlot) : undefined
+    featuredAuctionsPerSlot: (typeof featuredAuctionsPerSlot === 'number') ? Number(featuredAuctionsPerSlot) : undefined,
+    cmartHalfPriceEnabled: (typeof cmartHalfPriceEnabled === 'boolean') ? cmartHalfPriceEnabled : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -79,7 +81,8 @@ export default defineEventHandler(async (event) => {
         dhashDuplicateThreshold: payload.dhashDuplicateThreshold ?? 16,
         featuredAuctionHours: payload.featuredAuctionHours ?? [],
         featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays ?? 1,
-        featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot ?? 1
+        featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot ?? 1,
+        cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled ?? false
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -93,7 +96,8 @@ export default defineEventHandler(async (event) => {
         ...(payload.dhashDuplicateThreshold !== undefined ? { dhashDuplicateThreshold: payload.dhashDuplicateThreshold } : {}),
         ...(payload.featuredAuctionHours !== undefined ? { featuredAuctionHours: payload.featuredAuctionHours } : {}),
         ...(payload.featuredAuctionIntervalDays !== undefined ? { featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays } : {}),
-        ...(payload.featuredAuctionsPerSlot !== undefined ? { featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot } : {})
+        ...(payload.featuredAuctionsPerSlot !== undefined ? { featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot } : {}),
+        ...(payload.cmartHalfPriceEnabled !== undefined ? { cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled } : {})
       }
     })
     // Log field-level changes
@@ -108,7 +112,8 @@ export default defineEventHandler(async (event) => {
       'dhashDuplicateThreshold',
       'featuredAuctionHours',
       'featuredAuctionIntervalDays',
-      'featuredAuctionsPerSlot'
+      'featuredAuctionsPerSlot',
+      'cmartHalfPriceEnabled'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
