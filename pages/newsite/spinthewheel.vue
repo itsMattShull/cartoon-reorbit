@@ -1,78 +1,71 @@
 <template>
-  <NuxtLayout name="newsite-template">
-    <template #sidebar-top>
-      <UserInfo />
-    </template>
-    <template #main-content>
-      <div class="stw-container">
-        <h1 class="stw-title">Spin the Wheel</h1>
+  <div class="stw-container">
+    <h1 class="stw-title">Spin the Wheel</h1>
 
-        <!-- Admin controls -->
-        <div v-if="isAdmin" class="stw-buttons">
-          <button
-            class="stw-btn stw-btn-allow"
-            :disabled="wheelState.isOpen || wheelState.spinning"
-            @click="allowJoin"
-          >
-            Allow
-          </button>
-          <button
-            class="stw-btn stw-btn-clear"
-            :disabled="wheelState.spinning || (!wheelState.isOpen && wheelState.participants.length === 0)"
-            @click="clearWheel"
-          >
-            Clear
-          </button>
-          <button
-            class="stw-btn stw-btn-spin"
-            :disabled="wheelState.participants.length === 0 || wheelState.spinning"
-            @click="spinWheel"
-          >
-            Spin
-          </button>
-        </div>
+    <!-- Admin controls -->
+    <div v-if="isAdmin" class="stw-buttons">
+      <button
+        class="stw-btn stw-btn-allow"
+        :disabled="wheelState.isOpen || wheelState.spinning"
+        @click="allowJoin"
+      >
+        Allow
+      </button>
+      <button
+        class="stw-btn stw-btn-clear"
+        :disabled="wheelState.spinning || (!wheelState.isOpen && wheelState.participants.length === 0)"
+        @click="clearWheel"
+      >
+        Clear
+      </button>
+      <button
+        class="stw-btn stw-btn-spin"
+        :disabled="wheelState.participants.length === 0 || wheelState.spinning"
+        @click="spinWheel"
+      >
+        Spin
+      </button>
+    </div>
 
-        <!-- Non-admin controls -->
-        <div v-else class="stw-buttons">
-          <button
-            class="stw-btn stw-btn-join"
-            :disabled="!wheelState.isOpen || wheelState.spinning || hasJoined"
-            @click="joinWheel"
-          >
-            Join
-          </button>
-          <span class="stw-status-msg">
-            <template v-if="wheelState.spinning">Wheel is spinning...</template>
-            <template v-else-if="hasJoined">You are on the wheel!</template>
-            <template v-else-if="!wheelState.isOpen">Waiting for the host to open joining...</template>
-            <template v-else>Click Join to add yourself to the wheel!</template>
-          </span>
-        </div>
+    <!-- Non-admin controls -->
+    <div v-else class="stw-buttons">
+      <button
+        class="stw-btn stw-btn-join"
+        :disabled="!wheelState.isOpen || wheelState.spinning || hasJoined"
+        @click="joinWheel"
+      >
+        Join
+      </button>
+      <span class="stw-status-msg">
+        <template v-if="wheelState.spinning">Wheel is spinning...</template>
+        <template v-else-if="hasJoined">You are on the wheel!</template>
+        <template v-else-if="!wheelState.isOpen">Waiting for the host to open joining...</template>
+        <template v-else>Click Join to add yourself to the wheel!</template>
+      </span>
+    </div>
 
-        <!-- Participant count -->
-        <p class="stw-count">
-          {{ wheelState.participants.length }}
-          participant{{ wheelState.participants.length !== 1 ? 's' : '' }}
-        </p>
+    <!-- Participant count -->
+    <p class="stw-count">
+      {{ wheelState.participants.length }}
+      participant{{ wheelState.participants.length !== 1 ? 's' : '' }}
+    </p>
 
-        <!-- Wheel -->
-        <div class="stw-wheel-wrapper">
-          <canvas ref="wheelCanvas" class="stw-canvas" :width="canvasSize" :height="canvasSize" />
-        </div>
+    <!-- Wheel -->
+    <div class="stw-wheel-wrapper">
+      <canvas ref="wheelCanvas" class="stw-canvas" :width="canvasSize" :height="canvasSize" />
+    </div>
+  </div>
+
+  <!-- Winner modal -->
+  <Teleport to="body">
+    <div v-if="winner" class="stw-modal-backdrop" @click.self="dismissWinner">
+      <div class="stw-modal">
+        <div class="stw-modal-header">Winner!</div>
+        <div class="stw-modal-winner">{{ winner }}</div>
+        <button class="stw-btn stw-btn-dismiss" @click="dismissWinner">Dismiss</button>
       </div>
-
-      <!-- Winner modal -->
-      <Teleport to="body">
-        <div v-if="winner" class="stw-modal-backdrop" @click.self="dismissWinner">
-          <div class="stw-modal">
-            <div class="stw-modal-header">Winner!</div>
-            <div class="stw-modal-winner">{{ winner }}</div>
-            <button class="stw-btn stw-btn-dismiss" @click="dismissWinner">Dismiss</button>
-          </div>
-        </div>
-      </Teleport>
-    </template>
-  </NuxtLayout>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -80,7 +73,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { io } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
 
 const { user, fetchSelf, isAdmin } = useAuth()
 const runtime = useRuntimeConfig()
