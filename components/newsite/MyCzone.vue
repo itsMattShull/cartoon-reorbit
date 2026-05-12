@@ -320,6 +320,10 @@ async function loadZone(username) {
     viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
     loadCzoneSearchItems()
+
+    if (user.value && data.ownerId && data.ownerId !== user.value.id) {
+      $fetch('/api/points/visit', { method: 'POST', body: { zoneOwnerId: data.ownerId } }).catch(() => {})
+    }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
   }
