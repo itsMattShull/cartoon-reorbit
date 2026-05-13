@@ -411,7 +411,7 @@ const PAGE_LINKS = {
   'win-wheel':   '/newsite/winwheel',
   'winball':     '/newsite/winball',
   'lottery':     '/newsite/lottery',
-  'auctions':    '/newsite/auctions',
+  'auctions':    '/newsite/AuctionHouse',
   'gtoons-clash':'/newsite/gtoons-clash',
   'news':        '/newsite/news',
   'earn-points': '/newsite/earnpoints'
