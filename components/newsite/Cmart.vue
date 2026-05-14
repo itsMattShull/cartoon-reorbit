@@ -47,6 +47,54 @@
       <div v-if="showGlow" class="pack-glow" :class="glowStage" />
     </Teleport>
 
+    <!-- ── Pack preview modal ─────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="packPreviewVisible" class="pack-preview-overlay" @click.self="packPreviewVisible = false">
+        <div class="pack-preview-card">
+          <button class="pack-overlay-close" @click="packPreviewVisible = false">✕</button>
+          <p class="pack-preview-name">{{ packPreviewPack?.name }}</p>
+          <div
+            v-for="(list, rarity) in previewGroupedByRarity"
+            :key="rarity"
+            class="pack-preview-rarity-group"
+          >
+            <h3 class="pack-preview-rarity-title">{{ rarity }}</h3>
+            <p class="pack-preview-rarity-prob">
+              {{ previewRarityProbMap[rarity] ?? 0 }}% chance to receive
+              {{ previewRarityCountMap[rarity] ?? 0 }} cToon(s)
+            </p>
+            <div class="pack-preview-ctoon-grid">
+              <div
+                v-for="item in list"
+                :key="item.ctoonId"
+                class="pack-preview-ctoon-card"
+              >
+                <span
+                  class="owned-badge"
+                  :class="originalOwnedSet.has(item.ctoonId) ? 'owned-badge--owned' : 'owned-badge--unowned'"
+                >{{ originalOwnedSet.has(item.ctoonId) ? 'Owned' : 'Unowned' }}</span>
+                <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="pack-preview-ctoon-img" />
+                <p class="pack-preview-ctoon-name">{{ item.name }}</p>
+                <p class="pack-preview-ctoon-weight">{{ item.weight }}% chance</p>
+              </div>
+            </div>
+          </div>
+          <GreenButton
+            class="pack-preview-buy-btn"
+            :disabled="buyingPackIds.includes(packPreviewPack?.id)"
+            @click="packPreviewVisible = false; buyPack(packPreviewPack)"
+          >
+            <template v-if="buyingPackIds.includes(packPreviewPack?.id)">Purchasing…</template>
+            <template v-else-if="cmartHalfPriceEnabled">
+              Buy for {{ displayPrice(packPreviewPack?.price).toLocaleString() }} pts
+              <span class="pack-price-original">{{ packPreviewPack?.price?.toLocaleString() }}</span>
+            </template>
+            <template v-else>Buy for {{ packPreviewPack?.price?.toLocaleString() }} pts</template>
+          </GreenButton>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="cmart-header">Cartoon ReOrbit cMart</div>
     <div v-if="cmartHalfPriceEnabled" class="cmart-sale-banner">🏷️ 50% Off Sale! All prices are half price.</div>
@@ -142,7 +190,7 @@
           class="pack-card"
         >
           <p class="pack-name">{{ pack.name }}</p>
-          <img v-if="pack.imagePath" :src="pack.imagePath" class="pack-img" :alt="pack.name" />
+          <img v-if="pack.imagePath" :src="pack.imagePath" class="pack-img pack-img--clickable" :alt="pack.name" @click="openPackPreview(pack)" />
           <ul class="pack-rarity-list">
             <li v-for="r in pack.rarityConfigs" :key="r.rarity">
               <strong>{{ r.rarity }}:</strong> {{ r.probabilityPercent }}% — {{ r.count }} cToon(s)
@@ -222,6 +270,45 @@ const revealComplete  = ref(false)
 const openingPack     = ref(null)
 const packContents    = ref([])
 const ownedCtoonIds   = ref([])
+
+// ── Pack preview modal ────────────────────────────────────────
+const packPreviewVisible = ref(false)
+const packPreviewPack    = ref(null)
+const packPreviewLoading = ref(false)
+
+const previewGroupedByRarity = computed(() => {
+  if (!packPreviewPack.value?.ctoonOptions) return {}
+  return packPreviewPack.value.ctoonOptions.reduce((acc, o) => {
+    ;(acc[o.rarity] = acc[o.rarity] || []).push(o)
+    return acc
+  }, {})
+})
+
+const previewRarityProbMap = computed(() => {
+  const map = {}
+  for (const rc of packPreviewPack.value?.rarityConfigs || []) map[rc.rarity] = rc.probabilityPercent
+  return map
+})
+
+const previewRarityCountMap = computed(() => {
+  const map = {}
+  for (const rc of packPreviewPack.value?.rarityConfigs || []) map[rc.rarity] = rc.count
+  return map
+})
+
+async function openPackPreview(pack) {
+  if (packPreviewLoading.value) return
+  packPreviewLoading.value = true
+  try {
+    packPreviewPack.value    = await $fetch('/api/cmart/packs/' + pack.id)
+    packPreviewVisible.value = true
+  } catch (err) {
+    console.error('Failed to load pack details', err)
+    showToast('Failed to load pack details', 'error')
+  } finally {
+    packPreviewLoading.value = false
+  }
+}
 
 const originalOwnedSet = computed(() => new Set(ownedCtoonIds.value))
 
@@ -631,6 +718,118 @@ async function closeOverlay() {
   font-size: 0.7rem;
   padding: 4px 6px;
   white-space: nowrap;
+}
+
+.pack-img--clickable {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.pack-img--clickable:hover {
+  opacity: 0.8;
+}
+
+/* ── Pack preview modal ──────────────────────────────────────── */
+:global(.pack-preview-overlay) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+:global(.pack-preview-card) {
+  position: relative;
+  background: var(--OrbitDarkBlue, #003466);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  color: #fff;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+.pack-preview-name {
+  font-size: 1rem;
+  font-weight: bold;
+  text-align: center;
+  color: #fff;
+  margin: 0;
+}
+
+.pack-preview-rarity-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pack-preview-rarity-title {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #cce0ff;
+  margin: 0;
+}
+
+.pack-preview-rarity-prob {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
+.pack-preview-ctoon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.pack-preview-ctoon-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 6px 6px;
+  gap: 3px;
+}
+
+.pack-preview-ctoon-img {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  margin-top: 14px;
+  image-rendering: pixelated;
+}
+
+.pack-preview-ctoon-name {
+  font-size: 0.65rem;
+  font-weight: bold;
+  text-align: center;
+  color: #fff;
+  margin: 0;
+}
+
+.pack-preview-ctoon-weight {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.pack-preview-buy-btn {
+  width: 100%;
+  font-size: 0.8rem;
 }
 
 /* ── Pack opening overlay ────────────────────────────────────── */

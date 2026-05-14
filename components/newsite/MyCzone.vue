@@ -20,9 +20,10 @@
       </div>
       <div class="cz-owner-info" v-if="viewedOwner">
         <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
-        <span class="cz-owner-label">
-          <span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}
-        </span>
+        <div class="cz-owner-label">
+          <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
+          <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
+        </div>
       </div>
     </div>
 
@@ -252,6 +253,14 @@ let   searchToastTimer    = null
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
+const lastOnlineText = computed(() => {
+  if (!viewedOwner.value?.lastActivity) return null
+  const diffMs   = Date.now() - new Date(viewedOwner.value.lastActivity).getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 1) return 'Last Online: Today!'
+  return `Last Online: ${diffDays} day${diffDays === 1 ? '' : 's'}`
+})
+
 function bgUrl(v) {
   if (!v) return ''
   const s = String(v)
@@ -318,7 +327,7 @@ async function loadZone(username) {
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedUsername.value = target
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null }
     loadCzoneSearchItems()
 
     if (user.value && data.ownerId && data.ownerId !== user.value.id) {
@@ -723,7 +732,8 @@ defineExpose({ save, clearZone })
 }
 .cz-owner-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
-.cz-owner-prefix { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
+.cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
+.cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
 
 @media (max-width: 768px) {
   .cz-topbar {
