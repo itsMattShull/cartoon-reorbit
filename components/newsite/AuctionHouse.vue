@@ -868,4 +868,17 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   min-width: 55px;
   text-align: center;
 }
+
+@media (max-width: 768px) {
+  .ah-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .ah-card-grid :deep(.sc) {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 4;
+  }
+}
 </style>
