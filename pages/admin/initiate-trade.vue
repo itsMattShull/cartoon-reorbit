@@ -212,11 +212,7 @@
               :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
               badge-class-owned="bg-blue-100 text-blue-800"
               badge-class-unowned="bg-gray-200 text-gray-600"
-              @toggle="() => {
-                const already = selectedOfficialCtoonsMap.has(c.id)
-                if (!already && officialOfferLimitReached) return
-                toggleOfficialCtoon(c)
-              }"
+              @toggle="toggleOfficialCtoon(c)"
             />
           </div>
         </div>
@@ -319,7 +315,6 @@ const currentStep = ref(1) // 1-3
 // ------------------------------------------------------------------------------
 const MIN_CHARS = 3
 const DEBOUNCE_MS = 250
-const MAX_OFFICIAL_OFFER = 5
 
 const userQuery = ref('')
 const userResults = ref([])
@@ -534,27 +529,9 @@ function toggleTargetCtoon(c) {
 }
 function toggleOfficialCtoon(c) {
   const i = selectedOfficialCtoons.value.findIndex(x => x.id === c.id)
-
-  // unselect always allowed
-  if (i >= 0) {
-    selectedOfficialCtoons.value.splice(i, 1)
-    return
-  }
-
-  // enforce max
-  if (selectedOfficialCtoons.value.length >= MAX_OFFICIAL_OFFER) {
-    toast.message = `You can only offer up to ${MAX_OFFICIAL_OFFER} cToons.`
-    toast.show = true
-    setTimeout(() => (toast.show = false), 2500)
-    return
-  }
-
-  selectedOfficialCtoons.value.push(c)
+  if (i >= 0) selectedOfficialCtoons.value.splice(i, 1)
+  else selectedOfficialCtoons.value.push(c)
 }
-
-const officialOfferLimitReached = computed(
-  () => selectedOfficialCtoons.value.length >= MAX_OFFICIAL_OFFER
-)
 
 function sortAlpha(arr) {
   return [...arr].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }))
