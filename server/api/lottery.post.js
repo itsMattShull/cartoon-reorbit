@@ -97,7 +97,15 @@ export default defineEventHandler(async (event) => {
         const randomIndex = Math.floor(Math.random() * availablePool.length)
         const prizeCtoonInfo = availablePool[randomIndex]
         awardedCtoon = prizeCtoonInfo.ctoon
-        const mintNumber = awardedCtoon.totalMinted + 1
+
+        // Increment first; the returned totalMinted is this mint's number
+        const updatedCtoon = await tx.ctoon.update({
+          where: { id: awardedCtoon.id },
+          data: { totalMinted: { increment: 1 } },
+          select: { totalMinted: true, initialQuantity: true }
+        })
+        const mintNumber = updatedCtoon.totalMinted
+        const isFirstEdition = updatedCtoon.initialQuantity === null || mintNumber <= updatedCtoon.initialQuantity
 
         // Mint the new ctoon for the user
         const newUserCtoon = await tx.userCtoon.create({
@@ -105,13 +113,11 @@ export default defineEventHandler(async (event) => {
             userId: me.id,
             ctoonId: awardedCtoon.id,
             isTradeable: true,
-            mintNumber
+            mintNumber,
+            isFirstEdition
           }
         })
         wonUserCtoonId = newUserCtoon.id
-
-        // Increment the total minted count for the ctoon
-        await tx.ctoon.update({ where: { id: awardedCtoon.id }, data: { totalMinted: { increment: 1 } } })
 
         // Record ownership log
         await tx.ctoonOwnerLog.create({

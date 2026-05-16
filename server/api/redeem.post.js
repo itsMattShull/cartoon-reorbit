@@ -1,7 +1,14 @@
 // server/api/redeem.post.js
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { mintQueue } from '../utils/queues'
+import { QueueEvents } from 'bullmq'
 import { prisma } from '@/server/prisma'
+
+const redisConnection = {
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD || undefined,
+}
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -93,12 +100,6 @@ export default defineEventHandler(async (event) => {
   const seenBg = new Set(), backgroundRewards = []
   for (const b of backgroundRewardsRaw) if (!seenBg.has(b.id)) { seenBg.add(b.id); backgroundRewards.push(b) }
 
-  const counts = {}
-  for (const award of ctoonAwards) {
-    const { ctoonId } = award
-    if (counts[ctoonId] == null) counts[ctoonId] = await prisma.userCtoon.count({ where: { ctoonId } })
-  }
-
   await prisma.$transaction(async (tx) => {
     await tx.claim.create({ data: { userId, codeId: claimCode.id } })
     if (pointsToAward > 0) {
@@ -118,18 +119,33 @@ export default defineEventHandler(async (event) => {
   })
 
   const mintedRecords = []
-  for (const award of ctoonAwards) {
-    for (let i = 0; i < award.quantity; i++) {
-      const { ctoonId, name, initialQuantity } = award
-      const mintNumber = counts[ctoonId] + 1
-      counts[ctoonId]++
-      const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
-      await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
-      mintedRecords.push({
-        ctoonId, name, mintNumber, isFirstEdition,
-        assetPath: award.assetPath, rarity: award.rarity, set: award.set
-      })
+  let qe
+  try {
+    qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
+    await qe.waitUntilReady()
+    for (const award of ctoonAwards) {
+      for (let i = 0; i < award.quantity; i++) {
+        const { ctoonId, name } = award
+        const job = await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
+        await job.waitUntilFinished(qe)
+        const minted = await prisma.userCtoon.findFirst({
+          where: { userId, ctoonId },
+          orderBy: { createdAt: 'desc' },
+          select: { mintNumber: true, isFirstEdition: true }
+        })
+        mintedRecords.push({
+          ctoonId,
+          name,
+          mintNumber: minted?.mintNumber ?? null,
+          isFirstEdition: minted?.isFirstEdition ?? false,
+          assetPath: award.assetPath,
+          rarity: award.rarity,
+          set: award.set
+        })
+      }
     }
+  } finally {
+    await qe?.close()
   }
 
   return { points: pointsToAward, ctoons: mintedRecords, backgrounds: backgroundRewards }

@@ -1,7 +1,14 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { mintQueue } from '@/server/utils/queues'
+import { QueueEvents } from 'bullmq'
 import { prisma as db } from '@/server/prisma'
+
+const redisConnection = {
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD || undefined,
+}
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -107,17 +114,25 @@ export default defineEventHandler(async (event) => {
     })
   })
 
-  const count = await db.userCtoon.count({ where: { ctoonId: appearance.ctoonId } })
-  const mintNumber = count + 1
-  const initialQuantity = appearance.ctoon.initialQuantity ?? 0
-  const isFirstEdition = initialQuantity > 0 ? mintNumber <= initialQuantity : false
-
   const [captureCount, ownedCount] = await Promise.all([
     db.cZoneSearchCapture.count({ where: { userId, ctoonId: appearance.ctoonId } }),
     db.userCtoon.count({ where: { userId, ctoonId: appearance.ctoonId } })
   ])
 
-  await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
+  const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
+  const qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
+  await qe.waitUntilReady()
+  try {
+    await job.waitUntilFinished(qe)
+  } finally {
+    await qe.close()
+  }
+
+  const minted = await db.userCtoon.findFirst({
+    where: { userId, ctoonId: appearance.ctoonId },
+    orderBy: { createdAt: 'desc' },
+    select: { mintNumber: true, isFirstEdition: true }
+  })
 
   return {
     ctoon: {
@@ -127,8 +142,8 @@ export default defineEventHandler(async (event) => {
       rarity: appearance.ctoon.rarity,
       series: appearance.ctoon.series,
       set: appearance.ctoon.set,
-      mintNumber,
-      isFirstEdition,
+      mintNumber: minted?.mintNumber ?? null,
+      isFirstEdition: minted?.isFirstEdition ?? false,
       captureCount,
       ownedCount: ownedCount + 1
     }
