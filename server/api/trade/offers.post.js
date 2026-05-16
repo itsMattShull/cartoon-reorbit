@@ -33,6 +33,9 @@ export default defineEventHandler(async (event) => {
   if (!recipientUsername) {
     throw createError({ statusCode: 400, statusMessage: 'recipientUsername is required' })
   }
+  if (typeof pointsOffered !== 'number' || !Number.isInteger(pointsOffered) || pointsOffered < 0) {
+    throw createError({ statusCode: 400, statusMessage: 'pointsOffered must be a non-negative integer' })
+  }
   if (!Array.isArray(ctoonIdsRequested) || !Array.isArray(ctoonIdsOffered)) {
     throw createError({
       statusCode: 400,

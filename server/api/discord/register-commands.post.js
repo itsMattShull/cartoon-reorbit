@@ -1,7 +1,12 @@
 // server/api/discord/register-commands.post.js
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler, createError, getRequestHeader } from 'h3'
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  const cookie = getRequestHeader(event, 'cookie') || ''
+  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
+  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
+
+
   const APP_ID    = process.env.DISCORD_APP_ID
   const GUILD_ID  = process.env.DISCORD_GUILD_ID   // test guild
   const BOT_TOKEN = process.env.BOT_TOKEN
