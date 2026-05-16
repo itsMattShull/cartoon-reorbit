@@ -45,7 +45,9 @@
               </div>
               <div class="czs-info-box">
                 <p class="text-xs uppercase tracking-widest text-white/40">Prize Pool</p>
-                <p class="mt-1 text-sm text-white/80">{{ prizeCount }} cToon{{ prizeCount === 1 ? '' : 's' }}</p>
+                <p class="mt-1 text-sm text-white/80"># of unique cToons available: {{ prizeCount }}</p>
+                <p class="text-sm text-white/80"># of unique cToons from the set owned: {{ ownedUnique }}</p>
+                <p class="text-sm text-white/80"># of total cToons from the set owned: {{ ownedTotal }}</p>
               </div>
             </div>
           </section>
@@ -249,6 +251,8 @@ const { data, pending, error } = await useFetch(
 const search = computed(() => data.value || null)
 const searchName = computed(() => (search.value?.name || '').trim() || 'cZone Search')
 const prizeCount = computed(() => Number(search.value?.prizePool?.length || 0))
+const ownedUnique = computed(() => (search.value?.prizePool || []).filter(e => (e.userOwnedCount || 0) > 0).length)
+const ownedTotal = computed(() => (search.value?.prizePool || []).reduce((sum, e) => sum + (e.userOwnedCount || 0), 0))
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'
 
 const showOnlyAvailable = ref(false)
