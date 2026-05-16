@@ -241,7 +241,7 @@
                 <span v-else>&nbsp;</span>
               </span>
               <NuxtLink
-                :to="`/czone/${owner.username}`"
+                :to="`/newsite/czone/${owner.username}`"
                 class="text-indigo-300 hover:text-indigo-200 hover:underline truncate text-left"
               >
                 {{ owner.username }}
