@@ -49,17 +49,17 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // — Deduct spin cost —
-  const up = await prisma.userPoints.findUnique({ where: { userId } })
-  if ((up?.points || 0) < spinCost) {
+  // — Deduct spin cost (atomic — WHERE clause prevents race condition) —
+  const deducted = await prisma.userPoints.updateMany({
+    where: { userId, points: { gte: spinCost } },
+    data: { points: { decrement: spinCost } }
+  })
+  if (deducted.count === 0) {
     throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
   }
-  const updated = await prisma.userPoints.update({
-    where: { userId },
-    data: { points: { decrement: spinCost } },
-  })
+  const afterDeduct = await prisma.userPoints.findUnique({ where: { userId } })
   await prisma.pointsLog.create({
-    data: { userId, direction: 'decrease', points: spinCost, total: updated.points, method: 'Game - Win Wheel' },
+    data: { userId, direction: 'decrease', points: spinCost, total: afterDeduct.points, method: 'Game - Win Wheel' },
   })
 
   // — Spin the wheel —

@@ -57,25 +57,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
   }
 
-  // check points balance
-  const userPoints = await db.userPoints.findUnique({ where: { userId: me.id } })
-  const currentPoints = userPoints?.points ?? 0
-  if (currentPoints < settings.cost) {
-    throw createError({ statusCode: 400, statusMessage: 'Not enough points to buy a ticket' })
-  }
-
-  // Subtract cost of ticket
-  const pointsAfterPurchase = currentPoints - settings.cost
-  await db.$transaction([
-    db.userPoints.update({
-      where: { userId: me.id },
-      data: {
-        points: pointsAfterPurchase,
-        updatedAt: new Date()
-      }
-    }),
-    db.pointsLog.create({ data: { userId: me.id, direction: 'decrease', points: settings.cost, total: pointsAfterPurchase, method: 'lottery-ticket' } })
-  ])
+  // Atomically deduct ticket cost — the WHERE clause makes this race-safe
+  const pointsAfterPurchase = await db.$transaction(async (tx) => {
+    const deducted = await tx.userPoints.updateMany({
+      where: { userId: me.id, points: { gte: settings.cost } },
+      data: { points: { decrement: settings.cost }, updatedAt: new Date() }
+    })
+    if (deducted.count === 0) {
+      throw createError({ statusCode: 400, statusMessage: 'Not enough points to buy a ticket' })
+    }
+    const after = await tx.userPoints.findUnique({ where: { userId: me.id } })
+    await tx.pointsLog.create({ data: { userId: me.id, direction: 'decrease', points: settings.cost, total: after.points, method: 'lottery-ticket' } })
+    return after.points
+  })
 
   const oddsBefore = u.odds ?? settings.baseOdds
   let oddsAfter = oddsBefore
