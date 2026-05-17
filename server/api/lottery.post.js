@@ -51,11 +51,8 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // buy one ticket per request
-  // check daily limit
-  if (settings.countPerDay !== -1 && u.purchasesToday >= settings.countPerDay) {
-    throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
-  }
+  // Daily limit is enforced atomically later when purchasesToday is incremented.
+  // An early non-atomic check is intentionally omitted to avoid TOCTOU races.
 
   // Atomically deduct ticket cost — the WHERE clause makes this race-safe
   const pointsAfterPurchase = await db.$transaction(async (tx) => {
@@ -149,20 +146,28 @@ export default defineEventHandler(async (event) => {
     await db.lottoUser.update({ where: { userId: me.id }, data: { odds: newOdds } })
 
     if (pointsWin) {
-      // Secondary Prize: Win points
+      // Secondary Prize: Win points — use increment (not SET) to avoid overwriting
+      // concurrent point changes with a stale computed total.
       awardedPoints = settings.lottoPointsWinnings
       await db.$transaction(async (tx) => {
-        const newTotal = pointsAfterPurchase + awardedPoints
-        await tx.userPoints.update({ where: { userId: me.id }, data: { points: newTotal, updatedAt: new Date() } })
-        await tx.pointsLog.create({ data: { userId: me.id, direction: 'increase', points: awardedPoints, total: newTotal, method: 'lottery-win' } })
+        const updated = await tx.userPoints.update({
+          where: { userId: me.id },
+          data: { points: { increment: awardedPoints }, updatedAt: new Date() }
+        })
+        await tx.pointsLog.create({ data: { userId: me.id, direction: 'increase', points: awardedPoints, total: updated.points, method: 'lottery-win' } })
       })
     }
   }
 
   const outcome = ctoonWin ? 'CTOON' : pointsWin ? 'POINTS' : 'NOTHING'
 
-  // increment purchasesToday and lastPurchaseAt + log outcome
+  // Atomically increment purchasesToday and enforce the daily cap in the same
+  // transaction to prevent TOCTOU races from concurrent requests.
   const updated = await db.$transaction(async (tx) => {
+    const current = await tx.lottoUser.findUnique({ where: { userId: me.id } })
+    if (settings.countPerDay !== -1 && (current?.purchasesToday ?? 0) >= settings.countPerDay) {
+      throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
+    }
     const next = await tx.lottoUser.update({
       where: { userId: me.id },
       data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now }
