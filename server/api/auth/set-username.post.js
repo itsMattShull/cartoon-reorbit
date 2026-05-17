@@ -86,15 +86,19 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'That is already your current username.' })
     }
 
-    // Ensure uniqueness
-    const exists = await prisma.user.findFirst({ where: { username } })
-    if (exists) throw createError({ statusCode: 409, statusMessage: 'Username already taken' })
-  
-    // Update local DB
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { username, usernameChangedAt: new Date() }
-    })
+    // Update local DB — the @unique constraint on username enforces atomicity
+    let user
+    try {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: { username, usernameChangedAt: new Date() }
+      })
+    } catch (e) {
+      if (e?.code === 'P2002') {
+        throw createError({ statusCode: 409, statusMessage: 'Username already taken' })
+      }
+      throw e
+    }
   
     // Update nickname in Discord server
     const { botToken, discord } = useRuntimeConfig(event)

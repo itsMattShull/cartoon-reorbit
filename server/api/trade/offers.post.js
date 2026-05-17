@@ -55,124 +55,120 @@ export default defineEventHandler(async (event) => {
     console.warn(`Cannot DM ${recipientUsername}: no discordId on record`)
   }
 
-  // 4) Verify ownership of offered cToons
-  if (ctoonIdsOffered.length) {
-    const ownedByInitiator = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsOffered }, userId: initiatorId, burnedAt: null },
-      select: { id: true }
-    })
-    if (ownedByInitiator.length !== ctoonIdsOffered.length) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'One or more offered cToons are not owned by you or no longer available'
-      })
-    }
-  }
-
-  // 4a) Check offered cToons are not in any pending trades
-  if (ctoonIdsOffered.length) {
-    const offeredInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
-      where: {
-        userCtoonId: { in: ctoonIdsOffered },
-        tradeOffer: { status: 'PENDING' }
-      },
-      include: {
-        userCtoon: { include: { ctoon: { select: { name: true } } } }
-      }
-    })
-    if (offeredInPendingTrade) {
-      const ctoonName = offeredInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
-      throw createError({
-        statusCode: 400,
-        statusMessage: `Your cToon "${ctoonName}" is already part of a pending trade and cannot be offered.`
-      })
-    }
-  }
-
-  // 4) Verify initiator has enough AVAILABLE points (total - active locks)
-  const initiator = await prisma.user.findUnique({
-    where: { id: initiatorId },
-    select: { points: { select: { points: true } } } // UserPoints relation
-  })
-  const totalPoints = initiator?.points?.points ?? 0
-  const activeLocks = await prisma.lockedPoints.findMany({
-    where: { userId: initiatorId, status: 'ACTIVE' },
-    select: { amount: true }
-  })
-  const lockedSum = activeLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
-  const availablePoints = totalPoints - lockedSum
-
-  if (pointsOffered > availablePoints) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: `Insufficient points: you have ${fmt(totalPoints)} points, with ${fmt(lockedSum)} locked; tried to offer ${fmt(pointsOffered)}.`
-    })
-  }
-
-  // 5) Verify ownership of requested cToons
-  if (ctoonIdsRequested.length) {
-    const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsRequested }, userId: recipient.id, burnedAt: null },
-      select: { id: true }
-    })
-    if (ownedByRecipient.length !== ctoonIdsRequested.length) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
-      })
-    }
-  }
-
-  // 5a) Check requested cToons are not in any pending trades
-  if (ctoonIdsRequested.length) {
-    const requestedInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
-      where: {
-        userCtoonId: { in: ctoonIdsRequested },
-        tradeOffer: { status: 'PENDING' }
-      },
-      include: {
-        userCtoon: { include: { ctoon: { select: { name: true } } } }
-      }
-    })
-    if (requestedInPendingTrade) {
-      const ctoonName = requestedInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
-      throw createError({
-        statusCode: 400,
-        statusMessage: `${recipient.username}'s cToon "${ctoonName}" is already part of a pending trade and cannot be requested.`
-      })
-    }
-  }
-
-  // 5.5) Prevent trades involving cToons in active auctions
-  if (ctoonIdsOffered.length) {
-    const offeredActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
-      include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
-    })
-    if (offeredActiveAuction) {
-      const ctoonName = offeredActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
-      throw createError({
-        statusCode: 400,
-        statusMessage: `Your cToon "${ctoonName}" is currently in an active auction and cannot be offered.`
-      })
-    }
-  }
-  if (ctoonIdsRequested.length) {
-    const requestedActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
-      include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
-    })
-    if (requestedActiveAuction) {
-      const ctoonName = requestedActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
-      throw createError({
-        statusCode: 400,
-        statusMessage: `${recipient.username}'s cToon "${ctoonName}" is currently in an active auction and cannot be requested.`
-      })
-    }
-  }
-
-  // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points
+  // 4–6) All validation and offer creation happen atomically inside a transaction
+  // to prevent TOCTOU races (ownership, pending trades, auctions, and points can
+  // all change between a pre-check and the write).
   const offer = await prisma.$transaction(async (tx) => {
+    // 4) Verify ownership of offered cToons
+    if (ctoonIdsOffered.length) {
+      const ownedCount = await tx.userCtoon.count({
+        where: { id: { in: ctoonIdsOffered }, userId: initiatorId, burnedAt: null }
+      })
+      if (ownedCount !== ctoonIdsOffered.length) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'One or more offered cToons are not owned by you or no longer available'
+        })
+      }
+
+      // 4a) Check offered cToons are not in any pending trades
+      const offeredInPendingTrade = await tx.tradeOfferCtoon.findFirst({
+        where: {
+          userCtoonId: { in: ctoonIdsOffered },
+          tradeOffer: { status: 'PENDING' }
+        },
+        include: {
+          userCtoon: { include: { ctoon: { select: { name: true } } } }
+        }
+      })
+      if (offeredInPendingTrade) {
+        const ctoonName = offeredInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Your cToon "${ctoonName}" is already part of a pending trade and cannot be offered.`
+        })
+      }
+
+      // 4b) Check offered cToons are not in active auctions
+      const offeredActiveAuction = await tx.auction.findFirst({
+        where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
+        include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
+      })
+      if (offeredActiveAuction) {
+        const ctoonName = offeredActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Your cToon "${ctoonName}" is currently in an active auction and cannot be offered.`
+        })
+      }
+    }
+
+    // 4c) Verify initiator has enough AVAILABLE points (total - active locks)
+    if (pointsOffered > 0) {
+      const pts = await tx.userPoints.findUnique({
+        where: { userId: initiatorId },
+        select: { points: true }
+      })
+      const lockAgg = await tx.lockedPoints.aggregate({
+        where: { userId: initiatorId, status: 'ACTIVE' },
+        _sum: { amount: true }
+      })
+      const totalPoints = pts?.points ?? 0
+      const lockedSum = lockAgg._sum.amount ?? 0
+      const availablePoints = totalPoints - lockedSum
+      if (pointsOffered > availablePoints) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Insufficient points: you have ${fmt(totalPoints)} points, with ${fmt(lockedSum)} locked; tried to offer ${fmt(pointsOffered)}.`
+        })
+      }
+    }
+
+    // 5) Verify ownership of requested cToons
+    if (ctoonIdsRequested.length) {
+      const ownedCount = await tx.userCtoon.count({
+        where: { id: { in: ctoonIdsRequested }, userId: recipient.id, burnedAt: null }
+      })
+      if (ownedCount !== ctoonIdsRequested.length) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
+        })
+      }
+
+      // 5a) Check requested cToons are not in any pending trades
+      const requestedInPendingTrade = await tx.tradeOfferCtoon.findFirst({
+        where: {
+          userCtoonId: { in: ctoonIdsRequested },
+          tradeOffer: { status: 'PENDING' }
+        },
+        include: {
+          userCtoon: { include: { ctoon: { select: { name: true } } } }
+        }
+      })
+      if (requestedInPendingTrade) {
+        const ctoonName = requestedInPendingTrade.userCtoon?.ctoon?.name || 'Unknown cToon'
+        throw createError({
+          statusCode: 400,
+          statusMessage: `${recipient.username}'s cToon "${ctoonName}" is already part of a pending trade and cannot be requested.`
+        })
+      }
+
+      // 5b) Check requested cToons are not in active auctions
+      const requestedActiveAuction = await tx.auction.findFirst({
+        where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
+        include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
+      })
+      if (requestedActiveAuction) {
+        const ctoonName = requestedActiveAuction.userCtoon?.ctoon?.name || 'Unknown cToon'
+        throw createError({
+          statusCode: 400,
+          statusMessage: `${recipient.username}'s cToon "${ctoonName}" is currently in an active auction and cannot be requested.`
+        })
+      }
+    }
+
+    // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points
     const created = await tx.tradeOffer.create({
       data: {
         initiatorId,
