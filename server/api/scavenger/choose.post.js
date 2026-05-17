@@ -79,6 +79,21 @@ export default defineEventHandler(async (event) => {
   let points = 0
   let ctoonId = null
 
+  // Atomically claim the session before awarding any prize. If two concurrent
+  // requests reach this point with the same sessionId, only one will get
+  // count > 0 — the other returns the already-stored result without re-awarding.
+  const claimed = await db.scavengerSession.updateMany({
+    where: { id: sessionId, status: 'PENDING' },
+    data: { status: 'COMPLETED', stepIndex: 4, path: finalPath, resultType, pointsAwarded: null, ctoonIdAwarded: null }
+  })
+  if (claimed.count === 0) {
+    const done = await db.scavengerSession.findUnique({ where: { id: sessionId } })
+    const ctoon = done?.ctoonIdAwarded
+      ? await db.ctoon.findUnique({ where: { id: done.ctoonIdAwarded }, select: { id: true, name: true, assetPath: true } })
+      : null
+    return { complete: true, result: { type: done?.resultType || 'NOTHING', points: done?.pointsAwarded || 0, ctoon } }
+  }
+
   if (resultType === 'POINTS' && (outcome?.points || 0) > 0) {
     points = outcome.points
     const updated = await db.userPoints.upsert({
@@ -118,17 +133,10 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // finalize session
+  // Update the session record with final outcome details (status already set to COMPLETED above)
   await db.scavengerSession.update({
     where: { id: sessionId },
-    data: {
-      stepIndex: 4,
-      path: finalPath,
-      status: 'COMPLETED',
-      resultType,
-      pointsAwarded: points || null,
-      ctoonIdAwarded: ctoonId
-    }
+    data: { pointsAwarded: points || null, ctoonIdAwarded: ctoonId, resultType }
   })
 
   const ctoon = ctoonId ? await db.ctoon.findUnique({ where: { id: ctoonId }, select: { id: true, name: true, assetPath: true } }) : null

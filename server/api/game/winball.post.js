@@ -111,47 +111,55 @@ export default defineEventHandler(async (event) => {
   if (now.getTime() < boundaryUtcMs) boundaryUtcMs -= 24 * 60 * 60 * 1000
   const boundary = new Date(boundaryUtcMs)
 
-  // 6) sum pts since boundary
-  const agg = await prisma.gamePointLog.aggregate({
-    where: { userId, createdAt: { gte: boundary } }, _sum:{ points:true }
-  })
-  const used = agg._sum.points || 0
-  const global = await prisma.globalGameConfig.findUnique({ where:{ id:'singleton' } })
-  const cap    = global.dailyPointLimit
-  const remaining = Math.max(0, cap - used)
-  const toGive = Math.min(award.points, remaining)
-
-  // 7) persist points
-  if (toGive > 0) {
-    await prisma.gamePointLog.create({ data: { userId, points: toGive } })
-    const updated = await prisma.userPoints.upsert({
-      where: { userId },
-      create: { userId, points: toGive },
-      update: { points: { increment: toGive } }
+  // 6) sum pts since boundary and persist — all inside one transaction to
+  // prevent TOCTOU races where concurrent requests each pass the cap check
+  // before any GamePointLog row is written.
+  const { toGive } = await prisma.$transaction(async (tx) => {
+    const agg = await tx.gamePointLog.aggregate({
+      where: { userId, createdAt: { gte: boundary } }, _sum: { points: true }
     })
-    await prisma.pointsLog.create({
-      data: { userId, points: toGive, total: updated.points, method: "Game - Winball", direction: 'increase' }
-    });
-  }
+    const used = agg._sum.points || 0
+    const global = await tx.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+    const cap = global.dailyPointLimit
+    const remaining = Math.max(0, cap - used)
+    const toGive = Math.min(award.points, remaining)
 
-  // 8) if gold cup, enqueue grand prize mint
+    if (toGive > 0) {
+      await tx.gamePointLog.create({ data: { userId, points: toGive } })
+      const updated = await tx.userPoints.upsert({
+        where: { userId },
+        create: { userId, points: toGive },
+        update: { points: { increment: toGive } }
+      })
+      await tx.pointsLog.create({
+        data: { userId, points: toGive, total: updated.points, method: 'Game - Winball', direction: 'increase' }
+      })
+    }
+    return { toGive, remaining }
+  })
+
+  // 8) if gold cup, enqueue grand prize mint.
+  // Use a stable jobId (userId+ctoonId) so BullMQ deduplicates concurrent
+  // requests that both pass the ownership check before either mint lands.
   let grandPrizeCtoonName = null
   let grandPrizeCtoonImagePath = null
   let grandPrizeCtoonId = null
 
-  if (award.pocket === 'halfCircle2'
-      && config.grandPrizeCtoonId
-  ) {
+  if (award.pocket === 'halfCircle2' && config.grandPrizeCtoonId) {
     const existing = await prisma.ctoonOwnerLog.findFirst({
       where: { userId, ctoonId: config.grandPrizeCtoonId }
     })
     if (!existing) {
       const gp = await prisma.ctoon.findUnique({ where: { id: config.grandPrizeCtoonId } })
       if (gp) {
-        await mintQueue.add('mintCtoon', { userId, ctoonId: gp.id, isSpecial: true })
+        await mintQueue.add(
+          'mintCtoon',
+          { userId, ctoonId: gp.id, isSpecial: true },
+          { jobId: `winball-gp-${userId}-${gp.id}` }
+        )
         grandPrizeCtoonName = gp.name
-        grandPrizeCtoonImagePath = gp.assetPath   // <-- add
-        grandPrizeCtoonId = gp.id                 // <-- add
+        grandPrizeCtoonImagePath = gp.assetPath
+        grandPrizeCtoonId = gp.id
       }
     }
   }
@@ -163,7 +171,7 @@ export default defineEventHandler(async (event) => {
     pointsAwarded:        toGive,
     pointsRemainingToday: remaining - toGive,
     grandPrizeCtoon:      grandPrizeCtoonName,
-    grandPrizeCtoonImage: grandPrizeCtoonImagePath,  // <-- add
-    grandPrizeCtoonId                                     // <-- add
+    grandPrizeCtoonImage: grandPrizeCtoonImagePath,
+    grandPrizeCtoonId
   }
 })
