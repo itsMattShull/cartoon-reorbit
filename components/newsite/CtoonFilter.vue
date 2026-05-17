@@ -108,6 +108,7 @@ const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
   showSortDir:         { type: Boolean, default: true  },
   showAuctionFilters:  { type: Boolean, default: false },
+  ctoonsStateKey:      { type: String,  default: 'cmartCtoons' },
   sortOptions: {
     type: Array,
     default: () => [
@@ -120,7 +121,7 @@ const props = defineProps({
 
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
-const ctoons   = useState('cmartCtoons', () => [])
+const ctoons   = useState(props.ctoonsStateKey, () => [])
 
 const RARITIES = [
   { value: 'common',       label: 'C',  cls: 'cf-rb-common'        },

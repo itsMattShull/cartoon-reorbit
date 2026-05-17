@@ -3,6 +3,9 @@
     <NuxtLink to="/newsite/MycWorld" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">My cWorld</BlueButton>
     </NuxtLink>
+    <NuxtLink to="/newsite/allCtoons" class="nav-link">
+      <BlueButton :style="{ height: buttonHeight }">All cToons</BlueButton>
+    </NuxtLink>
     <NuxtLink to="/newsite/cmart" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">cMart</BlueButton>
     </NuxtLink>
