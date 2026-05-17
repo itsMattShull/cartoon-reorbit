@@ -12,12 +12,19 @@
       @created="onAuctionCreated"
     />
 
+    <!-- ── Pagination (top) ─────────────────────────────────────── -->
+    <div class="mc-pagination">
+      <button class="mc-pg-btn" :disabled="currentPage <= 1" @click="prevPage">‹</button>
+      <span class="mc-pg-info">{{ currentPage }} / {{ totalPages }}</span>
+      <button class="mc-pg-btn" :disabled="currentPage >= totalPages" @click="nextPage">›</button>
+    </div>
+
     <!-- ── Card grid ─────────────────────────────────────────────── -->
     <div class="mc-grid">
       <div v-if="loading" class="mc-status">Loading…</div>
       <div v-else-if="!ctoons.length" class="mc-status">No cToons in your collection.</div>
       <template v-else>
-        <ShortCard v-for="c in ctoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
+        <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
           <template #header>
             <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
           </template>
@@ -36,6 +43,13 @@
           </template>
         </ShortCard>
       </template>
+    </div>
+
+    <!-- ── Pagination (bottom) ───────────────────────────────────── -->
+    <div class="mc-pagination">
+      <button class="mc-pg-btn" :disabled="currentPage <= 1" @click="prevPage">‹</button>
+      <span class="mc-pg-info">{{ currentPage }} / {{ totalPages }}</span>
+      <button class="mc-pg-btn" :disabled="currentPage >= totalPages" @click="nextPage">›</button>
     </div>
 
   </div>
@@ -73,6 +87,11 @@ const allCtoons   = useState('myCollectionCtoons', () => [])
 const loading     = ref(true)
 const filter      = useNewSiteCtoonFilter()
 const auctionCtoon = ref(null)
+
+const PAGE_SIZE   = 30
+const currentPage = ref(1)
+
+watch(filter, () => { currentPage.value = 1 }, { deep: true })
 
 function hasActiveAuction(c) {
   return (c.auctions && c.auctions.length > 0) || !!c.hasActiveAuction
@@ -143,6 +162,16 @@ const ctoons = computed(() => {
   return list
 })
 
+const totalPages = computed(() => Math.max(1, Math.ceil(ctoons.value.length / PAGE_SIZE)))
+
+const paginatedCtoons = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE
+  return ctoons.value.slice(start, start + PAGE_SIZE)
+})
+
+function prevPage() { if (currentPage.value > 1) currentPage.value-- }
+function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
+
 onMounted(async () => {
   try {
     allCtoons.value = await $fetch('/api/collections')
@@ -165,6 +194,38 @@ onMounted(async () => {
   overflow: hidden;
 
   --img-scale: 0.7;
+}
+
+.mc-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 3px 6px;
+  background: var(--OrbitDarkBlue);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.mc-pg-btn {
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 1px 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.mc-pg-btn:disabled { opacity: 0.3; cursor: default; }
+.mc-pg-btn:not(:disabled):hover { background: rgba(255,255,255,0.1); }
+
+.mc-pg-info {
+  font-size: 0.63rem;
+  color: rgba(255,255,255,0.55);
+  min-width: 55px;
+  text-align: center;
 }
 
 .mc-header {
