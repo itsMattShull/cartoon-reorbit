@@ -466,6 +466,8 @@ const delayHours = ref(12)
 
 function detectPreset(link) {
   if (!link) return ''
+  // Treat old /newsite/auctions path as the auctions preset
+  if (link === '/newsite/auctions') return 'auctions'
   for (const [preset, path] of Object.entries(PAGE_LINKS)) {
     if (link === path) return preset
   }

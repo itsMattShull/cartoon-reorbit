@@ -51,6 +51,13 @@
     </div>
 
   </div>
+
+  <WishlistModal
+    v-if="wishlistModalCtoon"
+    :ctoon="wishlistModalCtoon"
+    @close="wishlistModalCtoon = null"
+    @added="wishlistModalCtoon = null"
+  />
 </template>
 
 <script setup>
@@ -82,8 +89,10 @@ const RARITY_ORDER = {
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
 }
 
-const { wishlist, loading: wishlistLoading, add: wishlistAdd, remove: wishlistRemove } = useWishlist()
+const { wishlist, loading: wishlistLoading, remove: wishlistRemove } = useWishlist()
 const processing = ref(new Set())
+
+const wishlistModalCtoon = ref(null)
 
 function inWishlist(ctoonId) {
   return wishlist.value.includes(ctoonId)
@@ -91,17 +100,17 @@ function inWishlist(ctoonId) {
 
 async function toggleWishlist(c) {
   if (processing.value.has(c.id)) return
-  processing.value = new Set([...processing.value, c.id])
-  try {
-    if (inWishlist(c.id)) {
+  if (inWishlist(c.id)) {
+    processing.value = new Set([...processing.value, c.id])
+    try {
       await wishlistRemove(c.id)
-    } else {
-      await wishlistAdd(c.id, 0)
+    } finally {
+      const next = new Set(processing.value)
+      next.delete(c.id)
+      processing.value = next
     }
-  } finally {
-    const next = new Set(processing.value)
-    next.delete(c.id)
-    processing.value = next
+  } else {
+    wishlistModalCtoon.value = c
   }
 }
 
@@ -116,7 +125,8 @@ const filteredCtoons = computed(() => {
     const o  = f.owned === 'all'
       ? true
       : f.owned === 'owned' ? c.isOwned : !c.isOwned
-    return nm && r && o
+    const w  = !f.wishlist || wishlist.value.includes(c.id)
+    return nm && r && o && w
   })
 })
 
