@@ -53,6 +53,14 @@
 
     <hr class="acs-divider" />
 
+    <!-- Wishlist filter -->
+    <label class="acs-checkbox-row">
+      <input type="checkbox" v-model="filter.wishlist" class="acs-checkbox" />
+      <span class="acs-checkbox-label">My Wishlist</span>
+    </label>
+
+    <hr class="acs-divider" />
+
     <!-- Sort -->
     <div>
       <div class="acs-label">Sort By</div>
@@ -100,6 +108,7 @@ function clearFilters() {
     name:      '',
     rarities:  [],
     owned:     'all',
+    wishlist:  false,
     sortField: 'name',
     sortAsc:   true,
   })
@@ -272,6 +281,31 @@ function clearFilters() {
   cursor: pointer;
   flex-shrink: 0;
 }
+
+/* ── Wishlist checkbox ── */
+.acs-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.acs-checkbox {
+  accent-color: var(--OrbitLightBlue);
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.acs-checkbox-label {
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.acs-checkbox-row:hover .acs-checkbox-label { color: #fff; }
 
 /* ── Clear ── */
 .acs-clear {

@@ -125,7 +125,8 @@ const filteredCtoons = computed(() => {
     const o  = f.owned === 'all'
       ? true
       : f.owned === 'owned' ? c.isOwned : !c.isOwned
-    return nm && r && o
+    const w  = !f.wishlist || wishlist.value.includes(c.id)
+    return nm && r && o && w
   })
 })
 

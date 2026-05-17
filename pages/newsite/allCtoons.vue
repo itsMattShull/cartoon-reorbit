@@ -13,6 +13,7 @@ Object.assign(filter.value, {
   name:      '',
   rarities:  [],
   owned:     'all',
+  wishlist:  false,
   sortField: 'name',
   sortAsc:   true,
 })
