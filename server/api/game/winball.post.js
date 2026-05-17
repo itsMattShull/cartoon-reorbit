@@ -114,7 +114,7 @@ export default defineEventHandler(async (event) => {
   // 6) sum pts since boundary and persist — all inside one transaction to
   // prevent TOCTOU races where concurrent requests each pass the cap check
   // before any GamePointLog row is written.
-  const { toGive } = await prisma.$transaction(async (tx) => {
+  const { toGive, remaining } = await prisma.$transaction(async (tx) => {
     const agg = await tx.gamePointLog.aggregate({
       where: { userId, createdAt: { gte: boundary } }, _sum: { points: true }
     })
@@ -141,25 +141,39 @@ export default defineEventHandler(async (event) => {
   // 8) if gold cup, enqueue grand prize mint.
   // Use a stable jobId (userId+ctoonId) so BullMQ deduplicates concurrent
   // requests that both pass the ownership check before either mint lands.
+  // Prize comes from the admin override (grandPrizeCtoonId) when set,
+  // otherwise from the active WinballGrandPrizeSchedule row — matching the
+  // logic in winball-prize.get.js so the displayed prize is always the one
+  // that gets awarded.
   let grandPrizeCtoonName = null
   let grandPrizeCtoonImagePath = null
   let grandPrizeCtoonId = null
 
-  if (award.pocket === 'halfCircle2' && config.grandPrizeCtoonId) {
-    const existing = await prisma.ctoonOwnerLog.findFirst({
-      where: { userId, ctoonId: config.grandPrizeCtoonId }
-    })
-    if (!existing) {
-      const gp = await prisma.ctoon.findUnique({ where: { id: config.grandPrizeCtoonId } })
-      if (gp) {
+  if (award.pocket === 'halfCircle2') {
+    let gpCtoon = config.grandPrizeCtoon || null
+
+    if (!gpCtoon) {
+      const scheduled = await prisma.winballGrandPrizeSchedule.findFirst({
+        where: { startsAt: { lte: new Date() } },
+        orderBy: { startsAt: 'desc' },
+        include: { ctoon: true }
+      })
+      gpCtoon = scheduled?.ctoon || null
+    }
+
+    if (gpCtoon) {
+      const existing = await prisma.ctoonOwnerLog.findFirst({
+        where: { userId, ctoonId: gpCtoon.id }
+      })
+      if (!existing) {
         await mintQueue.add(
           'mintCtoon',
-          { userId, ctoonId: gp.id, isSpecial: true },
-          { jobId: `winball-gp-${userId}-${gp.id}` }
+          { userId, ctoonId: gpCtoon.id, isSpecial: true },
+          { jobId: `winball-gp-${userId}-${gpCtoon.id}` }
         )
-        grandPrizeCtoonName = gp.name
-        grandPrizeCtoonImagePath = gp.assetPath
-        grandPrizeCtoonId = gp.id
+        grandPrizeCtoonName = gpCtoon.name
+        grandPrizeCtoonImagePath = gpCtoon.assetPath
+        grandPrizeCtoonId = gpCtoon.id
       }
     }
   }

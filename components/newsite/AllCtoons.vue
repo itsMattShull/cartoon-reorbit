@@ -3,12 +3,19 @@
 
     <div class="ac-header">All cToons</div>
 
+    <!-- ── Pagination (top) ─────────────────────────────────────── -->
+    <div class="ac-pagination">
+      <button class="ac-pg-btn" :disabled="groupPage <= 1" @click="prevGroupPage">‹</button>
+      <span class="ac-pg-info">{{ groupPage }} / {{ totalGroupPages }}</span>
+      <button class="ac-pg-btn" :disabled="groupPage >= totalGroupPages" @click="nextGroupPage">›</button>
+    </div>
+
     <div class="ac-scroll">
       <div v-if="loading" class="ac-status">Loading…</div>
       <div v-else-if="!filteredCtoons.length" class="ac-status">No cToons found.</div>
 
       <template v-else>
-        <div v-for="groupName in groupNames" :key="groupName" class="ac-group">
+        <div v-for="groupName in pagedGroupNames" :key="groupName" class="ac-group">
           <div class="ac-group-header">
             <span class="ac-group-name">{{ groupName }}</span>
             <span class="ac-group-count">
@@ -48,6 +55,13 @@
           </div>
         </div>
       </template>
+    </div>
+
+    <!-- ── Pagination (bottom) ───────────────────────────────────── -->
+    <div class="ac-pagination">
+      <button class="ac-pg-btn" :disabled="groupPage <= 1" @click="prevGroupPage">‹</button>
+      <span class="ac-pg-info">{{ groupPage }} / {{ totalGroupPages }}</span>
+      <button class="ac-pg-btn" :disabled="groupPage >= totalGroupPages" @click="nextGroupPage">›</button>
     </div>
 
   </div>
@@ -113,6 +127,21 @@ async function toggleWishlist(c) {
     wishlistModalCtoon.value = c
   }
 }
+
+const GROUPS_PER_PAGE = 5
+const groupPage       = ref(1)
+
+watch([filter, activeTab], () => { groupPage.value = 1 }, { deep: true })
+
+const totalGroupPages = computed(() => Math.max(1, Math.ceil(groupNames.value.length / GROUPS_PER_PAGE)))
+
+const pagedGroupNames = computed(() => {
+  const start = (groupPage.value - 1) * GROUPS_PER_PAGE
+  return groupNames.value.slice(start, start + GROUPS_PER_PAGE)
+})
+
+function prevGroupPage() { if (groupPage.value > 1) groupPage.value-- }
+function nextGroupPage() { if (groupPage.value < totalGroupPages.value) groupPage.value++ }
 
 const allCtoons = ref([])
 const loading   = ref(true)
@@ -187,6 +216,38 @@ onMounted(async () => {
   background: white;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.ac-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 3px 6px;
+  background: var(--OrbitDarkBlue);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.ac-pg-btn {
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 1px 9px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ac-pg-btn:disabled { opacity: 0.3; cursor: default; }
+.ac-pg-btn:not(:disabled):hover { background: rgba(255,255,255,0.1); }
+
+.ac-pg-info {
+  font-size: 0.63rem;
+  color: rgba(255,255,255,0.55);
+  min-width: 55px;
+  text-align: center;
 }
 
 .ac-header {
