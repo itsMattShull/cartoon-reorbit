@@ -27,10 +27,12 @@
             <span class="rarity-dot" :style="{ background: rarityColor(c.rarity) }" :title="c.rarity" />
           </template>
           <template #footer-left>
-            <BlueButton class="card-btn" @click="openAuction(c)">Auction</BlueButton>
+            <BlueButton class="card-btn" :disabled="hasActiveAuction(c)" @click="openAuction(c)">Auction</BlueButton>
           </template>
           <template #footer-right>
-            <GreenButton class="card-btn">Trade List</GreenButton>
+            <GreenButton class="card-btn" :disabled="tradeListLoading" @click="toggleTradeList(c)">
+              {{ tradeList.includes(c.id) ? 'Remove Tradable' : 'Make Tradable' }}
+            </GreenButton>
           </template>
         </ShortCard>
       </template>
@@ -41,6 +43,7 @@
 
 <script setup>
 const { open: openCtoonModal } = useCtoonModal()
+const { tradeList, loading: tradeListLoading, add: addToTradeList, remove: removeFromTradeList } = useTradeList()
 
 function openInfo(c) {
   openCtoonModal({ ctoonId: c.ctoonId, userCtoonId: c.id, assetPath: c.assetPath, name: c.name })
@@ -71,7 +74,23 @@ const loading     = ref(true)
 const filter      = useNewSiteCtoonFilter()
 const auctionCtoon = ref(null)
 
-function openAuction(c) { auctionCtoon.value = c }
+function hasActiveAuction(c) {
+  return (c.auctions && c.auctions.length > 0) || !!c.hasActiveAuction
+}
+
+function openAuction(c) {
+  if (hasActiveAuction(c)) return
+  auctionCtoon.value = c
+}
+
+async function toggleTradeList(c) {
+  if (tradeList.value.includes(c.id)) {
+    await removeFromTradeList(c.id)
+  } else {
+    await addToTradeList(c.id)
+  }
+}
+
 function onAuctionCreated(userCtoonId) {
   // Mark the ctoon as having an active auction so button could be disabled in future
   const ctoon = allCtoons.value.find(c => c.id === userCtoonId)
