@@ -55,14 +55,7 @@ export default defineEventHandler(async (event) => {
     return { success: false, message: 'Already awarded points for this zone owner in this period' }
   }
 
-  // ── 3) log the visit ────────────────────────────────────────────────────
-  await prisma.visit.create({
-    data: { userId: viewerId, zoneOwnerId: ownerId },
-  })
-
-  // ── 4) award points ─────────────────────────────────────────────────────
-  // Load public-safe config values for cZone visits with fallback
-  // Fetch visit points (may be cached above; fetch again selecting points)
+  // ── 3) fetch visit points config ────────────────────────────────────────
   let cfg2
   try {
     cfg2 = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { czoneVisitPoints: true } })
@@ -71,15 +64,48 @@ export default defineEventHandler(async (event) => {
   }
   const visitPoints = Number(cfg2?.czoneVisitPoints ?? 20)
 
-  const updated = await prisma.userPoints.upsert({
-    where:  { userId: viewerId },
-    update: { points: { increment: visitPoints } },
-    create: { userId: viewerId, points: visitPoints },
-  })
+  // ── 4) atomically log the visit and award points ─────────────────────────
+  // All three operations run in one transaction to prevent TOCTOU races where
+  // concurrent requests pass the duplicate-visit check before any write lands.
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Re-check total visits inside transaction
+      const totalVisitsInTx = await tx.visit.count({
+        where: { userId: viewerId, createdAt: { gte: boundaryUtc } },
+      })
+      if (totalVisitsInTx >= maxVisits) {
+        throw new Error('LIMIT_REACHED')
+      }
 
-  await prisma.pointsLog.create({
-    data: { userId: viewerId, points: visitPoints, total: updated.points, method: "cZone Visit", direction: 'increase' }
-  });
+      // Re-check duplicate visit inside transaction
+      const dupInTx = await tx.visit.findFirst({
+        where: { userId: viewerId, zoneOwnerId: ownerId, createdAt: { gte: boundaryUtc } },
+      })
+      if (dupInTx) {
+        throw new Error('ALREADY_VISITED')
+      }
+
+      await tx.visit.create({ data: { userId: viewerId, zoneOwnerId: ownerId } })
+
+      const updated = await tx.userPoints.upsert({
+        where:  { userId: viewerId },
+        update: { points: { increment: visitPoints } },
+        create: { userId: viewerId, points: visitPoints },
+      })
+
+      await tx.pointsLog.create({
+        data: { userId: viewerId, points: visitPoints, total: updated.points, method: 'cZone Visit', direction: 'increase' },
+      })
+    })
+  } catch (err) {
+    if (err.message === 'LIMIT_REACHED') {
+      return { success: false, message: `Daily limit of ${maxVisits} visits reached` }
+    }
+    if (err.message === 'ALREADY_VISITED') {
+      return { success: false, message: 'Already awarded points for this zone owner in this period' }
+    }
+    throw err
+  }
 
   return { success: true, message: 'Points awarded' }
 })
