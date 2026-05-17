@@ -1,5 +1,5 @@
 // server/api/collections/all.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, createError, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -13,9 +13,15 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
+  const { sortField = 'releaseDate', sortAsc = 'false' } = getQuery(event)
+  const asc = sortAsc === 'true'
+  const orderBy = sortField === 'name'
+    ? { name: asc ? 'asc' : 'desc' }
+    : { releaseDate: asc ? 'asc' : 'desc' }
+
   try {
     const ctoons = await prisma.ctoon.findMany({
-      orderBy: { releaseDate: 'desc' },
+      orderBy,
       select: {
         id: true, name: true, assetPath: true, releaseDate: true,
         set: true, series: true, rarity: true, price: true,
