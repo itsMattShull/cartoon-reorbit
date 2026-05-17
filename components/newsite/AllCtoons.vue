@@ -22,22 +22,27 @@
               :style="{ '--footer-left-width': '100%', '--footer-right-width': '0%' }"
             >
               <template #header>
-                <img
-                  v-if="c.assetPath"
-                  :src="c.assetPath"
-                  :alt="c.name"
-                  class="card-img card-img--clickable"
-                  @click="openInfo(c)"
-                />
+                <div class="card-header-wrap" @click="openInfo(c)">
+                  <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+                  <span
+                    class="owned-badge"
+                    :class="c.isOwned ? 'owned-badge--owned' : 'owned-badge--unowned'"
+                  >{{ c.isOwned ? 'Owned' : 'Unowned' }}</span>
+                </div>
               </template>
               <template #middle>
                 <span class="card-name">{{ c.name }}</span>
                 <span class="rarity-dot" :style="{ background: rarityColor(c.rarity) }" :title="c.rarity" />
               </template>
               <template #footer-left>
-                <span class="owned-badge" :class="c.isOwned ? 'badge-owned' : 'badge-unowned'">
-                  {{ c.isOwned ? 'Owned' : 'Unowned' }}
-                </span>
+                <button
+                  class="wishlist-btn"
+                  :class="inWishlist(c.id) ? 'wishlist-btn--remove' : 'wishlist-btn--add'"
+                  :disabled="wishlistLoading || processing.has(c.id)"
+                  @click.stop="toggleWishlist(c)"
+                >
+                  {{ inWishlist(c.id) ? 'Remove from Wishlist' : 'Add to Wishlist' }}
+                </button>
               </template>
             </ShortCard>
           </div>
@@ -75,6 +80,29 @@ function rarityColor(rarity) {
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
+}
+
+const { wishlist, loading: wishlistLoading, add: wishlistAdd, remove: wishlistRemove } = useWishlist()
+const processing = ref(new Set())
+
+function inWishlist(ctoonId) {
+  return wishlist.value.includes(ctoonId)
+}
+
+async function toggleWishlist(c) {
+  if (processing.value.has(c.id)) return
+  processing.value = new Set([...processing.value, c.id])
+  try {
+    if (inWishlist(c.id)) {
+      await wishlistRemove(c.id)
+    } else {
+      await wishlistAdd(c.id, 0)
+    }
+  } finally {
+    const next = new Set(processing.value)
+    next.delete(c.id)
+    processing.value = next
+  }
 }
 
 const allCtoons = ref([])
@@ -230,6 +258,13 @@ onMounted(async () => {
 }
 
 /* ── Card contents ── */
+.card-header-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
 .card-img {
   width: 100%;
   height: 100%;
@@ -237,13 +272,22 @@ onMounted(async () => {
   transform: scale(0.7);
 }
 
-.card-img--clickable {
-  cursor: pointer;
+.card-header-wrap:hover .card-img { filter: brightness(1.12); }
+
+.owned-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.5rem;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+  pointer-events: none;
 }
 
-.card-img--clickable:hover {
-  filter: brightness(1.12);
-}
+.owned-badge--owned   { background: #16a34a;            color: #fff; }
+.owned-badge--unowned { background: rgba(0, 0, 0, 0.55); color: rgba(255, 255, 255, 0.75); }
 
 .card-name {
   font-size: 0.6rem;
@@ -264,24 +308,26 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.owned-badge {
-  display: block;
-  width: 100%;
-  height: 100%;
+/* ── Wishlist button ── */
+.wishlist-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.58rem;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  font-size: 0.65rem;
   font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  cursor: pointer;
+  user-select: none;
 }
 
-.badge-owned {
-  background: #22c55e;
-  color: #fff;
-}
-
-.badge-unowned {
-  background: #6b7280;
-  color: #fff;
-}
+.wishlist-btn--add    { background: var(--OrbitGreen); color: #fff; }
+.wishlist-btn--remove { background: #f47b00;           color: #fff; }
+.wishlist-btn:disabled { opacity: 0.5; cursor: default; }
+.wishlist-btn:not(:disabled):hover { filter: brightness(1.1); }
 </style>
