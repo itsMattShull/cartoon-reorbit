@@ -171,8 +171,26 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points
+  // 6) Create the TradeOffer + nested C-Toon joins AND lock the offered points.
+  // Re-verify available points inside the transaction to prevent concurrent offers
+  // from over-committing the same balance (TOCTOU race on the pre-flight check above).
   const offer = await prisma.$transaction(async (tx) => {
+    if (pointsOffered > 0) {
+      const ptsNow = await tx.userPoints.findUnique({ where: { userId: initiatorId }, select: { points: true } })
+      const locksNow = await tx.lockedPoints.findMany({
+        where: { userId: initiatorId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+      const lockedNow = locksNow.reduce((acc, r) => acc + (r.amount || 0), 0)
+      const availableNow = (ptsNow?.points ?? 0) - lockedNow
+      if (pointsOffered > availableNow) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: `Insufficient points: you have ${fmt(ptsNow?.points ?? 0)} points, with ${fmt(lockedNow)} locked; tried to offer ${fmt(pointsOffered)}.`
+        })
+      }
+    }
+
     const created = await tx.tradeOffer.create({
       data: {
         initiatorId,
