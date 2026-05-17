@@ -224,12 +224,12 @@
                 <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber ?? 'N/A' }}</span>
                 <span v-else>&nbsp;</span>
               </span>
-              <NuxtLink :to="`/czone/${owner.username}`" class="ctic-owner-link">
+              <NuxtLink :to="`/newsite/czone/${owner.username}`" class="ctic-owner-link">
                 {{ owner.username }}
               </NuxtLink>
               <NuxtLink
                 v-if="owner.isTradeListItem"
-                :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+                :to="{ path: '/newsite/trade', query: { username: owner.username, userCtoonId: owner.userCtoonId } }"
                 class="ctic-tradeable-badge"
               >
                 Tradeable

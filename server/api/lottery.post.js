@@ -51,11 +51,22 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Daily limit is enforced atomically later when purchasesToday is incremented.
-  // An early non-atomic check is intentionally omitted to avoid TOCTOU races.
-
-  // Atomically deduct ticket cost — the WHERE clause makes this race-safe
+  // Atomically enforce the daily limit, increment purchasesToday, and deduct the
+  // ticket cost in a single transaction. Prizes are only awarded after this
+  // succeeds, so a limit violation or insufficient-points error always rolls back
+  // before any reward is committed.
+  let purchasesTodayAfter
   const pointsAfterPurchase = await db.$transaction(async (tx) => {
+    const current = await tx.lottoUser.findUnique({ where: { userId: me.id } })
+    if (settings.countPerDay !== -1 && (current?.purchasesToday ?? 0) >= settings.countPerDay) {
+      throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
+    }
+    const next = await tx.lottoUser.update({
+      where: { userId: me.id },
+      data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now }
+    })
+    purchasesTodayAfter = next.purchasesToday
+
     const deducted = await tx.userPoints.updateMany({
       where: { userId: me.id, points: { gte: settings.cost } },
       data: { points: { decrement: settings.cost }, updatedAt: new Date() }
@@ -161,35 +172,22 @@ export default defineEventHandler(async (event) => {
 
   const outcome = ctoonWin ? 'CTOON' : pointsWin ? 'POINTS' : 'NOTHING'
 
-  // Atomically increment purchasesToday and enforce the daily cap in the same
-  // transaction to prevent TOCTOU races from concurrent requests.
-  const updated = await db.$transaction(async (tx) => {
-    const current = await tx.lottoUser.findUnique({ where: { userId: me.id } })
-    if (settings.countPerDay !== -1 && (current?.purchasesToday ?? 0) >= settings.countPerDay) {
-      throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
+  await db.lottoLog.create({
+    data: {
+      userId: me.id,
+      outcome,
+      oddsBefore,
+      oddsAfter,
+      ...(wonUserCtoonId ? { userCtoonId: wonUserCtoonId } : {})
     }
-    const next = await tx.lottoUser.update({
-      where: { userId: me.id },
-      data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now }
-    })
-    await tx.lottoLog.create({
-      data: {
-        userId: me.id,
-        outcome,
-        oddsBefore,
-        oddsAfter,
-        ...(wonUserCtoonId ? { userCtoonId: wonUserCtoonId } : {})
-      }
-    })
-    return next
   })
 
-  const remaining = (settings.countPerDay === -1) ? -1 : Math.max(0, settings.countPerDay - updated.purchasesToday)
+  const remaining = (settings.countPerDay === -1) ? -1 : Math.max(0, settings.countPerDay - purchasesTodayAfter)
 
   return {
     roll,
     win: ctoonWin || pointsWin,
-    newOdds: updated.odds,
+    newOdds: oddsAfter,
     remaining,
     awardedPoints,
     awardedCtoon,

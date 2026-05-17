@@ -37,6 +37,11 @@
     0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+.blue-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .blue-button {
     font-size: 0.75rem;

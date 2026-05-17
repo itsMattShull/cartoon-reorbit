@@ -495,35 +495,40 @@ export default defineEventHandler(async (event) => {
   }
 
   if (scanPointsValue > 0) {
-    let toGive = scanPointsValue
-    const globalConfig = await db.globalGameConfig.findUnique({
-      where: { id: 'singleton' },
-      select: { dailyPointLimit: true }
-    })
-    if (globalConfig) {
-      const cutoffUTC = getGamePointBoundaryUtc()
-      const agg = await db.gamePointLog.aggregate({
-        where: { userId, createdAt: { gte: cutoffUTC } },
-        _sum: { points: true }
+    // Wrap the cap-check and the award in a single transaction so concurrent
+    // scan requests cannot both read the same "used" total and each award full
+    // points, blowing past the daily cap.
+    await db.$transaction(async (tx) => {
+      let toGive = scanPointsValue
+      const globalConfig = await tx.globalGameConfig.findUnique({
+        where: { id: 'singleton' },
+        select: { dailyPointLimit: true }
       })
-      const used = agg._sum.points || 0
-      const cap = Number(globalConfig.dailyPointLimit ?? 0)
-      const remaining = Math.max(0, cap - used)
-      toGive = Math.min(scanPointsValue, remaining)
-    }
+      if (globalConfig) {
+        const cutoffUTC = getGamePointBoundaryUtc()
+        const agg = await tx.gamePointLog.aggregate({
+          where: { userId, createdAt: { gte: cutoffUTC } },
+          _sum: { points: true }
+        })
+        const used = agg._sum.points || 0
+        const cap = Number(globalConfig.dailyPointLimit ?? 0)
+        const remaining = Math.max(0, cap - used)
+        toGive = Math.min(scanPointsValue, remaining)
+      }
 
-    if (toGive > 0) {
-      await db.gamePointLog.create({ data: { userId, points: toGive } })
-      const updatedPoints = await db.userPoints.upsert({
-        where: { userId },
-        update: { points: { increment: toGive } },
-        create: { userId, points: toGive },
-      })
-      await db.pointsLog.create({
-        data: { userId, points: toGive, total: updatedPoints.points, method: 'Barcode Scan', direction: 'increase' }
-      })
-      scanPointsAwarded = toGive
-    }
+      if (toGive > 0) {
+        await tx.gamePointLog.create({ data: { userId, points: toGive } })
+        const updatedPoints = await tx.userPoints.upsert({
+          where: { userId },
+          update: { points: { increment: toGive } },
+          create: { userId, points: toGive },
+        })
+        await tx.pointsLog.create({
+          data: { userId, points: toGive, total: updatedPoints.points, method: 'Barcode Scan', direction: 'increase' }
+        })
+        scanPointsAwarded = toGive
+      }
+    })
   }
 
   let battleInfo = null
