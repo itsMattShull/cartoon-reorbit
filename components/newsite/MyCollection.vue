@@ -30,7 +30,7 @@
             <BlueButton class="card-btn" @click="openAuction(c)">Auction</BlueButton>
           </template>
           <template #footer-right>
-            <GreenButton class="card-btn">Trade List</GreenButton>
+            <AddToTradeList class="card-btn" :user-ctoon-id="c.id" :is-owner="true" />
           </template>
         </ShortCard>
       </template>
@@ -218,6 +218,9 @@ onMounted(async () => {
 }
 
 .card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   padding: 0;

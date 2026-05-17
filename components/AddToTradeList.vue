@@ -3,7 +3,7 @@
     @click="toggle"
     :disabled="isDisabled"
     :class="[
-      'px-4 py-2 rounded-lg text-white',
+      'px-4 py-2 rounded-lg text-white text-xs',
       isDisabled
         ? 'opacity-50 cursor-not-allowed'
         : inTradeList
