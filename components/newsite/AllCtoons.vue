@@ -179,8 +179,25 @@ function sortedItems(list) {
 }
 
 const groupNames = computed(() => {
-  const key = activeTab.value === 'AllSeries' ? 'series' : 'set'
-  return [...new Set(filteredCtoons.value.map(c => c[key]).filter(Boolean))].sort()
+  const key   = activeTab.value === 'AllSeries' ? 'series' : 'set'
+  const f     = filter.value
+  const names = [...new Set(filteredCtoons.value.map(c => c[key]).filter(Boolean))]
+
+  if (f.sortField === 'releaseDate') {
+    const groupMinDate = {}
+    for (const c of filteredCtoons.value) {
+      const grp = c[key]
+      if (!grp) continue
+      const t = c.releaseDate ? new Date(c.releaseDate).getTime() : 0
+      if (groupMinDate[grp] === undefined || t < groupMinDate[grp]) groupMinDate[grp] = t
+    }
+    return names.sort((a, b) => {
+      const diff = (groupMinDate[a] ?? 0) - (groupMinDate[b] ?? 0)
+      return f.sortAsc ? diff : -diff
+    })
+  }
+
+  return names.sort()
 })
 
 function itemsInGroup(groupName) {
@@ -198,7 +215,12 @@ function totalInGroup(groupName) {
 
 onMounted(async () => {
   try {
-    allCtoons.value = await $fetch('/api/collections/all')
+    allCtoons.value = await $fetch('/api/collections/all', {
+      query: {
+        sortField: filter.value.sortField,
+        sortAsc:   String(filter.value.sortAsc),
+      }
+    })
   } catch (err) {
     console.error('AllCtoons: failed to load', err)
   } finally {
