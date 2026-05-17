@@ -28,10 +28,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid offeredPoints' })
   }
 
-  // preflight points
+  // preflight points — must check available (total minus locked) to prevent
+  // double-spending points that are already reserved in active auctions/trades
   const initiatorPts = await prisma.userPoints.findUnique({ where: { userId: initiatorId } })
-  if ((initiatorPts?.points || 0) < wi.offeredPoints) {
-    throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient points' })
+  const initiatorLocks = await prisma.lockedPoints.findMany({
+    where: { userId: initiatorId, status: 'ACTIVE' },
+    select: { amount: true }
+  })
+  const lockedSum = initiatorLocks.reduce((sum, r) => sum + (r.amount || 0), 0)
+  const availablePoints = (initiatorPts?.points || 0) - lockedSum
+  if (availablePoints < wi.offeredPoints) {
+    throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient available points' })
   }
 
   const availableUserCtoonWhere = {
@@ -55,10 +62,15 @@ export default defineEventHandler(async (event) => {
 
   // txn
   const result = await prisma.$transaction(async (tx) => {
-    // re-check points in txn
+    // re-check available points inside the transaction (re-query locks too)
     const ptsNow = await tx.userPoints.findUnique({ where: { userId: initiatorId } })
-    if ((ptsNow?.points || 0) < wi.offeredPoints) {
-      throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient points' })
+    const locksNow = await tx.lockedPoints.findMany({
+      where: { userId: initiatorId, status: 'ACTIVE' },
+      select: { amount: true }
+    })
+    const lockedNow = locksNow.reduce((sum, r) => sum + (r.amount || 0), 0)
+    if ((ptsNow?.points || 0) - lockedNow < wi.offeredPoints) {
+      throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient available points' })
     }
 
     // pick highest mint owned by recipient
