@@ -3,6 +3,7 @@
     <div class="mcw-nav">
       <GreenButton @click="goToCzone">My cZone</GreenButton>
       <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
+      <GreenButton @click="$router.push('/newsite/allCtoons')">All cToons</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
     </div>
     <div class="mcw-content">
