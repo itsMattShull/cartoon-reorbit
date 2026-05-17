@@ -1,5 +1,5 @@
 <template>
-  <CtoonFilter :sort-options="myCollectionSortOptions" />
+  <CtoonFilter :sort-options="myCollectionSortOptions" :show-trade-list-filter="true" />
 </template>
 
 <script setup>

@@ -87,12 +87,16 @@
       </div>
     </template>
 
-    <template v-if="showHideUnavailable">
+    <template v-if="showHideUnavailable || showTradeListFilter">
       <hr class="cf-divider" />
       <div class="cf-page-filters">
-        <label class="cf-checkbox-row">
+        <label v-if="showHideUnavailable" class="cf-checkbox-row">
           <input type="checkbox" v-model="filter.hideUnavailable" />
           <span>Hide unavailable</span>
+        </label>
+        <label v-if="showTradeListFilter" class="cf-checkbox-row">
+          <input type="checkbox" v-model="filter.onTradeListOnly" />
+          <span>On My Trade List</span>
         </label>
       </div>
     </template>
@@ -106,6 +110,7 @@
 <script setup>
 const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
+  showTradeListFilter: { type: Boolean, default: false },
   showSortDir:         { type: Boolean, default: true  },
   showAuctionFilters:  { type: Boolean, default: false },
   sortOptions: {
@@ -157,7 +162,8 @@ function clearFilters() {
     priceMax:        '',
     sortField:       props.sortOptions[0]?.value ?? 'name',
     sortAsc:         true,
-    hideUnavailable: false,
+    hideUnavailable:  false,
+    onTradeListOnly:  false,
   })
   if (props.showAuctionFilters) {
     Object.assign(aFilters.value, {

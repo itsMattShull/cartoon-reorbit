@@ -66,10 +66,11 @@ function rarityColor(rarity) {
   return RARITY_COLORS[(rarity || '').toLowerCase()] || '#aaaaaa'
 }
 
-const allCtoons   = useState('myCollectionCtoons', () => [])
-const loading     = ref(true)
-const filter      = useNewSiteCtoonFilter()
-const auctionCtoon = ref(null)
+const allCtoons    = useState('myCollectionCtoons', () => [])
+const loading      = ref(true)
+const filter       = useNewSiteCtoonFilter()
+const { tradeList } = useTradeList()
+const auctionCtoon  = ref(null)
 
 function openAuction(c) { auctionCtoon.value = c }
 function onAuctionCreated(userCtoonId) {
@@ -100,6 +101,9 @@ const ctoons = computed(() => {
 
   if (f.priceMax !== '')
     list = list.filter(c => c.price <= Number(f.priceMax))
+
+  if (f.onTradeListOnly)
+    list = list.filter(c => tradeList.value.includes(c.id))
 
   list = [...list].sort((a, b) => {
     let cmp = 0
