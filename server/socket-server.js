@@ -1044,24 +1044,27 @@ async function awardClashWinPoints(userId) {
       : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
     const cutoffUTC = cutoffCST.toUTC().toJSDate()
 
-    const agg = await db.gamePointLog.aggregate({
-      where: { userId, createdAt: { gte: cutoffUTC } },
-      _sum:  { points: true }
+    toGive = await db.$transaction(async (tx) => {
+      const agg = await tx.gamePointLog.aggregate({
+        where: { userId, createdAt: { gte: cutoffUTC } },
+        _sum:  { points: true }
+      })
+      const used = agg._sum.points || 0
+      const remaining = Math.max(0, cap - used)
+      const give = Math.min(pointsPerWin, remaining)
+      if (give > 0) {
+        await tx.gamePointLog.create({ data: { userId, points: give } })
+        const updated = await tx.userPoints.upsert({
+          where:  { userId },
+          create: { userId, points: give },
+          update: { points: { increment: give } }
+        })
+        await tx.pointsLog.create({
+          data: { userId, points: give, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
+        })
+      }
+      return give
     })
-    const used = agg._sum.points || 0
-    const remaining = Math.max(0, cap - used)
-    toGive = Math.min(pointsPerWin, remaining)
-    if (toGive > 0) {
-      await db.gamePointLog.create({ data: { userId, points: toGive } })
-      const updated = await db.userPoints.upsert({
-        where:  { userId },
-        create: { userId, points: toGive },
-        update: { points: { increment: toGive } }
-      })
-      await db.pointsLog.create({
-        data: { userId, points: toGive, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
-      })
-    }
   } catch (e) {
     console.error('Failed to award PvP Clash points:', e)
   }
@@ -1144,32 +1147,29 @@ async function endMatch(io, match, result) {
           : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 });
         const cutoffUTC = cutoffCST.toUTC().toJSDate();
 
-        // 6) Sum points awarded since that cutoff
-        const agg = await db.gamePointLog.aggregate({
-          where: {
-            userId,
-            createdAt: { gte: cutoffUTC }
-          },
-          _sum: { points: true }
+        // 6-8) Sum cap usage and award atomically to prevent TOCTOU races
+        // where two concurrent match completions both pass the cap check.
+        toGive = await db.$transaction(async (tx) => {
+          const agg = await tx.gamePointLog.aggregate({
+            where: { userId, createdAt: { gte: cutoffUTC } },
+            _sum: { points: true }
+          });
+          const usedSinceCutoff = agg._sum.points || 0;
+          const remaining = Math.max(0, cap - usedSinceCutoff);
+          const give = Math.min(pointsPerWin, remaining);
+          if (give > 0) {
+            await tx.gamePointLog.create({ data: { userId, points: give } });
+            const updated = await tx.userPoints.upsert({
+              where: { userId },
+              create: { userId, points: give },
+              update: { points: { increment: give } }
+            });
+            await tx.pointsLog.create({
+              data: { userId, points: give, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
+            });
+          }
+          return give;
         });
-        const usedSinceCutoff = agg._sum.points || 0;
-
-        // 7) Compute how many we can still give
-        const remaining = Math.max(0, cap - usedSinceCutoff);
-        toGive = Math.min(pointsPerWin, remaining);
-
-        // 8) Award if possible
-        if (toGive > 0) {
-          await db.gamePointLog.create({ data: { userId, points: toGive } });
-          const updated = await db.userPoints.upsert({
-            where: { userId },
-            create: { userId, points: toGive },
-            update: { points: { increment: toGive } }
-          });
-          await db.pointsLog.create({
-            data: { userId, points: toGive, total: updated.points, method: "Game - gToons Clash", direction: 'increase' }
-          });
-        }
       }
     } catch (err) {
       console.error('Failed to award Clash points:', err);
