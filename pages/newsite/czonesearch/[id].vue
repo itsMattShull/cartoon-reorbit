@@ -279,10 +279,14 @@ function isEntryAvailable(entry) {
     if (getCurrentTimeOfDay() !== entry.conditionTimeOfDay) return false
   }
 
-  if (entry.conditionUserOwnsEnabled && Array.isArray(entry.conditionUserOwns)) {
-    for (const req of entry.conditionUserOwns) {
+  if (entry.conditionUserOwnsEnabled) {
+    const ownsReqs = Array.isArray(entry.conditionUserOwns) ? entry.conditionUserOwns : []
+    if (!ownsReqs.length) return false
+    for (const req of ownsReqs) {
+      const required = Number(req.count || 0)
+      if (!req.ctoonId || required < 1) return false
       const owned = stats.userOwnsCountMap[req.ctoonId] || 0
-      if (owned < (req.count || 1)) return false
+      if (owned < required) return false
     }
   }
 
