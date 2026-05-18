@@ -138,7 +138,6 @@ export default defineEventHandler(async (event) => {
 
     return {
       offerId: offer.id,
-      transferredUserCtoonId: transferred.id,
       transferredMint: transferred.mintNumber
     }
   })

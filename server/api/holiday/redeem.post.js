@@ -1,6 +1,7 @@
 // server/api/holiday/redeem.post.js
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { resolveUserCtoonId } from '../../utils/userCtoonId'
 import { mintQueue } from '../../utils/queues'
 import { QueueEvents } from 'bullmq'
 
@@ -171,9 +172,13 @@ export default defineEventHandler(async (event) => {
     if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
     // ── Input ─────────────────────────────────────────────────────────────
-    const { userCtoonId } = await readBody(event)
-    if (!userCtoonId) {
+    const { userCtoonId: rawUserCtoonId } = await readBody(event)
+    if (!rawUserCtoonId) {
       throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonId' })
+    }
+    const userCtoonId = await resolveUserCtoonId(rawUserCtoonId)
+    if (!userCtoonId) {
+      throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
     }
 
     const idempotentResponse = await getIdempotentRedemptionResponse(userId, userCtoonId)

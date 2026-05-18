@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
     isFeatured: auction.isFeatured,
     ctoon: {
       id:         auction.userCtoon.ctoonId,
-      userCtoonId: auction.userCtoon.id,
+      userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
       assetPath:  auction.userCtoon.ctoon.assetPath,
       name:       auction.userCtoon.ctoon.name,
       series:     auction.userCtoon.ctoon.series,

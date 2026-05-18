@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -212,6 +213,7 @@ export default defineEventHandler(async (event) => {
         userCtoon: {
           select: {
             id: true,
+            userId: true,
             ctoonId: true,
             mintNumber: true,
             ctoon: {
@@ -267,7 +269,7 @@ export default defineEventHandler(async (event) => {
       id: a.id,
       status: a.status,
       isFeatured: a.isFeatured,
-      userCtoonId: a.userCtoonId,
+      userCtoonId: encodeUserCtoonId(a.userCtoon?.userId, a.userCtoon?.ctoonId, a.userCtoon?.mintNumber),
       ctoonId: a.userCtoon?.ctoonId ?? null,
       assetPath: a.userCtoon?.ctoon?.assetPath ?? null,
       name: a.userCtoon?.ctoon?.name ?? null,

@@ -6,6 +6,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const fmt = (n) => Number(n || 0).toLocaleString('en-US')
@@ -43,6 +44,12 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const resolvedOffered   = await Promise.all(ctoonIdsOffered.map(resolveUserCtoonId))
+  const resolvedRequested = await Promise.all(ctoonIdsRequested.map(resolveUserCtoonId))
+  if (resolvedOffered.some(id => !id) || resolvedRequested.some(id => !id)) {
+    throw createError({ statusCode: 400, statusMessage: 'One or more invalid cToon references' })
+  }
+
   // 3) Lookup recipient & ensure they have a Discord ID
   const recipient = await prisma.user.findUnique({
     where: { username: recipientUsername }
@@ -56,12 +63,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4) Verify ownership of offered cToons
-  if (ctoonIdsOffered.length) {
+  if (resolvedOffered.length) {
     const ownedByInitiator = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsOffered }, userId: initiatorId, burnedAt: null },
+      where: { id: { in: resolvedOffered }, userId: initiatorId, burnedAt: null },
       select: { id: true }
     })
-    if (ownedByInitiator.length !== ctoonIdsOffered.length) {
+    if (ownedByInitiator.length !== resolvedOffered.length) {
       throw createError({
         statusCode: 400,
         statusMessage: 'One or more offered cToons are not owned by you or no longer available'
@@ -70,10 +77,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4a) Check offered cToons are not in any pending trades
-  if (ctoonIdsOffered.length) {
+  if (resolvedOffered.length) {
     const offeredInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
       where: {
-        userCtoonId: { in: ctoonIdsOffered },
+        userCtoonId: { in: resolvedOffered },
         tradeOffer: { status: 'PENDING' }
       },
       include: {
@@ -110,12 +117,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5) Verify ownership of requested cToons
-  if (ctoonIdsRequested.length) {
+  if (resolvedRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsRequested }, userId: recipient.id, burnedAt: null },
+      where: { id: { in: resolvedRequested }, userId: recipient.id, burnedAt: null },
       select: { id: true }
     })
-    if (ownedByRecipient.length !== ctoonIdsRequested.length) {
+    if (ownedByRecipient.length !== resolvedRequested.length) {
       throw createError({
         statusCode: 400,
         statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
@@ -124,10 +131,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5a) Check requested cToons are not in any pending trades
-  if (ctoonIdsRequested.length) {
+  if (resolvedRequested.length) {
     const requestedInPendingTrade = await prisma.tradeOfferCtoon.findFirst({
       where: {
-        userCtoonId: { in: ctoonIdsRequested },
+        userCtoonId: { in: resolvedRequested },
         tradeOffer: { status: 'PENDING' }
       },
       include: {
@@ -144,9 +151,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5.5) Prevent trades involving cToons in active auctions
-  if (ctoonIdsOffered.length) {
+  if (resolvedOffered.length) {
     const offeredActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
+      where: { userCtoonId: { in: resolvedOffered }, status: 'ACTIVE' },
       include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
     })
     if (offeredActiveAuction) {
@@ -157,9 +164,9 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
-  if (ctoonIdsRequested.length) {
+  if (resolvedRequested.length) {
     const requestedActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
+      where: { userCtoonId: { in: resolvedRequested }, status: 'ACTIVE' },
       include: { userCtoon: { include: { ctoon: { select: { name: true } } } } }
     })
     if (requestedActiveAuction) {
@@ -198,8 +205,8 @@ export default defineEventHandler(async (event) => {
         pointsOffered,
         ctoons: {
           create: [
-            ...ctoonIdsOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
-            ...ctoonIdsRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
+            ...resolvedOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
+            ...resolvedRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
           ]
         }
       },
