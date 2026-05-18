@@ -18,11 +18,8 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
 
     // ───────────────────── Time-based mint window guard ─────────────────────
-    // If this is a time-based cToon and the mint window has ended but the
-    // worker hasn't yet set the final quantity, reject the mint.
     if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
-      const mintEndPassed = new Date(ctoon.mintEndDate) <= new Date()
-      if (mintEndPassed && ctoon.quantity === TIME_BASED_CAP) {
+      if (new Date(ctoon.mintEndDate) <= new Date()) {
         throw new Error('Minting period has ended')
       }
     }
