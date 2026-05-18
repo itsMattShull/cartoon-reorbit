@@ -53,23 +53,41 @@
           </section>
 
           <section class="czs-prize-section">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-y-2">
               <h2 class="text-lg font-semibold text-white">Prize Pool</h2>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-white/50 select-none">Only Show Available cToons</span>
-                <button
-                  type="button"
-                  role="switch"
-                  :aria-checked="showOnlyAvailable"
-                  @click="showOnlyAvailable = !showOnlyAvailable"
-                  :class="showOnlyAvailable ? 'bg-[var(--OrbitLightBlue)]' : 'bg-white/20'"
-                  class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors"
-                >
-                  <span
-                    :class="showOnlyAvailable ? 'translate-x-4' : 'translate-x-0.5'"
-                    class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                  />
-                </button>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div v-if="showOnlyAvailable" class="flex items-center gap-2">
+                  <span class="text-xs text-white/50 select-none">Include Background-Gated cToons</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="showBackgroundGated"
+                    @click="showBackgroundGated = !showBackgroundGated"
+                    :class="showBackgroundGated ? 'bg-[var(--OrbitLightBlue)]' : 'bg-white/20'"
+                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors"
+                  >
+                    <span
+                      :class="showBackgroundGated ? 'translate-x-4' : 'translate-x-0.5'"
+                      class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                    />
+                  </button>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-white/50 select-none">Only Show Available cToons</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="showOnlyAvailable"
+                    @click="showOnlyAvailable = !showOnlyAvailable"
+                    :class="showOnlyAvailable ? 'bg-[var(--OrbitLightBlue)]' : 'bg-white/20'"
+                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer items-center rounded-full transition-colors"
+                  >
+                    <span
+                      :class="showOnlyAvailable ? 'translate-x-4' : 'translate-x-0.5'"
+                      class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -256,6 +274,7 @@ const ownedTotal = computed(() => (search.value?.prizePool || []).reduce((sum, e
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'
 
 const showOnlyAvailable = ref(false)
+const showBackgroundGated = ref(false)
 
 function getCurrentTimeOfDay() {
   const hour = new Date().getHours()
@@ -265,9 +284,11 @@ function getCurrentTimeOfDay() {
   return 'NIGHT'
 }
 
-function isEntryAvailable(entry) {
+function isEntryAvailable(entry, ignoreBackground = false) {
   const stats = search.value?.userStats
   if (!stats) return true
+
+  if (!ignoreBackground && entry.conditionBackgroundEnabled) return false
 
   if (entry.conditionDateEnabled) {
     const today = new Date().toISOString().split('T')[0]
@@ -328,7 +349,7 @@ function isEntryAvailable(entry) {
 const filteredPrizePool = computed(() => {
   const pool = search.value?.prizePool || []
   if (!showOnlyAvailable.value) return pool
-  return pool.filter(isEntryAvailable)
+  return pool.filter(e => isEntryAvailable(e, showBackgroundGated.value))
 })
 
 const formatNumber = (value) => {
