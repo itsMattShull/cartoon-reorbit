@@ -615,6 +615,16 @@ async function loadCzoneSearchItems() {
       query: { tz, zoneIndex: 0 }
     })
     const items = Array.isArray(res?.items) ? res.items : []
+
+    for (const item of items) {
+      if (!item.selectionLog) continue
+      const { name, dbChancePercent, relativeChancePercent, poolDetails } = item.selectionLog
+      console.log(
+        `[cZone Search] Selected: "${name}" | DB chance: ${dbChancePercent}% | Relative chance: ${relativeChancePercent}%`
+      )
+      console.log('[cZone Search] Prize pool details:', poolDetails)
+    }
+
     czoneSearchItems.value = buildSearchItems(items)
   } catch (err) {
     console.error('MyCzone: failed to load cZone search items', err)
