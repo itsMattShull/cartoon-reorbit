@@ -68,13 +68,9 @@ export default defineEventHandler(async (event) => {
 
     // Time-based mint window guard
     if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
-      const mintEndPassed = new Date(ctoon.mintEndDate) <= now
-      if (mintEndPassed && ctoon.quantity === TIME_BASED_CAP) {
-        // Worker hasn't set final quantity yet — reject
+      if (new Date(ctoon.mintEndDate) <= now) {
         throw createError({ statusCode: 410, statusMessage: 'Minting period has ended.' })
       }
-      // If mintEndPassed but quantity is no longer TIME_BASED_CAP, the worker
-      // has set the final cap — fall through to normal sold-out check below.
     }
 
     const isUnlimited = ctoon.quantity === null
@@ -85,8 +81,7 @@ export default defineEventHandler(async (event) => {
         // Time-based cToon still in minting window — skip two-phase logic,
         // the safety cap (999999999) is effectively unlimited
       } else {
-        // Standard two-phase logic for defined-limit cToons (or time-based
-        // cToons whose mint window has closed and quantity was set by worker)
+        // Standard two-phase logic for defined-limit cToons
         let initialPercent = 75
         let delayHours = 12
         try {
@@ -99,33 +94,26 @@ export default defineEventHandler(async (event) => {
 
         const qty = Number(ctoon.quantity)
 
-        // Skip two-phase windowing for time-based cToons (already capped by worker)
-        if (isTimeBased) {
-          if (ctoon.totalMinted >= qty) {
-            throw createError({ statusCode: 410, statusMessage: 'cToon already sold out.' })
-          }
-        } else {
-          const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
-          const initialCap = Math.min(
-            qty,
-            Math.max(1, Number(ctoon.initialReleaseQty ?? initialCapFromPct))
-          )
-          const finalReleaseAt = ctoon.finalReleaseAt
-            ? new Date(ctoon.finalReleaseAt)
-            : ctoon.releaseDate
-              ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-              : null
+        const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
+        const initialCap = Math.min(
+          qty,
+          Math.max(1, Number(ctoon.initialReleaseQty ?? initialCapFromPct))
+        )
+        const finalReleaseAt = ctoon.finalReleaseAt
+          ? new Date(ctoon.finalReleaseAt)
+          : ctoon.releaseDate
+            ? new Date(new Date(ctoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+            : null
 
-          const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
-          const allowedCap = beforeFinal ? initialCap : qty
+        const beforeFinal = finalReleaseAt ? now < finalReleaseAt : false
+        const allowedCap = beforeFinal ? initialCap : qty
 
-          // Optional: sold-out fast check before queueing (window-aware)
-          if (ctoon.totalMinted >= allowedCap) {
-            const msg = beforeFinal
-              ? 'Initial window sold out. Please wait for the final release.'
-              : 'cToon already sold out.'
-            throw createError({ statusCode: 410, statusMessage: msg })
-          }
+        // Optional: sold-out fast check before queueing (window-aware)
+        if (ctoon.totalMinted >= allowedCap) {
+          const msg = beforeFinal
+            ? 'Initial window sold out. Please wait for the final release.'
+            : 'cToon already sold out.'
+          throw createError({ statusCode: 410, statusMessage: msg })
         }
       }
     }
