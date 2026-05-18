@@ -511,6 +511,10 @@ export default defineEventHandler(async (event) => {
     const chosen = pickWeighted(eligiblePool)
     if (!chosen) continue
 
+    const eligibleTotal = eligiblePool.reduce((sum, p) => sum + clampPercent(p.chancePercent), 0)
+    const chosenDbChance = clampPercent(chosen.chancePercent)
+    const chosenRelativeChance = eligibleTotal > 0 ? (chosenDbChance / eligibleTotal) * 100 : 0
+
     const appearanceId = randomUUID()
     toCreate.push({
       id:            appearanceId,
@@ -528,6 +532,25 @@ export default defineEventHandler(async (event) => {
         name:      chosen.ctoon.name,
         rarity:    chosen.ctoon.rarity,
         assetPath: chosen.ctoon.assetPath
+      },
+      selectionLog: {
+        name: chosen.ctoon.name,
+        dbChancePercent: parseFloat(chosenDbChance.toFixed(4)),
+        relativeChancePercent: parseFloat(chosenRelativeChance.toFixed(4)),
+        poolDetails: {
+          eligibleCount: eligiblePool.length,
+          totalCount: search.prizePool.length,
+          eligiblePool: eligiblePool.map(p => {
+            const dbChance = clampPercent(p.chancePercent)
+            return {
+              name: p.ctoon.name,
+              dbChancePercent: parseFloat(dbChance.toFixed(4)),
+              relativeChancePercent: eligibleTotal > 0
+                ? parseFloat(((dbChance / eligibleTotal) * 100).toFixed(4))
+                : 0
+            }
+          })
+        }
       }
     })
   }
