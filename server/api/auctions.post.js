@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
     where: { userCtoonId: resolvedUserCtoonId, status: ‘ACTIVE’ }
   })
   if (existing) {
-    throw createError({ statusCode: 400, statusMessage: ‘There’s already an active auction for this cToon’ })
+    throw createError({ statusCode: 400, statusMessage: "There’s already an active auction for this cToon" })
   }
 
   // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
