@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -12,8 +13,10 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
-  const { userCtoonId } = event.context.params || {}
-  if (!userCtoonId) throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonId' })
+  const rawUserCtoonId = event.context.params?.userCtoonId
+  if (!rawUserCtoonId) throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonId' })
+  const userCtoonId = await resolveUserCtoonId(rawUserCtoonId)
+  if (!userCtoonId) throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
 
   const owned = await prisma.userCtoon.findFirst({
     where: { id: userCtoonId, userId, burnedAt: null },

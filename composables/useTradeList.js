@@ -17,12 +17,12 @@ export function useTradeList() {
   }
 
   async function add(userCtoonId) {
-    await $fetch(`/api/trade-list/${userCtoonId}`, { method: 'POST' })
+    await $fetch(`/api/trade-list/${encodeURIComponent(userCtoonId)}`, { method: 'POST' })
     if (!tradeList.value.includes(userCtoonId)) tradeList.value.push(userCtoonId)
   }
 
   async function remove(userCtoonId) {
-    await $fetch(`/api/trade-list/${userCtoonId}`, { method: 'DELETE' })
+    await $fetch(`/api/trade-list/${encodeURIComponent(userCtoonId)}`, { method: 'DELETE' })
     tradeList.value = tradeList.value.filter(id => id !== userCtoonId)
   }
 

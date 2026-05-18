@@ -1,6 +1,7 @@
 // File: server/api/mybids.get.js
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -207,7 +208,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       id: a.id,
-      userCtoonId: a.userCtoon?.id ?? null,
+      userCtoonId: a.userCtoon ? encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber) : null,
       ctoonId: a.userCtoon?.ctoonId ?? null,
       name: a.userCtoon?.ctoon?.name ?? 'Unknown',
       set: a.userCtoon?.ctoon?.set ?? null,

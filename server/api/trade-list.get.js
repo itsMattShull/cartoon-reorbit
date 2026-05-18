@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -22,8 +23,11 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  return prisma.userTradeListItem.findMany({
+  const items = await prisma.userTradeListItem.findMany({
     where: { userId, userCtoon: { userId, burnedAt: null } },
-    select: { userCtoonId: true }
+    select: { userCtoon: { select: { userId: true, ctoonId: true, mintNumber: true } } }
   })
+  return items.map(item => ({
+    userCtoonId: encodeUserCtoonId(item.userCtoon.userId, item.userCtoon.ctoonId, item.userCtoon.mintNumber)
+  }))
 })
