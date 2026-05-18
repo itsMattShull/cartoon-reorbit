@@ -8,6 +8,7 @@ import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 import { scheduleAuctionClose } from '@/server/utils/queues'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 
 function formatDuration(days, minutes) {
   if (minutes > 0) {
@@ -48,9 +49,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
+  const resolvedUserCtoonId = await resolveUserCtoonId(userCtoonId)
+  if (!resolvedUserCtoonId) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
+  }
+
   // 3. Ownership check + fetch rarity
   const userCtoonRec = await prisma.userCtoon.findUnique({
-    where: { id: userCtoonId },
+    where: { id: resolvedUserCtoonId },
     select: {
       userId: true,
       ctoonId: true, // needed to check Holiday flag
@@ -94,16 +100,16 @@ export default defineEventHandler(async (event) => {
 
   // 4. Active auction check
   const existing = await prisma.auction.findFirst({
-    where: { userCtoonId, status: 'ACTIVE' }
+    where: { userCtoonId: resolvedUserCtoonId, status: 'ACTIVE' }
   })
   if (existing) {
-    throw createError({ statusCode: 400, statusMessage: 'There’s already an active auction for this cToon' })
+    throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this cToon" })
   }
 
   // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
   const inPendingTrade = await prisma.tradeOfferCtoon.findFirst({
     where: {
-      userCtoonId,
+      userCtoonId: resolvedUserCtoonId,
       tradeOffer: { status: 'PENDING' }
     },
     select: { id: true }
@@ -121,7 +127,7 @@ export default defineEventHandler(async (event) => {
   // 6. Create auction
   const auction = await prisma.auction.create({
     data: {
-      userCtoonId,
+      userCtoonId: resolvedUserCtoonId,
       initialBet: Number(initialBet),
       duration: durationDays,
       endAt: endAtUtc,
@@ -159,7 +165,7 @@ export default defineEventHandler(async (event) => {
 
   // 8. Disable tradeability
   await prisma.userCtoon.update({
-    where: { id: userCtoonId },
+    where: { id: resolvedUserCtoonId },
     data: { isTradeable: false }
   })
 

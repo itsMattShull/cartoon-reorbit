@@ -1,6 +1,7 @@
 // server/api/collection/[username].get.js
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const requesterId = event.context.userId
@@ -56,7 +57,7 @@ export default defineEventHandler(async (event) => {
   })
 
   return rows.map(uc => ({
-    id: uc.id,
+    id: encodeUserCtoonId(uc.userId, uc.ctoonId, uc.mintNumber),
     ctoonId: uc.ctoonId,
     assetPath: uc.ctoon.assetPath,
     name: uc.ctoon.name,

@@ -1,6 +1,7 @@
 // server/api/collections/owners.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -43,7 +44,7 @@ export default defineEventHandler(async (event) => {
     // 4) Flatten and return
     return owners.map(o => ({
       userId:     o.userId,
-      userCtoonId: o.id,
+      userCtoonId: encodeUserCtoonId(o.userId, String(cToonId), o.mintNumber),
       username:   o.user.username,
       mintNumber: o.mintNumber,
       isHolidayItem,

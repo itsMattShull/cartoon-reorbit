@@ -1,5 +1,6 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { isSyntheticUserCtoonId, resolveUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 function asString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -28,13 +29,17 @@ export default defineEventHandler(async (event) => {
   let ctoon = null
   let userCtoon = null
 
-  // Synthetic IDs handed out by the public cZone view are not real UUIDs
-  // (e.g. `cz:0:1:<ctoonId>:<mintNumber>`). Skip the per-instance lookup
-  // for those — and, if the lookup misses for any other reason, fall
-  // through to the ctoonId-only path so the modal still opens.
-  const looksLikeUserCtoonId = !!userCtoonId && !userCtoonId.startsWith('cz:')
-
-  if (looksLikeUserCtoonId) {
+  // Synthetic IDs come in two forms:
+  //   cz:…  — positional token from the public cZone view (no per-instance lookup possible)
+  //   uc|…  — encoded token from all other endpoints (resolve to real UUID first)
+  // For cz: tokens fall through to the ctoonId-only path so the modal still opens.
+  if (userCtoonId?.startsWith('uc|')) {
+    const realId = await resolveUserCtoonId(userCtoonId)
+    if (realId) {
+      userCtoon = await prisma.userCtoon.findUnique({ where: { id: realId }, include: { ctoon: true } })
+      if (userCtoon) ctoon = userCtoon.ctoon
+    }
+  } else if (userCtoonId && !isSyntheticUserCtoonId(userCtoonId) && !userCtoonId.startsWith('cz:')) {
     userCtoon = await prisma.userCtoon.findUnique({
       where: { id: userCtoonId },
       include: { ctoon: true }
@@ -127,7 +132,7 @@ export default defineEventHandler(async (event) => {
 
     const uRow = userAuctionStats[0] ?? {}
     userStats = {
-      id: userCtoon.id,
+      id: encodeUserCtoonId(userCtoon.userId, userCtoon.ctoonId, userCtoon.mintNumber),
       mintNumber: userCtoon.mintNumber ?? null,
       tradedCount: tradeCount,
       successfulAuctions: Number(uRow.count ?? 0),

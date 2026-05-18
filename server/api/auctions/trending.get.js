@@ -1,6 +1,7 @@
 // server/api/auctions/trending.get.js
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -64,6 +65,7 @@ export default defineEventHandler(async (event) => {
       userCtoon: {
         select: {
           id: true,
+          userId: true,
           ctoonId: true,
           mintNumber: true,
           ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true } }
@@ -97,7 +99,7 @@ export default defineEventHandler(async (event) => {
       return {
         id:           a.id,
         isFeatured:   a.isFeatured,
-        userCtoonId:  a.userCtoon.id,
+        userCtoonId:  encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber),
         ctoonId:      a.userCtoon.ctoonId,
         name:         a.userCtoon.ctoon.name,
         set:          a.userCtoon.ctoon.set,

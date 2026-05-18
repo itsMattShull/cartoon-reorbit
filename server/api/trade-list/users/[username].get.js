@@ -1,6 +1,7 @@
 // server/api/trade-list/users/[username].get.js
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   const username = event.context.params?.username
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   const rows = items.map(item => ({
     id: item.id,
-    userCtoonId: item.userCtoonId,
+    userCtoonId: encodeUserCtoonId(item.userCtoon.userId, item.userCtoon.ctoonId, item.userCtoon.mintNumber),
     ctoonId: item.userCtoon.ctoonId,
     assetPath: item.userCtoon.ctoon.assetPath,
     name: item.userCtoon.ctoon.name,
