@@ -2,8 +2,11 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 
-const USER_CONDITION_TTL = 300 // seconds — matches searches.get.js
-const PRIZE_CAPTURE_TTL = 60  // seconds
+// Search structure (prize pool, conditions, background/ctoon metadata) never
+// changes mid-event, so all visitors share one DB round-trip per 10 minutes.
+const SEARCH_META_TTL = 600    // 10 minutes
+const USER_CONDITION_TTL = 300 // 5 minutes — matches searches.get.js
+const PRIZE_CAPTURE_TTL = 60   // 1 minute
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -16,69 +19,104 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing search id' })
   }
 
-  const search = await db.cZoneSearch.findUnique({
-    where: { id },
-    include: {
-      prizePool: {
-        orderBy: { chancePercent: 'desc' },
-        include: {
-          ctoon: {
-            select: { id: true, name: true, rarity: true, assetPath: true }
+  const searchMetaCacheKey = `czone:search-meta:${id}`
+  const prizeCacheKey = `czone:search-prizes:${id}:${userId}`
+  const userCondCacheKey = `czone:ucond:${userId}`
+
+  // Read all three caches in parallel before touching the DB
+  const [searchMetaStr, prizeCachedStr, userCondCachedStr] = await Promise.all([
+    redis.get(searchMetaCacheKey).catch(() => null),
+    redis.get(prizeCacheKey).catch(() => null),
+    redis.get(userCondCacheKey).catch(() => null),
+  ])
+
+  // --- Search metadata cache (non-user-specific) ---
+  let search = null
+  let backgroundMap = new Map()
+  let ctoonMap = new Map()
+  let searchMetaCacheHit = false
+
+  if (searchMetaStr) {
+    try {
+      const parsed = JSON.parse(searchMetaStr)
+      search = parsed.search
+      backgroundMap = new Map(Object.entries(parsed.backgroundMap || {}))
+      ctoonMap = new Map(Object.entries(parsed.ctoonMap || {}))
+      searchMetaCacheHit = true
+    } catch {}
+  }
+
+  if (!searchMetaCacheHit) {
+    search = await db.cZoneSearch.findUnique({
+      where: { id },
+      include: {
+        prizePool: {
+          orderBy: { chancePercent: 'desc' },
+          include: {
+            ctoon: {
+              select: { id: true, name: true, rarity: true, assetPath: true }
+            }
           }
         }
       }
+    })
+
+    if (!search) {
+      throw createError({ statusCode: 404, statusMessage: 'cZone Search not found' })
     }
-  })
+
+    const backgroundNames = new Set()
+    const extraCtoonIds = new Set()
+
+    for (const row of search.prizePool || []) {
+      if (row.conditionBackgroundEnabled) {
+        const names = Array.isArray(row.conditionBackgrounds) ? row.conditionBackgrounds : []
+        for (const name of names) { if (name) backgroundNames.add(name) }
+      }
+      if (row.conditionCtoonInZoneEnabled && row.conditionCtoonInZoneId) {
+        extraCtoonIds.add(row.conditionCtoonInZoneId)
+      }
+      if (row.conditionUserOwnsEnabled) {
+        const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
+        for (const entry of entries) {
+          if (entry?.ctoonId) extraCtoonIds.add(entry.ctoonId)
+        }
+      }
+    }
+
+    const [backgrounds, extraCtoons] = await Promise.all([
+      backgroundNames.size
+        ? db.background.findMany({
+            where: { filename: { in: Array.from(backgroundNames) } },
+            select: { id: true, filename: true, label: true, imagePath: true }
+          })
+        : [],
+      extraCtoonIds.size
+        ? db.ctoon.findMany({
+            where: { id: { in: Array.from(extraCtoonIds) } },
+            select: { id: true, name: true, rarity: true, assetPath: true }
+          })
+        : [],
+    ])
+
+    backgroundMap = new Map(backgrounds.map(bg => [bg.filename, bg]))
+    ctoonMap = new Map(extraCtoons.map(ctoon => [ctoon.id, ctoon]))
+
+    // Cache the non-user-specific search structure for 10 minutes
+    try {
+      await redis.setex(searchMetaCacheKey, SEARCH_META_TTL, JSON.stringify({
+        search,
+        backgroundMap: Object.fromEntries(backgroundMap),
+        ctoonMap: Object.fromEntries(ctoonMap),
+      }))
+    } catch {}
+  }
 
   if (!search) {
     throw createError({ statusCode: 404, statusMessage: 'cZone Search not found' })
   }
 
-  const backgroundNames = new Set()
-  const extraCtoonIds = new Set()
-  const conditionOwnsCtoonIds = new Set()
-  const setUniqueNames = new Set()
-  const setTotalNames = new Set()
-
-  for (const row of search.prizePool || []) {
-    if (row.conditionBackgroundEnabled) {
-      const names = Array.isArray(row.conditionBackgrounds) ? row.conditionBackgrounds : []
-      for (const name of names) {
-        if (name) backgroundNames.add(name)
-      }
-    }
-    if (row.conditionCtoonInZoneEnabled && row.conditionCtoonInZoneId) {
-      extraCtoonIds.add(row.conditionCtoonInZoneId)
-    }
-    if (row.conditionUserOwnsEnabled) {
-      const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
-      for (const entry of entries) {
-        if (entry?.ctoonId) {
-          extraCtoonIds.add(entry.ctoonId)
-          conditionOwnsCtoonIds.add(entry.ctoonId)
-        }
-      }
-    }
-    if (row.conditionSetUniqueCountEnabled && row.conditionSetUniqueCountSet) {
-      setUniqueNames.add(row.conditionSetUniqueCountSet)
-    }
-    if (row.conditionSetTotalCountEnabled && row.conditionSetTotalCountSet) {
-      setTotalNames.add(row.conditionSetTotalCountSet)
-    }
-  }
-
-  const prizeCtoonIds = (search.prizePool || []).map(row => row.ctoonId)
-
-  // Attempt to read both Redis caches in parallel before hitting the DB
-  const prizeCacheKey = `czone:search-prizes:${id}:${userId}`
-  const userCondCacheKey = `czone:ucond:${userId}`
-
-  const [prizeCachedStr, userCondCachedStr] = await Promise.all([
-    redis.get(prizeCacheKey).catch(() => null),
-    redis.get(userCondCacheKey).catch(() => null),
-  ])
-
-  // Parse prize/capture cache
+  // --- Parse prize/capture cache (per-user) ---
   let ownershipMap = new Map()
   let captureMap = new Map()
   let prizeCacheHit = false
@@ -91,7 +129,7 @@ export default defineEventHandler(async (event) => {
     } catch {}
   }
 
-  // Parse user condition cache
+  // --- Parse user condition cache ---
   let cachedCondData = null
   let userCondCacheHit = false
   if (userCondCachedStr) {
@@ -101,29 +139,41 @@ export default defineEventHandler(async (event) => {
     } catch {}
   }
 
+  // Collect IDs needed for user-specific queries from the prize pool
+  const prizeCtoonIds = (search.prizePool || []).map(row => row.ctoonId)
+  const conditionOwnsCtoonIds = new Set()
+  const lessThanCtoonIds = new Set()
+  const setUniqueNames = new Set()
+  const setTotalNames = new Set()
+
+  for (const row of search.prizePool || []) {
+    if (row.conditionUserOwnsEnabled) {
+      const entries = Array.isArray(row.conditionUserOwns) ? row.conditionUserOwns : []
+      for (const entry of entries) {
+        if (entry?.ctoonId) conditionOwnsCtoonIds.add(entry.ctoonId)
+      }
+    }
+    if (row.conditionOwnsLessThanEnabled && row.ctoonId) {
+      lessThanCtoonIds.add(row.ctoonId)
+    }
+    if (row.conditionSetUniqueCountEnabled && row.conditionSetUniqueCountSet) {
+      setUniqueNames.add(row.conditionSetUniqueCountSet)
+    }
+    if (row.conditionSetTotalCountEnabled && row.conditionSetTotalCountSet) {
+      setTotalNames.add(row.conditionSetTotalCountSet)
+    }
+  }
+
   // Run all DB queries that aren't satisfied by cache in one parallel batch
   const [
-    backgrounds,
-    extraCtoons,
     ownershipRows,
     captureRows,
     pointsRow,
     userTotalCountResult,
     uniqueRows,
     conditionOwnsRows,
+    lessThanRows,
   ] = await Promise.all([
-    backgroundNames.size
-      ? db.background.findMany({
-          where: { filename: { in: Array.from(backgroundNames) } },
-          select: { id: true, filename: true, label: true, imagePath: true }
-        })
-      : Promise.resolve([]),
-    extraCtoonIds.size
-      ? db.ctoon.findMany({
-          where: { id: { in: Array.from(extraCtoonIds) } },
-          select: { id: true, name: true, rarity: true, assetPath: true }
-        })
-      : Promise.resolve([]),
     !prizeCacheHit && prizeCtoonIds.length
       ? db.userCtoon.groupBy({
           by: ['ctoonId'],
@@ -154,6 +204,13 @@ export default defineEventHandler(async (event) => {
           _count: { _all: true }
         })
       : Promise.resolve([]),
+    !userCondCacheHit && lessThanCtoonIds.size
+      ? db.userCtoon.groupBy({
+          by: ['ctoonId'],
+          where: { userId, burnedAt: null, ctoonId: { in: Array.from(lessThanCtoonIds) } },
+          _count: { _all: true }
+        })
+      : Promise.resolve([]),
   ])
 
   // --- Populate and persist prize/capture data ---
@@ -173,6 +230,7 @@ export default defineEventHandler(async (event) => {
   let userTotalCount = 0
   let userUniqueCount = 0
   let conditionOwnsMap = {}
+  let userOwnsLessThanCountMap = {}
   let userSetUniqueCountMap = {}
   let userSetTotalCountMap = {}
 
@@ -181,6 +239,7 @@ export default defineEventHandler(async (event) => {
     userTotalCount = userTotalCountResult
     userUniqueCount = uniqueRows.length
     conditionOwnsMap = Object.fromEntries(conditionOwnsRows.map(r => [r.ctoonId, r._count._all || 0]))
+    userOwnsLessThanCountMap = Object.fromEntries(lessThanRows.map(r => [r.ctoonId, r._count._all || 0]))
 
     // Resolve set counts if needed
     if (setUniqueNames.size || setTotalNames.size) {
@@ -226,13 +285,15 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Write complete data to the shared user condition cache so that
+    // searches.get.js can rely on userOwnsLessThanCountMap being accurate.
     try {
       await redis.setex(userCondCacheKey, USER_CONDITION_TTL, JSON.stringify({
         userPoints,
         userTotalCount,
         userUniqueCount,
         userOwnsCountMap: conditionOwnsMap,
-        userOwnsLessThanCountMap: {},
+        userOwnsLessThanCountMap,
         userSetUniqueCountMap,
         userSetTotalCountMap,
       }))
@@ -244,6 +305,7 @@ export default defineEventHandler(async (event) => {
     userUniqueCount = cachedCondData.userUniqueCount || 0
     userSetUniqueCountMap = cachedCondData.userSetUniqueCountMap || {}
     userSetTotalCountMap = cachedCondData.userSetTotalCountMap || {}
+    userOwnsLessThanCountMap = cachedCondData.userOwnsLessThanCountMap || {}
 
     // Start with cached ownership entries; fill in any IDs this page needs that
     // weren't in the cache (do NOT rewrite the cache with page-specific data)
@@ -260,7 +322,6 @@ export default defineEventHandler(async (event) => {
           for (const row of missingRows) {
             conditionOwnsMap[row.ctoonId] = row._count._all || 0
           }
-          // Ensure every requested ID has an entry (0 if not owned)
           for (const cid of missingIds) {
             if (!(cid in conditionOwnsMap)) conditionOwnsMap[cid] = 0
           }
@@ -269,14 +330,14 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const backgroundMap = new Map(backgrounds.map(bg => [bg.filename, bg]))
-  const ctoonMap = new Map(extraCtoons.map(ctoon => [ctoon.id, ctoon]))
+  const startAt = search.startAt instanceof Date ? search.startAt.toISOString() : search.startAt
+  const endAt = search.endAt instanceof Date ? search.endAt.toISOString() : search.endAt
 
   return {
     id: search.id,
     name: search.name,
-    startAt: search.startAt.toISOString(),
-    endAt: search.endAt.toISOString(),
+    startAt,
+    endAt,
     appearanceRatePercent: search.appearanceRatePercent,
     cooldownHours: search.cooldownHours,
     resetType: search.resetType,
