@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
     where: {
       set: {
         not: null,
-        startsWith: query
+        startsWith: query,
+        mode: 'insensitive'
       }
     },
     select: { set: true },
