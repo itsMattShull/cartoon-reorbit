@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
+import { clearSearchesCache } from '@/server/api/czone/[username]/searches.get'
 
 function parsePercent(value, label) {
   const num = Number(value)
@@ -295,6 +296,8 @@ export default defineEventHandler(async (event) => {
       }
     }
   })
+
+  clearSearchesCache()
 
   return created
 })

@@ -1,5 +1,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+import { clearSearchesCache } from '@/server/api/czone/[username]/searches.get'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -17,6 +19,9 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing search id' })
 
   await db.cZoneSearch.delete({ where: { id } })
+
+  try { await redis.del(`czone:search-meta:${id}`) } catch {}
+  clearSearchesCache()
 
   return { ok: true }
 })
