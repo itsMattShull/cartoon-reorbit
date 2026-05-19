@@ -7,6 +7,7 @@ import {
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { clearUpgradesConfigCache } from '@/server/api/cmart/upgrades-config.get'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate & authorize
@@ -100,6 +101,7 @@ export default defineEventHandler(async (event) => {
         ...(payload.cmartHalfPriceEnabled !== undefined ? { cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled } : {})
       }
     })
+    clearUpgradesConfigCache()
     // Log field-level changes
     const fields = [
       'dailyPointLimit',
