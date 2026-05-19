@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import { mintQueue } from '@/server/utils/queues'
 import { QueueEvents } from 'bullmq'
 import { prisma as db } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -118,6 +119,10 @@ export default defineEventHandler(async (event) => {
     db.cZoneSearchCapture.count({ where: { userId, ctoonId: appearance.ctoonId } }),
     db.userCtoon.count({ where: { userId, ctoonId: appearance.ctoonId } })
   ])
+
+  // Invalidate the user's cached condition data so the next cZone search
+  // reflects the newly captured cToon (set counts, owns counts, etc.)
+  try { await redis.del(`czone:ucond:${userId}`) } catch {}
 
   const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
   const qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
