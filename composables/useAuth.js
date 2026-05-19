@@ -53,13 +53,13 @@ export const useAuth = () => {
           fetchSelfLastFetchedAt.value = Date.now()
           return me
         }
-        const { data } = await useFetch('/api/auth/me', {
+        const me = await $fetch('/api/auth/me', {
           credentials: 'include',
           headers: process.server ? useRequestHeaders(['cookie']) : undefined
         })
-        user.value = data.value
+        user.value = me
         fetchSelfLastFetchedAt.value = Date.now()
-        return data.value
+        return me
       } catch (err) {
         user.value = null
         // If banned, kick to /join-discord with notice

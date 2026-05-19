@@ -202,8 +202,13 @@ const scale = ref(1)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
-  scale.value = Math.min(1, (window.innerWidth - gutter) / CANVAS_W)
+  const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
+  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
 }
+
+// Set the correct scale immediately on the client to avoid a post-hydration
+// layout flash where the canvas briefly renders at full 800px width.
+if (process.client) recalcScale()
 
 // Outer box reserves the scaled visual footprint in layout flow
 const outerScaleStyle = computed(() => ({
