@@ -7,6 +7,11 @@ const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 let _cache = null
 let _cacheAt = 0
 
+export function clearUpgradesConfigCache() {
+  _cache = null
+  _cacheAt = 0
+}
+
 export default defineEventHandler(async () => {
   const now = Date.now()
   if (_cache && now - _cacheAt < CACHE_TTL_MS) {
