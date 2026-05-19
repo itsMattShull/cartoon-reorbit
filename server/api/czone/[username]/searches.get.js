@@ -12,6 +12,12 @@ let _searchesCache = null
 let _searchesCacheExpiry = 0
 let _searchesFetch = null
 
+export function clearSearchesCache() {
+  _searchesCache = null
+  _searchesCacheExpiry = 0
+  _searchesFetch = null
+}
+
 async function getActiveSearches() {
   const now = Date.now()
   if (_searchesCache && now < _searchesCacheExpiry) return _searchesCache
