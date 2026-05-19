@@ -525,20 +525,22 @@
               </div>
             </div>
 
-            <div v-if="formError" class="text-red-600 text-sm">{{ formError }}</div>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
-          <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
-          <button
-            class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            :disabled="saving"
-            @click="saveSearch"
-          >
-            <span v-if="!saving">Save</span>
-            <span v-else>Saving...</span>
-          </button>
+        <div class="p-4 border-t flex items-center justify-between gap-2 flex-shrink-0">
+          <div class="text-red-600 text-sm flex-1 mr-4">{{ formError }}</div>
+          <div class="flex gap-2 flex-shrink-0">
+            <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
+            <button
+              class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              :disabled="saving"
+              @click="saveSearch"
+            >
+              <span v-if="!saving">Save</span>
+              <span v-else>Saving...</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
