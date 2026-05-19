@@ -4,6 +4,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 
 import { prisma, rawPrisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { isSyntheticUserCtoonId } from '@/server/utils/userCtoonId'
 import { NAV_CACHE_KEY } from './[username]/next.get.js'
 
 export default defineEventHandler(async (event) => {
@@ -57,17 +58,57 @@ export default defineEventHandler(async (event) => {
   }
 
   // 3. Fetch only the UserCtoon records being placed (not the entire collection)
-  const requestedIds = new Set()
+  //
+  // Collection items carry synthetic IDs (uc|userId|ctoonId|mintNumber) rather
+  // than real DB UUIDs. Resolve them to real IDs before querying.
+  const rawItemIds = new Set()
   for (const zone of zones) {
     for (const item of zone.toons) {
-      if (typeof item?.id === 'string') requestedIds.add(item.id)
+      if (typeof item?.id === 'string') rawItemIds.add(item.id)
     }
   }
+
+  // Build a map from whatever ID the client sent → real userCtoon DB id
+  const idResolutionMap = new Map()
+  const syntheticToResolve = []
+  for (const id of rawItemIds) {
+    if (isSyntheticUserCtoonId(id)) {
+      syntheticToResolve.push(id)
+    } else {
+      idResolutionMap.set(id, id)
+    }
+  }
+
+  if (syntheticToResolve.length > 0) {
+    const parsed = syntheticToResolve.map(id => {
+      const [, synthUserId, ctoonId, mintStr] = id.split('|')
+      const mintNumber = mintStr === 'x' ? null : parseInt(mintStr, 10)
+      return { syntheticId: id, synthUserId, ctoonId, mintNumber }
+    }).filter(p => p.synthUserId === user.id)
+
+    if (parsed.length > 0) {
+      const recs = await rawPrisma.userCtoon.findMany({
+        where: {
+          userId: user.id,
+          burnedAt: null,
+          OR: parsed.map(p => ({ ctoonId: p.ctoonId, mintNumber: p.mintNumber }))
+        },
+        select: { id: true, ctoonId: true, mintNumber: true }
+      })
+      const recMap = new Map(recs.map(r => [`${r.ctoonId}|${r.mintNumber ?? 'x'}`, r.id]))
+      for (const p of parsed) {
+        const realId = recMap.get(`${p.ctoonId}|${p.mintNumber ?? 'x'}`)
+        if (realId) idResolutionMap.set(p.syntheticId, realId)
+      }
+    }
+  }
+
+  const resolvedIds = new Set(idResolutionMap.values())
 
   // Use rawPrisma (unextended client) so April Fools asset swaps are never
   // persisted into the cZone layout — we always store the real assetPath.
   const userCtoons = await rawPrisma.userCtoon.findMany({
-    where: { userId: user.id, id: { in: Array.from(requestedIds) } },
+    where: { userId: user.id, id: { in: Array.from(resolvedIds) } },
     select: {
       id: true,
       mintNumber: true,
@@ -134,12 +175,13 @@ export default defineEventHandler(async (event) => {
         continue
       }
 
-      if (!lookup.has(item.id)) {
+      const realId = idResolutionMap.get(item.id) ?? item.id
+      if (!lookup.has(realId)) {
         // user doesn't own this ctoon
         continue
       }
 
-      const meta = lookup.get(item.id)
+      const meta = lookup.get(realId)
       const { baseCtoonId, ...rest } = meta
 
       // Skip if this ctoon (user-owned instance) is already placed in ANY zone
@@ -149,7 +191,7 @@ export default defineEventHandler(async (event) => {
       seenCtoonIds.add(baseCtoonId)
 
       const entry = {
-        id: item.id,
+        id: realId,
         x: item.x,
         y: item.y,
         mintNumber: rest.mintNumber,
