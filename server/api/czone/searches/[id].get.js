@@ -303,8 +303,6 @@ export default defineEventHandler(async (event) => {
     userPoints = cachedCondData.userPoints || 0
     userTotalCount = cachedCondData.userTotalCount || 0
     userUniqueCount = cachedCondData.userUniqueCount || 0
-    userSetUniqueCountMap = cachedCondData.userSetUniqueCountMap || {}
-    userSetTotalCountMap = cachedCondData.userSetTotalCountMap || {}
     userOwnsLessThanCountMap = cachedCondData.userOwnsLessThanCountMap || {}
 
     // Start with cached ownership entries; fill in any IDs this page needs that
@@ -327,6 +325,60 @@ export default defineEventHandler(async (event) => {
           }
         } catch {}
       }
+    }
+
+    // Fill in set counts for any set names this search needs that weren't in the
+    // shared cache (cache may have been written by a different search with no set conditions)
+    userSetUniqueCountMap = { ...(cachedCondData.userSetUniqueCountMap || {}) }
+    userSetTotalCountMap = { ...(cachedCondData.userSetTotalCountMap || {}) }
+    const missingUniqueSetNames = Array.from(setUniqueNames).filter(n => !(n in userSetUniqueCountMap))
+    const missingTotalSetNames = Array.from(setTotalNames).filter(n => !(n in userSetTotalCountMap))
+    if (missingUniqueSetNames.length || missingTotalSetNames.length) {
+      try {
+        const [uniqueSetGrouped, totalSetGrouped] = await Promise.all([
+          missingUniqueSetNames.length
+            ? db.userCtoon.groupBy({
+                by: ['ctoonId'],
+                where: { userId, burnedAt: null, ctoon: { set: { in: missingUniqueSetNames } } }
+              })
+            : null,
+          missingTotalSetNames.length
+            ? db.userCtoon.groupBy({
+                by: ['ctoonId'],
+                where: { userId, burnedAt: null, ctoon: { set: { in: missingTotalSetNames } } },
+                _count: { _all: true }
+              })
+            : null,
+        ])
+        const allSetCtoonIds = new Set()
+        if (uniqueSetGrouped) for (const r of uniqueSetGrouped) allSetCtoonIds.add(r.ctoonId)
+        if (totalSetGrouped) for (const r of totalSetGrouped) allSetCtoonIds.add(r.ctoonId)
+        if (allSetCtoonIds.size) {
+          const setCtoons = await db.ctoon.findMany({
+            where: { id: { in: Array.from(allSetCtoonIds) } },
+            select: { id: true, set: true }
+          })
+          const setById = new Map(setCtoons.map(c => [c.id, c.set]))
+          if (uniqueSetGrouped) {
+            for (const row of uniqueSetGrouped) {
+              const setName = setById.get(row.ctoonId)
+              if (setName) userSetUniqueCountMap[setName] = (userSetUniqueCountMap[setName] || 0) + 1
+            }
+          }
+          if (totalSetGrouped) {
+            for (const row of totalSetGrouped) {
+              const setName = setById.get(row.ctoonId)
+              if (setName) userSetTotalCountMap[setName] = (userSetTotalCountMap[setName] || 0) + (row._count._all || 0)
+            }
+          }
+        }
+        for (const name of missingUniqueSetNames) {
+          if (!(name in userSetUniqueCountMap)) userSetUniqueCountMap[name] = 0
+        }
+        for (const name of missingTotalSetNames) {
+          if (!(name in userSetTotalCountMap)) userSetTotalCountMap[name] = 0
+        }
+      } catch {}
     }
   }
 
