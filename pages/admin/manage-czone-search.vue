@@ -163,6 +163,46 @@
               </div>
             </div>
 
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="sm:col-span-2">
+                <label class="block mb-1 font-medium">Mass Update Set Names</label>
+                <div class="flex gap-2">
+                  <div class="relative flex-1">
+                    <input
+                      v-model="massUpdateSetTerm"
+                      type="text"
+                      placeholder="Type 3+ characters to search set names"
+                      class="w-full border rounded px-3 py-2"
+                      @focus="massUpdateSetFocused = true"
+                      @blur="massUpdateSetFocused = false"
+                      @input="searchMassUpdateSets"
+                    />
+                    <ul v-if="massUpdateSetTerm.length >= 3 && massUpdateSetFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
+                      <li v-if="massUpdateSetSearching" class="px-3 py-2 text-gray-500">Searching...</li>
+                      <li v-else-if="!massUpdateSetResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                      <li
+                        v-for="setName in massUpdateSetResults"
+                        :key="setName"
+                        class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        @mousedown.prevent="selectMassUpdateSet(setName)"
+                      >
+                        {{ setName }}
+                      </li>
+                    </ul>
+                  </div>
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+                    :disabled="!massUpdateSetSelected"
+                    @click="applyMassUpdateSetName"
+                  >
+                    Mass Update
+                  </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Updates all prize pool set name fields to use the selected set name.</p>
+              </div>
+            </div>
+
             <div>
               <label class="block mb-1 font-medium">Prize Pool</label>
               <p v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="text-xs text-gray-500 mb-2">
@@ -485,20 +525,22 @@
               </div>
             </div>
 
-            <div v-if="formError" class="text-red-600 text-sm">{{ formError }}</div>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
-          <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
-          <button
-            class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            :disabled="saving"
-            @click="saveSearch"
-          >
-            <span v-if="!saving">Save</span>
-            <span v-else>Saving...</span>
-          </button>
+        <div class="p-4 border-t flex items-center justify-between gap-2 flex-shrink-0">
+          <div class="text-red-600 text-sm flex-1 mr-4">{{ formError }}</div>
+          <div class="flex gap-2 flex-shrink-0">
+            <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
+            <button
+              class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              :disabled="saving"
+              @click="saveSearch"
+            >
+              <span v-if="!saving">Save</span>
+              <span v-else>Saving...</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -545,6 +587,13 @@ const ctoonSearchTerm = ref('')
 const ctoonSearchResults = ref([])
 const searchingCtoons = ref(false)
 const searchFocused = ref(false)
+
+const massUpdateSetTerm = ref('')
+const massUpdateSetResults = ref([])
+const massUpdateSetSearching = ref(false)
+const massUpdateSetFocused = ref(false)
+const massUpdateSetSelected = ref('')
+let massUpdateSetTimer = null
 
 const modalTitle = computed(() => (form.id ? 'Edit cZone Search' : 'Create cZone Search'))
 const searchDateBounds = computed(() => {
@@ -822,6 +871,43 @@ async function searchConditionSets(row, type) {
   }, 300)
 }
 
+async function searchMassUpdateSets() {
+  clearTimeout(massUpdateSetTimer)
+  massUpdateSetSelected.value = ''
+  const term = massUpdateSetTerm.value.trim()
+  if (term.length < 3) {
+    massUpdateSetResults.value = []
+    massUpdateSetSearching.value = false
+    return
+  }
+  massUpdateSetSearching.value = true
+  massUpdateSetTimer = setTimeout(async () => {
+    try {
+      const results = await $fetch('/api/admin/ctoon-sets', { query: { q: term } })
+      massUpdateSetResults.value = Array.isArray(results) ? results : []
+    } catch {
+      massUpdateSetResults.value = []
+    } finally {
+      massUpdateSetSearching.value = false
+    }
+  }, 300)
+}
+
+function selectMassUpdateSet(setName) {
+  massUpdateSetTerm.value = setName
+  massUpdateSetSelected.value = setName
+  massUpdateSetResults.value = []
+  massUpdateSetFocused.value = false
+}
+
+function applyMassUpdateSetName() {
+  if (!massUpdateSetSelected.value) return
+  for (const row of form.prizePool) {
+    row.conditionSetUniqueCountSet = massUpdateSetSelected.value
+    row.conditionSetTotalCountSet = massUpdateSetSelected.value
+  }
+}
+
 async function hydrateConditionCtoons(rows) {
   const ids = new Set()
   for (const row of rows) {
@@ -951,6 +1037,10 @@ function resetForm() {
   expandedPrizeId.value = null
   ctoonSearchTerm.value = ''
   ctoonSearchResults.value = []
+  massUpdateSetTerm.value = ''
+  massUpdateSetResults.value = []
+  massUpdateSetSelected.value = ''
+  massUpdateSetFocused.value = false
 }
 
 function openCreate() {
