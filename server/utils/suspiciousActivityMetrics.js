@@ -85,8 +85,14 @@ export const METRIC_DEFINITIONS = {
     unit: 'purchases',
   },
   cmartRapidBurstCount: {
-    label: 'Rapid-fire purchase bursts',
-    description: 'Number of cMart purchases made within 30 seconds of the prior purchase. Consistently high values indicate automated (bot) clicking.',
+    label: 'Rapid-fire purchase bursts (≤1s, any cToon)',
+    description: 'Number of cMart purchases made within 1 second of the prior purchase (any cToon). Near-impossible for a human consistently — strong bot indicator.',
+    category: 'cMart',
+    unit: 'bursts',
+  },
+  cmartCrossCToonBurstCount: {
+    label: 'Cross-cToon rapid bursts (≤1s, different cToon)',
+    description: 'Number of cMart purchases made within 1 second of the prior purchase where the cToon purchased is different. Buying distinct items this fast is virtually impossible without a script.',
     category: 'cMart',
     unit: 'bursts',
   },
@@ -309,6 +315,7 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
   // ── cMart bot detection metrics ────────────────────────────────────────────
   const needsCmart = metricKeys.has('cmartPurchaseCount') ||
                      metricKeys.has('cmartRapidBurstCount') ||
+                     metricKeys.has('cmartCrossCToonBurstCount') ||
                      metricKeys.has('cmartUniqueCtoonCount') ||
                      metricKeys.has('cmartSingleCtoonConcentrationPct')
 
@@ -349,13 +356,18 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
         rec.cmartSingleCtoonConcentrationPct = total > 0 ? Math.round((maxCount / total) * 100 * 10) / 10 : 0
       }
 
-      if (metricKeys.has('cmartRapidBurstCount')) {
+      if (metricKeys.has('cmartRapidBurstCount') || metricKeys.has('cmartCrossCToonBurstCount')) {
         let burstCount = 0
+        let crossBurstCount = 0
         for (let i = 1; i < ps.length; i++) {
           const gapMs = new Date(ps[i].createdAt).getTime() - new Date(ps[i - 1].createdAt).getTime()
-          if (gapMs <= 30000) burstCount++
+          if (gapMs <= 1000) {
+            burstCount++
+            if (ps[i].ctoonId !== ps[i - 1].ctoonId) crossBurstCount++
+          }
         }
-        rec.cmartRapidBurstCount = burstCount
+        if (metricKeys.has('cmartRapidBurstCount')) rec.cmartRapidBurstCount = burstCount
+        if (metricKeys.has('cmartCrossCToonBurstCount')) rec.cmartCrossCToonBurstCount = crossBurstCount
       }
     }
   }

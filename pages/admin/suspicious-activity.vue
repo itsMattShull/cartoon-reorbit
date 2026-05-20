@@ -189,6 +189,9 @@
                   <span v-if="user.metrics.cmartRapidBurstCount != null && user.metrics.cmartRapidBurstCount > 0" class="text-red-600 font-medium">
                     {{ user.metrics.cmartRapidBurstCount }} rapid burst{{ user.metrics.cmartRapidBurstCount !== 1 ? 's' : '' }}
                   </span>
+                  <span v-if="user.metrics.cmartCrossCToonBurstCount != null && user.metrics.cmartCrossCToonBurstCount > 0" class="text-red-700 font-semibold">
+                    {{ user.metrics.cmartCrossCToonBurstCount }} cross-cToon burst{{ user.metrics.cmartCrossCToonBurstCount !== 1 ? 's' : '' }}
+                  </span>
                   <span v-if="user.metrics.cmartSingleCtoonConcentrationPct != null">
                     {{ user.metrics.cmartSingleCtoonConcentrationPct }}% cMart concentration
                   </span>
