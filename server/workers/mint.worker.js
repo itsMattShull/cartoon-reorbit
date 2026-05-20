@@ -188,6 +188,13 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
           mintNumber: uc.mintNumber
         }
       })
+
+      // 5) Log cMart purchase for bot-clicker detection metrics
+      if (!isSpecial) {
+        await tx.cmartPurchaseLog.create({
+          data: { userId, ctoonId }
+        })
+      }
     })
 }, { connection })
 
