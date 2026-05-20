@@ -76,6 +76,38 @@ export const METRIC_DEFINITIONS = {
     category: 'IP / Account',
     unit: 'users',
   },
+
+  // ── cMart Bot Detection ────────────────────────────────────────────────────
+  cmartPurchaseCount: {
+    label: 'cMart purchases',
+    description: 'Total number of cToons purchased from cMart',
+    category: 'cMart',
+    unit: 'purchases',
+  },
+  cmartRapidBurstCount: {
+    label: 'Rapid-fire purchase bursts (≤1s, any cToon)',
+    description: 'Number of cMart purchases made within 1 second of the prior purchase (any cToon). Near-impossible for a human consistently — strong bot indicator.',
+    category: 'cMart',
+    unit: 'bursts',
+  },
+  cmartCrossCToonBurstCount: {
+    label: 'Cross-cToon rapid bursts (≤1s, different cToon)',
+    description: 'Number of cMart purchases made within 1 second of the prior purchase where the cToon purchased is different. Buying distinct items this fast is virtually impossible without a script.',
+    category: 'cMart',
+    unit: 'bursts',
+  },
+  cmartUniqueCtoonCount: {
+    label: 'Unique cToons bought from cMart',
+    description: 'Number of distinct cToons this user has purchased from cMart',
+    category: 'cMart',
+    unit: 'cToons',
+  },
+  cmartSingleCtoonConcentrationPct: {
+    label: 'cMart purchase concentration % (top cToon)',
+    description: 'Percentage of all cMart purchases that were for the single most-bought cToon. High values with a high purchase count suggest a bot targeting a specific release.',
+    category: 'cMart',
+    unit: '%',
+  },
 }
 
 /** Operator evaluation helper */
@@ -280,6 +312,66 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
     }
   }
 
+  // ── cMart bot detection metrics ────────────────────────────────────────────
+  const needsCmart = metricKeys.has('cmartPurchaseCount') ||
+                     metricKeys.has('cmartRapidBurstCount') ||
+                     metricKeys.has('cmartCrossCToonBurstCount') ||
+                     metricKeys.has('cmartUniqueCtoonCount') ||
+                     metricKeys.has('cmartSingleCtoonConcentrationPct')
+
+  if (needsCmart) {
+    const purchases = await prisma.cmartPurchaseLog.findMany({
+      where: {
+        ...(dateFilter ? { createdAt: dateFilter } : {}),
+      },
+      select: {
+        userId: true,
+        ctoonId: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    // Group sorted purchases by user
+    const userPurchases = new Map()
+    for (const p of purchases) {
+      if (!userPurchases.has(p.userId)) userPurchases.set(p.userId, [])
+      userPurchases.get(p.userId).push(p)
+    }
+
+    for (const [userId, ps] of userPurchases) {
+      const rec = ensure(userId)
+      const total = ps.length
+
+      if (metricKeys.has('cmartPurchaseCount')) rec.cmartPurchaseCount = total
+
+      if (metricKeys.has('cmartUniqueCtoonCount')) {
+        rec.cmartUniqueCtoonCount = new Set(ps.map(p => p.ctoonId)).size
+      }
+
+      if (metricKeys.has('cmartSingleCtoonConcentrationPct')) {
+        const ctoonCounts = new Map()
+        for (const p of ps) ctoonCounts.set(p.ctoonId, (ctoonCounts.get(p.ctoonId) ?? 0) + 1)
+        const maxCount = Math.max(...ctoonCounts.values(), 0)
+        rec.cmartSingleCtoonConcentrationPct = total > 0 ? Math.round((maxCount / total) * 100 * 10) / 10 : 0
+      }
+
+      if (metricKeys.has('cmartRapidBurstCount') || metricKeys.has('cmartCrossCToonBurstCount')) {
+        let burstCount = 0
+        let crossBurstCount = 0
+        for (let i = 1; i < ps.length; i++) {
+          const gapMs = new Date(ps[i].createdAt).getTime() - new Date(ps[i - 1].createdAt).getTime()
+          if (gapMs <= 1000) {
+            burstCount++
+            if (ps[i].ctoonId !== ps[i - 1].ctoonId) crossBurstCount++
+          }
+        }
+        if (metricKeys.has('cmartRapidBurstCount')) rec.cmartRapidBurstCount = burstCount
+        if (metricKeys.has('cmartCrossCToonBurstCount')) rec.cmartCrossCToonBurstCount = crossBurstCount
+      }
+    }
+  }
+
   // ── Shared IP user count ───────────────────────────────────────────────────
   if (metricKeys.has('sharedIPUserCount')) {
     // Get all userIP records
@@ -328,7 +420,7 @@ async function buildContextForUsers(prisma, userIds, sinceDate) {
 
   const dateFilter = sinceDate ? { gte: sinceDate } : undefined
   const context = {}
-  for (const id of userIds) context[id] = { topTradePartners: [], topAuctionSellers: [], sharedIPUsers: [] }
+  for (const id of userIds) context[id] = { topTradePartners: [], topAuctionSellers: [], sharedIPUsers: [], cmartTopCtoons: [] }
 
   // ── Trade partners ─────────────────────────────────────────────────────────
   const offers = await prisma.tradeOffer.findMany({
@@ -447,6 +539,38 @@ async function buildContextForUsers(prisma, userIds, sinceDate) {
         }
       }
     }
+  }
+
+  // ── cMart top purchased cToons ─────────────────────────────────────────────
+  const cmartLogs = await prisma.cmartPurchaseLog.findMany({
+    where: {
+      userId: { in: userIds },
+      ...(dateFilter ? { createdAt: dateFilter } : {}),
+    },
+    select: {
+      userId: true,
+      ctoonId: true,
+      ctoon: { select: { name: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  // userId → Map<ctoonId, { name, count }>
+  const cmartByUser = new Map()
+  for (const id of userIds) cmartByUser.set(id, new Map())
+
+  for (const log of cmartLogs) {
+    if (!cmartByUser.has(log.userId)) continue
+    const m = cmartByUser.get(log.userId)
+    if (!m.has(log.ctoonId)) m.set(log.ctoonId, { name: log.ctoon.name, count: 0 })
+    m.get(log.ctoonId).count++
+  }
+
+  for (const [userId, ctoonMap] of cmartByUser) {
+    context[userId].cmartTopCtoons = [...ctoonMap.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map(({ name, count }) => ({ ctoonName: name, purchaseCount: count }))
   }
 
   return context
@@ -589,7 +713,7 @@ export async function runAllRules(prisma, rules) {
         : null,
       triggeredRules: entry.rules,
       metrics: entry.metrics,
-      context: contextMap[userId] ?? { topTradePartners: [], topAuctionSellers: [], sharedIPUsers: [] },
+      context: contextMap[userId] ?? { topTradePartners: [], topAuctionSellers: [], sharedIPUsers: [], cmartTopCtoons: [] },
     }
   })
 

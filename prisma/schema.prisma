@@ -278,6 +278,7 @@ model Ctoon {
   cZoneSearchPrizeRows  CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
   cZoneSearchCaptures   CZoneSearchCapture[]
+  cmartPurchaseLogs     CmartPurchaseLog[]
 }
 
 model CtoonImageHash {
@@ -446,6 +447,7 @@ model User {
 
   czoneContestSubmissions CZoneContestSubmission[]
   czoneContestVotes       CZoneContestVote[]
+  cmartPurchaseLogs       CmartPurchaseLog[]
 
   userMonsters     UserMonster[]
   userBarcodeScans UserBarcodeScan[]
@@ -2355,5 +2357,21 @@ model SuspiciousActivityMute {
   user    User @relation("SuspiciousMutedUser", fields: [userId], references: [id], onDelete: Cascade)
   mutedBy User @relation("SuspiciousMutedBy", fields: [mutedById], references: [id])
 
+  @@index([createdAt])
+}
+
+// ── cMart Bot Detection ───────────────────────────────────────────────────────
+
+model CmartPurchaseLog {
+  id        String   @id @default(uuid())
+  userId    String
+  ctoonId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([ctoonId, createdAt])
   @@index([createdAt])
 }
