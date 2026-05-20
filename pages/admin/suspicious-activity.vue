@@ -183,6 +183,15 @@
                   <span v-if="user.metrics.sharedIPUserCount != null">
                     {{ user.metrics.sharedIPUserCount }} shared-IP account{{ user.metrics.sharedIPUserCount !== 1 ? 's' : '' }}
                   </span>
+                  <span v-if="user.metrics.cmartPurchaseCount != null" class="text-orange-600 font-medium">
+                    {{ user.metrics.cmartPurchaseCount }} cMart purchase{{ user.metrics.cmartPurchaseCount !== 1 ? 's' : '' }}
+                  </span>
+                  <span v-if="user.metrics.cmartRapidBurstCount != null && user.metrics.cmartRapidBurstCount > 0" class="text-red-600 font-medium">
+                    {{ user.metrics.cmartRapidBurstCount }} rapid burst{{ user.metrics.cmartRapidBurstCount !== 1 ? 's' : '' }}
+                  </span>
+                  <span v-if="user.metrics.cmartSingleCtoonConcentrationPct != null">
+                    {{ user.metrics.cmartSingleCtoonConcentrationPct }}% cMart concentration
+                  </span>
                 </div>
               </div>
 
@@ -293,8 +302,23 @@
                 </div>
               </div>
 
+              <!-- cMart top cToons -->
+              <div v-if="user.context.cmartTopCtoons && user.context.cmartTopCtoons.length > 0">
+                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">cMart purchases by cToon</h4>
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="c in user.context.cmartTopCtoons"
+                    :key="c.ctoonName"
+                    class="inline-flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 text-orange-800"
+                  >
+                    {{ c.ctoonName }}
+                    <span class="text-gray-400 font-normal">× {{ c.purchaseCount }}</span>
+                  </span>
+                </div>
+              </div>
+
               <div
-                v-if="user.context.topTradePartners.length === 0 && user.context.topAuctionSellers.length === 0 && user.context.sharedIPUsers.length === 0"
+                v-if="user.context.topTradePartners.length === 0 && user.context.topAuctionSellers.length === 0 && user.context.sharedIPUsers.length === 0 && (!user.context.cmartTopCtoons || user.context.cmartTopCtoons.length === 0)"
                 class="text-xs text-gray-400"
               >No contextual data available for this user.</div>
             </div>
