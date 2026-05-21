@@ -52,7 +52,9 @@ export default defineEventHandler(async (event) => {
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
     clearSound,
-    mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw
+    mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw,
+    timeBasedLimitCount: timeBasedLimitCountRaw,
+    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw
   } = payload
 
   // 4) Validate basics
@@ -148,7 +150,11 @@ export default defineEventHandler(async (event) => {
     initialReleaseAt: initialReleaseAt ? new Date(initialReleaseAt) : null,
     finalReleaseAt:   finalReleaseAt   ? new Date(finalReleaseAt)   : null,
     initialReleaseQty: initialReleaseQty == null || initialReleaseQty === '' ? null : Number(initialReleaseQty),
-    finalReleaseQty:   finalReleaseQty   == null || finalReleaseQty   === '' ? null : Number(finalReleaseQty)
+    finalReleaseQty:   finalReleaseQty   == null || finalReleaseQty   === '' ? null : Number(finalReleaseQty),
+
+    // Time-based purchase limit overrides (only meaningful for timeBased; cleared for defined)
+    timeBasedLimitCount:      mintLimitType === 'timeBased' && timeBasedLimitCountRaw      != null && timeBasedLimitCountRaw      !== '' ? Number(timeBasedLimitCountRaw)      : null,
+    timeBasedLimitWindowDays: mintLimitType === 'timeBased' && timeBasedLimitWindowDaysRaw != null && timeBasedLimitWindowDaysRaw !== '' ? Number(timeBasedLimitWindowDaysRaw) : null
   }
 
   let imageHashData = null
@@ -229,7 +235,8 @@ export default defineEventHandler(async (event) => {
       'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',
-      'mintLimitType','mintEndDate'
+      'mintLimitType','mintEndDate',
+      'timeBasedLimitCount','timeBasedLimitWindowDays'
     ]
     for (const k of keys) {
       const prev = before ? (before[k] instanceof Date ? before[k].toISOString() : (Array.isArray(before[k]) || typeof before[k] === 'object' ? JSON.stringify(before[k]) : before[k])) : undefined

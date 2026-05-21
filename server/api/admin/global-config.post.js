@@ -36,7 +36,8 @@ export default defineEventHandler(async (event) => {
     featuredAuctionHours,
     featuredAuctionIntervalDays,
     featuredAuctionsPerSlot,
-    cmartHalfPriceEnabled
+    cmartHalfPriceEnabled,
+    timeBasedPurchaseLimits
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -62,7 +63,10 @@ export default defineEventHandler(async (event) => {
       : undefined,
     featuredAuctionIntervalDays: (typeof featuredAuctionIntervalDays === 'number') ? Math.max(1, featuredAuctionIntervalDays) : undefined,
     featuredAuctionsPerSlot: (typeof featuredAuctionsPerSlot === 'number') ? Number(featuredAuctionsPerSlot) : undefined,
-    cmartHalfPriceEnabled: (typeof cmartHalfPriceEnabled === 'boolean') ? cmartHalfPriceEnabled : undefined
+    cmartHalfPriceEnabled: (typeof cmartHalfPriceEnabled === 'boolean') ? cmartHalfPriceEnabled : undefined,
+    timeBasedPurchaseLimits: (timeBasedPurchaseLimits !== undefined && timeBasedPurchaseLimits !== null)
+      ? timeBasedPurchaseLimits
+      : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -83,7 +87,14 @@ export default defineEventHandler(async (event) => {
         featuredAuctionHours: payload.featuredAuctionHours ?? [],
         featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays ?? 1,
         featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot ?? 1,
-        cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled ?? false
+        cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled ?? false,
+        timeBasedPurchaseLimits: payload.timeBasedPurchaseLimits ?? {
+          'Common':     { count: 5, windowDays: null },
+          'Uncommon':   { count: 4, windowDays: null },
+          'Rare':       { count: 3, windowDays: null },
+          'Very Rare':  { count: 2, windowDays: null },
+          'Crazy Rare': { count: 1, windowDays: null }
+        }
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -98,7 +109,8 @@ export default defineEventHandler(async (event) => {
         ...(payload.featuredAuctionHours !== undefined ? { featuredAuctionHours: payload.featuredAuctionHours } : {}),
         ...(payload.featuredAuctionIntervalDays !== undefined ? { featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays } : {}),
         ...(payload.featuredAuctionsPerSlot !== undefined ? { featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot } : {}),
-        ...(payload.cmartHalfPriceEnabled !== undefined ? { cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled } : {})
+        ...(payload.cmartHalfPriceEnabled !== undefined ? { cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled } : {}),
+        ...(payload.timeBasedPurchaseLimits !== undefined ? { timeBasedPurchaseLimits: payload.timeBasedPurchaseLimits } : {})
       }
     })
     clearUpgradesConfigCache()
@@ -129,6 +141,16 @@ export default defineEventHandler(async (event) => {
           newValue: nextVal
         })
       }
+    }
+    // JSON field: compare by serialized value
+    if (JSON.stringify(before?.timeBasedPurchaseLimits ?? null) !== JSON.stringify(result?.timeBasedPurchaseLimits ?? null)) {
+      await logAdminChange(db, {
+        userId: me.id,
+        area: 'GlobalGameConfig',
+        key: 'timeBasedPurchaseLimits',
+        prevValue: before?.timeBasedPurchaseLimits ?? null,
+        newValue: result?.timeBasedPurchaseLimits ?? null
+      })
     }
     return result
   } catch (err) {
