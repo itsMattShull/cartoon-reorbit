@@ -103,6 +103,42 @@
           </p>
         </div>
 
+        <!-- Time-Based Purchase Limit Override (only for Time Based Limit) -->
+        <div v-if="mintLimitType === 'timeBased'" class="border rounded bg-indigo-50 p-4 space-y-3">
+          <div>
+            <h3 class="font-medium text-sm text-gray-800">Purchase Limit Override
+              <span class="text-xs font-normal text-gray-500 ml-1">— optional, overrides the rarity default from Global Settings</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Leave either field blank to use the rarity default. Window blank = full release window.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block mb-1 text-sm font-medium">Limit Count</label>
+              <input
+                type="number"
+                min="1"
+                :value="timeBasedLimitCountStr"
+                @input="timeBasedLimitCountStr = $event.target.value"
+                placeholder="Use rarity default"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Max purchases per user.</p>
+            </div>
+            <div>
+              <label class="block mb-1 text-sm font-medium">Window (days)</label>
+              <input
+                type="number"
+                min="1"
+                :value="timeBasedLimitWindowDaysStr"
+                @input="timeBasedLimitWindowDaysStr = $event.target.value"
+                placeholder="Full duration"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Rolling window. Blank = full release window.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Per-User Limit / Quantities -->
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -270,6 +306,8 @@ const description = ref('')
 /* mint limit refs */
 const mintLimitType = ref('defined')
 const mintEndDate = ref('')
+const timeBasedLimitCountStr = ref('')      // '' = no override (use rarity default)
+const timeBasedLimitWindowDaysStr = ref('') // '' = no override (use rarity default / full duration)
 
 /* new image refs */
 const newImageFile = ref(null)
@@ -401,6 +439,8 @@ onMounted(async ()=>{
     description.value = ctoon.description || ''
     mintLimitType.value = ctoon.mintLimitType || 'defined'
     if (ctoon.mintEndDate) mintEndDate.value = toDateTimeLocal(ctoon.mintEndDate)
+    timeBasedLimitCountStr.value      = ctoon.timeBasedLimitCount      != null ? String(ctoon.timeBasedLimitCount)      : ''
+    timeBasedLimitWindowDaysStr.value = ctoon.timeBasedLimitWindowDays != null ? String(ctoon.timeBasedLimitWindowDays) : ''
     currentSoundPath.value = ctoon.soundPath || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
@@ -511,6 +551,8 @@ async function submitForm(){
     if (mintLimitType.value === 'timeBased' && mintEndDate.value) {
       fd.append('mintEndDate', localToUtcIso(mintEndDate.value))
     }
+    fd.append('timeBasedLimitCount',      timeBasedLimitCountStr.value)
+    fd.append('timeBasedLimitWindowDays', timeBasedLimitWindowDaysStr.value)
     fd.append('perUserLimit', perUserLimit.value ?? '')
     fd.append('quantity', mintLimitType.value === 'defined' ? (quantity.value ?? '') : '')
     fd.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
@@ -558,6 +600,8 @@ async function submitForm(){
     mintLimitType:   mintLimitType.value,
     mintEndDate:     mintLimitType.value === 'timeBased' && mintEndDate.value
                        ? localToUtcIso(mintEndDate.value) : null,
+    timeBasedLimitCount:      timeBasedLimitCountStr.value      !== '' && !isNaN(Number(timeBasedLimitCountStr.value))      ? Number(timeBasedLimitCountStr.value)      : null,
+    timeBasedLimitWindowDays: timeBasedLimitWindowDaysStr.value !== '' && !isNaN(Number(timeBasedLimitWindowDaysStr.value)) ? Number(timeBasedLimitWindowDaysStr.value) : null,
     perUserLimit:    perUserLimit.value,
     quantity:        mintLimitType.value === 'defined' ? quantity.value : null,
     initialQuantity: mintLimitType.value === 'defined' ? initialQuantity.value : null,

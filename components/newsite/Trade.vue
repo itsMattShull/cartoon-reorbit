@@ -389,6 +389,10 @@
               <!-- Offered cToons -->
               <div class="tm-col">
                 <div class="tm-col-title">Offered cToons</div>
+                <div class="tm-points-row">
+                  <span class="tm-points-label">Points Offered</span>
+                  <span class="tm-points-value">{{ Number(currentOffer.pointsOffered).toLocaleString() }}</span>
+                </div>
                 <div class="tm-cards">
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'OFFERED')"
@@ -1127,6 +1131,49 @@ onBeforeUnmount(() => {
 }
 .tr-view-btn:hover { background: var(--OrbitDarkBlue); }
 
+/* ── Incoming / Outgoing: mobile card layout ── */
+@media (max-width: 640px) {
+  .tr-list-head { display: none; }
+
+  .tr-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    grid-template-rows: auto auto auto auto;
+    column-gap: 8px;
+    row-gap: 3px;
+    padding: 8px 10px;
+    align-items: center;
+  }
+
+  /* Row 1: username (span 2 cols) | status badge */
+  .tr-row > :nth-child(1) {
+    grid-column: 1 / 3; grid-row: 1;
+    font-size: 0.72rem; font-weight: bold; text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tr-row > :nth-child(5) { grid-column: 3; grid-row: 1; text-align: right; }
+
+  /* Row 2: points (span 2 cols) */
+  .tr-row > :nth-child(2) {
+    grid-column: 1 / 3; grid-row: 2;
+    text-align: left; font-size: 0.65rem;
+  }
+  .tr-row > :nth-child(2)::before { content: "Pts: "; color: rgba(255,255,255,0.4); }
+
+  /* Row 3: offered count | requested count */
+  .tr-row > :nth-child(3) { grid-column: 1; grid-row: 3; text-align: left; font-size: 0.65rem; }
+  .tr-row > :nth-child(4) { grid-column: 2; grid-row: 3; text-align: left; font-size: 0.65rem; }
+  .tr-row > :nth-child(3)::before { content: "↓ Off: "; color: rgba(255,255,255,0.4); }
+  .tr-row > :nth-child(4)::before { content: "↑ Req: "; color: rgba(255,255,255,0.4); }
+
+  /* Row 4: date | view button */
+  .tr-row > :nth-child(6) {
+    grid-column: 1 / 3; grid-row: 4;
+    text-align: left; font-size: 0.6rem; color: rgba(255,255,255,0.4);
+  }
+  .tr-row > :nth-child(7) { grid-column: 3; grid-row: 2 / 5; align-self: center; }
+}
+
 /* ── Status badges ── */
 .tr-badge {
   display: inline-block; padding: 1px 5px; border-radius: 9999px; font-size: 0.58rem; font-weight: bold; text-transform: capitalize;
@@ -1248,6 +1295,11 @@ onBeforeUnmount(() => {
   gap: 6px;
   flex-shrink: 0;
 }
+@media (max-width: 640px) {
+  .tr-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .tr-card-wrap {
   min-height: 0;
 }
@@ -1325,8 +1377,23 @@ onBeforeUnmount(() => {
   scrollbar-width: thin; scrollbar-color: var(--OrbitDarkBlue) transparent;
 }
 .tm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) {
+  .tm-cols { grid-template-columns: 1fr; }
+}
 .tm-col { display: flex; flex-direction: column; gap: 6px; }
 .tm-col-title { font-size: 0.68rem; font-weight: bold; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.05em; }
+.tm-points-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.28);
+}
+.tm-points-label {
+  font-size: 0.6rem; font-weight: bold; text-transform: uppercase;
+  letter-spacing: 0.05em; color: rgba(255,255,255,0.55);
+}
+.tm-points-value {
+  font-size: 0.85rem; font-weight: bold; color: #fbbf24;
+}
 .tm-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .tm-empty-col { font-size: 0.65rem; color: rgba(255,255,255,0.35); font-style: italic; }
 .tm-card {

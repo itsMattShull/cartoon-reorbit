@@ -121,6 +121,42 @@
           </div>
         </div>
 
+        <!-- Time-Based Purchase Limit Override (bulk, only for timeBased) -->
+        <div v-if="bulkMintLimitType === 'timeBased'" class="border rounded bg-indigo-50 p-4 space-y-3">
+          <div>
+            <h3 class="font-medium text-sm text-gray-800">Purchase Limit Override
+              <span class="text-xs font-normal text-gray-500 ml-1">— applied to all cToons in this batch; leave blank to use each rarity's default</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Window blank = full release window (release date → mint end date).</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block mb-1 text-sm font-medium">Limit Count</label>
+              <input
+                type="number"
+                min="1"
+                :value="bulkTimeBasedLimitCountStr"
+                @input="bulkTimeBasedLimitCountStr = $event.target.value"
+                placeholder="Use rarity default"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Max purchases per user for each cToon.</p>
+            </div>
+            <div>
+              <label class="block mb-1 text-sm font-medium">Window (days)</label>
+              <input
+                type="number"
+                min="1"
+                :value="bulkTimeBasedLimitWindowDaysStr"
+                @input="bulkTimeBasedLimitWindowDaysStr = $event.target.value"
+                placeholder="Full duration"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Rolling window. Blank = full release window.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Release schedule preview (applies to each row based on its Total Qty) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
           <div>
@@ -467,6 +503,8 @@ const bulkSeries = ref('')
 const bulkReleaseDate = ref('')
 const bulkMintLimitType = ref('defined')
 const bulkMintEndDate = ref('')
+const bulkTimeBasedLimitCountStr = ref('')      // '' = use rarity default
+const bulkTimeBasedLimitWindowDaysStr = ref('') // '' = use rarity default / full duration
 const uploading = ref(false)
 const releasePercent = ref(75)
 const delayHours = ref(12)
@@ -787,6 +825,8 @@ async function uploadAll() {
         formData.append('mintEndDate', new Date(bulkMintEndDate.value).toISOString())
       }
     }
+    formData.append('timeBasedLimitCount',      bulkTimeBasedLimitCountStr.value)
+    formData.append('timeBasedLimitWindowDays', bulkTimeBasedLimitWindowDaysStr.value)
     formData.append('totalQuantity', bulkMintLimitType.value === 'defined' ? (f.totalQuantity ?? '') : '')
     formData.append('initialQuantity', bulkMintLimitType.value === 'defined' ? (f.initialQuantity ?? '') : '')
     // advisory schedule fields per row

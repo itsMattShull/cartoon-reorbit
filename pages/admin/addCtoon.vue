@@ -146,6 +146,42 @@
           </p>
         </div>
 
+        <!-- Time-Based Purchase Limit Override (only for Time Based Limit) -->
+        <div v-if="mintLimitType === 'timeBased'" class="border rounded bg-indigo-50 p-4 space-y-3">
+          <div>
+            <h3 class="font-medium text-sm text-gray-800">Purchase Limit Override
+              <span class="text-xs font-normal text-gray-500 ml-1">— optional, overrides the rarity default from Global Settings</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Leave either field blank to use the rarity default. Window blank = full release window.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block mb-1 text-sm font-medium">Limit Count</label>
+              <input
+                type="number"
+                min="1"
+                :value="timeBasedLimitCountStr"
+                @input="timeBasedLimitCountStr = $event.target.value"
+                placeholder="Use rarity default"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Max purchases per user.</p>
+            </div>
+            <div>
+              <label class="block mb-1 text-sm font-medium">Window (days)</label>
+              <input
+                type="number"
+                min="1"
+                :value="timeBasedLimitWindowDaysStr"
+                @input="timeBasedLimitWindowDaysStr = $event.target.value"
+                placeholder="Full duration"
+                class="w-full border rounded p-2"
+              />
+              <p class="text-xs text-gray-500 mt-1">Rolling window. Blank = full release window.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Release schedule (computed, read-only) -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
           <div>
@@ -299,6 +335,8 @@ const characters = ref('')
 const releaseDate = ref('')
 const mintLimitType = ref('defined')
 const mintEndDate = ref('')
+const timeBasedLimitCountStr = ref('')      // '' = use rarity default
+const timeBasedLimitWindowDaysStr = ref('') // '' = use rarity default / full duration
 const totalQuantity = ref(null)
 const initialQuantity = ref(null)
 const perUserLimit = ref(null)
@@ -525,6 +563,8 @@ async function submitForm() {
       formData.append('mintEndDate', new Date(mintEndDate.value).toISOString())
     }
   }
+  formData.append('timeBasedLimitCount',      timeBasedLimitCountStr.value)
+  formData.append('timeBasedLimitWindowDays', timeBasedLimitWindowDaysStr.value)
   formData.append('totalQuantity', mintLimitType.value === 'defined' ? (totalQuantity.value ?? '') : '')
   formData.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
   // advisory schedule fields

@@ -81,23 +81,66 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       throw new Error('Insufficient points')
     }
 
-    // Per-user limit enforcement (first 48h window)
-    if (!isSpecial && ctoon.releaseDate) {
-      const hoursSinceRelease =
-        (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
-      const enforceLimit = hoursSinceRelease < 48
-      if (
-        enforceLimit &&
-        ctoon.perUserLimit !== null &&
-        existing >= ctoon.perUserLimit
-      ) {
-        throw new Error(
-          `Purchase limit of ${ctoon.perUserLimit} within first 48h reached`
-        )
+    // Per-user limit enforcement
+    if (!isSpecial) {
+      if (ctoon.mintLimitType === 'timeBased') {
+        // ── Time-based release purchase limits (replaces 48h perUserLimit for this type) ──
+        // Resolve limit: per-cToon override first, then rarity defaults from global config.
+        let limitCount    = ctoon.timeBasedLimitCount    ?? null
+        let windowDays    = ctoon.timeBasedLimitWindowDays ?? null
+
+        if (limitCount === null || windowDays === null) {
+          try {
+            const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+            const rarityLimits = cfg?.timeBasedPurchaseLimits
+            if (rarityLimits && rarityLimits[ctoon.rarity]) {
+              const def = rarityLimits[ctoon.rarity]
+              if (limitCount === null && def.count != null) limitCount = Number(def.count)
+              if (windowDays === null && def.windowDays != null) windowDays = Number(def.windowDays)
+            }
+          } catch {}
+        }
+
+        if (limitCount !== null && limitCount > 0) {
+          // Determine window start:
+          // windowDays > 0 → rolling N-day window; otherwise use full release window (releaseDate → mintEndDate)
+          let windowStart
+          if (windowDays != null && windowDays > 0) {
+            windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
+          } else {
+            // Full release window — count all purchases since releaseDate
+            windowStart = ctoon.releaseDate ? new Date(ctoon.releaseDate) : new Date(0)
+          }
+
+          const purchasesInWindow = await prisma.cmartPurchaseLog.count({
+            where: { userId, ctoonId, createdAt: { gte: windowStart } }
+          })
+
+          if (purchasesInWindow >= limitCount) {
+            const windowDesc = (windowDays != null && windowDays > 0)
+              ? `${windowDays}-day window`
+              : 'this release'
+            throw new Error(`Purchase limit of ${limitCount} for ${windowDesc} reached`)
+          }
+        }
+      } else if (ctoon.releaseDate) {
+        // ── Defined-quantity releases: existing 48-hour perUserLimit ──
+        const hoursSinceRelease =
+          (Date.now() - new Date(ctoon.releaseDate).getTime()) / (1000 * 60 * 60)
+        const enforceLimit = hoursSinceRelease < 48
+        if (
+          enforceLimit &&
+          ctoon.perUserLimit !== null &&
+          existing >= ctoon.perUserLimit
+        ) {
+          throw new Error(
+            `Purchase limit of ${ctoon.perUserLimit} within first 48h reached`
+          )
+        }
+      } else if (ctoon.perUserLimit !== null && existing >= ctoon.perUserLimit) {
+        // Fallback if no releaseDate
+        throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
       }
-    } else if (!isSpecial && ctoon.perUserLimit !== null && existing >= ctoon.perUserLimit) {
-      // Fallback if no releaseDate
-      throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
     }
 
     // Load global settings (for window-aware caps)

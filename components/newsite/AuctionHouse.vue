@@ -26,9 +26,16 @@
       </div>
     </div>
 
+    <!-- ── Top Pagination ────────────────────────────────────── -->
+    <div class="ah-pagination ah-pagination--top">
+      <button class="ah-pg-btn" :disabled="activePage <= 1"         @click="prevPage">‹</button>
+      <span class="ah-pg-info">{{ activePage }} / {{ totalPages }}</span>
+      <button class="ah-pg-btn" :disabled="activePage >= totalPages" @click="nextPage">›</button>
+    </div>
+
     <!-- ── List view ─────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
-    <div class="ah-list">
+    <div ref="listEl" class="ah-list">
 
       <!-- Loading skeletons -->
       <template v-if="isLoadingActive">
@@ -47,7 +54,14 @@
           class="ah-row" :class="{ trending: trendingIds.has(item.id) }"
         >
           <!-- Thumbnail -->
-          <img class="ah-img" :src="item.assetPath" :alt="item.name" draggable="false" />
+          <div class="ah-img-wrap" @click="openInfoModal(item)">
+            <img class="ah-img" :src="item.assetPath" :alt="item.name" draggable="false" />
+            <span
+              v-if="activeTab === 'current'"
+              class="ah-own-badge"
+              :class="item.isOwned ? 'ah-own-badge--owned' : 'ah-own-badge--unowned'"
+            >{{ item.isOwned ? 'Owned' : 'Unowned' }}</span>
+          </div>
 
           <!-- Name + meta -->
           <div class="ah-body">
@@ -66,7 +80,7 @@
               <span v-else-if="activeTab === 'mine' || activeTab === 'all'"
                 class="ah-badge" :class="!isEnded(item.endAt) ? 'badge-active' : 'badge-ended'"
               >{{ !isEnded(item.endAt) ? 'Active' : 'Ended' }}</span>
-              <span v-else-if="item.isOwned" class="ah-badge badge-won">Owned</span>
+              <!-- owned/unowned badge moved to image overlay on current tab -->
             </div>
           </div>
 
@@ -93,7 +107,7 @@
 
     <!-- ── Card view ─────────────────────────────────────────── -->
     <template v-else>
-    <div class="ah-card-grid">
+    <div ref="cardEl" class="ah-card-grid">
 
       <!-- Loading skeletons -->
       <template v-if="isLoadingActive">
@@ -110,15 +124,19 @@
         <ShortCard
           v-for="item in paginatedItems" :key="item.id"
           :style="{ '--footer-left-width': '60%', '--footer-right-width': '40%' }"
-          @click="selectedAuctionId = item.id"
         >
           <template #header>
-            <div class="ah-card-header">
+            <div class="ah-card-header" @click="openInfoModal(item)">
               <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="ah-card-img" draggable="false" />
               <div class="ah-card-time-badge" :class="{ ended: isEnded(item.endAt) }">
                 <template v-if="!isEnded(item.endAt)">{{ formatRemaining(item.endAt) }}</template>
                 <template v-else>Ended</template>
               </div>
+              <span
+                v-if="activeTab === 'current'"
+                class="ah-own-badge ah-card-own-badge"
+                :class="item.isOwned ? 'ah-own-badge--owned' : 'ah-own-badge--unowned'"
+              >{{ item.isOwned ? 'Owned' : 'Unowned' }}</span>
             </div>
           </template>
           <template #middle>
@@ -156,6 +174,7 @@
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
 const cmartCtoons = useState('cmartCtoons', () => [])
+const { open: openCtoonModal } = useCtoonModal()
 
 const selectedAuctionId = ref(null)
 
@@ -166,7 +185,11 @@ const TABS = [
   { id: 'all',     label: 'All'         },
 ]
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 100
+
+// ── Scroll refs ──────────────────────────────────────────────────
+const listEl = ref(null)
+const cardEl = ref(null)
 
 // ── View mode ─────────────────────────────────────────────────────
 const viewMode = ref('list')
@@ -478,6 +501,13 @@ function switchTab(id) {
   else if (id === 'all')    { allPage.value = 1;     loadAllAuctions() }
 }
 
+function scrollContentToTop() {
+  nextTick(() => {
+    if (listEl.value) listEl.value.scrollTop = 0
+    if (cardEl.value) cardEl.value.scrollTop = 0
+  })
+}
+
 function prevPage() {
   const p = activePage.value
   if (p <= 1) return
@@ -485,6 +515,7 @@ function prevPage() {
   else if (activeTab.value === 'mybids') myBidsPage.value = p - 1
   else if (activeTab.value === 'all')    allPage.value = p - 1
   else currentPage.value = p - 1
+  scrollContentToTop()
 }
 
 function nextPage() {
@@ -494,6 +525,16 @@ function nextPage() {
   else if (activeTab.value === 'mybids') myBidsPage.value = p + 1
   else if (activeTab.value === 'all')    allPage.value = p + 1
   else currentPage.value = p + 1
+  scrollContentToTop()
+}
+
+function openInfoModal(item) {
+  openCtoonModal({
+    ctoonId:     item.ctoonId    || null,
+    userCtoonId: item.userCtoonId || null,
+    assetPath:   item.assetPath  || null,
+    name:        item.name       || null,
+  })
 }
 
 // ── Formatters ────────────────────────────────────────────────────
@@ -640,8 +681,8 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   width: 102px;
   height: 102px;
   object-fit: contain;
-  flex-shrink: 0;
   image-rendering: pixelated;
+  display: block;
 }
 
 .ah-body { flex: 1; min-width: 0; }
@@ -761,6 +802,7 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   position: relative;
   width: 100%;
   height: 100%;
+  cursor: pointer;
 }
 
 .ah-card-img {
@@ -837,6 +879,46 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 .ah-card-view-btn:hover { background: var(--OrbitLightBlue); }
 
+/* ── Owned/Unowned image badge ── */
+.ah-img-wrap {
+  position: relative;
+  width: 102px;
+  height: 102px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ah-img-wrap .ah-img {
+  width: 100%;
+  height: 100%;
+}
+.ah-own-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  font-size: 0.48rem;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.ah-own-badge--owned {
+  background: rgba(74, 222, 128, 0.25);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+}
+.ah-own-badge--unowned {
+  background: rgba(156, 163, 175, 0.2);
+  color: #d1d5db;
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+.ah-card-own-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+}
+
 /* ── Pagination ── */
 .ah-pagination {
   display: flex;
@@ -846,6 +928,10 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   padding: 3px 6px;
   border-top: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;
+}
+.ah-pagination--top {
+  border-top: none;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .ah-pg-btn {
