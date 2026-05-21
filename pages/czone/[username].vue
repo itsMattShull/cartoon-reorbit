@@ -142,7 +142,7 @@
                   :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
                   @click="captureCzoneSearchItem(item)"
                 >
-                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
                 </button>
                 <CtoonAsset
                   v-else
@@ -418,7 +418,7 @@
                   :class="{ 'opacity-70 cursor-wait': item.isCapturing }"
                   @click="captureCzoneSearchItem(item)"
                 >
-                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
+                  <img :src="item.assetPath" :alt="item.name" class="czone-search-image" />
                 </button>
                 <CtoonAsset
                   v-else
