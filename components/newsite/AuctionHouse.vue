@@ -895,23 +895,23 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   position: absolute;
   top: 3px;
   left: 3px;
-  font-size: 0.48rem;
+  font-size: 0.55rem;
   font-weight: bold;
-  padding: 1px 4px;
+  padding: 1px 5px;
   border-radius: 3px;
   pointer-events: none;
   white-space: nowrap;
   line-height: 1.4;
 }
 .ah-own-badge--owned {
-  background: rgba(74, 222, 128, 0.25);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.4);
+  background: #16a34a;
+  color: #fff;
+  border: 1px solid #15803d;
 }
 .ah-own-badge--unowned {
-  background: rgba(156, 163, 175, 0.2);
-  color: #d1d5db;
-  border: 1px solid rgba(156, 163, 175, 0.3);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.3);
 }
 .ah-card-own-badge {
   position: absolute;

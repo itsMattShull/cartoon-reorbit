@@ -1405,8 +1405,8 @@ onBeforeUnmount(() => {
   position: absolute; top: 4px; right: 4px;
   font-size: 0.52rem; font-weight: bold; padding: 1px 4px; border-radius: 9999px;
 }
-.tm-own-badge.owned { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
-.tm-own-badge.unowned { background: rgba(156,163,175,0.15); color: #9ca3af; border: 1px solid rgba(156,163,175,0.2); }
+.tm-own-badge.owned { background: #16a34a; color: #fff; border: 1px solid #15803d; }
+.tm-own-badge.unowned { background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.3); }
 .tm-card-img { width: 80px; height: 80px; object-fit: contain; margin-top: 14px; }
 .tm-card-name { font-size: 0.65rem; color: white; font-weight: bold; text-align: center; line-height: 1.2; }
 .tm-dim { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-align: center; }
