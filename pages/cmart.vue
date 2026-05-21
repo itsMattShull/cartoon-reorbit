@@ -942,7 +942,7 @@ const hideOutOfStock   = ref(false)
 const gtoonsOnly       = ref(false)
 const sortBy           = ref('releaseDateDesc')
 const currentPage      = ref(1)
-const itemsPerPage     = 50
+const itemsPerPage     = 100
 
 // ────────── ROUTE QUERY SYNC ───────────────
 const route  = useRoute()
