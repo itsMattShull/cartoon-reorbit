@@ -168,6 +168,35 @@
           {{ searchToast.message }}
         </div>
       </transition>
+
+      <!-- ── Glitch / Matrix Effect Overlay ── -->
+      <div v-if="glitchActive" class="czone-glitch-overlay" :class="`czone-glitch-phase-${glitchPhase}`">
+        <!-- Phase 1: scan-line overlay (TV jitter via html class) -->
+        <div v-if="glitchPhase === 1" class="czone-glitch-scanlines"></div>
+
+        <!-- Phase 2 & 3: canvas for TV snow → matrix rain -->
+        <canvas v-if="glitchPhase >= 2" ref="matrixCanvas" class="czone-matrix-canvas"></canvas>
+
+        <!-- Phase 3: cToon floats on top of matrix, click to capture -->
+        <transition name="cz-fade">
+          <div v-if="glitchPhase === 3 && glitchItem" class="czone-glitch-ctoon-wrapper">
+            <button
+              class="czone-glitch-ctoon-btn"
+              :class="{ 'opacity-60 cursor-wait': glitchItem.isCapturing }"
+              @click="captureGlitchItem"
+              type="button"
+            >
+              <img
+                :src="glitchItem.assetPath"
+                :alt="glitchItem.name"
+                class="czone-glitch-ctoon-img"
+                draggable="false"
+              />
+              <div class="czone-glitch-ctoon-label">{{ glitchItem.name }}</div>
+            </button>
+          </div>
+        </transition>
+      </div>
     </Teleport>
 
   </div>
@@ -255,6 +284,203 @@ const capturedCtoon       = ref(null)
 const searchToast         = reactive({ visible: false, message: '', type: 'success' })
 let   searchToastTimer    = null
 
+// ── Glitch / Matrix Effect state ─────────────────────────────
+// Phase 0 = off | 1 = TV jitter | 2 = TV snow | 3 = matrix + cToon on top
+const glitchActive = ref(false)
+const glitchPhase  = ref(0)
+const glitchItem   = ref(null)
+const matrixCanvas = ref(null)
+let   glitchTimers   = []
+let   matrixAnimFrame = null
+let   matrixDrawMode  = 'snow' // 'snow' | 'matrix'
+
+const MATRIX_CODE_LINES = [
+  'import { defineEventHandler, createError } from "h3"',
+  'import { prisma as db } from "@/server/prisma"',
+  'import { redis } from "@/server/utils/redis"',
+  'export default defineEventHandler(async (event) => {',
+  '  const userId = event.context.userId',
+  '  if (!userId) throw createError({ statusCode: 401 })',
+  '  const appearance = await db.cZoneSearchAppearance.findUnique({',
+  '    where: { id: appearanceId },',
+  '    include: { ctoon: true, cZoneSearch: true }',
+  '  })',
+  '  if (!appearance) throw createError({ statusCode: 404 })',
+  '  const prizePool = search.prizePool.filter(row => {',
+  '    if (!row?.ctoon) return false',
+  '    if (row.glitchEffect) triggerGlitchSequence()',
+  '    return clampPercent(row.chancePercent) > 0',
+  '  })',
+  '  const chosen = pickWeighted(eligiblePool)',
+  '  await db.cZoneSearchAppearance.createMany({ data: toCreate })',
+  '  const job = await mintQueue.add("mintCtoon", { userId, ctoonId })',
+  '  await job.waitUntilFinished(queueEvents)',
+  '  return { items, glitchEffect: chosen.glitchEffect }',
+  '})',
+  'function startGlitchEffect(item) {',
+  '  glitchPhase.value = 1',
+  '  document.documentElement.classList.add("czone-tv-glitch")',
+  '  setTimeout(() => { glitchPhase.value = 2 }, 3000)',
+  '  setTimeout(() => { glitchPhase.value = 3 }, 6000)',
+  '}',
+  'const czoneSearchItems = ref([])',
+  'const glitchActive = ref(false)',
+  'async function captureCzoneSearchItem(item) {',
+  '  const res = await $fetch("/api/czone/searches/capture", {',
+  '    method: "POST", body: { appearanceId: item.appearanceId }',
+  '  })',
+  '  czoneSearchItems.value = czoneSearchItems.value',
+  '    .filter(i => i.appearanceId !== item.appearanceId)',
+  '  if (item.glitchEffect) stopGlitchEffect()',
+  '}',
+  'model CZoneSearchPrize {',
+  '  id            String  @id @default(uuid())',
+  '  cZoneSearchId String',
+  '  ctoonId       String',
+  '  chancePercent Float   @default(0)',
+  '  glitchEffect  Boolean @default(false)',
+  '  cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId])',
+  '  ctoon       Ctoon       @relation(fields: [ctoonId])',
+  '}',
+  'function randomSearchPosition(size) {',
+  '  const maxX = Math.max(0, CANVAS_W - size)',
+  '  const maxY = Math.max(0, CANVAS_H - size)',
+  '  return {',
+  '    x: Math.floor(Math.random() * (maxX + 1)),',
+  '    y: Math.floor(Math.random() * (maxY + 1))',
+  '  }',
+  '}',
+]
+
+function startGlitchEffect(item) {
+  if (!process.client) return
+  if (glitchActive.value) stopGlitchEffect()
+  glitchItem.value  = item
+  glitchPhase.value = 1
+  glitchActive.value = true
+  document.documentElement.classList.add('czone-tv-glitch')
+
+  // Phase 1 → 2: after 3s switch to TV snow
+  glitchTimers.push(setTimeout(() => {
+    glitchPhase.value = 2
+    document.documentElement.classList.remove('czone-tv-glitch')
+    nextTick(() => startMatrixCanvas('snow'))
+
+    // Phase 2 → matrix: after 2.5s start fading to matrix rain
+    glitchTimers.push(setTimeout(() => {
+      matrixDrawMode = 'matrix'
+
+      // Phase 3: after 0.5s more show the cToon on top
+      glitchTimers.push(setTimeout(() => {
+        glitchPhase.value = 3
+      }, 500))
+    }, 2500))
+  }, 3000))
+}
+
+function stopGlitchEffect() {
+  for (const t of glitchTimers) clearTimeout(t)
+  glitchTimers = []
+  glitchPhase.value  = 0
+  glitchActive.value = false
+  glitchItem.value   = null
+  matrixDrawMode     = 'snow'
+  stopMatrixCanvas()
+  if (process.client) {
+    document.documentElement.classList.remove('czone-tv-glitch')
+  }
+}
+
+function startMatrixCanvas(mode) {
+  const canvas = matrixCanvas.value
+  if (!canvas) return
+  matrixDrawMode = mode
+
+  canvas.width  = window.innerWidth
+  canvas.height = window.innerHeight
+  const ctx = canvas.getContext('2d')
+
+  // Matrix rain columns
+  const fontSize = 14
+  const cols  = Math.floor(canvas.width / fontSize)
+  const drops = new Array(cols).fill(0).map(() => Math.random() * -(canvas.height / fontSize))
+
+  // Characters used in the falling rain
+  const rainChars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ{}[]()<>=+/-_|\\!@#$%^&*;:,.?'
+
+  // Scrolling code overlay
+  let codeY = canvas.height
+  const codeLineH = 20
+  const codeFontSize = 13
+
+  function draw() {
+    if (matrixDrawMode === 'snow') {
+      // TV static noise – draw at ¼ resolution then scale for performance
+      const sw = Math.ceil(canvas.width / 4)
+      const sh = Math.ceil(canvas.height / 4)
+      const imageData = ctx.createImageData(sw, sh)
+      const data = imageData.data
+      for (let i = 0; i < data.length; i += 4) {
+        const v = Math.random() > 0.5 ? 255 : 0
+        data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255
+      }
+      // Draw small then scale up via drawImage
+      const offscreen = document.createElement('canvas')
+      offscreen.width  = sw
+      offscreen.height = sh
+      offscreen.getContext('2d').putImageData(imageData, 0, 0)
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height)
+    } else {
+      // Matrix rain effect
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      ctx.font = `${fontSize}px monospace`
+      for (let i = 0; i < drops.length; i++) {
+        const char = rainChars[Math.floor(Math.random() * rainChars.length)]
+        // Occasional bright white leader character
+        ctx.fillStyle = drops[i] > 0 && Math.random() > 0.97 ? '#ccffcc' : '#00cc44'
+        ctx.fillText(char, i * fontSize, drops[i] * fontSize)
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0
+        drops[i] += 0.6
+      }
+
+      // Scrolling code block overlay
+      codeY -= 1.2
+      if (codeY + MATRIX_CODE_LINES.length * codeLineH < 0) {
+        codeY = canvas.height + codeLineH
+      }
+      ctx.font = `${codeFontSize}px "Courier New", monospace`
+      const codeX = Math.round(canvas.width * 0.08)
+      for (let i = 0; i < MATRIX_CODE_LINES.length; i++) {
+        const lineY = codeY + i * codeLineH
+        if (lineY < -codeLineH || lineY > canvas.height + codeLineH) continue
+        // Highlight the glitchEffect line in brighter green
+        const isBright = MATRIX_CODE_LINES[i].includes('glitchEffect') || MATRIX_CODE_LINES[i].includes('triggerGlitch')
+        ctx.fillStyle = isBright ? '#7fff7f' : '#00ff41'
+        ctx.fillText(MATRIX_CODE_LINES[i], codeX, lineY)
+      }
+    }
+    matrixAnimFrame = requestAnimationFrame(draw)
+  }
+  draw()
+}
+
+function stopMatrixCanvas() {
+  if (matrixAnimFrame) {
+    cancelAnimationFrame(matrixAnimFrame)
+    matrixAnimFrame = null
+  }
+}
+
+async function captureGlitchItem() {
+  const item = glitchItem.value
+  if (!item || item.isCapturing) return
+  await captureCzoneSearchItem(item)
+  stopGlitchEffect()
+}
+
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
@@ -320,6 +546,8 @@ onUnmounted(() => {
   cancelLongPress()
   cz.value.activeDrag = null
   cz.value.buildMode  = false
+  // stop any active glitch effect
+  stopGlitchEffect()
 })
 
 // ── Data loading ──────────────────────────────────────────────
@@ -601,6 +829,7 @@ function buildSearchItems(items) {
       rarity: entry.ctoon?.rarity,
       series: entry.ctoon?.series,
       set: entry.ctoon?.set,
+      glitchEffect: entry.glitchEffect || false,
       x: pos.x,
       y: pos.y,
       size,
@@ -631,6 +860,9 @@ async function loadCzoneSearchItems() {
     }
 
     czoneSearchItems.value = buildSearchItems(items)
+    // Trigger glitch effect for any item that has it enabled
+    const glitchTrigger = czoneSearchItems.value.find(item => item.glitchEffect)
+    if (glitchTrigger) startGlitchEffect(glitchTrigger)
   } catch (err) {
     console.error('MyCzone: failed to load cZone search items', err)
     czoneSearchItems.value = []
@@ -985,4 +1217,144 @@ defineExpose({ save, clearZone })
 .cz-fade-leave-active { transition: opacity 0.2s; }
 .cz-fade-enter-from,
 .cz-fade-leave-to    { opacity: 0; }
+
+/* ─────────────────────────────────────────────────────────────
+   Glitch / Matrix Effect
+───────────────────────────────────────────────────────────── */
+
+/* Phase 1: TV horizontal jitter applied to the root element */
+html.czone-tv-glitch {
+  animation: czone-tv-jitter 0.12s steps(1) infinite;
+  overflow-x: hidden;
+}
+@keyframes czone-tv-jitter {
+  0%   { transform: translateX(0px)   skewX(0deg);   }
+  8%   { transform: translateX(-9px)  skewX(-0.4deg); }
+  16%  { transform: translateX(6px)   skewX(0.3deg);  }
+  24%  { transform: translateX(-4px)  skewX(0.2deg);  }
+  32%  { transform: translateX(11px)  skewX(-0.5deg); }
+  40%  { transform: translateX(-7px)  skewX(0.4deg);  }
+  48%  { transform: translateX(3px)   skewX(-0.2deg); }
+  56%  { transform: translateX(-12px) skewX(0.6deg);  }
+  64%  { transform: translateX(8px)   skewX(-0.3deg); }
+  72%  { transform: translateX(-5px)  skewX(0.2deg);  }
+  80%  { transform: translateX(10px)  skewX(-0.4deg); }
+  88%  { transform: translateX(-3px)  skewX(0.1deg);  }
+  96%  { transform: translateX(6px)   skewX(-0.3deg); }
+  100% { transform: translateX(0px)   skewX(0deg);   }
+}
+
+/* Full-screen overlay container */
+.czone-glitch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Phase 1 overlay: faint scan-lines on top of the jittering page */
+.czone-glitch-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: czone-scanline-flicker 0.08s steps(1) infinite;
+}
+@keyframes czone-scanline-flicker {
+  0%   { opacity: 1;    }
+  30%  { opacity: 0.7;  }
+  60%  { opacity: 0.9;  }
+  80%  { opacity: 0.5;  }
+  100% { opacity: 1;    }
+}
+
+/* Phase 2 & 3: the canvas takes up the entire overlay */
+.czone-matrix-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Phase 3: make the overlay block interaction so only the cToon button is clickable */
+.czone-glitch-phase-3 {
+  pointer-events: auto;
+}
+
+/* cToon wrapper – centred in the overlay */
+.czone-glitch-ctoon-wrapper {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+/* Clickable cToon button */
+.czone-glitch-ctoon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  animation: czone-glitch-ctoon-appear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes czone-glitch-ctoon-appear {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; }
+  50%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
+  75%  { transform: scale(0.96) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg);    opacity: 1; }
+}
+
+/* The cToon image itself – glow in matrix green */
+.czone-glitch-ctoon-img {
+  width: auto;
+  height: auto;
+  max-width: 240px;
+  max-height: 240px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter:
+    drop-shadow(0 0 18px #00ff41)
+    drop-shadow(0 0 40px rgba(0, 255, 65, 0.6))
+    drop-shadow(0 0 70px rgba(0, 255, 65, 0.3));
+  animation: czone-glitch-ctoon-pulse 2s ease-in-out infinite;
+}
+@keyframes czone-glitch-ctoon-pulse {
+  0%   { filter: drop-shadow(0 0 18px #00ff41) drop-shadow(0 0 40px rgba(0,255,65,0.6)); }
+  50%  { filter: drop-shadow(0 0 28px #00ff41) drop-shadow(0 0 60px rgba(0,255,65,0.9)) drop-shadow(0 0 90px rgba(0,255,65,0.4)); }
+  100% { filter: drop-shadow(0 0 18px #00ff41) drop-shadow(0 0 40px rgba(0,255,65,0.6)); }
+}
+
+/* Name label beneath the cToon */
+.czone-glitch-ctoon-label {
+  color: #00ff41;
+  font-family: "Courier New", monospace;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 8px #00ff41, 0 0 20px rgba(0,255,65,0.5);
+  animation: czone-glitch-label-blink 1.4s ease-in-out infinite;
+}
+@keyframes czone-glitch-label-blink {
+  0%, 100% { opacity: 1; }
+  45%       { opacity: 0.6; }
+  50%       { opacity: 1; }
+  55%       { opacity: 0.4; }
+  60%       { opacity: 1; }
+}
 </style>
