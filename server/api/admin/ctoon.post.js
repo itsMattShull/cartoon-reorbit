@@ -54,7 +54,11 @@ export default defineEventHandler(async (event) => {
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
 
     /* Mint limit fields */
-    mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw
+    mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw,
+
+    /* Time-based purchase limit overrides */
+    timeBasedLimitCount: timeBasedLimitCountRaw,
+    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw
   } = fields
 
   if (!name?.trim())   throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
@@ -100,6 +104,8 @@ export default defineEventHandler(async (event) => {
 
   const priceInt = price ? parseInt(price, 10) : 0
   const limitInt = perUserLimit ? parseInt(perUserLimit, 10) : null
+  const timeBasedLimitCountInt      = timeBasedLimitCountRaw      != null && timeBasedLimitCountRaw      !== '' ? parseInt(timeBasedLimitCountRaw,      10) : null
+  const timeBasedLimitWindowDaysInt = timeBasedLimitWindowDaysRaw != null && timeBasedLimitWindowDaysRaw !== '' ? parseInt(timeBasedLimitWindowDaysRaw, 10) : null
   const initialReleaseAtDate = initialReleaseAt ? new Date(initialReleaseAt) : null
   const finalReleaseAtDate   = finalReleaseAt   ? new Date(finalReleaseAt)   : null
   const initialReleaseQtyInt = initialReleaseQty == null || initialReleaseQty === '' ? null : parseInt(initialReleaseQty, 10)
@@ -173,6 +179,8 @@ export default defineEventHandler(async (event) => {
       perUserLimit: limitInt,
       mintLimitType,
       mintEndDate,
+      timeBasedLimitCount:      mintLimitType === 'timeBased' ? timeBasedLimitCountInt      : null,
+      timeBasedLimitWindowDays: mintLimitType === 'timeBased' ? timeBasedLimitWindowDaysInt : null,
       set: setField,
       characters: charactersArr,
       type: type.trim(),

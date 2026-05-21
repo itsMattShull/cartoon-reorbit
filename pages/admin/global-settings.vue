@@ -269,6 +269,89 @@
           </p>
         </div>
 
+        <!-- Time-Based Release Purchase Limits -->
+        <div class="border-t pt-5">
+          <h2 class="text-base font-semibold text-gray-800 mb-1">Time-Based Release Purchase Limits</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Default per-user purchase limits for time-based releases, applied by rarity tier.
+            These are overridden per-cToon when a cToon has its own limit set.
+            Leave <strong>Window (days)</strong> blank to use the full release window (release date → mint end date).
+          </p>
+
+          <!-- Desktop table -->
+          <div class="overflow-x-auto hidden sm:block mb-4">
+            <table class="min-w-full border-separate border-spacing-y-1">
+              <thead>
+                <tr class="text-left text-sm text-gray-600">
+                  <th class="px-3 py-2">Rarity</th>
+                  <th class="px-3 py-2">Purchase Limit</th>
+                  <th class="px-3 py-2">Window (days)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in timeBasedRarities" :key="r" class="bg-gray-50">
+                  <td class="px-3 py-2 font-medium">{{ r }}</td>
+                  <td class="px-3 py-2">
+                    <input
+                      type="number"
+                      min="1"
+                      class="input"
+                      :value="timeBasedLimits[r].countStr"
+                      @input="timeBasedLimits[r].countStr = $event.target.value"
+                      placeholder="No limit"
+                    />
+                  </td>
+                  <td class="px-3 py-2">
+                    <input
+                      type="number"
+                      min="1"
+                      class="input"
+                      :value="timeBasedLimits[r].windowDaysStr"
+                      @input="timeBasedLimits[r].windowDaysStr = $event.target.value"
+                      placeholder="Full duration"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile cards -->
+          <div class="space-y-3 sm:hidden mb-4">
+            <div
+              v-for="r in timeBasedRarities"
+              :key="r"
+              class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+            >
+              <div class="font-semibold text-gray-800 mb-2">{{ r }}</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Purchase Limit</label>
+                  <input
+                    type="number"
+                    min="1"
+                    class="input"
+                    :value="timeBasedLimits[r].countStr"
+                    @input="timeBasedLimits[r].countStr = $event.target.value"
+                    placeholder="No limit"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-600 mb-1">Window (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    class="input"
+                    :value="timeBasedLimits[r].windowDaysStr"
+                    @input="timeBasedLimits[r].windowDaysStr = $event.target.value"
+                    placeholder="Full duration"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div>
           <button class="btn-primary" :disabled="savingCmart" @click="saveCmart">
             <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
@@ -303,6 +386,16 @@ const firstAdditionalCzoneCost      = ref(25000)
 const subsequentAdditionalCzoneCost = ref(50000)
 const cmartHalfPriceEnabled         = ref(false)
 
+// Time-based purchase limits (per rarity)
+const timeBasedRarities = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+const defaultTimeBasedCounts = { 'Common': 5, 'Uncommon': 4, 'Rare': 3, 'Very Rare': 2, 'Crazy Rare': 1 }
+const timeBasedLimits = ref(
+  Object.fromEntries(timeBasedRarities.map(r => [
+    r,
+    { countStr: String(defaultTimeBasedCounts[r]), windowDaysStr: '' }
+  ]))
+)
+
 // Global Points state
 const dailyLoginPoints     = ref(500)
 const dailyNewUserPoints   = ref(1000)
@@ -332,6 +425,17 @@ async function loadGlobal() {
     featuredAuctionIntervalDays.value = Number(g?.featuredAuctionIntervalDays ?? 1)
     featuredAuctionsPerSlot.value     = Number(g?.featuredAuctionsPerSlot ?? 1)
     cmartHalfPriceEnabled.value = Boolean(g?.cmartHalfPriceEnabled ?? false)
+    if (g?.timeBasedPurchaseLimits) {
+      for (const r of timeBasedRarities) {
+        const def = g.timeBasedPurchaseLimits[r]
+        if (def) {
+          timeBasedLimits.value[r] = {
+            countStr:      def.count      != null ? String(def.count)      : String(defaultTimeBasedCounts[r]),
+            windowDaysStr: def.windowDays != null ? String(def.windowDays) : ''
+          }
+        }
+      }
+    }
   } catch (e) {
     console.error('Failed to load global config', e)
   }
@@ -442,12 +546,22 @@ async function saveCmart() {
     savingCmart.value = false
     return
   }
+  // Build the time-based limits payload (convert strings → numbers/null)
+  const timeBasedPurchaseLimits = {}
+  for (const r of timeBasedRarities) {
+    const { countStr, windowDaysStr } = timeBasedLimits.value[r]
+    timeBasedPurchaseLimits[r] = {
+      count:      countStr      !== '' && !isNaN(Number(countStr))      ? Number(countStr)      : null,
+      windowDays: windowDaysStr !== '' && !isNaN(Number(windowDaysStr)) ? Number(windowDaysStr) : null
+    }
+  }
   try {
     await $fetch('/api/admin/global-config', {
       method: 'POST',
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
-        cmartHalfPriceEnabled: cmartHalfPriceEnabled.value
+        cmartHalfPriceEnabled: cmartHalfPriceEnabled.value,
+        timeBasedPurchaseLimits
       }
     })
     toast.value = { type: 'ok', msg: 'cMart settings saved.' }
