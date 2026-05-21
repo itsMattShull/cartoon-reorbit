@@ -352,6 +352,31 @@
 
         <!-- CTOON GRID (right) -->
         <div class="w-full lg:w-3/4">
+
+          <!-- PAGINATION (top) -->
+          <div v-if="totalPages > 1" class="mb-6 flex items-center justify-between gap-2 flex-wrap">
+            <span class="text-sm text-gray-600">
+              Showing {{ (currentPage - 1) * itemsPerPage + 1 }}–{{ Math.min(currentPage * itemsPerPage, filteredAndSortedCtoons.length) }} of {{ filteredAndSortedCtoons.length }} cToons
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                @click="prevPage()"
+                :disabled="currentPage === 1"
+                class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50 text-sm"
+              >
+                ← Prev
+              </button>
+              <span class="text-sm font-medium text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
+              <button
+                @click="nextPage()"
+                :disabled="currentPage >= totalPages"
+                class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50 text-sm"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <div
               v-for="ctoon in pagedCtoons"
@@ -441,22 +466,28 @@
             </div>
           </div>
 
-          <!-- PAGINATION -->
-          <div class="mt-8 flex justify-center gap-4">
-            <button
-              @click="prevPage()"
-              :disabled="currentPage === 1"
-              class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              @click="nextPage()"
-              :disabled="(currentPage * itemsPerPage) >= filteredAndSortedCtoons.length"
-              class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-            >
-              Next
-            </button>
+          <!-- PAGINATION (bottom) -->
+          <div v-if="totalPages > 1" class="mt-8 flex items-center justify-between gap-2 flex-wrap">
+            <span class="text-sm text-gray-600">
+              Showing {{ (currentPage - 1) * itemsPerPage + 1 }}–{{ Math.min(currentPage * itemsPerPage, filteredAndSortedCtoons.length) }} of {{ filteredAndSortedCtoons.length }} cToons
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                @click="prevPage()"
+                :disabled="currentPage === 1"
+                class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50 text-sm"
+              >
+                ← Prev
+              </button>
+              <span class="text-sm font-medium text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
+              <button
+                @click="nextPage()"
+                :disabled="currentPage >= totalPages"
+                class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50 text-sm"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1091,6 +1122,10 @@ const filteredAndSortedCtoons = computed(() => {
 })
 
 // ────────── PAGINATION ─────────────────────────
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredAndSortedCtoons.value.length / itemsPerPage))
+)
+
 const pagedCtoons = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
   return filteredAndSortedCtoons.value.slice(start, start + itemsPerPage)
@@ -1124,7 +1159,7 @@ function prevPage () {
   }
 }
 function nextPage () {
-  if ((currentPage.value * itemsPerPage) < filteredAndSortedCtoons.value.length) {
+  if (currentPage.value < totalPages.value) {
     currentPage.value++
     scrollToTop()
   }
