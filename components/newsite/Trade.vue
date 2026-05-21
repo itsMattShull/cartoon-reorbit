@@ -1248,6 +1248,11 @@ onBeforeUnmount(() => {
   gap: 6px;
   flex-shrink: 0;
 }
+@media (max-width: 640px) {
+  .tr-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .tr-card-wrap {
   min-height: 0;
 }
