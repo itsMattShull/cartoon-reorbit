@@ -138,21 +138,21 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
 }
 
 .tc-badge--owned {
-  background: rgba(74,222,128,0.25);
-  color: #4ade80;
-  border: 1px solid rgba(74,222,128,0.4);
+  background: #16a34a;
+  color: #fff;
+  border: 1px solid #15803d;
 }
 
 .tc-badge--unowned {
-  background: rgba(156,163,175,0.2);
-  color: #d1d5db;
-  border: 1px solid rgba(156,163,175,0.3);
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #b91c1c;
 }
 
 .tc-badge--blue {
-  background: rgba(96,165,250,0.2);
-  color: #93c5fd;
-  border: 1px solid rgba(96,165,250,0.35);
+  background: #16a34a;
+  color: #fff;
+  border: 1px solid #15803d;
 }
 
 .tc-in-trade {
@@ -170,19 +170,20 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
 
 .tc-selected-pip {
   position: absolute;
-  bottom: 3px;
+  top: 3px;
   left: 3px;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: bold;
   color: #fff;
-  background: var(--OrbitLightBlue, #3399CC);
-  width: 14px;
-  height: 14px;
+  background: #7c3aed;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  box-shadow: 0 0 0 2px rgba(124,58,237,0.4), 0 1px 4px rgba(0,0,0,0.5);
 }
 
 /* ── Middle: name + rarity ── */
