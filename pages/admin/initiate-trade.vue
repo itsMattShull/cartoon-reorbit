@@ -84,8 +84,7 @@
             <span class="text-xs text-gray-500">Select one or more</span>
           </div>
           <button
-            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
-            :disabled="!selectedTargetCtoons.length"
+            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white"
             @click="currentStep = 2"
           >
             Next
@@ -132,8 +131,7 @@
 
         <div class="mt-4 flex justify-end">
           <button
-            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
-            :disabled="!selectedTargetCtoons.length"
+            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white"
             @click="currentStep = 2"
           >
             Next
@@ -150,7 +148,7 @@
           <div class="flex items-center gap-3">
             <button
               class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
-              :disabled="selectedOfficialCtoons.length === 0"
+              :disabled="!hasAnySelection"
               @click="currentStep = 3"
             >
               Confirm Offer
@@ -221,7 +219,7 @@
           <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 1">Back</button>
           <button
             class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
-            :disabled="selectedOfficialCtoons.length === 0"
+            :disabled="!hasAnySelection"
             @click="currentStep = 3"
           >
             Confirm Offer
@@ -276,7 +274,7 @@
           <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 2">Back</button>
           <button
             class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
-            :disabled="selectedOfficialCtoons.length === 0 || makingOffer"
+            :disabled="!hasAnySelection || makingOffer"
             @click="sendOffer"
           >
             <span v-if="makingOffer">Making Offer...</span>
@@ -521,6 +519,7 @@ const selectedTargetCtoons = ref([])
 const selectedOfficialCtoons = ref([])
 const selectedTargetCtoonsMap = computed(() => new Set(selectedTargetCtoons.value.map(c => c.id)))
 const selectedOfficialCtoonsMap = computed(() => new Set(selectedOfficialCtoons.value.map(c => c.id)))
+const hasAnySelection = computed(() => selectedTargetCtoons.value.length + selectedOfficialCtoons.value.length > 0)
 
 function toggleTargetCtoon(c) {
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
@@ -651,7 +650,7 @@ const toast = reactive({ show:false, message:'' })
 
 async function sendOffer() {
   if (!targetUser.value || !officialUser.value) return
-  if (selectedTargetCtoons.value.length === 0 || selectedOfficialCtoons.value.length === 0) return
+  if (!hasAnySelection.value) return
 
   const recipient = targetUser.value.username // capture before any reset
   const payload = {
