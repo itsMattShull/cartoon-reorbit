@@ -273,8 +273,9 @@ export default defineEventHandler(async (event) => {
     seen.add(ctoonId)
     const chancePercent = parsePercent(row?.chancePercent, 'cToon chance percent')
     const maxCaptures = isCustom ? parseMaxCaptures(row?.maxCaptures) : null
+    const glitchEffect = parseBoolean(row?.glitchEffect)
     const conditions = await normalizeConditions(row, windowDates)
-    return { ctoonId, chancePercent, maxCaptures, ...conditions }
+    return { ctoonId, chancePercent, maxCaptures, glitchEffect, ...conditions }
   }))
 
   if (!entries.some(e => e.chancePercent > 0)) {

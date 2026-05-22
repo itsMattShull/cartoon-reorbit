@@ -533,6 +533,7 @@ export default defineEventHandler(async (event) => {
     items.push({
       appearanceId,
       cZoneSearchId: search.id,
+      glitchEffect: chosen.glitchEffect || false,
       ctoon: {
         id:        chosen.ctoon.id,
         name:      chosen.ctoon.name,

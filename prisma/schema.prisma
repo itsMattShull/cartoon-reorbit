@@ -162,6 +162,7 @@ model CZoneSearchPrize {
   conditionSetTotalCountSet String?
   conditionOwnsLessThanEnabled Boolean @default(false)
   conditionOwnsLessThanCount   Int?
+  glitchEffect                 Boolean @default(false)
 
   cZoneSearch CZoneSearch @relation(fields: [cZoneSearchId], references: [id], onDelete: Cascade)
   ctoon       Ctoon       @relation(fields: [ctoonId], references: [id], onDelete: Cascade)

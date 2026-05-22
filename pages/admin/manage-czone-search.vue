@@ -520,6 +520,17 @@
                         </div>
                       </div>
                     </div>
+
+                    <div class="flex items-start gap-3 border-t pt-3 mt-1">
+                      <input v-model="row.glitchEffect" type="checkbox" class="mt-1" id="glitch-effect" />
+                      <div class="flex-1">
+                        <div class="text-sm font-medium flex items-center gap-2">
+                          <span>⚡ Glitch Effect</span>
+                          <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">Matrix</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-0.5">When selected in cZone Search, triggers a full-page TV glitch → static snow → Matrix green code effect before the cToon appears for capture.</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -673,7 +684,8 @@ function initPrizeRow(row) {
     conditionSetTotalCountSearching: false,
     conditionSetTotalCountFocused: false,
     conditionOwnsLessThanEnabled: Boolean(row.conditionOwnsLessThanEnabled),
-    conditionOwnsLessThanCount: row.conditionOwnsLessThanCount ?? ''
+    conditionOwnsLessThanCount: row.conditionOwnsLessThanCount ?? '',
+    glitchEffect: Boolean(row.glitchEffect)
   }
 }
 
@@ -1095,6 +1107,7 @@ async function openEdit(row) {
     conditionSetTotalCountSet: p.conditionSetTotalCountSet,
     conditionOwnsLessThanEnabled: p.conditionOwnsLessThanEnabled,
     conditionOwnsLessThanCount: p.conditionOwnsLessThanCount,
+    glitchEffect: p.glitchEffect,
     ctoon: p.ctoon
   }))
   formError.value = ''
@@ -1319,7 +1332,8 @@ async function saveSearch() {
       conditionSetTotalCountMin: p.conditionSetTotalCountEnabled ? Number(p.conditionSetTotalCountMin) : null,
       conditionSetTotalCountSet: p.conditionSetTotalCountEnabled ? String(p.conditionSetTotalCountSet || '').trim() : null,
       conditionOwnsLessThanEnabled: Boolean(p.conditionOwnsLessThanEnabled),
-      conditionOwnsLessThanCount: p.conditionOwnsLessThanEnabled ? Number(p.conditionOwnsLessThanCount) : null
+      conditionOwnsLessThanCount: p.conditionOwnsLessThanEnabled ? Number(p.conditionOwnsLessThanCount) : null,
+      glitchEffect: Boolean(p.glitchEffect)
     }))
   }
 
