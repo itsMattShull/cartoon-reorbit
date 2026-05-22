@@ -15,6 +15,7 @@
     <CtoonFilter
       v-if="cmartTab === 'ctoons'"
       :show-hide-unavailable="true"
+      :show-common-filters="true"
       :sort-options="cmartSortOptions"
     />
   </div>

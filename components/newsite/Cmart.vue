@@ -248,6 +248,21 @@ const loading    = ref(true)
 const buyingIds  = ref([])
 const cmartEl    = ref(null)
 const filter     = useNewSiteCtoonFilter()
+const aFilters   = useAuctionHouseFilters()
+
+// Lazily loaded list of ctoonIds the user has wishlisted (for the Wishlist pill)
+const wishlistCtoonIds = ref([])
+let wishlistLoaded = false
+async function loadWishlist() {
+  if (wishlistLoaded) return
+  try {
+    const items = await $fetch('/api/wishlist')
+    wishlistCtoonIds.value = Array.isArray(items) ? items.map(i => i?.id).filter(Boolean) : []
+  } finally {
+    wishlistLoaded = true
+  }
+}
+watch(() => aFilters.value.wishlistOnly, val => { if (val) loadWishlist() })
 
 // ── Half-price setting ─────────────────────────────────────────
 const cmartHalfPriceEnabled = ref(false)
@@ -391,6 +406,19 @@ const ctoons = computed(() => {
 
   if (f.hideUnavailable)
     list = list.filter(c => !c.nextReleaseAt && !(c.quantity != null && c.totalMinted >= c.quantity))
+
+  if (aFilters.value.gtoonsOnly)
+    list = list.filter(c => c.isGtoon)
+
+  if (aFilters.value.wishlistOnly) {
+    const wishSet = new Set(wishlistCtoonIds.value)
+    list = list.filter(c => wishSet.has(c.id))
+  }
+
+  if (aFilters.value.selectedOwned === 'owned')
+    list = list.filter(c => originalOwnedSet.value.has(c.id))
+  else if (aFilters.value.selectedOwned === 'unowned')
+    list = list.filter(c => !originalOwnedSet.value.has(c.id))
 
   const byReleaseDateDesc = (a, b) => {
     const at = a.releaseDate ? new Date(a.releaseDate).getTime() : 0

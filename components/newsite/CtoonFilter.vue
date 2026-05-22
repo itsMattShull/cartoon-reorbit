@@ -68,18 +68,18 @@
       </div>
     </div>
 
-    <!-- Auction-specific filters -->
-    <template v-if="showAuctionFilters">
+    <!-- Auction-specific + common filters -->
+    <template v-if="showAuctionFilters || showCommonFilters">
       <hr class="cf-divider" />
       <div>
         <div class="cf-section-label">Filters</div>
         <div class="cf-pill-row">
-          <button class="cf-pill" :class="{ active: aFilters.featuredOnly }" @click="aFilters.featuredOnly = !aFilters.featuredOnly">★ Feat.</button>
-          <button class="cf-pill" :class="{ active: aFilters.hasBidsOnly  }" @click="aFilters.hasBidsOnly  = !aFilters.hasBidsOnly" >Has Bids</button>
-          <button class="cf-pill" :class="{ active: aFilters.gtoonsOnly   }" @click="aFilters.gtoonsOnly   = !aFilters.gtoonsOnly"  >gToons</button>
-          <button class="cf-pill" :class="{ active: aFilters.wishlistOnly }" @click="aFilters.wishlistOnly = !aFilters.wishlistOnly">Wishlist</button>
+          <button v-if="showAuctionFilters" class="cf-pill" :class="{ active: aFilters.featuredOnly }" @click="aFilters.featuredOnly = !aFilters.featuredOnly">★ Feat.</button>
+          <button v-if="showAuctionFilters" class="cf-pill" :class="{ active: aFilters.hasBidsOnly  }" @click="aFilters.hasBidsOnly  = !aFilters.hasBidsOnly" >Has Bids</button>
+          <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.gtoonsOnly   }" @click="aFilters.gtoonsOnly   = !aFilters.gtoonsOnly"  >gToons</button>
+          <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.wishlistOnly }" @click="aFilters.wishlistOnly = !aFilters.wishlistOnly">Wishlist</button>
         </div>
-        <div class="cf-owned-row">
+        <div v-if="showCommonFilters" class="cf-owned-row">
           <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'all'     }" @click="aFilters.selectedOwned = 'all'"    >All</button>
           <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'owned'   }" @click="aFilters.selectedOwned = 'owned'"  >Owned</button>
           <button class="cf-owned-btn" :class="{ active: aFilters.selectedOwned === 'unowned' }" @click="aFilters.selectedOwned = 'unowned'">Unowned</button>
@@ -108,6 +108,7 @@ const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
   showSortDir:         { type: Boolean, default: true  },
   showAuctionFilters:  { type: Boolean, default: false },
+  showCommonFilters:   { type: Boolean, default: false },
   sortOptions: {
     type: Array,
     default: () => [
@@ -159,7 +160,7 @@ function clearFilters() {
     sortAsc:         true,
     hideUnavailable: false,
   })
-  if (props.showAuctionFilters) {
+  if (props.showAuctionFilters || props.showCommonFilters) {
     Object.assign(aFilters.value, {
       featuredOnly:  false,
       hasBidsOnly:   false,
