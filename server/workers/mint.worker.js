@@ -20,7 +20,14 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     // ───────────────────── Time-based mint window guard ─────────────────────
     if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
       if (new Date(ctoon.mintEndDate) <= new Date()) {
-        throw new Error('Minting period has ended')
+        // After the minting window closes the mint-end job finalizes the quantity
+        // (changes it away from TIME_BASED_CAP).  Only hard-block while the sentinel
+        // is still in place; once finalized, fall through and let normal sold-out
+        // checks handle clearance purchases.
+        if (ctoon.quantity === TIME_BASED_CAP) {
+          throw new Error('Minting period has ended')
+        }
+        // quantity is finalized — fall through to normal sold-out checks
       }
     }
 
