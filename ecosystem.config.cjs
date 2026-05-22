@@ -26,8 +26,9 @@
 // Load .env so NUXT_PORT / SOCKET_PORT are available at config-parse time
 require('dotenv').config()
 
-const NUXT_PORT   = process.env.NUXT_PORT   || '3000'
-const SOCKET_PORT = process.env.SOCKET_PORT || '3001'
+const NUXT_PORT        = process.env.NUXT_PORT   || '3000'
+const SOCKET_PORT      = process.env.SOCKET_PORT || '3001'
+const OFFICIAL_USERNAME = 'UmbraRobotTycoon'
 
 const DIAG_ENV = {
   DIAG_ENABLED:           '0',
@@ -63,10 +64,11 @@ module.exports = {
         ...DIAG_ENV,
       },
       env_development: {
-        NODE_ENV:      'production',
-        NITRO_PORT:    NUXT_PORT,
-        NUXT_PORT:     NUXT_PORT,
-        TKO_PASSCODE:  process.env.TKO_PASSCODE,
+        NODE_ENV:        'production',
+        NITRO_PORT:      NUXT_PORT,
+        NUXT_PORT:       NUXT_PORT,
+        TKO_PASSCODE:    process.env.TKO_PASSCODE,
+        OFFICIAL_USERNAME,
         ...DIAG_ENV,
       },
     },
@@ -90,8 +92,9 @@ module.exports = {
         ...DIAG_ENV,
       },
       env_development: {
-        NODE_ENV:    'production',
-        SOCKET_PORT: SOCKET_PORT,
+        NODE_ENV:        'production',
+        SOCKET_PORT:     SOCKET_PORT,
+        OFFICIAL_USERNAME,
         ...DIAG_ENV,
       },
     },
@@ -103,7 +106,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: time-based mint window closure ───────────────────────
@@ -113,7 +116,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -123,7 +126,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: dissolve auction launch ────────────────────────────
@@ -133,7 +136,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -143,7 +146,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -153,7 +156,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
   ],
 }
