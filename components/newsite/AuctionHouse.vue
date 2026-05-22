@@ -89,7 +89,6 @@
             <div v-if="activeTab === 'mybids'" class="ah-bid-val">My: {{ item.myBid != null ? item.myBid + ' pts' : '—' }}</div>
             <div class="ah-bid-label">{{ Number(item.bidCount ?? 0) > 0 ? 'Current:' : 'Start:' }}</div>
             <div class="ah-bid-val">{{ Number(item.bidCount ?? 0) > 0 ? formatHighestBid(item) : (item.initialBid != null ? item.initialBid + ' pts' : '—') }}</div>
-            <div class="ah-bid-ct">{{ item.bidCount ?? 0 }} bid{{ item.bidCount !== 1 ? 's' : '' }}</div>
           </div>
 
           <!-- Time -->
@@ -553,8 +552,11 @@ function formatRemaining(endAt) {
 }
 
 function formatHighestBid(item) {
-  if (Number(item?.bidCount ?? 0) < 1) return 'No bids'
-  return item?.highestBid != null ? `${item.highestBid} pts` : 'No bids'
+  const count = Number(item?.bidCount ?? 0)
+  if (count < 1) return 'No bids'
+  const bid = item?.highestBid ?? item?.winningBid
+  if (bid == null) return 'No bids'
+  return `${bid} pts (${count} bid${count !== 1 ? 's' : ''})`
 }
 
 const RARITY_MAP = {
