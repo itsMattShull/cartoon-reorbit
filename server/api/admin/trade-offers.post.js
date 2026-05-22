@@ -6,6 +6,11 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { isSyntheticUserCtoonId, resolveUserCtoonId } from '@/server/utils/userCtoonId'
+
+async function resolveIds(ids) {
+  return Promise.all(ids.map(id => isSyntheticUserCtoonId(id) ? resolveUserCtoonId(id) : id))
+}
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -49,6 +54,9 @@ export default defineEventHandler(async (event) => {
   if (Number(pointsOffered) > 0) {
     throw createError({ statusCode: 400, statusMessage: 'Points are not supported for admin-initiated trades.' })
   }
+  if (ctoonIdsOffered.length + ctoonIdsRequested.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Trade must include at least one cToon.' })
+  }
 
   // 4) Lookup recipient & ensure not the official account
   const recipient = await prisma.user.findUnique({
@@ -65,13 +73,25 @@ export default defineEventHandler(async (event) => {
     console.warn(`Cannot DM ${recipientUsername}: no discordId on record`)
   }
 
+  // 4a) Resolve synthetic UserCtoon IDs (uc|userId|ctoonId|mint) returned by
+  // /api/collection/[username] into real DB UUIDs. /api/admin/official-collection
+  // already returns real UUIDs, so non-synthetic inputs pass through.
+  const resolvedOffered = await resolveIds(ctoonIdsOffered)
+  const resolvedRequested = await resolveIds(ctoonIdsRequested)
+  if (resolvedOffered.some(id => !id) || resolvedRequested.some(id => !id)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'One or more cToons could not be resolved (may have been traded, burned, or moved).'
+    })
+  }
+
   // 5) Verify ownership of offered cToons (official account)
-  if (ctoonIdsOffered.length) {
+  if (resolvedOffered.length) {
     const ownedByOfficial = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsOffered }, userId: official.id },
+      where: { id: { in: resolvedOffered }, userId: official.id },
       select: { id: true }
     })
-    if (ownedByOfficial.length !== ctoonIdsOffered.length) {
+    if (ownedByOfficial.length !== resolvedOffered.length) {
       throw createError({
         statusCode: 400,
         statusMessage: 'One or more offered cToons are not owned by the official account or no longer available'
@@ -80,12 +100,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // 6) Verify ownership of requested cToons (recipient)
-  if (ctoonIdsRequested.length) {
+  if (resolvedRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: { id: { in: ctoonIdsRequested }, userId: recipient.id },
+      where: { id: { in: resolvedRequested }, userId: recipient.id },
       select: { id: true }
     })
-    if (ownedByRecipient.length !== ctoonIdsRequested.length) {
+    if (ownedByRecipient.length !== resolvedRequested.length) {
       throw createError({
         statusCode: 400,
         statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
@@ -94,9 +114,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // 7) Prevent trades involving cToons in active auctions
-  if (ctoonIdsOffered.length) {
+  if (resolvedOffered.length) {
     const offeredActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsOffered }, status: 'ACTIVE' },
+      where: { userCtoonId: { in: resolvedOffered }, status: 'ACTIVE' },
       select: { id: true }
     })
     if (offeredActiveAuction) {
@@ -106,9 +126,9 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
-  if (ctoonIdsRequested.length) {
+  if (resolvedRequested.length) {
     const requestedActiveAuction = await prisma.auction.findFirst({
-      where: { userCtoonId: { in: ctoonIdsRequested }, status: 'ACTIVE' },
+      where: { userCtoonId: { in: resolvedRequested }, status: 'ACTIVE' },
       select: { id: true }
     })
     if (requestedActiveAuction) {
@@ -128,8 +148,8 @@ export default defineEventHandler(async (event) => {
         pointsOffered: 0,
         ctoons: {
           create: [
-            ...ctoonIdsOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
-            ...ctoonIdsRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
+            ...resolvedOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
+            ...resolvedRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
           ]
         }
       },
