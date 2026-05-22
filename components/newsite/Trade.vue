@@ -402,7 +402,7 @@
                     <span class="tm-own-badge" :class="selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'owned' : 'unowned'">
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
-                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" />
+                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
                     <span class="tm-dim">{{ tc.userCtoon.ctoon.rarity }}</span>
                     <span class="tm-dim">Mint #{{ tc.userCtoon.mintNumber }} of {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}</span>
@@ -423,7 +423,7 @@
                     <span class="tm-own-badge" :class="selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'owned' : 'unowned'">
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
-                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" />
+                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
                     <span class="tm-dim">{{ tc.userCtoon.ctoon.rarity }}</span>
                     <span class="tm-dim">Mint #{{ tc.userCtoon.mintNumber }} of {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}</span>
@@ -489,6 +489,15 @@ import CtoonCard from '@/components/trade/CtoonCard.vue'
 
 const route = useRoute()
 const { user, fetchSelf } = useAuth()
+const { open: openCtoonModal } = useCtoonModal()
+
+function openTradeCToon(tc) {
+  openCtoonModal({
+    userCtoonId: tc.userCtoon.id,
+    assetPath:   tc.userCtoon.ctoon.assetPath,
+    name:        tc.userCtoon.ctoon.name,
+  })
+}
 
 const {
   tradeActiveTab,
@@ -1407,7 +1416,8 @@ onBeforeUnmount(() => {
 }
 .tm-own-badge.owned { background: #16a34a; color: #fff; border: 1px solid #15803d; }
 .tm-own-badge.unowned { background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.3); }
-.tm-card-img { width: 80px; height: 80px; object-fit: contain; margin-top: 14px; }
+.tm-card-img { width: 80px; height: 80px; object-fit: contain; margin-top: 14px; cursor: pointer; transition: opacity 0.15s; }
+.tm-card-img:hover { opacity: 0.8; }
 .tm-card-name { font-size: 0.65rem; color: white; font-weight: bold; text-align: center; line-height: 1.2; }
 .tm-dim { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-align: center; }
 .tm-own-stats {

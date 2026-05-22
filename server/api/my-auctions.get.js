@@ -194,6 +194,7 @@ export default defineEventHandler(async (event) => {
     createdAt:        a.createdAt.toISOString(),
     endAt:            a.endAt.toISOString(),      // <— new
     initialBid:       a.initialBet,
+    highestBid:       a.bids[0]?.amount ?? null,
     winningBid:       a.bids[0]?.amount ?? null,
     winningBidder:    a.bids[0]?.user.username ?? null,
     bidCount:         a._count?.bids ?? 0,
