@@ -136,6 +136,16 @@
                 class="ah-own-badge ah-card-own-badge"
                 :class="item.isOwned ? 'ah-own-badge--owned' : 'ah-own-badge--unowned'"
               >{{ item.isOwned ? 'Owned' : 'Unowned' }}</span>
+              <span
+                v-else-if="activeTab === 'mybids' && isEnded(item.endAt)"
+                class="ah-own-badge ah-card-own-badge"
+                :class="item.didWin ? 'ah-own-badge--won' : 'ah-own-badge--lost'"
+              >{{ item.didWin ? 'Won' : 'Lost' }}</span>
+              <span
+                v-else-if="activeTab === 'mybids'"
+                class="ah-own-badge ah-card-own-badge"
+                :class="item.myBid != null && item.myBid === item.highestBid ? 'ah-own-badge--won' : 'ah-own-badge--lost'"
+              >{{ item.myBid != null && item.myBid === item.highestBid ? 'Winning' : 'Losing' }}</span>
             </div>
           </template>
           <template #middle>
@@ -914,6 +924,16 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.ah-own-badge--won {
+  background: #16a34a;
+  color: #fff;
+  border: 1px solid #15803d;
+}
+.ah-own-badge--lost {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #b91c1c;
 }
 .ah-card-own-badge {
   position: absolute;
