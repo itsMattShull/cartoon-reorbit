@@ -249,7 +249,7 @@ onMounted(async () => {
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: var(--shortcard-height);
   grid-auto-flow: row;
   gap: 4px;
