@@ -6,4 +6,4 @@ ALTER TABLE "GlobalGameConfig"
   ADD COLUMN "featuredAuctionLastFiredSlot" TEXT;
 
 ALTER TABLE "GlobalGameConfig"
-  DROP COLUMN "featuredAuctionsPerDay";
+  DROP COLUMN IF EXISTS "featuredAuctionsPerDay";
