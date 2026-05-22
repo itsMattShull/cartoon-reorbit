@@ -4,7 +4,7 @@ require('dotenv').config()
 
 const NUXT_PORT        = process.env.NUXT_PORT   || '3000'
 const SOCKET_PORT      = process.env.SOCKET_PORT || '3001'
-const OFFICIAL_USERNAME = 'UmbraRobotTycoon'
+const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'UmbraRobotTycoon'
 
 /**
  * PM2 ecosystem file — cartoon-reorbit (DEVELOPMENT)

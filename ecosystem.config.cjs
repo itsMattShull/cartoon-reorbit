@@ -28,8 +28,8 @@ require('dotenv').config()
 
 const NUXT_PORT             = process.env.NUXT_PORT   || '3000'
 const SOCKET_PORT           = process.env.SOCKET_PORT || '3001'
-const OFFICIAL_USERNAME_PROD = 'CartoonReOrbitOfficial'
-const OFFICIAL_USERNAME_DEV  = 'UmbraRobotTycoon'
+const OFFICIAL_USERNAME_PROD = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+const OFFICIAL_USERNAME_DEV  = process.env.OFFICIAL_USERNAME || 'UmbraRobotTycoon'
 
 const DIAG_ENV = {
   DIAG_ENABLED:           '0',
