@@ -74,8 +74,6 @@ export default defineEventHandler(async (event) => {
       local.splice(local.findIndex(o => o.ctoon.id === pick.ctoon.id), 1)
     }
   }
-  if (!chosen.length) throw createError({ statusCode: 500, statusMessage: 'Pack yielded no cToons' })
-
   /* map of how many of each cToon we’re about to mint */
   const chosenCounts = chosen.reduce((m, c) => {
     m[c.id] = (m[c.id] || 0) + 1
@@ -83,11 +81,24 @@ export default defineEventHandler(async (event) => {
   }, {})
 
   /* ── 2. Mark opened, prune depleted, rebalance, update counts ─────────── */
+  //
+  // IMPORTANT: The depletion check and pack-unlisting logic run inside this
+  // transaction regardless of whether any cToons were drawn (chosen.length may
+  // be 0 when every rarity’s pool is exhausted).  We must NOT throw before the
+  // transaction executes, otherwise a pack whose last rarity just sold out
+  // would never be taken offline.
+  //
   await db.$transaction(async (tx) => {
-    await tx.userPack.update({
-      where: { id: userPackId },
-      data:  { opened: true, openedAt: new Date() }
-    })
+    // Only mark the UserPack as opened when cToons were actually drawn.
+    // If the pool was empty the user’s sealed pack is preserved so they
+    // don’t silently lose it; the important side-effect (unlisting the pack)
+    // still happens below.
+    if (chosen.length > 0) {
+      await tx.userPack.update({
+        where: { id: userPackId },
+        data:  { opened: true, openedAt: new Date() }
+      })
+    }
 
     const packId = userPack.pack.id
     const sellOutBehavior = userPack.pack.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
@@ -171,9 +182,22 @@ export default defineEventHandler(async (event) => {
       : anyRarityEmpty
 
     if (shouldUnlist) {
-      await tx.pack.update({ where: { id: packId }, data: { inCmart: false } })
+      // Also set sentAt so the hourly cron (markScheduledPacksInCmart) does not
+      // re-enable this pack.  The cron only targets rows where sentAt IS NULL,
+      // so stamping it here prevents an accidental re-listing after sell-out.
+      await tx.pack.update({
+        where: { id: packId },
+        data:  { inCmart: false, sentAt: new Date() }
+      })
     }
   })
+
+  // Now that the depletion / unlisting transaction has committed, it is safe
+  // to surface the "no cToons" error.  (The pack has already been taken
+  // offline if a rarity was fully exhausted.)
+  if (!chosen.length) {
+    throw createError({ statusCode: 500, statusMessage: 'Pack yielded no cToons' })
+  }
 
   /* ── 3. queue mints & build response ───────────────────── */
   for (const c of chosen)
