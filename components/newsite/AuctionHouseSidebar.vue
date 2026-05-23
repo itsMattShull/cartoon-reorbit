@@ -3,6 +3,7 @@
     :sort-options="auctionSortOptions"
     :show-sort-dir="false"
     :show-auction-filters="true"
+    :show-common-filters="true"
   />
 </template>
 
