@@ -1,12 +1,13 @@
 <template>
   <div class="newsite-admin">
     <div class="newsite-admin-nav">
-      <AdminNav @select="onSelect" />
+      <AdminNav />
     </div>
     <div class="newsite-admin-body">
-      <AdminAnalytics v-if="currentSection === 'analytics'" />
+      <AdminAnalytics v-if="!section" />
+      <AdminManageUsers v-else-if="section === 'manageUsers'" />
       <div v-else class="newsite-admin-placeholder">
-        <h1 class="newsite-admin-title">Admin</h1>
+        <h1 class="newsite-admin-title">Unknown section</h1>
       </div>
     </div>
   </div>
@@ -25,11 +26,8 @@ useHead({ htmlAttrs: { class: 'newsite-admin-page' } })
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
-const currentSection = ref('analytics')
-function onSelect(id) {
-  if (id === 'analytics') currentSection.value = 'analytics'
-  // placeholders intentionally do nothing
-}
+const route = useRoute()
+const section = computed(() => route.params.section || null)
 </script>
 
 <style>
