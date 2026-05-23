@@ -3,12 +3,19 @@
     <div class="admin-nav-dropdown" ref="dropdownRef">
       <BlueButton :style="{ height: buttonHeight }" @click.stop="toggleOpen">Admin Core ▾</BlueButton>
       <div v-if="open" class="admin-nav-menu">
-        <button
-          v-for="item in items"
-          :key="item.id"
-          class="admin-nav-menu-item"
-          @click="onItemClick(item)"
-        >{{ item.label }}</button>
+        <template v-for="item in items" :key="item.id">
+          <NuxtLink
+            v-if="item.to"
+            :to="item.to"
+            class="admin-nav-menu-item"
+            @click="open = false"
+          >{{ item.label }}</NuxtLink>
+          <button
+            v-else
+            class="admin-nav-menu-item"
+            @click="open = false"
+          >{{ item.label }}</button>
+        </template>
       </div>
     </div>
 
@@ -30,19 +37,17 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['select'])
-
 const items = [
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'placeholder-1', label: 'Placeholder' },
-  { id: 'placeholder-2', label: 'Placeholder' },
-  { id: 'placeholder-3', label: 'Placeholder' },
-  { id: 'placeholder-4', label: 'Placeholder' },
-  { id: 'placeholder-5', label: 'Placeholder' },
-  { id: 'placeholder-6', label: 'Placeholder' },
-  { id: 'placeholder-7', label: 'Placeholder' },
-  { id: 'placeholder-8', label: 'Placeholder' },
-  { id: 'placeholder-9', label: 'Placeholder' }
+  { id: 'analytics',   label: 'Analytics',    to: '/newsite/admin' },
+  { id: 'manageUsers', label: 'Manage Users', to: '/newsite/admin/manageUsers' },
+  { id: 'placeholder-1', label: 'Placeholder', to: null },
+  { id: 'placeholder-2', label: 'Placeholder', to: null },
+  { id: 'placeholder-3', label: 'Placeholder', to: null },
+  { id: 'placeholder-4', label: 'Placeholder', to: null },
+  { id: 'placeholder-5', label: 'Placeholder', to: null },
+  { id: 'placeholder-6', label: 'Placeholder', to: null },
+  { id: 'placeholder-7', label: 'Placeholder', to: null },
+  { id: 'placeholder-8', label: 'Placeholder', to: null }
 ]
 
 const open = ref(false)
@@ -50,11 +55,6 @@ const dropdownRef = ref(null)
 
 function toggleOpen() {
   open.value = !open.value
-}
-
-function onItemClick(item) {
-  open.value = false
-  emit('select', item.id)
 }
 
 function onGlobalClick(e) {
@@ -110,6 +110,8 @@ onBeforeUnmount(() => {
 }
 
 .admin-nav-menu-item {
+  display: block;
+  width: 100%;
   background: transparent;
   border: none;
   color: #fff;
@@ -119,6 +121,7 @@ onBeforeUnmount(() => {
   font-family: inherit;
   font-size: 0.85rem;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .admin-nav-menu-item:hover {
