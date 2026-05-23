@@ -3,7 +3,7 @@
     <NuxtLink to="/newsite/home">
       <BlueButton :style="{ height: buttonHeight }">ReOrbit Home</BlueButton>
     </NuxtLink>
-    <NuxtLink v-if="isAdmin" to="/admin">
+    <NuxtLink v-if="isAdmin" to="/newsite/admin">
       <BlueButton :style="{ height: buttonHeight }">Admin</BlueButton>
     </NuxtLink>
     <NuxtLink v-if="isMobile" to="/newsite/settings" class="nav-link">
