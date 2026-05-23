@@ -1,19 +1,19 @@
 <template>
-  <div class="admin-manage-users bg-gray-50">
-    <div class="max-w-7xl mx-auto px-4 py-6">
+  <div class="admin-manage-users bg-gray-50 text-xs">
+    <div class="px-2 py-2">
       <!-- Controls -->
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+      <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-2">
         <div class="flex items-center gap-2 w-full md:w-auto">
           <input
             v-model="filter"
             type="text"
             placeholder="Search username or Discord tag"
-            class="w-full md:w-80 border rounded-md px-3 py-2"
+            class="w-full md:w-72 border rounded-md px-1.5 py-0.5 text-xs"
           />
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <select v-model="statusFilter" class="px-3 py-1 text-sm border rounded-md">
+        <div class="flex flex-wrap items-center gap-1">
+          <select v-model="statusFilter" class="px-1.5 py-0.5 text-xs border rounded-md">
             <option value="all">All users</option>
             <option value="active">Active only</option>
             <option value="inactive">Inactive only</option>
@@ -22,77 +22,77 @@
           <button @click="toggle('onlyGuild')" :class="chip(onlyGuild)">In Discord</button>
           <button @click="toggle('onlyWarned')" :class="chip(onlyWarned)">Warned</button>
 
-          <div class="flex items-center gap-2">
-            <label class="text-sm text-gray-600">Sort:</label>
-            <select v-model="sortField" class="px-3 py-1 text-sm border rounded-md">
+          <div class="flex items-center gap-1">
+            <label class="text-[11px] text-gray-600">Sort:</label>
+            <select v-model="sortField" class="px-1.5 py-0.5 text-xs border rounded-md">
               <option value="lastActivity">Last activity</option>
               <option value="joined">Account created</option>
             </select>
-            <select v-model="sortDir" class="px-3 py-1 text-sm border rounded-md">
+            <select v-model="sortDir" class="px-1.5 py-0.5 text-xs border rounded-md">
               <option value="desc">Newest</option>
               <option value="asc">Oldest</option>
             </select>
           </div>
 
-          <button @click="resetFilters" class="px-3 py-1 text-sm border rounded-md">Reset</button>
+          <button @click="resetFilters" class="px-2 py-0.5 text-[11px] border rounded-md">Reset</button>
         </div>
       </div>
 
       <!-- Unified Card Grid (mobile and desktop) -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         <article
           v-for="u in pagedUsers"
           :key="u.id"
-          class="bg-white border rounded-lg shadow p-4"
+          class="bg-white border rounded-lg shadow p-2"
         >
-          <div class="flex flex-col sm:flex-row-reverse sm:items-start sm:justify-between gap-2">
+          <div class="flex flex-col sm:flex-row-reverse sm:items-start sm:justify-between gap-1">
             <!-- Badges first in DOM: appear above username on mobile, on right on desktop -->
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="flex items-center gap-1 shrink-0">
               <span :class="badgeClass(!!u.inGuild)">{{ u.inGuild ? 'Guild' : 'No guild' }}</span>
               <span :class="badgeClass(!!u.active)">{{ u.active ? 'Active' : 'Disabled' }}</span>
               <div class="relative">
                 <button
-                  class="ml-1 h-7 w-7 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
+                  class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
                   title="More"
                   @click.stop="toggleMenu(u)"
                 >⋮</button>
                 <div
                   v-if="menuOpenId === u.id"
-                  class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
+                  class="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg z-40 py-1"
                 >
-                  <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
-                  <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
-                  <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
-                  <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
-                  <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
                   <button
                     v-if="!u.isAdmin && !u.banned"
-                    class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
                     @click="openActionModal(u, 'BAN'); closeMenu()"
                   >Ban user</button>
                   <button
                     v-if="!u.isAdmin && u.banned"
-                    class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
                     @click="openActionModal(u, 'UNBAN'); closeMenu()"
                   >Unban user</button>
                   <button
                     v-if="!u.isAdmin && !u.active && !u.banned"
-                    class="w-full text-left px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
                     @click="activateUser(u); closeMenu()"
                   >Activate User</button>
                   <button
                     v-if="!u.isAdmin && u.active"
-                    class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-rose-700 hover:bg-rose-50"
                     @click="openDissolveModal(u); closeMenu()"
                   >Dissolve User</button>
                   <button
                     v-if="isSuperAdmin && !u.isAdmin"
-                    class="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
                     @click="makeAdmin(u); closeMenu()"
                   >Make Admin</button>
                   <button
                     v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
-                    class="w-full text-left px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
                     @click="removeAdmin(u); closeMenu()"
                   >Remove Admin</button>
                 </div>
@@ -100,55 +100,55 @@
             </div>
             <!-- Username second in DOM: appears below badges on mobile, on left on desktop -->
             <div class="min-w-0">
-              <div class="font-semibold text-base leading-tight">{{ u.username || '—' }}</div>
-              <div class="text-xs text-gray-500">{{ u.discordTag || 'No tag' }}</div>
+              <div class="font-semibold text-xs leading-tight truncate">{{ u.username || '—' }}</div>
+              <div class="text-[10px] text-gray-500 truncate">{{ u.discordTag || 'No tag' }}</div>
             </div>
           </div>
 
-          <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <div class="p-2 bg-gray-50 rounded">
-              <div class="text-gray-500 text-xs">Unique cToons</div>
+          <div class="mt-1.5 grid grid-cols-3 gap-1 text-[11px]">
+            <div class="p-1 bg-gray-50 rounded">
+              <div class="text-gray-500 text-[10px]">Unique</div>
               <div class="font-medium tabular-nums">{{ u.uniqueCtoons ?? 0 }}</div>
             </div>
-            <div class="p-2 bg-gray-50 rounded">
-              <div class="text-gray-500 text-xs">Total cToons</div>
+            <div class="p-1 bg-gray-50 rounded">
+              <div class="text-gray-500 text-[10px]">Total</div>
               <div class="font-medium tabular-nums">{{ u.totalCtoons ?? 0 }}</div>
             </div>
-            <div class="p-2 bg-gray-50 rounded">
-              <div class="text-gray-500 text-xs">Total Points</div>
+            <div class="p-1 bg-gray-50 rounded">
+              <div class="text-gray-500 text-[10px]">Points</div>
               <div class="font-medium tabular-nums">{{ u.points ?? 0 }}</div>
             </div>
           </div>
 
-          <div class="mt-3 text-xs text-gray-600 space-y-1">
+          <div class="mt-1.5 text-[10px] text-gray-600 space-y-0.5">
             <div><span class="text-gray-500">Joined:</span> {{ formatDate(u.joined) }} • {{ rel(u.joined) }}</div>
             <div><span class="text-gray-500">Last login:</span> {{ formatDate(u.lastLogin) }} • {{ rel(u.lastLogin) }}</div>
-            <div class="flex items-center gap-2">
-              <span class="text-gray-600"><span class="text-gray-500">Last activity:</span> {{ formatDate(u.lastActivity) }} • {{ rel(u.lastActivity) }}</span>
-              <button class="ml-auto text-xs underline" @click="toggleSort()">Sort {{ sortDir==='desc' ? '↓' : '↑' }}</button>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-600 truncate"><span class="text-gray-500">Last activity:</span> {{ formatDate(u.lastActivity) }} • {{ rel(u.lastActivity) }}</span>
+              <button class="ml-auto text-[10px] underline shrink-0" @click="toggleSort()">Sort {{ sortDir==='desc' ? '↓' : '↑' }}</button>
             </div>
           </div>
 
-          <div class="mt-3 flex flex-wrap gap-2">
+          <div class="mt-1.5 flex flex-wrap gap-1">
             <span :class="warnClass(!!u.warning180,'amber')">180d</span>
             <span :class="warnClass(!!u.warning210,'amber')">210d</span>
             <span :class="warnClass(!!u.warning240,'red')">240d</span>
           </div>
         </article>
 
-        <div v-if="!filteredSorted.length" class="col-span-full text-center text-gray-500 py-8">
+        <div v-if="!filteredSorted.length" class="col-span-full text-center text-gray-500 py-6">
           No users match your filters.
         </div>
       </div>
 
       <!-- Pagination -->
-      <div v-if="filteredSorted.length" class="mt-6 flex items-center justify-between">
-        <div class="text-sm text-gray-600">
+      <div v-if="filteredSorted.length" class="mt-3 flex items-center justify-between">
+        <div class="text-[11px] text-gray-600">
           Page {{ page }} of {{ totalPages }} - Showing {{ showingRange }}
         </div>
-        <div class="space-x-2">
-          <button class="px-3 py-1 text-sm border rounded-md" :disabled="page <= 1" @click="prevPage">Prev</button>
-          <button class="px-3 py-1 text-sm border rounded-md" :disabled="page >= totalPages" @click="nextPage">Next</button>
+        <div class="space-x-1">
+          <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="page <= 1" @click="prevPage">Prev</button>
+          <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="page >= totalPages" @click="nextPage">Next</button>
         </div>
       </div>
     </div>
@@ -602,7 +602,7 @@ const pagedUsers = computed(() => {
 
 const chip = (on) =>
   [
-    'px-3 py-1 text-sm rounded-md border',
+    'px-2 py-0.5 text-[11px] rounded-md border',
     on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'
   ].join(' ')
 
@@ -653,7 +653,7 @@ const rel = dt => {
 
 const badgeClass = (ok) =>
   [
-    'px-2 py-0.5 rounded text-xs font-medium',
+    'px-1.5 py-0 rounded text-[10px] font-medium',
     ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
   ].join(' ')
 
@@ -662,7 +662,7 @@ const warnClass = (on, tone = 'amber') => {
     ? 'bg-red-100 text-red-800 border-red-200'
     : 'bg-amber-100 text-amber-800 border-amber-200'
   return [
-    'px-2 py-0.5 rounded text-xs border',
+    'px-1.5 py-0 rounded text-[10px] border',
     on ? onCls : 'bg-gray-100 text-gray-700 border-gray-300'
   ].join(' ')
 }

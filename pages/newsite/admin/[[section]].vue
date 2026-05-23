@@ -6,6 +6,19 @@
     <div class="newsite-admin-body">
       <AdminAnalytics v-if="!section" />
       <AdminManageUsers v-else-if="section === 'manageUsers'" />
+      <AdminCheatFinder v-else-if="section === 'cheatFinder'" />
+      <AdminAuthLogs v-else-if="section === 'authLogs'" />
+      <AdminTradeLogs v-else-if="section === 'tradeLogs'" />
+      <AdminAuctionLogs v-else-if="section === 'auctionLogs'" />
+      <AdminCtoonOwnerLogs v-else-if="section === 'ctoonOwnerLogs'" />
+      <AdminCzoneSearchLogs v-else-if="section === 'czoneSearchLogs'" />
+      <AdminPointLogs v-else-if="section === 'pointLogs'" />
+      <AdminAchievementLogs v-else-if="section === 'achievementLogs'" />
+      <AdminGtoonsClashLogs v-else-if="section === 'gtoonsClashLogs'" />
+      <AdminMonsterBattleLogs v-else-if="section === 'monsterBattleLogs'" />
+      <AdminLottoLogs v-else-if="section === 'lottoLogs'" />
+      <AdminWinWheelLogs v-else-if="section === 'winWheelLogs'" />
+      <AdminScavengerLogs v-else-if="section === 'scavengerLogs'" />
       <div v-else class="newsite-admin-placeholder">
         <h1 class="newsite-admin-title">Unknown section</h1>
       </div>

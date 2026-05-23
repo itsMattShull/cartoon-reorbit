@@ -54,9 +54,15 @@ export default defineEventHandler(async (event) => {
 
     const name = user.username || '__unknown__'
     byIp[ip] = byIp[ip] || {}
-    // for each alias keep the latest timestamp
-    if (!byIp[ip][name] || ts > byIp[ip][name]) {
-      byIp[ip][name] = ts
+    // for each alias keep the latest login timestamp + user metadata
+    const existing = byIp[ip][name]
+    if (!existing || ts > existing.ts) {
+      byIp[ip][name] = {
+        ts,
+        joined: user.createdAt,
+        discordTag: user.discordTag,
+        discordCreatedAt: user.discordCreatedAt
+      }
     }
   }
 
@@ -67,11 +73,14 @@ export default defineEventHandler(async (event) => {
       Object.keys(nameMap).length > 1
     )
     .map(([ip, nameMap]) => {
-      const aliases = Object.entries(nameMap).map(([username, ts]) => ({
+      const aliases = Object.entries(nameMap).map(([username, info]) => ({
         username,
-        lastLogin: new Date(ts)
+        lastLogin: new Date(info.ts),
+        joined: info.joined,
+        discordTag: info.discordTag,
+        discordCreatedAt: info.discordCreatedAt
       }))
-      const lastLoginTs = Object.values(nameMap).reduce((max, ts) => Math.max(max, ts), 0)
+      const lastLoginTs = Object.values(nameMap).reduce((max, info) => Math.max(max, info.ts), 0)
       return { ip, aliases, lastLogin: new Date(lastLoginTs) }
     })
     .sort((a, b) => b.lastLogin.getTime() - a.lastLogin.getTime())
