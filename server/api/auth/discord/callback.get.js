@@ -111,6 +111,7 @@ export default defineEventHandler(async (event) => {
       const created = await tx.user.create({
         data: {
           discordId: discordUser.id,
+          discordUsername: discordUser.username || null,
           discordTag: displayName,
           discordAvatar: discordUser.avatar,
           email: emailInUseByInactive ? null : discordUser.email,
@@ -129,6 +130,7 @@ export default defineEventHandler(async (event) => {
     const updated = await tx.user.update({
       where: { id: activeUser.id },
       data: {
+        discordUsername: discordUser.username || null,
         discordTag: displayName,
         discordAvatar: discordUser.avatar,
         // keep email unique; only update if email is free or belongs to this user
