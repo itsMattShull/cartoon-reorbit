@@ -1,0 +1,106 @@
+import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
+import { prisma } from '@/server/prisma'
+import { Prisma } from '@prisma/client'
+
+export default defineEventHandler(async (event) => {
+  // Require authentication
+  const cookie = getRequestHeader(event, 'cookie') || ''
+  let me
+  try {
+    me = await $fetch('/api/auth/me', { headers: { cookie } })
+  } catch {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+  if (!me?.id) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+
+  const body = await readBody(event)
+  const userCtoonIds = body?.userCtoonIds
+
+  if (!Array.isArray(userCtoonIds) || userCtoonIds.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Missing userCtoonIds' })
+  }
+
+  // Sanitize & cap to prevent abuse
+  const ids = userCtoonIds
+    .filter(id => typeof id === 'string' && id.trim())
+    .slice(0, 50)
+
+  if (!ids.length) return {}
+
+  // Fetch all userCtoons with their base ctoon data
+  const userCtoons = await prisma.userCtoon.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      ctoonId: true,
+      mintNumber: true,
+      ctoon: {
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          quantity: true,
+          totalMinted: true,
+        }
+      }
+    }
+  })
+
+  if (!userCtoons.length) return {}
+
+  const ctoonIds = [...new Set(userCtoons.map(uc => uc.ctoonId))]
+
+  // Get highest minted mint number per ctoon type (determines the mint range)
+  const mintAggs = await prisma.userCtoon.groupBy({
+    by: ['ctoonId'],
+    where: { ctoonId: { in: ctoonIds } },
+    _max: { mintNumber: true }
+  })
+
+  const highestMintByCtoonId = new Map(
+    mintAggs.map(row => [row.ctoonId, row._max.mintNumber])
+  )
+
+  // Get average sale price per ctoon type across all mints
+  const avgSaleRows = await prisma.$queryRaw`
+    SELECT
+      uc."ctoonId",
+      ROUND(AVG(a."highestBid")::numeric, 2)::float AS avg_bid
+    FROM "Auction" a
+    JOIN "UserCtoon" uc ON a."userCtoonId" = uc.id
+    WHERE uc."ctoonId" IN (${Prisma.join(ctoonIds)})
+      AND a.status = 'CLOSED'
+      AND a."winnerId" IS NOT NULL
+    GROUP BY uc."ctoonId"
+  `
+
+  const avgSaleByCtoonId = new Map(
+    avgSaleRows.map(row => [
+      row.ctoonId,
+      row.avg_bid != null ? Number(row.avg_bid) : null
+    ])
+  )
+
+  // Build result keyed by userCtoonId
+  const result = {}
+  for (const uc of userCtoons) {
+    const highestMint =
+      highestMintByCtoonId.get(uc.ctoonId) ??
+      uc.ctoon.totalMinted ??
+      null
+
+    result[uc.id] = {
+      ctoonId: uc.ctoonId,
+      mintNumber: uc.mintNumber,
+      highestMint,
+      quantity: uc.ctoon.quantity,
+      avgSale: avgSaleByCtoonId.get(uc.ctoonId) ?? null,
+      cMartPrice: uc.ctoon.price,
+      name: uc.ctoon.name,
+    }
+  }
+
+  return result
+})
