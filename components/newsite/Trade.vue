@@ -330,6 +330,48 @@
             </div>
           </div>
 
+          <!-- Value preview banner: what the recipient will see -->
+          <div class="tr-create-preview">
+            <div class="tr-create-preview-header">
+              Preview — what <strong>{{ tradeTargetUser.username }}</strong> will see:
+            </div>
+            <div v-if="isLoadingCreateValuations" class="tm-val-loading">Estimating values…</div>
+            <template v-else-if="createFairnessData">
+              <div class="tm-val-row">
+                <div class="tm-val-side">
+                  <div class="tm-val-label">They receive (cToons + pts)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.offeredTotal.toLocaleString() }} pts</div>
+                </div>
+                <div class="tm-val-bar-wrap">
+                  <div class="tm-val-bar">
+                    <div class="tm-val-bar-fill" :style="{ width: createFairnessData.offeredBarPct + '%' }"></div>
+                  </div>
+                  <div class="tm-val-bar-labels">
+                    <span>They receive</span>
+                    <span>They give up</span>
+                  </div>
+                </div>
+                <div class="tm-val-side tm-val-side-right">
+                  <div class="tm-val-label">They give up (cToons)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.requestedTotal.toLocaleString() }} pts</div>
+                </div>
+              </div>
+              <div class="tm-val-verdict" :class="'tm-verdict--' + createFairnessData.verdictClass">
+                {{ createFairnessData.verdict }}
+              </div>
+              <div v-if="createFairnessData.pct < 0" class="tm-val-suggestion">
+                💡 Consider adding <strong>~{{ createFairnessData.shortfall.toLocaleString() }} pts</strong>
+                (or cToons worth that amount) to your offer to make this fair for {{ tradeTargetUser.username }}.
+              </div>
+              <div class="tm-val-note">
+                Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
+              </div>
+            </template>
+            <div v-else-if="!isLoadingCreateValuations" class="tm-val-loading">
+              No auction data available to estimate values.
+            </div>
+          </div>
+
           <div class="tr-confirm-grid">
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">Requesting from {{ tradeTargetUser.username }}</div>
@@ -385,6 +427,53 @@
 
           <!-- Modal body -->
           <div class="tm-body">
+
+            <!-- ── Value summary (PENDING trades only) ── -->
+            <div v-if="currentOffer.status === 'PENDING'" class="tm-valuation">
+              <div v-if="isLoadingValuations" class="tm-val-loading">Estimating values…</div>
+              <template v-else-if="fairnessData">
+                <div class="tm-val-row">
+                  <!-- Offered side total -->
+                  <div class="tm-val-side">
+                    <div class="tm-val-label">Offered (cToons + pts)</div>
+                    <div class="tm-val-amount">~{{ fairnessData.offeredTotal.toLocaleString() }} pts</div>
+                  </div>
+                  <!-- Proportional bar -->
+                  <div class="tm-val-bar-wrap">
+                    <div class="tm-val-bar">
+                      <div
+                        class="tm-val-bar-fill"
+                        :style="{ width: fairnessData.offeredBarPct + '%' }"
+                      ></div>
+                    </div>
+                    <div class="tm-val-bar-labels">
+                      <span>Offered</span>
+                      <span>Requested</span>
+                    </div>
+                  </div>
+                  <!-- Requested side total -->
+                  <div class="tm-val-side tm-val-side-right">
+                    <div class="tm-val-label">Requested (cToons)</div>
+                    <div class="tm-val-amount">~{{ fairnessData.requestedTotal.toLocaleString() }} pts</div>
+                  </div>
+                </div>
+                <div class="tm-val-verdict" :class="'tm-verdict--' + fairnessData.verdictClass">
+                  {{ fairnessData.verdict }}
+                </div>
+                <div v-if="fairnessData.pct < 0" class="tm-val-suggestion">
+                  💡 Ask <strong>{{ fairnessData.otherUsername }}</strong> to add
+                  <strong>~{{ fairnessData.shortfall.toLocaleString() }} pts</strong>
+                  (or cToons worth that amount) to make this trade even.
+                </div>
+                <div class="tm-val-note">
+                  Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
+                </div>
+              </template>
+              <div v-else-if="!isLoadingValuations" class="tm-val-loading">
+                No auction data available to estimate values.
+              </div>
+            </div>
+
             <div class="tm-cols">
               <!-- Offered cToons -->
               <div class="tm-col">
@@ -574,6 +663,237 @@ function getSelfStats(ctoonId) {
 const isRecipient = computed(() => currentOffer.value?.recipient.id === user.value?.id)
 const isInitiator = computed(() => currentOffer.value?.initiator.id === user.value?.id)
 
+// ── Trade Valuations ──────────────────────────────────────────────
+const tradeValuations = ref({})
+const isLoadingValuations = ref(false)
+
+async function loadValuations(offer) {
+  if (!offer?.ctoons?.length) return
+  isLoadingValuations.value = true
+  tradeValuations.value = {}
+  try {
+    const userCtoonIds = offer.ctoons.map(tc => tc.userCtoon.id)
+    const result = await $fetch('/api/ctoon/valuations', {
+      method: 'POST',
+      body: { userCtoonIds }
+    })
+    tradeValuations.value = result || {}
+  } catch {
+    tradeValuations.value = {}
+  } finally {
+    isLoadingValuations.value = false
+  }
+}
+
+/**
+ * Applies a mint-number premium to the base average sale price.
+ * Lower mint numbers are rarer and command a higher value.
+ *
+ * Formula:  adjustedValue = baseValue × (1 + (highestMint - mintNumber) / highestMint)
+ *   – Mint #1 of 500  → 1 + 499/500 ≈ 1.998× base
+ *   – Mint #250 of 500 → 1 + 250/500 = 1.5× base
+ *   – Mint #500 of 500 → 1 + 0/500  = 1.0× base  (no premium)
+ *
+ * Falls back to cMart price when no auction history exists.
+ */
+function getMintAdjustedValue(valuation) {
+  if (!valuation) return null
+  const { avgSale, mintNumber, highestMint, cMartPrice } = valuation
+  const base = avgSale ?? cMartPrice ?? 0
+  if (!base) return 0
+  // No mint adjustment for unlimited-edition cToons (mintNumber null) or single-mint sets
+  if (mintNumber == null || !highestMint || highestMint <= 1) return base
+  const multiplier = 1 + (highestMint - mintNumber) / highestMint
+  return Math.round(base * multiplier)
+}
+
+/** Sum of mint-adjusted values for offered cToons, plus the points offered */
+const offeredTotal = computed(() => {
+  if (!currentOffer.value || !Object.keys(tradeValuations.value).length) return null
+  const ctoonSum = currentOffer.value.ctoons
+    .filter(tc => tc.role === 'OFFERED')
+    .reduce((sum, tc) => {
+      const val = getMintAdjustedValue(tradeValuations.value[tc.userCtoon.id])
+      return sum + (val ?? 0)
+    }, 0)
+  return ctoonSum + (Number(currentOffer.value.pointsOffered) || 0)
+})
+
+/** Sum of mint-adjusted values for requested cToons */
+const requestedTotal = computed(() => {
+  if (!currentOffer.value || !Object.keys(tradeValuations.value).length) return null
+  return currentOffer.value.ctoons
+    .filter(tc => tc.role === 'REQUESTED')
+    .reduce((sum, tc) => {
+      const val = getMintAdjustedValue(tradeValuations.value[tc.userCtoon.id])
+      return sum + (val ?? 0)
+    }, 0)
+})
+
+/**
+ * Computes the fairness breakdown from the current user's perspective.
+ *
+ * Recipient: they RECEIVE offered cToons+pts, they GIVE requested cToons.
+ * Initiator: they RECEIVE requested cToons,   they GIVE offered cToons+pts.
+ *
+ * pct > 0  → favors current user
+ * pct < 0  → favors the other party
+ */
+const fairnessData = computed(() => {
+  if (offeredTotal.value == null || requestedTotal.value == null) return null
+  const offered = offeredTotal.value
+  const requested = requestedTotal.value
+
+  let youGet, youGive
+  if (isRecipient.value) {
+    youGet = offered
+    youGive = requested
+  } else {
+    youGet = requested
+    youGive = offered
+  }
+
+  const pct = youGive > 0
+    ? ((youGet - youGive) / youGive) * 100
+    : youGet > 0 ? 100 : 0
+
+  let verdict, verdictClass
+  if (Math.abs(pct) < 15) {
+    verdict = 'This trade is roughly fair'
+    verdictClass = 'fair'
+  } else if (pct >= 15 && pct < 50) {
+    verdict = 'This trade slightly favors you'
+    verdictClass = 'good'
+  } else if (pct >= 50) {
+    verdict = 'This trade heavily favors you'
+    verdictClass = 'great'
+  } else if (pct <= -15 && pct > -50) {
+    verdict = 'This trade slightly favors the other party'
+    verdictClass = 'warn'
+  } else {
+    verdict = 'This trade heavily favors the other party'
+    verdictClass = 'bad'
+  }
+
+  // How many more points of value the current user should ask for to break even
+  const shortfall = pct < 0 ? Math.round(youGive - youGet) : 0
+
+  // Username of the other party (the one who should add more value)
+  const otherUsername = isRecipient.value
+    ? currentOffer.value?.initiator?.username
+    : currentOffer.value?.recipient?.username
+
+  const barTotal = offered + requested
+  return {
+    offeredTotal: offered,
+    requestedTotal: requested,
+    youGet,
+    youGive,
+    pct,
+    verdict,
+    verdictClass,
+    shortfall,
+    otherUsername,
+    // Percent of the bar that represents the offered side
+    offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
+  }
+})
+
+// ── Create-flow Valuations (Step 3 preview) ───────────────────────
+const createValuations = ref({})
+const isLoadingCreateValuations = ref(false)
+
+async function loadCreateValuations() {
+  const allIds = [
+    ...selectedInitiatorCtoons.value.map(c => c.id),
+    ...selectedTargetCtoons.value.map(c => c.id),
+  ].filter(Boolean)
+  if (!allIds.length) { createValuations.value = {}; return }
+  isLoadingCreateValuations.value = true
+  createValuations.value = {}
+  try {
+    const result = await $fetch('/api/ctoon/valuations', { method: 'POST', body: { userCtoonIds: allIds } })
+    createValuations.value = result || {}
+  } catch {
+    createValuations.value = {}
+  } finally {
+    isLoadingCreateValuations.value = false
+  }
+}
+
+// Load valuations when entering Step 3; clear when leaving
+watch(tradeCurrentStep, step => {
+  if (step === 3) loadCreateValuations()
+  else createValuations.value = {}
+})
+
+/** What the recipient will receive: offered cToons (mint-adjusted) + points */
+const createOfferedTotal = computed(() => {
+  if (!Object.keys(createValuations.value).length) return null
+  const ctoonSum = selectedInitiatorCtoons.value.reduce((sum, c) => {
+    const val = getMintAdjustedValue(createValuations.value[c.id])
+    return sum + (val ?? 0)
+  }, 0)
+  return ctoonSum + (Number(pointsToOffer.value) || 0)
+})
+
+/** What the recipient will give up: requested cToons (mint-adjusted) */
+const createRequestedTotal = computed(() => {
+  if (!Object.keys(createValuations.value).length) return null
+  return selectedTargetCtoons.value.reduce((sum, c) => {
+    const val = getMintAdjustedValue(createValuations.value[c.id])
+    return sum + (val ?? 0)
+  }, 0)
+})
+
+/**
+ * Fairness as the RECIPIENT will see it.
+ * youGet = offered (they receive), youGive = requested (they give up).
+ * pct < 0 means the trade is net bad for the recipient → suggest the creator adds more.
+ */
+const createFairnessData = computed(() => {
+  if (createOfferedTotal.value == null || createRequestedTotal.value == null) return null
+  const offered = createOfferedTotal.value
+  const requested = createRequestedTotal.value
+
+  const youGet = offered
+  const youGive = requested
+
+  const pct = youGive > 0
+    ? ((youGet - youGive) / youGive) * 100
+    : youGet > 0 ? 100 : 0
+
+  let verdict, verdictClass
+  if (Math.abs(pct) < 15) {
+    verdict = 'This trade is roughly fair'
+    verdictClass = 'fair'
+  } else if (pct >= 15 && pct < 50) {
+    verdict = 'This trade slightly favors you'
+    verdictClass = 'good'
+  } else if (pct >= 50) {
+    verdict = 'This trade heavily favors you'
+    verdictClass = 'great'
+  } else if (pct <= -15 && pct > -50) {
+    verdict = 'This trade slightly favors the other party'
+    verdictClass = 'warn'
+  } else {
+    verdict = 'This trade heavily favors the other party'
+    verdictClass = 'bad'
+  }
+
+  const shortfall = pct < 0 ? Math.round(youGive - youGet) : 0
+  const barTotal = offered + requested
+  return {
+    offeredTotal: offered,
+    requestedTotal: requested,
+    pct,
+    verdict,
+    verdictClass,
+    shortfall,
+    offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
+  }
+})
+
 const modalToast = reactive({ show: false, message: '', type: 'success' })
 const pageToast = reactive({ show: false, message: '', type: 'success' })
 
@@ -590,9 +910,13 @@ function viewOffer(offer) {
   currentOffer.value = offer
   showModal.value = true
   loadModalSelfCollection()
+  if (offer.status === 'PENDING') {
+    loadValuations(offer)
+  }
 }
 function closeModal() {
   showModal.value = false; currentOffer.value = null; isProcessing.value = false; modalToast.show = false
+  tradeValuations.value = {}
 }
 
 async function loadModalSelfCollection() {
@@ -1349,6 +1673,26 @@ onBeforeUnmount(() => {
 .tr-page-toast.success { background: #15803d; color: white; }
 .tr-page-toast.error { background: #b91c1c; color: white; }
 
+/* ── Create-flow Step 3 value preview ── */
+.tr-create-preview {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+.tr-create-preview-header {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.tr-create-preview-header strong {
+  color: var(--OrbitLightBlue);
+  font-weight: bold;
+}
+
 /* ══════════════════════════════════════════════
    TRADE MODAL
    ══════════════════════════════════════════════ */
@@ -1424,6 +1768,107 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   font-size: 0.58rem; color: rgba(255,255,255,0.55); margin-top: 3px; text-align: center;
   padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); width: 100%;
+}
+
+/* ── Value summary ── */
+.tm-valuation {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.tm-val-loading {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 4px 0;
+  font-style: italic;
+}
+.tm-val-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tm-val-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+.tm-val-side-right {
+  text-align: right;
+}
+.tm-val-label {
+  font-size: 0.56rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tm-val-amount {
+  font-size: 0.88rem;
+  font-weight: bold;
+  color: #fbbf24;
+}
+.tm-val-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tm-val-bar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.tm-val-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--OrbitLightBlue) 0%, #fbbf24 100%);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+.tm-val-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+.tm-val-verdict {
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+.tm-verdict--fair  { color: #d1d5db; background: rgba(209, 213, 219, 0.1); }
+.tm-verdict--good  { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+.tm-verdict--great { color: #4ade80; background: rgba(74, 222, 128, 0.18); border: 1px solid rgba(74, 222, 128, 0.25); }
+.tm-verdict--warn  { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.tm-verdict--bad   { color: #f87171; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.2); }
+.tm-val-suggestion {
+  font-size: 0.66rem;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 4px;
+  padding: 5px 10px;
+  text-align: center;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.tm-val-suggestion strong {
+  color: #fde68a;
+}
+.tm-val-note {
+  font-size: 0.54rem;
+  color: rgba(255, 255, 255, 0.27);
+  text-align: center;
 }
 
 /* Modal footer */

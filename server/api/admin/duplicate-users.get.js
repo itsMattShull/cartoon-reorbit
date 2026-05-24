@@ -53,6 +53,7 @@ export default defineEventHandler(async (event) => {
     if (!existing || ts > existing.ts) {
       byIp[ip][name] = {
         ts,
+        userId: user.id,
         joined: user.createdAt,
         discordTag: user.discordTag,
         discordCreatedAt: user.discordCreatedAt,
@@ -67,6 +68,7 @@ export default defineEventHandler(async (event) => {
     .map(([ip, nameMap]) => {
       const aliases = Object.entries(nameMap).map(([username, info]) => ({
         username,
+        userId: info.userId,
         lastLogin: new Date(info.ts),
         joined: info.joined,
         discordTag: info.discordTag,
@@ -107,6 +109,60 @@ export default defineEventHandler(async (event) => {
 
   const total = filteredGroups.length
   const paged = filteredGroups.slice(skip, skip + limit)
+
+  // 5. Enrich aliases on the paged groups with points, ctoon count, and
+  //    latest fingerprint visitorId. Batch by userId so we don't fan out
+  //    queries per alias.
+  const userIds = Array.from(
+    new Set(paged.flatMap((g) => g.aliases.map((a) => a.userId).filter(Boolean)))
+  )
+
+  if (userIds.length) {
+    const [pointsRows, ctoonGroups, fingerprintRows] = await Promise.all([
+      prisma.userPoints.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, points: true }
+      }),
+      prisma.userCtoon.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, burnedAt: null },
+        _count: { _all: true }
+      }),
+      prisma.deviceFingerprintLog.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: 'desc' },
+        select: { userId: true, visitorId: true, deviceType: true, createdAt: true }
+      })
+    ])
+
+    const pointsByUser = Object.fromEntries(
+      pointsRows.map((r) => [r.userId, r.points])
+    )
+    const ctoonsByUser = Object.fromEntries(
+      ctoonGroups.map((r) => [r.userId, r._count._all])
+    )
+    const latestFingerprintByUser = {}
+    for (const row of fingerprintRows) {
+      if (!latestFingerprintByUser[row.userId]) {
+        latestFingerprintByUser[row.userId] = {
+          visitorId: row.visitorId,
+          deviceType: row.deviceType,
+          capturedAt: row.createdAt
+        }
+      }
+    }
+
+    for (const group of paged) {
+      for (const alias of group.aliases) {
+        const fp = latestFingerprintByUser[alias.userId]
+        alias.points = pointsByUser[alias.userId] ?? 0
+        alias.ctoonCount = ctoonsByUser[alias.userId] ?? 0
+        alias.latestVisitorId = fp?.visitorId || null
+        alias.latestDeviceType = fp?.deviceType || null
+        alias.latestVisitorAt = fp?.capturedAt || null
+      }
+    }
+  }
 
   return { groups: paged, total, page, limit }
 })

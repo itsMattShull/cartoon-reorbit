@@ -52,21 +52,38 @@
                   <th class="px-1.5 py-1 border-b">Joined</th>
                   <th class="px-1.5 py-1 border-b">Discord Username</th>
                   <th class="px-1.5 py-1 border-b">Discord Account Created</th>
+                  <th class="px-1.5 py-1 border-b">Latest Device</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="alias in group.aliases" :key="alias.username" class="border-b last:border-b-0">
-                  <td class="px-1.5 py-1 font-medium">
-                    {{ alias.username }}
-                    <span
-                      v-if="alias.isAdmin"
-                      class="ml-1 px-1 py-0.5 text-[9px] uppercase tracking-wide rounded bg-amber-100 text-amber-800 border border-amber-300"
-                      title="This account is an admin — likely legitimate testing"
-                    >Admin</span>
+                <tr v-for="alias in group.aliases" :key="alias.username" class="border-b last:border-b-0 align-top">
+                  <td class="px-1.5 py-1">
+                    <div class="font-medium">
+                      {{ alias.username }}
+                      <span
+                        v-if="alias.isAdmin"
+                        class="ml-1 px-1 py-0.5 text-[9px] uppercase tracking-wide rounded bg-amber-100 text-amber-800 border border-amber-300"
+                        title="This account is an admin — likely legitimate testing"
+                      >Admin</span>
+                    </div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">
+                      {{ formatNumber(alias.points) }} pts · {{ formatNumber(alias.ctoonCount) }} ctoons · Last login {{ formatDateTime(alias.lastLogin) }}
+                    </div>
+                    <div
+                      v-if="alias.latestVisitorId"
+                      class="text-[10px] text-gray-500 font-mono break-all"
+                      :title="alias.latestVisitorAt ? `Captured ${formatDateTime(alias.latestVisitorAt)}` : ''"
+                    >
+                      Browser: {{ alias.latestVisitorId }}
+                    </div>
                   </td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.joined) }}</td>
                   <td class="px-1.5 py-1">{{ alias.discordTag || '—' }}</td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.discordCreatedAt) }}</td>
+                  <td class="px-1.5 py-1 whitespace-nowrap">
+                    <span v-if="alias.latestDeviceType">{{ alias.latestDeviceType }}</span>
+                    <span v-else class="text-gray-400">—</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -86,10 +103,25 @@
                   class="ml-1 px-1 py-0.5 text-[9px] uppercase tracking-wide rounded bg-amber-100 text-amber-800 border border-amber-300"
                 >Admin</span>
               </div>
-              <div class="mt-0.5 grid grid-cols-1 gap-0.5 text-[10px] text-gray-700">
+              <div class="text-[10px] text-gray-500 mt-0.5">
+                {{ formatNumber(alias.points) }} pts · {{ formatNumber(alias.ctoonCount) }} ctoons · Last login {{ formatDateTime(alias.lastLogin) }}
+              </div>
+              <div
+                v-if="alias.latestVisitorId"
+                class="text-[10px] text-gray-500 font-mono break-all"
+                :title="alias.latestVisitorAt ? `Captured ${formatDateTime(alias.latestVisitorAt)}` : ''"
+              >
+                Browser: {{ alias.latestVisitorId }}
+              </div>
+              <div class="mt-1 grid grid-cols-1 gap-0.5 text-[10px] text-gray-700">
                 <div><span class="text-gray-500">Joined:</span> {{ formatDate(alias.joined) }}</div>
                 <div><span class="text-gray-500">Discord:</span> {{ alias.discordTag || '—' }}</div>
                 <div><span class="text-gray-500">Discord Created:</span> {{ formatDate(alias.discordCreatedAt) }}</div>
+                <div>
+                  <span class="text-gray-500">Latest Device:</span>
+                  <span v-if="alias.latestDeviceType">{{ alias.latestDeviceType }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </div>
               </div>
             </div>
           </div>
@@ -150,6 +182,22 @@ function formatDate(dt) {
     month: 'short',
     day: 'numeric'
   })
+}
+
+function formatDateTime(dt) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+function formatNumber(n) {
+  if (n == null) return '—'
+  return Number(n).toLocaleString('en-US')
 }
 
 async function fetchGroups() {
