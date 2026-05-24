@@ -36,7 +36,8 @@
         <div
           v-for="group in groups"
           :key="group.ip"
-          class="bg-white border rounded shadow p-2"
+          class="border rounded shadow p-2"
+          :class="group.hasInternalTrades ? 'bg-yellow-100' : 'bg-white'"
         >
           <div class="flex items-center justify-between gap-2 mb-1 flex-wrap">
             <div class="flex items-baseline gap-2 min-w-0">
@@ -53,16 +54,26 @@
                 <tr>
                   <th class="px-1.5 py-1 border-b">Username</th>
                   <th class="px-1.5 py-1 border-b">Joined</th>
-                  <th class="px-1.5 py-1 border-b">Discord Username</th>
-                  <th class="px-1.5 py-1 border-b">Discord Account Created</th>
+                  <th class="px-1.5 py-1 border-b">Disc. Disp. Name</th>
+                  <th class="px-1.5 py-1 border-b">Disc. Acct.</th>
+                  <th class="px-1.5 py-1 border-b">Disc. Acct. Created</th>
+                  <th class="px-1.5 py-1 border-b">Traded With</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="alias in group.aliases" :key="alias.username" class="border-b last:border-b-0">
-                  <td class="px-1.5 py-1 font-medium">{{ alias.username }}</td>
+                <tr v-for="alias in group.aliases" :key="alias.username" class="border-b last:border-b-0 align-top">
+                  <td class="px-1.5 py-1">
+                    <div class="font-medium">{{ alias.username }}</div>
+                    <div class="text-[10px] text-gray-400 leading-tight">{{ aliasMeta(alias) }}</div>
+                  </td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.joined) }}</td>
                   <td class="px-1.5 py-1">{{ alias.discordTag || '—' }}</td>
+                  <td class="px-1.5 py-1 font-mono">{{ alias.discordId || '—' }}</td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.discordCreatedAt) }}</td>
+                  <td class="px-1.5 py-1">
+                    <span v-if="alias.tradedWith && alias.tradedWith.length">{{ alias.tradedWith.join(', ') }}</span>
+                    <span v-else class="text-gray-400">—</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -76,10 +87,17 @@
               class="border rounded p-1.5 bg-gray-50"
             >
               <div class="font-medium text-[11px]">{{ alias.username }}</div>
+              <div class="text-[10px] text-gray-400 leading-tight">{{ aliasMeta(alias) }}</div>
               <div class="mt-0.5 grid grid-cols-1 gap-0.5 text-[10px] text-gray-700">
                 <div><span class="text-gray-500">Joined:</span> {{ formatDate(alias.joined) }}</div>
-                <div><span class="text-gray-500">Discord:</span> {{ alias.discordTag || '—' }}</div>
-                <div><span class="text-gray-500">Discord Created:</span> {{ formatDate(alias.discordCreatedAt) }}</div>
+                <div><span class="text-gray-500">Disc. Disp. Name:</span> {{ alias.discordTag || '—' }}</div>
+                <div><span class="text-gray-500">Disc. Acct.:</span> <span class="font-mono">{{ alias.discordId || '—' }}</span></div>
+                <div><span class="text-gray-500">Disc. Acct. Created:</span> {{ formatDate(alias.discordCreatedAt) }}</div>
+                <div>
+                  <span class="text-gray-500">Traded With:</span>
+                  <span v-if="alias.tradedWith && alias.tradedWith.length">{{ alias.tradedWith.join(', ') }}</span>
+                  <span v-else>—</span>
+                </div>
               </div>
             </div>
           </div>
@@ -109,7 +127,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 
 const tabs = [
-  { id: 'duplicateIps', label: 'Duplicate IPs' },
+  { id: 'duplicateIps', label: 'Dashboard' },
   { id: 'placeholder-1', label: 'Placeholder' },
   { id: 'placeholder-2', label: 'Placeholder' },
   { id: 'placeholder-3', label: 'Placeholder' },
@@ -152,6 +170,14 @@ function formatDate(dt) {
     month: 'short',
     day: 'numeric'
   })
+}
+
+function aliasMeta(alias) {
+  const parts = []
+  parts.push(`${Number(alias.points ?? 0).toLocaleString()} pts`)
+  parts.push(`${Number(alias.ctoonCount ?? 0).toLocaleString()} cToons`)
+  parts.push(`last login ${formatDate(alias.lastLogin)}`)
+  return parts.join(' · ')
 }
 
 async function fetchGroups() {

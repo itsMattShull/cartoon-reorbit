@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
           username: true,
           isAdmin: true,
           createdAt: true,
+          discordId: true,
           discordTag: true,
           discordCreatedAt: true
         }
@@ -59,7 +60,9 @@ export default defineEventHandler(async (event) => {
     if (!existing || ts > existing.ts) {
       byIp[ip][name] = {
         ts,
+        userId: user.id,
         joined: user.createdAt,
+        discordId: user.discordId,
         discordTag: user.discordTag,
         discordCreatedAt: user.discordCreatedAt
       }
@@ -75,8 +78,10 @@ export default defineEventHandler(async (event) => {
     .map(([ip, nameMap]) => {
       const aliases = Object.entries(nameMap).map(([username, info]) => ({
         username,
+        userId: info.userId,
         lastLogin: new Date(info.ts),
         joined: info.joined,
+        discordId: info.discordId,
         discordTag: info.discordTag,
         discordCreatedAt: info.discordCreatedAt
       }))
@@ -115,5 +120,76 @@ export default defineEventHandler(async (event) => {
   const total = filteredGroups.length
   const paged = filteredGroups.slice(skip, skip + limit)
 
-  return { groups: paged, total, page, limit }
+  // Enrich only the paged aliases with points and cToon count (single
+  // batched query each, scoped to the user IDs visible on this page).
+  const visibleUserIds = Array.from(new Set(
+    paged.flatMap(g => g.aliases.map(a => a.userId).filter(Boolean))
+  ))
+
+  let pointsByUser = new Map()
+  let ctoonCountByUser = new Map()
+  // tradePartners.get(userId) = Set of other userIds they have any
+  // TradeOffer record with (initiator OR recipient on either side).
+  const tradePartners = new Map()
+
+  if (visibleUserIds.length) {
+    const [pointsRows, ctoonRows, tradeRows] = await Promise.all([
+      prisma.userPoints.findMany({
+        where: { userId: { in: visibleUserIds } },
+        select: { userId: true, points: true }
+      }),
+      prisma.userCtoon.groupBy({
+        by: ['userId'],
+        where: { userId: { in: visibleUserIds }, burnedAt: null },
+        _count: { _all: true }
+      }),
+      prisma.tradeOffer.findMany({
+        where: {
+          initiatorId: { in: visibleUserIds },
+          recipientId: { in: visibleUserIds }
+        },
+        select: { initiatorId: true, recipientId: true }
+      })
+    ])
+    pointsByUser = new Map(pointsRows.map(p => [p.userId, p.points]))
+    ctoonCountByUser = new Map(ctoonRows.map(c => [c.userId, c._count._all]))
+    for (const t of tradeRows) {
+      if (t.initiatorId === t.recipientId) continue
+      if (!tradePartners.has(t.initiatorId)) tradePartners.set(t.initiatorId, new Set())
+      if (!tradePartners.has(t.recipientId)) tradePartners.set(t.recipientId, new Set())
+      tradePartners.get(t.initiatorId).add(t.recipientId)
+      tradePartners.get(t.recipientId).add(t.initiatorId)
+    }
+  }
+
+  const enriched = paged.map(group => {
+    // For each alias, find which other aliases in THIS group they've
+    // traded with. Trades with users outside the group don't count.
+    const groupUserIds = new Set(group.aliases.map(a => a.userId).filter(Boolean))
+    const usernameByUserId = new Map(group.aliases.map(a => [a.userId, a.username]))
+
+    let hasInternalTrades = false
+    const aliases = group.aliases.map(a => {
+      const partners = tradePartners.get(a.userId) || new Set()
+      const tradedWith = []
+      for (const otherId of partners) {
+        if (otherId === a.userId) continue
+        if (!groupUserIds.has(otherId)) continue
+        const name = usernameByUserId.get(otherId)
+        if (name) tradedWith.push(name)
+      }
+      tradedWith.sort()
+      if (tradedWith.length) hasInternalTrades = true
+      return {
+        ...a,
+        points: pointsByUser.get(a.userId) ?? 0,
+        ctoonCount: ctoonCountByUser.get(a.userId) ?? 0,
+        tradedWith
+      }
+    })
+
+    return { ...group, aliases, hasInternalTrades }
+  })
+
+  return { groups: enriched, total, page, limit }
 })
