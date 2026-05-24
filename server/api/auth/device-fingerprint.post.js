@@ -21,6 +21,76 @@ function getRequestIP(event) {
   )
 }
 
+// Derive a compact, human-readable device summary from a User-Agent string.
+// Returns a string like "Mobile · iOS 17 · Safari" or "Desktop · Windows · Chrome 124".
+// No external dependency — covers the vast majority of real browsers.
+function parseDeviceType(ua) {
+  if (!ua) return null
+
+  let deviceType = 'Desktop'
+  let os = 'Unknown'
+  let osVersion = ''
+  let browser = 'Unknown'
+  let browserVersion = ''
+
+  // ── OS / device class ──────────────────────────────────────────────────────
+  if (/iPhone/i.test(ua)) {
+    deviceType = 'Mobile'
+    os = 'iOS'
+    const m = ua.match(/OS (\d+)[_.]/)
+    if (m) osVersion = ` ${m[1]}`
+  } else if (/iPad/i.test(ua)) {
+    deviceType = 'Tablet'
+    os = 'iPadOS'
+    const m = ua.match(/OS (\d+)[_.]/)
+    if (m) osVersion = ` ${m[1]}`
+  } else if (/Android/i.test(ua)) {
+    os = 'Android'
+    const m = ua.match(/Android (\d+)/)
+    if (m) osVersion = ` ${m[1]}`
+    deviceType = /Mobile/i.test(ua) ? 'Mobile' : 'Tablet'
+  } else if (/CrOS/i.test(ua)) {
+    os = 'ChromeOS'
+  } else if (/Windows NT/i.test(ua)) {
+    os = 'Windows'
+  } else if (/Macintosh|Mac OS X/i.test(ua)) {
+    os = 'macOS'
+  } else if (/Linux/i.test(ua)) {
+    os = 'Linux'
+  }
+
+  // ── Browser (check specifics before generic Chrome/Safari) ────────────────
+  if (/Edg\//i.test(ua)) {
+    browser = 'Edge'
+    const m = ua.match(/Edg\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/OPR\/|Opera/i.test(ua)) {
+    browser = 'Opera'
+    const m = ua.match(/(?:OPR|Opera)\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/SamsungBrowser/i.test(ua)) {
+    browser = 'Samsung'
+    const m = ua.match(/SamsungBrowser\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/Firefox\/(\d+)/i.test(ua)) {
+    browser = 'Firefox'
+    const m = ua.match(/Firefox\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/Chrome\/(\d+)/i.test(ua)) {
+    browser = 'Chrome'
+    const m = ua.match(/Chrome\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/Version\/(\d+).*Safari/i.test(ua)) {
+    browser = 'Safari'
+    const m = ua.match(/Version\/(\d+)/)
+    if (m) browserVersion = ` ${m[1]}`
+  } else if (/Safari/i.test(ua)) {
+    browser = 'Safari'
+  }
+
+  return `${deviceType} · ${os}${osVersion} · ${browser}${browserVersion}`
+}
+
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -40,12 +110,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const ip = getRequestIP(event)
+  const ua = getRequestHeader(event, 'user-agent') || ''
+  const deviceType = parseDeviceType(ua)
 
   await prisma.deviceFingerprintLog.create({
     data: {
       userId: me.id,
       ip,
-      visitorId
+      visitorId,
+      deviceType
     }
   })
 

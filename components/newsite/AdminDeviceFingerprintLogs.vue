@@ -72,6 +72,7 @@
                 <th class="px-1.5 py-1 border-b">Username</th>
                 <th class="px-1.5 py-1 border-b">DiscordID</th>
                 <th class="px-1.5 py-1 border-b">IP</th>
+                <th class="px-1.5 py-1 border-b">Device</th>
                 <th class="px-1.5 py-1 border-b">Browser ID (fingerprint)</th>
                 <th class="px-1.5 py-1 border-b"></th>
               </tr>
@@ -106,6 +107,7 @@
                       <span v-else class="font-mono text-gray-500" :title="'Snowflake — user has not re-logged in since discordUsername was added'">{{ row.user?.discordId || '—' }}</span>
                     </td>
                     <td class="px-1.5 py-1 font-mono">{{ row.ip || '—' }}</td>
+                    <td class="px-1.5 py-1 whitespace-nowrap">{{ row.deviceType || '—' }}</td>
                     <td class="px-1.5 py-1 font-mono break-all">{{ row.visitorId }}</td>
                     <td class="px-1.5 py-1">
                       <button
@@ -127,6 +129,7 @@
                     <span v-else class="font-mono text-gray-500" :title="'Snowflake — user has not re-logged in since discordUsername was added'">{{ row.user?.discordId || '—' }}</span>
                   </td>
                   <td class="px-1.5 py-1 font-mono">{{ row.ip || '—' }}</td>
+                  <td class="px-1.5 py-1 whitespace-nowrap">{{ row.deviceType || '—' }}</td>
                   <td class="px-1.5 py-1 font-mono break-all">{{ row.visitorId }}</td>
                   <td class="px-1.5 py-1">
                     <button
@@ -165,6 +168,7 @@
                 <div><span class="text-gray-500">User:</span> <span class="font-medium">{{ row.user?.username || '—' }}</span></div>
                 <div><span class="text-gray-500">DiscordID:</span> <span class="font-mono">{{ row.user?.discordId || '—' }}</span></div>
                 <div><span class="text-gray-500">IP:</span> <span class="font-mono">{{ row.ip || '—' }}</span></div>
+                <div><span class="text-gray-500">Device:</span> <span>{{ row.deviceType || '—' }}</span></div>
                 <div><span class="text-gray-500">Browser ID:</span> <span class="font-mono break-all">{{ row.visitorId }}</span></div>
                 <div class="pt-1">
                   <button
@@ -182,6 +186,7 @@
               <div><span class="text-gray-500">User:</span> <span class="font-medium">{{ row.user?.username || '—' }}</span></div>
               <div><span class="text-gray-500">DiscordID:</span> <span class="font-mono">{{ row.user?.discordId || '—' }}</span></div>
               <div><span class="text-gray-500">IP:</span> <span class="font-mono">{{ row.ip || '—' }}</span></div>
+              <div><span class="text-gray-500">Device:</span> <span>{{ row.deviceType || '—' }}</span></div>
               <div><span class="text-gray-500">Browser ID:</span> <span class="font-mono break-all">{{ row.visitorId }}</span></div>
               <div class="pt-1">
                 <button
