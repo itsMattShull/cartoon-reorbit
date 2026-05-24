@@ -10,6 +10,7 @@ setSidebarMiddle('CmartSidebar')
 
 const cmartTab = useState('newSiteCmartTab', () => 'ctoons')
 const filter   = useNewSiteCtoonFilter()
+const aFilters = useAuctionHouseFilters()
 const route    = useRoute()
 const router   = useRouter()
 
@@ -24,6 +25,13 @@ Object.assign(filter.value, {
   sortField:       'releaseDate',
   sortAsc:         false,
   hideUnavailable: false,
+})
+Object.assign(aFilters.value, {
+  featuredOnly:  false,
+  hasBidsOnly:   false,
+  gtoonsOnly:    false,
+  wishlistOnly:  false,
+  selectedOwned: 'all',
 })
 
 const q = route.query

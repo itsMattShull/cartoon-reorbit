@@ -248,6 +248,21 @@ const loading    = ref(true)
 const buyingIds  = ref([])
 const cmartEl    = ref(null)
 const filter     = useNewSiteCtoonFilter()
+const aFilters   = useAuctionHouseFilters()
+
+// Lazily loaded list of ctoonIds the user has wishlisted (for the Wishlist pill)
+const wishlistCtoonIds = ref([])
+let wishlistLoaded = false
+async function loadWishlist() {
+  if (wishlistLoaded) return
+  try {
+    const items = await $fetch('/api/wishlist')
+    wishlistCtoonIds.value = Array.isArray(items) ? items.map(i => i?.id).filter(Boolean) : []
+  } finally {
+    wishlistLoaded = true
+  }
+}
+watch(() => aFilters.value.wishlistOnly, val => { if (val) loadWishlist() })
 
 // ── Half-price setting ─────────────────────────────────────────
 const cmartHalfPriceEnabled = ref(false)
@@ -392,6 +407,19 @@ const ctoons = computed(() => {
   if (f.hideUnavailable)
     list = list.filter(c => !c.nextReleaseAt && !(c.quantity != null && c.totalMinted >= c.quantity))
 
+  if (aFilters.value.gtoonsOnly)
+    list = list.filter(c => c.isGtoon)
+
+  if (aFilters.value.wishlistOnly) {
+    const wishSet = new Set(wishlistCtoonIds.value)
+    list = list.filter(c => wishSet.has(c.id))
+  }
+
+  if (aFilters.value.selectedOwned === 'owned')
+    list = list.filter(c => originalOwnedSet.value.has(c.id))
+  else if (aFilters.value.selectedOwned === 'unowned')
+    list = list.filter(c => !originalOwnedSet.value.has(c.id))
+
   const byReleaseDateDesc = (a, b) => {
     const at = a.releaseDate ? new Date(a.releaseDate).getTime() : 0
     const bt = b.releaseDate ? new Date(b.releaseDate).getTime() : 0
@@ -488,10 +516,52 @@ onUnmounted(() => {
   if (_refreshTimer) clearTimeout(_refreshTimer)
 })
 
+function describePurchaseError(err, kind = 'cToon') {
+  const status = err?.statusCode || err?.response?.status || err?.data?.statusCode
+  const raw   = err?.data?.statusMessage || err?.statusMessage || err?.message || ''
+  const low   = raw.toLowerCase()
+
+  if (status === 401 || /not authenticated|unauthorized/.test(low)) {
+    return 'You need to be signed in to make a purchase.'
+  }
+  if (/not enough available points|insufficient points/.test(low)) {
+    return `Not enough available points — some of your points may be locked in active trades or auctions.`
+  }
+  if (status === 429 || /daily limit/.test(low)) {
+    return raw || 'Daily purchase limit reached (resets at 8pm CST).'
+  }
+  if (/not released/.test(low)) {
+    return `This ${kind} has not been released yet.`
+  }
+  if (/holiday item/.test(low)) {
+    return 'This item can only be minted while its holiday event is active.'
+  }
+  if (/initial window sold out/.test(low)) {
+    return 'The initial release is sold out — please wait for the final release.'
+  }
+  if (/sold out/.test(low)) {
+    return `This ${kind} is sold out.`
+  }
+  if (/minting period/.test(low)) {
+    return `The minting period for this ${kind} has ended.`
+  }
+  if (/purchase limit/.test(low)) {
+    return raw
+  }
+  if (status === 404 || /not for sale|not found|invalid or not-for-sale/.test(low)) {
+    return `This ${kind} is no longer available for purchase.`
+  }
+  if (status === 400 && /missing|required/.test(low)) {
+    return `Something went wrong sending the purchase request. Please refresh and try again.`
+  }
+  return raw || `Couldn't complete the ${kind} purchase. Please try again.`
+}
+
 async function buy(ctoon) {
   if (buyingIds.value.includes(ctoon.id)) return
-  if (user.value && user.value.points < displayPrice(ctoon.price)) {
-    showToast("You don't have enough points", 'error')
+  const price = displayPrice(ctoon.price)
+  if (user.value && user.value.points < price) {
+    showToast(`Not enough points — this cToon costs ${price.toLocaleString()} pts.`, 'error')
     return
   }
   buyingIds.value = [...buyingIds.value, ctoon.id]
@@ -510,8 +580,7 @@ async function buy(ctoon) {
     allCtoons.value = ctoonRes
     scheduleNextRefresh()
   } catch (err) {
-    const msg = err?.data?.statusMessage || err?.message || 'Purchase failed.'
-    showToast(msg, 'error')
+    showToast(describePurchaseError(err, 'cToon'), 'error')
   } finally {
     buyingIds.value = buyingIds.value.filter(id => id !== ctoon.id)
   }
@@ -528,8 +597,9 @@ function resetPackSequence() {
 
 async function buyPack(pack) {
   if (buyingPackIds.value.includes(pack.id)) return
-  if (user.value && user.value.points < displayPrice(pack.price)) {
-    showToast("You don't have enough points", 'error')
+  const price = displayPrice(pack.price)
+  if (user.value && user.value.points < price) {
+    showToast(`Not enough points — this pack costs ${price.toLocaleString()} pts.`, 'error')
     return
   }
   buyingPackIds.value = [...buyingPackIds.value, pack.id]
@@ -569,8 +639,7 @@ async function buyPack(pack) {
     await fetchSelf({ force: true })
     await loadOwnedCtoonIds()
   } catch (err) {
-    const msg = err?.data?.statusMessage || err?.message || 'Purchase failed.'
-    showToast(msg, 'error')
+    showToast(describePurchaseError(err, 'pack'), 'error')
   } finally {
     buyingPackIds.value = buyingPackIds.value.filter(id => id !== pack.id)
   }

@@ -26,8 +26,10 @@
 // Load .env so NUXT_PORT / SOCKET_PORT are available at config-parse time
 require('dotenv').config()
 
-const NUXT_PORT   = process.env.NUXT_PORT   || '3000'
-const SOCKET_PORT = process.env.SOCKET_PORT || '3001'
+const NUXT_PORT             = process.env.NUXT_PORT   || '3000'
+const SOCKET_PORT           = process.env.SOCKET_PORT || '3001'
+const OFFICIAL_USERNAME_PROD = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+const OFFICIAL_USERNAME_DEV  = process.env.OFFICIAL_USERNAME || 'UmbraRobotTycoon'
 
 const DIAG_ENV = {
   DIAG_ENABLED:           '0',
@@ -56,17 +58,19 @@ module.exports = {
       node_args:          '--max-old-space-size=2048',
       max_memory_restart: '2G',
       env: {
-        NODE_ENV:      'production',
-        NITRO_PORT:    NUXT_PORT,
-        NUXT_PORT:     NUXT_PORT,
-        TKO_PASSCODE:  process.env.TKO_PASSCODE,
+        NODE_ENV:         'production',
+        NITRO_PORT:       NUXT_PORT,
+        NUXT_PORT:        NUXT_PORT,
+        TKO_PASSCODE:     process.env.TKO_PASSCODE,
+        OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD,
         ...DIAG_ENV,
       },
       env_development: {
-        NODE_ENV:      'production',
-        NITRO_PORT:    NUXT_PORT,
-        NUXT_PORT:     NUXT_PORT,
-        TKO_PASSCODE:  process.env.TKO_PASSCODE,
+        NODE_ENV:         'production',
+        NITRO_PORT:       NUXT_PORT,
+        NUXT_PORT:        NUXT_PORT,
+        TKO_PASSCODE:     process.env.TKO_PASSCODE,
+        OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,
         ...DIAG_ENV,
       },
     },
@@ -85,13 +89,15 @@ module.exports = {
       node_args:          '--max-old-space-size=2048',
       max_memory_restart: '2G',
       env: {
-        NODE_ENV:    'production',
-        SOCKET_PORT: SOCKET_PORT,
+        NODE_ENV:         'production',
+        SOCKET_PORT:      SOCKET_PORT,
+        OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD,
         ...DIAG_ENV,
       },
       env_development: {
-        NODE_ENV:    'production',
-        SOCKET_PORT: SOCKET_PORT,
+        NODE_ENV:         'production',
+        SOCKET_PORT:      SOCKET_PORT,
+        OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,
         ...DIAG_ENV,
       },
     },
@@ -102,8 +108,8 @@ module.exports = {
       script:    'server/workers/mint.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: time-based mint window closure ───────────────────────
@@ -112,8 +118,8 @@ module.exports = {
       script:    'server/workers/mint-end.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -122,8 +128,8 @@ module.exports = {
       script:    'server/workers/dissolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: dissolve auction launch ────────────────────────────
@@ -132,8 +138,8 @@ module.exports = {
       script:    'server/workers/dissolve-auction-launch.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -142,8 +148,8 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -152,8 +158,8 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production' },
-      env_development: { NODE_ENV: 'development' },
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
   ],
 }

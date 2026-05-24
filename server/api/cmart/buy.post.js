@@ -69,7 +69,14 @@ export default defineEventHandler(async (event) => {
     // Time-based mint window guard
     if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
       if (new Date(ctoon.mintEndDate) <= now) {
-        throw createError({ statusCode: 410, statusMessage: 'Minting period has ended.' })
+        // After the minting window closes, allow clearance purchases as long as the
+        // mint-end job has finalized the quantity (i.e., it's no longer the
+        // TIME_BASED_CAP sentinel).  If the quantity is still TIME_BASED_CAP the
+        // mint-end job hasn't run yet — block immediately.
+        if (ctoon.quantity === TIME_BASED_CAP) {
+          throw createError({ statusCode: 410, statusMessage: 'Minting period has ended.' })
+        }
+        // quantity is finalized — fall through to the normal sold-out check below
       }
     }
 
