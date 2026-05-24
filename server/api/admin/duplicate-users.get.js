@@ -39,19 +39,13 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 3. Track IPs used by any admin, and build map of user aliases per IP
-  const ipsWithAdmin = new Set()
+  // 3. Build map of user aliases per IP. We keep admin logins in the
+  //    grouping (with an isAdmin flag on the alias) so admins testing
+  //    other accounts on shared devices still surface in Cheat Finder.
   const byIp = {}
 
   for (const { ip, createdAt, user } of logs) {
     const ts = createdAt.getTime()
-
-    if (user.isAdmin) {
-      // mark this IP and skip grouping it
-      ipsWithAdmin.add(ip)
-      continue
-    }
-
     const name = user.username || '__unknown__'
     byIp[ip] = byIp[ip] || {}
     // for each alias keep the latest login timestamp + user metadata
@@ -61,24 +55,23 @@ export default defineEventHandler(async (event) => {
         ts,
         joined: user.createdAt,
         discordTag: user.discordTag,
-        discordCreatedAt: user.discordCreatedAt
+        discordCreatedAt: user.discordCreatedAt,
+        isAdmin: !!user.isAdmin
       }
     }
   }
 
-  // 4. Build only those IP groups with >1 distinct username and no admin on that IP
+  // 4. Build only those IP groups with >1 distinct username
   const groups = Object.entries(byIp)
-    .filter(([ip, nameMap]) =>
-      !ipsWithAdmin.has(ip) &&
-      Object.keys(nameMap).length > 1
-    )
+    .filter(([, nameMap]) => Object.keys(nameMap).length > 1)
     .map(([ip, nameMap]) => {
       const aliases = Object.entries(nameMap).map(([username, info]) => ({
         username,
         lastLogin: new Date(info.ts),
         joined: info.joined,
         discordTag: info.discordTag,
-        discordCreatedAt: info.discordCreatedAt
+        discordCreatedAt: info.discordCreatedAt,
+        isAdmin: info.isAdmin
       }))
       const lastLoginTs = Object.values(nameMap).reduce((max, info) => Math.max(max, info.ts), 0)
       return { ip, aliases, lastLogin: new Date(lastLoginTs) }
