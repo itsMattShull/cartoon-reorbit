@@ -1,19 +1,24 @@
 <template>
   <div class="admin-nav">
-    <div class="admin-nav-dropdown" ref="dropdownRef">
-      <BlueButton :style="{ height: buttonHeight }" @click.stop="toggleOpen">Admin Core ▾</BlueButton>
-      <div v-if="open" class="admin-nav-menu">
-        <template v-for="item in items" :key="item.id">
+    <div
+      v-for="menu in menus"
+      :key="menu.id"
+      class="admin-nav-dropdown"
+      :ref="el => (dropdownRefs[menu.id] = el)"
+    >
+      <BlueButton :style="{ height: buttonHeight }" @click.stop="toggle(menu.id)">{{ menu.label }} ▾</BlueButton>
+      <div v-if="openDropdown === menu.id" class="admin-nav-menu">
+        <template v-for="item in menu.items" :key="item.id">
           <NuxtLink
             v-if="item.to"
             :to="item.to"
             class="admin-nav-menu-item"
-            @click="open = false"
+            @click="openDropdown = null"
           >{{ item.label }}</NuxtLink>
           <button
             v-else
             class="admin-nav-menu-item"
-            @click="open = false"
+            @click="openDropdown = null"
           >{{ item.label }}</button>
         </template>
       </div>
@@ -37,30 +42,55 @@ const props = defineProps({
   }
 })
 
-const items = [
-  { id: 'analytics',   label: 'Analytics',    to: '/newsite/admin' },
-  { id: 'manageUsers', label: 'Manage Users', to: '/newsite/admin/manageUsers' },
-  { id: 'placeholder-1', label: 'Placeholder', to: null },
-  { id: 'placeholder-2', label: 'Placeholder', to: null },
-  { id: 'placeholder-3', label: 'Placeholder', to: null },
-  { id: 'placeholder-4', label: 'Placeholder', to: null },
-  { id: 'placeholder-5', label: 'Placeholder', to: null },
-  { id: 'placeholder-6', label: 'Placeholder', to: null },
-  { id: 'placeholder-7', label: 'Placeholder', to: null },
-  { id: 'placeholder-8', label: 'Placeholder', to: null }
+const menus = [
+  {
+    id: 'core',
+    label: 'Admin Core',
+    items: [
+      { id: 'analytics',     label: 'Analytics',    to: '/newsite/admin' },
+      { id: 'manageUsers',   label: 'Manage Users', to: '/newsite/admin/manageUsers' },
+      { id: 'core-placeholder-1', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-2', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-3', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-4', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-5', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-6', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-7', label: 'Placeholder', to: null },
+      { id: 'core-placeholder-8', label: 'Placeholder', to: null }
+    ]
+  },
+  {
+    id: 'logs',
+    label: 'Admin Logs',
+    items: [
+      { id: 'cheatFinder',        label: 'Cheat Finder',       to: '/newsite/admin/cheatFinder' },
+      { id: 'authLogs',           label: 'Auth Logs',          to: '/newsite/admin/authLogs' },
+      { id: 'tradeLogs',          label: 'Trade Logs',         to: '/newsite/admin/tradeLogs' },
+      { id: 'auctionLogs',        label: 'Auction Logs',       to: '/newsite/admin/auctionLogs' },
+      { id: 'ctoonOwnerLogs',     label: 'cToon Owner Logs',   to: '/newsite/admin/ctoonOwnerLogs' },
+      { id: 'czoneSearchLogs',    label: 'cZone Search Logs',  to: '/newsite/admin/czoneSearchLogs' },
+      { id: 'pointLogs',          label: 'Point Logs',         to: '/newsite/admin/pointLogs' },
+      { id: 'achievementLogs',    label: 'Achievement Logs',   to: '/newsite/admin/achievementLogs' },
+      { id: 'gtoonsClashLogs',    label: 'gToons Clash Logs',  to: '/newsite/admin/gtoonsClashLogs' },
+      { id: 'monsterBattleLogs',  label: 'Monster Battle Logs', to: '/newsite/admin/monsterBattleLogs' },
+      { id: 'lottoLogs',          label: 'Lotto Logs',         to: '/newsite/admin/lottoLogs' },
+      { id: 'winWheelLogs',       label: 'Win Wheel Logs',     to: '/newsite/admin/winWheelLogs' },
+      { id: 'scavengerLogs',      label: 'Scavenger Logs',     to: '/newsite/admin/scavengerLogs' }
+    ]
+  }
 ]
 
-const open = ref(false)
-const dropdownRef = ref(null)
+const openDropdown = ref(null)
+const dropdownRefs = {}
 
-function toggleOpen() {
-  open.value = !open.value
+function toggle(id) {
+  openDropdown.value = openDropdown.value === id ? null : id
 }
 
 function onGlobalClick(e) {
-  if (!open.value) return
-  const root = dropdownRef.value
-  if (root && !root.contains(e.target)) open.value = false
+  if (!openDropdown.value) return
+  const active = dropdownRefs[openDropdown.value]
+  if (active && !active.contains(e.target)) openDropdown.value = null
 }
 
 onMounted(() => {

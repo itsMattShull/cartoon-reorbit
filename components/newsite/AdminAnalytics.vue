@@ -1,11 +1,11 @@
 <template>
-  <div class="admin-analytics bg-gray-50">
+  <div class="admin-analytics bg-gray-50 text-xs">
 
     <!-- Active Discord % Card -->
-    <div class="px-6 py-4">
-      <div class="inline-block bg-white shadow rounded p-4 mb-6">
-        <h2 class="text-lg font-semibold">Active in Discord</h2>
-        <p class="text-2xl font-bold">
+    <div class="px-2 pt-2">
+      <div class="inline-block bg-white shadow rounded p-2 mb-2">
+        <h2 class="text-xs font-semibold">Active in Discord</h2>
+        <p class="text-sm font-bold">
           {{ activeDiscord.percentage }}%
           ({{ activeDiscord.count }} of {{ activeDiscord.total }})
         </p>
@@ -13,13 +13,13 @@
     </div>
 
     <!-- Timeframe + GroupBy selector -->
-    <div class="px-6 py-4 flex flex-wrap items-center gap-4">
-      <div class="flex items-center space-x-2">
+    <div class="px-2 py-1 flex flex-wrap items-center gap-2">
+      <div class="flex items-center space-x-1">
         <label for="timeframe" class="font-medium">Timeframe:</label>
         <select
           id="timeframe"
           v-model="selectedTimeframe"
-          class="border rounded px-2 py-1"
+          class="border rounded px-1.5 py-0.5 text-xs"
         >
           <option v-for="opt in timeframeOptions" :key="opt.value" :value="opt.value">
             {{ opt.label }}
@@ -27,12 +27,12 @@
         </select>
       </div>
 
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-1">
         <label for="groupBy" class="font-medium">Group by:</label>
         <select
           id="groupBy"
           v-model="groupBy"
-          class="border rounded px-2 py-1"
+          class="border rounded px-1.5 py-0.5 text-xs"
         >
           <option v-for="opt in groupOptions" :key="opt.value" :value="opt.value">
             {{ opt.label }}
@@ -42,16 +42,16 @@
     </div>
 
     <!-- Charts grid -->
-    <div class="px-6 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="px-2 pb-2 grid grid-cols-1 lg:grid-cols-2 gap-3">
       <!-- 1) Cumulative Users -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Cumulative Users</h2>
+        <h2 class="text-sm font-semibold mb-1">Cumulative Users</h2>
         <div class="chart-container"><canvas ref="cumCanvas"></canvas></div>
       </div>
 
       <!-- 2) % First Purchase -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">
+        <h2 class="text-sm font-semibold mb-1">
           % of Users Buying First cToon within 1 {{ groupUnitLabel }}
         </h2>
         <div class="chart-container"><canvas ref="pctCanvas"></canvas></div>
@@ -59,48 +59,48 @@
 
       <!-- 3) Unique Logons -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Unique {{ groupLabel }} Logons</h2>
+        <h2 class="text-sm font-semibold mb-1">Unique {{ groupLabel }} Logons</h2>
         <div class="chart-container"><canvas ref="uniqueCanvas"></canvas></div>
       </div>
 
       <!-- 4) Codes Redeemed (bar) -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Codes Redeemed</h2>
+        <h2 class="text-sm font-semibold mb-1">Codes Redeemed</h2>
         <div class="chart-container"><canvas ref="codesCanvas"></canvas></div>
       </div>
 
       <!-- 5) Trades Requested (bar) -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Trades Requested</h2>
+        <h2 class="text-sm font-semibold mb-1">Trades Requested</h2>
         <div class="chart-container"><canvas ref="tradesCanvas"></canvas></div>
       </div>
 
       <!-- 5) cToons Purchased (bar) -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">cToons Purchased</h2>
+        <h2 class="text-sm font-semibold mb-1">cToons Purchased</h2>
         <div class="chart-container"><canvas ref="ctoonCanvas"></canvas></div>
       </div>
 
       <!-- 6) Packs Purchased (bar) -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Packs Purchased</h2>
+        <h2 class="text-sm font-semibold mb-1">Packs Purchased</h2>
         <div class="chart-container"><canvas ref="packsCanvas"></canvas></div>
       </div>
 
       <!-- 4) gToons Clash Games -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">gToons Clash Games</h2>
-        <h3 class="text-sm text-gray-600 mb-1">
+        <h2 class="text-sm font-semibold mb-1">gToons Clash Games</h2>
+        <h3 class="text-[11px] text-gray-600 mb-1">
           Total (window): {{ clashTotal }} — Finished: {{ clashPctFinished }}%
         </h3>
-        <div class="chart-container mb-6">
+        <div class="chart-container mb-2">
           <canvas ref="clashCanvas"></canvas>
         </div>
       </div>
 
       <!-- Monster Scans -->
       <div>
-        <h2 class="text-xl font-semibold mb-2">Monster Scans</h2>
+        <h2 class="text-sm font-semibold mb-1">Monster Scans</h2>
         <div class="chart-container">
           <canvas ref="monsterScansCanvas"></canvas>
         </div>
@@ -108,22 +108,22 @@
 
       <!-- Socket State / Leak Signals -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-semibold mb-2 flex items-center">
+        <h2 class="text-sm font-semibold mb-1 flex items-center">
           Socket State Signals
           <span
-            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
             :class="leakRiskBadgeClass"
           >
             {{ leakRiskBadgeText }}
           </span>
         </h2>
-        <p class="text-sm text-gray-600 mb-2">
+        <p class="text-[11px] text-gray-600 mb-1">
           {{ leakRiskSummary }}
         </p>
-        <p class="text-xs text-gray-500 mb-2">
+        <p class="text-[10px] text-gray-500 mb-1">
           RSS MB is resident set size: the total memory the socket server process holds in RAM (heap + native).
         </p>
-        <p v-if="socketMetricsUpdatedAt" class="text-xs text-gray-500 mb-3">
+        <p v-if="socketMetricsUpdatedAt" class="text-[10px] text-gray-500 mb-1">
           Last sample: {{ formatSocketTime(socketMetricsUpdatedAt) }} · Samples: {{ socketMetricsSeries.length }}
         </p>
         <div class="chart-container">
@@ -133,25 +133,25 @@
 
       <!-- 7) Points Distribution (histogram) spans full width -->
       <div class="lg:col-span-2">
-        <div class="flex flex-wrap items-center justify-between gap-4 mb-2">
-          <h2 class="text-xl font-semibold">Points Distribution</h2>
-          <div class="flex flex-wrap items-center gap-3">
-            <label class="flex items-center space-x-2 text-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h2 class="text-sm font-semibold">Points Distribution</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="flex items-center space-x-1 text-[11px]">
               <span class="font-medium">Bucket size:</span>
-              <select v-model.number="pointsBucketSize" class="border rounded px-2 py-1">
+              <select v-model.number="pointsBucketSize" class="border rounded px-1.5 py-0.5 text-xs">
                 <option v-for="opt in pointsBucketOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
                 </option>
               </select>
             </label>
-            <div class="flex items-center gap-2 text-sm">
-              <button type="button" class="border rounded px-2 py-1" @click="zoomPointsIn">
+            <div class="flex items-center gap-1 text-[11px]">
+              <button type="button" class="border rounded px-1.5 py-0.5" @click="zoomPointsIn">
                 Zoom In
               </button>
-              <button type="button" class="border rounded px-2 py-1" @click="zoomPointsOut">
+              <button type="button" class="border rounded px-1.5 py-0.5" @click="zoomPointsOut">
                 Zoom Out
               </button>
-              <button type="button" class="border rounded px-2 py-1" @click="resetPointsZoom">
+              <button type="button" class="border rounded px-1.5 py-0.5" @click="resetPointsZoom">
                 Reset
               </button>
             </div>
@@ -162,13 +162,13 @@
 
       <!-- 0) Net Points Issued w/ health badge -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-semibold mb-2 flex items-center">
+        <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
           Net Points Issued
-          <span class="ml-2 text-sm text-gray-500">
+          <span class="text-[10px] text-gray-500">
             (last {{ netWindowCount }} {{ windowUnitPlural }})
           </span>
           <span
-            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
             :class="badgeClass"
           >
             {{ badgeText }}
@@ -176,9 +176,9 @@
         </h2>
 
         <!-- suggestions block -->
-        <div v-if="netStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
-          <p class="font-medium mb-1">How to improve:</p>
-          <ul class="list-disc list-inside space-y-1 text-sm">
+        <div v-if="netStatus !== 'good'" class="mt-1 p-2 bg-yellow-50 rounded">
+          <p class="font-medium mb-1 text-[11px]">How to improve:</p>
+          <ul class="list-disc list-inside space-y-0.5 text-[11px]">
             <li v-for="(s,i) in netSuggestions" :key="i">{{ s }}</li>
           </ul>
         </div>
@@ -190,22 +190,22 @@
 
       <!-- Spend / Earn Ratio -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-semibold mb-2 flex items-center">
+        <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
           Spend / Earn Ratio
-          <span class="ml-2 text-sm text-gray-500">
+          <span class="text-[10px] text-gray-500">
             (last {{ ratioWindowCount }} {{ windowUnitPlural }})
           </span>
           <span
-            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
             :class="ratioBadgeClass"
           >
             {{ ratioBadgeText }}
           </span>
         </h2>
 
-        <div v-if="ratioStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
-          <p class="font-medium mb-1">How to improve:</p>
-          <ul class="list-disc list-inside space-y-1 text-sm">
+        <div v-if="ratioStatus !== 'good'" class="mt-1 p-2 bg-yellow-50 rounded">
+          <p class="font-medium mb-1 text-[11px]">How to improve:</p>
+          <ul class="list-disc list-inside space-y-0.5 text-[11px]">
             <li v-for="(s,i) in ratioSuggestions" :key="i">{{ s }}</li>
           </ul>
         </div>
@@ -217,13 +217,13 @@
 
       <!-- 8) Rarity Turnover Rate -->
       <div class="lg:col-span-2">
-        <h2 class="text-xl font-semibold mb-2 flex items-center">
+        <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
           Rarity Turnover Rate
-          <span class="ml-2 text-sm text-gray-500">
+          <span class="text-[10px] text-gray-500">
             (last {{ turnoverWindowCount }} {{ windowUnitPlural }})
           </span>
           <span
-            class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
             :class="turnoverBadgeClass"
           >
             {{ turnoverBadgeText }}
@@ -231,16 +231,16 @@
         </h2>
 
         <!-- healthy ranges subtitle -->
-        <div class="text-sm text-gray-500 mb-4">
-          <span v-for="(range, rarity) in healthyRanges" :key="rarity" class="mr-6">
+        <div class="text-[10px] text-gray-500 mb-2">
+          <span v-for="(range, rarity) in healthyRanges" :key="rarity" class="mr-3">
             {{ rarity }}: {{ range }}
           </span>
         </div>
 
         <!-- suggestions if not healthy -->
-        <div v-if="turnoverStatus !== 'good'" class="mt-2 p-3 bg-yellow-50 rounded">
-          <p class="font-medium mb-1">How to improve:</p>
-          <ul class="list-disc list-inside space-y-1 text-sm">
+        <div v-if="turnoverStatus !== 'good'" class="mt-1 p-2 bg-yellow-50 rounded">
+          <p class="font-medium mb-1 text-[11px]">How to improve:</p>
+          <ul class="list-disc list-inside space-y-0.5 text-[11px]">
             <li v-for="(s,i) in turnoverSuggestions" :key="i">{{ s }}</li>
           </ul>
         </div>
@@ -1283,8 +1283,8 @@ watch(pointsBucketSize, async () => {
 }
 
 .chart-container {
-  height: 300px;
+  height: 220px;
   position: relative;
-  padding: 10px;
+  padding: 4px;
 }
 </style>
