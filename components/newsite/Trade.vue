@@ -418,6 +418,11 @@
                 <div class="tm-val-verdict" :class="'tm-verdict--' + fairnessData.verdictClass">
                   {{ fairnessData.verdict }}
                 </div>
+                <div v-if="fairnessData.pct < 0" class="tm-val-suggestion">
+                  💡 Ask <strong>{{ fairnessData.otherUsername }}</strong> to add
+                  <strong>~{{ fairnessData.shortfall.toLocaleString() }} pts</strong>
+                  (or cToons worth that amount) to make this trade even.
+                </div>
                 <div class="tm-val-note">
                   Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
                 </div>
@@ -728,6 +733,14 @@ const fairnessData = computed(() => {
     verdictClass = 'bad'
   }
 
+  // How many more points of value the current user should ask for to break even
+  const shortfall = pct < 0 ? Math.round(youGive - youGet) : 0
+
+  // Username of the other party (the one who should add more value)
+  const otherUsername = isRecipient.value
+    ? currentOffer.value?.initiator?.username
+    : currentOffer.value?.recipient?.username
+
   const barTotal = offered + requested
   return {
     offeredTotal: offered,
@@ -737,6 +750,8 @@ const fairnessData = computed(() => {
     pct,
     verdict,
     verdictClass,
+    shortfall,
+    otherUsername,
     // Percent of the bar that represents the offered side
     offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
   }
@@ -1679,6 +1694,20 @@ onBeforeUnmount(() => {
 .tm-verdict--great { color: #4ade80; background: rgba(74, 222, 128, 0.18); border: 1px solid rgba(74, 222, 128, 0.25); }
 .tm-verdict--warn  { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
 .tm-verdict--bad   { color: #f87171; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.2); }
+.tm-val-suggestion {
+  font-size: 0.66rem;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 4px;
+  padding: 5px 10px;
+  text-align: center;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.tm-val-suggestion strong {
+  color: #fde68a;
+}
 .tm-val-note {
   font-size: 0.54rem;
   color: rgba(255, 255, 255, 0.27);
