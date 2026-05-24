@@ -3,12 +3,13 @@
 // the user (for username + discordId display in AdminDeviceFingerprintLogs).
 //
 // Query params:
-//   page=N        (1-indexed; default 1)
-//   limit=N       (1..200; default 100)
-//   username=...  (case-insensitive substring match on User.username)
-//   visitorId=... (exact match — useful for clicking a row to "show all
-//                  accounts that share this fingerprint")
-//   ip=...        (exact match)
+//   page=N             (1-indexed; default 1)
+//   limit=N            (1..200; default 100)
+//   username=...       (case-insensitive substring match on User.username)
+//   visitorId=...      (exact match — useful for clicking a row to "show all
+//                       accounts that share this fingerprint")
+//   ip=...             (exact match)
+//   duplicatesOnly=1   (restrict to visitorIds that appear more than once)
 
 import {
   defineEventHandler,
@@ -35,9 +36,10 @@ export default defineEventHandler(async (event) => {
   const limit = Math.min(Math.max(parseInt(query.limit || '100', 10), 1), 200)
   const skip = (page - 1) * limit
 
-  const username  = String(query.username  || '').trim()
-  const visitorId = String(query.visitorId || '').trim()
-  const ip        = String(query.ip        || '').trim()
+  const username      = String(query.username      || '').trim()
+  const visitorId     = String(query.visitorId     || '').trim()
+  const ip            = String(query.ip            || '').trim()
+  const duplicatesOnly = query.duplicatesOnly === '1' || query.duplicatesOnly === 'true'
 
   const where = {}
   if (username) {
@@ -45,6 +47,28 @@ export default defineEventHandler(async (event) => {
   }
   if (visitorId) where.visitorId = visitorId
   if (ip) where.ip = ip
+
+  // If duplicatesOnly, restrict to visitorIds that appear more than once
+  if (duplicatesOnly) {
+    const dupeGroups = await prisma.deviceFingerprintLog.groupBy({
+      by: ['visitorId'],
+      _count: { visitorId: true },
+      having: { visitorId: { _count: { gt: 1 } } }
+    })
+    const dupeIds = dupeGroups.map(r => r.visitorId)
+    if (dupeIds.length === 0) {
+      return { items: [], total: 0, page, limit }
+    }
+    if (where.visitorId) {
+      // Keep exact filter only if it's among the duplicates
+      if (!dupeIds.includes(where.visitorId)) {
+        return { items: [], total: 0, page, limit }
+      }
+      // else the existing exact filter already narrows it enough
+    } else {
+      where.visitorId = { in: dupeIds }
+    }
+  }
 
   const [items, total] = await Promise.all([
     prisma.deviceFingerprintLog.findMany({
