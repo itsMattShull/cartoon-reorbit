@@ -7,6 +7,7 @@
       <AdminAnalytics v-if="!section" />
       <AdminManageUsers v-else-if="section === 'manageUsers'" />
       <AdminCheatFinder v-else-if="section === 'cheatFinder'" />
+      <AdminDeviceFingerprintLogs v-else-if="section === 'deviceFingerprints'" />
       <AdminAuthLogs v-else-if="section === 'authLogs'" />
       <AdminTradeLogs v-else-if="section === 'tradeLogs'" />
       <AdminAuctionLogs v-else-if="section === 'auctionLogs'" />

@@ -349,6 +349,7 @@ model User {
   id                                String    @id @default(uuid())
   username                          String?   @unique
   discordId                         String    @unique
+  discordUsername                   String?
   discordTag                        String?
   discordAvatar                     String?
   email                             String?   @unique
@@ -379,6 +380,7 @@ model User {
   cZones                   CZone[]
   clashDecks               ClashDeck[]
   logins                   LoginLog[]
+  deviceFingerprintLogs    DeviceFingerprintLog[]
   gamePointLogs            GamePointLog[]
   pointsLogs               PointsLog[]
   lockedPoints             LockedPoints[]
@@ -759,6 +761,21 @@ model LoginLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([ip])
+}
+
+model DeviceFingerprintLog {
+  id        String   @id @default(uuid())
+  userId    String
+  ip        String
+  visitorId String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([visitorId])
+  @@index([ip])
+  @@index([createdAt])
 }
 
 model GamePointLog {
