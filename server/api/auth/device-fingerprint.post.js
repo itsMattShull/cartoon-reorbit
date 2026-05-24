@@ -113,6 +113,24 @@ export default defineEventHandler(async (event) => {
   const ua = getRequestHeader(event, 'user-agent') || ''
   const deviceType = parseDeviceType(ua)
 
+  // Daily dedup: only store one row per day per unique combination of
+  // (user, ip, visitorId, deviceType).  "Day" is defined as UTC midnight→midnight.
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+
+  const alreadyLogged = await prisma.deviceFingerprintLog.findFirst({
+    where: {
+      userId:     me.id,
+      ip,
+      visitorId,
+      deviceType: deviceType ?? null,
+      createdAt:  { gte: todayStart }
+    },
+    select: { id: true }
+  })
+
+  if (alreadyLogged) return { ok: true }
+
   await prisma.deviceFingerprintLog.create({
     data: {
       userId: me.id,
