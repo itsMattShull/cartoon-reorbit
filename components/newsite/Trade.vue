@@ -385,6 +385,48 @@
 
           <!-- Modal body -->
           <div class="tm-body">
+
+            <!-- ── Value summary (PENDING trades only) ── -->
+            <div v-if="currentOffer.status === 'PENDING'" class="tm-valuation">
+              <div v-if="isLoadingValuations" class="tm-val-loading">Estimating values…</div>
+              <template v-else-if="fairnessData">
+                <div class="tm-val-row">
+                  <!-- Offered side total -->
+                  <div class="tm-val-side">
+                    <div class="tm-val-label">Offered (cToons + pts)</div>
+                    <div class="tm-val-amount">~{{ fairnessData.offeredTotal.toLocaleString() }} pts</div>
+                  </div>
+                  <!-- Proportional bar -->
+                  <div class="tm-val-bar-wrap">
+                    <div class="tm-val-bar">
+                      <div
+                        class="tm-val-bar-fill"
+                        :style="{ width: fairnessData.offeredBarPct + '%' }"
+                      ></div>
+                    </div>
+                    <div class="tm-val-bar-labels">
+                      <span>Offered</span>
+                      <span>Requested</span>
+                    </div>
+                  </div>
+                  <!-- Requested side total -->
+                  <div class="tm-val-side tm-val-side-right">
+                    <div class="tm-val-label">Requested (cToons)</div>
+                    <div class="tm-val-amount">~{{ fairnessData.requestedTotal.toLocaleString() }} pts</div>
+                  </div>
+                </div>
+                <div class="tm-val-verdict" :class="'tm-verdict--' + fairnessData.verdictClass">
+                  {{ fairnessData.verdict }}
+                </div>
+                <div class="tm-val-note">
+                  Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
+                </div>
+              </template>
+              <div v-else-if="!isLoadingValuations" class="tm-val-loading">
+                No auction data available to estimate values.
+              </div>
+            </div>
+
             <div class="tm-cols">
               <!-- Offered cToons -->
               <div class="tm-col">
@@ -574,6 +616,132 @@ function getSelfStats(ctoonId) {
 const isRecipient = computed(() => currentOffer.value?.recipient.id === user.value?.id)
 const isInitiator = computed(() => currentOffer.value?.initiator.id === user.value?.id)
 
+// ── Trade Valuations ──────────────────────────────────────────────
+const tradeValuations = ref({})
+const isLoadingValuations = ref(false)
+
+async function loadValuations(offer) {
+  if (!offer?.ctoons?.length) return
+  isLoadingValuations.value = true
+  tradeValuations.value = {}
+  try {
+    const userCtoonIds = offer.ctoons.map(tc => tc.userCtoon.id)
+    const result = await $fetch('/api/ctoon/valuations', {
+      method: 'POST',
+      body: { userCtoonIds }
+    })
+    tradeValuations.value = result || {}
+  } catch {
+    tradeValuations.value = {}
+  } finally {
+    isLoadingValuations.value = false
+  }
+}
+
+/**
+ * Applies a mint-number premium to the base average sale price.
+ * Lower mint numbers are rarer and command a higher value.
+ *
+ * Formula:  adjustedValue = baseValue × (1 + (highestMint - mintNumber) / highestMint)
+ *   – Mint #1 of 500  → 1 + 499/500 ≈ 1.998× base
+ *   – Mint #250 of 500 → 1 + 250/500 = 1.5× base
+ *   – Mint #500 of 500 → 1 + 0/500  = 1.0× base  (no premium)
+ *
+ * Falls back to cMart price when no auction history exists.
+ */
+function getMintAdjustedValue(valuation) {
+  if (!valuation) return null
+  const { avgSale, mintNumber, highestMint, cMartPrice } = valuation
+  const base = avgSale ?? cMartPrice ?? 0
+  if (!base) return 0
+  // No mint adjustment for unlimited-edition cToons (mintNumber null) or single-mint sets
+  if (mintNumber == null || !highestMint || highestMint <= 1) return base
+  const multiplier = 1 + (highestMint - mintNumber) / highestMint
+  return Math.round(base * multiplier)
+}
+
+/** Sum of mint-adjusted values for offered cToons, plus the points offered */
+const offeredTotal = computed(() => {
+  if (!currentOffer.value || !Object.keys(tradeValuations.value).length) return null
+  const ctoonSum = currentOffer.value.ctoons
+    .filter(tc => tc.role === 'OFFERED')
+    .reduce((sum, tc) => {
+      const val = getMintAdjustedValue(tradeValuations.value[tc.userCtoon.id])
+      return sum + (val ?? 0)
+    }, 0)
+  return ctoonSum + (Number(currentOffer.value.pointsOffered) || 0)
+})
+
+/** Sum of mint-adjusted values for requested cToons */
+const requestedTotal = computed(() => {
+  if (!currentOffer.value || !Object.keys(tradeValuations.value).length) return null
+  return currentOffer.value.ctoons
+    .filter(tc => tc.role === 'REQUESTED')
+    .reduce((sum, tc) => {
+      const val = getMintAdjustedValue(tradeValuations.value[tc.userCtoon.id])
+      return sum + (val ?? 0)
+    }, 0)
+})
+
+/**
+ * Computes the fairness breakdown from the current user's perspective.
+ *
+ * Recipient: they RECEIVE offered cToons+pts, they GIVE requested cToons.
+ * Initiator: they RECEIVE requested cToons,   they GIVE offered cToons+pts.
+ *
+ * pct > 0  → favors current user
+ * pct < 0  → favors the other party
+ */
+const fairnessData = computed(() => {
+  if (offeredTotal.value == null || requestedTotal.value == null) return null
+  const offered = offeredTotal.value
+  const requested = requestedTotal.value
+
+  let youGet, youGive
+  if (isRecipient.value) {
+    youGet = offered
+    youGive = requested
+  } else {
+    youGet = requested
+    youGive = offered
+  }
+
+  const pct = youGive > 0
+    ? ((youGet - youGive) / youGive) * 100
+    : youGet > 0 ? 100 : 0
+
+  let verdict, verdictClass
+  if (Math.abs(pct) < 15) {
+    verdict = 'This trade is roughly fair'
+    verdictClass = 'fair'
+  } else if (pct >= 15 && pct < 50) {
+    verdict = 'This trade slightly favors you'
+    verdictClass = 'good'
+  } else if (pct >= 50) {
+    verdict = 'This trade heavily favors you'
+    verdictClass = 'great'
+  } else if (pct <= -15 && pct > -50) {
+    verdict = 'This trade slightly favors the other party'
+    verdictClass = 'warn'
+  } else {
+    verdict = 'This trade heavily favors the other party'
+    verdictClass = 'bad'
+  }
+
+  const barTotal = offered + requested
+  return {
+    offeredTotal: offered,
+    requestedTotal: requested,
+    youGet,
+    youGive,
+    pct,
+    verdict,
+    verdictClass,
+    // Percent of the bar that represents the offered side
+    offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
+  }
+})
+
 const modalToast = reactive({ show: false, message: '', type: 'success' })
 const pageToast = reactive({ show: false, message: '', type: 'success' })
 
@@ -590,9 +758,13 @@ function viewOffer(offer) {
   currentOffer.value = offer
   showModal.value = true
   loadModalSelfCollection()
+  if (offer.status === 'PENDING') {
+    loadValuations(offer)
+  }
 }
 function closeModal() {
   showModal.value = false; currentOffer.value = null; isProcessing.value = false; modalToast.show = false
+  tradeValuations.value = {}
 }
 
 async function loadModalSelfCollection() {
@@ -1424,6 +1596,93 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   font-size: 0.58rem; color: rgba(255,255,255,0.55); margin-top: 3px; text-align: center;
   padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); width: 100%;
+}
+
+/* ── Value summary ── */
+.tm-valuation {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.tm-val-loading {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 4px 0;
+  font-style: italic;
+}
+.tm-val-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tm-val-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+.tm-val-side-right {
+  text-align: right;
+}
+.tm-val-label {
+  font-size: 0.56rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tm-val-amount {
+  font-size: 0.88rem;
+  font-weight: bold;
+  color: #fbbf24;
+}
+.tm-val-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tm-val-bar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.tm-val-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--OrbitLightBlue) 0%, #fbbf24 100%);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+.tm-val-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+.tm-val-verdict {
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-align: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+.tm-verdict--fair  { color: #d1d5db; background: rgba(209, 213, 219, 0.1); }
+.tm-verdict--good  { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+.tm-verdict--great { color: #4ade80; background: rgba(74, 222, 128, 0.18); border: 1px solid rgba(74, 222, 128, 0.25); }
+.tm-verdict--warn  { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.tm-verdict--bad   { color: #f87171; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.2); }
+.tm-val-note {
+  font-size: 0.54rem;
+  color: rgba(255, 255, 255, 0.27);
+  text-align: center;
 }
 
 /* Modal footer */
