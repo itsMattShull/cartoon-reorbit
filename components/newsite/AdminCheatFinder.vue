@@ -38,9 +38,12 @@
           :key="group.ip"
           class="bg-white border rounded shadow p-2"
         >
-          <div class="flex items-center justify-between mb-1">
-            <h2 class="font-mono font-semibold text-xs">{{ group.ip }}</h2>
-            <span class="text-[10px] text-gray-500">{{ group.aliases.length }} accounts</span>
+          <div class="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <div class="flex items-baseline gap-2 min-w-0">
+              <h2 class="font-mono font-semibold text-xs shrink-0">{{ group.ip }}</h2>
+              <span class="text-[10px] text-gray-500 truncate">{{ whoisDisplay(group.ip) }}</span>
+            </div>
+            <span class="text-[10px] text-gray-500 shrink-0">{{ group.aliases.length }} accounts</span>
           </div>
 
           <!-- Desktop table -->
@@ -121,6 +124,18 @@ const page = ref(1)
 const pageSize = 100
 const loading = ref(false)
 const searchTerm = ref('')
+const whoisByIp = ref({})
+
+function whoisDisplay(ip) {
+  const w = whoisByIp.value[ip]
+  if (!w) return ''
+  if (w.error) return `(${w.error})`
+  const place = [w.city, w.region, w.country].filter(Boolean).join(', ')
+  const parts = []
+  if (w.isp) parts.push(w.isp)
+  if (place) parts.push(place)
+  return parts.join(' · ')
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const showingRange = computed(() => {
@@ -159,12 +174,30 @@ async function fetchGroups() {
     groups.value = data.groups || []
     total.value = data.total || 0
     if (data.page) page.value = data.page
+    fetchWhois()
   } catch (e) {
     console.error('Failed to load duplicate users', e)
     groups.value = []
     total.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchWhois() {
+  // Only look up IPs not already cached client-side
+  const missing = groups.value
+    .map(g => g.ip)
+    .filter(ip => ip && !whoisByIp.value[ip])
+  if (!missing.length) return
+  try {
+    const params = new URLSearchParams({ ips: missing.join(',') })
+    const res = await fetch(`/api/admin/ip-whois?${params.toString()}`, { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json()
+    whoisByIp.value = { ...whoisByIp.value, ...data }
+  } catch (e) {
+    console.error('Failed to load IP whois', e)
   }
 }
 
