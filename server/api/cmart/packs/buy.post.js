@@ -20,6 +20,7 @@ import {
 } from 'h3'
 
 import { prisma as db } from '@/server/prisma'
+import { checkPackDepletion } from '@/server/utils/packAvailability'
 
 /**
  * Returns the start of the current 8pm–7:59pm CST daily window as a UTC Date.
@@ -116,7 +117,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Not enough available points' })
   }
 
-  /* 4.  daily purchase limit check --------------------------------------- */
+  /* 4.  pack rarity depletion check -------------------------------------- */
+  // Some cToons in a pack can also be bought directly via the cToons
+  // section. When that happens, a rarity can become unsatisfiable without
+  // anyone opening the pack — so the pack's inCmart flag may still be true
+  // even though the pack is effectively sold out. Re-check depletion here
+  // and unlist the pack if it can no longer be filled.
+  const depletion = await checkPackDepletion(pack.id)
+  if (depletion.shouldUnlist) {
+    await db.pack.update({ where: { id: pack.id }, data: { inCmart: false } }).catch(() => {})
+    throw createError({
+      statusCode: 410,
+      statusMessage: 'This pack is sold out.'
+    })
+  }
+
+  /* 5.  daily purchase limit check --------------------------------------- */
   if (pack.dailyPurchaseLimit != null) {
     const windowStart = getDailyWindowStart()
     const purchasedToday = await db.userPack.count({
@@ -134,9 +150,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  /* 5.  transaction: deduct points + create sealed pack ----------------- */
+  /* 6.  transaction: deduct points + create sealed pack ----------------- */
   const result = await db.$transaction(async (tx) => {
-    // 5-a  deduct points
+    // 6-a  deduct points
     const updated = await tx.userPoints.update({
       where: { userId: me.id },
       data:  { points: { decrement: effectivePackPrice } }
@@ -146,7 +162,7 @@ export default defineEventHandler(async (event) => {
       data: { userId: me.id, points: effectivePackPrice, total: updated.points, method: "Bought Pack", direction: 'decrease' }
     })
 
-    // 5-b  create UserPack (sealed)
+    // 6-b  create UserPack (sealed)
     const userPack = await tx.userPack.create({
       data: {
         userId: me.id,
@@ -158,6 +174,6 @@ export default defineEventHandler(async (event) => {
     return userPack
   })
 
-  /* 6.  success response ------------------------------------------------- */
+  /* 7.  success response ------------------------------------------------- */
   return { success: true, userPackId: result.id }
 })
