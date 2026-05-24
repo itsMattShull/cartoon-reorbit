@@ -56,7 +56,14 @@
               </thead>
               <tbody>
                 <tr v-for="alias in group.aliases" :key="alias.username" class="border-b last:border-b-0">
-                  <td class="px-1.5 py-1 font-medium">{{ alias.username }}</td>
+                  <td class="px-1.5 py-1 font-medium">
+                    {{ alias.username }}
+                    <span
+                      v-if="alias.isAdmin"
+                      class="ml-1 px-1 py-0.5 text-[9px] uppercase tracking-wide rounded bg-amber-100 text-amber-800 border border-amber-300"
+                      title="This account is an admin — likely legitimate testing"
+                    >Admin</span>
+                  </td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.joined) }}</td>
                   <td class="px-1.5 py-1">{{ alias.discordTag || '—' }}</td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.discordCreatedAt) }}</td>
@@ -72,7 +79,13 @@
               :key="alias.username"
               class="border rounded p-1.5 bg-gray-50"
             >
-              <div class="font-medium text-[11px]">{{ alias.username }}</div>
+              <div class="font-medium text-[11px]">
+                {{ alias.username }}
+                <span
+                  v-if="alias.isAdmin"
+                  class="ml-1 px-1 py-0.5 text-[9px] uppercase tracking-wide rounded bg-amber-100 text-amber-800 border border-amber-300"
+                >Admin</span>
+              </div>
               <div class="mt-0.5 grid grid-cols-1 gap-0.5 text-[10px] text-gray-700">
                 <div><span class="text-gray-500">Joined:</span> {{ formatDate(alias.joined) }}</div>
                 <div><span class="text-gray-500">Discord:</span> {{ alias.discordTag || '—' }}</div>
