@@ -330,6 +330,48 @@
             </div>
           </div>
 
+          <!-- Value preview banner: what the recipient will see -->
+          <div class="tr-create-preview">
+            <div class="tr-create-preview-header">
+              Preview — what <strong>{{ tradeTargetUser.username }}</strong> will see:
+            </div>
+            <div v-if="isLoadingCreateValuations" class="tm-val-loading">Estimating values…</div>
+            <template v-else-if="createFairnessData">
+              <div class="tm-val-row">
+                <div class="tm-val-side">
+                  <div class="tm-val-label">They receive (cToons + pts)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.offeredTotal.toLocaleString() }} pts</div>
+                </div>
+                <div class="tm-val-bar-wrap">
+                  <div class="tm-val-bar">
+                    <div class="tm-val-bar-fill" :style="{ width: createFairnessData.offeredBarPct + '%' }"></div>
+                  </div>
+                  <div class="tm-val-bar-labels">
+                    <span>They receive</span>
+                    <span>They give up</span>
+                  </div>
+                </div>
+                <div class="tm-val-side tm-val-side-right">
+                  <div class="tm-val-label">They give up (cToons)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.requestedTotal.toLocaleString() }} pts</div>
+                </div>
+              </div>
+              <div class="tm-val-verdict" :class="'tm-verdict--' + createFairnessData.verdictClass">
+                {{ createFairnessData.verdict }}
+              </div>
+              <div v-if="createFairnessData.pct < 0" class="tm-val-suggestion">
+                💡 Consider adding <strong>~{{ createFairnessData.shortfall.toLocaleString() }} pts</strong>
+                (or cToons worth that amount) to your offer to make this fair for {{ tradeTargetUser.username }}.
+              </div>
+              <div class="tm-val-note">
+                Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
+              </div>
+            </template>
+            <div v-else-if="!isLoadingCreateValuations" class="tm-val-loading">
+              No auction data available to estimate values.
+            </div>
+          </div>
+
           <div class="tr-confirm-grid">
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">Requesting from {{ tradeTargetUser.username }}</div>
@@ -753,6 +795,101 @@ const fairnessData = computed(() => {
     shortfall,
     otherUsername,
     // Percent of the bar that represents the offered side
+    offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
+  }
+})
+
+// ── Create-flow Valuations (Step 3 preview) ───────────────────────
+const createValuations = ref({})
+const isLoadingCreateValuations = ref(false)
+
+async function loadCreateValuations() {
+  const allIds = [
+    ...selectedInitiatorCtoons.value.map(c => c.id),
+    ...selectedTargetCtoons.value.map(c => c.id),
+  ].filter(Boolean)
+  if (!allIds.length) { createValuations.value = {}; return }
+  isLoadingCreateValuations.value = true
+  createValuations.value = {}
+  try {
+    const result = await $fetch('/api/ctoon/valuations', { method: 'POST', body: { userCtoonIds: allIds } })
+    createValuations.value = result || {}
+  } catch {
+    createValuations.value = {}
+  } finally {
+    isLoadingCreateValuations.value = false
+  }
+}
+
+// Load valuations when entering Step 3; clear when leaving
+watch(tradeCurrentStep, step => {
+  if (step === 3) loadCreateValuations()
+  else createValuations.value = {}
+})
+
+/** What the recipient will receive: offered cToons (mint-adjusted) + points */
+const createOfferedTotal = computed(() => {
+  if (!Object.keys(createValuations.value).length) return null
+  const ctoonSum = selectedInitiatorCtoons.value.reduce((sum, c) => {
+    const val = getMintAdjustedValue(createValuations.value[c.id])
+    return sum + (val ?? 0)
+  }, 0)
+  return ctoonSum + (Number(pointsToOffer.value) || 0)
+})
+
+/** What the recipient will give up: requested cToons (mint-adjusted) */
+const createRequestedTotal = computed(() => {
+  if (!Object.keys(createValuations.value).length) return null
+  return selectedTargetCtoons.value.reduce((sum, c) => {
+    const val = getMintAdjustedValue(createValuations.value[c.id])
+    return sum + (val ?? 0)
+  }, 0)
+})
+
+/**
+ * Fairness as the RECIPIENT will see it.
+ * youGet = offered (they receive), youGive = requested (they give up).
+ * pct < 0 means the trade is net bad for the recipient → suggest the creator adds more.
+ */
+const createFairnessData = computed(() => {
+  if (createOfferedTotal.value == null || createRequestedTotal.value == null) return null
+  const offered = createOfferedTotal.value
+  const requested = createRequestedTotal.value
+
+  const youGet = offered
+  const youGive = requested
+
+  const pct = youGive > 0
+    ? ((youGet - youGive) / youGive) * 100
+    : youGet > 0 ? 100 : 0
+
+  let verdict, verdictClass
+  if (Math.abs(pct) < 15) {
+    verdict = 'This trade is roughly fair'
+    verdictClass = 'fair'
+  } else if (pct >= 15 && pct < 50) {
+    verdict = 'This trade slightly favors you'
+    verdictClass = 'good'
+  } else if (pct >= 50) {
+    verdict = 'This trade heavily favors you'
+    verdictClass = 'great'
+  } else if (pct <= -15 && pct > -50) {
+    verdict = 'This trade slightly favors the other party'
+    verdictClass = 'warn'
+  } else {
+    verdict = 'This trade heavily favors the other party'
+    verdictClass = 'bad'
+  }
+
+  const shortfall = pct < 0 ? Math.round(youGive - youGet) : 0
+  const barTotal = offered + requested
+  return {
+    offeredTotal: offered,
+    requestedTotal: requested,
+    pct,
+    verdict,
+    verdictClass,
+    shortfall,
     offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
   }
 })
@@ -1535,6 +1672,26 @@ onBeforeUnmount(() => {
 }
 .tr-page-toast.success { background: #15803d; color: white; }
 .tr-page-toast.error { background: #b91c1c; color: white; }
+
+/* ── Create-flow Step 3 value preview ── */
+.tr-create-preview {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 10px 12px;
+  flex-shrink: 0;
+}
+.tr-create-preview-header {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.tr-create-preview-header strong {
+  color: var(--OrbitLightBlue);
+  font-weight: bold;
+}
 
 /* ══════════════════════════════════════════════
    TRADE MODAL
