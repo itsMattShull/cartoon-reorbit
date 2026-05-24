@@ -7,23 +7,32 @@
         <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
           {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
         </OrangeButton>
-        <NuxtLink v-else-if="viewedOwner" :to="`/newsite/trade?username=${encodeURIComponent(viewedOwner.username)}`" style="text-decoration:none;display:contents;">
+        <NuxtLink v-else-if="viewedUsername" :to="`/newsite/trade?username=${encodeURIComponent(viewedUsername)}`" style="text-decoration:none;display:contents;">
           <OrangeButton>Trade</OrangeButton>
         </NuxtLink>
         <template v-for="(zone, i) in cz.zones" :key="i">
           <button
-            v-if="cz.buildMode || zone.toons.length > 0"
+            v-if="!zoneLoading && (cz.buildMode || zone.toons.length > 0)"
             class="cz-zone-tab" :class="{ active: cz.activeZone === i }"
             @click="cz.activeZone = i"
           >{{ i + 1 }}</button>
         </template>
       </div>
-      <div class="cz-owner-info" v-if="viewedOwner">
-        <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
-        <div class="cz-owner-label">
-          <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
-          <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
-        </div>
+      <div class="cz-owner-info" v-if="zoneLoading || viewedOwner">
+        <template v-if="zoneLoading">
+          <div class="cz-owner-avatar cz-skeleton cz-skeleton-avatar"></div>
+          <div class="cz-owner-label">
+            <div class="cz-skeleton cz-skeleton-line cz-skeleton-username"></div>
+            <div class="cz-skeleton cz-skeleton-line cz-skeleton-lastseen"></div>
+          </div>
+        </template>
+        <template v-else>
+          <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
+          <div class="cz-owner-label">
+            <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
+            <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -262,6 +271,9 @@ const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // True while build-mode data is loading (prevents double-click and shows spinner on button)
 const buildLoading = ref(false)
+
+// True while a zone is being fetched – drives skeleton placeholders in the topbar
+const zoneLoading = ref(false)
 
 // Local drag: repositioning toons already on the canvas
 const localDrag = ref(null)  // { toon, offsetX, offsetY }
@@ -554,12 +566,15 @@ onUnmounted(() => {
 async function loadZone(username) {
   const target = username ?? user.value?.username
   if (!target) return
+  // Set viewedUsername immediately so the Trade/Build button stays visible
+  // (and stable in place) while the zone data loads.
+  viewedUsername.value = target
+  zoneLoading.value    = true
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedUsername.value = target
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null }
     loadCzoneSearchItems()
 
@@ -568,6 +583,8 @@ async function loadZone(username) {
     }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
+  } finally {
+    zoneLoading.value = false
   }
 }
 
@@ -981,6 +998,20 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+
+/* ── Skeleton placeholders (shown while a new cZone is loading) ── */
+.cz-skeleton {
+  background: rgba(255, 255, 255, 0.18);
+  animation: cz-skeleton-pulse 1.2s ease-in-out infinite;
+}
+.cz-skeleton-avatar { border-radius: 50%; }
+.cz-skeleton-line { border-radius: 3px; margin: 2px 0; }
+.cz-skeleton-username { width: 88px; height: 9px; }
+.cz-skeleton-lastseen { width: 64px; height: 7px; }
+@keyframes cz-skeleton-pulse {
+  0%, 100% { opacity: 1;   }
+  50%      { opacity: 0.4; }
+}
 
 @media (max-width: 768px) {
   .cz-topbar {
