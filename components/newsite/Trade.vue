@@ -352,38 +352,38 @@
             </div>
           </div>
 
-          <!-- Value preview banner: what the recipient will see -->
+          <!-- Trade value summary from the initiator's perspective -->
           <div class="tr-create-preview">
             <div class="tr-create-preview-header">
-              Preview — what <strong>{{ tradeTargetUser.username }}</strong> will see:
+              Trade Summary
             </div>
             <div v-if="isLoadingCreateValuations" class="tm-val-loading">Estimating values…</div>
             <template v-else-if="createFairnessData">
               <div class="tm-val-row">
                 <div class="tm-val-side">
-                  <div class="tm-val-label">They receive (cToons + pts)</div>
-                  <div class="tm-val-amount">~{{ createFairnessData.offeredTotal.toLocaleString() }} pts</div>
+                  <div class="tm-val-label">You receive (cToons)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.requestedTotal.toLocaleString() }} pts</div>
                 </div>
                 <div class="tm-val-bar-wrap">
                   <div class="tm-val-bar">
-                    <div class="tm-val-bar-fill" :style="{ width: createFairnessData.offeredBarPct + '%' }"></div>
+                    <div class="tm-val-bar-fill" :style="{ width: createFairnessData.receivedBarPct + '%' }"></div>
                   </div>
                   <div class="tm-val-bar-labels">
-                    <span>They receive</span>
-                    <span>They give up</span>
+                    <span>You receive</span>
+                    <span>You give</span>
                   </div>
                 </div>
                 <div class="tm-val-side tm-val-side-right">
-                  <div class="tm-val-label">They give up (cToons)</div>
-                  <div class="tm-val-amount">~{{ createFairnessData.requestedTotal.toLocaleString() }} pts</div>
+                  <div class="tm-val-label">You give (cToons + pts)</div>
+                  <div class="tm-val-amount">~{{ createFairnessData.offeredTotal.toLocaleString() }} pts</div>
                 </div>
               </div>
               <div class="tm-val-verdict" :class="'tm-verdict--' + createFairnessData.verdictClass">
                 {{ createFairnessData.verdict }}
               </div>
-              <div v-if="createFairnessData.pct < 0" class="tm-val-suggestion">
-                💡 Consider adding <strong>~{{ createFairnessData.shortfall.toLocaleString() }} pts</strong>
-                (or cToons worth that amount) to your offer to make this fair for {{ tradeTargetUser.username }}.
+              <div v-if="createFairnessData.pct > 0" class="tm-val-suggestion">
+                💡 You're requesting <strong>~{{ createFairnessData.shortfall.toLocaleString() }} pts</strong>
+                more than you're offering. {{ tradeTargetUser.username }} may want a more balanced offer.
               </div>
               <div class="tm-val-note">
                 Est. based on avg. auction prices, adjusted for mint #. Treat as a guide, not a guarantee.
@@ -875,17 +875,19 @@ const createOfferedTotal = computed(() => {
 const createRequestedTotal = computed(() => step1SelectedTotal.value)
 
 /**
- * Fairness as the RECIPIENT will see it.
- * youGet = offered (they receive), youGive = requested (they give up).
- * pct < 0 means the trade is net bad for the recipient → suggest the creator adds more.
+ * Fairness from the INITIATOR'S (current user's) perspective.
+ * youGet = requested (the cToons you'll receive), youGive = offered (cToons + pts you're giving).
+ * pct > 0 means you receive more than you give → trade favors you, but recipient may reject.
+ * pct < 0 means you give more than you receive → generous offer.
  */
 const createFairnessData = computed(() => {
   if (createOfferedTotal.value == null || createRequestedTotal.value == null) return null
   const offered = createOfferedTotal.value
   const requested = createRequestedTotal.value
 
-  const youGet = offered
-  const youGive = requested
+  // Initiator's perspective: you give offered, you receive requested
+  const youGet = requested
+  const youGive = offered
 
   const pct = youGive > 0
     ? ((youGet - youGive) / youGive) * 100
@@ -909,7 +911,8 @@ const createFairnessData = computed(() => {
     verdictClass = 'bad'
   }
 
-  const shortfall = pct < 0 ? Math.round(youGive - youGet) : 0
+  // shortfall: how much more you're requesting vs offering (shown when trade favors you)
+  const shortfall = pct > 0 ? Math.round(youGet - youGive) : 0
   const barTotal = offered + requested
   return {
     offeredTotal: offered,
@@ -918,7 +921,8 @@ const createFairnessData = computed(() => {
     verdict,
     verdictClass,
     shortfall,
-    offeredBarPct: barTotal > 0 ? Math.round((offered / barTotal) * 100) : 50,
+    // Bar fill represents your received value as a proportion of the total trade
+    receivedBarPct: barTotal > 0 ? Math.round((requested / barTotal) * 100) : 50,
   }
 })
 
