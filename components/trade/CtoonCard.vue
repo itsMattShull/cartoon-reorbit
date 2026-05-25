@@ -83,6 +83,7 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
   flex-direction: column;
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
   background: var(--OrbitDarkBlue, #336699);
   border: 2px solid #1a4a7a;
   border-radius: 8px;
@@ -115,14 +116,17 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
   min-height: 0;
   background: url('/images/newsite/infocardSplash.png') top / 100% 100% no-repeat;
   overflow: hidden;
+  /* Inset padding lets the splash show as a frame without shrinking the image via transform */
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .tc-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transform: scale(0.7);
   image-rendering: pixelated;
+  /* No transform — padding on the header creates the splash border effect instead */
 }
 
 /* ── Overlays ── */

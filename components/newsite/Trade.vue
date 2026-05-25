@@ -203,6 +203,11 @@
               <span class="tr-step-title">{{ tradeTargetUser.username }}'s Collection</span>
               <span class="tr-step-hint">Select cToons to request</span>
             </div>
+            <div v-if="selectedTargetCtoons.length" class="tr-sel-total">
+              <span class="tr-sel-total-label">Selected value</span>
+              <span v-if="isLoadingCreateValuations" class="tr-sel-total-val tr-sel-total-dim">…</span>
+              <span v-else-if="step1SelectedTotal != null" class="tr-sel-total-val">~{{ step1SelectedTotal.toLocaleString() }} pts</span>
+            </div>
             <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length" @click="tradeCurrentStep = 2">
               Next →
             </button>
@@ -265,6 +270,23 @@
                   class="tr-points-input"
                   placeholder="0"
                 />
+              </div>
+            </div>
+            <!-- Value comparison: what you're requesting vs what you're offering -->
+            <div class="tr-step2-compare">
+              <div class="tr-cmp-side">
+                <span class="tr-cmp-label">Requesting</span>
+                <span class="tr-cmp-val">
+                  <template v-if="isLoadingCreateValuations && step1SelectedTotal == null">…</template>
+                  <template v-else-if="step1SelectedTotal != null">~{{ step1SelectedTotal.toLocaleString() }}</template>
+                  <template v-else>—</template>
+                  pts
+                </span>
+              </div>
+              <span class="tr-cmp-sep">vs</span>
+              <div class="tr-cmp-side tr-cmp-side-right">
+                <span class="tr-cmp-label">Offering</span>
+                <span class="tr-cmp-val">~{{ step2OfferedTotal.toLocaleString() }} pts</span>
               </div>
             </div>
             <div class="tr-step-btns">
@@ -799,52 +821,78 @@ const fairnessData = computed(() => {
   }
 })
 
-// ── Create-flow Valuations (Step 3 preview) ───────────────────────
+// ── Create-flow Valuations (all steps) ───────────────────────────
+// Persistent cache keyed by encoded userCtoon ID; grows incrementally
+// as the user selects cToons across Steps 1, 2, and 3.
 const createValuations = ref({})
 const isLoadingCreateValuations = ref(false)
 
-async function loadCreateValuations() {
-  const allIds = [
-    ...selectedInitiatorCtoons.value.map(c => c.id),
-    ...selectedTargetCtoons.value.map(c => c.id),
-  ].filter(Boolean)
-  if (!allIds.length) { createValuations.value = {}; return }
+/**
+ * Fetches valuations for any IDs not already in the cache and merges
+ * the results in. Skips IDs we already have, so re-triggering on every
+ * toggle is cheap.
+ */
+async function fetchValuationsForIds(ids) {
+  const missing = (ids || []).filter(id => id && !(id in createValuations.value))
+  if (!missing.length) return
   isLoadingCreateValuations.value = true
-  createValuations.value = {}
   try {
-    const result = await $fetch('/api/ctoon/valuations', { method: 'POST', body: { userCtoonIds: allIds } })
-    createValuations.value = result || {}
+    const result = await $fetch('/api/ctoon/valuations', { method: 'POST', body: { userCtoonIds: missing } })
+    if (result) Object.assign(createValuations.value, result)
   } catch {
-    createValuations.value = {}
+    // preserve whatever is already in the cache
   } finally {
     isLoadingCreateValuations.value = false
   }
 }
 
-// Load valuations when entering Step 3; clear when leaving
+// Step 1: fetch valuations as the user selects target cToons
+watch(selectedTargetCtoons, ctoons => {
+  fetchValuationsForIds(ctoons.map(c => c.id))
+}, { deep: true })
+
+// Step 2: fetch valuations as the user selects their own cToons
+watch(selectedInitiatorCtoons, ctoons => {
+  fetchValuationsForIds(ctoons.map(c => c.id))
+}, { deep: true })
+
+// Step 3: ensure any gaps are filled (covers edge cases like back-navigation)
 watch(tradeCurrentStep, step => {
-  if (step === 3) loadCreateValuations()
-  else createValuations.value = {}
+  if (step === 3) {
+    fetchValuationsForIds([
+      ...selectedInitiatorCtoons.value.map(c => c.id),
+      ...selectedTargetCtoons.value.map(c => c.id),
+    ])
+  }
 })
 
-/** What the recipient will receive: offered cToons (mint-adjusted) + points */
-const createOfferedTotal = computed(() => {
-  if (!Object.keys(createValuations.value).length) return null
-  const ctoonSum = selectedInitiatorCtoons.value.reduce((sum, c) => {
-    const val = getMintAdjustedValue(createValuations.value[c.id])
-    return sum + (val ?? 0)
-  }, 0)
-  return ctoonSum + (Number(pointsToOffer.value) || 0)
-})
-
-/** What the recipient will give up: requested cToons (mint-adjusted) */
-const createRequestedTotal = computed(() => {
-  if (!Object.keys(createValuations.value).length) return null
+/** Total mint-adjusted value of the cToons selected from the other user (Step 1 display) */
+const step1SelectedTotal = computed(() => {
+  if (!selectedTargetCtoons.value.length) return null
+  if (!selectedTargetCtoons.value.some(c => createValuations.value[c.id])) return null
   return selectedTargetCtoons.value.reduce((sum, c) => {
-    const val = getMintAdjustedValue(createValuations.value[c.id])
-    return sum + (val ?? 0)
+    return sum + (getMintAdjustedValue(createValuations.value[c.id]) ?? 0)
   }, 0)
 })
+
+/** Total value of what the initiator is offering: own cToons (mint-adjusted) + points (Step 2 display) */
+const step2OfferedTotal = computed(() => {
+  const points = Number(pointsToOffer.value) || 0
+  const ctoonSum = selectedInitiatorCtoons.value.reduce((sum, c) => {
+    return sum + (getMintAdjustedValue(createValuations.value[c.id]) ?? 0)
+  }, 0)
+  return ctoonSum + points
+})
+
+/** Aliases used by createFairnessData (Step 3 preview) */
+const createOfferedTotal = computed(() => {
+  // Need at least some cToon data or non-zero points to show a meaningful total
+  const hasCtoonData = selectedInitiatorCtoons.value.some(c => createValuations.value[c.id])
+  const hasPoints = (Number(pointsToOffer.value) || 0) > 0
+  if (!hasCtoonData && !hasPoints) return null
+  return step2OfferedTotal.value
+})
+const createRequestedTotal = computed(() => step1SelectedTotal.value)
 
 /**
  * Fairness as the RECIPIENT will see it.
@@ -1115,6 +1163,7 @@ async function clearTarget(focusInput = false) {
   tradeSeriesOptionsOther.value = ['All']; tradeSeriesOptionsSelf.value = ['All']
   tradeRarityOptionsOther.value = ['All']; tradeRarityOptionsSelf.value = ['All']
   tradeNameSuggestionsOther.value = []; tradeNameSuggestionsSelf.value = []
+  createValuations.value = {}
   if (focusInput) {
     await nextTick()
     if (findTab.value === 'ctoon') ctoonInputRef.value?.focus()
@@ -1635,6 +1684,7 @@ onBeforeUnmount(() => {
 }
 .tr-card-wrap {
   min-height: 0;
+  height: 100%;
 }
 
 /* ── Confirm ── */
@@ -1662,6 +1712,63 @@ onBeforeUnmount(() => {
   .tr-content {
     padding-bottom: 220px;
   }
+}
+
+/* ── Step 1: selected value chip ── */
+.tr-sel-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.tr-sel-total-label {
+  font-size: 0.54rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tr-sel-total-val {
+  font-size: 0.82rem;
+  font-weight: bold;
+  color: #fbbf24;
+}
+.tr-sel-total-dim {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Step 2: requesting vs offering comparison ── */
+.tr-step2-compare {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tr-cmp-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.tr-cmp-side-right {
+  align-items: flex-start;
+}
+.tr-cmp-label {
+  font-size: 0.54rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tr-cmp-val {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #fbbf24;
+  white-space: nowrap;
+}
+.tr-cmp-sep {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
 }
 
 /* ── Page toast ── */
