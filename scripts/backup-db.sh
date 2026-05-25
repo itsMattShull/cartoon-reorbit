@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
-# backup-db.sh — PostgreSQL → S3 backup (low resource, no temp files on disk)
+# backup-db.sh — PostgreSQL → Google Drive backup (low resource, no disk writes)
 # =============================================================================
-# Pipes pg_dump directly through gzip into S3 so nothing is written locally.
-# Schedule via system cron (not PM2) so it uses zero memory when idle.
+# Pipes pg_dump directly through gzip into Google Drive via rclone rcat.
+# Nothing is written to the server's disk. Schedule via system cron (not PM2)
+# so it uses zero memory when idle.
 #
 # Required env vars (or set them in /etc/cartoon-reorbit-backup.env):
-#   DATABASE_URL          postgresql://user:pass@host:port/dbname
-#   BACKUP_S3_BUCKET      my-backups-bucket
-#   AWS_ACCESS_KEY_ID     (IAM backup user key)
-#   AWS_SECRET_ACCESS_KEY (IAM backup user secret)
-#   AWS_DEFAULT_REGION    us-east-1   (or wherever your bucket lives)
+#   DATABASE_URL           postgresql://user:pass@host:port/dbname
+#   BACKUP_DRIVE_REMOTE    gdrive          (name of your rclone remote)
+#   BACKUP_DRIVE_FOLDER    cartoon-reorbit-backups  (Google Drive folder path)
 #
 # Optional env vars:
-#   BACKUP_S3_PREFIX      backups/cartoon-reorbit  (default shown)
-#   BACKUP_RETAIN_DAYS    30                        (days of local log retention)
-#   BACKUP_LOG_FILE       /var/log/cartoon-reorbit-backup.log
+#   BACKUP_LOG_FILE        /var/log/cartoon-reorbit-backup.log
+#   RCLONE_CONFIG          /root/.config/rclone/rclone.conf  (default location)
 # =============================================================================
 
 set -euo pipefail
@@ -33,21 +31,16 @@ fi
 # Validate required variables
 # ---------------------------------------------------------------------------
 : "${DATABASE_URL:?DATABASE_URL is not set}"
-: "${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is not set}"
-: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is not set}"
-: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is not set}"
-: "${AWS_DEFAULT_REGION:?AWS_DEFAULT_REGION is not set}"
+: "${BACKUP_DRIVE_REMOTE:?BACKUP_DRIVE_REMOTE is not set (e.g. gdrive)}"
+: "${BACKUP_DRIVE_FOLDER:?BACKUP_DRIVE_FOLDER is not set (e.g. cartoon-reorbit-backups)}"
 
 # ---------------------------------------------------------------------------
 # Config with sensible defaults
 # ---------------------------------------------------------------------------
-S3_PREFIX="${BACKUP_S3_PREFIX:-backups/cartoon-reorbit}"
 LOG_FILE="${BACKUP_LOG_FILE:-/var/log/cartoon-reorbit-backup.log}"
-RETAIN_DAYS="${BACKUP_RETAIN_DAYS:-30}"
-
 TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-S3_KEY="${S3_PREFIX}/db-${TIMESTAMP}.sql.gz"
-S3_URI="s3://${BACKUP_S3_BUCKET}/${S3_KEY}"
+DEST_FILE="db-${TIMESTAMP}.sql.gz"
+DEST_PATH="${BACKUP_DRIVE_REMOTE}:${BACKUP_DRIVE_FOLDER}/${DEST_FILE}"
 
 # ---------------------------------------------------------------------------
 # Logging helper
@@ -57,16 +50,13 @@ log() {
 }
 
 log "=== Backup started ==="
-log "Target: ${S3_URI}"
+log "Target: ${DEST_PATH}"
 
 # ---------------------------------------------------------------------------
 # Parse DATABASE_URL → pg_dump friendly args
 # e.g. postgresql://orbit_user:pass@localhost:5432/orbitdb
 # ---------------------------------------------------------------------------
-DB_URL="${DATABASE_URL}"
-DB_PROTO="$(echo "$DB_URL" | grep -oP '^[^:]+(?=://)')"
-DB_URL_NOSCHEME="${DB_URL#*://}"
-
+DB_URL_NOSCHEME="${DATABASE_URL#*://}"
 DB_USER="$(echo "$DB_URL_NOSCHEME" | grep -oP '^[^:@]+(?=[:@])')"
 DB_PASS="$(echo "$DB_URL_NOSCHEME" | grep -oP '(?<=:)[^@]+(?=@)' || echo '')"
 DB_HOST_PORT="$(echo "$DB_URL_NOSCHEME" | grep -oP '(?<=@)[^/]+')"
@@ -78,6 +68,7 @@ log "Database: ${DB_HOST}:${DB_PORT}/${DB_NAME} (user: ${DB_USER})"
 
 # ---------------------------------------------------------------------------
 # Dump → compress → upload in a single pipe (no disk write)
+# rclone rcat reads from stdin and streams directly to Google Drive
 # ---------------------------------------------------------------------------
 PGPASSWORD="$DB_PASS" pg_dump \
   --host="$DB_HOST" \
@@ -89,11 +80,11 @@ PGPASSWORD="$DB_PASS" pg_dump \
   --no-owner \
   --no-acl \
   | gzip --best \
-  | aws s3 cp - "$S3_URI" \
-      --storage-class STANDARD_IA \
-      --no-progress
+  | rclone rcat "${DEST_PATH}" \
+      --drive-chunk-size 32M \
+      --no-check-certificate
 
-log "Upload complete: ${S3_URI}"
+log "Upload complete: ${DEST_PATH}"
 
 # ---------------------------------------------------------------------------
 # Trim old log file so it doesn't grow forever (keep last ~1000 lines)

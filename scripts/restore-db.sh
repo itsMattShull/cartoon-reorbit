@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
 # =============================================================================
-# restore-db.sh — Restore a PostgreSQL backup from S3
+# restore-db.sh — Restore a PostgreSQL backup from Google Drive
 # =============================================================================
 # Usage:
 #   ./scripts/restore-db.sh                        # list available backups
-#   ./scripts/restore-db.sh <s3-key-or-timestamp>  # restore a specific backup
+#   ./scripts/restore-db.sh <filename-or-timestamp> # restore a specific backup
 #
-# The script will prompt for confirmation before dropping/recreating the DB.
+# The script will prompt for confirmation before touching the database.
 # =============================================================================
 
 set -euo pipefail
 
 SECRETS_FILE="${SECRETS_FILE:-/etc/cartoon-reorbit-backup.env}"
 if [[ -f "$SECRETS_FILE" ]]; then
+  # shellcheck disable=SC1090
   set -a; source "$SECRETS_FILE"; set +a
 fi
 
 : "${DATABASE_URL:?DATABASE_URL is not set}"
-: "${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is not set}"
-: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is not set}"
-: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is not set}"
-: "${AWS_DEFAULT_REGION:?AWS_DEFAULT_REGION is not set}"
-
-S3_PREFIX="${BACKUP_S3_PREFIX:-backups/cartoon-reorbit}"
+: "${BACKUP_DRIVE_REMOTE:?BACKUP_DRIVE_REMOTE is not set (e.g. gdrive)}"
+: "${BACKUP_DRIVE_FOLDER:?BACKUP_DRIVE_FOLDER is not set (e.g. cartoon-reorbit-backups)}"
 
 # Parse DATABASE_URL
 DB_URL_NOSCHEME="${DATABASE_URL#*://}"
@@ -33,13 +30,15 @@ DB_HOST="$(echo "$DB_HOST_PORT" | cut -d: -f1)"
 DB_PORT="$(echo "$DB_HOST_PORT" | grep -oP '(?<=:)\d+' || echo '5432')"
 DB_NAME="$(echo "$DB_URL_NOSCHEME" | grep -oP '(?<=/)[^?]+')"
 
+REMOTE_PATH="${BACKUP_DRIVE_REMOTE}:${BACKUP_DRIVE_FOLDER}"
+
 # ---------------------------------------------------------------------------
 # List mode: no argument provided
 # ---------------------------------------------------------------------------
 if [[ $# -eq 0 ]]; then
-  echo "Available backups in s3://${BACKUP_S3_BUCKET}/${S3_PREFIX}/"
+  echo "Available backups in ${REMOTE_PATH}/"
   echo ""
-  aws s3 ls "s3://${BACKUP_S3_BUCKET}/${S3_PREFIX}/" \
+  rclone ls "${REMOTE_PATH}/" \
     | sort -r \
     | head -20 \
     | awk '{print NR". "$NF}'
@@ -58,12 +57,11 @@ TARGET="$1"
 if [[ "$TARGET" != *".sql.gz" ]]; then
   TARGET="db-${TARGET}.sql.gz"
 fi
-S3_KEY="${S3_PREFIX}/${TARGET}"
-S3_URI="s3://${BACKUP_S3_BUCKET}/${S3_KEY}"
+SOURCE="${REMOTE_PATH}/${TARGET}"
 
 echo ""
-echo "⚠️  WARNING: This will DROP and RECREATE the database '${DB_NAME}' on ${DB_HOST}."
-echo "Source: ${S3_URI}"
+echo "⚠️  WARNING: This will overwrite the database '${DB_NAME}' on ${DB_HOST}."
+echo "Source: ${SOURCE}"
 echo ""
 read -r -p "Type the database name to confirm: " CONFIRM
 if [[ "$CONFIRM" != "$DB_NAME" ]]; then
@@ -72,7 +70,7 @@ if [[ "$CONFIRM" != "$DB_NAME" ]]; then
 fi
 
 echo "Downloading and restoring..."
-PGPASSWORD="$DB_PASS" aws s3 cp "$S3_URI" - \
+rclone cat "${SOURCE}" \
   | gunzip \
   | PGPASSWORD="$DB_PASS" psql \
       --host="$DB_HOST" \
@@ -82,4 +80,4 @@ PGPASSWORD="$DB_PASS" aws s3 cp "$S3_URI" - \
       --no-password
 
 echo ""
-echo "✅ Restore complete from ${S3_URI}"
+echo "✅ Restore complete from ${SOURCE}"
