@@ -117,7 +117,7 @@
           <EmptyState v-if="!filteredTarget.length" label="No cToons match your filters" />
           <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
             <CtoonCard
-              v-for="c in filteredTarget"
+              v-for="c in pagedTarget"
               :key="c.id"
               :ctoon="c"
               :selected="selectedTargetCtoonsMap.has(c.id)"
@@ -126,6 +126,28 @@
               badge-class-unowned="bg-gray-200 text-gray-600"
               @toggle="toggleTargetCtoon(c)"
             />
+          </div>
+
+          <!-- Target Pagination -->
+          <div v-if="targetTotalPages > 1" class="mt-4 flex items-center justify-center gap-3">
+            <button
+              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              :disabled="targetPage === 1"
+              @click="targetPage--"
+            >
+              Previous
+            </button>
+            <span class="text-sm text-gray-600">
+              Page {{ targetPage }} of {{ targetTotalPages }}
+              <span class="text-gray-400">({{ filteredTarget.length }} total)</span>
+            </span>
+            <button
+              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              :disabled="targetPage >= targetTotalPages"
+              @click="targetPage++"
+            >
+              Next
+            </button>
           </div>
         </div>
 
@@ -203,7 +225,7 @@
           />
           <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
             <CtoonCard
-              v-for="c in filteredOfficial"
+              v-for="c in pagedOfficial"
               :key="c.id"
               :ctoon="c"
               :selected="selectedOfficialCtoonsMap.has(c.id)"
@@ -212,6 +234,28 @@
               badge-class-unowned="bg-gray-200 text-gray-600"
               @toggle="toggleOfficialCtoon(c)"
             />
+          </div>
+
+          <!-- Official Pagination -->
+          <div v-if="officialTotalPages > 1" class="mt-4 flex items-center justify-center gap-3">
+            <button
+              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              :disabled="officialPage === 1"
+              @click="officialPage--"
+            >
+              Previous
+            </button>
+            <span class="text-sm text-gray-600">
+              Page {{ officialPage }} of {{ officialTotalPages }}
+              <span class="text-gray-400">({{ filteredOfficial.length }} total)</span>
+            </span>
+            <button
+              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              :disabled="officialPage >= officialTotalPages"
+              @click="officialPage++"
+            >
+              Next
+            </button>
           </div>
         </div>
 
@@ -294,7 +338,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 
 // Import SFC components
@@ -434,6 +478,8 @@ async function clearTarget(focusInput = false) {
   officialCtoons.value = []
   filters.target = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
   filters.official = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
+  targetPage.value = 1
+  officialPage.value = 1
 
   // reset wishlist state
   targetWishlist.value = []
@@ -641,6 +687,30 @@ const filteredOfficial = computed(() => {
   }
   return list
 })
+
+// ------------------------------------------------------------------------------
+// Pagination (100 cToons per page, client-side)
+// ------------------------------------------------------------------------------
+const PAGE_SIZE = 100
+
+const targetPage = ref(1)
+const officialPage = ref(1)
+
+const targetTotalPages = computed(() => Math.max(1, Math.ceil(filteredTarget.value.length / PAGE_SIZE)))
+const officialTotalPages = computed(() => Math.max(1, Math.ceil(filteredOfficial.value.length / PAGE_SIZE)))
+
+const pagedTarget = computed(() => {
+  const start = (targetPage.value - 1) * PAGE_SIZE
+  return filteredTarget.value.slice(start, start + PAGE_SIZE)
+})
+const pagedOfficial = computed(() => {
+  const start = (officialPage.value - 1) * PAGE_SIZE
+  return filteredOfficial.value.slice(start, start + PAGE_SIZE)
+})
+
+// Reset to page 1 whenever filters change
+watch(() => ({ ...filters.target }), () => { targetPage.value = 1 }, { deep: true })
+watch(() => ({ ...filters.official }), () => { officialPage.value = 1 }, { deep: true })
 
 // ------------------------------------------------------------------------------
 // Offer
