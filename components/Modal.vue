@@ -1,7 +1,7 @@
 <!-- components/Modal.vue -->
 <template>
   <div
-    class="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50"
+    class="fixed inset-0 flex items-center justify-center z-[1001] bg-black bg-opacity-50"
     @click.self="handleBackdrop"
   >
     <div :class="['bg-gray-800 rounded-lg p-6 w-11/12 max-w-md max-h-[90vh]', overflowVisible ? 'overflow-visible' : 'overflow-y-auto']">
