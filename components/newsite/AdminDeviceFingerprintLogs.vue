@@ -1,7 +1,7 @@
 <template>
   <div class="admin-device-fingerprint-logs bg-gray-50">
     <div class="p-2 text-xs">
-      <h1 class="text-base font-bold mb-2">Device Fingerprint Logs</h1>
+      <h1 class="text-base font-bold mb-2">Browser Fingerprint Logs</h1>
 
       <!-- Filters -->
       <div class="mb-2 flex flex-wrap items-end gap-2">
@@ -61,7 +61,7 @@
       </div>
 
       <div v-if="loading" class="text-gray-500">Loading…</div>
-      <div v-else-if="items.length === 0" class="text-gray-500">No fingerprint logs found.</div>
+      <div v-else-if="items.length === 0" class="text-gray-500">No browser fingerprint logs found.</div>
       <div v-else>
         <!-- Desktop table -->
         <div class="hidden md:block overflow-x-auto">
@@ -112,7 +112,7 @@
                     <td class="px-1.5 py-1">
                       <button
                         class="px-2 py-0.5 text-[11px] border rounded hover:bg-gray-100"
-                        title="Filter to all rows sharing this fingerprint"
+                        title="Filter to all rows sharing this browser fingerprint"
                         @click="filterByVisitor(row.visitorId)"
                       >Match</button>
                     </td>

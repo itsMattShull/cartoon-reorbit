@@ -64,7 +64,7 @@ const menus = [
     label: 'Admin Logs',
     items: [
       { id: 'cheatFinder',        label: 'Cheat Finder',       to: '/newsite/admin/cheatFinder' },
-      { id: 'deviceFingerprints', label: 'Device Fingerprints', to: '/newsite/admin/deviceFingerprints' },
+      { id: 'deviceFingerprints', label: 'Browser Fingerprints', to: '/newsite/admin/deviceFingerprints' },
       { id: 'authLogs',           label: 'Auth Logs',          to: '/newsite/admin/authLogs' },
       { id: 'tradeLogs',          label: 'Trade Logs',         to: '/newsite/admin/tradeLogs' },
       { id: 'auctionLogs',        label: 'Auction Logs',       to: '/newsite/admin/auctionLogs' },
