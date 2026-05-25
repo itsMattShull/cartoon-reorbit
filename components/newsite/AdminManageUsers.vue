@@ -1,6 +1,16 @@
 <template>
   <div class="admin-manage-users bg-gray-50 text-xs">
     <div class="px-2 py-2">
+
+      <!-- Summary banner -->
+      <div v-if="stats" class="flex flex-wrap gap-2 mb-3">
+        <div class="bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 text-[11px]">
+          <span class="text-gray-500">Survey (active 30d):</span>
+          <span class="font-semibold ml-1">{{ stats.surveyCompletedLast30Days }}</span>
+          <span class="text-gray-500 ml-1">completed</span>
+        </div>
+      </div>
+
       <!-- Controls -->
       <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-2">
         <div class="flex items-center gap-2 w-full md:w-auto">
@@ -21,6 +31,8 @@
 
           <button @click="toggle('onlyGuild')" :class="chip(onlyGuild)">In Discord</button>
           <button @click="toggle('onlyWarned')" :class="chip(onlyWarned)">Warned</button>
+          <button @click="toggle('onlySurveyDone')" :class="chip(onlySurveyDone)">Survey Done</button>
+          <button @click="toggle('onlySurveyNotDone')" :class="chip(onlySurveyNotDone)">No Survey</button>
 
           <div class="flex items-center gap-1">
             <label class="text-[11px] text-gray-600">Sort:</label>
@@ -133,6 +145,9 @@
             <span :class="warnClass(!!u.warning180,'amber')">180d</span>
             <span :class="warnClass(!!u.warning210,'amber')">210d</span>
             <span :class="warnClass(!!u.warning240,'red')">240d</span>
+            <span :class="surveyBadgeClass(u.surveyComplete)">
+              Survey: {{ u.surveyComplete ? '✓' : '✗' }}
+            </span>
           </div>
         </article>
 
@@ -525,6 +540,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 const users    = ref([])
 const official = ref(null)
 const meData   = ref(null)
+const stats    = ref(null)
 const filter   = ref('')
 
 const superAdminId = '732319322093125695'
@@ -532,22 +548,26 @@ const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)
 
 onMounted(async () => {
   try {
-    const [usersRes, officialRes, meRes] = await Promise.all([
+    const [usersRes, officialRes, meRes, statsRes] = await Promise.all([
       $fetch('/api/admin/users'),
       $fetch('/api/admin/official').catch(() => null),
-      $fetch('/api/auth/me').catch(() => null)
+      $fetch('/api/auth/me').catch(() => null),
+      $fetch('/api/admin/users/stats').catch(() => null),
     ])
     users.value    = Array.isArray(usersRes) ? usersRes : []
     official.value = officialRes
     meData.value   = meRes
+    stats.value    = statsRes
   } catch (e) {
     console.error('AdminManageUsers: failed to load', e)
   }
 })
 
-const statusFilter = ref('all')
-const onlyGuild = ref(false)
-const onlyWarned = ref(false)
+const statusFilter      = ref('all')
+const onlyGuild         = ref(false)
+const onlyWarned        = ref(false)
+const onlySurveyDone    = ref(false)
+const onlySurveyNotDone = ref(false)
 
 const sortField = ref('lastActivity')
 const sortDir = ref('desc')
@@ -561,13 +581,15 @@ const filteredSorted = computed(() => {
     const matchGuild = !onlyGuild.value || !!u.inGuild
     const warned = !!(u.warning180 || u.warning210 || u.warning240)
     const matchWarned = !onlyWarned.value || warned
+    const matchSurveyDone    = !onlySurveyDone.value    || !!u.surveyComplete
+    const matchSurveyNotDone = !onlySurveyNotDone.value || !u.surveyComplete
 
     const statusOk =
       statusFilter.value === 'all' ||
       (statusFilter.value === 'active' && !!u.active) ||
       (statusFilter.value === 'inactive' && !u.active)
 
-    return matchQ && matchGuild && matchWarned && statusOk
+    return matchQ && matchGuild && matchWarned && matchSurveyDone && matchSurveyNotDone && statusOk
   })
 
   const toTs = (d) => d ? new Date(d).getTime() : -Infinity
@@ -607,16 +629,20 @@ const chip = (on) =>
   ].join(' ')
 
 function toggle(key) {
-  if (key === 'onlyGuild') onlyGuild.value = !onlyGuild.value
-  if (key === 'onlyWarned') onlyWarned.value = !onlyWarned.value
+  if (key === 'onlyGuild')         onlyGuild.value         = !onlyGuild.value
+  if (key === 'onlyWarned')        onlyWarned.value        = !onlyWarned.value
+  if (key === 'onlySurveyDone')    onlySurveyDone.value    = !onlySurveyDone.value
+  if (key === 'onlySurveyNotDone') onlySurveyNotDone.value = !onlySurveyNotDone.value
 }
 function resetFilters() {
-  filter.value = ''
-  statusFilter.value = 'all'
-  onlyGuild.value = false
-  onlyWarned.value = false
-  sortField.value = 'lastActivity'
-  sortDir.value = 'desc'
+  filter.value            = ''
+  statusFilter.value      = 'all'
+  onlyGuild.value         = false
+  onlyWarned.value        = false
+  onlySurveyDone.value    = false
+  onlySurveyNotDone.value = false
+  sortField.value         = 'lastActivity'
+  sortDir.value           = 'desc'
 }
 
 function nextPage() {
@@ -629,7 +655,7 @@ function prevPage() {
   page.value -= 1
 }
 
-watch([filter, statusFilter, onlyGuild, onlyWarned, sortField, sortDir], () => {
+watch([filter, statusFilter, onlyGuild, onlyWarned, onlySurveyDone, onlySurveyNotDone, sortField, sortDir], () => {
   page.value = 1
 })
 
@@ -666,6 +692,14 @@ const warnClass = (on, tone = 'amber') => {
     on ? onCls : 'bg-gray-100 text-gray-700 border-gray-300'
   ].join(' ')
 }
+
+const surveyBadgeClass = (done) =>
+  [
+    'px-1.5 py-0 rounded text-[10px] border',
+    done
+      ? 'bg-green-100 text-green-800 border-green-200'
+      : 'bg-gray-100 text-gray-500 border-gray-300',
+  ].join(' ')
 
 const noteTone = (action) => {
   if (action === 'BAN') return 'text-red-700'
