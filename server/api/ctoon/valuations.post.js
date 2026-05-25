@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { Prisma } from '@prisma/client'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 
 export default defineEventHandler(async (event) => {
   // Require authentication
@@ -23,15 +24,36 @@ export default defineEventHandler(async (event) => {
   }
 
   // Sanitize & cap to prevent abuse
-  const ids = userCtoonIds
+  const inputIds = userCtoonIds
     .filter(id => typeof id === 'string' && id.trim())
     .slice(0, 50)
 
-  if (!ids.length) return {}
+  if (!inputIds.length) return {}
+
+  // Resolve encoded IDs (uc|userId|ctoonId|mintNumber) to real DB UUIDs.
+  // Raw UUIDs pass through resolveUserCtoonId unchanged, so this handles both
+  // the create-flow (collection API returns encoded IDs) and the modal (trade
+  // offer API returns raw UUIDs) transparently.
+  const resolved = await Promise.all(
+    inputIds.map(async (inputId) => {
+      const realId = await resolveUserCtoonId(inputId)
+      return { inputId, realId }
+    })
+  )
+
+  // Drop any IDs that couldn't be resolved
+  const validPairs = resolved.filter(p => p.realId)
+  if (!validPairs.length) return {}
+
+  const realIds = validPairs.map(p => p.realId)
+
+  // Map real DB UUID → original input ID so we can key the response
+  // by whatever format the client sent (encoded or raw)
+  const realToInput = new Map(validPairs.map(p => [p.realId, p.inputId]))
 
   // Fetch all userCtoons with their base ctoon data
   const userCtoons = await prisma.userCtoon.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: realIds } },
     select: {
       id: true,
       ctoonId: true,
@@ -83,15 +105,17 @@ export default defineEventHandler(async (event) => {
     ])
   )
 
-  // Build result keyed by userCtoonId
+  // Build result keyed by the ORIGINAL input ID (encoded or raw) so the
+  // client-side lookup — createValuations.value[c.id] — always finds a match
   const result = {}
   for (const uc of userCtoons) {
+    const inputId = realToInput.get(uc.id) ?? uc.id
     const highestMint =
       highestMintByCtoonId.get(uc.ctoonId) ??
       uc.ctoon.totalMinted ??
       null
 
-    result[uc.id] = {
+    result[inputId] = {
       ctoonId: uc.ctoonId,
       mintNumber: uc.mintNumber,
       highestMint,
