@@ -1684,6 +1684,7 @@ onBeforeUnmount(() => {
 }
 .tr-card-wrap {
   min-height: 0;
+  height: 100%;
 }
 
 /* ── Confirm ── */
