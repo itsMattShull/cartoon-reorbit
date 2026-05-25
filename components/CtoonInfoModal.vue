@@ -234,7 +234,7 @@
             <li
               v-for="owner in sortedOwners"
               :key="owner.userId + '-' + owner.mintNumber"
-              class="grid grid-cols-[auto,1fr,auto] items-center gap-3 rounded bg-gray-800/60 px-3 py-2"
+              class="grid grid-cols-[auto,1fr,auto,auto] items-center gap-3 rounded bg-gray-800/60 px-3 py-2"
             >
               <span class="text-gray-300 whitespace-nowrap">
                 <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber ?? 'N/A' }}</span>
@@ -254,6 +254,17 @@
                 Tradeable
               </NuxtLink>
               <span v-else class="text-xs text-gray-500 whitespace-nowrap w-16">&nbsp;</span>
+              <span class="text-xs font-semibold whitespace-nowrap text-right min-w-[72px]">
+                <template v-if="ownerValuationsLoading">
+                  <span class="text-gray-500">…</span>
+                </template>
+                <template v-else-if="getMintAdjustedValue(ownerValuations[owner.userCtoonId]) != null">
+                  <span class="text-yellow-300">~{{ getMintAdjustedValue(ownerValuations[owner.userCtoonId]).toLocaleString() }} pts</span>
+                </template>
+                <template v-else>
+                  <span class="text-gray-600">—</span>
+                </template>
+              </span>
             </li>
           </ul>
         </template>
@@ -496,6 +507,18 @@ const ownersLoading = ref(false)
 const ownersError = ref('')
 const ownersList = ref([])
 const lastOwnersCtoonId = ref(null)
+const ownerValuations = ref({})
+const ownerValuationsLoading = ref(false)
+
+function getMintAdjustedValue(valuation) {
+  if (!valuation) return null
+  const { avgSale, mintNumber, highestMint, cMartPrice } = valuation
+  const base = avgSale ?? cMartPrice ?? 0
+  if (!base) return 0
+  if (mintNumber == null || !highestMint || highestMint <= 1) return base
+  const multiplier = 1 + (highestMint - mintNumber) / highestMint
+  return Math.round(base * multiplier)
+}
 
 const holidayEvent = ref(null)
 const openingHoliday = ref(false)
@@ -662,6 +685,8 @@ watch(isOpen, (open) => {
     ownersError.value = ''
     ownersList.value = []
     lastOwnersCtoonId.value = null
+    ownerValuations.value = {}
+    ownerValuationsLoading.value = false
     if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
@@ -774,12 +799,30 @@ onBeforeUnmount(() => {
 async function loadOwners(ctoonId) {
   ownersLoading.value = true
   ownersError.value = ''
+  ownerValuations.value = {}
   try {
     const res = await $fetch('/api/collections/owners', {
       query: { cToonId: ctoonId }
     })
     ownersList.value = Array.isArray(res) ? res : []
     lastOwnersCtoonId.value = ctoonId
+
+    // Fetch mint-adjusted valuations for all owners
+    const ids = ownersList.value.map(o => o.userCtoonId).filter(Boolean)
+    if (ids.length) {
+      ownerValuationsLoading.value = true
+      try {
+        const vals = await $fetch('/api/ctoon/valuations', {
+          method: 'POST',
+          body: { userCtoonIds: ids }
+        })
+        ownerValuations.value = vals || {}
+      } catch {
+        ownerValuations.value = {}
+      } finally {
+        ownerValuationsLoading.value = false
+      }
+    }
   } catch (err) {
     ownersError.value = 'Failed to load owners.'
     ownersList.value = []
