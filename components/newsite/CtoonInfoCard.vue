@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="ctic-overlay" @click.self="close">
     <div class="ctic-panel">
       <!-- Status banner image -->
@@ -331,6 +332,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
