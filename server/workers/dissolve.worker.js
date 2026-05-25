@@ -42,7 +42,8 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   let highestReassigned = 0
   let autoBidsDeleted = 0
   let autoBidsReassigned = 0
-  let tradeOffersReassigned = 0
+  let tradeOffersWithdrawn = 0
+  let tradeOffersRejected = 0
 
   await progress(job, 0, 'Starting…')
 
@@ -201,11 +202,55 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     autoBidsReassigned++
   }
 
-  // ── Step 6: Trade offers ─────────────────────────────────────────────────
-  await progress(job, 87, 'Reassigning trade offers…')
+  // ── Step 6: Trade offers — withdraw/reject all pending ──────────────────
+  await progress(job, 87, 'Handling trade offers…')
 
-  const toRe = await prisma.tradeOffer.updateMany({ where: { initiatorId: userId }, data: { initiatorId: officialId } })
-  tradeOffersReassigned = toRe.count
+  const pendingAsInitiator = await prisma.tradeOffer.findMany({
+    where: { initiatorId: userId, status: 'PENDING' },
+    select: { id: true }
+  })
+  if (pendingAsInitiator.length) {
+    const ids = pendingAsInitiator.map(o => o.id)
+    await prisma.$transaction(async (tx) => {
+      const upd = await tx.tradeOffer.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'WITHDRAWN', updatedAt: new Date() }
+      })
+      tradeOffersWithdrawn = upd.count
+      await tx.lockedPoints.updateMany({
+        where: {
+          userId,
+          status: 'ACTIVE',
+          contextType: 'TRADE',
+          contextId: { in: ids }
+        },
+        data: { status: 'RELEASED' }
+      })
+    })
+  }
+
+  const pendingAsRecipient = await prisma.tradeOffer.findMany({
+    where: { recipientId: userId, status: 'PENDING' },
+    select: { id: true }
+  })
+  if (pendingAsRecipient.length) {
+    const ids = pendingAsRecipient.map(o => o.id)
+    await prisma.$transaction(async (tx) => {
+      const upd = await tx.tradeOffer.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'REJECTED', updatedAt: new Date() }
+      })
+      tradeOffersRejected = upd.count
+      await tx.lockedPoints.updateMany({
+        where: {
+          status: 'ACTIVE',
+          contextType: 'TRADE',
+          contextId: { in: ids }
+        },
+        data: { status: 'RELEASED' }
+      })
+    })
+  }
 
   // ── Step 7: Deactivate account ───────────────────────────────────────────
   await progress(job, 92, 'Deactivating account…')
@@ -229,7 +274,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       userId,
       adminId,
       action: 'DISSOLVE',
-      reason: `Account dissolved by ${adminUsername || adminId}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and added to auction queue (${ctoonsQueued}). Active auction bids deleted (${bidsDeleted} bids, ${autoBidsDeleted} auto-bids).`
+      reason: `Account dissolved by ${adminUsername || adminId}. Points (${pointsTransferred}) moved to ${officialUsername}; cToons transferred to ${officialUsername} and added to auction queue (${ctoonsQueued}). Active auction bids deleted (${bidsDeleted} bids, ${autoBidsDeleted} auto-bids). Pending trade offers withdrawn (${tradeOffersWithdrawn}) and rejected (${tradeOffersRejected}).`
     }
   })
 
@@ -249,7 +294,8 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       highestReassigned,
       autoBidsDeleted,
       autoBidsReassigned,
-      tradeOffersReassigned
+      tradeOffersWithdrawn,
+      tradeOffersRejected
     }
   })
 
@@ -308,7 +354,8 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     highestReassigned,
     autoBidsDeleted,
     autoBidsReassigned,
-    tradeOffersReassigned
+    tradeOffersWithdrawn,
+    tradeOffersRejected
   }
 }, { connection })
 

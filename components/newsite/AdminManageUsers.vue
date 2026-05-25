@@ -489,6 +489,8 @@
             <li>cToons transferred: {{ dissolveSummary.ctoonsTransferred }}</li>
             <li>cToons queued for auction: {{ dissolveSummary.ctoonsQueued }}</li>
             <li>Bids removed: {{ dissolveSummary.bidsDeleted }}</li>
+            <li>Trade offers withdrawn: {{ dissolveSummary.tradeOffersWithdrawn }}</li>
+            <li>Trade offers rejected: {{ dissolveSummary.tradeOffersRejected }}</li>
           </ul>
           <p class="text-xs mt-2">
             <a href="/admin/dissolve-queue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
