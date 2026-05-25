@@ -1,6 +1,5 @@
 <template>
   <Trade />
-  <CtoonInfoModal />
 </template>
 
 <script setup>
