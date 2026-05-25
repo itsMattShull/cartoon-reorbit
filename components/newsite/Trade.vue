@@ -846,6 +846,26 @@ async function fetchValuationsForIds(ids) {
   }
 }
 
+// Step 1: fetch valuations as the user selects target cToons
+watch(selectedTargetCtoons, ctoons => {
+  fetchValuationsForIds(ctoons.map(c => c.id))
+}, { deep: true })
+
+// Step 2: fetch valuations as the user selects their own cToons
+watch(selectedInitiatorCtoons, ctoons => {
+  fetchValuationsForIds(ctoons.map(c => c.id))
+}, { deep: true })
+
+// Step 3: ensure any gaps are filled (covers edge cases like back-navigation)
+watch(tradeCurrentStep, step => {
+  if (step === 3) {
+    fetchValuationsForIds([
+      ...selectedInitiatorCtoons.value.map(c => c.id),
+      ...selectedTargetCtoons.value.map(c => c.id),
+    ])
+  }
+})
+
 /** Total mint-adjusted value of the cToons selected from the other user (Step 1 display) */
 const step1SelectedTotal = computed(() => {
   if (!selectedTargetCtoons.value.length) return null
