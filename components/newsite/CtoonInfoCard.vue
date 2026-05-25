@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="ctic-overlay" @click.self="close">
     <div class="ctic-panel">
       <!-- Status banner image -->
@@ -331,6 +332,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -627,12 +629,34 @@ async function loadOwners(ctoonId) {
   }
 }
 
+/**
+ * Applies a mint-number premium to the base average sale price,
+ * matching the formula used in the Create Trade tab of trade.vue.
+ *
+ * Formula:  adjustedValue = baseValue × (1 + (highestMint - mintNumber) / highestMint)
+ *   – Mint #1 of 500  → 1 + 499/500 ≈ 1.998× base
+ *   – Mint #250 of 500 → 1 + 250/500 = 1.5× base
+ *   – Mint #500 of 500 → 1 + 0/500  = 1.0× base  (no premium)
+ *
+ * Falls back to cMart price when no auction history exists.
+ */
+function getMintAdjustedValue(valuation) {
+  if (!valuation) return null
+  const { avgSale, mintNumber, highestMint, cMartPrice } = valuation
+  const base = avgSale ?? cMartPrice ?? 0
+  if (!base) return 0
+  // No mint adjustment for unlimited-edition cToons (mintNumber null) or single-mint sets
+  if (mintNumber == null || !highestMint || highestMint <= 1) return base
+  const multiplier = 1 + (highestMint - mintNumber) / highestMint
+  return Math.round(base * multiplier)
+}
+
 function ownerValuation(userCtoonId) {
   const v = valuationsMap.value?.[userCtoonId]
   if (!v) return '—'
-  const pts = v.avgSale ?? v.cMartPrice ?? null
-  if (pts === null) return '—'
-  return `${Math.round(pts).toLocaleString()} pts`
+  const pts = getMintAdjustedValue(v)
+  if (pts === null || pts === 0) return '—'
+  return `${pts.toLocaleString()} pts`
 }
 
 async function submitSuggestion() {
