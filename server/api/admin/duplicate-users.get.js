@@ -118,7 +118,7 @@ export default defineEventHandler(async (event) => {
   )
 
   if (userIds.length) {
-    const [pointsRows, ctoonGroups, fingerprintRows] = await Promise.all([
+    const [pointsRows, ctoonGroups, fingerprintRows, tradeRooms] = await Promise.all([
       prisma.userPoints.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true, points: true }
@@ -132,6 +132,21 @@ export default defineEventHandler(async (event) => {
         where: { userId: { in: userIds } },
         orderBy: { createdAt: 'desc' },
         select: { userId: true, visitorId: true, deviceType: true, createdAt: true }
+      }),
+      // Only completed trades where BOTH sides are in our scoped userIds.
+      // A trade is completed when every Trade row in the room is confirmed.
+      prisma.tradeRoom.findMany({
+        where: {
+          AND: [
+            { traderAId: { in: userIds } },
+            { traderBId: { in: userIds } }
+          ]
+        },
+        select: {
+          traderAId: true,
+          traderBId: true,
+          trades: { select: { confirmed: true } }
+        }
       })
     ])
 
@@ -152,7 +167,21 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // userId -> Set of userIds they've completed a trade with (within scope)
+    const tradePartnersByUser = {}
+    for (const room of tradeRooms) {
+      if (!room.traderAId || !room.traderBId) continue
+      if (!room.trades.length) continue
+      if (!room.trades.every((t) => t.confirmed)) continue
+      ;(tradePartnersByUser[room.traderAId] ??= new Set()).add(room.traderBId)
+      ;(tradePartnersByUser[room.traderBId] ??= new Set()).add(room.traderAId)
+    }
+
     for (const group of paged) {
+      // username lookup limited to this group's other aliases
+      const groupAliasesByUserId = Object.fromEntries(
+        group.aliases.map((a) => [a.userId, a.username])
+      )
       for (const alias of group.aliases) {
         const fp = latestFingerprintByUser[alias.userId]
         alias.points = pointsByUser[alias.userId] ?? 0
@@ -160,6 +189,13 @@ export default defineEventHandler(async (event) => {
         alias.latestVisitorId = fp?.visitorId || null
         alias.latestDeviceType = fp?.deviceType || null
         alias.latestVisitorAt = fp?.capturedAt || null
+
+        const partners = tradePartnersByUser[alias.userId]
+        alias.tradedWith = partners
+          ? Array.from(partners)
+              .filter((pid) => pid !== alias.userId && groupAliasesByUserId[pid])
+              .map((pid) => ({ userId: pid, username: groupAliasesByUserId[pid] }))
+          : []
       }
     }
   }

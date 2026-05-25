@@ -53,6 +53,7 @@
                   <th class="px-1.5 py-1 border-b">Discord Username</th>
                   <th class="px-1.5 py-1 border-b">Discord Account Created</th>
                   <th class="px-1.5 py-1 border-b">Latest Device</th>
+                  <th class="px-1.5 py-1 border-b">Has Traded With</th>
                 </tr>
               </thead>
               <tbody>
@@ -82,6 +83,20 @@
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(alias.discordCreatedAt) }}</td>
                   <td class="px-1.5 py-1 whitespace-nowrap">
                     <span v-if="alias.latestDeviceType">{{ alias.latestDeviceType }}</span>
+                    <span v-else class="text-gray-400">—</span>
+                  </td>
+                  <td class="px-1.5 py-1">
+                    <template v-if="alias.tradedWith && alias.tradedWith.length">
+                      <div v-for="(pair, rIdx) in chunk(alias.tradedWith, 2)" :key="rIdx">
+                        <template v-for="(partner, idx) in pair" :key="partner.userId">
+                          <a
+                            href="#"
+                            class="text-indigo-600 hover:underline"
+                            @click.prevent
+                          >{{ partner.username }}</a><span v-if="idx < pair.length - 1">, </span>
+                        </template>
+                      </div>
+                    </template>
                     <span v-else class="text-gray-400">—</span>
                   </td>
                 </tr>
@@ -120,6 +135,17 @@
                 <div>
                   <span class="text-gray-500">Latest Device:</span>
                   <span v-if="alias.latestDeviceType">{{ alias.latestDeviceType }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Has Traded With:</span>
+                  <template v-if="alias.tradedWith && alias.tradedWith.length">
+                    <div v-for="(pair, rIdx) in chunk(alias.tradedWith, 2)" :key="rIdx" class="ml-1">
+                      <template v-for="(partner, idx) in pair" :key="partner.userId">
+                        <a href="#" class="text-indigo-600 hover:underline" @click.prevent>{{ partner.username }}</a><span v-if="idx < pair.length - 1">, </span>
+                      </template>
+                    </div>
+                  </template>
                   <span v-else class="text-gray-400">—</span>
                 </div>
               </div>
@@ -198,6 +224,13 @@ function formatDateTime(dt) {
 function formatNumber(n) {
   if (n == null) return '—'
   return Number(n).toLocaleString('en-US')
+}
+
+function chunk(arr, size) {
+  if (!Array.isArray(arr) || size <= 0) return []
+  const out = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
 }
 
 async function fetchGroups() {
