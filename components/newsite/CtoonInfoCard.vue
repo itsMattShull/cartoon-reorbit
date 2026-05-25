@@ -235,6 +235,7 @@
                 Tradeable
               </NuxtLink>
               <span v-else class="ctic-owner-spacer">&nbsp;</span>
+              <span class="ctic-owner-value">{{ ownerValuation(owner.userCtoonId) }}</span>
             </li>
           </ul>
         </template>
@@ -409,6 +410,7 @@ const ownersLoading = ref(false)
 const ownersError = ref('')
 const ownersList = ref([])
 const lastOwnersCtoonId = ref(null)
+const valuationsMap = ref({})
 
 function replaySound() {
   if (!audioEl.value || !ctoon.value?.soundPath) return
@@ -509,6 +511,7 @@ watch(isOpen, (open) => {
     ownersError.value = ''
     ownersList.value = []
     lastOwnersCtoonId.value = null
+    valuationsMap.value = {}
     if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
@@ -603,12 +606,33 @@ async function loadOwners(ctoonId) {
     const res = await $fetch('/api/collections/owners', { query: { cToonId: ctoonId } })
     ownersList.value = Array.isArray(res) ? res : []
     lastOwnersCtoonId.value = ctoonId
+
+    // Fetch valuations for all mints in parallel
+    const ids = ownersList.value.map(o => o.userCtoonId).filter(Boolean)
+    if (ids.length) {
+      try {
+        valuationsMap.value = await $fetch('/api/ctoon/valuations', {
+          method: 'POST',
+          body: { userCtoonIds: ids }
+        })
+      } catch {
+        valuationsMap.value = {}
+      }
+    }
   } catch {
     ownersError.value = 'Failed to load owners.'
     ownersList.value = []
   } finally {
     ownersLoading.value = false
   }
+}
+
+function ownerValuation(userCtoonId) {
+  const v = valuationsMap.value?.[userCtoonId]
+  if (!v) return '—'
+  const pts = v.avgSale ?? v.cMartPrice ?? null
+  if (pts === null) return '—'
+  return `${Math.round(pts).toLocaleString()} pts`
 }
 
 async function submitSuggestion() {
@@ -660,7 +684,7 @@ function formatDate(value) {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: 1100;
   padding: 12px;
   box-sizing: border-box;
 }
@@ -870,7 +894,7 @@ function formatDate(value) {
 
 .ctic-owner-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 10px;
   background: rgba(255, 255, 255, 0.07);
@@ -909,6 +933,13 @@ function formatDate(value) {
   font-size: 0.7rem;
   width: 58px;
   display: inline-block;
+}
+
+.ctic-owner-value {
+  font-size: 0.72rem;
+  color: #86efac;
+  white-space: nowrap;
+  text-align: right;
 }
 
 /* ── Suggest form ────────────────────────────────────────────── */
