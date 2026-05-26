@@ -303,7 +303,7 @@ async function main() {
     }
   })
 
-  const closedAuctions = await prisma.auction.findMany({
+  const closedAuctionsRaw = await prisma.auction.findMany({
     where:  { userCtoonId: { in: validUcIds }, status: 'CLOSED' },
     select: {
       id: true, userCtoonId: true,
@@ -313,6 +313,26 @@ async function main() {
     orderBy: { createdAt: 'asc' }   // process oldest first
   })
 
+  // Resolve the effective refund amount for each closed auction.
+  // Auction.highestBid is set conditionally during close (only when winningBid is truthy).
+  // If it is 0/null but winnerId is set, the field was not written correctly — fall back
+  // to the actual winning Bid record so the summary and refunds are accurate.
+  const closedAuctions = await Promise.all(closedAuctionsRaw.map(async (auction) => {
+    let effectiveAmount = auction.highestBid || 0
+    if (effectiveAmount === 0 && auction.winnerId) {
+      const winningBid = await prisma.bid.findFirst({
+        where:   { auctionId: auction.id, userId: auction.winnerId },
+        orderBy: { amount: 'desc' },
+        select:  { amount: true }
+      })
+      if (winningBid?.amount) {
+        effectiveAmount = winningBid.amount
+        warn(`Auction ${auction.id}: Auction.highestBid=0 but winning Bid found: ${effectiveAmount} pts — using Bid table amount`)
+      }
+    }
+    return { ...auction, effectiveAmount }
+  }))
+
   log(`  Active auctions to cancel:          ${activeAuctions.length}`)
   log(`  Closed auctions to fully undo:      ${closedAuctions.length}`)
 
@@ -321,7 +341,8 @@ async function main() {
       log(`    [ACTIVE]  auctionId=${a.id}  bids=${a._count.bids}  highestBid=${a.highestBid}`)
     }
     for (const a of closedAuctions) {
-      log(`    [CLOSED]  auctionId=${a.id}  winnerId=${a.winnerId}  highestBid=${a.highestBid}`)
+      const amountNote = a.effectiveAmount !== (a.highestBid || 0) ? ` (resolved from Bid table)` : ''
+      log(`    [CLOSED]  auctionId=${a.id}  winnerId=${a.winnerId}  highestBid=${a.highestBid}  effectiveAmount=${a.effectiveAmount}${amountNote}`)
     }
   }
 
@@ -426,7 +447,7 @@ async function main() {
   sep('Summary of planned changes')
 
   const totalRefundPoints = [...refundMap.values()].reduce((s, u) => s + u.totalRefund, 0)
-  const totalClosedAuctionRefunds = closedAuctions.reduce((s, a) => s + (a.highestBid || 0), 0)
+  const totalClosedAuctionRefunds = closedAuctions.reduce((s, a) => s + a.effectiveAmount, 0)
 
   log(`  Excess UserCtoon records to delete:       ${excessUserCtoonIds.size}`)
   log(`  Excess CmartPurchaseLog records to delete: ${excessPurchaseLogIds.size}`)
@@ -495,42 +516,43 @@ async function main() {
   // ── 2. Undo CLOSED auctions ───────────────────────────────────────────────
   log('\n  [2/8] Undoing closed auctions…')
   for (const auction of closedAuctions) {
+    const refundAmt = auction.effectiveAmount  // resolved from Auction.highestBid or Bid table
     await prisma.$transaction(async (tx) => {
-      // Refund the auction winner (they paid highestBid; the cToon they won is being deleted)
-      if (auction.winnerId && auction.highestBid > 0) {
+      // Refund the auction winner (they paid refundAmt; the cToon they won is being deleted)
+      if (auction.winnerId && refundAmt > 0) {
         const winnerPts = await tx.userPoints.upsert({
           where:  { userId: auction.winnerId },
-          update: { points: { increment: auction.highestBid } },
-          create: { userId: auction.winnerId, points: auction.highestBid }
+          update: { points: { increment: refundAmt } },
+          create: { userId: auction.winnerId, points: refundAmt }
         })
         await tx.pointsLog.create({
           data: {
             userId:    auction.winnerId,
             direction: 'increase',
-            points:    auction.highestBid,
+            points:    refundAmt,
             total:     winnerPts.points,
             method:    'saiyan-saga-auction-undo-winner-refund'
           }
         })
-        stats.auctionWinnerRefundPts += auction.highestBid
+        stats.auctionWinnerRefundPts += refundAmt
 
         // Claw back from the auction creator (they received the bid proceeds)
         if (auction.creatorId) {
           const creatorPts = await tx.userPoints.upsert({
             where:  { userId: auction.creatorId },
-            update: { points: { decrement: auction.highestBid } },
-            create: { userId: auction.creatorId, points: -auction.highestBid }
+            update: { points: { decrement: refundAmt } },
+            create: { userId: auction.creatorId, points: -refundAmt }
           })
           await tx.pointsLog.create({
             data: {
               userId:    auction.creatorId,
               direction: 'decrease',
-              points:    auction.highestBid,
+              points:    refundAmt,
               total:     creatorPts.points,
               method:    'saiyan-saga-auction-undo-creator-clawback'
             }
           })
-          stats.auctionCreatorClawbackPts += auction.highestBid
+          stats.auctionCreatorClawbackPts += refundAmt
         }
       }
 
@@ -539,7 +561,7 @@ async function main() {
       await tx.bid.deleteMany({ where: { auctionId: auction.id } })
       await tx.auction.delete({ where: { id: auction.id } })
     })
-    log(`    ✓ Undid closed auction ${auction.id} — refunded ${auction.highestBid} pts to winner ${auction.winnerId}; clawed back from creator ${auction.creatorId}`)
+    log(`    ✓ Undid closed auction ${auction.id} — refunded ${refundAmt} pts to winner ${auction.winnerId}; clawed back from creator ${auction.creatorId}`)
     stats.closedAuctionsUndone++
   }
 
