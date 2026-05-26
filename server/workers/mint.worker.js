@@ -92,7 +92,16 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     if (!isSpecial) {
       if (ctoon.mintLimitType === 'timeBased') {
         // ── Time-based release purchase limits (replaces 48h perUserLimit for this type) ──
-        // Resolve limit: per-cToon override first, then rarity defaults from global config.
+        // Resolve limit: per-cToon override first, then rarity defaults from global config,
+        // then hardcoded defaults as a final safety net.
+        const HARDCODED_TIME_BASED_LIMITS = {
+          'Common':     { count: 5, windowDays: null },
+          'Uncommon':   { count: 4, windowDays: null },
+          'Rare':       { count: 3, windowDays: null },
+          'Very Rare':  { count: 2, windowDays: null },
+          'Crazy Rare': { count: 1, windowDays: null }
+        }
+
         let limitCount    = ctoon.timeBasedLimitCount    ?? null
         let windowDays    = ctoon.timeBasedLimitWindowDays ?? null
 
@@ -106,6 +115,15 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
               if (windowDays === null && def.windowDays != null) windowDays = Number(def.windowDays)
             }
           } catch {}
+
+          // Fallback to hardcoded defaults if the global config is missing or lacks this rarity.
+          // This ensures limits are always enforced for time-based cToons even when the DB is
+          // not yet seeded with timeBasedPurchaseLimits.
+          if (limitCount === null && HARDCODED_TIME_BASED_LIMITS[ctoon.rarity]) {
+            const def = HARDCODED_TIME_BASED_LIMITS[ctoon.rarity]
+            if (def.count != null) limitCount = Number(def.count)
+            if (windowDays === null && def.windowDays != null) windowDays = Number(def.windowDays)
+          }
         }
 
         if (limitCount !== null && limitCount > 0) {

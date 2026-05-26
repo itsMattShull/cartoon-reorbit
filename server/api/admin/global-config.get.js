@@ -6,6 +6,14 @@ import {
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
+const DEFAULT_TIME_BASED_PURCHASE_LIMITS = {
+  'Common':     { count: 5, windowDays: null },
+  'Uncommon':   { count: 4, windowDays: null },
+  'Rare':       { count: 3, windowDays: null },
+  'Very Rare':  { count: 2, windowDays: null },
+  'Crazy Rare': { count: 1, windowDays: null }
+}
+
 export default defineEventHandler(async (event) => {
   // 1) Authenticate & authorize
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -24,13 +32,12 @@ export default defineEventHandler(async (event) => {
     where: { id: 'singleton' }
   })
 
-  // 3) If not found, create with a default cap (e.g. 100)
+  // 3) If not found, create with defaults
   if (!config) {
     config = await db.globalGameConfig.create({
       data: {
         id: 'singleton',
         dailyPointLimit: 250,
-        // new fields defaults
         dailyLoginPoints: 500,
         dailyNewUserPoints: 1000,
         czoneVisitPoints: 20,
@@ -40,8 +47,16 @@ export default defineEventHandler(async (event) => {
         dhashDuplicateThreshold: 16,
         featuredAuctionHours: [],
         featuredAuctionIntervalDays: 1,
-        featuredAuctionsPerSlot: 1
+        featuredAuctionsPerSlot: 1,
+        timeBasedPurchaseLimits: DEFAULT_TIME_BASED_PURCHASE_LIMITS
       }
+    })
+  } else if (!config.timeBasedPurchaseLimits) {
+    // Backfill defaults for existing singletons created before this field was added.
+    // This ensures the purchase-limit enforcement in the mint worker has data to work with.
+    config = await db.globalGameConfig.update({
+      where: { id: 'singleton' },
+      data: { timeBasedPurchaseLimits: DEFAULT_TIME_BASED_PURCHASE_LIMITS }
     })
   }
 
