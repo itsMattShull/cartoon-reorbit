@@ -153,6 +153,19 @@ const ctoons = computed(() => {
       const at = a.acquiredAt ? new Date(a.acquiredAt).getTime() : 0
       const bt = b.acquiredAt ? new Date(b.acquiredAt).getTime() : 0
       cmp = at - bt
+    } else if (f.sortField === 'mintNumber') {
+      // Primary: mint number (direction controlled by sortAsc)
+      const am = a.mintNumber ?? Infinity
+      const bm = b.mintNumber ?? Infinity
+      const primaryCmp = f.sortAsc ? (am - bm) : (bm - am)
+      if (primaryCmp !== 0) return primaryCmp
+      // Secondary: acquisition date descending (fixed)
+      const at = a.acquiredAt ? new Date(a.acquiredAt).getTime() : 0
+      const bt = b.acquiredAt ? new Date(b.acquiredAt).getTime() : 0
+      const secondaryCmp = bt - at
+      if (secondaryCmp !== 0) return secondaryCmp
+      // Tertiary: name ascending (fixed)
+      return a.name.localeCompare(b.name)
     } else {
       cmp = a.name.localeCompare(b.name)
     }
