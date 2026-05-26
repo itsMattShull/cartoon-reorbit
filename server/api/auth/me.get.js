@@ -44,7 +44,8 @@ export default defineEventHandler(async (event) => {
       inGuild: true,
       points: true,
       isBooster: true,
-      additionalCzones: true
+      additionalCzones: true,
+      surveyAnswers: { select: { userId: true } },
     }
   })
 
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
     ctoonCount,
     uniqueCtoonCount: uniqueCtoonRows.length,
     isBooster: user.isBooster,
-    additionalCzones: user.additionalCzones ?? 0
+    additionalCzones: user.additionalCzones ?? 0,
+    surveyComplete: !!user.surveyAnswers,
   }
 })

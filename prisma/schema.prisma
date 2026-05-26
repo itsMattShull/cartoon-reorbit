@@ -470,6 +470,9 @@ model User {
   tkoRoundsWon  TkoRound[] @relation("TkoRoundWinner")
   tkoRoundsLost TkoRound[] @relation("TkoRoundLoser")
 
+  // Identity / survey
+  surveyAnswers SurveyAnswers?
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -2399,5 +2402,46 @@ model CmartPurchaseLog {
 
   @@index([userId, createdAt])
   @@index([ctoonId, createdAt])
+  @@index([createdAt])
+}
+
+// ── Survey Answers (identity signal + 3000-point reward) ──────────────────────
+
+model SurveyAnswers {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id])
+
+  // Raw text answers
+  whyJoin          String   @db.Text
+  howFound         String   @db.Text
+  favoriteShows    String   @db.Text
+
+  // Character lengths (for validation audit)
+  whyJoinLen       Int
+  howFoundLen      Int
+  favoriteShowsLen Int
+
+  // Embedding vectors stored as JSON float arrays (384-dim MiniLM)
+  // Set by content-analyzer worker after submission
+  whyJoinVec       Json?
+  howFoundVec      Json?
+  favoriteShowsVec Json?
+
+  // Combined stylometric feature blob (set by worker)
+  stylometric      Json?
+
+  // MinHash signature for near-duplicate detection (set by worker)
+  minhashSig       Bytes?
+
+  // AI-generation likelihood per answer (set by worker, 0-1)
+  aiScoreWhy       Float?
+  aiScoreFound     Float?
+  aiScoreShows     Float?
+
+  // Whether the 3000-point award was issued
+  pointsAwarded    Boolean  @default(false)
+
+  createdAt        DateTime @default(now())
+
   @@index([createdAt])
 }
