@@ -168,17 +168,6 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
     }
 
-    // Load global settings (for window-aware caps)
-    let initialPercent = 75
-    let delayHours = 12
-    try {
-      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-      if (cfg) {
-        if (typeof cfg.initialReleasePercent === 'number') initialPercent = cfg.initialReleasePercent
-        if (typeof cfg.finalReleaseDelayHours === 'number') delayHours = cfg.finalReleaseDelayHours
-      }
-    } catch {}
-
     // Mint inside a single transaction with atomic counter for mintNumber
     await prisma.$transaction(async (tx) => {
       // 1) Atomically increment totalMinted and use the new value as mintNumber
@@ -189,9 +178,6 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
           totalMinted: true,
           initialQuantity: true,
           quantity: true,
-          releaseDate: true,
-          initialReleaseQty: true,
-          finalReleaseAt: true
         }
       })
 
@@ -199,26 +185,6 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       // Sold-out guard (rolls back the increment if exceeded)
       if (updatedCtoon.quantity !== null && mintNumber > updatedCtoon.quantity) {
         throw new Error('cToon sold out')
-      }
-
-      // Window-aware cap (non-special mints only)
-      // Skip two-phase logic for time-based cToons (they don't have initial/final windows)
-      if (!isSpecial && ctoon.mintLimitType !== 'timeBased' && updatedCtoon.quantity !== null && updatedCtoon.releaseDate) {
-        const qty = Number(updatedCtoon.quantity)
-        const initialCapFromPct = Math.max(1, Math.floor((qty * Number(initialPercent)) / 100))
-        const initialCap = Math.min(
-          qty,
-          Math.max(1, Number(updatedCtoon.initialReleaseQty ?? initialCapFromPct))
-        )
-        const finalReleaseAt = updatedCtoon.finalReleaseAt
-          ? new Date(updatedCtoon.finalReleaseAt)
-          : new Date(new Date(updatedCtoon.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-        const now = new Date()
-        const beforeFinal = now < finalReleaseAt
-        const allowedCap = beforeFinal ? initialCap : qty
-        if (mintNumber > allowedCap) {
-          throw new Error('Initial window sold out. Please wait for the final release.')
-        }
       }
 
       const isFirstEdition =

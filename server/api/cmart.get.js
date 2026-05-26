@@ -65,10 +65,6 @@ export default defineEventHandler(async () => {
     let nextReleaseAt = null
     if (c.releaseDate && new Date(c.releaseDate) > now) {
       nextReleaseAt = c.releaseDate
-    } else if (
-      qty != null && c.releaseDate && finalAt && now < finalAt && c.totalMinted >= (initialCap ?? 0) && c.totalMinted < qty
-    ) {
-      nextReleaseAt = finalAt.toISOString()
     }
     return {
       ...c,
