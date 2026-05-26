@@ -2,29 +2,26 @@
 // Returns cMart upgrade costs with a 10-minute in-memory cache.
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import {
+  getUpgradesConfigCache,
+  setUpgradesConfigCache,
+  clearUpgradesConfigCache
+} from '@/server/utils/upgradesConfigCache'
 
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
-let _cache = null
-let _cacheAt = 0
-
-export function clearUpgradesConfigCache() {
-  _cache = null
-  _cacheAt = 0
-}
+// Re-export so any legacy imports still resolve (belt-and-suspenders)
+export { clearUpgradesConfigCache }
 
 export default defineEventHandler(async () => {
-  const now = Date.now()
-  if (_cache && now - _cacheAt < CACHE_TTL_MS) {
-    return _cache
-  }
+  const cached = getUpgradesConfigCache()
+  if (cached) return cached
 
   const cfg = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
 
-  _cache = {
+  const result = {
     firstAdditionalCzoneCost:      cfg?.firstAdditionalCzoneCost      ?? 25000,
     subsequentAdditionalCzoneCost: cfg?.subsequentAdditionalCzoneCost ?? 50000,
     cmartHalfPriceEnabled:         cfg?.cmartHalfPriceEnabled         ?? false
   }
-  _cacheAt = now
-  return _cache
+  setUpgradesConfigCache(result)
+  return result
 })
