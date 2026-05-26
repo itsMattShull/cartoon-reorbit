@@ -7,7 +7,7 @@ import {
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { clearUpgradesConfigCache } from '@/server/api/cmart/upgrades-config.get'
+import { clearUpgradesConfigCache } from '@/server/utils/upgradesConfigCache'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate & authorize
