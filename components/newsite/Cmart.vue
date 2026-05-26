@@ -332,8 +332,27 @@ const nowTs = ref(Date.now())
 let _tick = null
 let _refreshTimer = null
 
+// Only Defined Number Limit cToons have a 2-phase cap guard.
+// Returns the currently-active cap: initialCap before finalReleaseAt, full
+// quantity after.  Time-Based Limit cToons simply return their raw quantity
+// (or Infinity when unlimited) so they are never artificially capped.
+function currentAllowedCap(c) {
+  if (c.quantity == null) return Infinity
+  if (c.mintLimitType !== 'defined') return Number(c.quantity)
+  const finalAt = c.finalReleaseAt ? new Date(c.finalReleaseAt).getTime() : null
+  const beforeFinal = finalAt ? nowTs.value < finalAt : false
+  const initCap = Number(c.initialCap ?? 0)
+  return beforeFinal ? (initCap || 0) : Number(c.quantity)
+}
+
 function isSoldOut(c) {
-  return c.quantity != null && c.totalMinted >= c.quantity
+  if (c.quantity == null) return false
+  if (c.mintLimitType === 'defined') {
+    // Defined Number Limit: respect the 2-phase cap guard
+    return c.totalMinted >= currentAllowedCap(c)
+  }
+  // Time-Based Limit: no phase cap — check raw quantity only
+  return c.totalMinted >= c.quantity
 }
 
 function hasCountdown(c) {

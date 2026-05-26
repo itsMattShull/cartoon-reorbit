@@ -45,6 +45,7 @@ export default defineEventHandler(async () => {
       cost: true,
       power: true,
       characters: true,
+      mintLimitType: true,
       // advisory fields (optional)
       initialReleaseAt: true,
       finalReleaseAt: true,
@@ -53,20 +54,32 @@ export default defineEventHandler(async () => {
     }
   })
 
-  // Compute nextReleaseAt and initialCap for UI convenience
+  // Compute nextReleaseAt and initialCap for UI convenience.
+  // The 2-phase cap guard (initialCap / finalReleaseAt) only applies to
+  // Defined Number Limit cToons.  Time-Based Limit cToons mint freely
+  // during their window and must not receive phase logic.
   return ctoons.map(c => {
     const qty = c.quantity
-    const finalAt = c.finalReleaseAt
-      ? new Date(c.finalReleaseAt)
-      : c.releaseDate
-        ? new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
-        : null
-    const initialCap = qty != null ? computeInitialCap(qty, initialPercent, c.initialReleaseQty) : null
+    const isDefinedLimit = c.mintLimitType === 'defined'
+
+    // Only compute phase fields for Defined Number Limit cToons
+    const finalAt = isDefinedLimit
+      ? (c.finalReleaseAt
+          ? new Date(c.finalReleaseAt)
+          : c.releaseDate
+            ? new Date(new Date(c.releaseDate).getTime() + delayHours * 60 * 60 * 1000)
+            : null)
+      : null
+    const initialCap = isDefinedLimit && qty != null
+      ? computeInitialCap(qty, initialPercent, c.initialReleaseQty)
+      : null
     let nextReleaseAt = null
     if (c.releaseDate && new Date(c.releaseDate) > now) {
       nextReleaseAt = c.releaseDate
     } else if (
-      qty != null && c.releaseDate && finalAt && now < finalAt && c.totalMinted >= (initialCap ?? 0) && c.totalMinted < qty
+      isDefinedLimit &&
+      qty != null && c.releaseDate && finalAt && now < finalAt &&
+      c.totalMinted >= (initialCap ?? 0) && c.totalMinted < qty
     ) {
       nextReleaseAt = finalAt.toISOString()
     }

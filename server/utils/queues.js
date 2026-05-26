@@ -148,3 +148,15 @@ export async function cancelDissolveAuctionLaunch(queueEntryId) {
   const existing = await dissolveAuctionLaunchQueue.getJob(queueEntryId)
   if (existing) { try { await existing.remove() } catch {} }
 }
+
+// Queue for analysing survey text (embeddings, MinHash, stylometrics)
+export const contentAnalysisQueue = new Queue(
+  process.env.CONTENT_ANALYSIS_QUEUE_KEY || 'contentAnalysis',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500 },
+      removeOnFail:     { count: 500 },
+    },
+  }
+)
