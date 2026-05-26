@@ -22,11 +22,13 @@
 //     the same amount from the auction creator, delete bids / auto-bids /
 //     auction record
 //
-// Phase 3 – Trade cleanup (for excess UserCtoon IDs)
+// Phase 3 – Trade cleanup (any trade where a Saiyan Saga cToon appears on either side)
 //   • PENDING trade offers: withdraw, release initiator's active locked points
-//   • ACCEPTED trade offers (fully undo): return non-excess cToons to their
-//     pre-trade owners (skips if the cToon has since moved again), reverse any
-//     points transferred in the trade
+//   • ACCEPTED trade offers (fully undo): return all non-excess cToons (set and non-set)
+//     to their pre-trade owners (skips if the cToon has since moved again), reverse any
+//     points transferred in the trade.
+//     Scope: ANY accepted trade where a Saiyan Saga cToon (excess or not) was traded,
+//     so that no set cToon ends up in a permanently mismatched state.
 //
 // Phase 4 – Misc FK cleanup
 //   • AuctionOnly listings, DissolveAuctionQueue, UserTradeListItem,
@@ -291,6 +293,10 @@ async function main() {
 
   const validUcIds = [...excessUserCtoonIds]
 
+  // All UserCtoon IDs for this set (used for trade scope — we reverse every trade
+  // that involved a Saiyan Saga cToon on either side, not just excess ones).
+  const allSetUserCtoonIds = allUserCtoons.map(uc => uc.id)
+
   // ── Phase 2: Collect auction state ─────────────────────────────────────────
   sep('Phase 2: Analyzing auctions for excess UserCtoons')
 
@@ -303,7 +309,7 @@ async function main() {
     }
   })
 
-  const closedAuctions = await prisma.auction.findMany({
+  const closedAuctionsRaw = await prisma.auction.findMany({
     where:  { userCtoonId: { in: validUcIds }, status: 'CLOSED' },
     select: {
       id: true, userCtoonId: true,
@@ -313,6 +319,26 @@ async function main() {
     orderBy: { createdAt: 'asc' }   // process oldest first
   })
 
+  // Resolve the effective refund amount for each closed auction.
+  // Auction.highestBid is set conditionally during close (only when winningBid is truthy).
+  // If it is 0/null but winnerId is set, the field was not written correctly — fall back
+  // to the actual winning Bid record so the summary and refunds are accurate.
+  const closedAuctions = await Promise.all(closedAuctionsRaw.map(async (auction) => {
+    let effectiveAmount = auction.highestBid || 0
+    if (effectiveAmount === 0 && auction.winnerId) {
+      const winningBid = await prisma.bid.findFirst({
+        where:   { auctionId: auction.id, userId: auction.winnerId },
+        orderBy: { amount: 'desc' },
+        select:  { amount: true }
+      })
+      if (winningBid?.amount) {
+        effectiveAmount = winningBid.amount
+        warn(`Auction ${auction.id}: Auction.highestBid=0 but winning Bid found: ${effectiveAmount} pts — using Bid table amount`)
+      }
+    }
+    return { ...auction, effectiveAmount }
+  }))
+
   log(`  Active auctions to cancel:          ${activeAuctions.length}`)
   log(`  Closed auctions to fully undo:      ${closedAuctions.length}`)
 
@@ -321,15 +347,18 @@ async function main() {
       log(`    [ACTIVE]  auctionId=${a.id}  bids=${a._count.bids}  highestBid=${a.highestBid}`)
     }
     for (const a of closedAuctions) {
-      log(`    [CLOSED]  auctionId=${a.id}  winnerId=${a.winnerId}  highestBid=${a.highestBid}`)
+      const amountNote = a.effectiveAmount !== (a.highestBid || 0) ? ` (resolved from Bid table)` : ''
+      log(`    [CLOSED]  auctionId=${a.id}  winnerId=${a.winnerId}  highestBid=${a.highestBid}  effectiveAmount=${a.effectiveAmount}${amountNote}`)
     }
   }
 
   // ── Phase 3: Collect trade offer state ─────────────────────────────────────
-  sep('Phase 3: Analyzing trade offers for excess UserCtoons')
+  sep('Phase 3: Analyzing trade offers for any Saiyan Saga cToon on either side')
 
+  // Use allSetUserCtoonIds so we catch every trade that involved a Saiyan Saga
+  // cToon — regardless of whether that specific mint was over-limit.
   const pendingTradeOffers = await prisma.tradeOffer.findMany({
-    where:  { status: 'PENDING', ctoons: { some: { userCtoonId: { in: validUcIds } } } },
+    where:  { status: 'PENDING', ctoons: { some: { userCtoonId: { in: allSetUserCtoonIds } } } },
     select: {
       id: true, initiatorId: true, recipientId: true, pointsOffered: true,
       ctoons: { select: { id: true, userCtoonId: true, role: true } }
@@ -338,7 +367,7 @@ async function main() {
 
   // Sort accepted trades by updatedAt descending so we undo the most recent first
   const acceptedTradeOffers = await prisma.tradeOffer.findMany({
-    where:  { status: 'ACCEPTED', ctoons: { some: { userCtoonId: { in: validUcIds } } } },
+    where:  { status: 'ACCEPTED', ctoons: { some: { userCtoonId: { in: allSetUserCtoonIds } } } },
     select: {
       id: true, initiatorId: true, recipientId: true, pointsOffered: true, updatedAt: true,
       ctoons: { select: { id: true, userCtoonId: true, role: true } }
@@ -346,22 +375,27 @@ async function main() {
     orderBy: { updatedAt: 'desc' }   // undo most recent first
   })
 
-  log(`  Pending trade offers to withdraw:   ${pendingTradeOffers.length}`)
-  log(`  Accepted trade offers to undo:      ${acceptedTradeOffers.length}`)
+  log(`  Pending trade offers to withdraw:   ${pendingTradeOffers.length}  (any trade with a set cToon on either side)`)
+  log(`  Accepted trade offers to undo:      ${acceptedTradeOffers.length}  (any trade with a set cToon on either side)`)
 
   if (VERBOSE) {
     for (const t of pendingTradeOffers) {
-      log(`    [PENDING]  tradeId=${t.id}  initiator=${t.initiatorId}`)
+      const setInTrade = t.ctoons.filter(c => allSetUserCtoonIds.includes(c.userCtoonId)).length
+      log(`    [PENDING]  tradeId=${t.id}  initiator=${t.initiatorId}  set_ctoons_in_trade=${setInTrade}`)
     }
     for (const t of acceptedTradeOffers) {
+      const setInTrade   = t.ctoons.filter(c => allSetUserCtoonIds.includes(c.userCtoonId)).length
       const excessInTrade = t.ctoons.filter(c => excessUserCtoonIds.has(c.userCtoonId)).length
-      log(`    [ACCEPTED] tradeId=${t.id}  initiator=${t.initiatorId}  excess_ctoons_in_trade=${excessInTrade}`)
+      log(`    [ACCEPTED] tradeId=${t.id}  initiator=${t.initiatorId}  set_ctoons=${setInTrade}  excess_ctoons=${excessInTrade}`)
     }
   }
 
   // Pre-compute accepted trade reversals.
-  // For each accepted trade, determine which non-excess cToons need returning
-  // and whether points need reversing.
+  // For each accepted trade containing any Saiyan Saga cToon, determine which
+  // non-excess cToons need returning and whether points need reversing.
+  // Excess cToons are skipped here (they'll be deleted in Phase 5/6) but every
+  // other cToon in the same trade — including non-set cToons on the other side —
+  // is returned to its pre-trade owner.
   const acceptedTradeReversals = []
   for (const trade of acceptedTradeOffers) {
     const ctoonsToReturn = []
@@ -426,14 +460,14 @@ async function main() {
   sep('Summary of planned changes')
 
   const totalRefundPoints = [...refundMap.values()].reduce((s, u) => s + u.totalRefund, 0)
-  const totalClosedAuctionRefunds = closedAuctions.reduce((s, a) => s + (a.highestBid || 0), 0)
+  const totalClosedAuctionRefunds = closedAuctions.reduce((s, a) => s + a.effectiveAmount, 0)
 
   log(`  Excess UserCtoon records to delete:       ${excessUserCtoonIds.size}`)
   log(`  Excess CmartPurchaseLog records to delete: ${excessPurchaseLogIds.size}`)
   log(`  Active auctions to cancel:                 ${activeAuctions.length}`)
   log(`  Closed auctions to undo:                   ${closedAuctions.length}`)
-  log(`  Pending trade offers to withdraw:          ${pendingTradeOffers.length}`)
-  log(`  Accepted trade offers to undo:             ${acceptedTradeOffers.length}`)
+  log(`  Pending trade offers to withdraw:          ${pendingTradeOffers.length}  (any trade with a set cToon)`)
+  log(`  Accepted trade offers to undo:             ${acceptedTradeOffers.length}  (any trade with a set cToon)`)
   log(`  Original purchaser refunds:                ${refundMap.size} user(s), ${totalRefundPoints} total pts`)
   log(`  Closed auction winner refunds:             ${totalClosedAuctionRefunds} total pts`)
   log(`  cToons to renumber:                        ${ctoons.length}`)
@@ -495,42 +529,43 @@ async function main() {
   // ── 2. Undo CLOSED auctions ───────────────────────────────────────────────
   log('\n  [2/8] Undoing closed auctions…')
   for (const auction of closedAuctions) {
+    const refundAmt = auction.effectiveAmount  // resolved from Auction.highestBid or Bid table
     await prisma.$transaction(async (tx) => {
-      // Refund the auction winner (they paid highestBid; the cToon they won is being deleted)
-      if (auction.winnerId && auction.highestBid > 0) {
+      // Refund the auction winner (they paid refundAmt; the cToon they won is being deleted)
+      if (auction.winnerId && refundAmt > 0) {
         const winnerPts = await tx.userPoints.upsert({
           where:  { userId: auction.winnerId },
-          update: { points: { increment: auction.highestBid } },
-          create: { userId: auction.winnerId, points: auction.highestBid }
+          update: { points: { increment: refundAmt } },
+          create: { userId: auction.winnerId, points: refundAmt }
         })
         await tx.pointsLog.create({
           data: {
             userId:    auction.winnerId,
             direction: 'increase',
-            points:    auction.highestBid,
+            points:    refundAmt,
             total:     winnerPts.points,
             method:    'saiyan-saga-auction-undo-winner-refund'
           }
         })
-        stats.auctionWinnerRefundPts += auction.highestBid
+        stats.auctionWinnerRefundPts += refundAmt
 
         // Claw back from the auction creator (they received the bid proceeds)
         if (auction.creatorId) {
           const creatorPts = await tx.userPoints.upsert({
             where:  { userId: auction.creatorId },
-            update: { points: { decrement: auction.highestBid } },
-            create: { userId: auction.creatorId, points: -auction.highestBid }
+            update: { points: { decrement: refundAmt } },
+            create: { userId: auction.creatorId, points: -refundAmt }
           })
           await tx.pointsLog.create({
             data: {
               userId:    auction.creatorId,
               direction: 'decrease',
-              points:    auction.highestBid,
+              points:    refundAmt,
               total:     creatorPts.points,
               method:    'saiyan-saga-auction-undo-creator-clawback'
             }
           })
-          stats.auctionCreatorClawbackPts += auction.highestBid
+          stats.auctionCreatorClawbackPts += refundAmt
         }
       }
 
@@ -539,7 +574,7 @@ async function main() {
       await tx.bid.deleteMany({ where: { auctionId: auction.id } })
       await tx.auction.delete({ where: { id: auction.id } })
     })
-    log(`    ✓ Undid closed auction ${auction.id} — refunded ${auction.highestBid} pts to winner ${auction.winnerId}; clawed back from creator ${auction.creatorId}`)
+    log(`    ✓ Undid closed auction ${auction.id} — refunded ${refundAmt} pts to winner ${auction.winnerId}; clawed back from creator ${auction.creatorId}`)
     stats.closedAuctionsUndone++
   }
 
