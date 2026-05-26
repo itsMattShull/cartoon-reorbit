@@ -452,10 +452,10 @@
                 <button
                   v-else
                   @click="buyCtoon(ctoon)"
-                  :disabled="(ctoon.quantity !== null && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= currentAllowedCap(ctoon)) || buyingCtoons.has(ctoon.id)"
+                  :disabled="(ctoon.mintLimitType === 'defined' && ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)) || buyingCtoons.has(ctoon.id)"
                   class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50 text-xs"
                 >
-                  <span v-if="ctoon.quantity !== null && ctoon.quantity !== TIME_BASED_CAP && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
+                  <span v-if="ctoon.mintLimitType === 'defined' && ctoon.quantity !== null && ctoon.minted >= currentAllowedCap(ctoon)">Sold Out</span>
                   <span v-else-if="buyingCtoons.has(ctoon.id)">Purchasing…</span>
                   <span v-else>
                     Buy for {{ displayPrice(ctoon.price) }} Pts
@@ -858,6 +858,8 @@ function getFinalReleaseAt(ctoon) {
 }
 
 function shouldShowFinalCountdown(ctoon) {
+  // The 2-phase countdown only applies to Defined Number Limit cToons
+  if (ctoon.mintLimitType !== 'defined') return false
   if (ctoon.quantity === null) return false
   if (!ctoon.releaseDate) return false
   const finalAt = getFinalReleaseAt(ctoon)
@@ -873,6 +875,9 @@ function shouldShowFinalCountdown(ctoon) {
 
 function currentAllowedCap(ctoon) {
   if (ctoon.quantity === null) return Infinity
+  // Only apply the 2-phase timer cap guard to Defined Number Limit cToons;
+  // Time-Based Limit cToons mint freely during their window.
+  if (ctoon.mintLimitType !== 'defined') return Number(ctoon.quantity)
   const finalAt = ctoon.finalReleaseAt ? new Date(ctoon.finalReleaseAt).getTime() : null
   const beforeFinal = finalAt ? nowTs.value < finalAt : false
   const initCap = Number(ctoon.initialCap ?? 0)
@@ -1260,7 +1265,8 @@ onMounted(async () => {
       owners:      c.owners,
       characters:  c.characters,
       minted:      c.totalMinted ?? 0,
-      // staged release helpers
+      mintLimitType: c.mintLimitType ?? null,
+      // staged release helpers (Defined Number Limit only)
       initialCap:  c.initialCap ?? null,
       finalReleaseAt: c.finalReleaseAt ?? null,
       nextReleaseAt:  c.nextReleaseAt ?? null,
