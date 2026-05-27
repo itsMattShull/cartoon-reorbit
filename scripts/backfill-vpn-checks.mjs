@@ -1,37 +1,14 @@
 /**
  * Backfill VPN checks for all historical (userId, ip) combinations in LoginLog.
  *
- * Run with: node scripts/backfill-vpn-checks.mjs
+ * Run with: node --env-file=.env scripts/backfill-vpn-checks.mjs
  *
- * Requires IP_ENCRYPTION_KEY to be set in .env or the environment.
+ * Requires IP_ENCRYPTION_KEY and DATABASE_URL to be set in .env or the environment.
  * Processes at most 20 IPs per minute to stay within ip-api.com free tier limits.
  * Safe to re-run — already-checked IPs are skipped automatically.
  */
 
-// ── Load .env manually (outside Nuxt runtime) ────────────────────────────────
-import { readFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
 import { createCipheriv, createDecipheriv, createHash } from 'crypto'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const envPath = resolve(__dirname, '../.env')
-
-try {
-  const envContent = readFileSync(envPath, 'utf8')
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
-    if (eqIdx === -1) continue
-    const key = trimmed.slice(0, eqIdx).trim()
-    const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (!process.env[key]) process.env[key] = value
-  }
-} catch {
-  console.warn('Could not load .env file — relying on environment variables')
-}
-
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()

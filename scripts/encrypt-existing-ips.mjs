@@ -5,9 +5,9 @@
  * Run ONCE on each environment (staging, production) BEFORE deploying the
  * new middleware code and BEFORE running backfill-vpn-checks.mjs.
  *
- * Run with: node scripts/encrypt-existing-ips.mjs
+ * Run with: node --env-file=.env scripts/encrypt-existing-ips.mjs
  *
- * Requires IP_ENCRYPTION_KEY to be set in .env or the environment.
+ * Requires IP_ENCRYPTION_KEY and DATABASE_URL to be set in .env or the environment.
  * Safe to re-run — rows that are already encrypted are detected and skipped.
  *
  * Tables updated:
@@ -17,30 +17,7 @@
  *   DeviceFingerprintLog.ip    — encrypted in-place
  */
 
-// ── Load .env manually (outside Nuxt runtime) ────────────────────────────────
-import { readFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
 import { createCipheriv, createHash } from 'crypto'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const envPath = resolve(__dirname, '../.env')
-
-try {
-  const envContent = readFileSync(envPath, 'utf8')
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
-    if (eqIdx === -1) continue
-    const key = trimmed.slice(0, eqIdx).trim()
-    const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (!process.env[key]) process.env[key] = value
-  }
-} catch {
-  console.warn('Could not load .env file — relying on environment variables')
-}
-
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
