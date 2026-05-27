@@ -1,47 +1,23 @@
 /**
  * One-time migration: encrypt plaintext IP addresses already stored in the
- * UserIP and VpnLog tables.
+ * UserIP, VpnLog, LoginLog, and DeviceFingerprintLog tables.
  *
  * Run ONCE on each environment (staging, production) BEFORE deploying the
  * new middleware code and BEFORE running backfill-vpn-checks.mjs.
  *
- * Run with: node scripts/encrypt-existing-ips.mjs
+ * Run with: node --env-file=.env scripts/encrypt-existing-ips.mjs
  *
- * Requires IP_ENCRYPTION_KEY to be set in .env or the environment.
+ * Requires IP_ENCRYPTION_KEY and DATABASE_URL to be set in .env or the environment.
  * Safe to re-run — rows that are already encrypted are detected and skipped.
  *
  * Tables updated:
- *   UserIP.ip   — encrypted in-place (unique constraint handled)
- *   VpnLog.ip   — encrypted in-place
- *
- * Tables NOT touched:
- *   LoginLog    — intentionally kept as plaintext (internal audit log)
+ *   UserIP.ip                  — encrypted in-place (unique constraint handled)
+ *   VpnLog.ip                  — encrypted in-place
+ *   LoginLog.ip                — encrypted in-place
+ *   DeviceFingerprintLog.ip    — encrypted in-place
  */
 
-// ── Load .env manually (outside Nuxt runtime) ────────────────────────────────
-import { readFileSync } from 'fs'
-import { resolve, dirname } from 'path'
-import { fileURLToPath } from 'url'
 import { createCipheriv, createHash } from 'crypto'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const envPath = resolve(__dirname, '../.env')
-
-try {
-  const envContent = readFileSync(envPath, 'utf8')
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eqIdx = trimmed.indexOf('=')
-    if (eqIdx === -1) continue
-    const key = trimmed.slice(0, eqIdx).trim()
-    const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (!process.env[key]) process.env[key] = value
-  }
-} catch {
-  console.warn('Could not load .env file — relying on environment variables')
-}
-
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
@@ -162,15 +138,88 @@ async function encryptVpnLogs() {
   console.log(`  Errors:  ${errors}`)
 }
 
+// ── LoginLog migration ────────────────────────────────────────────────────────
+async function encryptLoginLogs() {
+  console.log('\n── LoginLog ─────────────────────────────────────────────')
+
+  const rows = await prisma.loginLog.findMany({ select: { id: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  const alreadyDone = rows.length - plaintext.length
+  console.log(`  Already encrypted: ${alreadyDone}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+
+  if (plaintext.length === 0) {
+    console.log('  Nothing to do.')
+    return
+  }
+
+  let updated = 0, errors = 0
+
+  for (const row of plaintext) {
+    try {
+      await prisma.loginLog.update({
+        where: { id: row.id },
+        data: { ip: encryptIp(row.ip) },
+      })
+      updated++
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+
+  console.log(`  Updated: ${updated}`)
+  console.log(`  Errors:  ${errors}`)
+}
+
+// ── DeviceFingerprintLog migration ────────────────────────────────────────────
+async function encryptDeviceFingerprintLogs() {
+  console.log('\n── DeviceFingerprintLog ─────────────────────────────────')
+
+  const rows = await prisma.deviceFingerprintLog.findMany({ select: { id: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  const alreadyDone = rows.length - plaintext.length
+  console.log(`  Already encrypted: ${alreadyDone}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+
+  if (plaintext.length === 0) {
+    console.log('  Nothing to do.')
+    return
+  }
+
+  let updated = 0, errors = 0
+
+  for (const row of plaintext) {
+    try {
+      await prisma.deviceFingerprintLog.update({
+        where: { id: row.id },
+        data: { ip: encryptIp(row.ip) },
+      })
+      updated++
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+
+  console.log(`  Updated: ${updated}`)
+  console.log(`  Errors:  ${errors}`)
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   getKeyAndIV() // Validate key before doing any work
 
-  console.log('Encrypting existing IP addresses in UserIP and VpnLog...')
-  console.log('(LoginLog is intentionally left as plaintext)\n')
+  console.log('Encrypting existing IP addresses in UserIP, VpnLog, LoginLog, and DeviceFingerprintLog...')
 
   await encryptUserIPs()
   await encryptVpnLogs()
+  await encryptLoginLogs()
+  await encryptDeviceFingerprintLogs()
 
   console.log('\nDone. You can now deploy the new middleware and run backfill-vpn-checks.mjs.')
   await prisma.$disconnect()
