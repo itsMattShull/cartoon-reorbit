@@ -1,6 +1,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { getQueueStatus } from '@/server/utils/vpn-queue'
+import { decryptIp } from '@/server/utils/ip-encrypt'
 import { startOfDay } from 'date-fns'
 
 export default defineEventHandler(async (event) => {
@@ -45,12 +46,17 @@ export default defineEventHandler(async (event) => {
 
   const queueStatus = getQueueStatus()
 
-  // Safety filter: never send a plaintext IP to the frontend.
-  // Encrypted IPs are lowercase hex strings; anything else (dots, colons, etc.)
-  // is a plaintext IP that should never have been stored and must be redacted.
+  // Decrypt IPs before sending to the admin frontend.
+  // If decryption fails or the field is empty, fall back to '[redacted]'.
   const safeActivity = recentActivity.map((entry) => ({
     ...entry,
-    ip: /^[0-9a-f]+$/i.test(entry.ip ?? '') ? entry.ip : '[redacted]',
+    ip: decryptIp(entry.ip) || '[redacted]',
+  }))
+
+  // Decrypt the encryptedIp stored in in-memory error log entries.
+  const safeErrors = queueStatus.errors.map((err) => ({
+    ...err,
+    ip: decryptIp(err.encryptedIp) || '[redacted]',
   }))
 
   return {
@@ -68,6 +74,6 @@ export default defineEventHandler(async (event) => {
       flaggedToday,
     },
     recentActivity: safeActivity,
-    errors: queueStatus.errors,
+    errors: safeErrors,
   }
 })
