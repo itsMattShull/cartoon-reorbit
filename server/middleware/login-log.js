@@ -1,6 +1,7 @@
 import { startOfDay, endOfDay } from 'date-fns'
 
 import { prisma } from '@/server/prisma'
+import { checkVpn, isPrivateIp } from '@/server/utils/vpn-check'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context?.userId
@@ -30,6 +31,40 @@ export default defineEventHandler(async (event) => {
         ip,
       },
     })
+  }
+
+  // Non-blocking VPN check
+  if (userId && ip && !isPrivateIp(ip)) {
+    Promise.resolve().then(async () => {
+      // Skip if we already have a VpnLog for this (userId, ip) combo
+      const existing = await prisma.vpnLog.findFirst({ where: { userId, ip } })
+      if (existing) return
+
+      const result = await checkVpn(ip)
+      if (!result) return
+
+      await prisma.vpnLog.create({
+        data: {
+          userId,
+          ip,
+          isVpn: result.isVpn,
+          proxyType: result.proxyType,
+          isp: result.isp,
+          org: result.org,
+          asn: result.asn,
+          country: result.country,
+          countryCode: result.countryCode,
+          reason: result.reason,
+        },
+      })
+
+      if (result.isVpn) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { vpnDetected: true },
+        })
+      }
+    }).catch(() => {})
   }
 })
 

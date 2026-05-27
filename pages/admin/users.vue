@@ -22,6 +22,7 @@
 
         <button @click="toggle('onlyGuild')" :class="chip(onlyGuild)">In Discord</button>
         <button @click="toggle('onlyWarned')" :class="chip(onlyWarned)">Warned</button>
+        <button @click="toggle('filterVpn')" :class="chip(filterVpn)">VPN</button>
 
         <div class="flex items-center gap-2">
           <label class="text-sm text-gray-600">Sort:</label>
@@ -51,6 +52,10 @@
           <div class="flex items-center gap-2 shrink-0">
             <span :class="badgeClass(!!u.inGuild)">{{ u.inGuild ? 'Guild' : 'No guild' }}</span>
             <span :class="badgeClass(!!u.active)">{{ u.active ? 'Active' : 'Disabled' }}</span>
+            <span v-if="u.vpnDetected" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.649 2 6.318 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.35-.166-2A11.954 11.954 0 0110 1.944zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-4a1 1 0 00-1 1v1a1 1 0 102 0v-1a1 1 0 00-1-1zm0-7a1 1 0 00-1 1v3a1 1 0 102 0V4a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+              VPN
+            </span>
             <div class="relative">
               <button
                 class="ml-1 h-7 w-7 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
@@ -62,6 +67,7 @@
                 class="absolute right-0 mt-1 w-44 bg-white border rounded-md shadow-lg z-40 py-1"
               >
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
+                <button v-if="u.vpnDetected" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openVpnDetails(u); closeMenu()">VPN Details</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
@@ -533,6 +539,60 @@
       </div>
     </div>
   </div>
+
+  <!-- VPN Details modal -->
+  <div v-if="vpnDetailsUser" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeVpnDetails()"></div>
+    <div class="relative bg-white w-[92%] max-w-4xl rounded-lg shadow-lg flex flex-col max-h-[90vh]">
+      <!-- Fixed header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+        <h3 class="text-lg font-semibold">VPN Details — {{ vpnDetailsUser?.username || vpnDetailsUser?.discordTag || 'user' }}</h3>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeVpnDetails()">✕</button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="overflow-y-auto flex-1 px-5 py-4">
+        <div v-if="vpnDetailsLoading" class="text-sm text-gray-500 py-3">Loading…</div>
+        <div v-else-if="!vpnLogs.length" class="text-sm text-gray-500 py-3">No VPN logs found.</div>
+        <div v-else class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="border-b text-left text-xs text-gray-500 uppercase tracking-wide">
+                <th class="pb-2 pr-4">IP Address</th>
+                <th class="pb-2 pr-4">Detection Type</th>
+                <th class="pb-2 pr-4">Reason</th>
+                <th class="pb-2 pr-4">ISP</th>
+                <th class="pb-2 pr-4">Organization</th>
+                <th class="pb-2 pr-4">ASN</th>
+                <th class="pb-2 pr-4">Country</th>
+                <th class="pb-2">Detected At</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              <tr v-for="log in vpnLogs" :key="log.id" class="text-sm">
+                <td class="py-2 pr-4 font-mono text-xs">{{ log.ip }}</td>
+                <td class="py-2 pr-4">
+                  <span v-if="log.proxyType" class="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{{ log.proxyType }}</span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="py-2 pr-4 text-gray-600 max-w-xs truncate">{{ log.reason || '—' }}</td>
+                <td class="py-2 pr-4 text-gray-600">{{ log.isp || '—' }}</td>
+                <td class="py-2 pr-4 text-gray-600">{{ log.org || '—' }}</td>
+                <td class="py-2 pr-4 text-gray-600 font-mono text-xs">{{ log.asn || '—' }}</td>
+                <td class="py-2 pr-4 text-gray-600">{{ log.country ? `${log.country} (${log.countryCode})` : '—' }}</td>
+                <td class="py-2 text-gray-500 text-xs">{{ formatDate(log.detectedAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Fixed footer -->
+      <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeVpnDetails()">Close</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -564,6 +624,7 @@ const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)
 const statusFilter = ref('all') // 'all' | 'active' | 'inactive'
 const onlyGuild = ref(false)
 const onlyWarned = ref(false)
+const filterVpn = ref(false)
 
 // sorting
 const sortField = ref('lastActivity') // 'lastActivity' | 'joined'
@@ -579,13 +640,14 @@ const filteredSorted = computed(() => {
     const matchGuild = !onlyGuild.value || !!u.inGuild
     const warned = !!(u.warning180 || u.warning210 || u.warning240)
     const matchWarned = !onlyWarned.value || warned
+    const matchVpn = !filterVpn.value || !!u.vpnDetected
 
     const statusOk =
       statusFilter.value === 'all' ||
       (statusFilter.value === 'active' && !!u.active) ||
       (statusFilter.value === 'inactive' && !u.active)
 
-    return matchQ && matchGuild && matchWarned && statusOk
+    return matchQ && matchGuild && matchWarned && matchVpn && statusOk
   })
 
   const toTs = (d) => d ? new Date(d).getTime() : -Infinity
@@ -627,12 +689,14 @@ const chip = (on) =>
 function toggle(key) {
   if (key === 'onlyGuild') onlyGuild.value = !onlyGuild.value
   if (key === 'onlyWarned') onlyWarned.value = !onlyWarned.value
+  if (key === 'filterVpn') filterVpn.value = !filterVpn.value
 }
 function resetFilters() {
   filter.value = ''
   statusFilter.value = 'all'
   onlyGuild.value = false
   onlyWarned.value = false
+  filterVpn.value = false
   sortField.value = 'lastActivity'
   sortDir.value = 'desc'
 }
@@ -647,7 +711,7 @@ function prevPage() {
   page.value -= 1
 }
 
-watch([filter, statusFilter, onlyGuild, onlyWarned, sortField, sortDir], () => {
+watch([filter, statusFilter, onlyGuild, onlyWarned, filterVpn, sortField, sortDir], () => {
   page.value = 1
 })
 
@@ -1139,6 +1203,31 @@ async function confirmDissolve() {
   } catch (e) {
     dissolveError.value = parseDissolveError(e)
     dissolveWorking.value = false
+  }
+}
+
+// VPN Details state
+const vpnDetailsUser = ref(null)
+const vpnLogs = ref([])
+const vpnDetailsLoading = ref(false)
+
+function closeVpnDetails() {
+  vpnDetailsUser.value = null
+  vpnLogs.value = []
+  vpnDetailsLoading.value = false
+}
+
+async function openVpnDetails(u) {
+  vpnDetailsUser.value = u
+  vpnLogs.value = []
+  vpnDetailsLoading.value = true
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/vpn-details`)
+    vpnLogs.value = res || []
+  } catch (e) {
+    vpnLogs.value = []
+  } finally {
+    vpnDetailsLoading.value = false
   }
 }
 </script>
