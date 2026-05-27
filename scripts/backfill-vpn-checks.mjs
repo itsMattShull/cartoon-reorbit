@@ -3,14 +3,16 @@
  *
  * Run with: node scripts/backfill-vpn-checks.mjs
  *
- * Requires IP_ENCRYPTION_KEY to be set in the environment (or .env file).
+ * Requires IP_ENCRYPTION_KEY to be set in .env or the environment.
  * Processes at most 20 IPs per minute to stay within ip-api.com free tier limits.
+ * Safe to re-run — already-checked IPs are skipped automatically.
  */
 
-// Load .env manually since we're outside Nuxt runtime
+// ── Load .env manually (outside Nuxt runtime) ────────────────────────────────
 import { readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { createCipheriv, createDecipheriv, createHash } from 'crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = resolve(__dirname, '../.env')
@@ -31,15 +33,17 @@ try {
 }
 
 import { PrismaClient } from '@prisma/client'
-import { createCipheriv, createDecipheriv, createHash } from 'crypto'
 
 const prisma = new PrismaClient()
 
-// ── Inline encryption (can't import Nuxt server utils directly) ──────────────
+// ── Inline encryption (cannot import Nuxt server utils outside runtime) ───────
 function getKeyAndIV() {
   const keyHex = process.env.IP_ENCRYPTION_KEY
   if (!keyHex || keyHex.length !== 64) {
-    throw new Error('IP_ENCRYPTION_KEY must be a 64-char hex string. Generate with:\n  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"')
+    throw new Error(
+      'IP_ENCRYPTION_KEY must be a 64-char hex string.\n' +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    )
   }
   const key = Buffer.from(keyHex, 'hex')
   const iv = createHash('sha256').update(key).digest().slice(0, 16)
@@ -52,21 +56,11 @@ function encryptIp(ip) {
   return cipher.update(ip, 'utf8', 'hex') + cipher.final('hex')
 }
 
-function decryptIp(encrypted) {
-  if (!/^[0-9a-f]+$/i.test(encrypted)) return encrypted
-  try {
-    const { key, iv } = getKeyAndIV()
-    const decipher = createDecipheriv('aes-256-cbc', key, iv)
-    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8')
-  } catch {
-    return encrypted
-  }
-}
-
-// ── VPN check via ip-api.com ──────────────────────────────────────────────────
+// ── IP helpers ────────────────────────────────────────────────────────────────
 const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i
 function isPrivateIp(ip) { return !ip || PRIVATE_IP_RE.test(ip) }
 
+// ── VPN check via ip-api.com (free, 45 req/min) ───────────────────────────────
 async function checkVpn(ip) {
   try {
     const url = `http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,isp,org,as,proxy,hosting,query`
@@ -74,32 +68,42 @@ async function checkVpn(ip) {
     if (!res || res.status !== 'success') return null
     const isVpn = !!(res.proxy || res.hosting)
     let proxyType = null, reason = null
-    if (res.hosting) { proxyType = 'Datacenter/Hosting'; reason = 'IP flagged as datacenter/hosting by ip-api.com' }
-    else if (res.proxy) { proxyType = 'VPN/Proxy'; reason = 'IP flagged as VPN/Proxy by ip-api.com' }
-    return { isVpn, proxyType, isp: res.isp || null, org: res.org || null, asn: res.as || null, country: res.country || null, countryCode: res.countryCode || null, reason }
+    if (res.hosting) {
+      proxyType = 'Datacenter/Hosting'
+      reason = 'IP flagged as datacenter/hosting by ip-api.com'
+    } else if (res.proxy) {
+      proxyType = 'VPN/Proxy'
+      reason = 'IP flagged as VPN/Proxy by ip-api.com'
+    }
+    return { isVpn, proxyType, isp: res.isp || null, org: res.org || null,
+             asn: res.as || null, country: res.country || null,
+             countryCode: res.countryCode || null, reason }
   } catch { return null }
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🔍 Fetching distinct (userId, ip) combinations from LoginLog...')
+  getKeyAndIV() // Verify key is valid before doing any work
 
-  // Get all distinct combos from LoginLog (plaintext IPs)
+  console.log('Fetching distinct (userId, ip) combinations from LoginLog...')
   const logins = await prisma.loginLog.findMany({
     distinct: ['userId', 'ip'],
     select: { userId: true, ip: true },
   })
-  console.log(`   Found ${logins.length} unique (userId, ip) combinations`)
+  console.log(`  Found ${logins.length} unique (userId, ip) combinations`)
 
-  // Filter out private IPs
   const publicLogins = logins.filter(l => !isPrivateIp(l.ip))
-  const skippedPrivate = logins.length - publicLogins.length
-  console.log(`   Skipping ${skippedPrivate} private/local IPs`)
+  console.log(`  Skipping ${logins.length - publicLogins.length} private/local IPs`)
+  console.log(`  Processing ${publicLogins.length} public IPs\n`)
 
-  // Encrypt all IPs
-  const pairs = publicLogins.map(l => ({ userId: l.userId, encryptedIp: encryptIp(l.ip), plainIp: l.ip }))
+  const pairs = publicLogins.map(l => ({
+    userId: l.userId,
+    encryptedIp: encryptIp(l.ip),
+    plainIp: l.ip,
+  }))
 
-  // Upsert into UserIP (insert encrypted combos we haven't seen)
+  // Upsert into UserIP
+  console.log('Upserting into UserIP table...')
   let userIpInserted = 0
   for (const { userId, encryptedIp } of pairs) {
     try {
@@ -111,34 +115,27 @@ async function main() {
       userIpInserted++
     } catch { /* skip */ }
   }
-  console.log(`   Upserted ${userIpInserted} rows into UserIP`)
+  console.log(`  Upserted ${userIpInserted} rows into UserIP\n`)
 
-  // Find which combos still need VPN checking
-  const alreadyChecked = await prisma.vpnLog.findMany({
-    select: { userId: true, ip: true },
-  })
+  // Find unchecked combos
+  const alreadyChecked = await prisma.vpnLog.findMany({ select: { userId: true, ip: true } })
   const checkedSet = new Set(alreadyChecked.map(r => `${r.userId}:${r.ip}`))
-
   const toCheck = pairs.filter(p => !checkedSet.has(`${p.userId}:${p.encryptedIp}`))
-  console.log(`\n📋 ${toCheck.length} IPs to check | ${checkedSet.size} already checked | processing at 20/min`)
-  console.log('   This will take approximately', Math.ceil(toCheck.length / 20), 'minute(s)\n')
+
+  console.log(`Queue: ${toCheck.length} to check | ${checkedSet.size} already done | ~${Math.ceil(toCheck.length / 20)} min at 20/min\n`)
 
   if (toCheck.length === 0) {
-    console.log('✅ Nothing to do — all IPs already checked!')
+    console.log('Nothing to do — all IPs already checked!')
     await prisma.$disconnect()
     return
   }
 
-  let processed = 0
-  let flagged = 0
-  let errors = 0
+  let processed = 0, flagged = 0, errors = 0
 
   for (const { userId, encryptedIp, plainIp } of toCheck) {
-    // Rate limit: 1 every 3 seconds = 20/min
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise(r => setTimeout(r, 3000)) // 1 per 3s = 20/min
 
     try {
-      // Re-check in case a parallel process already handled it
       const exists = await prisma.vpnLog.findFirst({ where: { userId, ip: encryptedIp } })
       if (exists) { processed++; continue }
 
@@ -146,8 +143,7 @@ async function main() {
 
       await prisma.vpnLog.create({
         data: {
-          userId,
-          ip: encryptedIp,
+          userId, ip: encryptedIp,
           isVpn: result?.isVpn ?? false,
           proxyType: result?.proxyType ?? null,
           isp: result?.isp ?? null,
@@ -165,22 +161,20 @@ async function main() {
       }
 
       processed++
-      if (processed % 10 === 0 || processed === toCheck.length) {
-        const pct = Math.round((processed / toCheck.length) * 100)
-        process.stdout.write(`\r   Progress: ${processed}/${toCheck.length} (${pct}%) — ${flagged} VPN flags set`)
-      }
+      const pct = Math.round((processed / toCheck.length) * 100)
+      process.stdout.write(`\r  Progress: ${processed}/${toCheck.length} (${pct}%) — ${flagged} VPN flags`)
     } catch (err) {
       errors++
-      console.error(`\n   Error processing ${userId}: ${err.message}`)
+      console.error(`\n  Error for user ${userId}: ${err.message}`)
     }
   }
 
-  console.log(`\n\n✅ Done! Processed: ${processed} | VPN flags set: ${flagged} | Errors: ${errors}`)
+  console.log(`\n\nDone! Processed: ${processed} | VPN flags set: ${flagged} | Errors: ${errors}`)
   await prisma.$disconnect()
 }
 
 main().catch(async err => {
-  console.error('Fatal error:', err)
+  console.error('Fatal:', err.message)
   await prisma.$disconnect()
   process.exit(1)
 })
