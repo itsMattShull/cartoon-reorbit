@@ -1,0 +1,146 @@
+// scripts/encrypt-existing-ips.js
+//
+// One-time migration: encrypt plaintext IP addresses already stored in the
+// UserIP, VpnLog, LoginLog, and DeviceFingerprintLog tables.
+//
+// Run ONCE on each environment (staging, production) BEFORE deploying the
+// new middleware code and BEFORE running backfill-vpn-checks.js.
+//
+// Run with: node --env-file=.env scripts/encrypt-existing-ips.js
+//
+// Safe to re-run — rows that are already encrypted are detected and skipped.
+//
+// Tables updated:
+//   UserIP.ip                  — encrypted in-place (unique constraint handled)
+//   VpnLog.ip                  — encrypted in-place
+//   LoginLog.ip                — encrypted in-place
+//   DeviceFingerprintLog.ip    — encrypted in-place
+
+import { prisma } from '../server/prisma.js'
+import { encryptIp } from '../server/utils/ip-encrypt.js'
+
+// A value is already encrypted if it's a long pure-hex string.
+// Plaintext IPs contain dots/colons so they never match.
+function isAlreadyEncrypted(value) {
+  return /^[0-9a-f]{32,}$/i.test(value)
+}
+
+// ── UserIP ────────────────────────────────────────────────────────────────────
+async function encryptUserIPs() {
+  console.log('\n── UserIP ───────────────────────────────────────────────')
+  const rows = await prisma.userIP.findMany({ select: { id: true, userId: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  console.log(`  Already encrypted: ${rows.length - plaintext.length}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+  if (plaintext.length === 0) { console.log('  Nothing to do.'); return }
+
+  let updated = 0, skippedConflict = 0, errors = 0
+  for (const row of plaintext) {
+    const encryptedIp = encryptIp(row.ip)
+    try {
+      const conflict = await prisma.userIP.findUnique({
+        where: { userId_ip: { userId: row.userId, ip: encryptedIp } },
+      })
+      if (conflict) {
+        await prisma.userIP.delete({ where: { id: row.id } })
+        skippedConflict++
+      } else {
+        await prisma.userIP.update({ where: { id: row.id }, data: { ip: encryptedIp } })
+        updated++
+      }
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+  console.log(`  Updated: ${updated} | Deleted (conflict): ${skippedConflict} | Errors: ${errors}`)
+}
+
+// ── VpnLog ────────────────────────────────────────────────────────────────────
+async function encryptVpnLogs() {
+  console.log('\n── VpnLog ───────────────────────────────────────────────')
+  const rows = await prisma.vpnLog.findMany({ select: { id: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  console.log(`  Already encrypted: ${rows.length - plaintext.length}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+  if (plaintext.length === 0) { console.log('  Nothing to do.'); return }
+
+  let updated = 0, errors = 0
+  for (const row of plaintext) {
+    try {
+      await prisma.vpnLog.update({ where: { id: row.id }, data: { ip: encryptIp(row.ip) } })
+      updated++
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+  console.log(`  Updated: ${updated} | Errors: ${errors}`)
+}
+
+// ── LoginLog ──────────────────────────────────────────────────────────────────
+async function encryptLoginLogs() {
+  console.log('\n── LoginLog ─────────────────────────────────────────────')
+  const rows = await prisma.loginLog.findMany({ select: { id: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  console.log(`  Already encrypted: ${rows.length - plaintext.length}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+  if (plaintext.length === 0) { console.log('  Nothing to do.'); return }
+
+  let updated = 0, errors = 0
+  for (const row of plaintext) {
+    try {
+      await prisma.loginLog.update({ where: { id: row.id }, data: { ip: encryptIp(row.ip) } })
+      updated++
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+  console.log(`  Updated: ${updated} | Errors: ${errors}`)
+}
+
+// ── DeviceFingerprintLog ──────────────────────────────────────────────────────
+async function encryptDeviceFingerprintLogs() {
+  console.log('\n── DeviceFingerprintLog ─────────────────────────────────')
+  const rows = await prisma.deviceFingerprintLog.findMany({ select: { id: true, ip: true } })
+  console.log(`  Total rows: ${rows.length}`)
+
+  const plaintext = rows.filter(r => !isAlreadyEncrypted(r.ip))
+  console.log(`  Already encrypted: ${rows.length - plaintext.length}`)
+  console.log(`  Need encrypting:   ${plaintext.length}`)
+  if (plaintext.length === 0) { console.log('  Nothing to do.'); return }
+
+  let updated = 0, errors = 0
+  for (const row of plaintext) {
+    try {
+      await prisma.deviceFingerprintLog.update({ where: { id: row.id }, data: { ip: encryptIp(row.ip) } })
+      updated++
+    } catch (err) {
+      errors++
+      console.error(`  Error on row ${row.id}: ${err.message}`)
+    }
+  }
+  console.log(`  Updated: ${updated} | Errors: ${errors}`)
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('Encrypting existing IP addresses in UserIP, VpnLog, LoginLog, and DeviceFingerprintLog...')
+  await encryptUserIPs()
+  await encryptVpnLogs()
+  await encryptLoginLogs()
+  await encryptDeviceFingerprintLogs()
+  console.log('\nDone. You can now deploy the new middleware and run backfill-vpn-checks.js.')
+}
+
+main().catch(err => {
+  console.error('Fatal:', err.message)
+  process.exit(1)
+})

@@ -1,54 +1,17 @@
-/**
- * Backfill VPN checks for all historical (userId, ip) combinations in LoginLog.
- *
- * Run with: node --env-file=.env scripts/backfill-vpn-checks.mjs
- *
- * Requires IP_ENCRYPTION_KEY and DATABASE_URL to be set in .env or the environment.
- * Processes at most 20 IPs per minute to stay within ip-api.com free tier limits.
- * Safe to re-run — already-checked IPs are skipped automatically.
- */
+// scripts/backfill-vpn-checks.js
+//
+// Backfill VPN checks for all historical (userId, ip) combinations in LoginLog.
+//
+// Run with: node --env-file=.env scripts/backfill-vpn-checks.js
+//
+// Processes at most 20 IPs per minute to stay within ip-api.com free tier limits.
+// Safe to re-run — already-checked IPs are skipped automatically.
 
-import { createCipheriv, createDecipheriv, createHash } from 'crypto'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '../server/prisma.js'
+import { encryptIp, decryptIp } from '../server/utils/ip-encrypt.js'
+import { isPrivateIp } from '../server/utils/vpn-check.js'
 
-const prisma = new PrismaClient()
-
-// ── Inline encryption (cannot import Nuxt server utils outside runtime) ───────
-function getKeyAndIV() {
-  const keyHex = process.env.IP_ENCRYPTION_KEY
-  if (!keyHex || keyHex.length !== 64) {
-    throw new Error(
-      'IP_ENCRYPTION_KEY must be a 64-char hex string.\n' +
-      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
-    )
-  }
-  const key = Buffer.from(keyHex, 'hex')
-  const iv = createHash('sha256').update(key).digest().slice(0, 16)
-  return { key, iv }
-}
-
-function encryptIp(ip) {
-  const { key, iv } = getKeyAndIV()
-  const cipher = createCipheriv('aes-256-cbc', key, iv)
-  return cipher.update(ip, 'utf8', 'hex') + cipher.final('hex')
-}
-
-function decryptIp(encrypted) {
-  if (!/^[0-9a-f]+$/i.test(encrypted)) return encrypted  // plaintext passthrough
-  try {
-    const { key, iv } = getKeyAndIV()
-    const decipher = createDecipheriv('aes-256-cbc', key, iv)
-    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8')
-  } catch {
-    return encrypted
-  }
-}
-
-// ── IP helpers ────────────────────────────────────────────────────────────────
-const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i
-function isPrivateIp(ip) { return !ip || PRIVATE_IP_RE.test(ip) }
-
-// ── VPN check via ip-api.com (free, 45 req/min) ───────────────────────────────
+// VPN check using native fetch (cannot use $fetch outside Nuxt runtime)
 async function checkVpn(ip) {
   try {
     const url = `http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,isp,org,as,proxy,hosting,query`
@@ -63,16 +26,15 @@ async function checkVpn(ip) {
       proxyType = 'VPN/Proxy'
       reason = 'IP flagged as VPN/Proxy by ip-api.com'
     }
-    return { isVpn, proxyType, isp: res.isp || null, org: res.org || null,
-             asn: res.as || null, country: res.country || null,
-             countryCode: res.countryCode || null, reason }
+    return {
+      isVpn, proxyType,
+      isp: res.isp || null, org: res.org || null, asn: res.as || null,
+      country: res.country || null, countryCode: res.countryCode || null, reason,
+    }
   } catch { return null }
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  getKeyAndIV() // Verify key is valid before doing any work
-
   console.log('Fetching distinct (userId, ip) combinations from LoginLog...')
   const logins = await prisma.loginLog.findMany({
     distinct: ['userId', 'ip'],
@@ -80,18 +42,15 @@ async function main() {
   })
   console.log(`  Found ${logins.length} unique (userId, ip) combinations`)
 
-  const publicLogins = logins.filter(l => !isPrivateIp(l.ip))
-  console.log(`  Skipping ${logins.length - publicLogins.length} private/local IPs`)
-  console.log(`  Processing ${publicLogins.length} public IPs\n`)
+  // Decrypt first (handles both plaintext and already-encrypted values),
+  // then filter private IPs using the plaintext value
+  const pairs = logins
+    .map(l => ({ userId: l.userId, plainIp: decryptIp(l.ip) }))
+    .filter(l => !isPrivateIp(l.plainIp))
+    .map(l => ({ userId: l.userId, plainIp: l.plainIp, encryptedIp: encryptIp(l.plainIp) }))
 
-  const pairs = publicLogins.map(l => {
-    const plainIp = decryptIp(l.ip)   // safe on both plaintext and already-encrypted values
-    return {
-      userId: l.userId,
-      encryptedIp: encryptIp(plainIp),
-      plainIp,
-    }
-  })
+  console.log(`  Skipping ${logins.length - pairs.length} private/local IPs`)
+  console.log(`  Processing ${pairs.length} public IPs\n`)
 
   // Upsert into UserIP
   console.log('Upserting into UserIP table...')
@@ -104,7 +63,7 @@ async function main() {
         create: { userId, ip: encryptedIp },
       })
       userIpInserted++
-    } catch { /* skip */ }
+    } catch { /* skip unique constraint races */ }
   }
   console.log(`  Upserted ${userIpInserted} rows into UserIP\n`)
 
@@ -117,7 +76,6 @@ async function main() {
 
   if (toCheck.length === 0) {
     console.log('Nothing to do — all IPs already checked!')
-    await prisma.$disconnect()
     return
   }
 
@@ -161,11 +119,9 @@ async function main() {
   }
 
   console.log(`\n\nDone! Processed: ${processed} | VPN flags set: ${flagged} | Errors: ${errors}`)
-  await prisma.$disconnect()
 }
 
-main().catch(async err => {
+main().catch(err => {
   console.error('Fatal:', err.message)
-  await prisma.$disconnect()
   process.exit(1)
 })
