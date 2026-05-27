@@ -12,20 +12,22 @@ export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event)
   if (!ip) return
 
-  // 1. LoginLog — still stored as plaintext (internal log, one per day per combo)
+  const encryptedLoginIp = encryptIp(ip)
+
+  // 1. LoginLog — stored encrypted, one per day per combo
   const todayStart = startOfDay(new Date())
   const todayEnd = endOfDay(new Date())
 
   const existingLog = await prisma.loginLog.findFirst({
     where: {
       userId,
-      ip,
+      ip: encryptedLoginIp,
       createdAt: { gte: todayStart, lte: todayEnd },
     },
   })
 
   if (!existingLog) {
-    await prisma.loginLog.create({ data: { userId, ip } })
+    await prisma.loginLog.create({ data: { userId, ip: encryptedLoginIp } })
   }
 
   // 2. VPN check — only for public IPs, deduped via UserIP table (encrypted)

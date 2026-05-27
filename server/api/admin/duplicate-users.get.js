@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { decryptIp } from '@/server/utils/ip-encrypt'
 
 export default defineEventHandler(async (event) => {
   // 1. Admin auth
@@ -76,7 +77,7 @@ export default defineEventHandler(async (event) => {
         isAdmin: info.isAdmin
       }))
       const lastLoginTs = Object.values(nameMap).reduce((max, info) => Math.max(max, info.ts), 0)
-      return { ip, aliases, lastLogin: new Date(lastLoginTs) }
+      return { ip: decryptIp(ip), aliases, lastLogin: new Date(lastLoginTs) }
     })
     .sort((a, b) => b.lastLogin.getTime() - a.lastLogin.getTime())
 

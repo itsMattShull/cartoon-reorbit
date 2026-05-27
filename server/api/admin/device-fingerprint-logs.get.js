@@ -18,6 +18,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encryptIp, decryptIp } from '@/server/utils/ip-encrypt'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
     where.user = { username: { contains: username, mode: 'insensitive' } }
   }
   if (visitorId) where.visitorId = visitorId
-  if (ip) where.ip = ip
+  if (ip) where.ip = encryptIp(ip)
 
   // If duplicatesOnly, restrict to visitorIds that appear more than once
   if (duplicatesOnly) {
@@ -91,5 +92,10 @@ export default defineEventHandler(async (event) => {
     prisma.deviceFingerprintLog.count({ where })
   ])
 
-  return { items, total, page, limit }
+  return {
+    items: items.map(item => ({ ...item, ip: decryptIp(item.ip) })),
+    total,
+    page,
+    limit
+  }
 })

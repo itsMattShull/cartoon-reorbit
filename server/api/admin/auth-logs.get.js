@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
+import { decryptIp } from '@/server/utils/ip-encrypt'
 
 export default defineEventHandler(async (event) => {
   // 1. Admin check via your /api/auth/me endpoint
@@ -48,7 +49,7 @@ export default defineEventHandler(async (event) => {
   ])
 
   return {
-    items: logs,
+    items: logs.map(log => ({ ...log, ip: decryptIp(log.ip) })),
     total,
     page,
     limit

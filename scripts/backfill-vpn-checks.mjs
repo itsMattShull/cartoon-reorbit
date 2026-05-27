@@ -56,6 +56,17 @@ function encryptIp(ip) {
   return cipher.update(ip, 'utf8', 'hex') + cipher.final('hex')
 }
 
+function decryptIp(encrypted) {
+  if (!/^[0-9a-f]+$/i.test(encrypted)) return encrypted  // plaintext passthrough
+  try {
+    const { key, iv } = getKeyAndIV()
+    const decipher = createDecipheriv('aes-256-cbc', key, iv)
+    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8')
+  } catch {
+    return encrypted
+  }
+}
+
 // ── IP helpers ────────────────────────────────────────────────────────────────
 const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i
 function isPrivateIp(ip) { return !ip || PRIVATE_IP_RE.test(ip) }
@@ -96,11 +107,14 @@ async function main() {
   console.log(`  Skipping ${logins.length - publicLogins.length} private/local IPs`)
   console.log(`  Processing ${publicLogins.length} public IPs\n`)
 
-  const pairs = publicLogins.map(l => ({
-    userId: l.userId,
-    encryptedIp: encryptIp(l.ip),
-    plainIp: l.ip,
-  }))
+  const pairs = publicLogins.map(l => {
+    const plainIp = decryptIp(l.ip)   // safe on both plaintext and already-encrypted values
+    return {
+      userId: l.userId,
+      encryptedIp: encryptIp(plainIp),
+      plainIp,
+    }
+  })
 
   // Upsert into UserIP
   console.log('Upserting into UserIP table...')
