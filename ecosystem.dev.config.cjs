@@ -27,9 +27,10 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env: {
-        NODE_ENV:        'development',
-        NITRO_PORT:      NUXT_PORT,
-        NUXT_PORT:       NUXT_PORT,
+        NODE_ENV:          'development',
+        NITRO_PORT:        NUXT_PORT,
+        NUXT_PORT:         NUXT_PORT,
+        IP_ENCRYPTION_KEY: process.env.IP_ENCRYPTION_KEY,
         OFFICIAL_USERNAME,
       },
     },

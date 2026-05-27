@@ -20,6 +20,7 @@
       <AdminLottoLogs v-else-if="section === 'lottoLogs'" />
       <AdminWinWheelLogs v-else-if="section === 'winWheelLogs'" />
       <AdminScavengerLogs v-else-if="section === 'scavengerLogs'" />
+      <AdminVpnQueue v-else-if="section === 'vpn-queue'" />
       <div v-else class="newsite-admin-placeholder">
         <h1 class="newsite-admin-title">Unknown section</h1>
       </div>

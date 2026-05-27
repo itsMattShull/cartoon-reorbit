@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
   ])
 
   return {
-    items: logs,
+    items: logs.map(log => ({ ...log, ip: log.ip })),
     total,
     page,
     limit

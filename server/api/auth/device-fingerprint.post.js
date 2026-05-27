@@ -11,6 +11,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { encryptIp } from '@/server/utils/ip-encrypt'
 
 function getRequestIP(event) {
   return (
@@ -112,6 +113,7 @@ export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event)
   const ua = getRequestHeader(event, 'user-agent') || ''
   const deviceType = parseDeviceType(ua)
+  const encryptedIp = encryptIp(ip)
 
   // Daily dedup: only store one row per day per unique combination of
   // (user, ip, visitorId, deviceType).  "Day" is defined as UTC midnight→midnight.
@@ -121,7 +123,7 @@ export default defineEventHandler(async (event) => {
   const alreadyLogged = await prisma.deviceFingerprintLog.findFirst({
     where: {
       userId:     me.id,
-      ip,
+      ip:         encryptedIp,
       visitorId,
       deviceType: deviceType ?? null,
       createdAt:  { gte: todayStart }
@@ -134,7 +136,7 @@ export default defineEventHandler(async (event) => {
   await prisma.deviceFingerprintLog.create({
     data: {
       userId: me.id,
-      ip,
+      ip:     encryptedIp,
       visitorId,
       deviceType
     }
