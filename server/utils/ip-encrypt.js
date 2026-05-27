@@ -21,8 +21,8 @@ function getKeyAndIV() {
 
 /**
  * Encrypt a plaintext IP address → hex ciphertext string.
- * Returns the original value unchanged if IP_ENCRYPTION_KEY is not set
- * (development fallback — log a warning).
+ * Returns null if encryption fails (e.g. IP_ENCRYPTION_KEY not set).
+ * NEVER falls back to returning the plaintext IP.
  */
 export function encryptIp(ip) {
   if (!ip) return ip
@@ -31,8 +31,8 @@ export function encryptIp(ip) {
     const cipher = createCipheriv('aes-256-cbc', key, iv)
     return cipher.update(ip, 'utf8', 'hex') + cipher.final('hex')
   } catch (err) {
-    console.warn('[ip-encrypt] encryptIp failed:', err.message)
-    return ip
+    console.error('[ip-encrypt] encryptIp failed — IP will NOT be stored:', err.message)
+    return null // Never fall back to storing plaintext
   }
 }
 

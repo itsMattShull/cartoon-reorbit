@@ -13,6 +13,10 @@ export default defineEventHandler(async (event) => {
   if (!ip) return
 
   const encryptedLoginIp = encryptIp(ip)
+  if (!encryptedLoginIp) {
+    console.error('[login-log] Skipping login log — IP encryption returned null for userId:', userId)
+    return
+  }
 
   // 1. LoginLog — stored encrypted, one per day per combo
   const todayStart = startOfDay(new Date())
@@ -33,6 +37,7 @@ export default defineEventHandler(async (event) => {
   // 2. VPN check — only for public IPs, deduped via UserIP table (encrypted)
   if (!isPrivateIp(ip)) {
     const encryptedIp = encryptIp(ip)
+    if (!encryptedIp) return // encryption failed, do not proceed
 
     // Check if we've seen this (userId, encryptedIp) combo before
     const existingUserIp = await prisma.userIP.findUnique({

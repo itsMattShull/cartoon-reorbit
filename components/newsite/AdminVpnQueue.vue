@@ -117,7 +117,7 @@
               <span class="activity-user">
                 {{ entry.user?.username || entry.user?.discordTag || entry.userId?.slice(0, 8) + '…' }}
               </span>
-              <span class="activity-ip" :title="entry.ip">{{ entry.ip.slice(0, 18) }}…</span>
+              <span class="activity-ip">{{ entry.ip.slice(0, 18) }}…</span>
               <span v-if="entry.proxyType" class="activity-type">{{ entry.proxyType }}</span>
               <span v-if="entry.isp" class="activity-isp">{{ entry.isp }}</span>
               <span v-if="entry.country" class="activity-country">{{ entry.country }}</span>

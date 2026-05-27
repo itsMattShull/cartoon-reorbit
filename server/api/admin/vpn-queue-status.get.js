@@ -45,6 +45,14 @@ export default defineEventHandler(async (event) => {
 
   const queueStatus = getQueueStatus()
 
+  // Safety filter: never send a plaintext IP to the frontend.
+  // Encrypted IPs are lowercase hex strings; anything else (dots, colons, etc.)
+  // is a plaintext IP that should never have been stored and must be redacted.
+  const safeActivity = recentActivity.map((entry) => ({
+    ...entry,
+    ip: /^[0-9a-f]+$/i.test(entry.ip ?? '') ? entry.ip : '[redacted]',
+  }))
+
   return {
     queue: {
       pending: queueStatus.pending,
@@ -59,7 +67,7 @@ export default defineEventHandler(async (event) => {
       checkedToday,
       flaggedToday,
     },
-    recentActivity,
+    recentActivity: safeActivity,
     errors: queueStatus.errors,
   }
 })
