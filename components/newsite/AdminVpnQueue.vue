@@ -134,17 +134,6 @@
 </template>
 
 <script setup>
-definePageMeta({
-  layout: 'newsite-template',
-  middleware: ['auth', 'admin'],
-  showAdbar: false,
-  showNav: true,
-  showSidebar: false,
-  showFooter: false,
-})
-
-useHead({ title: 'VPN Queue Monitor — Admin' })
-
 const data = ref(null)
 const loading = ref(false)
 const error = ref(null)
