@@ -11,6 +11,19 @@ const queue = []           // [{ userId, encryptedIp }]
 const inQueue = new Set()  // "userId:encryptedIp" for dedup
 let timer = null
 
+// ── Error buffer (last 200 errors, oldest dropped first) ─────────────────────
+const ERROR_BUFFER_MAX = 200
+const errorLog = []        // [{ ts, userId, encryptedIp, message }]
+
+function pushError(userId, encryptedIp, message) {
+  errorLog.push({ ts: new Date().toISOString(), userId, encryptedIp, message })
+  if (errorLog.length > ERROR_BUFFER_MAX) errorLog.shift()
+}
+
+// ── Stats counters (reset on server restart) ──────────────────────────────────
+let totalProcessed = 0
+let totalFlagged = 0
+
 function startTimer() {
   if (timer) return
   timer = setInterval(processNext, 3000) // 1 every 3s = 20/min
@@ -35,7 +48,10 @@ async function processNext() {
     if (existing) return
 
     const result = await checkVpn(plainIp)
-    if (!result) return
+    if (!result) {
+      pushError(userId, encryptedIp, 'ip-api.com returned no result (API failure or invalid IP)')
+      return
+    }
 
     await prisma.vpnLog.create({
       data: {
@@ -52,7 +68,9 @@ async function processNext() {
       },
     })
 
+    totalProcessed++
     if (result.isVpn) {
+      totalFlagged++
       await prisma.user.update({
         where: { id: userId },
         data: { vpnDetected: true },
@@ -60,6 +78,7 @@ async function processNext() {
     }
   } catch (err) {
     console.error('[vpn-queue] Error processing item:', err.message)
+    pushError(userId, encryptedIp, err.message)
   }
 }
 
@@ -78,4 +97,17 @@ export function enqueueVpnCheck(userId, encryptedIp) {
 /** Exposed for the backfill script to check queue depth. */
 export function queueLength() {
   return queue.length
+}
+
+/**
+ * Returns a snapshot of queue state for the admin status page.
+ */
+export function getQueueStatus() {
+  return {
+    pending: queue.length,
+    isRunning: timer !== null,
+    totalProcessed,
+    totalFlagged,
+    errors: [...errorLog].reverse(), // most recent first
+  }
 }
