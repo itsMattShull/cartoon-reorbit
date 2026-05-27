@@ -18,7 +18,13 @@
  */
 
 import { createCipheriv, createHash } from 'crypto'
-import { PrismaClient } from '@prisma/client'
+import { createRequire } from 'module'
+
+// Use createRequire so CJS resolution finds @prisma/client via its `main`
+// field instead of the ESM exports map — avoids "cannot find package
+// @prisma/client/index.js" errors on some server environments.
+const require = createRequire(import.meta.url)
+const { PrismaClient } = require('@prisma/client')
 
 const prisma = new PrismaClient()
 
