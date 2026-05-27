@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
       warning210: true,
       warning240: true,
       additionalCzones: true,
+      vpnDetected: true,
       points:        { select: { points: true } },
       surveyAnswers: { select: { userId: true } },
     },
@@ -97,6 +98,7 @@ export default defineEventHandler(async (event) => {
       '240': u.warning240,
     },
 
+    vpnDetected:   u.vpnDetected ?? false,
     surveyComplete: !!u.surveyAnswers,
   }))
 })
