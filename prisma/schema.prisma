@@ -560,6 +560,7 @@ model UserIP {
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, ip])
+  @@index([userId])
 }
 
 model Friend {

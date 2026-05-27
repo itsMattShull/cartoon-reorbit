@@ -1,0 +1,186 @@
+/**
+ * Backfill VPN checks for all historical (userId, ip) combinations in LoginLog.
+ *
+ * Run with: node scripts/backfill-vpn-checks.mjs
+ *
+ * Requires IP_ENCRYPTION_KEY to be set in the environment (or .env file).
+ * Processes at most 20 IPs per minute to stay within ip-api.com free tier limits.
+ */
+
+// Load .env manually since we're outside Nuxt runtime
+import { readFileSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const envPath = resolve(__dirname, '../.env')
+
+try {
+  const envContent = readFileSync(envPath, 'utf8')
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx === -1) continue
+    const key = trimmed.slice(0, eqIdx).trim()
+    const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
+    if (!process.env[key]) process.env[key] = value
+  }
+} catch {
+  console.warn('Could not load .env file — relying on environment variables')
+}
+
+import { PrismaClient } from '@prisma/client'
+import { createCipheriv, createDecipheriv, createHash } from 'crypto'
+
+const prisma = new PrismaClient()
+
+// ── Inline encryption (can't import Nuxt server utils directly) ──────────────
+function getKeyAndIV() {
+  const keyHex = process.env.IP_ENCRYPTION_KEY
+  if (!keyHex || keyHex.length !== 64) {
+    throw new Error('IP_ENCRYPTION_KEY must be a 64-char hex string. Generate with:\n  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"')
+  }
+  const key = Buffer.from(keyHex, 'hex')
+  const iv = createHash('sha256').update(key).digest().slice(0, 16)
+  return { key, iv }
+}
+
+function encryptIp(ip) {
+  const { key, iv } = getKeyAndIV()
+  const cipher = createCipheriv('aes-256-cbc', key, iv)
+  return cipher.update(ip, 'utf8', 'hex') + cipher.final('hex')
+}
+
+function decryptIp(encrypted) {
+  if (!/^[0-9a-f]+$/i.test(encrypted)) return encrypted
+  try {
+    const { key, iv } = getKeyAndIV()
+    const decipher = createDecipheriv('aes-256-cbc', key, iv)
+    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8')
+  } catch {
+    return encrypted
+  }
+}
+
+// ── VPN check via ip-api.com ──────────────────────────────────────────────────
+const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i
+function isPrivateIp(ip) { return !ip || PRIVATE_IP_RE.test(ip) }
+
+async function checkVpn(ip) {
+  try {
+    const url = `http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,isp,org,as,proxy,hosting,query`
+    const res = await fetch(url).then(r => r.json())
+    if (!res || res.status !== 'success') return null
+    const isVpn = !!(res.proxy || res.hosting)
+    let proxyType = null, reason = null
+    if (res.hosting) { proxyType = 'Datacenter/Hosting'; reason = 'IP flagged as datacenter/hosting by ip-api.com' }
+    else if (res.proxy) { proxyType = 'VPN/Proxy'; reason = 'IP flagged as VPN/Proxy by ip-api.com' }
+    return { isVpn, proxyType, isp: res.isp || null, org: res.org || null, asn: res.as || null, country: res.country || null, countryCode: res.countryCode || null, reason }
+  } catch { return null }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('🔍 Fetching distinct (userId, ip) combinations from LoginLog...')
+
+  // Get all distinct combos from LoginLog (plaintext IPs)
+  const logins = await prisma.loginLog.findMany({
+    distinct: ['userId', 'ip'],
+    select: { userId: true, ip: true },
+  })
+  console.log(`   Found ${logins.length} unique (userId, ip) combinations`)
+
+  // Filter out private IPs
+  const publicLogins = logins.filter(l => !isPrivateIp(l.ip))
+  const skippedPrivate = logins.length - publicLogins.length
+  console.log(`   Skipping ${skippedPrivate} private/local IPs`)
+
+  // Encrypt all IPs
+  const pairs = publicLogins.map(l => ({ userId: l.userId, encryptedIp: encryptIp(l.ip), plainIp: l.ip }))
+
+  // Upsert into UserIP (insert encrypted combos we haven't seen)
+  let userIpInserted = 0
+  for (const { userId, encryptedIp } of pairs) {
+    try {
+      await prisma.userIP.upsert({
+        where: { userId_ip: { userId, ip: encryptedIp } },
+        update: {},
+        create: { userId, ip: encryptedIp },
+      })
+      userIpInserted++
+    } catch { /* skip */ }
+  }
+  console.log(`   Upserted ${userIpInserted} rows into UserIP`)
+
+  // Find which combos still need VPN checking
+  const alreadyChecked = await prisma.vpnLog.findMany({
+    select: { userId: true, ip: true },
+  })
+  const checkedSet = new Set(alreadyChecked.map(r => `${r.userId}:${r.ip}`))
+
+  const toCheck = pairs.filter(p => !checkedSet.has(`${p.userId}:${p.encryptedIp}`))
+  console.log(`\n📋 ${toCheck.length} IPs to check | ${checkedSet.size} already checked | processing at 20/min`)
+  console.log('   This will take approximately', Math.ceil(toCheck.length / 20), 'minute(s)\n')
+
+  if (toCheck.length === 0) {
+    console.log('✅ Nothing to do — all IPs already checked!')
+    await prisma.$disconnect()
+    return
+  }
+
+  let processed = 0
+  let flagged = 0
+  let errors = 0
+
+  for (const { userId, encryptedIp, plainIp } of toCheck) {
+    // Rate limit: 1 every 3 seconds = 20/min
+    await new Promise(r => setTimeout(r, 3000))
+
+    try {
+      // Re-check in case a parallel process already handled it
+      const exists = await prisma.vpnLog.findFirst({ where: { userId, ip: encryptedIp } })
+      if (exists) { processed++; continue }
+
+      const result = await checkVpn(plainIp)
+
+      await prisma.vpnLog.create({
+        data: {
+          userId,
+          ip: encryptedIp,
+          isVpn: result?.isVpn ?? false,
+          proxyType: result?.proxyType ?? null,
+          isp: result?.isp ?? null,
+          org: result?.org ?? null,
+          asn: result?.asn ?? null,
+          country: result?.country ?? null,
+          countryCode: result?.countryCode ?? null,
+          reason: result?.reason ?? (result === null ? 'API check failed' : null),
+        },
+      })
+
+      if (result?.isVpn) {
+        flagged++
+        await prisma.user.update({ where: { id: userId }, data: { vpnDetected: true } })
+      }
+
+      processed++
+      if (processed % 10 === 0 || processed === toCheck.length) {
+        const pct = Math.round((processed / toCheck.length) * 100)
+        process.stdout.write(`\r   Progress: ${processed}/${toCheck.length} (${pct}%) — ${flagged} VPN flags set`)
+      }
+    } catch (err) {
+      errors++
+      console.error(`\n   Error processing ${userId}: ${err.message}`)
+    }
+  }
+
+  console.log(`\n\n✅ Done! Processed: ${processed} | VPN flags set: ${flagged} | Errors: ${errors}`)
+  await prisma.$disconnect()
+}
+
+main().catch(async err => {
+  console.error('Fatal error:', err)
+  await prisma.$disconnect()
+  process.exit(1)
+})
