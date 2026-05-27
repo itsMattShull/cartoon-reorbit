@@ -77,6 +77,7 @@
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openVpnInfo(u); closeMenu()">VPN Info</button>
                   <button
                     v-if="!u.isAdmin && !u.banned"
                     class="w-full text-left px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
@@ -148,6 +149,7 @@
             <span :class="surveyBadgeClass(u.surveyComplete)">
               Survey: {{ u.surveyComplete ? '✓' : '✗' }}
             </span>
+            <span v-if="u.vpnDetected" class="px-1.5 py-0 rounded text-[10px] border bg-orange-100 text-orange-800 border-orange-200">VPN</span>
           </div>
         </article>
 
@@ -224,6 +226,57 @@
 
         <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
           <button class="px-3 py-1 text-sm border rounded-md" @click="closePendingTradesModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VPN Info modal -->
+    <div v-if="showVpnModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="closeVpnModal()"></div>
+      <div class="relative bg-white w-[92%] max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh]">
+        <div class="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+          <div>
+            <h3 class="text-lg font-semibold">VPN Info — {{ vpnTarget?.username || vpnTarget?.discordTag || 'user' }}</h3>
+            <p class="text-xs text-gray-500 mt-0.5">VPN detection log for this user</p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeVpnModal()">✕</button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 px-5 py-4">
+          <div v-if="vpnLoading" class="text-sm text-gray-500 py-3">Loading…</div>
+          <div v-else-if="vpnError" class="text-sm text-red-600 py-3">{{ vpnError }}</div>
+          <div v-else-if="!vpnLogs.length" class="text-sm text-gray-500 py-3">No VPN log entries found for this user.</div>
+          <div v-else class="space-y-2">
+            <div
+              v-for="log in vpnLogs"
+              :key="log.id"
+              class="border rounded-lg p-3 text-xs"
+              :class="log.isVpn ? 'border-orange-200 bg-orange-50' : 'border-gray-200 bg-gray-50'"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="px-1.5 py-0.5 rounded text-[10px] font-medium border"
+                    :class="log.isVpn ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-green-100 text-green-800 border-green-200'"
+                  >{{ log.isVpn ? 'VPN' : 'Clean' }}</span>
+                  <span class="font-mono font-medium text-gray-800">{{ log.ip }}</span>
+                </div>
+                <span class="text-gray-400">{{ formatDate(log.detectedAt) }}</span>
+              </div>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                <div v-if="log.proxyType"><span class="text-gray-500">Proxy type:</span> <span class="font-medium">{{ log.proxyType }}</span></div>
+                <div v-if="log.isp"><span class="text-gray-500">ISP:</span> <span class="font-medium">{{ log.isp }}</span></div>
+                <div v-if="log.org"><span class="text-gray-500">Org:</span> <span class="font-medium">{{ log.org }}</span></div>
+                <div v-if="log.asn"><span class="text-gray-500">ASN:</span> <span class="font-medium">{{ log.asn }}</span></div>
+                <div v-if="log.country"><span class="text-gray-500">Country:</span> <span class="font-medium">{{ log.country }}{{ log.countryCode ? ` (${log.countryCode})` : '' }}</span></div>
+                <div v-if="log.reason" class="col-span-2"><span class="text-gray-500">Reason:</span> <span class="font-medium">{{ log.reason }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
+          <button class="px-3 py-1 text-sm border rounded-md" @click="closeVpnModal()">Close</button>
         </div>
       </div>
     </div>
@@ -970,6 +1023,36 @@ async function openPendingTrades(u) {
     pendingTradesError.value = e?.data?.statusMessage || e?.message || 'Failed to load pending trades.'
   } finally {
     pendingTradesLoading.value = false
+  }
+}
+
+// VPN Info state
+const showVpnModal = ref(false)
+const vpnTarget = ref(null)
+const vpnLogs = ref([])
+const vpnLoading = ref(false)
+const vpnError = ref('')
+
+function closeVpnModal() {
+  showVpnModal.value = false
+  vpnTarget.value = null
+  vpnLogs.value = []
+  vpnError.value = ''
+}
+
+async function openVpnInfo(u) {
+  vpnTarget.value = u
+  showVpnModal.value = true
+  vpnLogs.value = []
+  vpnError.value = ''
+  vpnLoading.value = true
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/vpn-details`)
+    vpnLogs.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    vpnError.value = e?.data?.statusMessage || e?.message || 'Failed to load VPN info.'
+  } finally {
+    vpnLoading.value = false
   }
 }
 
