@@ -33,6 +33,7 @@
           <button @click="toggle('onlyWarned')" :class="chip(onlyWarned)">Warned</button>
           <button @click="toggle('onlySurveyDone')" :class="chip(onlySurveyDone)">Survey Done</button>
           <button @click="toggle('onlySurveyNotDone')" :class="chip(onlySurveyNotDone)">No Survey</button>
+          <button @click="toggle('onlyVpn')" :class="chip(onlyVpn)">VPN</button>
 
           <div class="flex items-center gap-1">
             <label class="text-[11px] text-gray-600">Sort:</label>
@@ -623,6 +624,7 @@ const onlyGuild         = ref(false)
 const onlyWarned        = ref(false)
 const onlySurveyDone    = ref(false)
 const onlySurveyNotDone = ref(false)
+const onlyVpn           = ref(false)
 
 const sortField = ref('lastActivity')
 const sortDir = ref('desc')
@@ -638,13 +640,14 @@ const filteredSorted = computed(() => {
     const matchWarned = !onlyWarned.value || warned
     const matchSurveyDone    = !onlySurveyDone.value    || !!u.surveyComplete
     const matchSurveyNotDone = !onlySurveyNotDone.value || !u.surveyComplete
+    const matchVpn           = !onlyVpn.value           || !!u.vpnDetected
 
     const statusOk =
       statusFilter.value === 'all' ||
       (statusFilter.value === 'active' && !!u.active) ||
       (statusFilter.value === 'inactive' && !u.active)
 
-    return matchQ && matchGuild && matchWarned && matchSurveyDone && matchSurveyNotDone && statusOk
+    return matchQ && matchGuild && matchWarned && matchSurveyDone && matchSurveyNotDone && matchVpn && statusOk
   })
 
   const toTs = (d) => d ? new Date(d).getTime() : -Infinity
@@ -688,6 +691,7 @@ function toggle(key) {
   if (key === 'onlyWarned')        onlyWarned.value        = !onlyWarned.value
   if (key === 'onlySurveyDone')    onlySurveyDone.value    = !onlySurveyDone.value
   if (key === 'onlySurveyNotDone') onlySurveyNotDone.value = !onlySurveyNotDone.value
+  if (key === 'onlyVpn')           onlyVpn.value           = !onlyVpn.value
 }
 function resetFilters() {
   filter.value            = ''
@@ -696,6 +700,7 @@ function resetFilters() {
   onlyWarned.value        = false
   onlySurveyDone.value    = false
   onlySurveyNotDone.value = false
+  onlyVpn.value           = false
   sortField.value         = 'lastActivity'
   sortDir.value           = 'desc'
 }
@@ -710,7 +715,7 @@ function prevPage() {
   page.value -= 1
 }
 
-watch([filter, statusFilter, onlyGuild, onlyWarned, onlySurveyDone, onlySurveyNotDone, sortField, sortDir], () => {
+watch([filter, statusFilter, onlyGuild, onlyWarned, onlySurveyDone, onlySurveyNotDone, onlyVpn, sortField, sortDir], () => {
   page.value = 1
 })
 
