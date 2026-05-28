@@ -1,4 +1,4 @@
-// Usage: node --env-file=.env prisma/get-user-ips.js <username>
+// Usage: node --env-file=.env prisma/get-user-info.js <username>
 
 import { PrismaClient } from '@prisma/client'
 import { decryptIp } from '../server/utils/ip-encrypt.js'
@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 
 const username = process.argv[2]
 if (!username) {
-  console.error('Usage: node --env-file=.env prisma/get-user-ips.js <username>')
+  console.error('Usage: node --env-file=.env prisma/get-user-info.js <username>')
   process.exit(1)
 }
 
