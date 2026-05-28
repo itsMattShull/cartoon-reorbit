@@ -49,7 +49,6 @@ const menus = [
     items: [
       { id: 'analytics',     label: 'Analytics',    to: '/newsite/admin' },
       { id: 'manageUsers',   label: 'Manage Users', to: '/newsite/admin/manageUsers' },
-      { id: 'vpnQueue', label: 'VPN Queue', to: '/newsite/admin/vpn-queue' },
       { id: 'core-placeholder-2', label: 'Placeholder', to: null },
       { id: 'core-placeholder-3', label: 'Placeholder', to: null },
       { id: 'core-placeholder-4', label: 'Placeholder', to: null },
@@ -63,6 +62,7 @@ const menus = [
     id: 'logs',
     label: 'Admin Logs',
     items: [
+      { id: 'vpnQueue',            label: 'VPN Queue',          to: '/newsite/admin/vpn-queue' },
       { id: 'cheatFinder',        label: 'Cheat Finder',       to: '/newsite/admin/cheatFinder' },
       { id: 'deviceFingerprints', label: 'Browser Fingerprints', to: '/newsite/admin/deviceFingerprints' },
       { id: 'authLogs',           label: 'Auth Logs',          to: '/newsite/admin/authLogs' },

@@ -18,7 +18,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encryptIp } from '@/server/utils/ip-encrypt'
+import { encryptIp, decryptIp } from '@/server/utils/ip-encrypt'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
   ])
 
   return {
-    items: items.map(item => ({ ...item, ip: item.ip })),
+    items: items.map(item => ({ ...item, ip: decryptIp(item.ip) })),
     total,
     page,
     limit
