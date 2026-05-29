@@ -36,13 +36,11 @@
           <div
             v-for="c in filteredCollection" :key="c.id"
             class="czew-toon-wrap"
-            :class="{ 'in-zone': currentZoneToonIds.has(c.id) }"
-            @mousedown.prevent="!currentZoneToonIds.has(c.id) && startDrag(c, $event)"
-            @touchstart="!currentZoneToonIds.has(c.id) && onToonTouchStart(c, $event)"
-            @touchend="!currentZoneToonIds.has(c.id) && onToonTouchEnd(c, $event)"
+            @mousedown.prevent="startDrag(c, $event)"
+            @touchstart="onToonTouchStart(c, $event)"
+            @touchend="onToonTouchEnd(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
-            <div v-if="currentZoneToonIds.has(c.id)" class="czew-toon-overlay" />
           </div>
           <div v-if="!filteredCollection.length" class="czew-empty" style="grid-column:1/-1">No cToons found.</div>
         </template>
@@ -106,9 +104,23 @@ const selectedSeries  = ref('')
 
 const currentZoneBg = computed(() => cz.value.zones[cz.value.activeZone]?.background ?? '')
 
-const currentZoneToonIds = computed(() =>
-  new Set((cz.value.zones[cz.value.activeZone]?.toons ?? []).map(t => t.id))
-)
+// Stable identity for a cToon shared between the collection payload and the
+// saved zone payload. The per-item `id` differs between the two (the
+// collection uses a synthetic `uc|…` token while saved zones store the real
+// UserCtoon UUID), so we key on ctoonId + mintNumber, which both carry.
+function toonKey(item) {
+  return `${item.ctoonId ?? 'x'}|${item.mintNumber ?? 'x'}`
+}
+
+// Keys of cToons already placed in ANY zone — hidden from the sidebar so they
+// can't be dragged into a zone a second time (e.g. after a page refresh).
+const placedToonKeys = computed(() => {
+  const keys = new Set()
+  for (const zone of cz.value.zones ?? []) {
+    for (const t of zone?.toons ?? []) keys.add(toonKey(t))
+  }
+  return keys
+})
 
 const seriesList = computed(() =>
   [...new Set(cz.value.collection.map(c => c.series).filter(Boolean))].sort()
@@ -118,7 +130,9 @@ const filteredCollection = computed(() => {
   const q = search.value.toLowerCase()
   const rs = activeRarities.value
   const s  = selectedSeries.value
+  const placed = placedToonKeys.value
   return cz.value.collection.filter(c => {
+    if (placed.has(toonKey(c)))                               return false
     if (q  && !(c.name   || '').toLowerCase().includes(q))    return false
     if (rs.length && !rs.includes((c.rarity || '').toLowerCase())) return false
     if (s  && c.series !== s)                                  return false
@@ -181,6 +195,8 @@ function addToonToTopLeft(c) {
   img.onload = () => {
     zone.toons.push({
       id: c.id,
+      ctoonId: c.ctoonId,
+      mintNumber: c.mintNumber,
       assetPath: c.assetPath,
       name: c.name,
       x: 0,
@@ -312,8 +328,7 @@ function selectBg(bg) {
   cursor: grab;
   user-select: none;
 }
-.czew-toon-wrap.in-zone { cursor: default; }
-.czew-toon-wrap:not(.in-zone):hover .czew-toon { background: rgba(0,0,0,0.4); }
+.czew-toon-wrap:hover .czew-toon { background: rgba(0,0,0,0.4); }
 
 .czew-toon {
   display: block;
@@ -325,14 +340,6 @@ function selectBg(bg) {
   padding: 3px;
   image-rendering: pixelated;
   box-sizing: border-box;
-}
-
-.czew-toon-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(90, 90, 90, 0.6);
-  border-radius: 4px;
-  pointer-events: none;
 }
 
 /* ── Background grid ── */
