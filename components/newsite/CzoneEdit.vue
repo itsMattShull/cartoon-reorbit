@@ -104,14 +104,22 @@ const selectedSeries  = ref('')
 
 const currentZoneBg = computed(() => cz.value.zones[cz.value.activeZone]?.background ?? '')
 
-// cToon ids already placed in ANY zone — these are hidden from the sidebar so
-// they can't be dragged into a zone a second time (e.g. after a page refresh).
-const placedToonIds = computed(() => {
-  const ids = new Set()
+// Stable identity for a cToon shared between the collection payload and the
+// saved zone payload. The per-item `id` differs between the two (the
+// collection uses a synthetic `uc|…` token while saved zones store the real
+// UserCtoon UUID), so we key on ctoonId + mintNumber, which both carry.
+function toonKey(item) {
+  return `${item.ctoonId ?? 'x'}|${item.mintNumber ?? 'x'}`
+}
+
+// Keys of cToons already placed in ANY zone — hidden from the sidebar so they
+// can't be dragged into a zone a second time (e.g. after a page refresh).
+const placedToonKeys = computed(() => {
+  const keys = new Set()
   for (const zone of cz.value.zones ?? []) {
-    for (const t of zone?.toons ?? []) ids.add(t.id)
+    for (const t of zone?.toons ?? []) keys.add(toonKey(t))
   }
-  return ids
+  return keys
 })
 
 const seriesList = computed(() =>
@@ -122,9 +130,9 @@ const filteredCollection = computed(() => {
   const q = search.value.toLowerCase()
   const rs = activeRarities.value
   const s  = selectedSeries.value
-  const placed = placedToonIds.value
+  const placed = placedToonKeys.value
   return cz.value.collection.filter(c => {
-    if (placed.has(c.id))                                     return false
+    if (placed.has(toonKey(c)))                               return false
     if (q  && !(c.name   || '').toLowerCase().includes(q))    return false
     if (rs.length && !rs.includes((c.rarity || '').toLowerCase())) return false
     if (s  && c.series !== s)                                  return false
@@ -187,6 +195,8 @@ function addToonToTopLeft(c) {
   img.onload = () => {
     zone.toons.push({
       id: c.id,
+      ctoonId: c.ctoonId,
+      mintNumber: c.mintNumber,
       assetPath: c.assetPath,
       name: c.name,
       x: 0,

@@ -763,7 +763,8 @@ function onGlobalUp(e) {
         const w = img.naturalWidth
         const h = img.naturalHeight
         currentZone.value.toons.push({
-          id: c.id, assetPath: c.assetPath, name: c.name,
+          id: c.id, ctoonId: c.ctoonId, mintNumber: c.mintNumber,
+          assetPath: c.assetPath, name: c.name,
           x: clamp(x - w / 2, 0, canvasW() - w),
           y: clamp(y - h / 2, 0, canvasH() - h),
           width: w, height: h,
