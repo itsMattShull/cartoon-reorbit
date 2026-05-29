@@ -88,6 +88,8 @@ export default defineEventHandler(async (event) => {
       ctoonSuggestionsAcceptedGte: criteria?.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
       tkoWinsGte: criteria?.tkoWinsGte ?? null,
+      wordleWinsGte: criteria?.wordleWinsGte ?? null,
+      wordleCurrentStreakGte: criteria?.wordleCurrentStreakGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
       requiredCtoons: {

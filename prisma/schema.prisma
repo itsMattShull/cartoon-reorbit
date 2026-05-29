@@ -471,6 +471,9 @@ model User {
   tkoRoundsWon  TkoRound[] @relation("TkoRoundWinner")
   tkoRoundsLost TkoRound[] @relation("TkoRoundLoser")
 
+  // Wordle
+  wordleResults WordleResult[]
+
   // Identity / survey
   surveyAnswers SurveyAnswers?
 
@@ -1864,6 +1867,8 @@ model Achievement {
   ctoonSuggestionsAcceptedGte Int?
   cumulativeActiveDaysGte Int?
   tkoWinsGte      Int?
+  wordleWinsGte   Int?     // total lifetime crown wins in Wordle
+  wordleCurrentStreakGte Int? // current consecutive-day crown streak
   setsRequired    String[] // complete ALL sets in this array
   userCreatedBefore DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName String?
@@ -1899,6 +1904,21 @@ model UserDailyActivity {
   @@unique([userId, day])
   @@index([userId, day])
   @@index([day])
+}
+
+model WordleResult {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime // puzzle date stored as UTC midnight
+  isWinner  Boolean  @default(false) // true = held the crown (best score that day)
+  score     String?  // e.g. "3/6"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, isWinner])
+  @@index([date])
 }
 
 model AchievementReward {

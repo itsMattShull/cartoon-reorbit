@@ -92,6 +92,16 @@
                 <input v-model.number="form.criteria.tkoWinsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
                 <p class="text-xs text-gray-500 mt-1">Counted round wins in the TKO game.</p>
               </div>
+              <div>
+                <label class="block text-sm">Wordle Crown Wins ≥</label>
+                <input v-model.number="form.criteria.wordleWinsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">Total times the user earned the 👑 (best score of the day).</p>
+              </div>
+              <div>
+                <label class="block text-sm">Wordle Crown Streak ≥</label>
+                <input v-model.number="form.criteria.wordleCurrentStreakGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">Current consecutive-day streak of earning the 👑.</p>
+              </div>
               <div class="md:col-span-3">
                 <label class="block text-sm">User created before</label>
                 <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
@@ -295,6 +305,8 @@ const emptyForm = () => ({
     ctoonSuggestionsAcceptedGte: null,
     cumulativeActiveDaysGte: null,
     tkoWinsGte: null,
+    wordleWinsGte: null,
+    wordleCurrentStreakGte: null,
     setsRequired: [],
     ctoonsRequired: [],
     userCreatedBefore: null
@@ -448,6 +460,8 @@ function startEdit(a) {
       ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       tkoWinsGte: a.tkoWinsGte ?? null,
+      wordleWinsGte: a.wordleWinsGte ?? null,
+      wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
