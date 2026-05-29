@@ -17,10 +17,17 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2) Build buckets, exclude a specific user, fill gaps
-  const { bucketSize: rawBucketSize } = getQuery(event)
+  const { bucketSize: rawBucketSize, excludeTopPercent: rawExcludeTopPercent } = getQuery(event)
   const bucketSize = [500, 1000, 5000, 10000].includes(Number(rawBucketSize))
     ? Number(rawBucketSize)
     : 1000
+
+  // Optional: exclude the top X% of users (by points) from the distribution.
+  // Blank/invalid means no exclusion. Clamp to [0, 100).
+  const parsedExclude = Number(rawExcludeTopPercent)
+  const excludeTopPercent = Number.isFinite(parsedExclude)
+    ? Math.min(Math.max(parsedExclude, 0), 99.999)
+    : 0
 
   const rows = await prisma.$queryRaw`
     WITH all_pts AS (
@@ -32,16 +39,29 @@ export default defineEventHandler(async (event) => {
         ON up."userId" = u.id
       WHERE u.id <> '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
     ),
+    ranked AS (
+      SELECT
+        id,
+        pts,
+        ROW_NUMBER() OVER (ORDER BY pts DESC, id) AS rn,
+        COUNT(*) OVER ()                          AS total
+      FROM all_pts
+    ),
+    filtered AS (
+      SELECT id, pts
+      FROM ranked
+      WHERE rn > floor(total * ${excludeTopPercent}::float / 100)
+    ),
     counts AS (
       SELECT
         (floor(pts / ${bucketSize})::int * ${bucketSize}) AS bucket_start,
         COUNT(*)::int                  AS cnt
-      FROM all_pts
+      FROM filtered
       GROUP BY bucket_start
     ),
     max_bucket AS (
       SELECT (floor(MAX(pts) / ${bucketSize})::int * ${bucketSize}) AS max_b
-      FROM all_pts
+      FROM filtered
     ),
     buckets AS (
       -- now both 0 and max_b are ints

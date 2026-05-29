@@ -144,6 +144,18 @@
                 </option>
               </select>
             </label>
+            <label class="flex items-center space-x-1 text-[11px]">
+              <span class="font-medium">Exclude top % users:</span>
+              <input
+                v-model="pointsExcludeTopPercent"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                placeholder="0"
+                class="border rounded px-1.5 py-0.5 text-xs w-16"
+              />
+            </label>
             <div class="flex items-center gap-1 text-[11px]">
               <button type="button" class="border rounded px-1.5 py-0.5" @click="zoomPointsIn">
                 Zoom In
@@ -307,6 +319,8 @@ const pointsBucketOptions = [
   { value: 10000, label: '10,000' }
 ]
 const pointsBucketSize = ref(1000)
+// Blank by default — when set, excludes the top X% of users (by points) from the chart.
+const pointsExcludeTopPercent = ref('')
 const pointsZoomSpan = ref(null)
 const pointsZoomCenter = ref(null)
 const pointsFullData = ref({ labels: [], counts: [] })
@@ -756,7 +770,9 @@ function resetPointsZoom () {
 }
 
 async function fetchPointsDistribution () {
-  const res = await fetch(`/api/admin/points-distribution?bucketSize=${pointsBucketSize.value}`, { credentials: 'include' })
+  const raw = parseFloat(pointsExcludeTopPercent.value)
+  const excludeTopPercent = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 100) : 0
+  const res = await fetch(`/api/admin/points-distribution?bucketSize=${pointsBucketSize.value}&excludeTopPercent=${excludeTopPercent}`, { credentials: 'include' })
   const hd = await res.json()
   const labels = hd.map(b => b.label)
   const counts = hd.map(b => b.count)
@@ -1255,6 +1271,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (socketMetricsTimer) clearInterval(socketMetricsTimer)
+  if (pointsExcludeTimer) clearTimeout(pointsExcludeTimer)
 })
 
 watch([selectedTimeframe, groupBy], async () => {
@@ -1272,6 +1289,15 @@ watch([selectedTimeframe, groupBy], async () => {
 watch(pointsBucketSize, async () => {
   if (!ptsHistChart) return
   await fetchPointsDistribution()
+})
+
+let pointsExcludeTimer
+watch(pointsExcludeTopPercent, () => {
+  if (!ptsHistChart) return
+  clearTimeout(pointsExcludeTimer)
+  pointsExcludeTimer = setTimeout(() => {
+    fetchPointsDistribution()
+  }, 400)
 })
 </script>
 
