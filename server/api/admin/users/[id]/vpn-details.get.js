@@ -1,6 +1,7 @@
 // server/api/admin/users/[id]/vpn-details.get.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { decryptIp } from '@/server/utils/ip-encrypt'
 
 export default defineEventHandler(async (event) => {
   // 1) Auth: must be admin
@@ -23,5 +24,5 @@ export default defineEventHandler(async (event) => {
     orderBy: { detectedAt: 'desc' },
   })
 
-  return logs
+  return logs.map(log => ({ ...log, ip: decryptIp(log.ip) }))
 })
