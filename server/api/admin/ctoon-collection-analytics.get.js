@@ -1,5 +1,8 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 86400 // 24 hours
 
 function lastMonday(from = new Date()) {
   const d = new Date(from)
@@ -52,6 +55,14 @@ export default defineEventHandler(async (event) => {
   const weekEnd = new Date(weekStart)
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
 
+  // ── Cache check ───────────────────────────────────────────────────────────
+  const weekKey = weekStart.toISOString().slice(0, 10)
+  const cacheKey = `admin:collection-analytics:${weekKey}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   // ── 1. Weekly cToons ─────────────────────────────────────────────────────
   const weeklyCtoons = await prisma.ctoon.findMany({
     where: {
@@ -61,8 +72,13 @@ export default defineEventHandler(async (event) => {
     select: { id: true, set: true, name: true, price: true }
   })
 
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
+
   if (weeklyCtoons.length === 0) {
-    return {
+    return cacheAndReturn({
       weekStart: weekStart.toISOString(),
       weekEnd: weekEnd.toISOString(),
       sets: [],
@@ -70,7 +86,7 @@ export default defineEventHandler(async (event) => {
       allSets: { count: 0, users: [] },
       oneSetPointsDistribution: [],
       allSetsPointsDistribution: []
-    }
+    })
   }
 
   // Group by set name
@@ -139,7 +155,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (oneSetCompleterIds.length === 0) {
-    return {
+    return cacheAndReturn({
       weekStart: weekStart.toISOString(),
       weekEnd: weekEnd.toISOString(),
       sets: setNames.map(n => ({ name: n, ctoonCount: setMap.get(n).length })),
@@ -147,7 +163,7 @@ export default defineEventHandler(async (event) => {
       allSets: { count: 0, users: [] },
       oneSetPointsDistribution: [],
       allSetsPointsDistribution: []
-    }
+    })
   }
 
   // ── 4. Collect all relevant userCtoon IDs for completers ──────────────────
@@ -321,7 +337,7 @@ export default defineEventHandler(async (event) => {
   const oneSetPoints = oneSetUsers.map(u => u.pointsSpent)
   const allSetsPoints = allSetsUsers.map(u => u.pointsSpent)
 
-  return {
+  return cacheAndReturn({
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     sets: setNames.map(n => ({ name: n, ctoonCount: setMap.get(n).length })),
@@ -335,5 +351,5 @@ export default defineEventHandler(async (event) => {
     },
     oneSetPointsDistribution: buildHistogram(oneSetPoints, chooseBucketSize(oneSetPoints)),
     allSetsPointsDistribution: buildHistogram(allSetsPoints, chooseBucketSize(allSetsPoints))
-  }
+  })
 })
