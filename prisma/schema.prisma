@@ -313,9 +313,11 @@ model UserCtoon {
   userPurchased  Boolean   @default(true)
   createdAt      DateTime  @default(now())
   burnedAt       DateTime?
+  userPackId     String?
 
-  user  User  @relation(fields: [userId], references: [id])
-  ctoon Ctoon @relation(fields: [ctoonId], references: [id])
+  user     User      @relation(fields: [userId], references: [id])
+  ctoon    Ctoon     @relation(fields: [ctoonId], references: [id])
+  userPack UserPack? @relation(fields: [userPackId], references: [id])
 
   tradeCtoons               TradeCtoon[]
   tradeOfferCtoons          TradeOfferCtoon[]
@@ -756,8 +758,9 @@ model UserPack {
   openedAt  DateTime?
   createdAt DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  pack Pack @relation(fields: [packId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+  pack         Pack       @relation(fields: [packId], references: [id])
+  mintedCtoons UserCtoon[]
 }
 
 model LoginLog {

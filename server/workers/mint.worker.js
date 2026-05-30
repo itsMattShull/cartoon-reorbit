@@ -9,7 +9,7 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
-    const { userId, ctoonId, isSpecial = false, effectivePrice } = job.data
+    const { userId, ctoonId, isSpecial = false, effectivePrice, userPackId = null } = job.data
 
     const TIME_BASED_CAP = 999999999
 
@@ -243,7 +243,7 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
 
       // 3) Create the UserCtoon with the atomic mintNumber
       const uc = await tx.userCtoon.create({
-        data: { userId, ctoonId, mintNumber, isFirstEdition },
+        data: { userId, ctoonId, mintNumber, isFirstEdition, ...(userPackId ? { userPackId } : {}) },
         select: { id: true, mintNumber: true }
       })
 

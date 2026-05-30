@@ -177,7 +177,7 @@ export default defineEventHandler(async (event) => {
 
   /* ── 3. queue mints & build response ───────────────────── */
   for (const c of chosen)
-    await mintQueue.add('mintCtoon', { userId, ctoonId: c.id, isSpecial: true })
+    await mintQueue.add('mintCtoon', { userId, ctoonId: c.id, isSpecial: true, userPackId })
 
   const mintNumbers  = {}
   const inCmartFlags = {}
