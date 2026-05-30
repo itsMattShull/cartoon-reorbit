@@ -76,7 +76,8 @@ const menus = [
       { id: 'monsterBattleLogs',  label: 'Monster Battle Logs', to: '/newsite/admin/monsterBattleLogs' },
       { id: 'lottoLogs',          label: 'Lotto Logs',         to: '/newsite/admin/lottoLogs' },
       { id: 'winWheelLogs',       label: 'Win Wheel Logs',     to: '/newsite/admin/winWheelLogs' },
-      { id: 'scavengerLogs',      label: 'Scavenger Logs',     to: '/newsite/admin/scavengerLogs' }
+      { id: 'scavengerLogs',      label: 'Scavenger Logs',     to: '/newsite/admin/scavengerLogs' },
+      { id: 'collectionAnalytics', label: 'Collection Analytics', to: '/newsite/admin/collectionAnalytics' }
     ]
   }
 ]

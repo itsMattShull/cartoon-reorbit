@@ -1,6 +1,9 @@
 // server/api/admin/purchases.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 86400 // 24 hours
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -21,6 +24,13 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'daily'
 
+  // 3) Cache check
+  const cacheKey = `admin:purchases:${timeframe}:${method}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -31,7 +41,7 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Helper to run the appropriate aggregation
+  // 4) Helper to run the appropriate aggregation
   async function fetchPurchases(kind /* 'ctoon' | 'pack' */) {
     const like = kind === 'pack' ? '%Bought Pack%' : '%Bought cToon%'
     if (groupBy === 'weekly') {
@@ -71,19 +81,21 @@ export default defineEventHandler(async (event) => {
     `
   }
 
-  // 4) Return per requested method
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
+
+  // 5) Return per requested method
   if (method === 'ctoon') {
-    const ctoonPurchases = await fetchPurchases('ctoon')
-    return ctoonPurchases
+    return cacheAndReturn(await fetchPurchases('ctoon'))
   } else if (method === 'pack') {
-    const packPurchases = await fetchPurchases('pack')
-    return packPurchases
+    return cacheAndReturn(await fetchPurchases('pack'))
   } else {
-    // fallback—if someone omits/changes method, return both
     const [ctoonPurchases, packPurchases] = await Promise.all([
       fetchPurchases('ctoon'),
       fetchPurchases('pack')
     ])
-    return { ctoonPurchases, packPurchases }
+    return cacheAndReturn({ ctoonPurchases, packPurchases })
   }
 })
