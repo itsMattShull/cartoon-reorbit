@@ -8,6 +8,7 @@ import { prisma } from '../prisma.js'
 import cron from 'node-cron'
 import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
+import { syncWordleResults } from '../../server/utils/wordle.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -1151,6 +1152,15 @@ cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
 // check featured auction schedule every hour
 cron.schedule("0 * * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
 
+// Sync Wordle daily crown results from Discord
+async function syncWordleResultsDaily() {
+  try {
+    await syncWordleResults()
+  } catch (e) {
+    console.error('[wordle-cron] Error during Wordle sync:', e?.message)
+  }
+}
+
 // Enqueue daily achievements processing at 03:00 CST
 async function enqueueAchievementsDaily() {
   try {
@@ -1165,6 +1175,10 @@ async function enqueueAchievementsDaily() {
 
 // await enqueueAchievementsDaily()
 cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
+
+// Sync Wordle results at 10:00 CST daily (after the bot's morning post)
+await syncWordleResultsDaily()
+cron.schedule('0 10 * * *', syncWordleResultsDaily, { timezone: 'America/Chicago' })
 
 
 await runTournamentCron()

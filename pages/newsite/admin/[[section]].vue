@@ -21,6 +21,7 @@
       <AdminWinWheelLogs v-else-if="section === 'winWheelLogs'" />
       <AdminScavengerLogs v-else-if="section === 'scavengerLogs'" />
       <AdminVpnQueue v-else-if="section === 'vpn-queue'" />
+      <AdminCtoonCollectionAnalytics v-else-if="section === 'collectionAnalytics'" />
       <div v-else class="newsite-admin-placeholder">
         <h1 class="newsite-admin-title">Unknown section</h1>
       </div>

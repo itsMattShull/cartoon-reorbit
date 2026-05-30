@@ -2,6 +2,7 @@
 import { prisma } from '../../server/prisma.js'
 import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
+import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
 
 let cachedAchievements     = null
 let cachedAchievementsTime = 0
@@ -107,6 +108,18 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       where: { winnerUserId: userId, counted: true }
     })
     if (wins < ach.tkoWinsGte) return false
+  }
+
+  // Wordle crown wins (total lifetime)
+  if (ach.wordleWinsGte != null) {
+    const wins = await getWordleWinCount(db, userId)
+    if (wins < ach.wordleWinsGte) return false
+  }
+
+  // Wordle current consecutive crown streak
+  if (ach.wordleCurrentStreakGte != null) {
+    const streak = await getWordleCurrentStreak(db, userId)
+    if (streak < ach.wordleCurrentStreakGte) return false
   }
 
   // Cumulative active days based on activity logs
