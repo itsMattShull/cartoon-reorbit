@@ -5,7 +5,7 @@
         <h1 class="text-base font-semibold mb-2 text-gray-900">cToon Collection Analytics</h1>
 
         <!-- Controls row -->
-        <div class="flex flex-wrap items-center gap-3 mb-3">
+        <div class="flex flex-wrap items-center gap-3 mb-1">
           <div class="flex items-center gap-1.5">
             <label for="weekStart" class="font-medium">Week starting (Monday):</label>
             <input
@@ -55,6 +55,16 @@
             </svg>
             Refresh
           </button>
+        </div>
+
+        <!-- Filter notes -->
+        <div class="flex flex-col gap-1 mb-3">
+          <p class="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+            <strong>Note:</strong> The week selection determines <strong>which sets to analyze</strong> based on their release date. All acquisition data (points spent, trades, auctions, pack purchases) is tracked <strong>for all time</strong> — not limited to the selected week.
+          </p>
+          <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+            <strong>Data accuracy:</strong> Failed pack tracking (packs that were opened but yielded no new set cToons) requires UserPack records that were first tracked on <strong>May 31, 2026</strong>. Data before that date may undercount pack-related costs.
+          </p>
         </div>
 
         <div v-if="loading" class="text-center py-6 text-gray-500">Loading…</div>
@@ -118,7 +128,7 @@
               <div>
                 <h2 class="text-sm font-semibold mb-1 text-gray-900">Points Distribution — ≥1 Set Completers</h2>
                 <p class="text-[11px] text-gray-600 mb-1">
-                  Distribution of total points spent to collect at least one full set.
+                  Distribution of total all-time points spent to collect at least one full set.
                 </p>
                 <div class="chart-container">
                   <canvas ref="oneSetCanvas"></canvas>
@@ -127,7 +137,7 @@
               <div>
                 <h2 class="text-sm font-semibold mb-1 text-gray-900">Points Distribution — All Sets Completers</h2>
                 <p class="text-[11px] text-gray-600 mb-1">
-                  Distribution of total points spent to collect every set released that week.
+                  Distribution of total all-time points spent to collect every set released that week.
                 </p>
                 <div class="chart-container">
                   <canvas ref="allSetsCanvas"></canvas>
@@ -136,7 +146,7 @@
             </div>
 
             <!-- Tab toggle -->
-            <div class="flex gap-1 mb-2">
+            <div class="flex gap-1 mb-3">
               <button
                 type="button"
                 :class="[
@@ -157,6 +167,63 @@
               >
                 All Sets Completers ({{ filteredAllSetsUsers.length }})
               </button>
+            </div>
+
+            <!-- Aggregate breakdown -->
+            <div v-if="activeBreakdown" class="mb-3 bg-gray-50 border rounded p-3">
+              <h3 class="text-[11px] font-semibold text-gray-800 mb-2">
+                Aggregate Acquisition Breakdown
+                <span class="font-normal text-gray-500">(across all {{ activeTab === 'one' ? '≥1 set' : 'all sets' }} completers)</span>
+              </h3>
+              <div class="overflow-x-auto">
+                <table class="text-[11px] w-full max-w-lg">
+                  <thead>
+                    <tr class="border-b bg-gray-100">
+                      <th class="px-2 py-1 text-left text-gray-800">Method</th>
+                      <th class="px-2 py-1 text-right text-gray-800">Count</th>
+                      <th class="px-2 py-1 text-right text-gray-800">Total Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="border-b">
+                      <td class="px-2 py-1 text-gray-700">cMart purchases</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalCmartCount.toLocaleString() }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalCmartPoints.toLocaleString() }}</td>
+                    </tr>
+                    <tr class="border-b">
+                      <td class="px-2 py-1 text-gray-700">
+                        Packs purchased
+                        <span v-if="activeBreakdown.totalFailedPackCount > 0" class="text-gray-400">({{ activeBreakdown.totalFailedPackCount.toLocaleString() }} failed)</span>
+                      </td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalPackCount.toLocaleString() }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalPackPoints.toLocaleString() }}</td>
+                    </tr>
+                    <tr v-if="activeBreakdown.totalFailedPackCount > 0" class="border-b bg-amber-50">
+                      <td class="px-2 py-1 text-amber-700 pl-5">↳ of which failed (no new set cToons)</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-amber-700">{{ activeBreakdown.totalFailedPackCount.toLocaleString() }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-amber-700">{{ activeBreakdown.totalFailedPackPoints.toLocaleString() }}</td>
+                    </tr>
+                    <tr class="border-b">
+                      <td class="px-2 py-1 text-gray-700">Auctions won</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalAuctions.toLocaleString() }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-gray-400">—</td>
+                    </tr>
+                    <tr class="border-b">
+                      <td class="px-2 py-1 text-gray-700">Trades made</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ activeBreakdown.totalTrades.toLocaleString() }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-gray-400">—</td>
+                    </tr>
+                    <tr class="font-semibold bg-gray-100">
+                      <td class="px-2 py-1 text-gray-900">Total points spent</td>
+                      <td class="px-2 py-1"></td>
+                      <td class="px-2 py-1 text-right tabular-nums text-gray-900">{{ activeBreakdown.totalPoints.toLocaleString() }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="text-[10px] text-gray-500 mt-1">
+                "Failed packs" are set-eligible packs opened before a user completed the set that yielded no new cToons from that set. Points for trades shown per-user above (initiator-side only). Auction point totals roll up into user totals.
+              </p>
             </div>
 
             <!-- User table -->
@@ -187,7 +254,7 @@
                   </tr>
                 </tbody>
               </table>
-              <p v-else class="text-gray-600 py-2">No users in this category for the selected week.</p>
+              <p v-else class="text-gray-600 py-2">No users in this category for the selected sets.</p>
             </div>
 
             <!-- Footnote shown when any visible user has an estimated cost -->
@@ -303,6 +370,29 @@ const filteredAllSetsUsers = computed(() => {
 const activeUsers = computed(() =>
   activeTab.value === 'one' ? filteredOneSetUsers.value : filteredAllSetsUsers.value
 )
+
+// Compute breakdown aggregate from filtered users (not from raw API breakdown,
+// since the minCtoons filter may exclude some users)
+const activeBreakdown = computed(() => {
+  const users = activeUsers.value
+  if (!users.length) return null
+  return users.reduce((acc, u) => ({
+    totalPoints: acc.totalPoints + u.pointsSpent,
+    totalTrades: acc.totalTrades + u.tradesUsed,
+    totalAuctions: acc.totalAuctions + u.auctionsWon,
+    totalCmartCount: acc.totalCmartCount + (u.cmartCount || 0),
+    totalCmartPoints: acc.totalCmartPoints + (u.cmartPoints || 0),
+    totalPackCount: acc.totalPackCount + (u.packCount || 0),
+    totalPackPoints: acc.totalPackPoints + (u.packPoints || 0),
+    totalFailedPackCount: acc.totalFailedPackCount + (u.failedPackCount || 0),
+    totalFailedPackPoints: acc.totalFailedPackPoints + (u.failedPackPoints || 0)
+  }), {
+    totalPoints: 0, totalTrades: 0, totalAuctions: 0,
+    totalCmartCount: 0, totalCmartPoints: 0,
+    totalPackCount: 0, totalPackPoints: 0,
+    totalFailedPackCount: 0, totalFailedPackPoints: 0
+  })
+})
 
 function filteredCompletedSets(u) {
   return u.completedSets.filter(s => filteredSetNames.value.has(s))
