@@ -34,7 +34,7 @@
             type="button"
             :disabled="loading"
             class="flex items-center gap-1 border rounded px-2 py-1 text-xs bg-amber-50 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            @click="fetchData"
+            @click="fetchData(true)"
           >
             <svg :class="['w-3 h-3', loading ? 'animate-spin' : '']" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -154,7 +154,7 @@ function setLastNDays(n) {
 const barCanvas = ref(null)
 let barChart = null
 
-async function fetchData() {
+async function fetchData(refresh = false) {
   if (!from.value || !to.value) return
   loading.value = true
   error.value = null
@@ -162,6 +162,7 @@ async function fetchData() {
     const params = new URLSearchParams({ start: from.value, end: to.value })
     if (selectedSet.value) params.set('set', selectedSet.value)
     if (selectedPack.value) params.set('packId', selectedPack.value)
+    if (refresh) params.set('refresh', '1')
 
     const data = await $fetch(`/api/admin/pack-analytics?${params.toString()}`)
 
