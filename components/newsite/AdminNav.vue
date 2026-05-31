@@ -78,7 +78,7 @@ const menus = [
       { id: 'winWheelLogs',       label: 'Win Wheel Logs',     to: '/newsite/admin/winWheelLogs' },
       { id: 'scavengerLogs',      label: 'Scavenger Logs',     to: '/newsite/admin/scavengerLogs' },
       { id: 'collectionAnalytics', label: 'Collection Analytics', to: '/newsite/admin/collectionAnalytics' },
-      { id: 'packAnalytics', label: 'Pack Analytics', to: '/newsite/admin/packAnalytics' }
+      { id: 'setAnalytics', label: 'Set Analytics', to: '/newsite/admin/setAnalytics' }
     ]
   }
 ]
