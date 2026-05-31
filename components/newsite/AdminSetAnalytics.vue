@@ -42,6 +42,9 @@
             Refresh
           </button>
         </form>
+        <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-3">
+          <strong>Note:</strong> <strong>Pack</strong> counts are only accurate as of May 31, 2026. Records prior to that date were not tracked and will show Pack as 0.
+        </p>
 
         <div v-if="loading" class="text-center py-6 text-gray-500">Loading…</div>
         <div v-else-if="error" class="text-red-600 py-4">{{ error }}</div>
@@ -158,6 +161,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -215,6 +219,7 @@ function initChart() {
   if (!barCanvas.value) return
   barChart = new Chart(barCanvas.value.getContext('2d'), {
     type: 'bar',
+    plugins: [ChartDataLabels],
     data: { labels: [], datasets: [] },
     options: {
       responsive: true,
@@ -222,18 +227,24 @@ function initChart() {
       scales: {
         x: {
           stacked: true,
-          ticks: { color: '#ffffff', font: { size: 10 } }
+          ticks: { color: '#374151', font: { size: 10 } }
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          ticks: { color: '#ffffff', font: { size: 10 } }
+          ticks: { color: '#374151', font: { size: 10 } }
         }
       },
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { color: '#ffffff', font: { size: 10 } }
+          labels: { color: '#374151', font: { size: 10 } }
+        },
+        datalabels: {
+          color: '#ffffff',
+          font: { size: 9, weight: 'bold' },
+          formatter: (value) => value > 0 ? value.toLocaleString() : null,
+          display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0
         }
       }
     }
