@@ -199,12 +199,25 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── 5. Attribution: CtoonOwnerLog (detect transfers vs direct mint) ───────
+  // ── 5. Attribution: CtoonOwnerLog (detect transfers vs original acquisition) ──
+  // A CtoonOwnerLog row is written on EVERY ownership event — including the
+  // initial mint / pack-open / direct purchase — not just transfers. So the
+  // mere presence of a log row does NOT mean the cToon was received for free.
+  // The ORIGINAL owner is the userId on the earliest log row for each userCtoon.
+  // If the current owner (a completer) is not that original owner, the cToon was
+  // transferred in (trade / auction / wishlist / admin) and no purchase points
+  // are attributed to them.
   const ownerLogs = await prisma.ctoonOwnerLog.findMany({
     where: { userCtoonId: { in: completerUcIds } },
-    select: { userCtoonId: true, userId: true }
+    select: { userCtoonId: true, userId: true, createdAt: true },
+    orderBy: { createdAt: 'asc' }
   })
-  const transferredUcIds = new Set(ownerLogs.map(l => l.userCtoonId))
+  const originalOwnerByUcId = new Map() // ucId → earliest-log userId
+  for (const log of ownerLogs) {
+    if (!originalOwnerByUcId.has(log.userCtoonId)) {
+      originalOwnerByUcId.set(log.userCtoonId, log.userId)
+    }
+  }
 
   // ── 6. Attribution: Auction wins ──────────────────────────────────────────
   const auctionWins = await prisma.auction.findMany({
@@ -333,33 +346,41 @@ export default defineEventHandler(async (event) => {
       if (auctionInfo && auctionInfo.winnerId === userId) {
         points += auctionInfo.bid
         auctions += 1
-      } else if (!transferredUcIds.has(ucId)) {
-        const uc = ucDetails.get(ucId)
-        if (uc?.userPackId) {
-          // Pack-acquired — count each pack's cost once even if it yielded multiple set cToons
-          if (!packsAccounted.has(uc.userPackId)) {
-            packsAccounted.add(uc.userPackId)
-            const packPricePaid = packPriceMap.get(uc.userPackId)
-            if (packPricePaid != null) {
-              points += packPricePaid
-            } else {
-              points += FALLBACK_PACK_PRICE
-              isEstimated = true
-            }
-          }
-        } else {
-          // Direct cmart purchase
-          if (uc?.pricePaid != null) {
-            points += uc.pricePaid
+        continue
+      }
+
+      // Transferred in (trade / wishlist / admin) → 0 additional purchase
+      // points; counted in trades. Detected by the original owner (earliest
+      // log row) differing from the current owner. No log → treat as an
+      // original acquisition by the current owner.
+      const originalOwner = originalOwnerByUcId.get(ucId)
+      const wasTransferred = originalOwner != null && originalOwner !== userId
+      if (wasTransferred) continue
+
+      const uc = ucDetails.get(ucId)
+      if (uc?.userPackId) {
+        // Pack-acquired — count each pack's cost once even if it yielded multiple set cToons
+        if (!packsAccounted.has(uc.userPackId)) {
+          packsAccounted.add(uc.userPackId)
+          const packPricePaid = packPriceMap.get(uc.userPackId)
+          if (packPricePaid != null) {
+            points += packPricePaid
           } else {
-            // Legacy record: fall back to rarity default price
-            const rarity = ctoonRarityMap.get(ctoonId)
-            points += rarityPrices[rarity] ?? 0
+            points += FALLBACK_PACK_PRICE
             isEstimated = true
           }
         }
+      } else {
+        // Direct cmart purchase
+        if (uc?.pricePaid != null) {
+          points += uc.pricePaid
+        } else {
+          // Legacy record: fall back to rarity default price
+          const rarity = ctoonRarityMap.get(ctoonId)
+          points += rarityPrices[rarity] ?? 0
+          isEstimated = true
+        }
       }
-      // transferred (trade / wishlist / lottery) → 0 additional points, counted in trades
     }
 
     userTotals.set(userId, {
