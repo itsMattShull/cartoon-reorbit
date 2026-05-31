@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  const { weekStart: weekStartParam } = getQuery(event)
+  const { weekStart: weekStartParam, refresh } = getQuery(event)
 
   let weekStart
   if (weekStartParam) {
@@ -64,10 +64,12 @@ export default defineEventHandler(async (event) => {
   // ── Cache check ───────────────────────────────────────────────────────────
   const weekKey = weekStart.toISOString().slice(0, 10)
   const cacheKey = `admin:collection-analytics:${weekKey}`
-  try {
-    const hit = await redis.get(cacheKey)
-    if (hit) return JSON.parse(hit)
-  } catch {}
+  if (!refresh) {
+    try {
+      const hit = await redis.get(cacheKey)
+      if (hit) return JSON.parse(hit)
+    } catch {}
+  }
 
   const TRACKED_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
 
