@@ -324,14 +324,29 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 10. Find set-eligible packs for "failed pack" tracking ───────────────
-  // A pack is "set-eligible" if it contains at least one weekly set cToon in its reward pool.
-  // Failed packs: set-eligible packs opened before the user completed all their sets
-  // that yielded no first-acquisition set cToons — these still represent acquisition costs.
-  const packCtoonLinks = await prisma.packCtoonOption.findMany({
-    where: { ctoonId: { in: allWeeklyCtoonIds } },
-    select: { packId: true }
-  })
-  const eligiblePackIds = [...new Set(packCtoonLinks.map(l => l.packId))]
+  // A pack is "set-eligible" if it could yield cToons from the selected sets.
+  // PackCtoonOption reflects the *current* pool and can change as rarities sell out
+  // or are rotated, so we use historical evidence as the primary signal: any pack
+  // definition that has actually minted a set cToon for any user at any time is
+  // definitively eligible. We supplement with the current PackCtoonOption config
+  // to catch newly added packs that haven't minted yet.
+  const [historicallyEligiblePacks, currentOptionPacks] = await Promise.all([
+    prisma.userPack.findMany({
+      where: {
+        mintedCtoons: { some: { ctoonId: { in: allWeeklyCtoonIds } } }
+      },
+      select: { packId: true }
+    }),
+    prisma.packCtoonOption.findMany({
+      where: { ctoonId: { in: allWeeklyCtoonIds } },
+      select: { packId: true }
+    })
+  ])
+  const eligiblePackDefIds = new Set([
+    ...historicallyEligiblePacks.map(up => up.packId),
+    ...currentOptionPacks.map(o => o.packId)
+  ])
+  const eligiblePackIds = [...eligiblePackDefIds]
 
   // Fetch all set-eligible UserPacks opened by completers (with known open time)
   const eligibleUserPacksRaw = eligiblePackIds.length > 0
