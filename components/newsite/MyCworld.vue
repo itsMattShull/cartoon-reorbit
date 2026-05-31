@@ -5,6 +5,7 @@
       <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
       <GreenButton @click="$router.push('/newsite/allCtoons')">All cToons</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
+      <GreenButton @click="$router.push('/newsite/leaderboards')">Leaderboards</GreenButton>
     </div>
     <div class="mcw-content">
       <CzoneContest />
@@ -41,8 +42,9 @@ function goToCzone() {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  height: var(--mcw-nav-height);
+  min-height: var(--mcw-nav-height);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .mcw-content {
