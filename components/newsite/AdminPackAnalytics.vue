@@ -76,7 +76,12 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="r in rarityBreakdown" :key="r.rarity" class="border-b hover:bg-gray-50">
+                  <tr
+                    v-for="r in rarityBreakdown"
+                    :key="r.rarity"
+                    class="border-b hover:bg-blue-50 cursor-pointer"
+                    @click="openRarityDetail(r.rarity)"
+                  >
                     <td class="px-1.5 py-1 text-gray-900">
                       <span class="inline-block w-3 h-3 rounded-sm mr-1.5 align-middle" :style="{ backgroundColor: colorFor(r.rarity) }"></span>
                       {{ capitalize(r.rarity) }}
@@ -100,11 +105,55 @@
         </template>
       </div>
     </div>
+
+    <!-- Rarity Detail Modal -->
+    <Teleport to="body">
+      <div
+        v-if="detailModal.open"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click.self="closeDetail"
+      >
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col text-xs text-gray-900">
+          <!-- Modal header -->
+          <div class="flex items-center justify-between px-4 py-3 border-b">
+            <h2 class="text-sm font-semibold">
+              <span class="inline-block w-3 h-3 rounded-sm mr-1.5 align-middle" :style="{ backgroundColor: colorFor(detailModal.rarity) }"></span>
+              {{ capitalize(detailModal.rarity) }} Ctoons
+              <span class="text-gray-500 font-normal ml-1">({{ detailModal.ctoons.length }} unique)</span>
+            </h2>
+            <button class="text-gray-500 hover:text-gray-800 text-lg leading-none" @click="closeDetail">&times;</button>
+          </div>
+
+          <!-- Modal body -->
+          <div class="overflow-y-auto p-4">
+            <div v-if="detailModal.loading" class="text-center py-8 text-gray-500">Loading…</div>
+            <div v-else-if="detailModal.error" class="text-red-600 py-4">{{ detailModal.error }}</div>
+            <div v-else-if="detailModal.ctoons.length === 0" class="text-gray-500 py-4 text-center">No ctoons found.</div>
+            <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+              <div
+                v-for="ctoon in detailModal.ctoons"
+                :key="ctoon.id"
+                class="flex flex-col items-center gap-1 p-2 rounded border bg-gray-50 hover:bg-gray-100"
+              >
+                <img
+                  :src="ctoon.assetPath"
+                  :alt="ctoon.name"
+                  class="w-16 h-16 object-contain"
+                  loading="lazy"
+                />
+                <span class="text-center text-[10px] text-gray-800 leading-tight">{{ ctoon.name }}</span>
+                <span class="text-[9px] text-gray-400">{{ ctoon.inCmart ? 'Shop' : 'PE' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js'
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
@@ -154,51 +203,12 @@ function setLastNDays(n) {
 const barCanvas = ref(null)
 let barChart = null
 
-async function fetchData(refresh = false) {
-  if (!from.value || !to.value) return
-  loading.value = true
-  error.value = null
-  try {
-    const params = new URLSearchParams({ start: from.value, end: to.value })
-    if (selectedSet.value) params.set('set', selectedSet.value)
-    if (selectedPack.value) params.set('packId', selectedPack.value)
-    if (refresh) params.set('refresh', '1')
-
-    const data = await $fetch(`/api/admin/pack-analytics?${params.toString()}`)
-
-    packsOpened.value = data.packsOpened ?? 0
-    rarityBreakdown.value = data.rarityBreakdown ?? []
-    sets.value = data.sets ?? []
-    packs.value = data.packs ?? []
-
-    if (barChart) {
-      barChart.data.labels = rarityBreakdown.value.map(r => capitalize(r.rarity))
-      barChart.data.datasets = [
-        { label: 'Shop', data: rarityBreakdown.value.map(r => r.shop), backgroundColor: '#3B82F6' },
-        { label: 'PE',   data: rarityBreakdown.value.map(r => r.pe),   backgroundColor: '#8B5CF6' }
-      ]
-      barChart.update()
-    }
-  } catch (err) {
-    error.value = err?.data?.statusMessage || err?.message || 'Failed to load analytics'
-  } finally {
-    loading.value = false
+function initChart() {
+  if (barChart) {
+    barChart.destroy()
+    barChart = null
   }
-}
-
-function applyFilters() {
-  if (!from.value || !to.value) return
-  if (new Date(from.value) > new Date(to.value)) {
-    const t = from.value
-    from.value = to.value
-    to.value = t
-  }
-  fetchData()
-}
-
-onMounted(() => {
-  setLastNDays(30)
-
+  if (!barCanvas.value) return
   barChart = new Chart(barCanvas.value.getContext('2d'), {
     type: 'bar',
     data: { labels: [], datasets: [] },
@@ -224,7 +234,82 @@ onMounted(() => {
       }
     }
   })
+}
 
+async function fetchData(refresh = false) {
+  if (!from.value || !to.value) return
+  loading.value = true
+  error.value = null
+  try {
+    const params = new URLSearchParams({ start: from.value, end: to.value })
+    if (selectedSet.value) params.set('set', selectedSet.value)
+    if (selectedPack.value) params.set('packId', selectedPack.value)
+    if (refresh) params.set('refresh', '1')
+
+    const data = await $fetch(`/api/admin/pack-analytics?${params.toString()}`)
+
+    packsOpened.value = data.packsOpened ?? 0
+    rarityBreakdown.value = data.rarityBreakdown ?? []
+    sets.value = data.sets ?? []
+    packs.value = data.packs ?? []
+  } catch (err) {
+    error.value = err?.data?.statusMessage || err?.message || 'Failed to load analytics'
+  } finally {
+    loading.value = false
+    // Re-init chart after DOM re-renders (canvas is inside v-else so it's recreated after loading)
+    await nextTick()
+    initChart()
+    if (barChart && rarityBreakdown.value.length) {
+      barChart.data.labels = rarityBreakdown.value.map(r => capitalize(r.rarity))
+      barChart.data.datasets = [
+        { label: 'Shop', data: rarityBreakdown.value.map(r => r.shop), backgroundColor: '#3B82F6' },
+        { label: 'PE',   data: rarityBreakdown.value.map(r => r.pe),   backgroundColor: '#8B5CF6' }
+      ]
+      barChart.update()
+    }
+  }
+}
+
+function applyFilters() {
+  if (!from.value || !to.value) return
+  if (new Date(from.value) > new Date(to.value)) {
+    const t = from.value
+    from.value = to.value
+    to.value = t
+  }
+  fetchData()
+}
+
+// Rarity detail modal
+const detailModal = ref({
+  open: false,
+  rarity: '',
+  loading: false,
+  error: null,
+  ctoons: []
+})
+
+async function openRarityDetail(rarity) {
+  detailModal.value = { open: true, rarity, loading: true, error: null, ctoons: [] }
+  try {
+    const params = new URLSearchParams({ start: from.value, end: to.value, rarity })
+    if (selectedSet.value) params.set('set', selectedSet.value)
+    if (selectedPack.value) params.set('packId', selectedPack.value)
+    const data = await $fetch(`/api/admin/pack-analytics-detail?${params.toString()}`)
+    detailModal.value.ctoons = data.ctoons ?? []
+  } catch (err) {
+    detailModal.value.error = err?.data?.statusMessage || err?.message || 'Failed to load detail'
+  } finally {
+    detailModal.value.loading = false
+  }
+}
+
+function closeDetail() {
+  detailModal.value.open = false
+}
+
+onMounted(() => {
+  setLastNDays(30)
   fetchData()
 })
 </script>
