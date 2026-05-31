@@ -4,6 +4,12 @@ import { redis } from '@/server/utils/redis'
 
 const CACHE_TTL_SECONDS = 86400 // 24 hours
 
+const FALLBACK_PACK_PRICE = 1500
+
+const HARDCODED_RARITY_PRICES = {
+  'Common': 100, 'Uncommon': 200, 'Rare': 400, 'Very Rare': 750, 'Crazy Rare': 1250
+}
+
 function lastMonday(from = new Date()) {
   const d = new Date(from)
   d.setUTCHours(0, 0, 0, 0)
@@ -92,13 +98,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Group by set name
-  const setMap = new Map() // setName → [{ id, name, price }]
-  const ctoonPriceMap = new Map() // ctoonId → price
+  // Group by set name; build rarity lookup for fallback pricing
+  const setMap = new Map() // setName → [{ id, name, price, rarity }]
+  const ctoonRarityMap = new Map() // ctoonId → rarity
   for (const c of weeklyCtoons) {
     if (!setMap.has(c.set)) setMap.set(c.set, [])
     setMap.get(c.set).push(c)
-    ctoonPriceMap.set(c.id, c.price)
+    ctoonRarityMap.set(c.id, c.rarity)
   }
   const setNames = [...setMap.keys()]
   const allWeeklyCtoonIds = weeklyCtoons.map(c => c.id)
@@ -113,12 +119,17 @@ export default defineEventHandler(async (event) => {
       id: true,
       userId: true,
       ctoonId: true,
+      userPackId: true,
+      pricePaid: true,
       user: { select: { username: true } }
     }
   })
 
   // userId → { username, ownedCtoonIds: Set, userCtoonByCtoonId: Map<ctoonId, ucId> }
   const userMap = new Map()
+  // ucId → { userPackId, pricePaid }
+  const ucDetails = new Map()
+
   for (const row of ownedRows) {
     if (!userMap.has(row.userId)) {
       userMap.set(row.userId, {
@@ -132,11 +143,10 @@ export default defineEventHandler(async (event) => {
       u.ownedCtoonIds.add(row.ctoonId)
       u.userCtoonByCtoonId.set(row.ctoonId, row.id) // first uc per ctoon
     }
+    ucDetails.set(row.id, { userPackId: row.userPackId, pricePaid: row.pricePaid })
   }
 
   // ── 3. Determine completers ───────────────────────────────────────────────
-  // oneSetCompleters: completed at least 1 of the weekly sets
-  // allSetsCompleters: completed every set released that week
   const oneSetCompleterIds = []
   const allSetsCompleterIds = []
   const userCompletedSetsMap = new Map() // userId → string[]
@@ -170,7 +180,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 4. Collect all relevant userCtoon IDs for completers ──────────────────
-  // Only the ONE userCtoon per ctoon per user (first acquired) that is part of a completed set
   const completerUcIds = []
   const ucIdToUserCtoon = new Map() // ucId → { userId, ctoonId }
 
@@ -193,7 +202,6 @@ export default defineEventHandler(async (event) => {
     where: { userCtoonId: { in: completerUcIds } },
     select: { userCtoonId: true, userId: true }
   })
-  // ucId → userId who this was transferred TO (if it was transferred)
   const transferredUcIds = new Set(ownerLogs.map(l => l.userCtoonId))
 
   // ── 6. Attribution: Auction wins ──────────────────────────────────────────
@@ -209,14 +217,12 @@ export default defineEventHandler(async (event) => {
       highestBid: true
     }
   })
-  // ucId → highestBid
   const auctionByUcId = new Map()
   for (const a of auctionWins) {
     auctionByUcId.set(a.userCtoonId, { bid: a.highestBid, winnerId: a.winnerId })
   }
 
   // ── 7. Attribution: Accepted trades ──────────────────────────────────────
-  // Find trades where a completer received a set cToon
   const acceptedTrades = await prisma.tradeOffer.findMany({
     where: {
       status: 'ACCEPTED',
@@ -240,9 +246,6 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // For each trade, determine if a set cToon was received by a completer
-  // tradeCount: userId → count of trades where they received a set cToon
-  // tradePoints: userId → points they paid as initiator with points+set cToon received
   const tradeCountByUser = new Map()
   const tradePointsByUser = new Map()
 
@@ -254,12 +257,10 @@ export default defineEventHandler(async (event) => {
       tc => tc.role === 'REQUESTED' && allWeeklyCtoonIds.includes(tc.userCtoon?.ctoonId)
     )
 
-    // Recipient got OFFERED set cToons
     if (offeredSetCtoons.length > 0 && oneSetCompleterIds.includes(offer.recipientId)) {
       tradeCountByUser.set(offer.recipientId, (tradeCountByUser.get(offer.recipientId) || 0) + 1)
     }
 
-    // Initiator got REQUESTED set cToons (and may have paid points)
     if (requestedSetCtoons.length > 0 && oneSetCompleterIds.includes(offer.initiatorId)) {
       tradeCountByUser.set(offer.initiatorId, (tradeCountByUser.get(offer.initiatorId) || 0) + 1)
       if (offer.pointsOffered > 0) {
@@ -271,9 +272,43 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── 8. Compute per-user totals ────────────────────────────────────────────
-  // pointsSpent: cmart (Ctoon.price) + auction wins (highestBid) + trade points offered
-  const userTotals = new Map() // userId → { points, trades, auctions }
+  // ── 8. Fetch rarity fallback prices from GlobalGameConfig ─────────────────
+  let rarityPrices = { ...HARDCODED_RARITY_PRICES }
+  try {
+    const cfg = await prisma.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { rarityDefaults: true }
+    })
+    if (cfg?.rarityDefaults) {
+      for (const [rarity, vals] of Object.entries(cfg.rarityDefaults)) {
+        if (vals?.price != null) rarityPrices[rarity] = vals.price
+      }
+    }
+  } catch {}
+
+  // ── 9. Fetch UserPack prices for pack-acquired set cToons ─────────────────
+  const packIdSet = new Set()
+  for (const ucId of completerUcIds) {
+    const uc = ucDetails.get(ucId)
+    if (uc?.userPackId) packIdSet.add(uc.userPackId)
+  }
+  const packPriceMap = new Map() // userPackId → pricePaid (Int | null)
+  if (packIdSet.size > 0) {
+    const userPacks = await prisma.userPack.findMany({
+      where: { id: { in: [...packIdSet] } },
+      select: { id: true, pricePaid: true }
+    })
+    for (const up of userPacks) {
+      packPriceMap.set(up.id, up.pricePaid)
+    }
+  }
+
+  // ── 10. Compute per-user totals ───────────────────────────────────────────
+  // pointsSpent sources (in priority order):
+  //   auction bid (exact) > direct cmart pricePaid (exact) > pack pricePaid (exact, deduplicated)
+  //   > rarity default fallback for direct (estimated*) > 1500 fallback for pack (estimated*)
+  //   trade points offered are added separately
+  const userTotals = new Map() // userId → { points, trades, auctions, isEstimated }
 
   for (const userId of oneSetCompleterIds) {
     const info = userMap.get(userId)
@@ -284,6 +319,10 @@ export default defineEventHandler(async (event) => {
 
     let points = tradePointsByUser.get(userId) || 0
     let auctions = 0
+    let isEstimated = false
+    // Track which packs have already been counted to avoid double-counting
+    // when multiple set cToons came from the same pack opening.
+    const packsAccounted = new Set()
 
     for (const [ctoonId, ucId] of info.userCtoonByCtoonId) {
       if (!completedCtoonIds.has(ctoonId)) continue
@@ -293,20 +332,43 @@ export default defineEventHandler(async (event) => {
         points += auctionInfo.bid
         auctions += 1
       } else if (!transferredUcIds.has(ucId)) {
-        // Direct mint (cmart / pack / code) — use published price as proxy
-        points += ctoonPriceMap.get(ctoonId) || 0
+        const uc = ucDetails.get(ucId)
+        if (uc?.userPackId) {
+          // Pack-acquired — count each pack's cost once even if it yielded multiple set cToons
+          if (!packsAccounted.has(uc.userPackId)) {
+            packsAccounted.add(uc.userPackId)
+            const packPricePaid = packPriceMap.get(uc.userPackId)
+            if (packPricePaid != null) {
+              points += packPricePaid
+            } else {
+              points += FALLBACK_PACK_PRICE
+              isEstimated = true
+            }
+          }
+        } else {
+          // Direct cmart purchase
+          if (uc?.pricePaid != null) {
+            points += uc.pricePaid
+          } else {
+            // Legacy record: fall back to rarity default price
+            const rarity = ctoonRarityMap.get(ctoonId)
+            points += rarityPrices[rarity] ?? 0
+            isEstimated = true
+          }
+        }
       }
-      // transferred without auction → trade (0 additional points, counted in trades)
+      // transferred (trade / wishlist / lottery) → 0 additional points, counted in trades
     }
 
     userTotals.set(userId, {
       points,
       trades: tradeCountByUser.get(userId) || 0,
-      auctions
+      auctions,
+      isEstimated
     })
   }
 
-  // ── 9. Build response arrays ──────────────────────────────────────────────
+  // ── 11. Build response arrays ─────────────────────────────────────────────
   function buildUserList(ids) {
     return ids.map(userId => {
       const info = userMap.get(userId)
@@ -316,6 +378,7 @@ export default defineEventHandler(async (event) => {
         username: info.username,
         completedSets: userCompletedSetsMap.get(userId),
         pointsSpent: totals.points,
+        pointsEstimated: totals.isEstimated,
         tradesUsed: totals.trades,
         auctionsWon: totals.auctions
       }

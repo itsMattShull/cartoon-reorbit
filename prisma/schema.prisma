@@ -314,6 +314,7 @@ model UserCtoon {
   createdAt      DateTime  @default(now())
   burnedAt       DateTime?
   userPackId     String?
+  pricePaid      Int?      // Points charged at purchase time; null for pack-origin, trade, reward, etc.
 
   user     User      @relation(fields: [userId], references: [id])
   ctoon    Ctoon     @relation(fields: [ctoonId], references: [id])
@@ -760,6 +761,7 @@ model UserPack {
   opened    Boolean   @default(false)
   openedAt  DateTime?
   createdAt DateTime  @default(now())
+  pricePaid Int?      // Effective points charged at purchase time; null for legacy records
 
   user         User       @relation(fields: [userId], references: [id])
   pack         Pack       @relation(fields: [packId], references: [id])

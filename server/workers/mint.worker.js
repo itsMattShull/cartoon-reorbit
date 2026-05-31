@@ -243,7 +243,11 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
 
       // 3) Create the UserCtoon with the atomic mintNumber
       const uc = await tx.userCtoon.create({
-        data: { userId, ctoonId, mintNumber, isFirstEdition, ...(userPackId ? { userPackId } : {}) },
+        data: {
+          userId, ctoonId, mintNumber, isFirstEdition,
+          ...(userPackId ? { userPackId } : {}),
+          pricePaid: isSpecial ? null : chargePrice
+        },
         select: { id: true, mintNumber: true }
       })
 

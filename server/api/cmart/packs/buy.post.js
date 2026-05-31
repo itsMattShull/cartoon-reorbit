@@ -162,12 +162,13 @@ export default defineEventHandler(async (event) => {
       data: { userId: me.id, points: effectivePackPrice, total: updated.points, method: "Bought Pack", direction: 'decrease' }
     })
 
-    // 6-b  create UserPack (sealed)
+    // 6-b  create UserPack (sealed) — record effective price paid at this moment
     const userPack = await tx.userPack.create({
       data: {
         userId: me.id,
         packId: pack.id,
-        opened: false
+        opened: false,
+        pricePaid: effectivePackPrice
       }
     })
 

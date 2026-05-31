@@ -70,11 +70,15 @@
                 <div class="text-[11px] text-purple-600">Completed All Sets</div>
               </div>
               <div class="bg-gray-50 rounded p-2 text-center">
-                <div class="text-lg font-bold text-gray-700">{{ avgPoints(data.oneSet.users) }}</div>
+                <div class="text-lg font-bold text-gray-700">
+                  {{ avgPoints(data.oneSet.users) }}<span v-if="data.oneSet.users.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
+                </div>
                 <div class="text-[11px] text-gray-500">Avg pts (1 set)</div>
               </div>
               <div class="bg-gray-50 rounded p-2 text-center">
-                <div class="text-lg font-bold text-gray-700">{{ avgPoints(data.allSets.users) }}</div>
+                <div class="text-lg font-bold text-gray-700">
+                  {{ avgPoints(data.allSets.users) }}<span v-if="data.allSets.users.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
+                </div>
                 <div class="text-[11px] text-gray-500">Avg pts (all sets)</div>
               </div>
             </div>
@@ -145,7 +149,9 @@
                   >
                     <td class="px-1.5 py-1 font-medium text-gray-900">{{ u.username }}</td>
                     <td class="px-1.5 py-1 text-gray-700">{{ u.completedSets.join(', ') }}</td>
-                    <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.pointsSpent.toLocaleString() }}</td>
+                    <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">
+                      {{ u.pointsSpent.toLocaleString() }}<span v-if="u.pointsEstimated" class="text-amber-500" title="Some costs estimated">*</span>
+                    </td>
                     <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.tradesUsed }}</td>
                     <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.auctionsWon }}</td>
                   </tr>
@@ -153,6 +159,12 @@
               </table>
               <p v-else class="text-gray-600 py-2">No users in this category for the selected week.</p>
             </div>
+
+            <!-- Footnote shown when any visible user has an estimated cost -->
+            <p v-if="activeUsers.some(u => u.pointsEstimated)" class="mt-1 text-[10px] text-amber-600">
+              * Points marked with an asterisk include estimated costs: rarity default prices for legacy direct purchases,
+              or {{ FALLBACK_PACK_PRICE.toLocaleString() }} pts per pack for purchases made before pack price tracking was added.
+            </p>
 
           </template>
         </template>
@@ -171,6 +183,8 @@ import {
 } from 'chart.js'
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend)
+
+const FALLBACK_PACK_PRICE = 1500
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
