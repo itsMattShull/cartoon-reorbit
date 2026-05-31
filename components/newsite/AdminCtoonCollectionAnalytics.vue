@@ -4,7 +4,7 @@
       <div class="bg-white rounded-lg shadow p-3">
         <h1 class="text-base font-semibold mb-2 text-gray-900">cToon Collection Analytics</h1>
 
-        <!-- Week picker -->
+        <!-- Controls row -->
         <div class="flex flex-wrap items-center gap-3 mb-3">
           <div class="flex items-center gap-1.5">
             <label for="weekStart" class="font-medium">Week starting (Monday):</label>
@@ -33,6 +33,17 @@
           <span v-if="weekEnd" class="text-gray-500">
             {{ formatDate(weekStartInput) }} – {{ formatDate(weekEnd) }}
           </span>
+
+          <div class="flex items-center gap-1.5 ml-auto">
+            <label for="minCtoons" class="font-medium whitespace-nowrap">Min cToons per set:</label>
+            <input
+              id="minCtoons"
+              v-model.number="minCtoons"
+              type="number"
+              min="1"
+              class="border rounded px-1.5 py-0.5 text-xs w-16"
+            />
+          </div>
         </div>
 
         <div v-if="loading" class="text-center py-6 text-gray-500">Loading…</div>
@@ -45,39 +56,47 @@
           </div>
 
           <template v-else>
-            <!-- Sets released this week -->
+            <!-- Sets released this week (filtered) -->
             <div class="mb-3">
-              <h2 class="text-sm font-semibold mb-1">Sets Released This Week</h2>
-              <div class="flex flex-wrap gap-2">
+              <h2 class="text-sm font-semibold mb-1">
+                Sets Released This Week
+                <span v-if="filteredSets.length < data.sets.length" class="text-[11px] font-normal text-gray-500">
+                  (showing {{ filteredSets.length }} of {{ data.sets.length }} with ≥{{ minCtoons }} cToons)
+                </span>
+              </h2>
+              <div v-if="filteredSets.length" class="flex flex-wrap gap-2">
                 <span
-                  v-for="s in data.sets"
+                  v-for="s in filteredSets"
                   :key="s.name"
                   class="inline-block bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-[11px]"
                 >
                   {{ s.name }} ({{ s.ctoonCount }} cToons)
                 </span>
               </div>
+              <p v-else class="text-gray-500 text-[11px]">
+                No sets have {{ minCtoons }}+ cToons this week.
+              </p>
             </div>
 
             <!-- Summary stats -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
               <div class="bg-green-50 rounded p-2 text-center">
-                <div class="text-lg font-bold text-green-700">{{ data.oneSet.count }}</div>
+                <div class="text-lg font-bold text-green-700">{{ filteredOneSetUsers.length }}</div>
                 <div class="text-[11px] text-green-600">Completed ≥1 Set</div>
               </div>
               <div class="bg-purple-50 rounded p-2 text-center">
-                <div class="text-lg font-bold text-purple-700">{{ data.allSets.count }}</div>
+                <div class="text-lg font-bold text-purple-700">{{ filteredAllSetsUsers.length }}</div>
                 <div class="text-[11px] text-purple-600">Completed All Sets</div>
               </div>
               <div class="bg-gray-50 rounded p-2 text-center">
                 <div class="text-lg font-bold text-gray-700">
-                  {{ avgPoints(data.oneSet.users) }}<span v-if="data.oneSet.users.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
+                  {{ avgPoints(filteredOneSetUsers) }}<span v-if="filteredOneSetUsers.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
                 </div>
                 <div class="text-[11px] text-gray-500">Avg pts (1 set)</div>
               </div>
               <div class="bg-gray-50 rounded p-2 text-center">
                 <div class="text-lg font-bold text-gray-700">
-                  {{ avgPoints(data.allSets.users) }}<span v-if="data.allSets.users.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
+                  {{ avgPoints(filteredAllSetsUsers) }}<span v-if="filteredAllSetsUsers.some(u => u.pointsEstimated)" class="text-amber-500" title="Includes estimated costs">*</span>
                 </div>
                 <div class="text-[11px] text-gray-500">Avg pts (all sets)</div>
               </div>
@@ -115,7 +134,7 @@
                 ]"
                 @click="activeTab = 'one'"
               >
-                ≥1 Set Completers ({{ data.oneSet.count }})
+                ≥1 Set Completers ({{ filteredOneSetUsers.length }})
               </button>
               <button
                 type="button"
@@ -125,7 +144,7 @@
                 ]"
                 @click="activeTab = 'all'"
               >
-                All Sets Completers ({{ data.allSets.count }})
+                All Sets Completers ({{ filteredAllSetsUsers.length }})
               </button>
             </div>
 
@@ -148,7 +167,7 @@
                     class="border-b hover:bg-gray-50"
                   >
                     <td class="px-1.5 py-1 font-medium text-gray-900">{{ u.username }}</td>
-                    <td class="px-1.5 py-1 text-gray-700">{{ u.completedSets.join(', ') }}</td>
+                    <td class="px-1.5 py-1 text-gray-700">{{ filteredCompletedSets(u).join(', ') }}</td>
                     <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">
                       {{ u.pointsSpent.toLocaleString() }}<span v-if="u.pointsEstimated" class="text-amber-500" title="Some costs estimated">*</span>
                     </td>
@@ -217,19 +236,66 @@ function addDays(ymd, n) {
   return toYMD(d)
 }
 
+function buildHistogram(users) {
+  const values = users.map(u => u.pointsSpent)
+  if (!values.length) return []
+  const max = Math.max(...values)
+  if (max === 0) return [{ label: '0–0', count: values.length }]
+  const raw = max / 10
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)))
+  const normalized = raw / magnitude
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10
+  const bucketSize = Math.max(1, nice * magnitude)
+  const buckets = []
+  for (let lo = 0; lo <= max; lo += bucketSize) {
+    const hi = lo + bucketSize
+    buckets.push({ label: `${lo}–${hi - 1}`, count: values.filter(v => v >= lo && v < hi).length })
+  }
+  while (buckets.length > 1 && buckets[buckets.length - 1].count === 0) buckets.pop()
+  return buckets
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 const weekStartInput = ref(toYMD(prevMonday()))
 const weekEnd = computed(() => addDays(weekStartInput.value, 6))
+const minCtoons = ref(19)
 
 const loading = ref(false)
 const error = ref(null)
 const data = ref(null)
 const activeTab = ref('one')
 
+// ── Filtered computed ─────────────────────────────────────────────────────────
+
+const filteredSets = computed(() => {
+  if (!data.value) return []
+  return data.value.sets.filter(s => s.ctoonCount >= minCtoons.value)
+})
+
+const filteredSetNames = computed(() => new Set(filteredSets.value.map(s => s.name)))
+
+const filteredOneSetUsers = computed(() => {
+  if (!data.value) return []
+  return data.value.oneSet.users.filter(u =>
+    u.completedSets.some(s => filteredSetNames.value.has(s))
+  )
+})
+
+const filteredAllSetsUsers = computed(() => {
+  if (!data.value) return []
+  return data.value.allSets.users.filter(u =>
+    u.completedSets.some(s => filteredSetNames.value.has(s))
+  )
+})
+
 const activeUsers = computed(() =>
-  activeTab.value === 'one' ? (data.value?.oneSet.users ?? []) : (data.value?.allSets.users ?? [])
+  activeTab.value === 'one' ? filteredOneSetUsers.value : filteredAllSetsUsers.value
 )
+
+function filteredCompletedSets(u) {
+  return u.completedSets.filter(s => filteredSetNames.value.has(s))
+}
 
 function avgPoints(users) {
   if (!users.length) return 0
@@ -296,13 +362,10 @@ function renderCharts() {
   destroyCharts()
   if (!data.value) return
   nextTick(() => {
-    const oneDist = data.value.oneSetPointsDistribution
-    const allDist = data.value.allSetsPointsDistribution
-
     if (oneSetCanvas.value) {
       oneSetChart = buildBarChart(
         oneSetCanvas.value,
-        oneDist,
+        buildHistogram(filteredOneSetUsers.value),
         'rgba(34, 197, 94, 0.7)',
         '≥1 Set Completers'
       )
@@ -310,7 +373,7 @@ function renderCharts() {
     if (allSetsCanvas.value) {
       allSetsChart = buildBarChart(
         allSetsCanvas.value,
-        allDist,
+        buildHistogram(filteredAllSetsUsers.value),
         'rgba(147, 51, 234, 0.7)',
         'All Sets Completers'
       )
@@ -349,6 +412,10 @@ onMounted(load)
 onBeforeUnmount(destroyCharts)
 
 watch(data, () => {
+  nextTick(renderCharts)
+})
+
+watch(minCtoons, () => {
   nextTick(renderCharts)
 })
 </script>
