@@ -1,8 +1,8 @@
 <template>
-  <div class="admin-collection-analytics bg-gray-50 text-xs">
+  <div class="admin-collection-analytics bg-gray-50 text-xs text-gray-900">
     <div class="p-2">
       <div class="bg-white rounded-lg shadow p-3">
-        <h1 class="text-base font-semibold mb-2">cToon Collection Analytics</h1>
+        <h1 class="text-base font-semibold mb-2 text-gray-900">cToon Collection Analytics</h1>
 
         <!-- Week picker -->
         <div class="flex flex-wrap items-center gap-3 mb-3">
@@ -79,6 +79,28 @@
               </div>
             </div>
 
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <div>
+                <h2 class="text-sm font-semibold mb-1 text-gray-900">Points Distribution — ≥1 Set Completers</h2>
+                <p class="text-[11px] text-gray-600 mb-1">
+                  Distribution of total points spent to collect at least one full set.
+                </p>
+                <div class="chart-container">
+                  <canvas ref="oneSetCanvas"></canvas>
+                </div>
+              </div>
+              <div>
+                <h2 class="text-sm font-semibold mb-1 text-gray-900">Points Distribution — All Sets Completers</h2>
+                <p class="text-[11px] text-gray-600 mb-1">
+                  Distribution of total points spent to collect every set released that week.
+                </p>
+                <div class="chart-container">
+                  <canvas ref="allSetsCanvas"></canvas>
+                </div>
+              </div>
+            </div>
+
             <!-- Tab toggle -->
             <div class="flex gap-1 mb-2">
               <button
@@ -104,15 +126,15 @@
             </div>
 
             <!-- User table -->
-            <div class="overflow-x-auto mb-4">
+            <div class="overflow-x-auto">
               <table v-if="activeUsers.length" class="min-w-full table-auto border-collapse text-[11px]">
                 <thead>
                   <tr class="bg-gray-100">
-                    <th class="px-1.5 py-1 text-left">User</th>
-                    <th class="px-1.5 py-1 text-left">Completed Sets</th>
-                    <th class="px-1.5 py-1 text-right">Points Spent</th>
-                    <th class="px-1.5 py-1 text-right">Trades Used</th>
-                    <th class="px-1.5 py-1 text-right">Auctions Won</th>
+                    <th class="px-1.5 py-1 text-left text-gray-900">User</th>
+                    <th class="px-1.5 py-1 text-left text-gray-900">Completed Sets</th>
+                    <th class="px-1.5 py-1 text-right text-gray-900">Points Spent</th>
+                    <th class="px-1.5 py-1 text-right text-gray-900">Trades Used</th>
+                    <th class="px-1.5 py-1 text-right text-gray-900">Auctions Won</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,37 +143,15 @@
                     :key="u.userId"
                     class="border-b hover:bg-gray-50"
                   >
-                    <td class="px-1.5 py-1 font-medium">{{ u.username }}</td>
-                    <td class="px-1.5 py-1 text-gray-600">{{ u.completedSets.join(', ') }}</td>
-                    <td class="px-1.5 py-1 text-right tabular-nums">{{ u.pointsSpent.toLocaleString() }}</td>
-                    <td class="px-1.5 py-1 text-right tabular-nums">{{ u.tradesUsed }}</td>
-                    <td class="px-1.5 py-1 text-right tabular-nums">{{ u.auctionsWon }}</td>
+                    <td class="px-1.5 py-1 font-medium text-gray-900">{{ u.username }}</td>
+                    <td class="px-1.5 py-1 text-gray-700">{{ u.completedSets.join(', ') }}</td>
+                    <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.pointsSpent.toLocaleString() }}</td>
+                    <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.tradesUsed }}</td>
+                    <td class="px-1.5 py-1 text-right tabular-nums text-gray-900">{{ u.auctionsWon }}</td>
                   </tr>
                 </tbody>
               </table>
-              <p v-else class="text-gray-500 py-2">No users in this category for the selected week.</p>
-            </div>
-
-            <!-- Charts -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div>
-                <h2 class="text-sm font-semibold mb-1">Points Distribution — ≥1 Set Completers</h2>
-                <p class="text-[11px] text-gray-500 mb-1">
-                  Distribution of total points spent to collect at least one full set.
-                </p>
-                <div class="chart-container">
-                  <canvas ref="oneSetCanvas"></canvas>
-                </div>
-              </div>
-              <div>
-                <h2 class="text-sm font-semibold mb-1">Points Distribution — All Sets Completers</h2>
-                <p class="text-[11px] text-gray-500 mb-1">
-                  Distribution of total points spent to collect every set released that week.
-                </p>
-                <div class="chart-container">
-                  <canvas ref="allSetsCanvas"></canvas>
-                </div>
-              </div>
+              <p v-else class="text-gray-600 py-2">No users in this category for the selected week.</p>
             </div>
 
           </template>
@@ -265,12 +265,12 @@ function buildBarChart(canvas, distribution, color, label) {
       },
       scales: {
         x: {
-          title: { display: true, text: 'Points Spent', font: { size: 10 } },
-          ticks: { font: { size: 10 } }
+          title: { display: true, text: 'Points Spent', font: { size: 10 }, color: '#111827' },
+          ticks: { font: { size: 10 }, color: '#111827' }
         },
         y: {
-          title: { display: true, text: 'Users', font: { size: 10 } },
-          ticks: { precision: 0, font: { size: 10 } },
+          title: { display: true, text: 'Users', font: { size: 10 }, color: '#111827' },
+          ticks: { precision: 0, font: { size: 10 }, color: '#111827' },
           beginAtZero: true
         }
       }
