@@ -281,7 +281,7 @@ import {
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend)
 
-const FALLBACK_PACK_PRICE = 1500
+const FALLBACK_PACK_PRICE = 1250
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
