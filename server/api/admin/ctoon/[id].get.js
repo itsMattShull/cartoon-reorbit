@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
         rarity: true, assetPath: true, releaseDate: true,
         price: true, inCmart: true, codeOnly: true,
         quantity: true, initialQuantity: true, perUserLimit: true,
-        characters: true,
+        characters: true, description: true, soundPath: true,
 
         // NEW G-toon fields
         isGtoon:    true,
@@ -33,6 +33,8 @@ export default defineEventHandler(async (event) => {
         // mint limit fields
         mintLimitType: true,
         mintEndDate: true,
+        timeBasedLimitCount: true,
+        timeBasedLimitWindowDays: true,
 
         // advisory schedule fields
         initialReleaseAt: true,
