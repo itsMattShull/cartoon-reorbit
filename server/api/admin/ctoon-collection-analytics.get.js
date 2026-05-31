@@ -63,13 +63,16 @@ export default defineEventHandler(async (event) => {
     if (hit) return JSON.parse(hit)
   } catch {}
 
+  const TRACKED_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
+
   // ── 1. Weekly cToons ─────────────────────────────────────────────────────
   const weeklyCtoons = await prisma.ctoon.findMany({
     where: {
       releaseDate: { gte: weekStart, lt: weekEnd },
-      set: { not: null }
+      set: { not: null },
+      rarity: { in: TRACKED_RARITIES }
     },
-    select: { id: true, set: true, name: true, price: true }
+    select: { id: true, set: true, name: true, price: true, rarity: true }
   })
 
   async function cacheAndReturn(result) {
