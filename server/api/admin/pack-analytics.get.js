@@ -1,5 +1,8 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 3600 // 1 hour
 
 function parseStartYMD(ymd) {
   if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
@@ -13,7 +16,7 @@ function parseEndYMD(ymd) {
   return isNaN(d.getTime()) ? null : d
 }
 
-const RARITIES = ['common', 'uncommon', 'rare', 'very rare']
+const RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -27,7 +30,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  const { start, end, packId, set } = getQuery(event)
+  const { start, end, packId, set, refresh } = getQuery(event)
 
   let endDate = (typeof end === 'string' && parseEndYMD(end)) || new Date()
   let startDate = (typeof start === 'string' && parseStartYMD(start)) || null
@@ -42,6 +45,17 @@ export default defineEventHandler(async (event) => {
     const tmp = startDate
     startDate = endDate
     endDate = tmp
+  }
+
+  const startKey = startDate.toISOString().slice(0, 10)
+  const endKey = endDate.toISOString().slice(0, 10)
+  const cacheKey = `admin:pack-analytics:${startKey}:${endKey}:${packId || 'all'}:${set || 'all'}`
+
+  if (!refresh) {
+    try {
+      const hit = await redis.get(cacheKey)
+      if (hit) return JSON.parse(hit)
+    } catch {}
   }
 
   // If filtering by pack, resolve the ctoon IDs for that pack
@@ -63,7 +77,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // Ctoon counts grouped by rarity × inCmart (shop vs PE) for each rarity
+  // Ctoon counts grouped by rarity × inCmart (shop vs pack-exclusive)
   const rarityBreakdown = await Promise.all(
     RARITIES.map(async (rarity) => {
       const ctoonWhere = {
@@ -105,7 +119,7 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
-  return {
+  const result = {
     start: startDate.toISOString(),
     end: endDate.toISOString(),
     packsOpened,
@@ -113,4 +127,8 @@ export default defineEventHandler(async (event) => {
     sets: setsRaw.map(s => s.set).filter(Boolean),
     packs
   }
+
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+
+  return result
 })
