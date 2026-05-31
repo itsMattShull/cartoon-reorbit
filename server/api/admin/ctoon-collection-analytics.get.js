@@ -4,7 +4,7 @@ import { redis } from '@/server/utils/redis'
 
 const CACHE_TTL_SECONDS = 86400 // 24 hours
 
-const FALLBACK_PACK_PRICE = 1500
+const FALLBACK_PACK_PRICE = 1250
 
 const HARDCODED_RARITY_PRICES = {
   'Common': 100, 'Uncommon': 200, 'Rare': 400, 'Very Rare': 750, 'Crazy Rare': 1250
