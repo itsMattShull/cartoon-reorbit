@@ -222,18 +222,18 @@ function initChart() {
       scales: {
         x: {
           stacked: true,
-          ticks: { color: '#111827', font: { size: 10 } }
+          ticks: { color: '#ffffff', font: { size: 10 } }
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          ticks: { color: '#111827', font: { size: 10 } }
+          ticks: { color: '#ffffff', font: { size: 10 } }
         }
       },
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { color: '#111827', font: { size: 10 } }
+          labels: { color: '#ffffff', font: { size: 10 } }
         }
       }
     }
