@@ -27,17 +27,19 @@
 
     <!-- Series -->
     <div>
+      <div class="cf-section-label">Series</div>
       <select class="cf-select" v-model="filter.series">
-        <option value="">All Series</option>
+        <option value=""></option>
         <option v-for="s in seriesList" :key="s" :value="s">{{ s }}</option>
       </select>
     </div>
 
     <!-- Set -->
     <div>
+      <div class="cf-section-label">Set</div>
       <select class="cf-select" v-model="filter.set">
-        <option value="">All Sets</option>
-        <option v-for="s in setList" :key="s" :value="s">{{ s }}</option>
+        <option value=""></option>
+        <option v-for="s in filteredSetList" :key="s" :value="s">{{ s }}</option>
       </select>
     </div>
 
@@ -141,6 +143,19 @@ const seriesList = computed(() =>
 const setList = computed(() =>
   [...new Set(ctoons.value.map(c => c.set).filter(Boolean))].sort()
 )
+
+const filteredSetList = computed(() => {
+  const src = filter.value.series
+    ? ctoons.value.filter(c => c.series === filter.value.series)
+    : ctoons.value
+  return [...new Set(src.map(c => c.set).filter(Boolean))].sort()
+})
+
+watch(() => filter.value.series, () => {
+  if (filter.value.set && !filteredSetList.value.includes(filter.value.set)) {
+    filter.value.set = ''
+  }
+})
 
 function toggleRarity(val) {
   const idx = filter.value.rarities.indexOf(val)
