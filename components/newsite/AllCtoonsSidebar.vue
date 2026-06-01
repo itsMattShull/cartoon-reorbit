@@ -17,6 +17,28 @@
 
     <hr class="acs-divider" />
 
+    <!-- Set filter -->
+    <div>
+      <div class="acs-label">Set</div>
+      <select class="acs-select acs-select-full" v-model="filter.set">
+        <option value="">All Sets</option>
+        <option v-for="s in meta.sets" :key="s" :value="s">{{ s }}</option>
+      </select>
+    </div>
+
+    <hr class="acs-divider" />
+
+    <!-- Series filter -->
+    <div>
+      <div class="acs-label">Series</div>
+      <select class="acs-select acs-select-full" v-model="filter.series">
+        <option value="">All Series</option>
+        <option v-for="s in meta.series" :key="s" :value="s">{{ s }}</option>
+      </select>
+    </div>
+
+    <hr class="acs-divider" />
+
     <!-- Search -->
     <div class="acs-search">
       <span class="acs-search-icon">&#9906;</span>
@@ -85,6 +107,7 @@
 <script setup>
 const activeTab = useAllCtoonsTab()
 const filter    = useAllCtoonsFilter()
+const meta      = useAllCtoonsMeta()
 
 const RARITIES = [
   { value: 'common',       label: 'C',  cls: 'acs-rb-common'        },
@@ -111,6 +134,8 @@ function clearFilters() {
     wishlist:  false,
     sortField: 'name',
     sortAsc:   true,
+    set:       '',
+    series:    '',
   })
 }
 </script>
@@ -270,6 +295,8 @@ function clearFilters() {
 }
 
 .acs-select option { background: #1a3a58; }
+
+.acs-select-full { width: 100%; }
 
 .acs-sort-dir {
   background: rgba(0, 0, 0, 0.25);
