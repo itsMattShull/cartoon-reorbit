@@ -78,6 +78,7 @@
 const { open: openCtoonModal } = useCtoonModal()
 const activeTab = useAllCtoonsTab()
 const filter    = useAllCtoonsFilter()
+const meta      = useAllCtoonsMeta()
 
 function openInfo(c) {
   openCtoonModal({ ctoonId: c.id, assetPath: c.assetPath, name: c.name })
@@ -155,7 +156,9 @@ const filteredCtoons = computed(() => {
       ? true
       : f.owned === 'owned' ? c.isOwned : !c.isOwned
     const w  = !f.wishlist || wishlist.value.includes(c.id)
-    return nm && r && o && w
+    const st = !f.set    || c.set    === f.set
+    const sr = !f.series || c.series === f.series
+    return nm && r && o && w && st && sr
   })
 })
 
@@ -221,6 +224,9 @@ onMounted(async () => {
         sortAsc:   String(filter.value.sortAsc),
       }
     })
+    const sets   = [...new Set(allCtoons.value.map(c => c.set).filter(Boolean))].sort()
+    const series = [...new Set(allCtoons.value.map(c => c.series).filter(Boolean))].sort()
+    meta.value = { sets, series }
   } catch (err) {
     console.error('AllCtoons: failed to load', err)
   } finally {

@@ -5,4 +5,6 @@ export const useAllCtoonsFilter = () => useState('allCtoonsFilter', () => ({
   wishlist:  false,
   sortField: 'name',
   sortAsc:   true,
+  set:       '',
+  series:    '',
 }))
