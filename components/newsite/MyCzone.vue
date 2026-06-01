@@ -10,6 +10,14 @@
         <NuxtLink v-else-if="viewedUsername" :to="`/newsite/trade?username=${encodeURIComponent(viewedUsername)}`" style="text-decoration:none;display:contents;">
           <OrangeButton>Trade</OrangeButton>
         </NuxtLink>
+        <template v-if="!isOwnZone && viewedUsername">
+          <OrangeButton class="cz-wl-btn" @click="openWishlistModal">
+            Wishlist ({{ wishlistCountDisplay }})
+          </OrangeButton>
+          <OrangeButton class="cz-wl-btn" @click="openTradeListModal">
+            Trade List ({{ tradeListCountDisplay }})
+          </OrangeButton>
+        </template>
         <template v-for="(zone, i) in cz.zones" :key="i">
           <button
             v-if="!zoneLoading && (cz.buildMode || zone.toons.length > 0)"
@@ -171,6 +179,81 @@
         </div>
       </transition>
 
+      <!-- ── Wishlist modal ── -->
+      <transition name="cz-fade">
+        <div v-if="wishlistModalVisible" class="cz-modal-overlay" @click.self="closeWishlistModal">
+          <div class="cz-modal">
+            <div class="cz-modal-header">
+              <span>🎁 {{ viewedOwner?.username }}'s Wishlist</span>
+              <button class="cz-modal-close" @click="closeWishlistModal">✕</button>
+            </div>
+            <div class="cz-modal-body">
+              <div v-if="isLoadingWishlist" class="cz-modal-loading">Loading…</div>
+              <div v-else-if="!wishlistItems.length" class="cz-modal-empty">No cToons on their wishlist.</div>
+              <div v-else class="cz-wl-grid">
+                <div v-for="item in wishlistItems" :key="item.id" class="cz-wl-card">
+                  <img :src="item.ctoon.assetPath" :alt="item.ctoon.name" class="cz-wl-img" />
+                  <p class="cz-wl-name">{{ item.ctoon.name }}</p>
+                  <p class="cz-wl-pts">Offer: {{ item.offeredPoints.toLocaleString() }} pts</p>
+                  <p class="cz-wl-owned">
+                    You own: {{ item.viewerOwnedCount || 0 }} {{ (item.viewerOwnedCount || 0) === 1 ? 'copy' : 'copies' }}
+                  </p>
+                  <p v-if="(item.viewerOwnedCount || 0) > 0 && item.viewerTradeMintNumber != null" class="cz-wl-mint">
+                    Send your highest mint: #{{ item.viewerTradeMintNumber }}
+                  </p>
+                  <p v-else-if="(item.viewerOwnedCount || 0) > 0" class="cz-wl-mint">
+                    Highest mint to trade: none (newest copy sent)
+                  </p>
+                  <p v-else class="cz-wl-mint cz-wl-mint--disabled">
+                    Trade disabled: you do not own this cToon.
+                  </p>
+                  <button
+                    class="cz-wl-trade-btn"
+                    :class="{ 'cz-wl-trade-btn--confirm': wishlistConfirmingId === item.id }"
+                    :disabled="!item.hasEnough || !(item.viewerOwnedCount || 0) || isProcessingWishlistTrade"
+                    @click="onWishlistTradeClick(item)"
+                  >
+                    {{ wishlistConfirmingId === item.id ? 'Confirm Trade?' : `Trade for ${item.offeredPoints.toLocaleString()} pts` }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- ── Trade list modal ── -->
+      <transition name="cz-fade">
+        <div v-if="tradeListModalVisible" class="cz-modal-overlay" @click.self="closeTradeListModal">
+          <div class="cz-modal">
+            <div class="cz-modal-header">
+              <span>{{ viewedOwner?.username }}'s Trade List</span>
+              <button class="cz-modal-close" @click="closeTradeListModal">✕</button>
+            </div>
+            <div class="cz-modal-body">
+              <div v-if="isLoadingTradeList" class="cz-modal-loading">Loading…</div>
+              <div v-else-if="!tradeListItems.length" class="cz-modal-empty">No cToons on their trade list.</div>
+              <div v-else>
+                <p class="cz-tl-hint">Click a cToon to start a trade.</p>
+                <div class="cz-wl-grid">
+                  <div
+                    v-for="item in tradeListItems"
+                    :key="item.userCtoonId"
+                    class="cz-wl-card cz-wl-card--clickable"
+                    @click="goToTradeWithCtoon(item)"
+                  >
+                    <img :src="item.assetPath" :alt="item.name" class="cz-wl-img" />
+                    <p class="cz-wl-name">{{ item.name }}</p>
+                    <p class="cz-wl-pts">{{ item.rarity }}</p>
+                    <p class="cz-wl-owned">Mint #{{ item.mintNumber ?? 'N/A' }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- ── cZone Search: toast ── -->
       <transition name="cz-fade">
         <div v-if="searchToast.visible" class="cz-search-toast" :class="searchToast.type">
@@ -228,7 +311,7 @@ function toonH(t) { return (t.height || TOON_SIZE) * (t.sizeScale || 1) }
 function canvasW() { return CANVAS_W }
 function canvasH() { return CANVAS_H }
 
-const { user } = useAuth()
+const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
 const { open: openCtoonModal } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
@@ -493,6 +576,122 @@ async function captureGlitchItem() {
   stopGlitchEffect()
 }
 
+// ── Wishlist state ────────────────────────────────────────────
+const wishlistModalVisible      = ref(false)
+const wishlistItems             = ref([])
+const isLoadingWishlist         = ref(false)
+const wishlistCount             = ref(0)
+const isLoadingWishlistCount    = ref(false)
+const wishlistConfirmingId      = ref(null)
+const isProcessingWishlistTrade = ref(false)
+let   wishlistConfirmTimer      = null
+
+// ── Trade list state ──────────────────────────────────────────
+const tradeListModalVisible = ref(false)
+const tradeListItems        = ref([])
+const isLoadingTradeList    = ref(false)
+const tradeListCount        = ref(0)
+
+const wishlistCountDisplay = computed(() => {
+  if (isLoadingWishlistCount.value) return '…'
+  return String(wishlistCount.value)
+})
+const tradeListCountDisplay = computed(() => {
+  if (isLoadingTradeList.value) return '…'
+  return String(tradeListCount.value)
+})
+
+async function loadWishlistCount(username) {
+  isLoadingWishlistCount.value = true
+  try {
+    const res = await $fetch(`/api/wishlist/users/${username}/count`)
+    wishlistCount.value = Number(res?.count ?? 0)
+  } catch {
+    wishlistCount.value = 0
+  } finally {
+    isLoadingWishlistCount.value = false
+  }
+}
+
+async function loadWishlistItems(username) {
+  isLoadingWishlist.value = true
+  try {
+    wishlistItems.value = await $fetch(`/api/wishlist/users/${username}`)
+    wishlistCount.value = wishlistItems.value.length
+  } catch {
+    wishlistItems.value = []
+  } finally {
+    isLoadingWishlist.value = false
+  }
+}
+
+async function loadTradeListItems(username) {
+  isLoadingTradeList.value = true
+  try {
+    tradeListItems.value = await $fetch(`/api/trade-list/users/${username}`)
+    tradeListCount.value = tradeListItems.value.length
+  } catch {
+    tradeListItems.value = []
+  } finally {
+    isLoadingTradeList.value = false
+  }
+}
+
+function openWishlistModal() {
+  wishlistModalVisible.value = true
+  if (viewedUsername.value) loadWishlistItems(viewedUsername.value)
+}
+function closeWishlistModal() {
+  wishlistModalVisible.value = false
+  wishlistConfirmingId.value = null
+  if (wishlistConfirmTimer) { clearTimeout(wishlistConfirmTimer); wishlistConfirmTimer = null }
+}
+
+function openTradeListModal() {
+  tradeListModalVisible.value = true
+  if (viewedUsername.value && !tradeListItems.value.length) loadTradeListItems(viewedUsername.value)
+}
+function closeTradeListModal() {
+  tradeListModalVisible.value = false
+}
+
+function onWishlistTradeClick(item) {
+  if (!item.hasEnough || !(item.viewerOwnedCount || 0) || isProcessingWishlistTrade.value) return
+  if (wishlistConfirmingId.value !== item.id) {
+    wishlistConfirmingId.value = item.id
+    if (wishlistConfirmTimer) clearTimeout(wishlistConfirmTimer)
+    wishlistConfirmTimer = setTimeout(() => {
+      wishlistConfirmingId.value = null
+    }, 5000)
+  } else {
+    if (wishlistConfirmTimer) { clearTimeout(wishlistConfirmTimer); wishlistConfirmTimer = null }
+    wishlistConfirmingId.value = null
+    executeWishlistTrade(item)
+  }
+}
+
+async function executeWishlistTrade(item) {
+  isProcessingWishlistTrade.value = true
+  try {
+    wishlistItems.value = wishlistItems.value.filter(w => w.id !== item.id)
+    wishlistCount.value = Math.max(0, wishlistCount.value - 1)
+    await $fetch(`/api/wishlist/accept/${item.id}`, { method: 'POST', body: { wishlistItemId: item.id } })
+    showSearchToast('Trade completed!', 'success')
+    await fetchSelf({ force: true })
+    if (wishlistModalVisible.value && viewedUsername.value) await loadWishlistItems(viewedUsername.value)
+  } catch (err) {
+    showSearchToast(err?.data?.message || 'Failed to complete trade.', 'error')
+    if (viewedUsername.value) await loadWishlistItems(viewedUsername.value)
+  } finally {
+    isProcessingWishlistTrade.value = false
+  }
+}
+
+function goToTradeWithCtoon(item) {
+  closeTradeListModal()
+  router.push(`/newsite/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
+}
+
 const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
@@ -580,6 +779,19 @@ async function loadZone(username) {
 
     if (user.value && data.ownerId && data.ownerId !== user.value.id) {
       $fetch('/api/points/visit', { method: 'POST', body: { zoneOwnerId: data.ownerId } }).catch(() => {})
+      // Reset and reload counts for the new zone owner
+      wishlistCount.value  = 0
+      tradeListCount.value = 0
+      wishlistItems.value  = []
+      tradeListItems.value = []
+      loadWishlistCount(target)
+      loadTradeListItems(target)
+    } else {
+      // Own zone or no user — clear visitor state
+      wishlistCount.value  = 0
+      tradeListCount.value = 0
+      wishlistItems.value  = []
+      tradeListItems.value = []
     }
   } catch (e) {
     console.error('MyCzone: failed to load zone', e)
@@ -1172,6 +1384,157 @@ defineExpose({ save, clearZone })
   margin: 0 -1px;
 }
 .cz-nav-btn:hover { opacity: 1; }
+
+/* ── Wishlist / Trade List buttons (topbar) ── */
+.cz-wl-btn {
+  font-size: 0.65rem;
+}
+
+/* ── Shared modal overlay + shell ── */
+.cz-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9980;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.cz-modal {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #111;
+}
+
+.cz-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--OrbitDarkBlue);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.cz-modal-close {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+.cz-modal-close:hover { color: #fff; }
+
+.cz-modal-body {
+  overflow-y: auto;
+  padding: 12px;
+  flex: 1;
+}
+
+.cz-modal-loading,
+.cz-modal-empty {
+  text-align: center;
+  color: #666;
+  font-size: 0.8rem;
+  padding: 24px 0;
+}
+
+/* ── Wishlist / Trade List grid ── */
+.cz-wl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.cz-wl-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 8px 6px;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.cz-wl-card--clickable {
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.cz-wl-card--clickable:hover {
+  background: #f0f4ff;
+  border-color: var(--OrbitDarkBlue);
+}
+
+.cz-wl-img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  margin-bottom: 5px;
+}
+
+.cz-wl-name  { font-weight: 600; font-size: 0.72rem; margin: 2px 0; }
+.cz-wl-pts   { color: #444; margin: 1px 0; }
+.cz-wl-owned { color: #555; margin: 1px 0; }
+.cz-wl-mint  { color: #555; margin: 1px 0; font-size: 0.67rem; }
+.cz-wl-mint--disabled { color: #e53e3e; }
+
+.cz-tl-hint {
+  font-size: 0.72rem;
+  color: #666;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+/* ── Wishlist trade buttons ── */
+.cz-wl-trade-btn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #fff;
+  background: #f47b00;
+  border: 2px solid #c05a00;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cz-wl-trade-btn:hover:not(:disabled):not(.cz-wl-trade-btn--confirm) {
+  filter: brightness(1.1);
+}
+.cz-wl-trade-btn--confirm {
+  background: #16a34a;
+  border-color: #15803d;
+  animation: cz-confirm-pulse 0.9s ease-in-out infinite;
+}
+.cz-wl-trade-btn--confirm:hover { filter: brightness(1.1); }
+.cz-wl-trade-btn:disabled {
+  background: #9ca3af;
+  border-color: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+@keyframes cz-confirm-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(22,163,74,0); }
+}
 </style>
 
 <style>
