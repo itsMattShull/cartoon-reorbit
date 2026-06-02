@@ -308,16 +308,21 @@ const MAIN_CONTENT_HEIGHT = 669
 const scale = ref(1)
 const isMobile = ref(false)
 
+// Captured once on mount (assumed to be at 100% zoom). devicePixelRatio is the
+// only cross-browser API that reliably reflects browser zoom; outerWidth includes
+// browser chrome in Firefox, making outerWidth/innerWidth an inaccurate zoom proxy there.
+let baseDPR = null
+
 const computeLayout = () => {
-  // outerWidth is not affected by browser zoom, so zooming doesn't trigger
-  // mobile layout or recalculate the CSS scale transform
-  isMobile.value = window.outerWidth < MOBILE_BREAKPOINT
+  if (baseDPR === null) baseDPR = window.devicePixelRatio
+  const zoomFactor = window.devicePixelRatio / baseDPR
+  const effectiveWidth = Math.round(window.innerWidth * zoomFactor)
+  const effectiveHeight = Math.round(window.innerHeight * zoomFactor)
+
+  isMobile.value = effectiveWidth < MOBILE_BREAKPOINT
   if (!isMobile.value) {
-    const scaleX = (window.outerWidth - SITE_PADDING) / SITE_WIDTH
-    // Infer zoom factor from outerWidth/innerWidth to get the unzoomed height
-    const zoomFactor = window.innerWidth > 0 ? window.outerWidth / window.innerWidth : 1
-    const unzoomedHeight = window.innerHeight * zoomFactor
-    const scaleY = (unzoomedHeight - SITE_PADDING) / SITE_HEIGHT
+    const scaleX = (effectiveWidth - SITE_PADDING) / SITE_WIDTH
+    const scaleY = (effectiveHeight - SITE_PADDING) / SITE_HEIGHT
     scale.value = Math.min(scaleX, scaleY, 1)
   }
 }

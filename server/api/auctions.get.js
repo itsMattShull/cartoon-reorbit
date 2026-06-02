@@ -38,8 +38,7 @@ export default defineEventHandler(async (event) => {
       _count: { select: { bids: true } }
     },
     orderBy: [
-      { isFeatured: 'desc' }, // featured first
-      { endAt: 'asc' }        // then soonest-ending
+      { endAt: 'asc' }
     ]
   })
 
@@ -62,15 +61,8 @@ export default defineEventHandler(async (event) => {
   const ownedSet = new Set(owned.map(u => u.ctoonId))
   const holidaySet = new Set(holidayItems.map(h => h.ctoonId))
 
-  // 4) Ensure featured items are first (defensive in case DB ordering changes)
-  const ordered = auctions.slice().sort((a, b) => {
-    const fb = (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0)
-    if (fb !== 0) return fb
-    return new Date(a.endAt) - new Date(b.endAt)
-  })
-
-  // 5) Shape for client
-  return ordered.map(a => ({
+  // 4) Shape for client
+  return auctions.map(a => ({
     id:           a.id,
     isFeatured:   a.isFeatured,
     userCtoonId:  encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber),
