@@ -131,6 +131,7 @@
                 <template v-if="!isEnded(item.endAt)">{{ formatRemaining(item.endAt) }}</template>
                 <template v-else>Ended</template>
               </div>
+              <span v-if="item.isFeatured" class="ah-card-featured-tag">Featured</span>
               <span
                 v-if="activeTab === 'current'"
                 class="ah-own-badge ah-card-own-badge"
@@ -840,6 +841,22 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   pointer-events: none;
 }
 .ah-card-time-badge.ended { color: rgba(255,255,255,0.45); }
+
+.ah-card-featured-tag {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.48rem;
+  font-weight: bold;
+  background: #fbbf24;
+  color: #000;
+  padding: 1px 5px;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 
 .ah-card-middle {
   position: relative;
