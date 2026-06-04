@@ -20,7 +20,7 @@
       <div class="adet-top">
 
         <!-- cToon image -->
-        <div class="adet-img-wrap">
+        <div class="adet-img-wrap adet-img-clickable" @click="openInfoModal">
           <img class="adet-img" :src="auction.ctoon.assetPath" :alt="auction.ctoon.name" draggable="false" />
           <div v-if="ended" class="adet-ended-badge">Ended</div>
         </div>
@@ -134,6 +134,7 @@ defineEmits(['back'])
 const { user, fetchSelf } = useAuth()
 const config  = useRuntimeConfig()
 const scavenger = useScavengerHunt()
+const { open: openCtoonModal } = useCtoonModal()
 
 const loading  = ref(true)
 const auction  = ref({ ctoon: {}, winnerUsername: null, endAt: null, highestBid: 0, initialBet: 0 })
@@ -225,6 +226,15 @@ async function loadAuction() {
 }
 
 // ── Actions ───────────────────────────────────────────────────────
+function openInfoModal() {
+  openCtoonModal({
+    ctoonId:     auction.value.ctoon.id         || null,
+    userCtoonId: auction.value.ctoon.userCtoonId || null,
+    assetPath:   auction.value.ctoon.assetPath   || null,
+    name:        auction.value.ctoon.name        || null,
+  })
+}
+
 async function placeBid() {
   if (!canBid.value) return
   try {
@@ -409,6 +419,8 @@ onUnmounted(() => {
   flex-shrink: 0;
   width: 120px;
 }
+
+.adet-img-clickable { cursor: pointer; }
 
 .adet-img {
   width: 120px;
