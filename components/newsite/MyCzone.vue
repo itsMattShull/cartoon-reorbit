@@ -115,14 +115,14 @@
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
-      <GreenButton class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
+      <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
           <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
         </template>
       </div>
-      <div class="cz-nav-buttons">
+      <div v-show="!cz.buildMode" class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
         <img src="/images/newsite/one_left.gif"  class="cz-nav-btn" title="Previous"    draggable="false" @click="navigate('previous')"   />
         <img src="/images/newsite/rand.gif"      class="cz-nav-btn" title="Random"      draggable="false" @click="navigate('random')"     />
@@ -192,7 +192,11 @@
               <div v-else-if="!wishlistItems.length" class="cz-modal-empty">No cToons on their wishlist.</div>
               <div v-else class="cz-wl-grid">
                 <div v-for="item in wishlistItems" :key="item.id" class="cz-wl-card">
-                  <img :src="item.ctoon.assetPath" :alt="item.ctoon.name" class="cz-wl-img" />
+                  <img
+                    :src="item.ctoon.assetPath" :alt="item.ctoon.name"
+                    class="cz-wl-img cz-wl-img--clickable"
+                    @click="openCtoonModal({ ctoonId: item.ctoon.id, assetPath: item.ctoon.assetPath, name: item.ctoon.name })"
+                  />
                   <p class="cz-wl-name">{{ item.ctoon.name }}</p>
                   <p class="cz-wl-pts">Offer: {{ item.offeredPoints.toLocaleString() }} pts</p>
                   <p class="cz-wl-owned">
@@ -1487,6 +1491,9 @@ defineExpose({ save, clearZone })
   image-rendering: pixelated;
   margin-bottom: 5px;
 }
+
+.cz-wl-img--clickable { cursor: pointer; }
+.cz-wl-img--clickable:hover { filter: brightness(1.1); }
 
 .cz-wl-name  { font-weight: 600; font-size: 0.72rem; margin: 2px 0; }
 .cz-wl-pts   { color: #444; margin: 1px 0; }
