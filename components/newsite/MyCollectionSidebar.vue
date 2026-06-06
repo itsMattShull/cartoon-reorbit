@@ -1,8 +1,10 @@
 <template>
-  <CtoonFilter :sort-options="myCollectionSortOptions" />
+  <CtoonFilter :sort-options="myCollectionSortOptions" :source-ctoons="myCtoons" />
 </template>
 
 <script setup>
+const myCtoons = useState('myCollectionCtoons', () => [])
+
 const myCollectionSortOptions = [
   { value: 'acquiredDate', label: 'Acquired Date' },
   { value: 'mintNumber',   label: 'Mint #'        },
