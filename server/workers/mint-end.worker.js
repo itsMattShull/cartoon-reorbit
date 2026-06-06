@@ -40,12 +40,14 @@ const worker = new Worker(
       return
     }
 
-    // Load rarity defaults (merge hardcoded with DB overrides)
+    // Load rarity defaults and global release settings in one query
     let rarityDefaultQty = null
+    let initialReleasePercent = 75
     try {
       const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
       const merged = { ...DEFAULTS, ...(cfg?.rarityDefaults || {}) }
       rarityDefaultQty = merged[ctoon.rarity]?.totalQuantity ?? null
+      if (typeof cfg?.initialReleasePercent === 'number') initialReleasePercent = cfg.initialReleasePercent
     } catch {
       rarityDefaultQty = DEFAULTS[ctoon.rarity]?.totalQuantity ?? null
     }
@@ -60,17 +62,22 @@ const worker = new Worker(
       finalQuantity = highestMint
     }
 
+    const finalInitialReleaseQty = Math.max(1, Math.floor((finalQuantity * initialReleasePercent) / 100))
+
     await prisma.ctoon.update({
       where: { id: ctoonId },
       data: {
         quantity: finalQuantity,
         initialQuantity: finalQuantity,
+        initialReleaseQty: finalInitialReleaseQty,
+        finalReleaseQty: finalQuantity,
       },
     })
 
     console.log(
       `[mint-end] cToon ${ctoonId} mint window closed. ` +
-      `totalMinted=${highestMint}, rarityDefault=${rarityDefaultQty}, finalQuantity=${finalQuantity}`
+      `totalMinted=${highestMint}, rarityDefault=${rarityDefaultQty}, finalQuantity=${finalQuantity}, ` +
+      `initialReleaseQty=${finalInitialReleaseQty}`
     )
   },
   { connection }

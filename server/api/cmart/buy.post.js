@@ -84,9 +84,10 @@ export default defineEventHandler(async (event) => {
     const isTimeBased = ctoon.mintLimitType === 'timeBased'
 
     if (!isUnlimited) {
-      if (isTimeBased && ctoon.quantity === TIME_BASED_CAP) {
-        // Time-based cToon still in minting window — skip two-phase logic,
-        // the safety cap (999999999) is effectively unlimited
+      if (isTimeBased) {
+        // Time-based cToons never use two-phase logic — during the window the
+        // sentinel (999999999) is effectively unlimited; after the window closes
+        // the finalized quantity is enforced by the sold-out check below.
       } else {
         // Standard two-phase logic for defined-limit cToons
         let initialPercent = 75
