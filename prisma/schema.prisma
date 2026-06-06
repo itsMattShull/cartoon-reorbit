@@ -721,6 +721,7 @@ model Pack {
   scheduledOffAt     DateTime?
   sellOutBehavior    PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
   dailyPurchaseLimit Int?
+  maxBuysPerUser     Int?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -968,6 +969,11 @@ model GlobalGameConfig {
   featuredAuctionsPerSlot      Int      @default(1)      // auctions created per slot
   featuredAuctionLastFiredSlot String?                   // idempotency key e.g. "2026-03-30-08"
   cmartHalfPriceEnabled        Boolean  @default(false)   // halves cToon and pack prices in cMart
+  // Pack price decay settings
+  packPriceDecayAmount         Int      @default(100)     // points to drop per decay period
+  packPriceDecayDays           Int      @default(7)       // days between each price drop
+  packPriceFloor               Int      @default(700)     // minimum price after decay
+  packMaxDefaultBuysPerUser    Int      @default(5)       // default maxBuysPerUser set on new packs
   // Per-rarity time-based purchase limits: { "Common": { "count": 5, "windowDays": null }, ... }
   // windowDays null = full release window (releaseDate → mintEndDate)
   timeBasedPurchaseLimits      Json?
