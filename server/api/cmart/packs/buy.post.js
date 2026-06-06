@@ -95,21 +95,42 @@ export default defineEventHandler(async (event) => {
   const [pack, userPts, activeLocks, globalCfg] = await Promise.all([
     db.pack.findUnique({
       where:  { id: packId },
-      select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true }
+      select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true, maxBuysPerUser: true, sentAt: true }
     }),
     db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } }),
     db.lockedPoints.findMany({
       where:  { userId: me.id, status: 'ACTIVE' },
       select: { amount: true }
     }),
-    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartHalfPriceEnabled: true } })
+    db.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: {
+        cmartHalfPriceEnabled: true,
+        packPriceDecayAmount: true,
+        packPriceDecayDays: true,
+        packPriceFloor: true
+      }
+    })
   ])
   if (!pack || !pack.inCmart) {
     throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
   }
+
+  // Apply price decay based on how long the pack has been listed
+  const decayAmount = globalCfg?.packPriceDecayAmount ?? 100
+  const decayDays   = globalCfg?.packPriceDecayDays   ?? 7
+  const priceFloor  = globalCfg?.packPriceFloor        ?? 700
+  let decayedPrice = pack.price
+  if (pack.sentAt && decayAmount > 0 && decayDays > 0) {
+    const msPerDay = 24 * 60 * 60 * 1000
+    const daysSinceListed = Math.floor((Date.now() - new Date(pack.sentAt).getTime()) / msPerDay)
+    const periods = Math.floor(daysSinceListed / decayDays)
+    decayedPrice = Math.max(pack.price - periods * decayAmount, priceFloor)
+  }
+
   const effectivePackPrice = globalCfg?.cmartHalfPriceEnabled === true
-    ? Math.floor(pack.price / 2)
-    : pack.price
+    ? Math.floor(decayedPrice / 2)
+    : decayedPrice
   const totalPoints    = userPts?.points || 0
   const lockedSum      = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
   const availablePoints = totalPoints - lockedSum
@@ -132,7 +153,20 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  /* 5.  daily purchase limit check --------------------------------------- */
+  /* 5a. total purchase limit check -------------------------------------- */
+  if (pack.maxBuysPerUser != null) {
+    const totalPurchased = await db.userPack.count({
+      where: { userId: me.id, packId: pack.id }
+    })
+    if (totalPurchased >= pack.maxBuysPerUser) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: `Purchase limit reached — you can only buy this pack ${pack.maxBuysPerUser} time${pack.maxBuysPerUser === 1 ? '' : 's'}`
+      })
+    }
+  }
+
+  /* 5b. daily purchase limit check -------------------------------------- */
   if (pack.dailyPurchaseLimit != null) {
     const windowStart = getDailyWindowStart()
     const purchasedToday = await db.userPack.count({

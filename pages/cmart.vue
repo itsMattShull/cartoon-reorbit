@@ -588,8 +588,8 @@
               Purchasing…
             </span>
             <span v-else>
-              Buy Pack for {{ displayPrice(pack.price) }} Pts
-              <span v-if="cmartHalfPriceEnabled" class="ml-1 line-through text-indigo-200 text-xs">{{ pack.price }}</span>
+              Buy Pack for {{ displayPrice(pack.effectivePrice ?? pack.price) }} Pts
+              <span v-if="cmartHalfPriceEnabled" class="ml-1 line-through text-indigo-200 text-xs">{{ pack.effectivePrice ?? pack.price }}</span>
             </span>
             </button>
           </div>
@@ -716,8 +716,8 @@
               class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
               @click.stop="buyPack(packDetails)"
             >
-              Buy Pack for {{ displayPrice(packDetails?.price) }} Pts
-              <span v-if="cmartHalfPriceEnabled && packDetails?.price" class="ml-1 line-through text-indigo-200 text-xs">{{ packDetails?.price }}</span>
+              Buy Pack for {{ displayPrice(packDetails?.effectivePrice ?? packDetails?.price) }} Pts
+              <span v-if="cmartHalfPriceEnabled && (packDetails?.effectivePrice ?? packDetails?.price)" class="ml-1 line-through text-indigo-200 text-xs">{{ packDetails?.effectivePrice ?? packDetails?.price }}</span>
             </button>
           </template>
 
@@ -1363,7 +1363,7 @@ async function openPackModal(pack) {
 
 // ────────── Buy Pack & Start Animation ──────────
 async function buyPack(pack) {
-  if (user.value.points < displayPrice(pack.price)) {
+  if (user.value.points < displayPrice(pack.effectivePrice ?? pack.price)) {
     return showToast("You don't have enough points")
   }
   buyingPacks.value.add(pack.id)

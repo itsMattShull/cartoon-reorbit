@@ -37,7 +37,11 @@ export default defineEventHandler(async (event) => {
     featuredAuctionIntervalDays,
     featuredAuctionsPerSlot,
     cmartHalfPriceEnabled,
-    timeBasedPurchaseLimits
+    timeBasedPurchaseLimits,
+    packPriceDecayAmount,
+    packPriceDecayDays,
+    packPriceFloor,
+    packMaxDefaultBuysPerUser
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -66,7 +70,11 @@ export default defineEventHandler(async (event) => {
     cmartHalfPriceEnabled: (typeof cmartHalfPriceEnabled === 'boolean') ? cmartHalfPriceEnabled : undefined,
     timeBasedPurchaseLimits: (timeBasedPurchaseLimits !== undefined && timeBasedPurchaseLimits !== null)
       ? timeBasedPurchaseLimits
-      : undefined
+      : undefined,
+    packPriceDecayAmount:      (typeof packPriceDecayAmount      === 'number') ? Math.max(0, packPriceDecayAmount)      : undefined,
+    packPriceDecayDays:        (typeof packPriceDecayDays        === 'number') ? Math.max(1, packPriceDecayDays)        : undefined,
+    packPriceFloor:            (typeof packPriceFloor            === 'number') ? Math.max(0, packPriceFloor)            : undefined,
+    packMaxDefaultBuysPerUser: (typeof packMaxDefaultBuysPerUser === 'number') ? Math.max(1, packMaxDefaultBuysPerUser) : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -94,7 +102,11 @@ export default defineEventHandler(async (event) => {
           'Rare':       { count: 3, windowDays: null },
           'Very Rare':  { count: 2, windowDays: null },
           'Crazy Rare': { count: 1, windowDays: null }
-        }
+        },
+        packPriceDecayAmount:      payload.packPriceDecayAmount      ?? 100,
+        packPriceDecayDays:        payload.packPriceDecayDays        ?? 7,
+        packPriceFloor:            payload.packPriceFloor            ?? 700,
+        packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser ?? 5
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -110,7 +122,11 @@ export default defineEventHandler(async (event) => {
         ...(payload.featuredAuctionIntervalDays !== undefined ? { featuredAuctionIntervalDays: payload.featuredAuctionIntervalDays } : {}),
         ...(payload.featuredAuctionsPerSlot !== undefined ? { featuredAuctionsPerSlot: payload.featuredAuctionsPerSlot } : {}),
         ...(payload.cmartHalfPriceEnabled !== undefined ? { cmartHalfPriceEnabled: payload.cmartHalfPriceEnabled } : {}),
-        ...(payload.timeBasedPurchaseLimits !== undefined ? { timeBasedPurchaseLimits: payload.timeBasedPurchaseLimits } : {})
+        ...(payload.timeBasedPurchaseLimits !== undefined ? { timeBasedPurchaseLimits: payload.timeBasedPurchaseLimits } : {}),
+        ...(payload.packPriceDecayAmount      !== undefined ? { packPriceDecayAmount:      payload.packPriceDecayAmount }      : {}),
+        ...(payload.packPriceDecayDays        !== undefined ? { packPriceDecayDays:        payload.packPriceDecayDays }        : {}),
+        ...(payload.packPriceFloor            !== undefined ? { packPriceFloor:            payload.packPriceFloor }            : {}),
+        ...(payload.packMaxDefaultBuysPerUser !== undefined ? { packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser } : {})
       }
     })
     clearUpgradesConfigCache()
@@ -127,7 +143,11 @@ export default defineEventHandler(async (event) => {
       'featuredAuctionHours',
       'featuredAuctionIntervalDays',
       'featuredAuctionsPerSlot',
-      'cmartHalfPriceEnabled'
+      'cmartHalfPriceEnabled',
+      'packPriceDecayAmount',
+      'packPriceDecayDays',
+      'packPriceFloor',
+      'packMaxDefaultBuysPerUser'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined

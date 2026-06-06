@@ -159,6 +159,12 @@ export default defineEventHandler(async (event) => {
     : `/packs/${filename}`
 
 
+  const globalCfg = await db.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { packMaxDefaultBuysPerUser: true }
+  })
+  const defaultMaxBuys = globalCfg?.packMaxDefaultBuysPerUser ?? 5
+
   const result = await db.$transaction(async (tx) => {
     const pack = await tx.pack.create({
       data: {
@@ -169,7 +175,8 @@ export default defineEventHandler(async (event) => {
         inCmart: meta.inCmart ?? false,
         sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
         scheduledAt,
-        scheduledOffAt
+        scheduledOffAt,
+        maxBuysPerUser: defaultMaxBuys
       }
     })
 

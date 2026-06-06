@@ -269,6 +269,37 @@
           </p>
         </div>
 
+        <!-- Pack Pricing Decay -->
+        <div class="border-t pt-5">
+          <h2 class="text-base font-semibold text-gray-800 mb-1">Pack Pricing Decay</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Pack prices automatically decrease over time after they go live in cMart.
+            The price drops by the decay amount every N days until it hits the floor.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Decay Amount (pts)</label>
+              <input type="number" min="0" class="input" v-model.number="packPriceDecayAmount" />
+              <p class="text-xs text-gray-500 mt-1">Points to drop per period (e.g. 100).</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Decay Period (days)</label>
+              <input type="number" min="1" class="input" v-model.number="packPriceDecayDays" />
+              <p class="text-xs text-gray-500 mt-1">How many days between each price drop (e.g. 7).</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Price Floor (pts)</label>
+              <input type="number" min="0" class="input" v-model.number="packPriceFloor" />
+              <p class="text-xs text-gray-500 mt-1">Minimum price a pack can decay to (e.g. 700).</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Default Pack Buys Per User</label>
+              <input type="number" min="1" class="input" v-model.number="packMaxDefaultBuysPerUser" />
+              <p class="text-xs text-gray-500 mt-1">Total times a user can buy a new pack (applied when pack is created).</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Time-Based Release Purchase Limits -->
         <div class="border-t pt-5">
           <h2 class="text-base font-semibold text-gray-800 mb-1">Time-Based Release Purchase Limits</h2>
@@ -385,6 +416,10 @@ const savingCmart = ref(false)
 const firstAdditionalCzoneCost      = ref(25000)
 const subsequentAdditionalCzoneCost = ref(50000)
 const cmartHalfPriceEnabled         = ref(false)
+const packPriceDecayAmount          = ref(100)
+const packPriceDecayDays            = ref(7)
+const packPriceFloor                = ref(700)
+const packMaxDefaultBuysPerUser     = ref(5)
 
 // Time-based purchase limits (per rarity)
 const timeBasedRarities = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare']
@@ -424,7 +459,11 @@ async function loadGlobal() {
     featuredAuctionHours.value        = Array.isArray(g?.featuredAuctionHours) ? g.featuredAuctionHours : []
     featuredAuctionIntervalDays.value = Number(g?.featuredAuctionIntervalDays ?? 1)
     featuredAuctionsPerSlot.value     = Number(g?.featuredAuctionsPerSlot ?? 1)
-    cmartHalfPriceEnabled.value = Boolean(g?.cmartHalfPriceEnabled ?? false)
+    cmartHalfPriceEnabled.value         = Boolean(g?.cmartHalfPriceEnabled ?? false)
+    packPriceDecayAmount.value          = Number(g?.packPriceDecayAmount          ?? 100)
+    packPriceDecayDays.value            = Number(g?.packPriceDecayDays            ?? 7)
+    packPriceFloor.value                = Number(g?.packPriceFloor                ?? 700)
+    packMaxDefaultBuysPerUser.value     = Number(g?.packMaxDefaultBuysPerUser     ?? 5)
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]
@@ -561,7 +600,11 @@ async function saveCmart() {
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
         cmartHalfPriceEnabled: cmartHalfPriceEnabled.value,
-        timeBasedPurchaseLimits
+        timeBasedPurchaseLimits,
+        packPriceDecayAmount:      Number(packPriceDecayAmount.value),
+        packPriceDecayDays:        Number(packPriceDecayDays.value),
+        packPriceFloor:            Number(packPriceFloor.value),
+        packMaxDefaultBuysPerUser: Number(packMaxDefaultBuysPerUser.value)
       }
     })
     toast.value = { type: 'ok', msg: 'cMart settings saved.' }
