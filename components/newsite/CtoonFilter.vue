@@ -119,11 +119,13 @@ const props = defineProps({
       { value: 'rarity', label: 'Rarity' },
     ],
   },
+  sourceCtoons: { type: Array, default: null },
 })
 
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
-const ctoons   = useState('cmartCtoons', () => [])
+const fallbackCtoons = useState('cmartCtoons', () => [])
+const ctoons = computed(() => props.sourceCtoons !== null ? props.sourceCtoons : fallbackCtoons.value)
 
 const RARITIES = [
   { value: 'common',       label: 'C',  cls: 'cf-rb-common'        },
