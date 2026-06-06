@@ -1,5 +1,7 @@
 import { prisma } from '@/server/prisma'
 
+const TIME_BASED_CAP = 999999999
+
 function computeInitialCap(totalQty, percent, overrideQty) {
   if (totalQty == null) return null
   if (overrideQty != null && Number.isFinite(Number(overrideQty))) {
@@ -46,6 +48,7 @@ export default defineEventHandler(async () => {
       power: true,
       characters: true,
       mintLimitType: true,
+      mintEndDate: true,
       // advisory fields (optional)
       initialReleaseAt: true,
       finalReleaseAt: true,
@@ -59,7 +62,17 @@ export default defineEventHandler(async () => {
   // Defined Number Limit cToons.  Time-Based Limit cToons mint freely
   // during their window and must not receive phase logic.
   return ctoons.map(c => {
-    const qty = c.quantity
+    // If a time-based cToon's mint window has closed but the finalization job
+    // hasn't written the real quantity yet (sentinel still in place), substitute
+    // totalMinted so the frontend displays the actual count instead of "???".
+    const effectiveQty = (
+      c.mintLimitType === 'timeBased' &&
+      c.mintEndDate &&
+      new Date(c.mintEndDate) <= now &&
+      c.quantity === TIME_BASED_CAP
+    ) ? c.totalMinted : c.quantity
+
+    const qty = effectiveQty
     const isDefinedLimit = c.mintLimitType === 'defined'
 
     // Only compute phase fields for Defined Number Limit cToons
@@ -85,6 +98,7 @@ export default defineEventHandler(async () => {
     }
     return {
       ...c,
+      quantity: effectiveQty,
       initialCap,
       finalReleaseAt: finalAt ? finalAt.toISOString() : null,
       nextReleaseAt
