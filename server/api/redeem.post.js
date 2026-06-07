@@ -144,6 +144,26 @@ export default defineEventHandler(async (event) => {
         })
       }
     }
+  } catch (mintErr) {
+    // Mint failed — best-effort rollback of the claim so the user can retry
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.claim.delete({ where: { userId_codeId: { userId, codeId: claimCode.id } } })
+        if (pointsToAward > 0) {
+          const updated = await tx.userPoints.update({
+            where: { userId },
+            data: { points: { decrement: pointsToAward } }
+          })
+          await tx.pointsLog.create({
+            data: { userId, points: pointsToAward, total: updated.points, method: 'Redeem Code Reversal', direction: 'decrease' }
+          })
+        }
+        if (backgroundRewards.length) {
+          await tx.userBackground.deleteMany({ where: { userId, sourceCodeId: claimCode.id } })
+        }
+      })
+    } catch {}
+    throw createError({ statusCode: 500, statusMessage: mintErr?.message || 'Failed to mint cToon. Please try again.' })
   } finally {
     await qe?.close()
   }
