@@ -124,13 +124,18 @@ export default defineEventHandler(async (event) => {
   // reflects the newly captured cToon (set counts, owns counts, etc.)
   try { await redis.del(`czone:ucond:${userId}`) } catch {}
 
-  const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
-  const qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
-  await qe.waitUntilReady()
+  let qe
   try {
+    const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
+    qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
+    await qe.waitUntilReady()
     await job.waitUntilFinished(qe)
+  } catch (mintErr) {
+    // Mint failed — remove the capture record so the user can retry
+    await db.cZoneSearchCapture.delete({ where: { appearanceId } }).catch(() => {})
+    throw createError({ statusCode: 500, statusMessage: mintErr?.message || 'Failed to mint cToon. Please try again.' })
   } finally {
-    await qe.close()
+    await qe?.close()
   }
 
   const minted = await db.userCtoon.findFirst({

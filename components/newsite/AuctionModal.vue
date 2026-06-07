@@ -159,7 +159,7 @@ async function sendToAuction() {
     emit('created', props.ctoon.id)
     setTimeout(() => emit('close'), 1200)
   } catch (e) {
-    showToast(e.data?.message || 'Failed to create auction.', 'error')
+    showToast(e.data?.statusMessage || e.data?.message || 'Failed to create auction.', 'error')
   } finally {
     sending.value = false
   }
@@ -177,7 +177,7 @@ async function instaBid() {
     emit('created', props.ctoon.id)
     setTimeout(() => emit('close'), 1200)
   } catch (e) {
-    showToast(e.data?.message || 'Failed to create auction.', 'error')
+    showToast(e.data?.statusMessage || e.data?.message || 'Failed to create auction.', 'error')
   } finally {
     sending.value = false
   }
