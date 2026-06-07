@@ -155,6 +155,14 @@
           </div>
         </div>
       </transition>
+
+      <Teleport to="body">
+        <transition name="ww-toast-fade">
+          <div v-if="toast.visible" class="ww-toast" :class="toast.type">
+            {{ toast.message }}
+          </div>
+        </transition>
+      </Teleport>
 </template>
 
 <script setup>
@@ -168,6 +176,16 @@ definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: t
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
+
+const toast = reactive({ visible: false, message: '', type: 'error' })
+let toastTimer = null
+function showToast(message, type = 'error') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.message = message
+  toast.type = type
+  toast.visible = true
+  toastTimer = setTimeout(() => { toast.visible = false }, 3500)
+}
 
 const sliceCount     = 6
 const sliceAngle     = 360 / sliceCount
@@ -305,7 +323,7 @@ async function spinWheel() {
     }, spinDurationMs)
   } catch (err) {
     console.error(err)
-    alert(err.statusMessage || 'Spin failed — please try again.')
+    showToast(err?.data?.statusMessage || err?.statusMessage || 'Spin failed — please try again.', 'error')
     user.value.points += spinCost.value
     spinsLeft.value++
     isSpinning.value = false
@@ -774,6 +792,31 @@ body {
 .fade-leave-to {
   opacity: 0;
 }
+
+/* Spin error toast */
+.ww-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 9999;
+  pointer-events: none;
+  white-space: pre-wrap;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.ww-toast.error   { background: #dc2626; color: #fff; }
+.ww-toast.success { background: #16a34a; color: #fff; }
+
+.ww-toast-fade-enter-active,
+.ww-toast-fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.ww-toast-fade-enter-from,
+.ww-toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 
 @media (max-width: 768px) {
   .wheel-img {

@@ -28,8 +28,6 @@
             <button type="submit" class="rd-btn">Redeem</button>
           </form>
 
-          <p v-if="error" class="rd-error">{{ error }}</p>
-
           <!-- Success -->
           <div v-if="success" class="rd-success-wrap">
             <p class="rd-success-heading">🎉 Success! You've been awarded:</p>
@@ -78,6 +76,14 @@
           </ClientOnly>
         </div>
       </div>
+
+      <Teleport to="body">
+        <transition name="rd-toast-fade">
+          <div v-if="toast.visible" class="rd-toast" :class="toast.type">
+            {{ toast.message }}
+          </div>
+        </transition>
+      </Teleport>
 </template>
 
 <script setup>
@@ -89,30 +95,31 @@ clearSidebarMiddle()
 const rawHTML = '<!-- My special production comment for this page -->'
 
 const code = ref('')
-const error = ref('')
 const success = ref(false)
 const rewards = ref({ points: 0, ctoons: [], backgrounds: [] })
+
+const toast = reactive({ visible: false, message: '', type: 'error' })
+let toastTimer = null
+function showToast(message, type = 'error') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.message = message
+  toast.type = type
+  toast.visible = true
+  toastTimer = setTimeout(() => { toast.visible = false }, 3500)
+}
 
 const showBalloons = ref(false)
 const balloons = ref([])
 
 async function submit() {
-  error.value = ''
   success.value = false
   rewards.value = { points: 0, ctoons: [], backgrounds: [] }
 
   try {
-    const res = await fetch('/api/redeem', {
+    const payload = await $fetch('/api/redeem', {
       method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: code.value.trim() })
+      body: { code: code.value.trim() }
     })
-    const payload = await res.json()
-    if (!res.ok) {
-      error.value = payload.message || 'Invalid or expired code.'
-      return
-    }
 
     rewards.value.points = payload.points ?? 0
     rewards.value.ctoons = payload.ctoons ?? []
@@ -127,9 +134,9 @@ async function submit() {
     }))
     showBalloons.value = true
     setTimeout(() => { showBalloons.value = false }, 5000)
-  } catch (e) {
-    console.error(e)
-    error.value = e.message || 'An unexpected error occurred.'
+  } catch (err) {
+    const msg = err?.data?.statusMessage || err?.message || 'An unexpected error occurred.'
+    showToast(msg, 'error')
   }
 }
 </script>
@@ -227,12 +234,6 @@ body {
 
 .rd-btn:hover {
   background: var(--OrbitLightBlue, #3399cc);
-}
-
-.rd-error {
-  margin-top: 8px;
-  font-size: 0.8125rem;
-  color: #f87171;
 }
 
 .rd-success-wrap {
@@ -356,6 +357,30 @@ body {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.4);
 }
+
+.rd-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 9999;
+  pointer-events: none;
+  white-space: pre-wrap;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.rd-toast.error   { background: #dc2626; color: #fff; }
+.rd-toast.success { background: #16a34a; color: #fff; }
+
+.rd-toast-fade-enter-active,
+.rd-toast-fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.rd-toast-fade-enter-from,
+.rd-toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 
 .rd-balloons {
   position: absolute;

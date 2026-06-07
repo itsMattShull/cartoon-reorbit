@@ -148,7 +148,7 @@ async function buy() {
   } catch (e) {
     console.error('Buy failed', e)
     modalTitle.value = 'Error'
-    modalMessage.value = e?.statusMessage || 'Purchase failed'
+    modalMessage.value = e?.data?.statusMessage || e?.statusMessage || 'Purchase failed'
     showModal.value = true
   } finally {
     await fetchSelf({ force: true })
