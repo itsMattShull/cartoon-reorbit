@@ -18,7 +18,9 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
 
     // ───────────────────── Time-based mint window guard ─────────────────────
-    if (ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
+    // Special mints (code redemption, cZone capture) bypass this guard so
+    // admins can award time-based cToons regardless of the mint window.
+    if (!isSpecial && ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate) {
       if (new Date(ctoon.mintEndDate) <= new Date()) {
         // After the minting window closes the mint-end job finalizes the quantity
         // (changes it away from TIME_BASED_CAP).  Only hard-block while the sentinel
@@ -34,27 +36,31 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     // ───────────────────────── Holiday window guard ─────────────────────────
     // If this cToon is a Holiday Item in ANY event, only allow mint while an
     // associated event is active (isActive && startsAt <= now < endsAt).
-    const now = new Date()
+    // Special mints (code redemption, cZone capture) bypass this guard so
+    // holiday cToons can be awarded outside their event window.
+    if (!isSpecial) {
+      const now = new Date()
 
-    // Is this cToon used as a Holiday Item anywhere?
-    const holidayLinkCount = await prisma.holidayEventItem.count({
-      where: { ctoonId }
-    })
-
-    if (holidayLinkCount > 0) {
-      // Is there an active event (right now) that includes this cToon?
-      const activeEvent = await prisma.holidayEvent.findFirst({
-        where: {
-          isActive: true,
-          startsAt: { lte: now },
-          endsAt:   { gt:  now },
-          items: { some: { ctoonId } }
-        },
-        select: { id: true }
+      // Is this cToon used as a Holiday Item anywhere?
+      const holidayLinkCount = await prisma.holidayEventItem.count({
+        where: { ctoonId }
       })
 
-      if (!activeEvent) {
-        throw new Error('This Holiday Item can only be minted while its event is active.')
+      if (holidayLinkCount > 0) {
+        // Is there an active event (right now) that includes this cToon?
+        const activeEvent = await prisma.holidayEvent.findFirst({
+          where: {
+            isActive: true,
+            startsAt: { lte: now },
+            endsAt:   { gt:  now },
+            items: { some: { ctoonId } }
+          },
+          select: { id: true }
+        })
+
+        if (!activeEvent) {
+          throw new Error('This Holiday Item can only be minted while its event is active.')
+        }
       }
     }
 
