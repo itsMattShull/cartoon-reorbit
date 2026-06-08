@@ -761,6 +761,8 @@ onUnmounted(() => {
   cancelLongPress()
   cz.value.activeDrag = null
   cz.value.buildMode  = false
+  // cancel any pending dimension auto-save
+  clearTimeout(_dimSaveTimer)
   // stop any active glitch effect
   stopGlitchEffect()
 })
@@ -780,6 +782,7 @@ async function loadZone(username) {
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null }
     loadCzoneSearchItems()
+    eagerLoadMissingDimensions()
 
     if (user.value && data.ownerId && data.ownerId !== user.value.id) {
       $fetch('/api/points/visit', { method: 'POST', body: { zoneOwnerId: data.ownerId } }).catch(() => {})
@@ -1030,6 +1033,40 @@ function cycleToonSize(idx) {
 function onToonImgLoad(e, toon) {
   if (!toon.width)  toon.width  = e.target.naturalWidth
   if (!toon.height) toon.height = e.target.naturalHeight
+}
+
+// ── Eagerly resolve missing toon dimensions on the client ─────
+// The Vue template @load handler can miss cached images during SSR
+// hydration (the event fires before Vue attaches the listener).
+// We create throwaway Image objects so the load always completes,
+// then reactively update any toons that lacked stored dimensions.
+// If the viewer owns the zone we also schedule a background save
+// so the dimensions are persisted and the flash never recurs.
+let _dimSaveTimer = null
+function eagerLoadMissingDimensions() {
+  if (typeof window === 'undefined') return
+  const zones = cz.value.zones
+  let outstanding = 0
+  let anyNew = false
+
+  for (const zone of zones) {
+    for (const toon of zone.toons) {
+      if (toon.width && toon.height) continue
+      outstanding++
+      const img = new Image()
+      img.onload = () => {
+        if (!toon.width)  { toon.width  = img.naturalWidth;  anyNew = true }
+        if (!toon.height) { toon.height = img.naturalHeight; anyNew = true }
+        outstanding--
+        if (outstanding === 0 && anyNew && isOwnZone.value && !cz.value.buildMode) {
+          clearTimeout(_dimSaveTimer)
+          _dimSaveTimer = setTimeout(() => save(), 1500)
+        }
+      }
+      img.onerror = () => { outstanding-- }
+      img.src = toon.assetPath
+    }
+  }
 }
 
 // ── cZone Search helpers ──────────────────────────────────────
