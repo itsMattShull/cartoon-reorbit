@@ -54,6 +54,15 @@
             alt="Server error illustration"
             class="mx-auto mt-8 max-w-full w-[360px] sm:w-[420px] h-auto rounded-2xl border border-[var(--reorbit-border)] bg-white"
           />
+          <div
+            v-if="isServerError && errorDetails"
+            class="mt-8 rounded-2xl border border-[var(--reorbit-border)] bg-[var(--reorbit-tint)] p-4 sm:p-6 text-left"
+          >
+            <p class="text-sm font-semibold tracking-wide text-[var(--reorbit-blue)]">
+              Error details
+            </p>
+            <pre class="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">{{ errorDetails }}</pre>
+          </div>
         </div>
       </div>
     </section>
@@ -82,6 +91,22 @@ const message = computed(() =>
 useHead(() => ({
   title: `${isServerError.value ? 'Server error' : 'Page not found'} | Cartoon ReOrbit`
 }))
+
+const errorDetails = computed(() => {
+  const parts = [
+    props.error?.statusMessage,
+    props.error?.message
+  ].filter((part, index, all) => part && all.indexOf(part) === index)
+
+  if (props.error?.data) {
+    const data = typeof props.error.data === 'string'
+      ? props.error.data
+      : JSON.stringify(props.error.data, null, 2)
+    parts.push(data)
+  }
+
+  return parts.join('\n')
+})
 
 const goHome = () => clearError({ redirect: '/' })
 </script>
