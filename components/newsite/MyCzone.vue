@@ -696,7 +696,7 @@ function goToTradeWithCtoon(item) {
   router.push(`/newsite/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
 }
 
-const currentZone = computed(() => cz.value.zones[cz.value.activeZone] ?? { background: '', toons: [] })
+const currentZone = computed(() => cz.value.zones?.[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
 const lastOnlineText = computed(() => {
