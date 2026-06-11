@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
-  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites } = await readBody(event)
+  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites, prereqMinOwned } = await readBody(event)
 
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   if (typeof maxClaims !== 'number' || maxClaims < 1) throw createError({ statusCode: 400, statusMessage: 'maxClaims must be >= 1.' })
@@ -98,6 +98,14 @@ export default defineEventHandler(async (event) => {
     return { ctoonId: p.ctoonId }
   })
 
+  let prereqMin = null
+  if (prereqMinOwned != null) {
+    if (!Number.isInteger(prereqMinOwned) || prereqMinOwned < 1) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned must be a positive integer.' })
+    if (prereqCreates.length === 0) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned requires at least one prerequisite cToon.' })
+    if (prereqMinOwned > prereqCreates.length) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned cannot exceed the number of prerequisite cToons.' })
+    prereqMin = prereqMinOwned
+  }
+
   const results = await prisma.$transaction([
     prisma.rewardCtoon.deleteMany({ where: { reward: { codeId } } }),
     prisma.rewardCtoonPool.deleteMany({ where: { reward: { codeId } } }), // NEW
@@ -106,7 +114,7 @@ export default defineEventHandler(async (event) => {
     prisma.claimCodePrerequisite.deleteMany({ where: { codeId } }),
     prisma.claimCode.update({
       where: { code },
-      data: { maxClaims, startsAt: startsDate, expiresAt: expiresDate, rewards: { create: rewardCreates }, prerequisites: { create: prereqCreates } }
+      data: { maxClaims, startsAt: startsDate, expiresAt: expiresDate, prereqMinOwned: prereqMin, rewards: { create: rewardCreates }, prerequisites: { create: prereqCreates } }
     })
   ])
   const updated = await prisma.claimCode.findUnique({
@@ -148,6 +156,9 @@ export default defineEventHandler(async (event) => {
     const nextExp = expiresDate ? new Date(expiresDate).toISOString() : null
     if (prevExp !== nextExp) {
       await logAdminChange(prisma, { userId: me.id, area, key: 'expiresAt', prevValue: existing.expiresAt, newValue: expiresDate })
+    }
+    if ((existing.prereqMinOwned ?? null) !== prereqMin) {
+      await logAdminChange(prisma, { userId: me.id, area, key: 'prereqMinOwned', prevValue: existing.prereqMinOwned ?? null, newValue: prereqMin })
     }
     // structural diffs
     const prevStruct = simplify(existing)

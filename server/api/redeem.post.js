@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const { code } = await readBody(event)
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required' })
 
-  const claimCode = await prisma.claimCode.findUnique({ where: { code }, select: { id: true, maxClaims: true, startsAt: true, expiresAt: true } })
+  const claimCode = await prisma.claimCode.findUnique({ where: { code }, select: { id: true, maxClaims: true, startsAt: true, expiresAt: true, prereqMinOwned: true } })
   if (!claimCode) throw createError({ statusCode: 404, statusMessage: 'Invalid code' })
   if (claimCode.startsAt && claimCode.startsAt > new Date()) throw createError({ statusCode: 400, statusMessage: 'This code is not yet available' })
   if (claimCode.expiresAt && claimCode.expiresAt < new Date()) throw createError({ statusCode: 400, statusMessage: 'Code expired' })
@@ -32,8 +32,18 @@ export default defineEventHandler(async (event) => {
   if (prereqs.length > 0) {
     const owned = await prisma.userCtoon.findMany({ where: { userId, ctoonId: { in: prereqs.map(p => p.ctoonId) } }, select: { ctoonId: true } })
     const ownedIds = new Set(owned.map(o => o.ctoonId))
-    const missing = prereqs.filter(p => !ownedIds.has(p.ctoonId)).map(p => p.ctoon.name)
-    if (missing.length) throw createError({ statusCode: 400, statusMessage: `You must own the following cToons to redeem this code: ${missing.join(', ')}` })
+    if (claimCode.prereqMinOwned != null) {
+      // Pool mode: user must own at least X distinct cToons from the prerequisite pool
+      const required = Math.min(claimCode.prereqMinOwned, prereqs.length)
+      const ownedCount = prereqs.filter(p => ownedIds.has(p.ctoonId)).length
+      if (ownedCount < required) {
+        const poolNames = prereqs.map(p => p.ctoon.name)
+        throw createError({ statusCode: 400, statusMessage: `You must own at least ${required} of the following cToons to redeem this code (you own ${ownedCount}): ${poolNames.join(', ')}` })
+      }
+    } else {
+      const missing = prereqs.filter(p => !ownedIds.has(p.ctoonId)).map(p => p.ctoon.name)
+      if (missing.length) throw createError({ statusCode: 400, statusMessage: `You must own the following cToons to redeem this code: ${missing.join(', ')}` })
+    }
   }
 
   const totalClaims = await prisma.claim.count({ where: { codeId: claimCode.id } })

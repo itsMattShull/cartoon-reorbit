@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
   const body = await readBody(event)
-  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites, backgrounds: topLevelBackgrounds, backgroundIds: topLevelBackgroundIds } = body || {}
+  const { code, maxClaims, startsAt, expiresAt, rewards, prerequisites, prereqMinOwned, backgrounds: topLevelBackgrounds, backgroundIds: topLevelBackgroundIds } = body || {}
 
   if (!code || typeof code !== 'string') throw createError({ statusCode: 400, statusMessage: 'Code is required.' })
   if (typeof maxClaims !== 'number' || maxClaims < 1) throw createError({ statusCode: 400, statusMessage: 'maxClaims must be a positive integer.' })
@@ -33,6 +33,14 @@ export default defineEventHandler(async (event) => {
     if (!p?.ctoonId || typeof p.ctoonId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
     return { ctoonId: p.ctoonId }
   })
+
+  let prereqMin = null
+  if (prereqMinOwned != null) {
+    if (!Number.isInteger(prereqMinOwned) || prereqMinOwned < 1) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned must be a positive integer.' })
+    if (prereqCreates.length === 0) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned requires at least one prerequisite cToon.' })
+    if (prereqMinOwned > prereqCreates.length) throw createError({ statusCode: 400, statusMessage: 'prereqMinOwned cannot exceed the number of prerequisite cToons.' })
+    prereqMin = prereqMinOwned
+  }
 
   function normalizeBackgroundIds(arr, where = 'rewards[].backgrounds') {
     if (!Array.isArray(arr)) return []
@@ -105,6 +113,7 @@ export default defineEventHandler(async (event) => {
         maxClaims,
         startsAt: startsDate,
         expiresAt: expiresDate,
+        prereqMinOwned: prereqMin,
         rewards: { create: rewardCreates },
         prerequisites: { create: prereqCreates }
       }
