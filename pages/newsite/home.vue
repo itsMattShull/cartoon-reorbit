@@ -16,7 +16,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Home',
+  description: "Welcome to Cartoon ReOrbit, a fan-made revival of Cartoon Network's Cartoon Orbit. Collect cToons, build your cZone, trade with friends, and play games."
+})
 useHead({ htmlAttrs: { class: 'newsite-home' } })
 
 const { clearSidebarMiddle } = useNewsiteLayout()

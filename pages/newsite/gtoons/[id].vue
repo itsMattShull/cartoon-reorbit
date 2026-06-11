@@ -240,6 +240,8 @@ definePageMeta({
   showSidebar: false,
   showFooter: false,
   mainContentBorder: false,
+  title: 'gToons Clash Match',
+  description: 'Live gToons Clash card battle match on Cartoon ReOrbit.'
 })
 
 const { clearSidebarMiddle } = useNewsiteLayout()

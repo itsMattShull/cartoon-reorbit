@@ -3,7 +3,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'cMart',
+  description: 'Shop the cMart on Cartoon ReOrbit and spend your points on the newest cToon releases and packs.'
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('NewcmartSidebar')

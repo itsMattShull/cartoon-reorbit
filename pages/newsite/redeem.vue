@@ -87,7 +87,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Redeem Code',
+  description: 'Redeem a code on Cartoon ReOrbit to claim cToons, points, and other rewards.'
+})
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()

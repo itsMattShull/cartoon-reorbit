@@ -234,7 +234,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'cZone Search',
+  description: 'Join the cZone Search contest on Cartoon ReOrbit — hunt through player cZones to find cToons and win prizes.'
+})
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()

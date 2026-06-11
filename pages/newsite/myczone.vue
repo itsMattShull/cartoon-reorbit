@@ -3,7 +3,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'My cZone',
+  description: 'Build and decorate your personal cZone on Cartoon ReOrbit with cToons from your collection.'
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('CzoneSidebarMiddle')

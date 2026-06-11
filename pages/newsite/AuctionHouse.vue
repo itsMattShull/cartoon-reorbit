@@ -3,7 +3,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Auction House',
+  description: 'Bid on rare and exclusive cToons in the Cartoon ReOrbit Auction House, or put your own cToons up for auction.'
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('AuctionHouseSidebar')

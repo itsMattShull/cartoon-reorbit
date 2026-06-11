@@ -102,7 +102,15 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Settings',
+  description: 'Manage your Cartoon ReOrbit account settings, avatar, and notification preferences.',
+  robots: 'noindex, nofollow'
+})
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
