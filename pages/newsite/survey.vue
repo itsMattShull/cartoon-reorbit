@@ -115,13 +115,13 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { navigateTo } from '#app'
 
 definePageMeta({
-  layout:     'newsite-template',
-  middleware: 'newsite',
-  showAdbar:  true,
-  showNav:    true,
+  layout:      'newsite-template',
+  middleware:  'newsite',
+  showAdbar:   true,
+  showNav:     true,
+  title:       'Community Survey — Earn 3,000 Points',
+  description: 'Share your feedback in the Cartoon ReOrbit community survey and earn 3,000 points.'
 })
-
-useHead({ title: 'Community Survey — Earn 3,000 Points' })
 
 const MIN_CHARS = 250
 

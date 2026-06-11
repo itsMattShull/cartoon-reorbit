@@ -86,7 +86,14 @@ import { ref, onMounted } from 'vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import { useAuth } from '~/composables/useAuth'
 
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Lottery',
+  description: 'Enter the Cartoon ReOrbit lottery for a chance to win points and exclusive cToon prizes.'
+})
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()

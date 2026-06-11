@@ -3,7 +3,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'All cToons',
+  description: 'Browse every cToon on Cartoon ReOrbit. Filter by series, set, and rarity to find your favorites.'
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('AllCtoonsSidebar')

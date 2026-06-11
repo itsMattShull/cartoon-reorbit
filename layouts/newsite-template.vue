@@ -273,6 +273,26 @@ const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
 const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
+
+const siteName = 'Cartoon ReOrbit'
+const defaultDescription = "Cartoon ReOrbit is a fan-made revival of Cartoon Network's Cartoon Orbit. Collect cToons, build your cZone, trade with other players, and play games."
+const resolveMeta = value =>
+  typeof value === 'function' ? value(route) : typeof value === 'string' ? value : ''
+const pageTitle = computed(() => resolveMeta(route.meta.title))
+const fullTitle = computed(() => (pageTitle.value ? `${pageTitle.value} | ${siteName}` : siteName))
+const pageDescription = computed(() => resolveMeta(route.meta.description) || defaultDescription)
+
+useHead({ title: fullTitle })
+useSeoMeta({
+  description: pageDescription,
+  ogTitle: fullTitle,
+  ogDescription: pageDescription,
+  ogSiteName: siteName,
+  ogType: 'website',
+  twitterCard: 'summary',
+  robots: computed(() => route.meta.robots || null)
+})
+
 useHead({
   htmlAttrs: { class: 'newsite-active' },
   bodyAttrs: { class: computed(() => {

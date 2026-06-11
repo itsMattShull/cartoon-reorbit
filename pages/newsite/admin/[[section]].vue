@@ -37,6 +37,9 @@ definePageMeta({
   showAdbar: true,
   showNav: true,
   showSidebar: false,
+  title: 'Admin',
+  description: 'Cartoon ReOrbit administration tools.',
+  robots: 'noindex, nofollow'
 })
 useHead({ htmlAttrs: { class: 'newsite-admin-page' } })
 

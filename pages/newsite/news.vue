@@ -8,7 +8,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'News',
+  description: 'The latest Cartoon ReOrbit news and announcements: new cToon releases, events, contests, and site updates.'
+})
 
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
