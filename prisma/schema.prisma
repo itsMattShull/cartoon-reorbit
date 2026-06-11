@@ -589,6 +589,9 @@ model ClaimCode {
   createdAt      DateTime  @default(now())
   startsAt       DateTime?
   expiresAt      DateTime?
+  // When set, users must own at least this many distinct cToons from the
+  // prerequisites pool. When null, users must own ALL prerequisite cToons.
+  prereqMinOwned Int?
 
   claims                Claim[]
   rewards               ClaimCodeReward[]

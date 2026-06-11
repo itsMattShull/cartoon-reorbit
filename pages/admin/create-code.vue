@@ -103,6 +103,26 @@
             + Add prerequisite cToon
           </button>
           <p class="text-sm text-gray-500">Leave empty for no prerequisites.</p>
+
+          <div class="mt-3 space-y-2">
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" v-model="prereqPoolEnabled" />
+              <span class="font-medium">Only require owning some cToons from this pool</span>
+            </label>
+            <div v-if="prereqPoolEnabled" class="flex items-center gap-2">
+              <span class="text-sm">Must own at least</span>
+              <input
+                v-model.number="prereqMinOwned"
+                type="number"
+                min="1"
+                class="w-24 border rounded p-2"
+              />
+              <span class="text-sm">of the selected cToons</span>
+            </div>
+            <p v-if="prereqPoolEnabled" class="text-sm text-gray-500">
+              Unchecked, users must own ALL prerequisite cToons. Checked, owning any {{ prereqMinOwned || 'X' }} from the pool is enough.
+            </p>
+          </div>
         </div>
 
         <!-- Points Reward -->
@@ -308,6 +328,8 @@ function removePoolItem(i) { poolItems.value.splice(i, 1) }
 
 // at the top, alongside your other refs
 const prereqCtoons = ref([{ ctoonName: '' }])
+const prereqPoolEnabled = ref(false)
+const prereqMinOwned = ref(1)
 
 function addPrereqCtoon() {
   prereqCtoons.value.push({ ctoonName: '' })
@@ -462,6 +484,21 @@ async function submitForm() {
     validPrereqs.push({ ctoonId: resolved.id })
   }
 
+  if (prereqPoolEnabled.value) {
+    if (validPrereqs.length === 0) {
+      error.value = 'Add at least one prerequisite cToon to use the ownership pool option.'
+      return
+    }
+    if (!Number.isInteger(prereqMinOwned.value) || prereqMinOwned.value < 1) {
+      error.value = 'Number of cToons to own must be at least 1.'
+      return
+    }
+    if (prereqMinOwned.value > validPrereqs.length) {
+      error.value = 'Number of cToons to own cannot exceed the number of prerequisite cToons.'
+      return
+    }
+  }
+
   // build payload
   // build either fixed cToons or pooled
   let rewardBlock = { points: points.value, backgrounds: backgroundsPayload }
@@ -509,6 +546,7 @@ async function submitForm() {
     code: code.value.trim(),
     maxClaims: maxClaims.value,
     prerequisites: validPrereqs,
+    prereqMinOwned: prereqPoolEnabled.value ? prereqMinOwned.value : null,
     startsAt: startsIso,
     expiresAt: expiresIso,
     rewards: [rewardBlock]
