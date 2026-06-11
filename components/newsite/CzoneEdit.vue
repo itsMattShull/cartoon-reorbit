@@ -102,7 +102,7 @@ const search          = ref('')
 const activeRarities  = ref([])
 const selectedSeries  = ref('')
 
-const currentZoneBg = computed(() => cz.value.zones[cz.value.activeZone]?.background ?? '')
+const currentZoneBg = computed(() => cz.value.zones?.[cz.value.activeZone]?.background ?? '')
 
 // Stable identity for a cToon shared between the collection payload and the
 // saved zone payload. The per-item `id` differs between the two (the
@@ -189,7 +189,7 @@ function onToonTouchEnd(c, e) {
 }
 
 function addToonToTopLeft(c) {
-  const zone = cz.value.zones[cz.value.activeZone]
+  const zone = cz.value.zones?.[cz.value.activeZone]
   if (!zone || zone.toons.some(t => t.id === c.id)) return
   const img = new Image()
   img.onload = () => {
@@ -209,7 +209,8 @@ function addToonToTopLeft(c) {
 }
 
 function selectBg(bg) {
-  cz.value.zones[cz.value.activeZone].background = bg.imagePath
+  const zone = cz.value.zones?.[cz.value.activeZone]
+  if (zone) zone.background = bg.imagePath
 }
 </script>
 
