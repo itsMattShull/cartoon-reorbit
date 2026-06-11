@@ -272,7 +272,7 @@ html.newsite-active body {
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
-const czoneState = useState('newSiteCzoneState', () => ({ buildMode: false }))
+const czoneState = useNewSiteCzoneState()
 
 const siteName = 'Cartoon ReOrbit'
 const defaultDescription = "Cartoon ReOrbit is a fan-made revival of Cartoon Network's Cartoon Orbit. Collect cToons, build your cZone, trade with other players, and play games."
