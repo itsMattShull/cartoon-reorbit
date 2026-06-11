@@ -2,6 +2,11 @@ import { refreshDiscordTokenAndRoles } from '../utils/refreshDiscordTokenAndRole
 import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
+  // Only API routes need user context. Without this gate the middleware runs
+  // for every static asset too (cToon images, backgrounds, JS chunks), and a
+  // cZone full of cToons turns one page load into dozens of DB lookups.
+  if (!event.path.startsWith('/api')) return
+
   const userId = event.context.userId
   if (!userId) return
 
