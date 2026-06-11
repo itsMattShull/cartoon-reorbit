@@ -79,6 +79,17 @@ import { useRuntimeConfig } from '#imports'
 
 definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
 
+// This page opts out of the newsite layout, so it sets its own SEO tags.
+useSeoMeta({
+  title: 'Marble Race | Cartoon ReOrbit',
+  description: 'Join the live multiplayer marble race on Cartoon ReOrbit and cheer your marble to the finish line.',
+  ogTitle: 'Marble Race | Cartoon ReOrbit',
+  ogDescription: 'Join the live multiplayer marble race on Cartoon ReOrbit and cheer your marble to the finish line.',
+  ogSiteName: 'Cartoon ReOrbit',
+  ogType: 'website',
+  twitterCard: 'summary'
+})
+
 const { user, fetchSelf, isAdmin } = useAuth()
 const runtime = useRuntimeConfig()
 

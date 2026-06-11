@@ -178,6 +178,8 @@ definePageMeta({
   showSidebar: false,
   showFooter: false,
   mainContentBorder: false,
+  title: 'gToons Clash Play',
+  description: 'Jump into a gToons Clash card battle on Cartoon ReOrbit.'
 })
 
 const { clearSidebarMiddle } = useNewsiteLayout()

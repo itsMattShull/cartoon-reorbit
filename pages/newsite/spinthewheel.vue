@@ -73,7 +73,14 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { io } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: 'Spin the Wheel',
+  description: 'Spin the wheel on Cartoon ReOrbit for a chance to win points and prizes.'
+})
 
 const { user, fetchSelf, isAdmin } = useAuth()
 const runtime = useRuntimeConfig()

@@ -3,7 +3,14 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: ['auth', 'newsite'], showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: ['auth', 'newsite'],
+  showAdbar: true,
+  showNav: true,
+  title: 'Trade',
+  description: 'Trade cToons with other Cartoon ReOrbit players in live trade rooms.'
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('TradeSidebarWrapper')

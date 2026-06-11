@@ -3,7 +3,24 @@
 </template>
 
 <script setup>
-definePageMeta({ layout: 'newsite-template', middleware: 'newsite', showAdbar: true, showNav: true })
+definePageMeta({
+  layout: 'newsite-template',
+  middleware: 'newsite',
+  showAdbar: true,
+  showNav: true,
+  title: route => {
+    const raw = route.params.username
+    const name = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw[0] : '')
+    return name ? `${name}'s cZone` : 'cZone'
+  },
+  description: route => {
+    const raw = route.params.username
+    const name = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw[0] : '')
+    return name
+      ? `Visit ${name}'s cZone on Cartoon ReOrbit and check out their cToon collection.`
+      : 'Visit a player cZone on Cartoon ReOrbit and check out their cToon collection.'
+  }
+})
 
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('CzoneSidebarMiddle')
