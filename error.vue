@@ -122,7 +122,8 @@ const errorDetails = computed(() => {
   if (stack) parts.push(stack)
 
   return parts
-    .filter((part, index, all) => part && all.indexOf(part) === index)
+    // Drop Nitro's redacted placeholder so non-admins get no details panel
+    .filter((part, index, all) => part && part !== 'Server Error' && all.indexOf(part) === index)
     .join('\n\n')
 })
 

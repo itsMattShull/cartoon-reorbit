@@ -1,4 +1,17 @@
+import { fileURLToPath } from 'node:url'
+
 export default defineNuxtConfig({
+  hooks: {
+    // Prepend the admin-gated error handler so it runs before Nuxt's default
+    // one (setting nitro.errorHandler directly would replace Nuxt's handler)
+    'nitro:config' (nitroConfig) {
+      nitroConfig.errorHandler = [
+        fileURLToPath(new URL('./server/error-handler.js', import.meta.url)),
+        ...[nitroConfig.errorHandler ?? []].flat()
+      ]
+    }
+  },
+
   app: {
     head: {
       meta: [
