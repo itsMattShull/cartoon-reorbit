@@ -92,20 +92,38 @@ useHead(() => ({
   title: `${isServerError.value ? 'Server error' : 'Page not found'} | Cartoon ReOrbit`
 }))
 
+const errorData = computed(() => {
+  let data = props.error?.data
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data) } catch { /* leave as plain string */ }
+  }
+  return data
+})
+
 const errorDetails = computed(() => {
+  const data = errorData.value
+  const stack = props.error?.stack
+    || (data && typeof data === 'object' ? data.stack : undefined)
+
   const parts = [
     props.error?.statusMessage,
     props.error?.message
-  ].filter((part, index, all) => part && all.indexOf(part) === index)
+  ]
 
-  if (props.error?.data) {
-    const data = typeof props.error.data === 'string'
-      ? props.error.data
-      : JSON.stringify(props.error.data, null, 2)
-    parts.push(data)
+  if (data != null) {
+    if (typeof data === 'object') {
+      const { stack: _stack, ...rest } = data
+      if (Object.keys(rest).length) parts.push(JSON.stringify(rest, null, 2))
+    } else {
+      parts.push(String(data))
+    }
   }
 
-  return parts.join('\n')
+  if (stack) parts.push(stack)
+
+  return parts
+    .filter((part, index, all) => part && all.indexOf(part) === index)
+    .join('\n\n')
 })
 
 const goHome = () => clearError({ redirect: '/' })
