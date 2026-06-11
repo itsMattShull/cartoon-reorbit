@@ -8,6 +8,14 @@ let cachedGlobalConfigTime = 0
 const GLOBAL_CONFIG_TTL_MS = 5 * 60 * 1000  // 5 minutes
 
 export default defineEventHandler(async (event) => {
+  // Only run for API requests. Static asset requests (cToon images, JS
+  // chunks) also pass through this middleware, and each one was costing an
+  // upsert + interactive transaction on the same UserPoints row — enough
+  // concurrent image requests exhausted the connection pool and 500'd the
+  // page. Every page load calls /api/auth/me, so the daily award still
+  // triggers reliably.
+  if (!event.path.startsWith('/api')) return
+
   const userId = event.context.userId
   if (!userId) return
 
