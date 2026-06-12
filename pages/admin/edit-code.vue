@@ -230,6 +230,21 @@
               <p v-if="prereqPoolEnabled" class="text-sm text-gray-500">
                 Unchecked, users must own ALL prerequisite cToons. Checked, owning any {{ prereqMinOwned || 'X' }} from the pool is enough.
               </p>
+              <div v-if="prereqPoolEnabled">
+                <label class="block font-medium mb-1">Add Set</label>
+                <datalist id="prereq-set-list">
+                  <option v-for="s in filteredSets(setSearch)" :key="s" :value="s" />
+                </datalist>
+                <input
+                  v-model="setSearch"
+                  list="prereq-set-list"
+                  type="text"
+                  class="w-full border rounded p-2"
+                  placeholder="Type 3+ characters to search sets"
+                  @change="onSetSelected"
+                />
+                <p class="text-sm text-gray-500">Selecting a set adds all of its cToons to the prerequisite list above.</p>
+              </div>
             </div>
           </div>
 
@@ -264,7 +279,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 
@@ -301,6 +316,7 @@ const ctoonRewards  = ref([])
 const prereqCtoons  = ref([{ ctoonName: '' }])
 const prereqPoolEnabled = ref(false)
 const prereqMinOwned    = ref(1)
+const setSearch         = ref('')
 const error         = ref('')
 
 // options
@@ -433,6 +449,34 @@ function filteredCtoons(input) {
   if (v.length < 2) return []
   const low = v.toLowerCase()
   return ctoonOptions.value.filter(ct => ct.name.toLowerCase().includes(low))
+}
+
+const setNames = computed(() => {
+  const seen = new Set()
+  for (const ct of ctoonOptions.value) {
+    const s = (ct.set || '').trim()
+    if (s) seen.add(s)
+  }
+  return [...seen].sort()
+})
+function filteredSets(input) {
+  const v = (input || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  return setNames.value.filter(s => s.toLowerCase().includes(v))
+}
+function onSetSelected() {
+  const v = setSearch.value.trim()
+  if (!v) return
+  const setName = setNames.value.find(s => s.toLowerCase() === v.toLowerCase())
+  if (!setName) return
+  const existingIds = new Set(
+    prereqCtoons.value.map(p => findCtoon((p.ctoonName || '').trim())?.id).filter(Boolean)
+  )
+  const toAdd = ctoonOptions.value.filter(ct => (ct.set || '').trim() === setName && !existingIds.has(ct.id))
+  const rows = prereqCtoons.value.filter(p => (p.ctoonName || '').trim())
+  for (const ct of toAdd) rows.push({ ctoonName: ct.name })
+  prereqCtoons.value = rows.length ? rows : [{ ctoonName: '' }]
+  setSearch.value = ''
 }
 
 async function submitForm() {
