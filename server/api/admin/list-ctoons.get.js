@@ -24,7 +24,8 @@ export default defineEventHandler(async (event) => {
     select: {
       id: true,
       name: true,
-      assetPath: true
+      assetPath: true,
+      set: true
     }
   })
 
