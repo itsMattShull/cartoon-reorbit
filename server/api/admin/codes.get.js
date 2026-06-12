@@ -75,6 +75,7 @@ export default defineEventHandler(async (event) => {
         maxClaims: true,
         startsAt: true,
         expiresAt: true,
+        prereqMinOwned: true,
         prerequisites: {
           select: {
             ctoonId: true,

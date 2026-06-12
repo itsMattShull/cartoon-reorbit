@@ -211,6 +211,41 @@
               + Add prerequisite cToon
             </button>
             <p class="text-sm text-gray-500">Leave empty for no prerequisites.</p>
+
+            <div class="mt-3 space-y-2">
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="prereqPoolEnabled" />
+                <span class="font-medium">Only require owning some cToons from this pool</span>
+              </label>
+              <div v-if="prereqPoolEnabled" class="flex items-center gap-2">
+                <span class="text-sm">Must own at least</span>
+                <input
+                  v-model.number="prereqMinOwned"
+                  type="number"
+                  min="1"
+                  class="w-24 border rounded p-2"
+                />
+                <span class="text-sm">of the selected cToons</span>
+              </div>
+              <p v-if="prereqPoolEnabled" class="text-sm text-gray-500">
+                Unchecked, users must own ALL prerequisite cToons. Checked, owning any {{ prereqMinOwned || 'X' }} from the pool is enough.
+              </p>
+              <div v-if="prereqPoolEnabled">
+                <label class="block font-medium mb-1">Add Set</label>
+                <datalist id="prereq-set-list">
+                  <option v-for="s in filteredSets(setSearch)" :key="s" :value="s" />
+                </datalist>
+                <input
+                  v-model="setSearch"
+                  list="prereq-set-list"
+                  type="text"
+                  class="w-full border rounded p-2"
+                  placeholder="Type 3+ characters to search sets"
+                  @change="onSetSelected"
+                />
+                <p class="text-sm text-gray-500">Selecting a set adds all of its cToons to the prerequisite list above.</p>
+              </div>
+            </div>
           </div>
 
           <!-- Background Rewards -->
@@ -244,7 +279,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 
@@ -279,6 +314,9 @@ const expiresAt     = ref('')
 const points        = ref(0)
 const ctoonRewards  = ref([])
 const prereqCtoons  = ref([{ ctoonName: '' }])
+const prereqPoolEnabled = ref(false)
+const prereqMinOwned    = ref(1)
+const setSearch         = ref('')
 const error         = ref('')
 
 // options
@@ -391,6 +429,10 @@ onMounted(async () => {
         return { ctoonName: found?.name||'' }
       })
     }
+    if (entry.prereqMinOwned != null) {
+      prereqPoolEnabled.value = true
+      prereqMinOwned.value    = entry.prereqMinOwned
+    }
   } catch (e) {
     fetchError.value = e
   } finally {
@@ -407,6 +449,34 @@ function filteredCtoons(input) {
   if (v.length < 2) return []
   const low = v.toLowerCase()
   return ctoonOptions.value.filter(ct => ct.name.toLowerCase().includes(low))
+}
+
+const setNames = computed(() => {
+  const seen = new Set()
+  for (const ct of ctoonOptions.value) {
+    const s = (ct.set || '').trim()
+    if (s) seen.add(s)
+  }
+  return [...seen].sort()
+})
+function filteredSets(input) {
+  const v = (input || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  return setNames.value.filter(s => s.toLowerCase().includes(v))
+}
+function onSetSelected() {
+  const v = setSearch.value.trim()
+  if (!v) return
+  const setName = setNames.value.find(s => s.toLowerCase() === v.toLowerCase())
+  if (!setName) return
+  const existingIds = new Set(
+    prereqCtoons.value.map(p => findCtoon((p.ctoonName || '').trim())?.id).filter(Boolean)
+  )
+  const toAdd = ctoonOptions.value.filter(ct => (ct.set || '').trim() === setName && !existingIds.has(ct.id))
+  const rows = prereqCtoons.value.filter(p => (p.ctoonName || '').trim())
+  for (const ct of toAdd) rows.push({ ctoonName: ct.name })
+  prereqCtoons.value = rows.length ? rows : [{ ctoonName: '' }]
+  setSearch.value = ''
 }
 
 async function submitForm() {
@@ -441,6 +511,21 @@ async function submitForm() {
     const found = ctoonOptions.value.find(ct => ct.name === name)
     if (!found) { error.value = `Unrecognized prerequisite cToon: “${name}”`; return }
     validPrereqs.push({ ctoonId: found.id })
+  }
+
+  if (prereqPoolEnabled.value) {
+    if (validPrereqs.length === 0) {
+      error.value = 'Add at least one prerequisite cToon to use the ownership pool option.'
+      return
+    }
+    if (!Number.isInteger(prereqMinOwned.value) || prereqMinOwned.value < 1) {
+      error.value = 'Number of cToons to own must be at least 1.'
+      return
+    }
+    if (prereqMinOwned.value > validPrereqs.length) {
+      error.value = 'Number of cToons to own cannot exceed the number of prerequisite cToons.'
+      return
+    }
   }
 
   // Build backgrounds payload *now* so it reflects current selections
@@ -486,6 +571,7 @@ async function submitForm() {
     code: code.value.trim(),
     maxClaims: maxClaims.value,
     prerequisites: validPrereqs,
+    prereqMinOwned: prereqPoolEnabled.value ? prereqMinOwned.value : null,
     startsAt: startsIso,
     expiresAt: expiresIso,
     rewards: [rewardBlock]
