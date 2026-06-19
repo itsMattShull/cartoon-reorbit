@@ -317,7 +317,7 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
-const { open: openCtoonModal } = useCtoonModal()
+const { open: openCtoonModal, setContext, clearContext } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
@@ -699,6 +699,11 @@ function goToTradeWithCtoon(item) {
 const currentZone = computed(() => cz.value.zones?.[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
+// Keep ctoon modal context in sync so the "Open cToon" button appears on owned zones
+watch([isOwnZone, viewedUsername], ([own, uname]) => {
+  setContext({ source: 'czone', isOwner: own, username: uname || '' })
+}, { immediate: true })
+
 const lastOnlineText = computed(() => {
   if (!viewedOwner.value?.lastActivity) return null
   const diffMs   = Date.now() - new Date(viewedOwner.value.lastActivity).getTime()
@@ -894,7 +899,12 @@ function isOverCanvas(cx, cy) {
 // ── Toon click: open info modal in view mode ──────────────────
 function onToonClick(toon) {
   if (cz.value.buildMode || !toon.ctoonId) return
-  openCtoonModal({ ctoonId: toon.ctoonId, assetPath: toon.assetPath, name: toon.name })
+  openCtoonModal({
+    ctoonId: toon.ctoonId,
+    userCtoonId: isOwnZone.value ? toon.id : undefined,
+    assetPath: toon.assetPath,
+    name: toon.name
+  })
 }
 
 // ── Item mousedown: reposition placed toon (desktop drag) ─────

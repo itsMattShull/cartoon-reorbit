@@ -3,7 +3,7 @@ import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 
-const CACHE_TTL_SECONDS = 86400 // 24 hours
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check

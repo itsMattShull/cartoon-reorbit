@@ -2,6 +2,9 @@
 
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // ── 1. Admin check via your /api/auth/me endpoint ─────────────────────────
@@ -16,12 +19,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
   }
 
-  // ── 2. Query total users and those currently in the guild ────────────────
+  // ── 2. Cache check ────────────────────────────────────────────────────────
+  const cacheKey = 'admin:active-discord'
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
+  // ── 3. Query total users and those currently in the guild ────────────────
   const total  = await prisma.user.count()
   const active = await prisma.user.count({
     where: { inGuild: true }
   })
 
-  // ── 3. Return the raw counts; client can compute % if needed ─────────────
-  return { total, active }
+  // ── 4. Cache and return ───────────────────────────────────────────────────
+  const result = { total, active }
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+  return result
 })

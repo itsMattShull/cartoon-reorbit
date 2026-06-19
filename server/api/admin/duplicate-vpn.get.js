@@ -6,7 +6,6 @@ import { redis } from '@/server/utils/redis'
 const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
-  // 1. Admin auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -24,19 +23,33 @@ export default defineEventHandler(async (event) => {
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
 
-  // 2. Cache check
-  const cacheKey = `admin:duplicate-users:${page}:${limit}:${searchTerm}`
+  // Cache check
+  const cacheKey = `admin:duplicate-vpn:${page}:${limit}:${searchTerm}`
   try {
     const hit = await redis.get(cacheKey)
     if (hit) return JSON.parse(hit)
   } catch {}
 
-  // 3. Fetch login logs with user info — limit to last 90 days to avoid loading the full table
-  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  const logs = await prisma.loginLog.findMany({
-    where: { createdAt: { gte: since } },
-    orderBy: { createdAt: 'desc' },
-    include: {
+  const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+
+  const vpnLogs = await prisma.vpnLog.findMany({
+    where: {
+      isVpn: true,
+      asn: { not: null },
+      detectedAt: { gte: since }
+    },
+    orderBy: { detectedAt: 'desc' },
+    select: {
+      userId: true,
+      ip: true,
+      proxyType: true,
+      isp: true,
+      org: true,
+      asn: true,
+      country: true,
+      countryCode: true,
+      reason: true,
+      detectedAt: true,
       user: {
         select: {
           id: true,
@@ -50,82 +63,79 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 4. Build map of user aliases per IP. We keep admin logins in the
-  //    grouping (with an isAdmin flag on the alias) so admins testing
-  //    other accounts on shared devices still surface in Cheat Finder.
-  const byIp = {}
-
-  for (const { ip, createdAt, user } of logs) {
-    const ts = createdAt.getTime()
-    const name = user.username || '__unknown__'
-    byIp[ip] = byIp[ip] || {}
-    // for each alias keep the latest login timestamp + user metadata
-    const existing = byIp[ip][name]
+  // Group by ASN. For each user+ASN pair keep the latest log entry.
+  const byAsn = {}
+  for (const log of vpnLogs) {
+    const asn = log.asn
+    if (!byAsn[asn]) {
+      byAsn[asn] = {
+        asn,
+        isp: log.isp,
+        org: log.org,
+        country: log.country,
+        countryCode: log.countryCode,
+        proxyType: log.proxyType,
+        reason: log.reason,
+        users: {}
+      }
+    }
+    const username = log.user.username || '__unknown__'
+    const ts = log.detectedAt.getTime()
+    const existing = byAsn[asn].users[username]
     if (!existing || ts > existing.ts) {
-      byIp[ip][name] = {
+      byAsn[asn].users[username] = {
         ts,
-        userId: user.id,
-        joined: user.createdAt,
-        discordTag: user.discordTag,
-        discordCreatedAt: user.discordCreatedAt,
-        isAdmin: !!user.isAdmin
+        userId: log.user.id,
+        joined: log.user.createdAt,
+        discordTag: log.user.discordTag,
+        discordCreatedAt: log.user.discordCreatedAt,
+        isAdmin: !!log.user.isAdmin,
+        ip: log.ip
       }
     }
   }
 
-  // 5. Build only those IP groups with >1 distinct username
-  const groups = Object.entries(byIp)
-    .filter(([, nameMap]) => Object.keys(nameMap).length > 1)
-    .map(([ip, nameMap]) => {
-      const aliases = Object.entries(nameMap).map(([username, info]) => ({
+  // Only keep ASN groups with >1 distinct user
+  const groups = Object.values(byAsn)
+    .filter(g => Object.keys(g.users).length > 1)
+    .map(g => {
+      const aliases = Object.entries(g.users).map(([username, info]) => ({
         username,
         userId: info.userId,
-        lastLogin: new Date(info.ts),
         joined: info.joined,
         discordTag: info.discordTag,
         discordCreatedAt: info.discordCreatedAt,
-        isAdmin: info.isAdmin
+        isAdmin: info.isAdmin,
+        lastSeen: new Date(info.ts),
+        ip: decryptIp(info.ip)
       }))
-      const lastLoginTs = Object.values(nameMap).reduce((max, info) => Math.max(max, info.ts), 0)
-      return { ip: decryptIp(ip), aliases, lastLogin: new Date(lastLoginTs) }
+      const lastSeenTs = Object.values(g.users).reduce((max, info) => Math.max(max, info.ts), 0)
+      return {
+        asn: g.asn,
+        isp: g.isp,
+        org: g.org,
+        country: g.country,
+        countryCode: g.countryCode,
+        proxyType: g.proxyType,
+        reason: g.reason,
+        aliases,
+        lastSeen: new Date(lastSeenTs)
+      }
     })
-    .sort((a, b) => b.lastLogin.getTime() - a.lastLogin.getTime())
-
-  const dedupedByAliases = new Map()
-  for (const group of groups) {
-    const key = (group.aliases || [])
-      .map((alias) => String(alias.username || '').trim().toLowerCase())
-      .filter(Boolean)
-      .sort()
-      .join('|')
-
-    const existing = dedupedByAliases.get(key)
-    const existingTs = existing ? new Date(existing.lastLogin).getTime() : -1
-    const groupTs = new Date(group.lastLogin).getTime()
-    if (!existing || groupTs > existingTs) {
-      dedupedByAliases.set(key, group)
-    }
-  }
-
-  const dedupedGroups = Array.from(dedupedByAliases.values())
-    .sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime())
+    .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime())
 
   const filteredGroups = searchTerm
-    ? dedupedGroups.filter((group) =>
-      (group.aliases || []).some((alias) =>
-        String(alias.username || '').toLowerCase().includes(searchTerm)
+    ? groups.filter(g =>
+        g.aliases.some(a => String(a.username || '').toLowerCase().includes(searchTerm))
       )
-    )
-    : dedupedGroups
+    : groups
 
   const total = filteredGroups.length
   const paged = filteredGroups.slice(skip, skip + limit)
 
-  // 6. Enrich aliases on the paged groups with points, ctoon count, and
-  //    latest fingerprint visitorId. Batch by userId so we don't fan out
-  //    queries per alias.
+  // Enrich aliases with points, ctoon count, fingerprint, and trade partners
   const userIds = Array.from(
-    new Set(paged.flatMap((g) => g.aliases.map((a) => a.userId).filter(Boolean)))
+    new Set(paged.flatMap(g => g.aliases.map(a => a.userId).filter(Boolean)))
   )
 
   if (userIds.length) {
@@ -144,8 +154,6 @@ export default defineEventHandler(async (event) => {
         orderBy: { createdAt: 'desc' },
         select: { userId: true, visitorId: true, deviceType: true, createdAt: true }
       }),
-      // Only completed trades where BOTH sides are in our scoped userIds.
-      // A trade is completed when every Trade row in the room is confirmed.
       prisma.tradeRoom.findMany({
         where: {
           AND: [
@@ -161,12 +169,8 @@ export default defineEventHandler(async (event) => {
       })
     ])
 
-    const pointsByUser = Object.fromEntries(
-      pointsRows.map((r) => [r.userId, r.points])
-    )
-    const ctoonsByUser = Object.fromEntries(
-      ctoonGroups.map((r) => [r.userId, r._count._all])
-    )
+    const pointsByUser = Object.fromEntries(pointsRows.map(r => [r.userId, r.points]))
+    const ctoonsByUser = Object.fromEntries(ctoonGroups.map(r => [r.userId, r._count._all]))
     const latestFingerprintByUser = {}
     for (const row of fingerprintRows) {
       if (!latestFingerprintByUser[row.userId]) {
@@ -178,20 +182,18 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // userId -> Set of userIds they've completed a trade with (within scope)
     const tradePartnersByUser = {}
     for (const room of tradeRooms) {
       if (!room.traderAId || !room.traderBId) continue
       if (!room.trades.length) continue
-      if (!room.trades.every((t) => t.confirmed)) continue
+      if (!room.trades.every(t => t.confirmed)) continue
       ;(tradePartnersByUser[room.traderAId] ??= new Set()).add(room.traderBId)
       ;(tradePartnersByUser[room.traderBId] ??= new Set()).add(room.traderAId)
     }
 
     for (const group of paged) {
-      // username lookup limited to this group's other aliases
       const groupAliasesByUserId = Object.fromEntries(
-        group.aliases.map((a) => [a.userId, a.username])
+        group.aliases.map(a => [a.userId, a.username])
       )
       for (const alias of group.aliases) {
         const fp = latestFingerprintByUser[alias.userId]
@@ -204,8 +206,8 @@ export default defineEventHandler(async (event) => {
         const partners = tradePartnersByUser[alias.userId]
         alias.tradedWith = partners
           ? Array.from(partners)
-              .filter((pid) => pid !== alias.userId && groupAliasesByUserId[pid])
-              .map((pid) => ({ userId: pid, username: groupAliasesByUserId[pid] }))
+              .filter(pid => pid !== alias.userId && groupAliasesByUserId[pid])
+              .map(pid => ({ userId: pid, username: groupAliasesByUserId[pid] }))
           : []
       }
     }

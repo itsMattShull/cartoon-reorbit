@@ -1,6 +1,9 @@
 // server/api/admin/rarity-turnover-rate.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // — Admin check (unchanged)
@@ -29,6 +32,13 @@ export default defineEventHandler(async (event) => {
   const TF_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
   const weeks = TF_WEEKS[timeframe] ?? 4
   const months = TF_MONTHS[timeframe] ?? 1
+
+  // — Cache check
+  const cacheKey = `admin:rarity-turnover-rate:${timeframe}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
 
   // — Compute turnover rate per rarity over the last N days, including accepted auctions
   const raw = await prisma.$queryRawUnsafe(`
@@ -96,7 +106,7 @@ ORDER BY
   END;
   `)
 
-  return {
+  const result = {
     timeframe,
     days,
     weeks,
@@ -106,4 +116,7 @@ ORDER BY
       turnoverRate: Number(r.turnover_rate)
     }))
   }
+
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+  return result
 })
