@@ -108,11 +108,11 @@ export default defineEventHandler(async (event) => {
           },
           include: includeOptions
         })
-      } else if (gameName === 'Clash') {
+      } else if (gameName === 'Clash' || gameName === 'TKO') {
         config = await db.gameConfig.create({
           data: {
             gameName,
-            pointsPerWin: 0
+            pointsPerWin: gameName === 'TKO' ? 300 : 0
           }
         })
       } else if (gameName === 'Winwheel') {

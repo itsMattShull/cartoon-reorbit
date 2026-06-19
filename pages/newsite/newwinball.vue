@@ -133,6 +133,7 @@ const SWF_FPS = 21;
     img.src = `${assetUrl(dir)}/${index + start}.svg${cache}`;
     return img;
   });
+  const plungerFrames = makeFrames("svg/sprites/DefineSprite_120", PLUNGER_FRAME_COUNT, 1);
   const overlaySets = {
     bumper: makeFrames("svg/sprites/DefineSprite_63", 18, 1, "?v=newicon2"),
     bumperShine: makeFrames("svg/sprites/DefineSprite_56", 75, 1),
@@ -1176,7 +1177,7 @@ fr_max = "45";`
   function frameSrc(set, frame) {
     if (set === "launcherBack") return assetUrl("svg/sprites/DefineSprite_131/launcher_back.svg");
     if (set === "launcherFront") return assetUrl("svg/sprites/DefineSprite_131/launcher_front.svg");
-    if (set === "plunger") return assetUrl(`svg/sprites/DefineSprite_120/${Math.min(PLUNGER_FRAME_COUNT, frame + 1)}.svg`);
+    if (set === "plunger") return plungerFrames[Math.min(PLUNGER_FRAME_COUNT - 1, frame)]?.src || "";
     if (set === "star1") return assetUrl(`svg/sprites/DefineSprite_16/${frame + 1}.svg`);
     if (set === "star23") return assetUrl(`svg/sprites/DefineSprite_19/${frame + 1}.svg`);
     const img = overlaySets[set]?.[frame] || overlaySets[set]?.[0];

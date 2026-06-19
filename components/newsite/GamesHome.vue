@@ -1,6 +1,6 @@
 <template>
   <div class="gameshome">
-    <NuxtLink to="/newsite/winball" class="quadrant quadrant--shop">Winball</NuxtLink>
+    <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">Winball</NuxtLink>
     <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">Lotto</NuxtLink>
     <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">Win Wheel</NuxtLink>
     <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">gToons Clash</NuxtLink>
