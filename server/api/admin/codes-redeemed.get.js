@@ -1,6 +1,9 @@
 // server/api/admin/codes-redeemed.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check via your /api/auth/me endpoint
@@ -21,6 +24,13 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'daily'
 
+  // 3) Cache check
+  const cacheKey = `admin:codes-redeemed:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -31,7 +41,12 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
-  // 3) Aggregate codes redeemed by selected period
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
+
+  // 4) Aggregate codes redeemed by selected period
   if (groupBy === 'weekly') {
     const rows = await prisma.$queryRaw`
       SELECT
@@ -42,7 +57,7 @@ export default defineEventHandler(async (event) => {
       GROUP BY period
       ORDER BY period
     `
-    return rows
+    return cacheAndReturn(rows)
   }
 
   if (groupBy === 'monthly') {
@@ -55,7 +70,7 @@ export default defineEventHandler(async (event) => {
       GROUP BY period
       ORDER BY period
     `
-    return rows
+    return cacheAndReturn(rows)
   }
 
   // daily (original behavior)
@@ -68,5 +83,5 @@ export default defineEventHandler(async (event) => {
     GROUP BY period
     ORDER BY period
   `
-  return rows
+  return cacheAndReturn(rows)
 })

@@ -6,6 +6,9 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -26,6 +29,13 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'daily'
 
+  // 3) Cache check
+  const cacheKey = `admin:clash-stats:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -34,6 +44,11 @@ export default defineEventHandler(async (event) => {
     case '6m': startDate.setMonth(startDate.getMonth() - 6); break
     case '1y': startDate.setFullYear(startDate.getFullYear() - 1); break
     default:   startDate.setMonth(startDate.getMonth() - 3)
+  }
+
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
   }
 
   if (groupBy === 'weekly') {
@@ -66,16 +81,16 @@ export default defineEventHandler(async (event) => {
       ORDER BY period
     `
 
-    return rows.map(r => {
+    return cacheAndReturn(rows.map(r => {
       const total    = Number(r.total)
       const finished = Number(r.finished)
       return {
-        period:          r.period,               // week start (local)
+        period:          r.period,
         count:           total,
         finishedCount:   finished,
         percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
       }
-    })
+    }))
   }
 
   if (groupBy === 'monthly') {
@@ -108,16 +123,16 @@ export default defineEventHandler(async (event) => {
       ORDER BY period
     `
 
-    return rows.map(r => {
+    return cacheAndReturn(rows.map(r => {
       const total    = Number(r.total)
       const finished = Number(r.finished)
       return {
-        period:          r.period,               // month start (local)
+        period:          r.period,
         count:           total,
         finishedCount:   finished,
         percentFinished: total > 0 ? Math.round((finished / total) * 100) : 0
       }
-    })
+    }))
   }
 
   // ---- Daily buckets (existing behavior) ----
@@ -145,14 +160,14 @@ export default defineEventHandler(async (event) => {
     ORDER BY day
   `
 
-  return rows.map(r => {
+  return cacheAndReturn(rows.map(r => {
     const total    = Number(r.total)
     const finished = Number(r.finished)
     return {
-      day:              r.day,                  // local day
+      day:              r.day,
       count:            total,
       finishedCount:    finished,
       percentFinished:  total > 0 ? Math.round((finished / total) * 100) : 0
     }
-  })
+  }))
 })

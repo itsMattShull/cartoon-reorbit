@@ -1,6 +1,9 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { decryptIp } from '@/server/utils/ip-encrypt'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1. Admin auth
@@ -21,7 +24,14 @@ export default defineEventHandler(async (event) => {
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
 
-  // 2. Fetch login logs with user info — limit to last 90 days to avoid loading the full table
+  // 2. Cache check
+  const cacheKey = `admin:duplicate-users:${page}:${limit}:${searchTerm}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
+  // 3. Fetch login logs with user info — limit to last 90 days to avoid loading the full table
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const logs = await prisma.loginLog.findMany({
     where: { createdAt: { gte: since } },
@@ -40,7 +50,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // 3. Build map of user aliases per IP. We keep admin logins in the
+  // 4. Build map of user aliases per IP. We keep admin logins in the
   //    grouping (with an isAdmin flag on the alias) so admins testing
   //    other accounts on shared devices still surface in Cheat Finder.
   const byIp = {}
@@ -63,7 +73,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 4. Build only those IP groups with >1 distinct username
+  // 5. Build only those IP groups with >1 distinct username
   const groups = Object.entries(byIp)
     .filter(([, nameMap]) => Object.keys(nameMap).length > 1)
     .map(([ip, nameMap]) => {
@@ -111,7 +121,7 @@ export default defineEventHandler(async (event) => {
   const total = filteredGroups.length
   const paged = filteredGroups.slice(skip, skip + limit)
 
-  // 5. Enrich aliases on the paged groups with points, ctoon count, and
+  // 6. Enrich aliases on the paged groups with points, ctoon count, and
   //    latest fingerprint visitorId. Batch by userId so we don't fan out
   //    queries per alias.
   const userIds = Array.from(
@@ -201,5 +211,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return { groups: paged, total, page, limit }
+  const result = { groups: paged, total, page, limit }
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+  return result
 })

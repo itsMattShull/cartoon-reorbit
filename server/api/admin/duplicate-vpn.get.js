@@ -1,6 +1,9 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { decryptIp } from '@/server/utils/ip-encrypt'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -19,6 +22,13 @@ export default defineEventHandler(async (event) => {
   const limit = Math.min(Math.max(parseInt(query.limit || '100', 10), 1), 200)
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
+
+  // Cache check
+  const cacheKey = `admin:duplicate-vpn:${page}:${limit}:${searchTerm}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
 
   const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
 
@@ -203,5 +213,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return { groups: paged, total, page, limit }
+  const result = { groups: paged, total, page, limit }
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+  return result
 })

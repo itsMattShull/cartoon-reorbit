@@ -2,6 +2,9 @@
 
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check via /api/auth/me
@@ -21,6 +24,13 @@ export default defineEventHandler(async (event) => {
   const bucketSize = [500, 1000, 5000, 10000].includes(Number(rawBucketSize))
     ? Number(rawBucketSize)
     : 1000
+
+  // 3) Cache check
+  const cacheKey = `admin:points-distribution:${bucketSize}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
 
   const rows = await prisma.$queryRaw`
     WITH all_pts AS (
@@ -56,8 +66,8 @@ export default defineEventHandler(async (event) => {
     ORDER BY b.bucket_start
   `
 
-  // 3) Shape payload with human-readable labels
-  return rows.map(r => {
+  // 4) Shape payload with human-readable labels
+  const result = rows.map(r => {
     const start = Number(r.bucket_start)
     const end   = start + (bucketSize - 1)
     return {
@@ -67,4 +77,7 @@ export default defineEventHandler(async (event) => {
       label:       `${start}–${end}`
     }
   })
+
+  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+  return result
 })
