@@ -3,6 +3,9 @@ import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
 const DEFAULTS = {
+  leftCupPoints: 150,
+  rightCupPoints: 150,
+  goldCupPoints: 300,
   // Colors
   winballColorBackground: '#ffffff',
   winballColorBackboard:  '#F0E6FF',
@@ -74,6 +77,9 @@ export default defineEventHandler(async () => {
   const config = await db.gameConfig.findUnique({
     where: { gameName: 'Winball' },
     select: {
+      leftCupPoints:              true,
+      rightCupPoints:             true,
+      goldCupPoints:              true,
       winballColorBackground:     true,
       winballColorBackboard:      true,
       winballColorWalls:          true,

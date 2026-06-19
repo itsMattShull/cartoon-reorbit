@@ -46,6 +46,17 @@
         <!-- Winball -->
         <section v-if="activeTab === 'Winball'" role="tabpanel" aria-label="Winball Settings">
           <h2 class="text-2xl font-semibold mb-4">Winball Settings</h2>
+          <div class="mb-6 rounded border border-indigo-100 bg-indigo-50 p-4">
+            <p class="text-sm text-indigo-900 mb-3">
+              These settings are shared by the current Winball page and the new Winball page.
+            </p>
+            <NuxtLink
+              to="/newsite/newwinball"
+              class="inline-flex items-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Open New Winball
+            </NuxtLink>
+          </div>
 
           <div class="mb-6 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Scoring</h3>
