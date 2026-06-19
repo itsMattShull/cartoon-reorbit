@@ -317,7 +317,7 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
-const { open: openCtoonModal, setContext, clearContext } = useCtoonModal()
+const { open: openCtoonModal, setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
@@ -703,6 +703,13 @@ const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user
 watch([isOwnZone, viewedUsername], ([own, uname]) => {
   setContext({ source: 'czone', isOwner: own, username: uname || '' })
 }, { immediate: true })
+
+watch(holidaySignal, async () => {
+  if (holidayRedeem.value?.reward?.name) {
+    showSearchToast(`Opened! You received ${holidayRedeem.value.reward.name} 🎉`, 'success')
+  }
+  await loadZone(viewedUsername.value)
+})
 
 const lastOnlineText = computed(() => {
   if (!viewedOwner.value?.lastActivity) return null
