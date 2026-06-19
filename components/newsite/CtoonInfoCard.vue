@@ -326,6 +326,19 @@
             >
               Edit cToon
             </NuxtLink>
+            <div v-if="canSeeHolidayReveal" class="ctic-open-wrap">
+              <button
+                v-if="canOpenNow"
+                class="ctic-open-btn"
+                :disabled="openingHoliday"
+                @click="openHolidayCtoon"
+              >
+                {{ openingHoliday ? 'Opening...' : 'Open cToon' }}
+              </button>
+              <div v-else class="ctic-countdown">
+                Reveal in: <span class="ctic-countdown-time">{{ revealCountdown }}</span>
+              </div>
+            </div>
             <AddToWishlist v-if="ctoon.id" :ctoon-id="ctoon.id" />
           </div>
         </template>
@@ -344,7 +357,7 @@ import { useAuth } from '@/composables/useAuth'
 import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
 
 const { isAdmin } = useAuth()
-const { isOpen, loading, error, data, close } = useCtoonModal()
+const { isOpen, loading, error, data, context, close, notifyHolidayRedeem } = useCtoonModal()
 
 const ctoon = computed(() => data.value?.ctoon || {})
 const ctoonDescription = computed(() => String(ctoon.value?.description || '').trim())
@@ -391,6 +404,67 @@ const statusImageAlt = computed(() => {
     default: return 'cToon status'
   }
 })
+
+const holidayEvent = ref(null)
+const openingHoliday = ref(false)
+const revealCountdown = ref('')
+let revealTimer = null
+
+const isCzoneContext = computed(() => context.value?.source === 'czone')
+const canSeeHolidayReveal = computed(() => (
+  isCzoneContext.value &&
+  !!context.value?.isOwner &&
+  !!holidayEvent.value &&
+  !!userCtoon.value?.id
+))
+const eventMinRevealAt = computed(() => holidayEvent.value?.minRevealAt || null)
+const canOpenNow = computed(() => {
+  if (!canSeeHolidayReveal.value) return false
+  const mra = eventMinRevealAt.value ? new Date(eventMinRevealAt.value).getTime() : null
+  return mra === null || Date.now() >= mra
+})
+
+function stopRevealCountdown() {
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null }
+}
+
+function startRevealCountdown() {
+  stopRevealCountdown()
+  if (!canSeeHolidayReveal.value) { revealCountdown.value = ''; return }
+  const mraStr = eventMinRevealAt.value
+  if (!mraStr) { revealCountdown.value = 'now'; return }
+  const target = new Date(mraStr).getTime()
+  const tick = () => {
+    const diff = Math.max(0, target - Date.now())
+    if (diff <= 0) { revealCountdown.value = 'now'; stopRevealCountdown(); return }
+    const s = Math.floor(diff / 1000)
+    const days = Math.floor(s / 86400)
+    const hours = Math.floor((s % 86400) / 3600)
+    const mins = Math.floor((s % 3600) / 60)
+    revealCountdown.value = `${days}d ${hours}h ${mins}m`
+  }
+  tick()
+  revealTimer = setInterval(tick, 60000)
+}
+
+async function openHolidayCtoon() {
+  if (!canOpenNow.value || openingHoliday.value) return
+  const userCtoonId = userCtoon.value?.id
+  if (!userCtoonId) return
+  openingHoliday.value = true
+  try {
+    const res = await $fetch('/api/holiday/redeem', {
+      method: 'POST',
+      body: { userCtoonId }
+    })
+    notifyHolidayRedeem({ userCtoonId, reward: res?.reward || null })
+    close()
+  } catch (err) {
+    console.error('Failed to open holiday cToon', err)
+  } finally {
+    openingHoliday.value = false
+  }
+}
 
 const audioEl = ref(null)
 const activeTab = ref('info')
@@ -586,6 +660,26 @@ watch(suggestSet, (next) => {
   }, 250)
 })
 
+watch([isOpen, () => ctoon.value?.id, isCzoneContext], async ([open, ctoonId, isCzone]) => {
+  if (!open || !isCzone || !ctoonId) {
+    holidayEvent.value = null
+    stopRevealCountdown()
+    return
+  }
+  try {
+    holidayEvent.value = await $fetch('/api/holiday/event-for-ctoon', {
+      query: { ctoonId }
+    })
+  } catch {
+    holidayEvent.value = null
+  }
+}, { immediate: true })
+
+watch([isOpen, canSeeHolidayReveal, eventMinRevealAt], () => {
+  if (isOpen.value && canSeeHolidayReveal.value) startRevealCountdown()
+  else stopRevealCountdown()
+})
+
 function onKeydown(e) {
   if (e.key === 'Escape') close()
 }
@@ -599,6 +693,7 @@ onBeforeUnmount(() => {
   if (seriesSuggestTimer) clearTimeout(seriesSuggestTimer)
   if (setSuggestTimer) clearTimeout(setSuggestTimer)
   if (audioEl.value) audioEl.value.pause()
+  stopRevealCountdown()
 })
 
 async function loadOwners(ctoonId) {
@@ -1062,7 +1157,46 @@ function formatDate(value) {
 .ctic-foot-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.ctic-open-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.ctic-open-btn {
+  background: var(--OrbitLightBlue);
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ctic-open-btn:hover:not(:disabled) { background: #2288bb; }
+.ctic-open-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ctic-countdown {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+.ctic-countdown-time {
+  font-weight: 600;
+  color: white;
+}
+
+@media (max-width: 480px) {
+  .ctic-foot {
+    flex-wrap: wrap;
+  }
+  .ctic-foot-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .ctic-close-action {
