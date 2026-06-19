@@ -45,6 +45,16 @@ async function seedGameConfigs() {
     }
   })
 
+  // TKO config (points per counted win)
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'TKO' },
+    update: {},
+    create: {
+      gameName: 'TKO',
+      pointsPerWin: 300
+    }
+  })
+
   // Winwheel config (spin cost, optional image)
   await prisma.gameConfig.upsert({
     where: { gameName: 'Winwheel' },

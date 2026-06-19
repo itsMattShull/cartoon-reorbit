@@ -60,7 +60,7 @@ function validatePayload(payload) {
       }
     }
 
-  } else if (payload.gameName === 'Clash') {
+  } else if (payload.gameName === 'Clash' || payload.gameName === 'TKO') {
     if (payload.pointsPerWin == null || typeof payload.pointsPerWin !== 'number') {
       throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "pointsPerWin", must be a number' })
     }
@@ -291,7 +291,7 @@ export default defineEventHandler(async (event) => {
           ...winballColors,
           ...winballPhysics
         }
-      } else if (gameName === 'Clash') {
+      } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
       } else if (gameName === 'Winwheel') {
@@ -447,7 +447,7 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
           }
-        } else if (gameName === 'Clash') {
+        } else if (gameName === 'Clash' || gameName === 'TKO') {
           if (before?.pointsPerWin !== pointsPerWin) {
             await logAdminChange(tx, { userId: me.id, area, key: 'pointsPerWin', prevValue: before?.pointsPerWin, newValue: pointsPerWin })
           }
