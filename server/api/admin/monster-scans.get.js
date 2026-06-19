@@ -1,6 +1,9 @@
 // server/api/admin/monster-scans.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -19,6 +22,12 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'daily'
 
+  const cacheKey = `admin:monster-scans:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -29,8 +38,13 @@ export default defineEventHandler(async (event) => {
     default:   startDate.setMonth(startDate.getMonth() - 3)
   }
 
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
+
   if (groupBy === 'weekly') {
-    return prisma.$queryRaw`
+    const rows = await prisma.$queryRaw`
       SELECT
         to_char(date_trunc('week', "scannedAt"), 'YYYY-MM-DD') AS period,
         COUNT(*)::int AS scans,
@@ -40,10 +54,11 @@ export default defineEventHandler(async (event) => {
       GROUP BY period
       ORDER BY period
     `
+    return cacheAndReturn(rows)
   }
 
   if (groupBy === 'monthly') {
-    return prisma.$queryRaw`
+    const rows = await prisma.$queryRaw`
       SELECT
         to_char(date_trunc('month', "scannedAt"), 'YYYY-MM-DD') AS period,
         COUNT(*)::int AS scans,
@@ -53,9 +68,10 @@ export default defineEventHandler(async (event) => {
       GROUP BY period
       ORDER BY period
     `
+    return cacheAndReturn(rows)
   }
 
-  return prisma.$queryRaw`
+  const rows = await prisma.$queryRaw`
     SELECT
       to_char(date_trunc('day', "scannedAt"), 'YYYY-MM-DD') AS period,
       COUNT(*)::int AS scans,
@@ -65,4 +81,5 @@ export default defineEventHandler(async (event) => {
     GROUP BY period
     ORDER BY period
   `
+  return cacheAndReturn(rows)
 })

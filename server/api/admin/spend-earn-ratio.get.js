@@ -1,6 +1,9 @@
 // server/api/admin/spend-earn-ratio.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -21,6 +24,13 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'daily'
 
+  // 3) Cache check
+  const cacheKey = `admin:spend-earn-ratio:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const TF_DAYS  = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }
   const TF_WEEKS = { '1m':  4, '3m': 13, '6m':  26, '1y':  52 }
   const TF_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
@@ -28,6 +38,11 @@ export default defineEventHandler(async (event) => {
   const days  = TF_DAYS[timeframe]  ?? 90
   const weeks = TF_WEEKS[timeframe] ?? 13
   const months = TF_MONTHS[timeframe] ?? 3
+
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
 
   if (groupBy === 'weekly') {
     // Weekly: ratio = spend/earn; MA ratio = MA(spend)/MA(earn)
@@ -87,11 +102,10 @@ export default defineEventHandler(async (event) => {
       spend: Number(r.spend),
       earn:  Number(r.earn),
       spendEarnRatio: r.spend_earn_ratio === null ? null : Number(r.spend_earn_ratio),
-      // keep frontend compatibility
       movingAvg7Day: r.ratio_ma7 === null ? null : Number(r.ratio_ma7)
     }))
 
-    return { timeframe, days, weeks, series }
+    return cacheAndReturn({ timeframe, days, weeks, series })
   }
 
   if (groupBy === 'monthly') {
@@ -152,11 +166,10 @@ export default defineEventHandler(async (event) => {
       spend: Number(r.spend),
       earn:  Number(r.earn),
       spendEarnRatio: r.spend_earn_ratio === null ? null : Number(r.spend_earn_ratio),
-      // keep frontend compatibility
       movingAvg7Day: r.ratio_ma7 === null ? null : Number(r.ratio_ma7)
     }))
 
-    return { timeframe, months, series }
+    return cacheAndReturn({ timeframe, months, series })
   }
 
   // Daily: ratio = spend/earn; MA ratio = MA(spend)/MA(earn)
@@ -211,7 +224,7 @@ export default defineEventHandler(async (event) => {
     ORDER BY period;
   `)
 
-  return {
+  return cacheAndReturn({
     timeframe,
     days,
     daily: daily.map(r => ({
@@ -219,8 +232,7 @@ export default defineEventHandler(async (event) => {
       spend: Number(r.spend),
       earn:  Number(r.earn),
       spendEarnRatio: r.spend_earn_ratio === null ? null : Number(r.spend_earn_ratio),
-      // keep frontend compatibility
       movingAvg7Day: r.ratio_ma7 === null ? null : Number(r.ratio_ma7)
     }))
-  }
+  })
 })

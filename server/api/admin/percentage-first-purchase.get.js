@@ -2,6 +2,9 @@
 
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 export default defineEventHandler(async (event) => {
   // ── 1. Admin check via your /api/auth/me endpoint ─────────────────────────
@@ -22,6 +25,13 @@ export default defineEventHandler(async (event) => {
     ? rawGroupBy
     : 'weekly'
 
+  // ── 3. Cache check ────────────────────────────────────────────────────────
+  const cacheKey = `admin:percentage-first-purchase:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const now = new Date()
   const startDate = new Date(now)
   switch (timeframe) {
@@ -32,8 +42,13 @@ export default defineEventHandler(async (event) => {
     default:    startDate.setMonth(startDate.getMonth() - 3)
   }
 
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
+
   if (groupBy === 'daily') {
-    // ── 3a. Daily: % of users with ≥1 purchase within 1 day of signup ──────
+    // ── 4a. Daily: % of users with ≥1 purchase within 1 day of signup ──────
     const result = await prisma.$queryRaw`
       WITH days AS (
         SELECT generate_series(
@@ -76,11 +91,11 @@ export default defineEventHandler(async (event) => {
         ON s.day = d.day
       ORDER BY d.day
     `
-    return result
+    return cacheAndReturn(result)
   }
 
   if (groupBy === 'monthly') {
-    // ── 3b. Monthly: % of users with ≥1 purchase within 1 day of signup ─────
+    // ── 4b. Monthly: % of users with ≥1 purchase within 1 day of signup ─────
     const result = await prisma.$queryRaw`
       WITH months AS (
         SELECT generate_series(
@@ -123,10 +138,10 @@ export default defineEventHandler(async (event) => {
         ON s.month = m.month
       ORDER BY m.month
     `
-    return result
+    return cacheAndReturn(result)
   }
 
-  // ── 3b. Weekly (original behavior): % within 1 day of signup ─────────────
+  // ── 4c. Weekly (original behavior): % within 1 day of signup ─────────────
   const result = await prisma.$queryRaw`
     WITH weeks AS (
       SELECT generate_series(
@@ -170,5 +185,5 @@ export default defineEventHandler(async (event) => {
     ORDER BY w.week
   `
 
-  return result
+  return cacheAndReturn(result)
 })

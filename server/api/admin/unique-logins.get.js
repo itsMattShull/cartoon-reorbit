@@ -2,6 +2,9 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { addDays, addWeeks, addMonths, subMonths, subYears, format, startOfWeek, startOfMonth } from 'date-fns'
 import { prisma } from '@/server/prisma'
+import { redis } from '@/server/utils/redis'
+
+const CACHE_TTL_SECONDS = 1800 // 30 minutes
 
 function getStartDate(timeframe) {
   const now = new Date()
@@ -31,6 +34,13 @@ export default defineEventHandler(async (event) => {
     ? q.groupBy
     : 'daily'
 
+  // Cache check
+  const cacheKey = `admin:unique-logins:${timeframe}:${groupBy}`
+  try {
+    const hit = await redis.get(cacheKey)
+    if (hit) return JSON.parse(hit)
+  } catch {}
+
   const startDate = getStartDate(timeframe)
   const today = new Date()
   const endDate = new Date(format(today, 'yyyy-MM-dd')) // strip time
@@ -48,6 +58,11 @@ export default defineEventHandler(async (event) => {
     select: { userId: true, createdAt: true },
     orderBy: { createdAt: 'asc' }
   })
+
+  async function cacheAndReturn(result) {
+    try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
+    return result
+  }
 
   // Per-period unique users with at least one pointsLog
   if (groupBy === 'weekly') {
@@ -69,7 +84,7 @@ export default defineEventHandler(async (event) => {
       result.push({ period: key, count: weekMap.get(key)?.size ?? 0 })
       w = addWeeks(w, 1)
     }
-    return result
+    return cacheAndReturn(result)
   } else if (groupBy === 'monthly') {
     const monthMap = new Map() // monthStart -> Set<userId>
     for (const r of pointsLogs) {
@@ -89,7 +104,7 @@ export default defineEventHandler(async (event) => {
       result.push({ period: key, count: monthMap.get(key)?.size ?? 0 })
       m = addMonths(m, 1)
     }
-    return result
+    return cacheAndReturn(result)
   } else {
     const dayMap = new Map() // yyyy-MM-dd -> Set<userId>
     for (const r of pointsLogs) {
@@ -106,6 +121,6 @@ export default defineEventHandler(async (event) => {
       result.push({ day: key, count: dayMap.get(key)?.size ?? 0 })
       d = addDays(d, 1)
     }
-    return result
+    return cacheAndReturn(result)
   }
 })
