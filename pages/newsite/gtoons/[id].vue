@@ -24,6 +24,7 @@
                   :disabled="!selectedDeckId || myReady"
                   @click="readyUp"
                 >{{ myReady ? 'Ready!' : 'Start Game' }}</button>
+                <p v-if="matchError" class="mt-2 text-xs text-red-400">{{ matchError }}</p>
               </div>
               <div class="border border-white/20 rounded p-3">
                 <h3 class="font-semibold mb-2 text-sm">Opponent</h3>
@@ -258,6 +259,7 @@ const oppReady = ref(false)
 const oppHasDeck = ref(false)
 const oppUsername = ref('')
 const roomStake = ref(0)
+const matchError = ref('')
 
 const route = useRoute()
 const roomId = route.params.id
@@ -276,11 +278,26 @@ const socket = io(
 )
 
 socket.on('gameStart', state => {
+  matchError.value = ''
   game.value = state
   startTimer(state.selectEndsAt)
 })
 
 socket.on('clashDecks', list => { myDecks.value = list || [] })
+
+socket.on('pvpStakeError', ({ message }) => {
+  matchError.value = message || 'Failed to start match.'
+  myReady.value = false
+})
+
+socket.on('deckError', ({ message }) => {
+  matchError.value = message || 'Invalid deck selection.'
+  myReady.value = false
+})
+
+socket.on('joinError', ({ message }) => {
+  matchError.value = message || 'Could not join room.'
+})
 
 socket.on('pvpLobbyState', snap => {
   const me  = String(user.value.id)
@@ -304,6 +321,7 @@ onMounted(() => {
 
 function readyUp() {
   if (!selectedDeckId.value) return
+  matchError.value = ''
   socket.emit('readyUpWithDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
 }
 
