@@ -1881,6 +1881,7 @@ body {
     min-height: calc(100svh - 190px);
     max-width: 100%;
     box-sizing: border-box;
+    align-items: start;
   }
 }
 </style>
