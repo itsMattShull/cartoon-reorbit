@@ -72,8 +72,9 @@ export default defineEventHandler(async (event) => {
   if (now.getTime() < resetUtcMs) resetUtcMs -= 24 * 60 * 60 * 1000
   const windowStart = new Date(resetUtcMs)
 
+  // Exclude failed spins — those were refunded and should not count against the daily limit
   const spinsToday = await prisma.wheelSpinLog.count({
-    where: { userId, createdAt: { gte: windowStart } }
+    where: { userId, createdAt: { gte: windowStart }, status: { not: 'failed' } }
   })
   const nextReset = new Date(resetUtcMs + 24 * 60 * 60 * 1000)
 

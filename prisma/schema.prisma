@@ -1204,6 +1204,7 @@ model WheelSpinLog {
   result  String // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive'
   points  Int? // how many points awarded, if any
   ctoonId String? // FK to the minted cToon, if any
+  status  String  @default("completed") // 'pending' | 'completed' | 'failed'
 
   sliceIndex Int // 0–5
   createdAt  DateTime @default(now())
