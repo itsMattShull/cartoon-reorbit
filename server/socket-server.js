@@ -1257,10 +1257,17 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
   // If there is an active PvP match in this room, end it as incomplete.
   const match = pvpMatches.get(roomId)
   if (match) {
-    // compute “future” size after this socket leaves
-    let size = roomSize(io, roomId)
-    const set = io.sockets.adapter.rooms.get(roomId)
-    if (leavingSocketId && set && set.has(leavingSocketId)) size -= 1
+    // Before ending the match, check whether the leaving user still has another
+    // socket connected in this room (e.g. the singleton from ClashRooms).
+    // Only end the match if the user truly has no remaining connection.
+    if (userId) {
+      const remainingSockets = await io.in(roomId).fetchSockets()
+      const uid = String(userId)
+      const stillPresent = remainingSockets.some(
+        s => s.id !== leavingSocketId && String(s.data?.userId) === uid
+      )
+      if (stillPresent) return
+    }
 
     if (match.timer) clearInterval(match.timer)
 
@@ -1312,16 +1319,25 @@ async function handleClashLeave(io, { roomId, userId, leavingSocketId }) {
     return
   }
 
-  // ── Otherwise handle *lobby* rooms (unchanged logic) ──
+  // ── Otherwise handle *lobby* rooms ──
   const lobby = pvpRooms.get(roomId)
   if (lobby) {
     if (userId) {
+      // Only remove the player if they have no other socket still in this room.
+      // The singleton socket from ClashRooms and the [id].vue socket both share
+      // the same userId — don't evict the user while either socket is present.
+      const remainingSockets = await io.in(roomId).fetchSockets()
       const uid = String(userId)
-      lobby.players = lobby.players.filter(id => id !== uid)
-      if (lobby.decks) delete lobby.decks[uid]
-      if (lobby.deckSnapshots) delete lobby.deckSnapshots[uid]
-      if (lobby.ready) delete lobby.ready[uid]
-      if (lobby.usernames) delete lobby.usernames[uid]
+      const stillPresent = remainingSockets.some(
+        s => s.id !== leavingSocketId && String(s.data?.userId) === uid
+      )
+      if (!stillPresent) {
+        lobby.players = lobby.players.filter(id => id !== uid)
+        if (lobby.decks) delete lobby.decks[uid]
+        if (lobby.deckSnapshots) delete lobby.deckSnapshots[uid]
+        if (lobby.ready) delete lobby.ready[uid]
+        if (lobby.usernames) delete lobby.usernames[uid]
+      }
     }
 
     // recompute future size after this socket leaves
@@ -2173,7 +2189,10 @@ io.on('connection', socket => {
     }
 
     const room = pvpRooms.get(roomId);
-    if (!room || room.players.length !== 1) {
+    // Reject if room doesn't exist, OR if room is full and this user isn't
+    // already a member (prevents a third party from joining, but lets the
+    // owner's [id].vue socket join after the opponent has already arrived).
+    if (!room || (room.players.length !== 1 && !room.players.includes(uid))) {
       socket.emit('joinError', { message: 'Room unavailable.' });
       return;
     }
@@ -2250,7 +2269,12 @@ io.on('connection', socket => {
     room.ready[uid] = true
 
     io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
-    await startPvpMatch(roomId)
+    try {
+      await startPvpMatch(roomId)
+    } catch (err) {
+      console.error('startPvpMatch threw unexpectedly:', err)
+      io.to(roomId).emit('pvpStakeError', { message: 'Failed to start match. Please try again.' })
+    }
   })
 
   // --- Relay selectCards & game flow ---

@@ -118,6 +118,22 @@ const SWF_FPS = 21;
     audio.volume = soundVolumes[id] ?? 1;
     return [id, audio];
   }));
+
+  let audioCtx = null;
+  const audioBuffers = {};
+  (async () => {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      await Promise.all(Object.entries(soundFiles).map(async ([id, src]) => {
+        try {
+          const resp = await fetch(src);
+          const buf = await resp.arrayBuffer();
+          audioBuffers[id] = await audioCtx.decodeAudioData(buf);
+        } catch {}
+      }));
+    } catch {}
+  })();
+
   window.__winballSoundEvents = [];
   window.__winballPath = [];
   window.__winballDumpPath = () => window.__winballPath.map((point) => (
@@ -914,9 +930,11 @@ fr_max = "45";`
     return true;
   }
 
+  const _launcherCurveWallsCache = launcherCurveWalls();
+
   function resolveWallSegments() {
     let touched = false;
-    const segments = state.launcherCleared ? [...wallSegments, ...launcherCurveWalls()] : wallSegments;
+    const segments = state.launcherCleared ? [...wallSegments, ..._launcherCurveWallsCache] : wallSegments;
     for (let pass = 0; pass < 2; pass += 1) {
       for (const segment of segments) {
         if (resolveSegmentCollision(segment)) {
@@ -1093,10 +1111,21 @@ fr_max = "45";`
   }
 
   function playSound(id) {
-    const base = sounds[id];
-    if (!base) return;
     window.__winballSoundEvents.push({ id, at: performance.now() });
     if (window.__winballSoundEvents.length > 50) window.__winballSoundEvents.shift();
+    if (audioCtx && audioBuffers[id]) {
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffers[id];
+      const gain = audioCtx.createGain();
+      gain.gain.value = soundVolumes[id] ?? 1;
+      source.connect(gain);
+      gain.connect(audioCtx.destination);
+      source.start(0);
+      return;
+    }
+    const base = sounds[id];
+    if (!base) return;
     const audio = base.cloneNode();
     audio.volume = base.volume;
     const played = audio.play();
@@ -1105,6 +1134,7 @@ fr_max = "45";`
   window.__winballPlaySound = playSound;
 
   function primeSounds() {
+    if (audioCtx?.state === "suspended") audioCtx.resume();
     Object.values(sounds).forEach((audio) => audio.load());
   }
 
@@ -1500,7 +1530,6 @@ fr_max = "45";`
 
   function draw(now) {
     if (disposed) return;
-    resizeCanvas();
     if (state.ballSink) {
       const t = Math.min(1, (now - state.ballSink.started) / state.ballSink.duration);
       const eased = t * t * (3 - 2 * t);
@@ -1537,11 +1566,14 @@ fr_max = "45";`
     }
   }
 
-  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+  const resizeObs = new ResizeObserver(() => resizeCanvas());
+  resizeObs.observe(canvas);
   window.__newWinballDispose = () => {
     disposed = true;
     if (drawFrameId) cancelAnimationFrame(drawFrameId);
-    window.removeEventListener("resize", resizeCanvas);
+    resizeObs.disconnect();
+    audioCtx?.close().catch(() => {});
   };
   setupDebugPowerChooser();
   setupStageLayers().finally(setupActors);
@@ -1740,6 +1772,7 @@ body {
   cursor: pointer;
   touch-action: none;
   z-index: 4;
+  will-change: transform;
 }
 
 #actors-back,
