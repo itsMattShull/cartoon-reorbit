@@ -46,6 +46,17 @@
         <!-- Winball -->
         <section v-if="activeTab === 'Winball'" role="tabpanel" aria-label="Winball Settings">
           <h2 class="text-2xl font-semibold mb-4">Winball Settings</h2>
+          <div class="mb-6 rounded border border-indigo-100 bg-indigo-50 p-4">
+            <p class="text-sm text-indigo-900 mb-3">
+              These settings are shared by the current Winball page and the new Winball page.
+            </p>
+            <NuxtLink
+              to="/newsite/newwinball"
+              class="inline-flex items-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Open New Winball
+            </NuxtLink>
+          </div>
 
           <div class="mb-6 border rounded-lg p-4">
             <h3 class="text-lg font-semibold mb-3">Scoring</h3>
@@ -672,6 +683,20 @@
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
 
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-3">Settings</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
+                <input type="number" v-model.number="tkoPointsPerWin" min="0" class="input" />
+              </div>
+            </div>
+            <button @click="saveTkoConfig" :disabled="loadingTkoConfig" class="btn-primary">
+              <span v-if="!loadingTkoConfig">Save TKO Settings</span>
+              <span v-else>Saving…</span>
+            </button>
+          </div>
+
           <div v-if="tkoLoading" class="text-gray-500 py-8 text-center">Loading…</div>
 
           <template v-else>
@@ -809,6 +834,7 @@ const leftCupPoints         = ref(0)
 const rightCupPoints        = ref(0)
 const goldCupPoints         = ref(0)
 const clashPointsPerWin     = ref(1)
+const tkoPointsPerWin       = ref(300)
 const loadingWinball        = ref(false)
 const winballBackboardFile  = ref(null)
 const uploadingBackboard    = ref(false)
@@ -817,6 +843,7 @@ const winballBumperFiles    = ref([null, null, null])
 const uploadingBumper       = ref([false, false, false])
 const winballBumperImagePaths = ref(['', '', ''])
 const loadingClash          = ref(false)
+const loadingTkoConfig      = ref(false)
 
 const winballBumperGeometry = ref([
   { radius: 6, height: 6, x: -8, z: -9 },
@@ -1173,6 +1200,9 @@ async function loadSettings() {
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
+
+  const tc = await $fetch('/api/admin/game-config?gameName=TKO')
+  tkoPointsPerWin.value = tc.pointsPerWin ?? 300
 }
 
 // Win Wheel state
@@ -1482,6 +1512,25 @@ async function saveClashConfig() {
     toastMessage.value = 'Error saving Clash settings'; toastType.value = 'error'
   } finally {
     loadingClash.value = false
+  }
+}
+
+async function saveTkoConfig() {
+  loadingTkoConfig.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:        'TKO',
+        pointsPerWin:    tkoPointsPerWin.value,
+        dailyPointLimit: globalDailyPointLimit.value
+      }
+    })
+    toastMessage.value = 'TKO settings saved!'; toastType.value = 'success'
+  } catch {
+    toastMessage.value = 'Error saving TKO settings'; toastType.value = 'error'
+  } finally {
+    loadingTkoConfig.value = false
   }
 }
 

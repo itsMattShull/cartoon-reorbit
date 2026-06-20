@@ -1,9 +1,17 @@
 <template>
   <div class="gameshome">
-    <NuxtLink to="/newsite/winball" class="quadrant quadrant--shop">Winball</NuxtLink>
+    <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">Winball</NuxtLink>
     <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">Lotto</NuxtLink>
     <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">Win Wheel</NuxtLink>
     <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">gToons Clash</NuxtLink>
+    <a
+      href="https://playtko.win"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="quadrant quadrant--tko"
+    >
+      TKO
+    </a>
   </div>
 </template>
 
@@ -11,7 +19,7 @@
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
   width: 100%;
   height: 100%;
   gap: 6px;
@@ -49,6 +57,7 @@
 .quadrant--collection { background: #1a3e8a; }
 .quadrant--games      { background: #7c2d8a; }
 .quadrant--profile    { background: #8a4a1a; }
+.quadrant--tko        { background: #8a1a32; grid-column: 1 / -1; }
 
 @media (max-width: 768px) {
   .gameshome {
