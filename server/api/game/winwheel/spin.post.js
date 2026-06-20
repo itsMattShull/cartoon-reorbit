@@ -34,9 +34,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // — Acquire per-user distributed lock to prevent concurrent spins —
+  // Store a unique token so the release can verify ownership (CAS) and
+  // avoid deleting a lock that was re-acquired by another request after TTL expiry.
+  const lockToken = crypto.randomUUID()
   let lockAcquired = false
   try {
-    const result = await redis.set(lockKey(userId), '1', 'NX', 'PX', LOCK_TTL_MS)
+    const result = await redis.set(lockKey(userId), lockToken, 'NX', 'PX', LOCK_TTL_MS)
     lockAcquired = result === 'OK'
   } catch (redisErr) {
     // Redis unavailable — fail closed rather than silently proceeding without a lock
@@ -144,29 +147,40 @@ export default defineEventHandler(async (event) => {
         break
     }
 
-    // — Deduct spin cost atomically —
-    const deducted = await prisma.userPoints.updateMany({
-      where: { userId, points: { gte: spinCost } },
-      data: { points: { decrement: spinCost } }
-    })
-    if (deducted.count === 0) {
-      throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
+    // — Deduct points, log the debit, and pre-claim the spin slot atomically —
+    // Wrapping all three in a transaction means a partial failure (e.g., spinLog
+    // create fails after points are deducted) rolls back cleanly with no lost points.
+    try {
+      const txResult = await prisma.$transaction(async (tx) => {
+        const deducted = await tx.userPoints.updateMany({
+          where: { userId, points: { gte: spinCost } },
+          data: { points: { decrement: spinCost } }
+        })
+        if (deducted.count === 0) {
+          throw Object.assign(new Error('Insufficient points'), { statusCode: 400 })
+        }
+        const afterDeduct = await tx.userPoints.findUnique({ where: { userId } })
+        await tx.pointsLog.create({
+          data: { userId, direction: 'decrease', points: spinCost, total: afterDeduct.points, method: 'Game - Win Wheel' },
+        })
+        // Pre-claim the spin slot. Any concurrent request that slips past the lock
+        // will see this pending entry in the daily count and be rejected.
+        const spinLog = await tx.wheelSpinLog.create({
+          data: { userId, result, sliceIndex, status: 'pending' }
+        })
+        return { spinLog }
+      })
+      spinLogId = txResult.spinLog.id
+    } catch (txErr) {
+      if (txErr.statusCode === 400) {
+        throw createError({ statusCode: 400, statusMessage: 'Insufficient points' })
+      }
+      throw createError({ statusCode: 500, statusMessage: 'Failed to initiate spin — no points were deducted.' })
     }
-    const afterDeduct = await prisma.userPoints.findUnique({ where: { userId } })
-    await prisma.pointsLog.create({
-      data: { userId, direction: 'decrease', points: spinCost, total: afterDeduct.points, method: 'Game - Win Wheel' },
-    })
 
     // — From here on any failure must refund points. Use a single try/catch so
-    //   compensation covers both log creation failure and prize delivery failure. —
+    //   compensation covers prize delivery failures. —
     try {
-      // Pre-claim the spin slot before awarding prize. Any concurrent request that
-      // slips past the lock will see this pending entry in the daily count.
-      const spinLog = await prisma.wheelSpinLog.create({
-        data: { userId, result, sliceIndex, status: 'pending' }
-      })
-      spinLogId = spinLog.id
-
       // — Award prize —
       if (result === 'points') {
         const updated = await prisma.userPoints.upsert({
@@ -186,8 +200,10 @@ export default defineEventHandler(async (event) => {
           userId,
           ctoonId: ctoonIdToMint,
           isSpecial: true
-        }, { timeout: MINT_JOB_TIMEOUT_MS })
-        await job.waitUntilFinished(qe)
+        })
+        // Second arg to waitUntilFinished is the client-side wait TTL in ms.
+        // The `timeout` field on add() options does not exist in BullMQ v5.
+        await job.waitUntilFinished(qe, MINT_JOB_TIMEOUT_MS)
       }
 
       // — Mark spin complete and record prize details —
@@ -238,9 +254,18 @@ export default defineEventHandler(async (event) => {
       sliceIndex
     }
   } finally {
-    // Always release the lock, even on error
+    // Compare-and-delete: only release the lock if it still holds our token.
+    // A plain DEL would incorrectly delete a lock re-acquired by another request
+    // after TTL expiry (e.g., if a stalled handler outlived the 22 s TTL).
+    const casRelease = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+      else
+        return 0
+      end
+    `
     try {
-      await redis.del(lockKey(userId))
+      await redis.eval(casRelease, 1, lockKey(userId), lockToken)
     } catch (e) {
       console.error('[WinWheel] Failed to release spin lock for user', userId, e)
     }
