@@ -23,6 +23,7 @@
       <AdminVpnQueue v-else-if="section === 'vpn-queue'" />
       <AdminCtoonCollectionAnalytics v-else-if="section === 'collectionAnalytics'" />
       <AdminSetAnalytics v-else-if="section === 'setAnalytics'" />
+      <AdminCzoneContest v-else-if="section === 'czoneContest'" />
       <div v-else class="newsite-admin-placeholder">
         <h1 class="newsite-admin-title">Unknown section</h1>
       </div>

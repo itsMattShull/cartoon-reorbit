@@ -2268,6 +2268,28 @@ model UserScan {
 
 // ── cZone Contest ─────────────────────────────────────────────────────────────
 
+/// Singleton config for the automated weekly cZone contest cron job.
+model CZoneContestAutomationConfig {
+  id                     String   @id @default("singleton")
+  enabled                Boolean  @default(false)
+  startDayOfWeek         Int      @default(6)   // 0=Sun … 6=Sat; default Saturday
+  startHour              Int      @default(8)   // CST hour (0–23); default 8am
+  startMinute            Int      @default(0)
+  submissionEndDayOfWeek Int      @default(1)   // default Monday
+  submissionEndHour      Int      @default(20)  // default 8pm CST
+  submissionEndMinute    Int      @default(0)
+  votingEndDayOfWeek     Int      @default(3)   // default Wednesday
+  votingEndHour          Int      @default(8)   // default 8am CST
+  votingEndMinute        Int      @default(0)
+  winnerPoints           Int      @default(1000)
+  participantPoints      Int      @default(250)
+  titleTemplate          String   @default("Weekly cZone Contest {startDate}")
+  maxVotesPerUser        Int      @default(5)
+  lastCreatedFor         String?  // CST date "YYYY-MM-DD" of the week we last auto-created for
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
 model CZoneContest {
   id                String    @id @default(uuid())
   name              String
