@@ -187,6 +187,7 @@ export default defineEventHandler(async (event) => {
         inCmart:            !!meta.inCmart,
         sellOutBehavior:    meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
         dailyPurchaseLimit: meta.dailyPurchaseLimit != null ? Number(meta.dailyPurchaseLimit) : null,
+        maxBuysPerUser:     meta.maxBuysPerUser     != null ? Number(meta.maxBuysPerUser)     : null,
         scheduledOffAt,
         scheduledAt,
         ...(imagePath ? { imagePath } : {})

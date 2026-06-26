@@ -129,6 +129,22 @@
             </p>
           </div>
 
+          <!-- total purchase limit -->
+          <div class="lg:col-span-2 flex flex-col gap-1">
+            <label class="text-sm font-medium">Total purchase limit per user</label>
+            <input
+              v-model.number="maxBuysPerUser"
+              type="number"
+              min="1"
+              placeholder="Leave blank for unlimited"
+              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+              @input="onMaxBuysInput"
+            />
+            <p class="text-xs text-gray-500 ml-1">
+              All-time cap on how many times a single user can buy this pack. Never resets. Leave blank for unlimited.
+            </p>
+          </div>
+
           <!-- sell-out behavior -->
           <div class="lg:col-span-2 space-y-2">
             <p class="text-sm font-medium">Pack sell-out behavior</p>
@@ -286,10 +302,16 @@ const scheduledAtLocal   = ref('')
 const scheduledOffAtLocal = ref('')
 const sellOutBehavior    = ref('REMOVE_ON_ANY_RARITY_EMPTY')
 const dailyPurchaseLimit = ref(null)
+const maxBuysPerUser     = ref(null)
 
 function onDailyLimitInput(e) {
   const raw = e.target.value
   dailyPurchaseLimit.value = raw === '' ? null : Math.max(1, Math.floor(Number(raw)))
+}
+
+function onMaxBuysInput(e) {
+  const raw = e.target.value
+  maxBuysPerUser.value = raw === '' ? null : Math.max(1, Math.floor(Number(raw)))
 }
 
 /* ---------------- thumbnail upload ---------------- */
@@ -489,6 +511,7 @@ onMounted(async () => {
     inCmart.value     = p.inCmart
     sellOutBehavior.value    = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
     dailyPurchaseLimit.value = p.dailyPurchaseLimit ?? null
+    maxBuysPerUser.value     = p.maxBuysPerUser ?? null
     imagePreview.value= p.imagePath
     scheduledAtLocal.value = p.scheduledAt ? centralDateTimeValue(new Date(p.scheduledAt)) : ''
     scheduledOffAtLocal.value = p.scheduledOffAt ? centralDateTimeValue(new Date(p.scheduledOffAt)) : ''
@@ -539,6 +562,7 @@ async function submit () {
     scheduledOffAtLocal: scheduledOffAtLocal.value || '',
     sellOutBehavior: sellOutBehavior.value,
     dailyPurchaseLimit: dailyPurchaseLimit.value,
+    maxBuysPerUser: maxBuysPerUser.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({
       ctoonId: id,
