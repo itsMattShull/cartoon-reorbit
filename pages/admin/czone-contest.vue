@@ -21,36 +21,48 @@
 
       <template v-else>
         <!-- Mobile cards -->
-        <div class="space-y-4 sm:hidden">
-          <div v-for="row in contests" :key="row.id" class="border rounded-lg p-4 bg-white">
-            <div class="font-semibold text-gray-900">{{ row.name }}</div>
-            <div class="text-xs text-gray-500 mt-1">
-              {{ formatDate(row.startDate) }} → {{ formatDate(row.endDate) }}
+        <div class="space-y-3 md:hidden">
+          <div v-for="row in contests" :key="row.id" class="border rounded-lg p-4 bg-white shadow-sm">
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-semibold text-gray-900 text-sm leading-snug">{{ row.name }}</div>
+              <span :class="statusClass(row)" class="shrink-0">{{ statusLabel(row) }}</span>
             </div>
-            <div class="text-xs text-gray-600 mt-1">
-              <span class="font-medium">Submissions:</span> {{ row._count.submissions }} &nbsp;
-              <span class="font-medium">Max votes:</span> {{ row.maxVotesPerUser }}
+            <div class="mt-2 space-y-1 text-xs text-gray-600">
+              <div><span class="font-medium text-gray-700">Start:</span> {{ formatDate(row.startDate) }}</div>
+              <div><span class="font-medium text-gray-700">Submission end:</span> {{ formatDate(row.endDate) }}</div>
+              <div v-if="row.endVotingDate"><span class="font-medium text-gray-700">Voting end:</span> {{ formatDate(row.endVotingDate) }}</div>
+              <div class="flex gap-4 pt-0.5">
+                <span><span class="font-medium text-gray-700">Submissions:</span> {{ row._count.submissions }}</span>
+                <span><span class="font-medium text-gray-700">Max votes:</span> {{ row.maxVotesPerUser }}</span>
+              </div>
             </div>
-            <div class="mt-1">
-              <span :class="statusClass(row)">{{ statusLabel(row) }}</span>
-            </div>
-            <div class="mt-3 flex gap-3 flex-wrap text-sm">
-              <NuxtLink :to="`/czone-contest/${row.id}`" class="text-green-600 hover:text-green-800" target="_blank">View Contest</NuxtLink>
-              <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
-              <button class="text-red-600 hover:text-red-800" @click="confirmDelete(row)">Delete</button>
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <NuxtLink
+                :to="`/czone-contest/${row.id}`"
+                class="flex items-center justify-center py-1.5 px-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
+                target="_blank"
+              >View Contest</NuxtLink>
+              <button
+                class="py-1.5 px-2 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                @click="openEdit(row)"
+              >Edit</button>
+              <button
+                class="py-1.5 px-2 rounded border border-red-300 text-red-700 hover:bg-red-50"
+                @click="confirmDelete(row)"
+              >Delete</button>
               <button
                 :disabled="!!row.distributedAt || isVotingStillOpen(row)"
-                class="hover:text-amber-800"
-                :class="(row.distributedAt || isVotingStillOpen(row)) ? 'text-gray-400 cursor-not-allowed' : 'text-amber-600'"
+                class="py-1.5 px-2 rounded border"
+                :class="(row.distributedAt || isVotingStillOpen(row)) ? 'border-gray-200 text-gray-400 cursor-not-allowed' : 'border-amber-300 text-amber-700 hover:bg-amber-50'"
                 :title="isVotingStillOpen(row) ? 'Cannot distribute until voting has ended' : ''"
                 @click="openDistribute(row)"
-              >{{ row.distributedAt ? 'Distributed' : 'Distribute Prizes' }}</button>
+              >{{ row.distributedAt ? 'Distributed' : 'Distribute' }}</button>
             </div>
           </div>
         </div>
 
         <!-- Desktop table -->
-        <div class="hidden sm:block overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left border-b">

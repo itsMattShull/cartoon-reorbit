@@ -9,6 +9,7 @@ import cron from 'node-cron'
 import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
+import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -1183,3 +1184,6 @@ cron.schedule('0 10 * * *', syncWordleResultsDaily, { timezone: 'America/Chicago
 
 await runTournamentCron()
 cron.schedule('*/15 * * * *', runTournamentCron)
+
+// Weekly cZone contest auto-creation — runs every minute and checks if it's time
+cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'America/Chicago' })
