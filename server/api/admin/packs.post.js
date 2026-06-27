@@ -176,7 +176,8 @@ export default defineEventHandler(async (event) => {
         sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
         scheduledAt,
         scheduledOffAt,
-        maxBuysPerUser: defaultMaxBuys
+        dailyPurchaseLimit: meta.dailyPurchaseLimit != null ? Number(meta.dailyPurchaseLimit) : null,
+        maxBuysPerUser: meta.maxBuysPerUser != null ? Number(meta.maxBuysPerUser) : defaultMaxBuys
       }
     })
 

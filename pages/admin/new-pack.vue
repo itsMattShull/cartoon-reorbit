@@ -149,6 +149,40 @@
           </p>
         </div>
 
+        <!-- Daily purchase limit -->
+        <div class="lg:col-span-2 flex flex-col gap-1">
+          <label for="daily-limit" class="text-sm font-medium">Daily purchase limit per user</label>
+          <input
+            id="daily-limit"
+            v-model.number="dailyPurchaseLimit"
+            type="number"
+            min="1"
+            placeholder="Leave blank for unlimited"
+            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            @input="onDailyLimitInput"
+          />
+          <p class="text-xs text-gray-500 ml-1">
+            Max purchases per user per day (8pm–7:59pm CST window). Leave blank for unlimited.
+          </p>
+        </div>
+
+        <!-- Total purchase limit -->
+        <div class="lg:col-span-2 flex flex-col gap-1">
+          <label for="max-buys" class="text-sm font-medium">Total purchase limit per user</label>
+          <input
+            id="max-buys"
+            v-model.number="maxBuysPerUser"
+            type="number"
+            min="1"
+            :placeholder="`Default: ${globalDefaultMaxBuys ?? 5}`"
+            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            @input="onMaxBuysInput"
+          />
+          <p class="text-xs text-gray-500 ml-1">
+            All-time cap on how many times a single user can buy this pack. Never resets. Leave blank to use the site default.
+          </p>
+        </div>
+
         <!-- Sell-out behavior -->
         <div class="lg:col-span-2 space-y-2">
           <p class="text-sm font-medium">Pack sell-out behavior</p>
@@ -402,9 +436,21 @@ const name        = ref('')
 const price       = ref(900)
 const description = ref('')
 const inCmart     = ref(false)
-const scheduledAtLocal = ref('')
+const scheduledAtLocal    = ref('')
 const scheduledOffAtLocal = ref('')
-const sellOutBehavior = ref('REMOVE_ON_ANY_RARITY_EMPTY')
+const sellOutBehavior     = ref('REMOVE_ON_ANY_RARITY_EMPTY')
+const dailyPurchaseLimit  = ref(null)
+const maxBuysPerUser      = ref(null)
+const globalDefaultMaxBuys = ref(null)
+
+function onDailyLimitInput(e) {
+  const raw = e.target.value
+  dailyPurchaseLimit.value = raw === '' ? null : Math.max(1, Math.floor(Number(raw)))
+}
+function onMaxBuysInput(e) {
+  const raw = e.target.value
+  maxBuysPerUser.value = raw === '' ? null : Math.max(1, Math.floor(Number(raw)))
+}
 
 function normalizeToHour(value) {
   if (!value) return ''
@@ -672,6 +718,13 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to load Sets', err)
   }
+
+  try {
+    const cfg = await $fetch('/api/admin/global-config', { credentials: 'include' })
+    globalDefaultMaxBuys.value = cfg?.packMaxDefaultBuysPerUser ?? 5
+  } catch {
+    globalDefaultMaxBuys.value = 5
+  }
 })
 
 // watch for bulk changes → apply default weights per rarity
@@ -695,6 +748,8 @@ async function submit() {
     scheduledAtLocal: scheduledAtLocal.value || '',
     scheduledOffAtLocal: scheduledOffAtLocal.value || '',
     sellOutBehavior: sellOutBehavior.value,
+    dailyPurchaseLimit: dailyPurchaseLimit.value,
+    maxBuysPerUser: maxBuysPerUser.value,
     rarityConfigs: rarityConfigs.value,
     ctoonOptions: selectedIds.value.map(id => ({ ctoonId: id, weight: weights.value[id] }))
   }
