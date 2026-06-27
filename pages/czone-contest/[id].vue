@@ -373,7 +373,7 @@
         <img
           :src="item.assetPath"
           :alt="item.name"
-          :style="`width: ${item.width}px; height: ${item.height}px; object-fit: contain; max-width: initial;`"
+          :style="`width: ${item.displayWidth}px; height: ${item.displayHeight}px; object-fit: contain; max-width: initial;`"
         />
       </div>
     </div>
@@ -440,13 +440,21 @@ const hiddenCanvasBgStyle = computed(() => {
   }
 })
 
+const TOON_SIZE = 80
+
 const submitZoneToons = computed(() => {
   const zone = myZones.value[submitZoneIndex.value]
   if (!zone) return []
-  return (zone.toons || []).map(item => ({
-    ...item,
-    style: `top: ${item.y}px; left: ${item.x}px; width: ${item.width}px; height: ${item.height}px;`
-  }))
+  return (zone.toons || []).map(item => {
+    const w = (item.width  || TOON_SIZE) * (item.sizeScale || 1)
+    const h = (item.height || TOON_SIZE) * (item.sizeScale || 1)
+    return {
+      ...item,
+      displayWidth: w,
+      displayHeight: h,
+      style: `top: ${item.y}px; left: ${item.x}px; width: ${w}px; height: ${h}px;`
+    }
+  })
 })
 
 function detectCanvasRFP() {
