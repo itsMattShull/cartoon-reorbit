@@ -274,6 +274,17 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .mc-grid {
     grid-template-columns: repeat(2, 1fr);
+    --footer-height: 52px;
+    --footer-left-width: 100%;
+    --footer-right-width: 100%;
+  }
+
+  :deep(.sc-footer) {
+    flex-direction: column;
+  }
+
+  :deep(.sc-footer-right) {
+    justify-content: flex-start;
   }
 }
 
