@@ -5,9 +5,11 @@
       <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
       <GreenButton @click="$router.push('/newsite/allCtoons')">All cToons</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
+      <GreenButton @click="openWishlist">My Wishlist</GreenButton>
     </div>
     <div class="mcw-content">
-      <CzoneContest />
+      <MyWishlist v-if="showWishlist" />
+      <CzoneContest v-else />
     </div>
   </div>
 </template>
@@ -15,11 +17,21 @@
 <script setup>
 const { user } = useAuth()
 const router = useRouter()
+const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
+
+const showWishlist = ref(false)
 
 function goToCzone() {
+  showWishlist.value = false
+  clearSidebarMiddle()
   if (user.value?.username) {
     router.push(`/newsite/czone/${user.value.username}`)
   }
+}
+
+function openWishlist() {
+  showWishlist.value = true
+  setSidebarMiddle('MyWishlistSidebar')
 }
 </script>
 
@@ -43,6 +55,12 @@ function goToCzone() {
   gap: 6px;
   height: var(--mcw-nav-height);
   flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mcw-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .mcw-content {

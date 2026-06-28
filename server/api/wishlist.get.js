@@ -25,16 +25,33 @@ export default defineEventHandler(async (event) => {
     include: { ctoon: true }
   })
 
-  // 3. Fetch the IDs of all cToons this user owns
-  const ownedRecords = await prisma.userCtoon.findMany({
-    where: { userId },
-    select: { ctoonId: true }
-  })
-  const ownedIds = new Set(ownedRecords.map(r => r.ctoonId))
+  const wishlistCtoonIds = wishlistItems.map(item => item.ctoonId)
 
-  // 4. Map to plain ctoon objects with isOwned flag
+  // 3. Fetch the IDs of all cToons this user owns
+  // 4. Find which wishlisted cToons have at least one tradable owner (any user)
+  const [ownedRecords, tradableRecords] = await Promise.all([
+    prisma.userCtoon.findMany({
+      where: { userId },
+      select: { ctoonId: true }
+    }),
+    prisma.userTradeListItem.findMany({
+      where: {
+        userCtoon: {
+          ctoonId: { in: wishlistCtoonIds },
+          burnedAt: null
+        }
+      },
+      select: { userCtoon: { select: { ctoonId: true } } }
+    })
+  ])
+
+  const ownedIds         = new Set(ownedRecords.map(r => r.ctoonId))
+  const tradableCtoonIds = new Set(tradableRecords.map(r => r.userCtoon.ctoonId))
+
+  // 5. Map to plain ctoon objects with isOwned and hasTradableOwner flags
   return wishlistItems.map(({ ctoon }) => ({
     ...ctoon,
-    isOwned: ownedIds.has(ctoon.id)
+    isOwned:          ownedIds.has(ctoon.id),
+    hasTradableOwner: tradableCtoonIds.has(ctoon.id)
   }))
 })
