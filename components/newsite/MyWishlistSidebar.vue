@@ -9,6 +9,15 @@
 
     <hr class="mws-divider" />
 
+    <!-- Tradable owners filter -->
+    <label class="mws-checkbox-row">
+      <input type="checkbox" v-model="filter.tradable" class="mws-checkbox" />
+      <span class="mws-checkbox-label">Has Tradable Owner</span>
+    </label>
+    <p class="mws-hint">Only show cToons where at least one player who owns it has marked it as tradable.</p>
+
+    <hr class="mws-divider" />
+
     <!-- Rarity -->
     <div>
       <div class="mws-label">Rarity</div>
@@ -70,6 +79,7 @@ function clearFilters() {
   Object.assign(filter.value, {
     name:      '',
     rarities:  [],
+    tradable:  false,
     sortField: 'name',
     sortAsc:   true,
   })
@@ -184,6 +194,38 @@ function clearFilters() {
   padding: 2px 7px;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+/* ── Tradable checkbox ── */
+.mws-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mws-checkbox {
+  accent-color: var(--OrbitLightBlue);
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mws-checkbox-label {
+  font-size: 0.72rem;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.mws-checkbox-row:hover .mws-checkbox-label { color: #fff; }
+
+.mws-hint {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0;
+  line-height: 1.4;
 }
 
 /* ── Clear ── */

@@ -79,7 +79,8 @@ const filteredItems = computed(() => {
   let list = allItems.value.filter(c => {
     const nm = !f.name || c.name.toLowerCase().includes(f.name.toLowerCase())
     const r  = !f.rarities.length || f.rarities.includes((c.rarity || '').toLowerCase())
-    return nm && r
+    const tr = !f.tradable || c.hasTradableOwner
+    return nm && r && tr
   })
 
   return list.slice().sort((a, b) => {
