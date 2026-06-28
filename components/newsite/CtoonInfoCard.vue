@@ -803,7 +803,7 @@ function formatDate(value) {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1100;
+  z-index: 10000;
   padding: 12px;
   box-sizing: border-box;
 }

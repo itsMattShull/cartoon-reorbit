@@ -255,6 +255,7 @@ html.newsite-active body {
           <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
           <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
           <AllCtoonsSidebar    v-show="sidebarMiddleComponent === 'AllCtoonsSidebar'" />
+          <MyWishlistSidebar   v-show="sidebarMiddleComponent === 'MyWishlistSidebar'" />
           <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
           <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
         </div>
