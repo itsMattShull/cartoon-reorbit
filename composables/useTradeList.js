@@ -10,7 +10,7 @@ export function useTradeList() {
     loading.value = true
     $fetch('/api/trade-list')
       .then(data => {
-        tradeList.value = (data || []).map(item => item.userCtoonId)
+        tradeList.value = (data || []).map(item => item.id || item.userCtoonId)
       })
       .catch(err => { console.error('Failed to load trade list:', err) })
       .finally(() => { loading.value = false })
