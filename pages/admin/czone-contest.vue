@@ -109,7 +109,7 @@
     <!-- ── Create / Edit Modal ─────────────────────────────────────── -->
     <div v-if="showFormModal" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click.self="closeFormModal"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col mx-4 sm:mx-0">
         <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
           <h2 class="text-lg font-semibold">{{ editingContest ? 'Edit Contest' : 'Create Contest' }}</h2>
           <button class="text-gray-600 hover:text-gray-800" @click="closeFormModal">Close</button>
@@ -124,7 +124,7 @@
             </div>
 
             <!-- Dates -->
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block font-medium mb-1">Start Date</label>
                 <input v-model="form.startDate" type="datetime-local" class="w-full border rounded px-3 py-2" />
@@ -178,7 +178,7 @@
     <!-- ── Delete Confirmation Modal ──────────────────────────────── -->
     <div v-if="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="showDeleteModal = false"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col mx-4 sm:mx-0">
         <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
           <h2 class="text-lg font-semibold">Delete Contest</h2>
           <button class="text-gray-600 hover:text-gray-800" @click="showDeleteModal = false">Close</button>
@@ -205,7 +205,7 @@
     <!-- ── Distribute Prizes Modal ─────────────────────────────────── -->
     <div v-if="showDistributeModal" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click.self="closeDistributeModal"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
+      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col mx-4 sm:mx-0">
         <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
           <h2 class="text-lg font-semibold">Distribute Prizes — {{ distributingContest?.name }}</h2>
           <button class="text-gray-600 hover:text-gray-800" @click="closeDistributeModal">Close</button>
