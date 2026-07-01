@@ -41,6 +41,7 @@
             @touchend="onToonTouchEnd(c, $event)"
           >
             <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
+            <SecondEditionOverlay :ctoon="c" />
           </div>
           <div v-if="!filteredCollection.length" class="czew-empty" style="grid-column:1/-1">No cToons found.</div>
         </template>
