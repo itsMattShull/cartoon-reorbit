@@ -17,6 +17,7 @@
           <template #header>
             <div class="card-header-wrap" @click="openInfo(c)">
               <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+              <SecondEditionOverlay :ctoon="c" />
               <span
                 class="owned-badge"
                 :class="c.isOwned ? 'owned-badge--owned' : 'owned-badge--unowned'"
