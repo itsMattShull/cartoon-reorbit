@@ -218,7 +218,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const rarityValues = { Common: 100, Uncommon: 200, Rare: 400, 'Very Rare': 750, 'Crazy Rare': 1250 }
 
@@ -337,6 +337,11 @@ watch([userQuery, selectedStatus, fromDate, toDate], () => {
 })
 
 let suggestionDebounceId = null
+
+onBeforeUnmount(() => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+  if (suggestionDebounceId) clearTimeout(suggestionDebounceId)
+})
 watch(userQuery, () => {
   if (suggestionDebounceId) clearTimeout(suggestionDebounceId)
   suggestionDebounceId = setTimeout(fetchUserSuggestions, 200)

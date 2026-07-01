@@ -332,6 +332,11 @@ const contests        = ref([])
 const loadingContests = ref(false)
 const showAll         = ref(false)
 const toast           = ref(null)
+let toastTimer = null
+
+onBeforeUnmount(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+})
 const ctoonOptions    = ref([])
 const bgOptions       = ref([])
 
@@ -383,7 +388,8 @@ const autoForm = ref({ ...automation.value })
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'success') {
   toast.value = { msg, type }
-  setTimeout(() => { toast.value = null }, 3500)
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = null; toastTimer = null }, 3500)
 }
 
 function fmtDate(dt) {

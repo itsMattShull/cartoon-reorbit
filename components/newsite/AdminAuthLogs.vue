@@ -184,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const logs             = ref([])
 const logsTotal        = ref(0)
@@ -348,6 +348,10 @@ onMounted(() => {
 })
 
 let searchDebounceId = null
+
+onBeforeUnmount(() => {
+  if (searchDebounceId) clearTimeout(searchDebounceId)
+})
 watch(searchTerm, () => {
   if (searchDebounceId) clearTimeout(searchDebounceId)
   searchDebounceId = setTimeout(() => {

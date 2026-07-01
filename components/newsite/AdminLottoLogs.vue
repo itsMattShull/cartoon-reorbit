@@ -150,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const from = ref('')
 const to = ref('')
@@ -260,6 +260,10 @@ async function fetchSummary() {
 }
 
 let userSuggestTimer = null
+
+onBeforeUnmount(() => {
+  if (userSuggestTimer) clearTimeout(userSuggestTimer)
+})
 async function fetchUserSuggestions() {
   const term = userQuery.value.trim()
   if (term.length < 3) {

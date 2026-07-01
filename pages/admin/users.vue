@@ -596,7 +596,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useAsyncData, useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
@@ -1071,6 +1071,12 @@ const dissolveStep = ref('')
 const dissolveSummary = ref(null)
 const dissolveCategoryCounts = ref(null)
 let dissolvePoller = null
+
+// Stop the dissolve status poller if the page is left while a dissolve is
+// still running (the modal-close handler only fires when the modal is closed).
+onBeforeUnmount(() => {
+  if (dissolvePoller) { clearInterval(dissolvePoller); dissolvePoller = null }
+})
 
 function defaultStartLocal() {
   // Compute tomorrow's date in CST (UTC-6) and default to 10:00 AM
