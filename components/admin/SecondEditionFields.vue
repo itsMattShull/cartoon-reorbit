@@ -38,14 +38,7 @@
         @pointerdown="startDrag"
       >
         <img v-if="ctoonImageSrc" :src="ctoonImageSrc" alt="cToon preview" class="sef-preview-img" draggable="false" />
-        <img
-          v-if="overlay.path"
-          :src="overlay.path"
-          alt="Second Edition overlay"
-          class="sef-preview-overlay"
-          :style="overlayStyle"
-          draggable="false"
-        />
+        <SecondEditionOverlay v-if="overlay.path" ref="overlayComp" :ctoon="previewCtoon" />
         <p v-else class="sef-no-overlay">No Second Edition overlay image is set. Upload one in Global Settings → Second Editions.</p>
       </div>
       <p class="sef-hint">Drag the icon on the preview, or use the fine-tune controls below.</p>
@@ -87,7 +80,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const { overlay, ensureLoaded, styleFor } = useSecondEditionOverlay()
+const { overlay, ensureLoaded } = useSecondEditionOverlay()
 const previewSize = SECOND_EDITION_PREVIEW_SIZE
 onMounted(ensureLoaded)
 
@@ -101,7 +94,7 @@ function setField(key, value) {
   emit('update:modelValue', next)
 }
 
-const overlayStyle = computed(() => styleFor({
+const previewCtoon = computed(() => ({
   isSecondEdition: true,
   secondEditionOverlayX: props.modelValue.overlayX,
   secondEditionOverlayY: props.modelValue.overlayY,
@@ -156,14 +149,24 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
 /* ── Drag-to-position on preview ── */
 const previewEl = ref(null)
+const overlayComp = ref(null)
 let dragging = false
 
 function clamp(v, min, max) { return Math.min(max, Math.max(min, v)) }
 
 function positionFromPointer(e) {
   const rect = previewEl.value.getBoundingClientRect()
-  const x = clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100)
-  const y = clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100)
+  // Convert pointer position into the same reference frame the overlay
+  // actually renders against — the cToon image's visible content rect
+  // (which can be smaller than the full preview box if the image isn't
+  // square), falling back to the full box before that's measured.
+  const content = overlayComp.value?.contentRect
+  const originX = content ? rect.left + content.left : rect.left
+  const originY = content ? rect.top + content.top : rect.top
+  const spanX = content ? content.width : rect.width
+  const spanY = content ? content.height : rect.height
+  const x = clamp(((e.clientX - originX) / spanX) * 100, 0, 100)
+  const y = clamp(((e.clientY - originY) / spanY) * 100, 0, 100)
   emit('update:modelValue', { ...props.modelValue, overlayX: x, overlayY: y })
 }
 
@@ -268,7 +271,6 @@ onBeforeUnmount(() => {
   cursor: grab;
 }
 .sef-preview-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-.sef-preview-overlay { z-index: 5; }
 .sef-no-overlay { font-size: 0.78rem; color: #9ca3af; padding: 0.75rem; margin: 0; }
 .sef-hint { font-size: 0.75rem; color: #6b7280; margin: 0.35rem 0 0; }
 

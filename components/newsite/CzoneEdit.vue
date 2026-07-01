@@ -204,6 +204,10 @@ function addToonToTopLeft(c) {
       y: 0,
       width: img.naturalWidth,
       height: img.naturalHeight,
+      isSecondEdition: c.isSecondEdition,
+      secondEditionOverlayX: c.secondEditionOverlayX,
+      secondEditionOverlayY: c.secondEditionOverlayY,
+      secondEditionOverlaySize: c.secondEditionOverlaySize,
     })
   }
   img.src = c.assetPath
