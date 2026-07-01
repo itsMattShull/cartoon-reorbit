@@ -52,14 +52,35 @@
     <section>
       <div v-if="pending" class="py-10 text-gray-500 text-center">Loading…</div>
       <div v-else-if="error" class="py-10 text-red-600 text-center">{{ error.message || 'Failed to fetch backgrounds' }}</div>
+      <template v-else>
+        <div v-if="updateError" class="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {{ updateError }}
+        </div>
 
-      <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         <div v-for="bg in backgrounds" :key="bg.id" class="bg-white rounded-xl border border-gray-200 shadow overflow-hidden">
           <img :src="bg.imagePath" :alt="bg.label || 'Background'" class="w-full h-44 object-cover" />
-          <div class="p-4 space-y-1 text-sm">
+          <div class="p-4 space-y-2 text-sm">
             <div class="font-medium truncate">{{ bg.label || '—' }}</div>
             <div class="text-gray-600">{{ bg.width }}×{{ bg.height }} • {{ shortMime(bg.mimeType) }}</div>
-            <div class="text-gray-600">Visibility: <span class="font-medium">{{ fromEnum(bg.visibility) }}</span></div>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-600 shrink-0">Visibility:</span>
+              <button
+                @click="toggleVisibility(bg)"
+                :disabled="!!saving[bg.id]"
+                :title="bg.visibility === 'PUBLIC' ? 'Click to make Code Only' : 'Click to make Public'"
+                :class="[
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors min-h-[28px]',
+                  bg.visibility === 'PUBLIC'
+                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                  saving[bg.id] ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                ]"
+              >
+                <span v-if="saving[bg.id]" class="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                {{ fromEnum(bg.visibility) }}
+              </button>
+            </div>
             <div class="text-gray-500">Added: {{ formatDate(bg.createdAt) }}</div>
           </div>
           <!-- <div class="px-4 pb-4">
@@ -69,13 +90,14 @@
           </div> -->
         </div>
       </div>
+      </template>
     </section>
   </div>
 </template>
 
 <script setup>
 definePageMeta({ title: 'Admin - Backgrounds', middleware: ['auth','admin'], layout: 'admin' })
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 
 const label = ref('')
 const visibility = ref('public') // 'public' | 'code-only'
@@ -83,6 +105,8 @@ const imageFile = ref(null)
 const imagePreview = ref('')
 const uploading = ref(false)
 const fileInput = ref(null)
+const saving = reactive({})
+const updateError = ref('')
 
 function shortMime(m) { return (m||'').replace('image/','').toUpperCase() }
 function fromEnum(v) { return v === 'CODE_ONLY' ? 'Code only' : 'Public' }
@@ -118,6 +142,26 @@ function onFile(e) {
 const { data: backgrounds, pending, error } = await useFetch('/api/admin/backgrounds', {
   key: 'backgrounds', credentials: 'include'
 })
+
+async function toggleVisibility(bg) {
+  if (saving[bg.id]) return
+  const prev = bg.visibility
+  const next = prev === 'PUBLIC' ? 'CODE_ONLY' : 'PUBLIC'
+  bg.visibility = next
+  saving[bg.id] = true
+  try {
+    await $fetch(`/api/admin/backgrounds/${bg.id}`, {
+      method: 'PATCH',
+      body: { visibility: next }
+    })
+  } catch (err) {
+    bg.visibility = prev
+    updateError.value = err?.data?.statusMessage || 'Failed to update visibility'
+    setTimeout(() => { updateError.value = '' }, 5000)
+  } finally {
+    delete saving[bg.id]
+  }
+}
 
 async function submit() {
   if (!imageFile.value) return
