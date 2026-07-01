@@ -1023,6 +1023,10 @@ function onGlobalUp(e) {
           x: clamp(x - w / 2, 0, canvasW() - w),
           y: clamp(y - h / 2, 0, canvasH() - h),
           width: w, height: h,
+          isSecondEdition: c.isSecondEdition,
+          secondEditionOverlayX: c.secondEditionOverlayX,
+          secondEditionOverlayY: c.secondEditionOverlayY,
+          secondEditionOverlaySize: c.secondEditionOverlaySize,
         })
       }
       img.src = c.assetPath
