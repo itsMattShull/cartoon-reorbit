@@ -11,6 +11,7 @@ import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { scheduleMintEnd } from '@/server/utils/queues'
+import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -58,7 +59,11 @@ export default defineEventHandler(async (event) => {
 
     /* Time-based purchase limit overrides */
     timeBasedLimitCount: timeBasedLimitCountRaw,
-    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw
+    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw,
+
+    /* Second Edition fields */
+    isSecondEdition, relatedFirstEditionId,
+    secondEditionOverlayX, secondEditionOverlayY, secondEditionOverlaySize
   } = fields
 
   if (!name?.trim())   throw createError({ statusCode: 400, statusMessage: 'Name is required.' })
@@ -132,6 +137,11 @@ export default defineEventHandler(async (event) => {
   const { phash, dhash } = await computeMultiHash(imagePart.data)
   const bucket = bucketFromHash(phash)
 
+  const secondEdition = await parseSecondEditionFields(
+    { isSecondEdition, relatedFirstEditionId, secondEditionOverlayX, secondEditionOverlayY, secondEditionOverlaySize },
+    prisma
+  )
+
   /* 4. Save image ------------------------------------------- */
   const safeSeries = series.trim()
   const uploadDir = process.env.NODE_ENV === 'production'
@@ -193,8 +203,15 @@ export default defineEventHandler(async (event) => {
       cost:       isGtoonBool ? costInt : null,
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,
-      abilityData: isGtoonBool ? abilityDataObj : null
-      ,
+      abilityData: isGtoonBool ? abilityDataObj : null,
+
+      // Second Edition fields
+      isSecondEdition: secondEdition.isSecondEdition,
+      relatedFirstEditionId: secondEdition.relatedFirstEditionId,
+      secondEditionOverlayX: secondEdition.secondEditionOverlayX,
+      secondEditionOverlayY: secondEdition.secondEditionOverlayY,
+      secondEditionOverlaySize: secondEdition.secondEditionOverlaySize,
+
       // advisory schedule fields
       initialReleaseAt: initialReleaseAtDate,
       finalReleaseAt:   finalReleaseAtDate,

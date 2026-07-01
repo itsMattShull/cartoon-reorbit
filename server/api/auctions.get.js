@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
           userId: true,
           ctoonId: true,
           mintNumber: true,
-          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true } }
+          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true } }
         }
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
@@ -82,6 +82,10 @@ export default defineEventHandler(async (event) => {
     highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
     bidCount:     a._count?.bids ?? 0,
     isOwned:      ownedSet.has(a.userCtoon.ctoonId),
-    isHolidayItem: holidaySet.has(a.userCtoon.ctoonId)
+    isHolidayItem: holidaySet.has(a.userCtoon.ctoonId),
+    isSecondEdition: a.userCtoon.ctoon.isSecondEdition,
+    secondEditionOverlayX: a.userCtoon.ctoon.secondEditionOverlayX,
+    secondEditionOverlayY: a.userCtoon.ctoon.secondEditionOverlayY,
+    secondEditionOverlaySize: a.userCtoon.ctoon.secondEditionOverlaySize
   }))
 })

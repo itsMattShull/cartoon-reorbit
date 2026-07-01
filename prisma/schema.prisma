@@ -252,6 +252,16 @@ model Ctoon {
   abilityKey  String?
   abilityData Json?
 
+  // Second Edition fields
+  isSecondEdition        Boolean  @default(false)
+  relatedFirstEditionId  String?  @unique
+  secondEditionOverlayX    Float? // % offset of overlay's left edge within the cToon image (0-100)
+  secondEditionOverlayY    Float? // % offset of overlay's top edge within the cToon image (0-100)
+  secondEditionOverlaySize Float? // % scale of overlay relative to its natural size (100 = natural size)
+
+  relatedFirstEdition  Ctoon?  @relation("EditionPair", fields: [relatedFirstEditionId], references: [id])
+  relatedSecondEdition Ctoon?  @relation("EditionPair")
+
   owners                     UserCtoon[]
   deckCards                  ClashDeckCard[]
   rewardCtoons               RewardCtoon[]
@@ -284,6 +294,9 @@ model Ctoon {
   cZoneSearchAppearances CZoneSearchAppearance[]
   cZoneSearchCaptures   CZoneSearchCapture[]
   cmartPurchaseLogs     CmartPurchaseLog[]
+
+  @@index([isSecondEdition])
+  @@index([name])
 }
 
 model CtoonImageHash {
@@ -980,6 +993,10 @@ model GlobalGameConfig {
   // Per-rarity time-based purchase limits: { "Common": { "count": 5, "windowDays": null }, ... }
   // windowDays null = full release window (releaseDate → mintEndDate)
   timeBasedPurchaseLimits      Json?
+  // Second Edition overlay icon, shown over every Second Edition cToon's image
+  secondEditionOverlayPath   String?
+  secondEditionOverlayWidth  Int?     // natural pixel width of the uploaded overlay image
+  secondEditionOverlayHeight Int?     // natural pixel height of the uploaded overlay image
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }

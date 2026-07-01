@@ -4,6 +4,7 @@
     :show-sort-dir="false"
     :show-auction-filters="true"
     :show-common-filters="true"
+    :show-exclude-second-editions="true"
   />
 </template>
 

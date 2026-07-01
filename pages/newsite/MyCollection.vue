@@ -26,6 +26,7 @@ Object.assign(filter.value, {
   sortField:       'acquiredDate',
   sortAsc:         false,
   hideUnavailable: false,
+  excludeSecondEditions: false,
 })
 </script>
 

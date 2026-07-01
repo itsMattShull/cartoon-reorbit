@@ -16,10 +16,12 @@ export default defineEventHandler(async (event) => {
   }
 
   // Inputs
-  const { q = '', set = '', series = '' } = getQuery(event)
+  const { q = '', set = '', series = '', excludeSecondEdition = '', excludeId = '' } = getQuery(event)
   const query  = String(q).trim()
   const bySet  = String(set).trim()
   const bySer  = String(series).trim()
+  const excludeSecondEditionBool = String(excludeSecondEdition) === 'true'
+  const excludeIdVal = String(excludeId).trim()
 
   // Require either q>=3 or at least one filter
   if (query.length < 3 && !bySet && !bySer) return []
@@ -29,7 +31,9 @@ export default defineEventHandler(async (event) => {
     AND: [
       query.length >= 3 ? { name: { contains: query, mode: 'insensitive' } } : {},
       bySet ?   { set:    { equals: bySet } }   : {},
-      bySer ?   { series: { equals: bySer } }   : {}
+      bySer ?   { series: { equals: bySer } }   : {},
+      excludeSecondEditionBool ? { isSecondEdition: false } : {},
+      excludeIdVal ? { id: { not: excludeIdVal } } : {}
     ]
   }
 
@@ -37,6 +41,7 @@ export default defineEventHandler(async (event) => {
   const ctoons = await prisma.ctoon.findMany({
     where,
     orderBy: [{ name: 'asc' }],
+    take: 20,
     select: {
       id: true,
       name: true,

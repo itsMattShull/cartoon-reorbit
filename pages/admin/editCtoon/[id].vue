@@ -264,6 +264,13 @@
           </div>
         </div>
 
+        <!-- Second Edition -->
+        <SecondEditionFields
+          v-model="secondEdition"
+          :ctoon-image-src="newImagePreview || assetPath"
+          :exclude-ctoon-id="id"
+        />
+
         <!-- Submit -->
         <div class="text-right">
           <button class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
@@ -286,6 +293,7 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import Nav   from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 import abilityMeta from '~/data/abilities.json'
+import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -317,6 +325,16 @@ const newImagePreview = ref('')
 const currentSoundPath = ref('')
 const newSoundFile = ref(null)
 const clearSound = ref(false)
+
+/* Second Edition refs */
+const secondEdition = ref({
+  isSecondEdition: false,
+  relatedFirstEditionId: null,
+  relatedFirstEditionName: '',
+  overlayX: 85,
+  overlayY: 85,
+  overlaySize: 100
+})
 
 /* G-toon refs */
 const isGtoon = ref(false)
@@ -451,6 +469,15 @@ onMounted(async ()=>{
       }
     }
 
+    secondEdition.value = {
+      isSecondEdition: !!ctoon.isSecondEdition,
+      relatedFirstEditionId: ctoon.relatedFirstEditionId || null,
+      relatedFirstEditionName: ctoon.relatedFirstEdition?.name || '',
+      overlayX: ctoon.secondEditionOverlayX ?? 85,
+      overlayY: ctoon.secondEditionOverlayY ?? 85,
+      overlaySize: ctoon.secondEditionOverlaySize ?? 100
+    }
+
     isGtoon.value   = ctoon.isGtoon
     gtoonType.value = ctoon.gtoonType || ''
     cost.value      = ctoon.cost ?? 0
@@ -578,6 +605,14 @@ async function submitForm(){
     if (newSoundFile.value) fd.append('sound', newSoundFile.value)
     else if (clearSound.value) fd.append('clearSound', 'true')
 
+    fd.append('isSecondEdition', secondEdition.value.isSecondEdition)
+    if (secondEdition.value.isSecondEdition) {
+      fd.append('relatedFirstEditionId', secondEdition.value.relatedFirstEditionId ?? '')
+      fd.append('secondEditionOverlayX', secondEdition.value.overlayX)
+      fd.append('secondEditionOverlayY', secondEdition.value.overlayY)
+      fd.append('secondEditionOverlaySize', secondEdition.value.overlaySize)
+    }
+
     const res = await fetch(`/api/admin/ctoon/${id}`, {
       method: 'PUT',
       credentials: 'include',
@@ -625,6 +660,12 @@ async function submitForm(){
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
     finalReleaseQty:   schedule.value.finalQty ?? null,
+
+    isSecondEdition: secondEdition.value.isSecondEdition,
+    relatedFirstEditionId: secondEdition.value.isSecondEdition ? (secondEdition.value.relatedFirstEditionId ?? null) : null,
+    secondEditionOverlayX: secondEdition.value.isSecondEdition ? secondEdition.value.overlayX : null,
+    secondEditionOverlayY: secondEdition.value.isSecondEdition ? secondEdition.value.overlayY : null,
+    secondEditionOverlaySize: secondEdition.value.isSecondEdition ? secondEdition.value.overlaySize : null,
 
     clearSound: clearSound.value || false
   }

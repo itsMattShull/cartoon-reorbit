@@ -29,6 +29,7 @@
                 :class="{ 'pack-reveal-new': !originalOwnedSet.has(item.id) }"
               >
                 <span v-if="!originalOwnedSet.has(item.id)" class="pack-new-badge">New!</span>
+                <span v-if="!item.inCmart" class="pack-exclusive-badge">Pack Exclusive</span>
                 <img
                   v-if="item.assetPath"
                   :src="item.assetPath"
@@ -1000,6 +1001,19 @@ async function closeOverlay() {
   font-weight: bold;
   padding: 2px 5px;
   border-radius: 10px;
+}
+
+:global(.pack-exclusive-badge) {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.56rem;
+  font-weight: bold;
+  padding: 2px 5px;
+  border-radius: 10px;
+  text-align: right;
 }
 
 :global(.pack-reveal-img) {
