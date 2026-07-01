@@ -16,7 +16,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..', '..', '..')
+  ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
 const ALLOWED_TYPES = new Set(['image/png', 'image/gif'])
@@ -30,7 +30,10 @@ export default defineEventHandler(async (event) => {
 
   // 2) Parse multipart
   const parts = await readMultipartFormData(event)
-  const imagePart = (parts || []).find(p => p.filename && p.name === 'image')
+  let imagePart = null
+  for (const part of parts || []) {
+    if (part.filename) imagePart = part
+  }
   if (!imagePart) throw createError({ statusCode: 400, statusMessage: 'Image required.' })
   if (!ALLOWED_TYPES.has(imagePart.type)) {
     throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
