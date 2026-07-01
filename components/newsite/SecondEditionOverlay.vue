@@ -56,26 +56,27 @@ function measure() {
   const parent = img?.parentElement
   if (!img || !parent || !img.naturalWidth || !img.naturalHeight) { contentRect.value = null; return }
 
-  // Measure the container in LAYOUT pixels (offsetWidth/offsetHeight) rather than
-  // getBoundingClientRect(). getBoundingClientRect() returns pixels already
-  // multiplied by any ancestor CSS transform — e.g. the cZone canvas wraps its
-  // items in `.cz-canvas-inner { transform: scale() }` to fit an 800×600 design
-  // space to the viewport. But the overlay's absolute left/top/width below are
-  // applied in the *un-scaled* layout coordinate space of its positioned parent,
-  // so mixing in transform-scaled measurements shrank the icon and pulled it
-  // toward the top-left by the scale factor. Layout metrics ignore ancestor
-  // transforms, keeping measurement and placement in the same frame so the icon
-  // stays locked to the artwork at every canvas scale (the ancestor transform
-  // then scales the overlay and image together, uniformly). In non-transformed
-  // call sites offsetWidth === getBoundingClientRect().width, so their behaviour
-  // is unchanged.
-  const boxW = parent.offsetWidth
-  const boxH = parent.offsetHeight
+  // Measure the *image's own layout box* (offset* metrics) rather than the parent
+  // box. These are LAYOUT pixels — immune to ancestor CSS transforms such as the
+  // cZone canvas's `.cz-canvas-inner { transform: scale() }` — so measurement and
+  // the overlay's absolute placement below share one coordinate frame (the
+  // ancestor transform then scales the overlay and artwork together, uniformly).
+  // Using the image's box (not the parent's) also honours any padding on the
+  // parent: some cards inset the art with padding (e.g. the trade card's
+  // `.tc-header`), and the image is laid out inside that padding. offset* are
+  // relative to offsetParent, which for a positioned parent is the same element
+  // the absolutely-positioned overlay resolves left/top against, so they align.
+  const sameFrame = img.offsetParent === parent
+  const boxLeft = sameFrame ? img.offsetLeft : 0
+  const boxTop  = sameFrame ? img.offsetTop  : 0
+  const boxW = img.offsetWidth
+  const boxH = img.offsetHeight
   if (!boxW || !boxH) { contentRect.value = null; return }
 
   const boxAspect = boxW / boxH
   const imgAspect = img.naturalWidth / img.naturalHeight
 
+  // object-fit: contain letterbox of the artwork within the image's layout box.
   let width, height
   if (imgAspect > boxAspect) {
     // Image is relatively wider than the box: full width, letterboxed top/bottom.
@@ -86,12 +87,40 @@ function measure() {
     height = boxH
     width = boxH * imgAspect
   }
+  let left = boxLeft + (boxW - width) / 2
+  let top  = boxTop + (boxH - height) / 2
 
-  contentRect.value = {
-    left: (boxW - width) / 2,
-    top: (boxH - height) / 2,
-    width,
-    height
+  // Honour the image's own CSS transform. Card thumbnails shrink the art with
+  // `transform: scale(0.7)` while keeping the wrapper full-size for corner badges;
+  // the overlay is a sibling without that transform, so bake the scale into the
+  // content rect — scaling about the image-box centre (the default
+  // transform-origin) — so the icon tracks the visibly-shrunk artwork rather than
+  // the full box. Elements without an own transform (czone, modals, admin) read
+  // scale 1 and are unaffected.
+  const { sx, sy } = readImageScale(img)
+  if (sx !== 1 || sy !== 1) {
+    const cx = boxLeft + boxW / 2
+    const cy = boxTop + boxH / 2
+    left = cx + (left - cx) * sx
+    top  = cy + (top - cy) * sy
+    width *= sx
+    height *= sy
+  }
+
+  contentRect.value = { left, top, width, height }
+}
+
+// Reads the element's own CSS transform scale (default 1×1) from its computed
+// style. Client-only (called from measure()); guarded so a missing DOMMatrix or
+// an unparseable value degrades to no scaling rather than throwing.
+function readImageScale(img) {
+  try {
+    const t = getComputedStyle(img).transform
+    if (!t || t === 'none') return { sx: 1, sy: 1 }
+    const m = new DOMMatrix(t)
+    return { sx: m.a, sy: m.d }
+  } catch {
+    return { sx: 1, sy: 1 }
   }
 }
 
