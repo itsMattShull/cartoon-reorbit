@@ -127,6 +127,7 @@
                 :alt="c.name"
                 class="card-img"
               />
+              <SecondEditionOverlay :ctoon="c" />
               <span
                 class="owned-badge"
                 :class="originalOwnedSet.has(c.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"

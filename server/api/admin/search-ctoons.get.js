@@ -51,7 +51,11 @@ export default defineEventHandler(async (event) => {
       releaseDate: true,
       quantity: true,
       rarity: true,
-      inCmart: true
+      inCmart: true,
+      isSecondEdition: true,
+      secondEditionOverlayX: true,
+      secondEditionOverlayY: true,
+      secondEditionOverlaySize: true
     }
   })
   if (!ctoons.length) return []

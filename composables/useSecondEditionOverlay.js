@@ -1,5 +1,14 @@
 // Fetches the global Second Edition overlay icon (path + natural size) once per
 // app load and exposes a helper to compute its render position/size for a given cToon.
+
+// Reference size (px) of the admin's live preview box in SecondEditionFields.vue,
+// where 100% "Size" means the overlay renders at its natural pixel dimensions.
+// All overlay sizing elsewhere is expressed as a % of the containing cToon image
+// box, scaled relative to this reference, so the icon resizes proportionally
+// with the cToon image wherever it's displayed (thumbnail, detail view, etc.)
+// instead of staying a fixed pixel size.
+export const SECOND_EDITION_PREVIEW_SIZE = 220
+
 export function useSecondEditionOverlay() {
   const overlay = useState('secondEditionOverlayConfig', () => ({
     path: null,
@@ -23,24 +32,25 @@ export function useSecondEditionOverlay() {
     }
   }
 
-  // Renders the overlay centered at (overlayX%, overlayY%) of its container,
-  // sized to a percentage of its own natural pixel dimensions (not the container),
-  // so it stays a consistent, legible size across thumbnails and detail views.
+  // Renders the overlay centered at (overlayX%, overlayY%) of its container, with
+  // its width expressed as a % of the container's own width (not a fixed px size)
+  // so it scales up/down together with the cToon image whenever that image is
+  // rendered larger or smaller. Height is left to the browser's natural
+  // width/height ratio for the image so the icon's own aspect ratio is preserved.
   function styleFor(ctoon) {
     const x = ctoon?.secondEditionOverlayX ?? 85
     const y = ctoon?.secondEditionOverlayY ?? 85
     const size = ctoon?.secondEditionOverlaySize ?? 100
-    const w = overlay.value.width || 32
-    const h = overlay.value.height || 32
+    const naturalWidth = overlay.value.width || 32
+    const widthPercent = (naturalWidth / SECOND_EDITION_PREVIEW_SIZE) * (size / 100) * 100
     return {
       position: 'absolute',
       left: `${x}%`,
       top: `${y}%`,
       transform: 'translate(-50%, -50%)',
-      width: `${w * (size / 100)}px`,
-      height: `${h * (size / 100)}px`,
-      maxWidth: '45%',
-      maxHeight: '45%',
+      width: `${widthPercent}%`,
+      height: 'auto',
+      maxWidth: '60%',
       pointerEvents: 'none',
       objectFit: 'contain'
     }

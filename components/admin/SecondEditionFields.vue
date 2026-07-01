@@ -34,6 +34,7 @@
       <div
         ref="previewEl"
         class="sef-preview"
+        :style="{ width: previewSize + 'px', height: previewSize + 'px' }"
         @pointerdown="startDrag"
       >
         <img v-if="ctoonImageSrc" :src="ctoonImageSrc" alt="cToon preview" class="sef-preview-img" draggable="false" />
@@ -75,7 +76,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useSecondEditionOverlay } from '@/composables/useSecondEditionOverlay'
+import { useSecondEditionOverlay, SECOND_EDITION_PREVIEW_SIZE } from '@/composables/useSecondEditionOverlay'
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -87,6 +88,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const { overlay, ensureLoaded, styleFor } = useSecondEditionOverlay()
+const previewSize = SECOND_EDITION_PREVIEW_SIZE
 onMounted(ensureLoaded)
 
 function setField(key, value) {
