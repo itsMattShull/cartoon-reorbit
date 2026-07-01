@@ -10,6 +10,7 @@ import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { scheduleMintEnd, cancelMintEnd } from '@/server/utils/queues'
+import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -54,7 +55,10 @@ export default defineEventHandler(async (event) => {
     clearSound,
     mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw,
     timeBasedLimitCount: timeBasedLimitCountRaw,
-    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw
+    timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw,
+
+    isSecondEdition, relatedFirstEditionId,
+    secondEditionOverlayX, secondEditionOverlayY, secondEditionOverlaySize
   } = payload
 
   // 4) Validate basics
@@ -122,6 +126,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const secondEdition = await parseSecondEditionFields(
+    { isSecondEdition, relatedFirstEditionId, secondEditionOverlayX, secondEditionOverlayY, secondEditionOverlaySize },
+    prisma,
+    id
+  )
+
   // 6) Build update payload
   const updateData = {
     name: name.trim(),
@@ -145,6 +155,13 @@ export default defineEventHandler(async (event) => {
     power:      isGtoonBool ? powerInt : null,
     abilityKey: isGtoonBool ? abilityKey : null,
     abilityData: isGtoonBool ? abilityDataObj : null,
+
+    // Second Edition fields
+    isSecondEdition: secondEdition.isSecondEdition,
+    relatedFirstEditionId: secondEdition.relatedFirstEditionId,
+    secondEditionOverlayX: secondEdition.secondEditionOverlayX,
+    secondEditionOverlayY: secondEdition.secondEditionOverlayY,
+    secondEditionOverlaySize: secondEdition.secondEditionOverlaySize,
 
     // advisory schedule fields
     initialReleaseAt: initialReleaseAt ? new Date(initialReleaseAt) : null,
@@ -228,6 +245,17 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // First Edition status is derived from isSecondEdition — if it changed, sync
+  // already-minted UserCtoon rows for this cToon (scoped to this ctoonId, index-backed,
+  // skips rows that already match to avoid a no-op write storm).
+  if (before && before.isSecondEdition !== updated.isSecondEdition) {
+    await prisma.$executeRaw`
+      UPDATE "UserCtoon"
+      SET "isFirstEdition" = ${!updated.isSecondEdition}
+      WHERE "ctoonId" = ${id} AND "isFirstEdition" IS DISTINCT FROM ${!updated.isSecondEdition}
+    `
+  }
+
   // 9) Log field-level changes
   try {
     const area = `Ctoon:${id}`
@@ -236,7 +264,8 @@ export default defineEventHandler(async (event) => {
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',
       'mintLimitType','mintEndDate',
-      'timeBasedLimitCount','timeBasedLimitWindowDays'
+      'timeBasedLimitCount','timeBasedLimitWindowDays',
+      'isSecondEdition','relatedFirstEditionId','secondEditionOverlayX','secondEditionOverlayY','secondEditionOverlaySize'
     ]
     for (const k of keys) {
       const prev = before ? (before[k] instanceof Date ? before[k].toISOString() : (Array.isArray(before[k]) || typeof before[k] === 'object' ? JSON.stringify(before[k]) : before[k])) : undefined

@@ -40,7 +40,15 @@ export default defineEventHandler(async (event) => {
         initialReleaseAt: true,
         finalReleaseAt:   true,
         initialReleaseQty: true,
-        finalReleaseQty:   true
+        finalReleaseQty:   true,
+
+        // Second Edition fields
+        isSecondEdition: true,
+        relatedFirstEditionId: true,
+        secondEditionOverlayX: true,
+        secondEditionOverlayY: true,
+        secondEditionOverlaySize: true,
+        relatedFirstEdition: { select: { id: true, name: true, assetPath: true } }
       }
     })
 

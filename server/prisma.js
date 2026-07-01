@@ -230,6 +230,22 @@ function prismaClientFactory() {
           const swapMap = await getAssetSwapMap(baseClient)
           return applyAssetSwap(result, swapMap)
         }
+      },
+      userCtoon: {
+        // First Edition is a property of the cToon template, not the mint: force
+        // isFirstEdition = NOT ctoon.isSecondEdition on every mint, regardless of what
+        // the many call sites pass in. Keeps all mint paths correct from one place.
+        async create({ args, query }) {
+          const ctoonId = args?.data?.ctoonId
+          if (ctoonId) {
+            const parent = await baseClient.ctoon.findUnique({
+              where: { id: ctoonId },
+              select: { isSecondEdition: true }
+            })
+            if (parent) args.data.isFirstEdition = !parent.isSecondEdition
+          }
+          return query(args)
+        }
       }
     }
   })

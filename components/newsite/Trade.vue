@@ -513,11 +513,15 @@
                     <span class="tm-own-badge" :class="selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'owned' : 'unowned'">
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
-                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                    <div class="tm-card-img-wrap">
+                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                      <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
+                    </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
                     <span class="tm-dim">{{ tc.userCtoon.ctoon.rarity }}</span>
                     <span class="tm-dim">Mint #{{ tc.userCtoon.mintNumber }} of {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}</span>
-                    <span class="tm-dim">{{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}</span>
+                    <span v-if="tc.userCtoon.ctoon.isSecondEdition" class="tm-2nd-badge">2nd Edition</span>
+                    <span v-else class="tm-dim">First Edition</span>
                   </div>
                   <div v-if="!currentOffer.ctoons.filter(c => c.role === 'OFFERED').length" class="tm-empty-col">None</div>
                 </div>
@@ -534,11 +538,15 @@
                     <span class="tm-own-badge" :class="selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'owned' : 'unowned'">
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
-                    <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                    <div class="tm-card-img-wrap">
+                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                      <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
+                    </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
                     <span class="tm-dim">{{ tc.userCtoon.ctoon.rarity }}</span>
                     <span class="tm-dim">Mint #{{ tc.userCtoon.mintNumber }} of {{ formatQuantity(tc.userCtoon.ctoon.quantity) }}</span>
-                    <span class="tm-dim">{{ tc.userCtoon.isFirstEdition ? 'First Edition' : 'Unlimited Edition' }}</span>
+                    <span v-if="tc.userCtoon.ctoon.isSecondEdition" class="tm-2nd-badge">2nd Edition</span>
+                    <span v-else class="tm-dim">First Edition</span>
                     <div class="tm-own-stats">
                       <template v-if="!isLoadingModalSelf">
                         <span>You own: {{ getSelfStats(tc.userCtoon.ctoonId).count }}</span>
@@ -1871,10 +1879,15 @@ onBeforeUnmount(() => {
 }
 .tm-own-badge.owned { background: #16a34a; color: #fff; border: 1px solid #15803d; }
 .tm-own-badge.unowned { background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.3); }
-.tm-card-img { width: 80px; height: 80px; object-fit: contain; margin-top: 14px; cursor: pointer; transition: opacity 0.15s; }
+.tm-card-img-wrap { position: relative; width: 80px; height: 80px; margin-top: 14px; }
+.tm-card-img { width: 80px; height: 80px; object-fit: contain; cursor: pointer; transition: opacity 0.15s; }
 .tm-card-img:hover { opacity: 0.8; }
 .tm-card-name { font-size: 0.65rem; color: white; font-weight: bold; text-align: center; line-height: 1.2; }
 .tm-dim { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-align: center; }
+.tm-2nd-badge {
+  font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  background: #7c3aed; color: #fff; padding: 1px 6px; border-radius: 10px;
+}
 .tm-own-stats {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   font-size: 0.58rem; color: rgba(255,255,255,0.55); margin-top: 3px; text-align: center;

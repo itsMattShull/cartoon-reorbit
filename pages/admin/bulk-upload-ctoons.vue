@@ -186,6 +186,7 @@
               <tr class="bg-gray-100">
                 <th class="px-4 py-2">Preview</th>
                 <th class="px-4 py-2">Duplicate</th>
+                <th class="px-4 py-2">2nd Ed.</th>
                 <th class="px-4 py-2">Name</th>
                 <th class="px-4 py-2">Series</th>
                 <th class="px-4 py-2">Rarity</th>
@@ -227,6 +228,14 @@
                     </div>
                   </div>
                   <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates</div>
+                </td>
+                <td class="px-4 py-2" style="min-width:180px;">
+                  <SecondEditionFields
+                    :model-value="rowSecondEdition(f)"
+                    :exclude-ctoon-id="''"
+                    :show-position-editor="false"
+                    @update:model-value="val => applyRowSecondEdition(f, val)"
+                  />
                 </td>
                 <td class="px-4 py-2">
                   <input v-model="f.nameField" class="w-full border rounded p-1" />
@@ -318,6 +327,13 @@
               </div>
               <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates found.</div>
             </div>
+
+            <SecondEditionFields
+              :model-value="rowSecondEdition(f)"
+              :exclude-ctoon-id="''"
+              :show-position-editor="false"
+              @update:model-value="val => applyRowSecondEdition(f, val)"
+            />
 
             <!-- Fields underneath -->
             <div class="space-y-4">
@@ -490,6 +506,7 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
+import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 
 definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 
@@ -731,7 +748,10 @@ function handleFiles(e) {
       price: 0,
       duplicateStatus: 'idle',
       duplicateMatch: null,
-      duplicateError: ''
+      duplicateError: '',
+      isSecondEdition: false,
+      relatedFirstEditionId: null,
+      relatedFirstEditionName: ''
     }
 
     if (row.rarity) updateDefaults?.(row)
@@ -774,10 +794,35 @@ async function checkDuplicateForRow(row) {
     const data = await res.json()
     row.duplicateMatch = data?.duplicate ? data.match : null
     row.duplicateStatus = 'done'
+
+    // Auto-set Second Edition when both duplicate-distance values are exactly 0
+    const m = row.duplicateMatch
+    if (m && m.phashDist === 0 && m.dhashDist === 0 && m.ctoon) {
+      row.isSecondEdition = true
+      row.relatedFirstEditionId = m.ctoon.id
+      row.relatedFirstEditionName = m.ctoon.name
+    }
   } catch {
     row.duplicateStatus = 'error'
     row.duplicateError = 'Duplicate check failed.'
   }
+}
+
+function rowSecondEdition(row) {
+  return {
+    isSecondEdition: row.isSecondEdition,
+    relatedFirstEditionId: row.relatedFirstEditionId,
+    relatedFirstEditionName: row.relatedFirstEditionName,
+    overlayX: 85,
+    overlayY: 85,
+    overlaySize: 100
+  }
+}
+
+function applyRowSecondEdition(row, val) {
+  row.isSecondEdition = val.isSecondEdition
+  row.relatedFirstEditionId = val.relatedFirstEditionId
+  row.relatedFirstEditionName = val.relatedFirstEditionName
 }
 
 async function uploadAll() {
@@ -842,6 +887,13 @@ async function uploadAll() {
     formData.append('perUserLimit', f.perUserLimit ?? '')
     formData.append('inCmart', f.inCmart)
     formData.append('price', f.price)
+    formData.append('isSecondEdition', f.isSecondEdition)
+    if (f.isSecondEdition) {
+      formData.append('relatedFirstEditionId', f.relatedFirstEditionId ?? '')
+      formData.append('secondEditionOverlayX', 85)
+      formData.append('secondEditionOverlayY', 85)
+      formData.append('secondEditionOverlaySize', 100)
+    }
 
     try {
       const res = await fetch('/api/admin/ctoon', {

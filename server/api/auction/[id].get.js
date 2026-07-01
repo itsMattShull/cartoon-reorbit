@@ -55,7 +55,11 @@ export default defineEventHandler(async (event) => {
       isGtoon:    auction.userCtoon.ctoon.isGtoon,
       cost:       auction.userCtoon.ctoon.cost,
       power:      auction.userCtoon.ctoon.power,
-      mintNumber: auction.userCtoon.mintNumber
+      mintNumber: auction.userCtoon.mintNumber,
+      isSecondEdition: auction.userCtoon.ctoon.isSecondEdition,
+      secondEditionOverlayX: auction.userCtoon.ctoon.secondEditionOverlayX,
+      secondEditionOverlayY: auction.userCtoon.ctoon.secondEditionOverlayY,
+      secondEditionOverlaySize: auction.userCtoon.ctoon.secondEditionOverlaySize
     },
     isHolidayItem, // ← added
     endAt:      auction.endAt.toISOString(),

@@ -80,6 +80,10 @@ export default defineEventHandler(async (event) => {
     isFirstEdition: uc.isFirstEdition,
     acquiredAt: uc.createdAt,
     auctions: uc.auctions || [],
-    isHolidayItem: holidaySet.has(uc.ctoonId)
+    isHolidayItem: holidaySet.has(uc.ctoonId),
+    isSecondEdition: uc.ctoon.isSecondEdition,
+    secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
+    secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
+    secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
   }))
 })

@@ -8,4 +8,5 @@ export const useNewSiteCtoonFilter = () => useState('newSiteCtoonFilter', () => 
   sortField:       'acquiredAt',
   sortAsc:         false,
   hideUnavailable: false,
+  excludeSecondEditions: false,
 }))

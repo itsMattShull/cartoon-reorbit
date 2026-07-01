@@ -73,6 +73,7 @@
               draggable="false"
               @load="e => onToonImgLoad(e, toon)"
             />
+            <SecondEditionOverlay :ctoon="toon" :respect-art-mode="true" />
             <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
               <button
                 class="cz-bring-front-btn"
@@ -116,6 +117,14 @@
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
       <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
+      <button
+        v-show="!cz.buildMode"
+        type="button"
+        class="cz-art-mode-btn"
+        :class="{ active: artMode }"
+        :aria-pressed="artMode ? 'true' : 'false'"
+        @click="artMode = !artMode"
+      >Art Mode: {{ artMode ? 'On' : 'Off' }}</button>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
@@ -355,6 +364,11 @@ const innerScaleStyle = computed(() => ({
 const canvasEl       = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
+
+// Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
+// default; resets to off whenever the viewed cZone/user changes.
+const artMode = useArtMode()
+watch(viewedUsername, () => { artMode.value = false })
 
 // True while build-mode data is loading (prevents double-click and shows spinner on button)
 const buildLoading = ref(false)
@@ -1408,6 +1422,29 @@ defineExpose({ save, clearZone })
 }
 
 .cz-myczone-btn { flex-shrink: 0; }
+
+.cz-art-mode-btn {
+  flex-shrink: 0;
+  margin-left: 6px;
+  height: calc(v-bind(BOTTOMBAR_H + 'px') - 10px);
+  padding: 0 8px;
+  font-size: 0.62rem;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cz-art-mode-btn.active {
+  background: var(--OrbitDarkBlue);
+  border-color: #fff;
+}
+
+@media (max-width: 480px) {
+  .cz-art-mode-btn { font-size: 0.56rem; padding: 0 6px; }
+}
 
 .cz-build-hint {
   font-size: 0.62rem;
