@@ -116,12 +116,15 @@
               class="border-b hover:bg-gray-50"
             >
               <td class="px-4 py-2">
-                <img
-                  loading="lazy"
-                  :src="c.assetPath"
-                  :alt="c.name"
-                  class="h-16 w-auto mx-auto rounded"
-                />
+                <div class="relative w-fit mx-auto">
+                  <img
+                    loading="lazy"
+                    :src="c.assetPath"
+                    :alt="c.name"
+                    class="h-16 w-auto rounded"
+                  />
+                  <SecondEditionOverlay :ctoon="c" />
+                </div>
               </td>
               <td class="px-4 py-2">{{ c.name }}</td>
               <td class="px-4 py-2 whitespace-nowrap">
@@ -186,12 +189,15 @@
             class="bg-gray-100 rounded-lg p-4 flex flex-col"
           >
             <div class="flex items-start space-x-4">
-              <img
-                loading="lazy"
-                :src="c.assetPath"
-                :alt="c.name"
-                class="max-w-[80px] w-auto flex-shrink-0 object-contain rounded"
-              />
+              <div class="relative w-fit flex-shrink-0">
+                <img
+                  loading="lazy"
+                  :src="c.assetPath"
+                  :alt="c.name"
+                  class="max-w-[80px] w-auto object-contain rounded"
+                />
+                <SecondEditionOverlay :ctoon="c" />
+              </div>
               <div class="flex-1 space-y-1">
                 <h2 class="text-lg font-semibold">{{ c.name }}</h2>
                 <p class="text-sm text-gray-600">
