@@ -56,41 +56,40 @@ function measure() {
   const parent = img?.parentElement
   if (!img || !parent || !img.naturalWidth || !img.naturalHeight) { contentRect.value = null; return }
 
-  const box = parent.getBoundingClientRect()
-  if (!box.width || !box.height) { contentRect.value = null; return }
+  // Measure the container in LAYOUT pixels (offsetWidth/offsetHeight) rather than
+  // getBoundingClientRect(). getBoundingClientRect() returns pixels already
+  // multiplied by any ancestor CSS transform — e.g. the cZone canvas wraps its
+  // items in `.cz-canvas-inner { transform: scale() }` to fit an 800×600 design
+  // space to the viewport. But the overlay's absolute left/top/width below are
+  // applied in the *un-scaled* layout coordinate space of its positioned parent,
+  // so mixing in transform-scaled measurements shrank the icon and pulled it
+  // toward the top-left by the scale factor. Layout metrics ignore ancestor
+  // transforms, keeping measurement and placement in the same frame so the icon
+  // stays locked to the artwork at every canvas scale (the ancestor transform
+  // then scales the overlay and image together, uniformly). In non-transformed
+  // call sites offsetWidth === getBoundingClientRect().width, so their behaviour
+  // is unchanged.
+  const boxW = parent.offsetWidth
+  const boxH = parent.offsetHeight
+  if (!boxW || !boxH) { contentRect.value = null; return }
 
-  const boxAspect = box.width / box.height
+  const boxAspect = boxW / boxH
   const imgAspect = img.naturalWidth / img.naturalHeight
-
-  // When the container's aspect ratio matches the image's, the image fills the
-  // box with no object-fit letterboxing — so the pixel-measured content rect is
-  // identical to the simpler percentage-based styleFor(), and we defer to it.
-  // This matters because getBoundingClientRect() above returns *transform-scaled*
-  // pixels: inside a scaled ancestor (e.g. the cZone canvas's
-  // `transform: scale()`), those px would be mis-applied in the un-scaled layout
-  // space of the absolutely-positioned overlay, shrinking the icon and pulling
-  // it toward the top-left by the scale factor. Percentages, by contrast, are
-  // invariant to ancestor transforms, so styleFor() keeps the icon locked to the
-  // artwork at every canvas scale. The pixel path is only needed where the image
-  // is genuinely letterboxed (aspect mismatch), and those call sites are never
-  // inside a transform.
-  const ASPECT_EPSILON = 0.01
-  if (Math.abs(boxAspect - imgAspect) < ASPECT_EPSILON) { contentRect.value = null; return }
 
   let width, height
   if (imgAspect > boxAspect) {
     // Image is relatively wider than the box: full width, letterboxed top/bottom.
-    width = box.width
-    height = box.width / imgAspect
+    width = boxW
+    height = boxW / imgAspect
   } else {
     // Image is relatively taller than the box: full height, letterboxed left/right.
-    height = box.height
-    width = box.height * imgAspect
+    height = boxH
+    width = boxH * imgAspect
   }
 
   contentRect.value = {
-    left: (box.width - width) / 2,
-    top: (box.height - height) / 2,
+    left: (boxW - width) / 2,
+    top: (boxH - height) / 2,
     width,
     height
   }
