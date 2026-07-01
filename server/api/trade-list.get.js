@@ -25,9 +25,10 @@ export default defineEventHandler(async (event) => {
 
   const items = await prisma.userTradeListItem.findMany({
     where: { userId, userCtoon: { userId, burnedAt: null } },
-    select: { userCtoon: { select: { userId: true, ctoonId: true, mintNumber: true } } }
+    select: { userCtoon: { select: { id: true, userId: true, ctoonId: true, mintNumber: true } } }
   })
   return items.map(item => ({
+    id: item.userCtoon.id,
     userCtoonId: encodeUserCtoonId(item.userCtoon.userId, item.userCtoon.ctoonId, item.userCtoon.mintNumber)
   }))
 })
