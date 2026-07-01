@@ -102,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const games = ref([])
 const total = ref(0)
@@ -225,6 +225,10 @@ function prevPage() {
 }
 
 let filterDebounceId = null
+
+onBeforeUnmount(() => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+})
 watch([fromDate, toDate], () => {
   if (filterDebounceId) clearTimeout(filterDebounceId)
   filterDebounceId = setTimeout(() => {

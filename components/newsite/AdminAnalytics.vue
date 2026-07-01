@@ -445,6 +445,9 @@ let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
     netChart, ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
 let socketMetricsTimer
+// Set true once the component starts tearing down so async fetches that resolve
+// after unmount don't touch charts we've already destroyed (see onBeforeUnmount).
+let isUnmounted = false
 
 // --- color palette ---
 const colors = {
@@ -756,7 +759,9 @@ function resetPointsZoom () {
 }
 
 async function fetchPointsDistribution () {
+  if (isUnmounted || !ptsHistChart) return
   const res = await fetch(`/api/admin/points-distribution?bucketSize=${pointsBucketSize.value}`, { credentials: 'include' })
+  if (isUnmounted || !ptsHistChart) return
   const hd = await res.json()
   const labels = hd.map(b => b.label)
   const counts = hd.map(b => b.count)
@@ -811,8 +816,9 @@ function computeLeakRisk(samples, intervalMs) {
 }
 
 async function fetchSocketMetrics() {
-  if (!socketMetricsChart) return
+  if (isUnmounted || !socketMetricsChart) return
   const res = await fetch('/api/admin/socket-metrics?limit=1440', { credentials: 'include' })
+  if (isUnmounted || !socketMetricsChart) return
   if (!res.ok) return
   const payload = await res.json()
   const samples = Array.isArray(payload.samples) ? payload.samples : []
@@ -836,9 +842,11 @@ async function fetchSocketMetrics() {
 }
 
 async function fetchData() {
+  if (isUnmounted || !cumChart) return
   const groupParam = `&groupBy=${groupBy.value}`
 
   let res = await fetch(`/api/admin/cumulative-users?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted || !cumChart) return
   let data = await res.json()
   cumChart.data.labels   = data.map(d => dateOf(d))
   cumChart.data.datasets = [{
@@ -851,6 +859,7 @@ async function fetchData() {
   cumChart.update()
 
   res = await fetch(`/api/admin/trades-requested?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const tr = await res.json()
   tradesChart.data.labels   = tr.map(d => dateOf(d))
   tradesChart.data.datasets = [{
@@ -862,6 +871,7 @@ async function fetchData() {
   tradesChart.update()
 
   res = await fetch(`/api/admin/net-points-issues?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const np = await res.json()
   const tfByGroup = {
     daily: TF_DAYS,
@@ -918,6 +928,7 @@ async function fetchData() {
   }
 
   res = await fetch(`/api/admin/percentage-first-purchase?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   data = await res.json()
   pctChart.data.labels   = data.map(d => dateOf(d))
   pctChart.data.datasets = [{
@@ -930,6 +941,7 @@ async function fetchData() {
   pctChart.update()
 
   res = await fetch(`/api/admin/unique-logins?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   data = await res.json()
   uniqueChart.data.labels   = data.map(d => dateOf(d))
   uniqueChart.data.datasets = [{
@@ -942,6 +954,7 @@ async function fetchData() {
   uniqueChart.update()
 
   res = await fetch('/api/admin/active-discord', { credentials: 'include' })
+  if (isUnmounted) return
   const ad = await res.json()
   activeDiscord.value = {
     percentage: Math.round((ad.active / ad.total) * 100),
@@ -950,6 +963,7 @@ async function fetchData() {
   }
 
   res = await fetch(`/api/admin/clash-stats?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const cs = await res.json()
   const total    = cs.reduce((s, d) => s + (d.count || 0), 0)
   const finished = cs.reduce((s, d) => s + (d.finishedCount || 0), 0)
@@ -986,6 +1000,7 @@ async function fetchData() {
   clashChart.update()
 
   res = await fetch(`/api/admin/monster-scans?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const ms = await res.json()
   monsterScansChart.data.labels = ms.map(d => dateOf(d))
   monsterScansChart.data.datasets = [
@@ -1017,6 +1032,7 @@ async function fetchData() {
   monsterScansChart.update()
 
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const sr = await res.json()
   ratioWindowCount.value = (tfByGroup[groupBy.value] || TF_DAYS)[selectedTimeframe.value]
 
@@ -1069,6 +1085,7 @@ async function fetchData() {
   }
 
   res = await fetch(`/api/admin/codes-redeemed?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   let cr = await res.json()
   codesChart.data.labels   = cr.map(d => dateOf(d))
   codesChart.data.datasets = [{
@@ -1080,6 +1097,7 @@ async function fetchData() {
   codesChart.update()
 
   res = await fetch(`/api/admin/purchases?method=ctoon&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   let pd = await res.json()
   if (pd.ctoonPurchases) pd = pd.ctoonPurchases
   ctoonChart.data.labels   = pd.map(d => dateOf(d))
@@ -1092,6 +1110,7 @@ async function fetchData() {
   ctoonChart.update()
 
   res = await fetch(`/api/admin/purchases?method=pack&timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   let pp = await res.json()
   if (pp.packPurchases) pp = pp.packPurchases
   packChart.data.labels   = pp.map(d => dateOf(d))
@@ -1106,6 +1125,7 @@ async function fetchData() {
   await fetchPointsDistribution()
 
   res = await fetch(`/api/admin/rarity-turnover-rate?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
   const turnrate = await res.json()
   const turnoverCounts = {
     daily: turnrate.days,
@@ -1250,11 +1270,29 @@ onMounted(async () => {
   await nextTick()
   await fetchData()
   await fetchSocketMetrics()
-  socketMetricsTimer = setInterval(fetchSocketMetrics, socketMetricsIntervalMs.value)
+  // Skip arming the poller if we already unmounted during the awaits above —
+  // onBeforeUnmount would have run before this timer existed and couldn't clear it.
+  if (!isUnmounted) socketMetricsTimer = setInterval(fetchSocketMetrics, socketMetricsIntervalMs.value)
 })
 
 onBeforeUnmount(() => {
-  if (socketMetricsTimer) clearInterval(socketMetricsTimer)
+  // Mark unmounted first so any in-flight fetch bails before touching charts,
+  // then stop the poller before destroying so it can't fire mid-teardown.
+  isUnmounted = true
+  if (socketMetricsTimer) { clearInterval(socketMetricsTimer); socketMetricsTimer = null }
+
+  // Destroy every Chart.js instance so its canvas, resize listeners and
+  // animation frames are released instead of leaking on each unmount (this
+  // component re-mounts every time the newsite admin section switches).
+  ;[
+    cumChart, pctChart, uniqueChart, codesChart, ctoonChart, packChart,
+    ptsHistChart, clashChart, tradesChart, netChart, ratioChart,
+    turnoverChart, monsterScansChart, socketMetricsChart
+  ].forEach(ch => { try { ch?.destroy() } catch {} })
+
+  cumChart = pctChart = uniqueChart = codesChart = ctoonChart = packChart =
+    ptsHistChart = clashChart = tradesChart = netChart = ratioChart =
+    turnoverChart = monsterScansChart = socketMetricsChart = null
 })
 
 watch([selectedTimeframe, groupBy], async () => {

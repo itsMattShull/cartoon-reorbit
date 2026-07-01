@@ -253,7 +253,7 @@
 
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 
 definePageMeta({
@@ -459,6 +459,12 @@ watch(activeTab, (tab) => {
 
 onMounted(() => {
   fetchCreatedCodes()
+})
+
+onBeforeUnmount(() => {
+  if (claimedFilterDebounceId) clearTimeout(claimedFilterDebounceId)
+  if (createdFilterDebounceId) clearTimeout(createdFilterDebounceId)
+  if (claimedSuggestDebounceId) clearTimeout(claimedSuggestDebounceId)
 })
 </script>
 

@@ -273,7 +273,7 @@
 <script setup>
 definePageMeta({ title: 'Admin - cToons', middleware: ['auth','admin'], layout: 'admin' })
 
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
@@ -441,6 +441,10 @@ onMounted(() => {
   if (set) selectedSet.value = set
   if (series) selectedSeries.value = series
   loadPage(1)
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer)
 })
 </script>
 
