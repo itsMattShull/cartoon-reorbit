@@ -2,11 +2,12 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { replayGame, MIN_MOVE_INTERVAL_MS } from '@/server/utils/reorbitMatchEngine'
+import { replayGame, MIN_MOVE_INTERVAL_MS, BASE_MATCH_POINTS, MAX_COMBO_MULT } from '@/server/utils/reorbitMatchEngine'
 
 const LOCK_TTL_MS = 15_000
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
 const MAX_MOVES_PER_SECOND = 10   // 1 move per 100ms max
+const MAX_MOVES = 5000            // absolute cap on replayed moves (DoS guard)
 
 function lockKey(userId) { return `reorbitmatch:lock:${userId}` }
 function sessionKey(userId) { return `reorbitmatch:session:${userId}` }
@@ -35,6 +36,11 @@ export default defineEventHandler(async (event) => {
 
   const { moveLog } = body
 
+  // Absolute move-count cap, independent of session TTL, before any expensive work.
+  if (moveLog.length > MAX_MOVES) {
+    throw createError({ statusCode: 400, statusMessage: 'Move log exceeds maximum' })
+  }
+
   // Per-user lock (same key as /start — serializes with concurrent start requests too)
   const lockToken = crypto.randomUUID()
   let lockAcquired = false
@@ -58,7 +64,7 @@ export default defineEventHandler(async (event) => {
     if (!raw) throw createError({ statusCode: 409, statusMessage: 'Game session not found or expired. Start a new game.' })
 
     const session = JSON.parse(raw)
-    const { board, startTime, gridSize, emojiCount, sessionToken } = session
+    const { board, startTime, gridSize, emojiCount, fillSeed } = session
     const endTime = Date.now()
     const elapsedMs = endTime - startTime
 
@@ -96,13 +102,14 @@ export default defineEventHandler(async (event) => {
     // Server-side replay (score computed here, NOT from client)
     let computedScore
     try {
-      computedScore = replayGame(board, moveLog, gridSize, emojiCount, sessionToken)
+      computedScore = replayGame(board, moveLog, gridSize, emojiCount, fillSeed)
     } catch (err) {
       throw createError({ statusCode: 400, statusMessage: `Invalid move sequence: ${err.message}` })
     }
 
-    // Sanity-check: cap at game-theoretical max (gridSize² tiles * 10pts * 2x size bonus * 16x combo * 50 cascades)
-    const theoreticalMax = gridSize * gridSize * 10 * 2 * 16 * 50
+    // Sanity-check: every match is exactly 3 tiles, so the tightest possible ceiling is
+    // one match per logged move at the max combo multiplier. Defense-in-depth vs replay bugs.
+    const theoreticalMax = moveLog.length * BASE_MATCH_POINTS * MAX_COMBO_MULT
     computedScore = Math.min(computedScore, theoreticalMax)
 
     // Load config for points-per-game

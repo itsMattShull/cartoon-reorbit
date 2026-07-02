@@ -58,9 +58,14 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Generate board from a 128-bit random session token (never sent to client)
+    // Generate board from a 128-bit random session token (never sent to client).
     const sessionToken = crypto.randomUUID().replace(/-/g, '')
     const board = generateBoard(gridSize, emojis.length, sessionToken)
+
+    // Separate, non-secret seed for tile refills. Shared with the client so both sides
+    // refill deterministically and the boards stay bit-identical. It is INDEPENDENT of
+    // the sessionToken so revealing it leaks no board-generation entropy.
+    const fillSeed = crypto.randomUUID().replace(/-/g, '')
 
     const ttlSeconds = timeSeconds ? timeSeconds + 120 : 600
     await redis.set(sessionKey(userId), JSON.stringify({
@@ -68,13 +73,14 @@ export default defineEventHandler(async (event) => {
       startTime: Date.now(),
       gridSize,
       emojiCount: emojis.length,
-      sessionToken
+      sessionToken,
+      fillSeed
     }), 'EX', ttlSeconds)
 
     // Record the play (inside the lock to prevent TOCTOU)
     await prisma.reOrbitMatchPlay.create({ data: { userId } })
 
-    return { board, gridSize, emojis, timeSeconds }
+    return { board, gridSize, emojis, timeSeconds, fillSeed }
   } finally {
     try { await redis.eval(casRelease, 1, lockKey(userId), lockToken) } catch {}
   }
