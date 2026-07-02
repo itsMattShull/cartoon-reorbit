@@ -1,8 +1,14 @@
 <template>
-  <button class="green-button">
+  <button class="green-button" :class="{ 'green-button--active': active }">
     <slot />
   </button>
 </template>
+
+<script setup>
+defineProps({
+  active: { type: Boolean, default: false }
+})
+</script>
 
 <style scoped>
 .green-button {
@@ -30,11 +36,13 @@
   background: var(--OrbitGreen);
 }
 
-.green-button:active {
-  background: var(--OrbitGreen);
+.green-button:active,
+.green-button--active {
+  background: #2a6a00;
   box-shadow:
-    inset 0 1px 0 rgba(0, 0, 0, 0.2),
-    0 1px 2px rgba(0, 0, 0, 0.3);
+    inset 0 2px 4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(0, 0, 0, 0.2);
+  border-color: #1a4a00;
 }
 
 .green-button:disabled {
