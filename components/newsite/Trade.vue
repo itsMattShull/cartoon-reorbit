@@ -400,7 +400,10 @@
               <div v-if="!selectedTargetCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons selected.</div>
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedTargetCtoons" :key="c.id" class="tr-confirm-card">
-                  <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                  <div class="tr-confirm-img-wrap">
+                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                    <SecondEditionOverlay :ctoon="c" />
+                  </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
                   <span class="tr-suggest-dim">{{ c.rarity }}</span>
                 </div>
@@ -412,7 +415,10 @@
               <div v-if="!selectedInitiatorCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons offered.</div>
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedInitiatorCtoons" :key="c.id" class="tr-confirm-card">
-                  <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                  <div class="tr-confirm-img-wrap">
+                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                    <SecondEditionOverlay :ctoon="c" />
+                  </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
                   <span class="tr-suggest-dim">{{ c.rarity }}</span>
                 </div>
@@ -1712,6 +1718,7 @@ onBeforeUnmount(() => {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: rgba(255,255,255,0.08); border-radius: 4px; padding: 6px 4px; overflow: hidden;
 }
+.tr-confirm-img-wrap { position: relative; width: 100%; }
 .tr-confirm-img { width: 100%; max-height: 64px; object-fit: contain; }
 .tr-confirm-name { font-size: 0.6rem; color: white; text-align: center; line-height: 1.2; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tr-confirm-rarity { font-size: 0.55rem; color: rgba(255,255,255,0.45); }
