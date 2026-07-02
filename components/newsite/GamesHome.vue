@@ -124,10 +124,9 @@ const tiles = computed(() => tileData.value ?? {})
 
 @media (max-width: 768px) {
   .gameshome {
-    height: max(200px, calc(100dvh - 276px));
-    grid-template-rows: repeat(4, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(6, minmax(70px, 1fr));
+    height: max(300px, calc(100dvh - 276px));
   }
-  .quadrant--tko,
-  .quadrant--reorbit { grid-column: 1 / -1; }
 }
 </style>
