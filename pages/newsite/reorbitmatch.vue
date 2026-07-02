@@ -170,6 +170,8 @@ let gridOffset   = { x: 0, y: 0 }
 let pointerStartX = 0
 let pointerStartY = 0
 let pointerDown  = false
+let dragFromIdx  = -1  // tile pressed on in current gesture (immediate visual feedback)
+let dragHoverIdx = -1  // adjacent tile being hovered over as a valid swap target
 let configData   = null
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -376,7 +378,7 @@ function renderFrame(nowMs) {
 
     // Tile background
     const baseColor = TILE_COLORS[tile.emojiIdx % TILE_COLORS.length]
-    const isSelected = (i === selectedIdx)
+    const isSelected = (i === selectedIdx || i === dragFromIdx || i === dragHoverIdx)
     const isMatched  = matchedSet.has(i)
 
     if (isSelected) {
@@ -446,6 +448,23 @@ function renderFrame(nowMs) {
       ctx.lineTo(tileCenterX(c2), tileCenterY(r2))
       ctx.stroke()
     }
+    ctx.restore()
+  }
+
+  // Draw drag-swap preview line between pressed tile and valid hover target
+  if (dragFromIdx !== -1 && dragHoverIdx !== -1) {
+    ctx.save()
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)'
+    ctx.lineWidth   = Math.max(2, tileSize * 0.06)
+    ctx.lineCap = 'round'
+    ctx.setLineDash([Math.round(tileSize * 0.15), Math.round(tileSize * 0.1)])
+    ctx.shadowColor = '#FFD700'
+    ctx.shadowBlur  = 6
+    ctx.beginPath()
+    ctx.moveTo(tileCenterX(colOf(dragFromIdx)), tileCenterY(rowOf(dragFromIdx)))
+    ctx.lineTo(tileCenterX(colOf(dragHoverIdx)), tileCenterY(rowOf(dragHoverIdx)))
+    ctx.stroke()
+    ctx.setLineDash([])
     ctx.restore()
   }
 }
@@ -647,11 +666,28 @@ function onPointerDown(e) {
   pointerStartX = pos.x
   pointerStartY = pos.y
   canvas.value?.setPointerCapture?.(e.pointerId)
+
+  // Immediately highlight the tile under the pointer
+  dragFromIdx  = hitTest(pos.x, pos.y)
+  dragHoverIdx = -1
 }
 
 function onPointerMove(e) {
   if (!pointerDown) return
   e.preventDefault()
+
+  if (animating || uiState.value !== 'playing' || dragFromIdx === -1) return
+
+  const pos    = getCanvasPos(e)
+  const overIdx = hitTest(pos.x, pos.y)
+
+  if (overIdx !== -1 && overIdx !== dragFromIdx && isAdjacent(dragFromIdx, overIdx)) {
+    const swapped = [...board]
+    ;[swapped[dragFromIdx], swapped[overIdx]] = [swapped[overIdx], swapped[dragFromIdx]]
+    dragHoverIdx = findMatches(swapped).size > 0 ? overIdx : -1
+  } else {
+    dragHoverIdx = -1
+  }
 }
 
 function onPointerUp(e) {
@@ -659,37 +695,57 @@ function onPointerUp(e) {
   e.preventDefault()
   pointerDown = false
 
+  const fromIdx  = dragFromIdx
+  const hoverIdx = dragHoverIdx
+  dragFromIdx  = -1
+  dragHoverIdx = -1
+
   if (animating || uiState.value !== 'playing') return
 
   const pos = getCanvasPos(e)
-  const dx = pos.x - pointerStartX
-  const dy = pos.y - pointerStartY
+  const dx  = pos.x - pointerStartX
+  const dy  = pos.y - pointerStartY
   const dist = Math.sqrt(dx * dx + dy * dy)
   const threshold = tileSize * 0.35
 
-  const fromIdx = hitTest(pointerStartX, pointerStartY)
   if (fromIdx === -1) { selectedIdx = -1; return }
 
+  // Drag released over a valid adjacent swap target → perform swap immediately
+  if (hoverIdx !== -1) {
+    selectedIdx = -1
+    trySwap(fromIdx, hoverIdx)
+    return
+  }
+
   if (dist < threshold) {
-    // Tap: select/deselect
-    if (selectedIdx === fromIdx) {
+    // Tap
+    if (selectedIdx !== -1 && selectedIdx !== fromIdx && isAdjacent(selectedIdx, fromIdx)) {
+      // Two-tap swap: previously selected tile + this tap
+      const prevSel = selectedIdx
       selectedIdx = -1
-    } else if (selectedIdx !== -1 && isAdjacent(selectedIdx, fromIdx)) {
-      trySwap(selectedIdx, fromIdx)
+      trySwap(prevSel, fromIdx)
+    } else if (selectedIdx === fromIdx) {
+      selectedIdx = -1  // tap same tile again: deselect
     } else {
-      selectedIdx = fromIdx
+      selectedIdx = fromIdx  // first tap: select
     }
   } else {
-    // Swipe: determine direction
+    // Swipe: use drag direction as fallback
     const swapIdx = getSwipeTarget(fromIdx, dx, dy)
     if (swapIdx !== -1) {
       selectedIdx = -1
       trySwap(fromIdx, swapIdx)
+    } else {
+      selectedIdx = -1
     }
   }
 }
 
-function onPointerLeave() { pointerDown = false }
+function onPointerLeave() {
+  pointerDown  = false
+  dragFromIdx  = -1
+  dragHoverIdx = -1
+}
 
 function getSwipeTarget(fromIdx, dx, dy) {
   const r = rowOf(fromIdx), c = colOf(fromIdx)
@@ -740,6 +796,8 @@ async function startGame() {
     timeLeft.value   = timeSeconds
     moveLog          = []
     selectedIdx      = -1
+    dragFromIdx      = -1
+    dragHoverIdx     = -1
     animating        = false
 
     await fetchStatus() // refresh plays left
