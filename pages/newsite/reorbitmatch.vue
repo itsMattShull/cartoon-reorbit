@@ -25,13 +25,21 @@
         <div v-else-if="uiState === 'start'" class="center-content">
           <div class="start-card">
             <h1 class="game-title">ReOrbit Match</h1>
-            <p class="start-sub">Match 3 or more orbiting icons to score!</p>
+            <p class="start-sub">Slide your finger across 3 matching icons — any direction — to clear them. Chain matches fast to build your combo!</p>
             <div class="plays-info">
               <span class="plays-badge">{{ playsLeft }} play{{ playsLeft !== 1 ? 's' : '' }} left</span>
               <span class="reset-text">· Resets {{ resetLabel }}</span>
             </div>
             <button class="btn-start" @click="startGame" :disabled="starting">
               {{ starting ? 'Launching…' : 'Play' }}
+            </button>
+            <button class="btn-howto" @click="showHowTo = true" aria-label="How to play">
+              <svg class="howto-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M9.1 9a3 3 0 1 1 4.4 3c-.9.6-1.5 1-1.5 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="12" cy="17.4" r="1.2" fill="currentColor"/>
+              </svg>
+              <span>How to Play</span>
             </button>
           </div>
         </div>
@@ -45,7 +53,7 @@
                 <span class="hud-label">Score</span>
                 <span class="hud-value">{{ score.toLocaleString() }}</span>
               </div>
-              <div class="hud-item" :class="{ 'hud-item--active': combo > 0 }">
+              <div class="hud-item" :class="{ 'hud-item--active': combo > 1 }">
                 <span class="hud-label">Combo</span>
                 <span class="hud-value">{{ combo }}x</span>
               </div>
@@ -76,10 +84,13 @@
               @pointerup="onPointerUp"
               @pointermove="onPointerMove"
               @pointerleave="onPointerLeave"
+              @pointercancel="onPointerCancel"
               aria-label="Match-3 game grid"
               role="img"
             ></canvas>
           </div>
+          <p class="sr-only" aria-live="polite">{{ announce }}</p>
+          <div class="game-hint" aria-hidden="true">Slide across 3 of the same icon — any direction, diagonals too</div>
         </div>
       </div>
     </NuxtLayout>
@@ -119,6 +130,40 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- How to Play Modal -->
+    <Teleport to="body">
+      <div v-if="showHowTo" class="modal-backdrop" @click.self="showHowTo = false">
+        <div class="modal-card modal-card--howto" role="dialog" aria-modal="true" aria-label="How to Play">
+          <h2 class="modal-title">How to Play</h2>
+          <ol class="howto-list">
+            <li>
+              <span class="howto-num">1</span>
+              <span>Press and hold on a tile, then <strong>slide your finger or mouse</strong> across the board — up, down, sideways, or diagonally.</span>
+            </li>
+            <li>
+              <span class="howto-num">2</span>
+              <span>Connect <strong>exactly 3 tiles of the same icon</strong>. The trail glows <span class="howto-green">green</span> when your picks match and <span class="howto-red">red</span> when they don't.</span>
+            </li>
+            <li>
+              <span class="howto-num">3</span>
+              <span><strong>Let go</strong> to clear a matching trio. The tiles pop, everything above drops down, and new tiles fill in from the top.</span>
+            </li>
+            <li>
+              <span class="howto-num">4</span>
+              <span>Chain matches <strong>quickly</strong> to build your <strong>combo multiplier</strong> — it climbs up to 8× but resets if you pause too long.</span>
+            </li>
+            <li>
+              <span class="howto-num">5</span>
+              <span>Score as much as you can before time runs out. Slid onto a wrong tile? Slide back a step to undo it.</span>
+            </li>
+          </ol>
+          <div class="modal-actions">
+            <button class="btn-start" @click="showHowTo = false">Got it!</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -127,76 +172,176 @@ definePageMeta({ ssr: false })
 
 // ─── Game constants ────────────────────────────────────────────────────────────
 const TILE_GAP = 3
-const ANIMATION_WIGGLE_MS = 400
-const ANIMATION_REMOVE_MS = 320
+const ANIMATION_REMOVE_MS = 300
 const ANIMATION_FALL_MS   = 280
-const ANIMATION_APPEAR_MS = 180
-const MIN_MATCH = 3
+const ANIMATION_APPEAR_MS = 200
+const MIN_MATCH = 3          // a valid match is exactly this many tiles
+const MAX_MATCH = 3          // chain is capped at this many tiles
 
-// Tile states
-const TS = { NORMAL: 0, SELECTED: 1, WIGGLE: 2, REMOVING: 3, FALLING: 4, APPEARING: 5 }
+// Scoring — MUST stay in sync with server/utils/reorbitMatchEngine.js
+const BASE_MATCH_POINTS = 30
+const COMBO_WINDOW_MS   = 2500
+const MAX_COMBO_MULT    = 8
 
-// ─── State ────────────────────────────────────────────────────────────────────
-const uiState   = ref('loading')  // loading | start | playing | gameover | noplays
-const starting  = ref(false)
-const score     = ref(0)
-const combo     = ref(0)
+const HINT_DELAY_MS = 5000
+const FAIL_FLASH_MS = 380
+
+// Tile animation states
+const TS = { NORMAL: 0, REMOVING: 1, FALLING: 2, APPEARING: 3 }
+
+// ─── Reactive UI state ──────────────────────────────────────────────────────────
+const uiState    = ref('loading')  // loading | start | playing | gameover | noplays
+const starting   = ref(false)
+const score      = ref(0)
+const combo      = ref(0)
 const multiplier = ref(1)
-const timeLeft  = ref(null)
-const playsLeft = ref(0)
-const finalScore  = ref(0)
-const weekHigh    = ref(0)
-const allTimeHigh = ref(0)
+const timeLeft   = ref(null)
+const playsLeft  = ref(0)
+const finalScore    = ref(0)
+const weekHigh      = ref(0)
+const allTimeHigh   = ref(0)
 const pointsAwarded = ref(0)
-const resetLabel  = ref('')
+const resetLabel = ref('')
+const announce   = ref('')
+const showHowTo  = ref(false)
 
-const canvas         = ref(null)
+const canvas          = ref(null)
 const canvasContainer = ref(null)
 
 // ─── Non-reactive game internals ──────────────────────────────────────────────
-let board        = []   // flat array of emoji indices
-let emojis       = []   // emoji strings
-let gridSize     = 8
-let timeSeconds  = null
-let moveLog      = []   // [{fromRow,fromCol,toRow,toCol,ts}]
-let tiles        = []   // per-tile animation state
-let selectedIdx  = -1
-let animating    = false
-let gameStartTs  = 0
-let rafId        = null
-let timerStart   = null
-let ctx          = null
-let tileSize     = 0
-let gridOffset   = { x: 0, y: 0 }
-let pointerStartX = 0
-let pointerStartY = 0
-let pointerDown  = false
-let dragFromIdx  = -1  // tile pressed on in current gesture (immediate visual feedback)
-let dragHoverIdx = -1  // adjacent tile being hovered over as a valid swap target
-let particles    = []  // burst particles [{x,y,vx,vy,color,size,startMs}]
-let configData   = null
+let board       = []    // flat array of emoji indices
+let emojis      = []     // emoji strings
+let gridSize    = 8
+let timeSeconds = null
+let fillSeed    = null
+let fillRng     = null   // deterministic refill stream (shared with server)
+let moveLog     = []     // [{ cells:[{row,col}x3], ts }]
+let tiles       = []     // per-tile animation state
+let animating   = false
+let ending      = false  // guards endGame against double-fire
+let gameStartTs = 0
+let rafId       = null
+let timerStart  = null
+let ctx         = null
+let tileSize    = 0
+let gridOffset  = { x: 0, y: 0 }
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
-function getMultiplier(c) {
-  if (c < 2) return 1
-  if (c < 4) return 2
-  if (c < 6) return 4
-  if (c < 8) return 8
-  return 16
+// Drag / chain state
+let pointerDown = false
+let chain       = []      // ordered tile indices in the current drag
+let pointerX    = 0
+let pointerY    = 0
+
+// Combo bookkeeping (mirrors the server's ts-driven combo)
+let comboCount  = 0
+let lastLogTs   = null    // relative ts of the previous logged match
+let lastMatchAbs = 0      // performance.now() of the previous match (for idle decay)
+
+// Feedback / hint
+let particles     = []
+let failFlashSet  = new Set()
+let failFlashUntil = 0
+let hintSet       = new Set()
+let hintActive    = false
+let lastActivityMs = 0
+let reducedMotion = false
+
+let configData = null
+
+// ─── Deterministic PRNG (byte-identical to server makePRNG) ────────────────────
+function makePRNG(seedHex) {
+  const hi = parseInt(seedHex.slice(0, 8), 16) >>> 0
+  const lo = parseInt(seedHex.slice(8, 16), 16) >>> 0
+  let s0 = hi >>> 0
+  let s1 = lo >>> 0
+  return function () {
+    s0 = (s0 + 0x9e3779b9) >>> 0
+    let z = s0
+    z = Math.imul(z ^ (z >>> 16), 0x85ebca6b) >>> 0
+    z = Math.imul(z ^ (z >>> 13), 0xc2b2ae35) >>> 0
+    z = (z ^ (z >>> 16)) >>> 0
+    s1 = (s1 + 0x6c62272e) >>> 0
+    let w = s1
+    w = Math.imul(w ^ (w >>> 16), 0x85ebca6b) >>> 0
+    w = Math.imul(w ^ (w >>> 13), 0xc2b2ae35) >>> 0
+    w = (w ^ (w >>> 16)) >>> 0
+    return ((z ^ w) >>> 0) / 4294967296
+  }
 }
 
+// ─── Grid helpers ───────────────────────────────────────────────────────────────
 function idxOf(row, col) { return row * gridSize + col }
 function rowOf(idx) { return Math.floor(idx / gridSize) }
 function colOf(idx) { return idx % gridSize }
 
-function isAdjacent(aIdx, bIdx) {
-  const ar = rowOf(aIdx), ac = colOf(aIdx), br = rowOf(bIdx), bc = colOf(bIdx)
-  return (Math.abs(ar - br) === 1 && ac === bc) || (ar === br && Math.abs(ac - bc) === 1)
+// 8-directional adjacency (Chebyshev distance exactly 1)
+function isEightAdjacent(a, b) {
+  const dr = Math.abs(rowOf(a) - rowOf(b))
+  const dc = Math.abs(colOf(a) - colOf(b))
+  return dr <= 1 && dc <= 1 && (dr + dc) > 0
 }
 
+function computeMultiplier(c) { return c <= 1 ? 1 : Math.min(c, MAX_COMBO_MULT) }
+
+function vibrate(pattern) { try { navigator.vibrate?.(pattern) } catch {} }
+
+// ─── Game-over detection (8-connected same-color component of size >= 3) ─────────
+function hasPossibleMoves(b) {
+  const n = gridSize * gridSize
+  const visited = new Uint8Array(n)
+  const stack = []
+  for (let start = 0; start < n; start++) {
+    if (visited[start]) continue
+    const color = b[start]
+    if (color === -1) { visited[start] = 1; continue }
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+    let size = 0
+    while (stack.length) {
+      const idx = stack.pop()
+      size++
+      if (size >= MIN_MATCH) return true
+      const r = rowOf(idx), c = colOf(idx)
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr, nc = c + dc
+          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
+          const nidx = nr * gridSize + nc
+          if (!visited[nidx] && b[nidx] === color) { visited[nidx] = 1; stack.push(nidx) }
+        }
+      }
+    }
+  }
+  return false
+}
+
+// Find one valid 3-chain for the idle hint (returns [idx, idx, idx] or null)
+function findHint(b) {
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const color = b[idxOf(r, c)]
+      if (color === -1) continue
+      const nbrs = []
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr, nc = c + dc
+          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
+          if (b[idxOf(nr, nc)] === color) nbrs.push(idxOf(nr, nc))
+        }
+      }
+      if (nbrs.length >= 2) return [nbrs[0], idxOf(r, c), nbrs[1]]
+    }
+  }
+  return null
+}
+
+// ─── Particles ──────────────────────────────────────────────────────────────────
 function fireExplosion(tileIdx) {
-  const row = rowOf(tileIdx), col = colOf(tileIdx)
-  const cx = tileCenterX(col), cy = tileCenterY(row)
+  if (reducedMotion) return
+  const cx = tileCenterX(colOf(tileIdx)), cy = tileCenterY(rowOf(tileIdx))
   const now = performance.now()
   const colors = ['#FFD700', '#fff', '#FFD700', '#66bbff', '#fff', '#FFD700']
   for (let i = 0; i < 10; i++) {
@@ -213,71 +358,15 @@ function fireExplosion(tileIdx) {
   }
 }
 
-// ─── Match finding ────────────────────────────────────────────────────────────
-function findMatches(b) {
-  const matched = new Set()
-  // Horizontal
-  for (let r = 0; r < gridSize; r++) {
-    let c = 0
-    while (c < gridSize) {
-      const v = b[idxOf(r, c)]
-      if (v === -1) { c++; continue }
-      let len = 1
-      while (c + len < gridSize && b[idxOf(r, c + len)] === v) len++
-      if (len >= MIN_MATCH) for (let k = 0; k < len; k++) matched.add(idxOf(r, c + k))
-      c += len
-    }
-  }
-  // Vertical
-  for (let c = 0; c < gridSize; c++) {
-    let r = 0
-    while (r < gridSize) {
-      const v = b[idxOf(r, c)]
-      if (v === -1) { r++; continue }
-      let len = 1
-      while (r + len < gridSize && b[idxOf(r + len, c)] === v) len++
-      if (len >= MIN_MATCH) for (let k = 0; k < len; k++) matched.add(idxOf(r + k, c))
-      r += len
-    }
-  }
-  return matched
-}
-
-function hasPossibleMoves(b) {
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
-      const idx = idxOf(r, c)
-      if (c + 1 < gridSize) {
-        const copy = [...b]; [copy[idx], copy[idxOf(r, c + 1)]] = [copy[idxOf(r, c + 1)], copy[idx]]
-        if (findMatches(copy).size > 0) return true
-      }
-      if (r + 1 < gridSize) {
-        const copy = [...b]; [copy[idx], copy[idxOf(r + 1, c)]] = [copy[idxOf(r + 1, c)], copy[idx]]
-        if (findMatches(copy).size > 0) return true
-      }
-    }
-  }
-  return false
-}
-
-function scoreGroup(cells, b) {
-  const n = cells.size
-  let base = n * 10
-  if (n >= 5) base = Math.round(base * 2)
-  else if (n === 4) base = Math.round(base * 1.5)
-  return base
-}
-
-// ─── Tile animation state helpers ─────────────────────────────────────────────
+// ─── Tile animation state ──────────────────────────────────────────────────────
 function initTiles(b) {
-  tiles = b.map((emojiIdx, i) => ({
+  tiles = b.map((emojiIdx) => ({
     emojiIdx,
     state: TS.NORMAL,
-    visualY: 0,       // current Y offset from logical row (for falling)
-    startVisualY: 0,  // Y offset at animation start (source for easing)
+    visualY: 0,
+    startVisualY: 0,
     alpha: 1,
     scale: 1,
-    wiggleAngle: 0,
     animStartMs: 0
   }))
 }
@@ -337,16 +426,22 @@ const TILE_COLORS = [
   '#4a0050', '#00404a', '#3a2a00', '#003a70'
 ]
 
+// Color of the in-progress chain feedback: green while all-same-so-far, red otherwise.
+function chainFeedbackColor() {
+  if (chain.length === 0) return null
+  const first = board[chain[0]]
+  const allSame = chain.every(i => board[i] === first)
+  return allSame ? '#3ddc84' : '#ff5a5a'
+}
+
 function renderFrame(nowMs) {
   if (!ctx) return
   const w = canvas.value.width / devicePixelRatio
   const h = canvas.value.height / devicePixelRatio
 
-  // Background
   ctx.fillStyle = '#001230'
   ctx.fillRect(0, 0, w, h)
 
-  // Board background glow
   const boardPx = tileSize * gridSize + TILE_GAP * (gridSize + 1)
   const grd = ctx.createRadialGradient(
     gridOffset.x + boardPx / 2, gridOffset.y + boardPx / 2, 0,
@@ -357,9 +452,9 @@ function renderFrame(nowMs) {
   ctx.fillStyle = grd
   ctx.fillRect(gridOffset.x, gridOffset.y, boardPx, boardPx)
 
-  // Collect match connections to draw last
-  const matchedSet = findMatches(board)
-  const connections = []
+  const feedback = chainFeedbackColor()
+  const chainSet = new Set(chain)
+  const flashing = nowMs < failFlashUntil
 
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i]
@@ -370,77 +465,68 @@ function renderFrame(nowMs) {
     let y = tileTop(row) + tile.visualY
     let alpha = tile.alpha
     let scale = tile.scale
+    let rot = 0
 
-    if (tile.state === TS.WIGGLE) {
-      const t = Math.min(elapsed / ANIMATION_WIGGLE_MS, 1)
-      const wobble = Math.sin(t * Math.PI * 6) * (1 - t)
-      tile.wiggleAngle = wobble * 0.2
-      scale = 1 + Math.abs(wobble) * 0.12
-    } else if (tile.state === TS.REMOVING) {
+    if (tile.state === TS.REMOVING) {
       const t = Math.min(elapsed / ANIMATION_REMOVE_MS, 1)
-      if (t < 0.28) {
-        // Pop: quick scale-up flash
-        const pop = t / 0.28
-        scale = 1 + pop * 0.55
+      if (reducedMotion) {
+        alpha = 1 - t
+        scale = 1
+      } else if (t < 0.28) {
+        scale = 1 + (t / 0.28) * 0.55
         alpha = 1
       } else {
-        // Burst: shrink to nothing while fading
         const burst = (t - 0.28) / 0.72
         scale = 1.55 * (1 - burst)
         alpha = 1 - Math.pow(burst, 0.6)
-        tile.wiggleAngle = (tile.wiggleAngle || 0) + burst * 0.4
+        rot = burst * 0.4
       }
     } else if (tile.state === TS.FALLING) {
       const t = Math.min(elapsed / ANIMATION_FALL_MS, 1)
-      const ease = 1 - Math.pow(1 - t, 3)
+      const ease = reducedMotion ? t : 1 - Math.pow(1 - t, 3)
       tile.visualY = tile.startVisualY * (1 - ease)
       y = tileTop(row) + tile.visualY
     } else if (tile.state === TS.APPEARING) {
       const fadeT = Math.min(elapsed / ANIMATION_APPEAR_MS, 1)
       const fallT = Math.min(elapsed / ANIMATION_FALL_MS, 1)
-      const ease  = 1 - Math.pow(1 - fallT, 3)
+      const ease  = reducedMotion ? fallT : 1 - Math.pow(1 - fallT, 3)
       alpha = fadeT
-      scale = 0.6 + fadeT * 0.4
+      scale = reducedMotion ? 1 : 0.6 + fadeT * 0.4
       tile.visualY = tile.startVisualY * (1 - ease)
       y = tileTop(row) + tile.visualY
     }
 
+    const inChain  = chainSet.has(i)
+    const inFlash  = flashing && failFlashSet.has(i)
+    const inHint   = hintActive && hintSet.has(i)
+
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
     ctx.translate(x + tileSize / 2, y + tileSize / 2)
-    ctx.rotate(tile.wiggleAngle || 0)
+    if (rot) ctx.rotate(rot)
+    if (inHint && !reducedMotion) scale *= 1 + Math.sin(nowMs / 160) * 0.06
     ctx.scale(scale, scale)
 
-    // Tile background
     const baseColor = TILE_COLORS[tile.emojiIdx % TILE_COLORS.length]
-    const isSelected = (i === selectedIdx || i === dragFromIdx || i === dragHoverIdx)
-    const isMatched  = matchedSet.has(i)
-
-    if (isSelected) {
-      ctx.shadowColor = '#FFD700'
-      ctx.shadowBlur  = 12
-      ctx.fillStyle = '#FFD700'
-    } else if (isMatched && tile.state !== TS.WIGGLE && tile.state !== TS.REMOVING) {
-      ctx.shadowColor = '#fff'
-      ctx.shadowBlur  = 8
-      ctx.fillStyle = '#3a80ff'
+    if (inFlash) {
+      ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff5a5a'
+    } else if (inChain && feedback) {
+      ctx.shadowColor = feedback; ctx.shadowBlur = 14; ctx.fillStyle = feedback
+    } else if (inHint) {
+      ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 12; ctx.fillStyle = baseColor
     } else {
-      ctx.shadowColor = 'rgba(0,0,0,0.4)'
-      ctx.shadowBlur  = 4
-      ctx.fillStyle = baseColor
+      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 4; ctx.fillStyle = baseColor
     }
     drawRoundRect(-tileSize / 2, -tileSize / 2, tileSize, tileSize, Math.round(tileSize * 0.12))
     ctx.fill()
     ctx.shadowBlur = 0
 
-    // Shimmer edge for selected
-    if (isSelected) {
+    if (inChain || inFlash) {
       ctx.strokeStyle = '#fff'
       ctx.lineWidth = 2
       ctx.stroke()
     }
 
-    // Emoji
     const fontSize = Math.round(tileSize * 0.52)
     ctx.font = `${fontSize}px serif`
     ctx.textAlign = 'center'
@@ -451,64 +537,41 @@ function renderFrame(nowMs) {
     ctx.fillText(emojis[tile.emojiIdx] || '?', 0, 1)
     ctx.shadowBlur = 0
     ctx.restore()
-
-    // Collect connections for matched tiles that are wiggling
-    if ((tile.state === TS.WIGGLE || matchedSet.has(i)) && tile.state !== TS.REMOVING) {
-      if (col + 1 < gridSize) {
-        const nidx = idxOf(row, col + 1)
-        if (matchedSet.has(nidx)) {
-          connections.push([col, row, col + 1, row])
-        }
-      }
-      if (row + 1 < gridSize) {
-        const nidx = idxOf(row + 1, col)
-        if (matchedSet.has(nidx)) {
-          connections.push([col, row, col, row + 1])
-        }
-      }
-    }
   }
 
-  // Draw connection lines
-  if (connections.length > 0) {
+  // Chain connecting line + live segment to the pointer
+  if (chain.length > 0 && feedback) {
     ctx.save()
-    ctx.strokeStyle = 'rgba(255, 220, 50, 0.85)'
-    ctx.lineWidth   = Math.max(2, tileSize * 0.06)
+    ctx.strokeStyle = feedback
+    ctx.lineWidth = Math.max(3, tileSize * 0.09)
     ctx.lineCap = 'round'
-    ctx.shadowColor = '#FFD700'
-    ctx.shadowBlur  = 8
-    for (const [c1, r1, c2, r2] of connections) {
-      ctx.beginPath()
-      ctx.moveTo(tileCenterX(c1), tileCenterY(r1))
-      ctx.lineTo(tileCenterX(c2), tileCenterY(r2))
-      ctx.stroke()
-    }
-    ctx.restore()
-  }
-
-  // Draw drag-swap preview line between pressed tile and valid hover target
-  if (dragFromIdx !== -1 && dragHoverIdx !== -1) {
-    ctx.save()
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)'
-    ctx.lineWidth   = Math.max(2, tileSize * 0.06)
-    ctx.lineCap = 'round'
-    ctx.setLineDash([Math.round(tileSize * 0.15), Math.round(tileSize * 0.1)])
-    ctx.shadowColor = '#FFD700'
-    ctx.shadowBlur  = 6
+    ctx.lineJoin = 'round'
+    ctx.shadowColor = feedback
+    ctx.shadowBlur = 10
     ctx.beginPath()
-    ctx.moveTo(tileCenterX(colOf(dragFromIdx)), tileCenterY(rowOf(dragFromIdx)))
-    ctx.lineTo(tileCenterX(colOf(dragHoverIdx)), tileCenterY(rowOf(dragHoverIdx)))
+    ctx.moveTo(tileCenterX(colOf(chain[0])), tileCenterY(rowOf(chain[0])))
+    for (let k = 1; k < chain.length; k++) {
+      ctx.lineTo(tileCenterX(colOf(chain[k])), tileCenterY(rowOf(chain[k])))
+    }
     ctx.stroke()
-    ctx.setLineDash([])
+    if (pointerDown && chain.length < MAX_MATCH) {
+      const last = chain[chain.length - 1]
+      ctx.setLineDash([Math.round(tileSize * 0.16), Math.round(tileSize * 0.12)])
+      ctx.beginPath()
+      ctx.moveTo(tileCenterX(colOf(last)), tileCenterY(rowOf(last)))
+      ctx.lineTo(pointerX, pointerY)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
     ctx.restore()
   }
 
-  // Burst particles from matched tile explosions
+  // Burst particles
   const PARTICLE_LIFE_MS = 500
   particles = particles.filter(p => {
-    const age  = nowMs - p.startMs
+    const age = nowMs - p.startMs
     if (age >= PARTICLE_LIFE_MS) return false
-    const t    = age / PARTICLE_LIFE_MS
+    const t = age / PARTICLE_LIFE_MS
     const secs = age / 1000
     ctx.save()
     ctx.globalAlpha = Math.pow(1 - t, 1.4)
@@ -516,12 +579,7 @@ function renderFrame(nowMs) {
     ctx.shadowColor = p.color
     ctx.shadowBlur  = 4
     ctx.beginPath()
-    ctx.arc(
-      p.x + p.vx * secs,
-      p.y + p.vy * secs + 400 * secs * secs,
-      p.size * (1 - t * 0.6),
-      0, Math.PI * 2
-    )
+    ctx.arc(p.x + p.vx * secs, p.y + p.vy * secs + 400 * secs * secs, p.size * (1 - t * 0.6), 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
     return true
@@ -532,186 +590,137 @@ function renderFrame(nowMs) {
 function gameLoop(nowMs) {
   if (!canvas.value) return
 
-  // Timer
   if (timeSeconds && timerStart !== null) {
     const elapsed = (nowMs - timerStart) / 1000
     timeLeft.value = Math.max(0, Math.ceil(timeSeconds - elapsed))
     if (timeLeft.value === 0) { endGame(); return }
   }
 
+  // Combo idle decay (display only; server recomputes authoritative combo from ts)
+  if (comboCount > 0) {
+    const alive = (nowMs - lastMatchAbs) <= COMBO_WINDOW_MS
+    const dispC = alive ? comboCount : 0
+    const dispM = alive ? computeMultiplier(comboCount) : 1
+    if (combo.value !== dispC) combo.value = dispC
+    if (multiplier.value !== dispM) multiplier.value = dispM
+  }
+
+  // Idle hint
+  if (uiState.value === 'playing' && !animating && !pointerDown && !hintActive) {
+    if (nowMs - lastActivityMs > HINT_DELAY_MS) {
+      const h = findHint(board)
+      if (h) { hintSet = new Set(h); hintActive = true }
+    }
+  }
+
   renderFrame(nowMs)
   rafId = requestAnimationFrame(gameLoop)
 }
 
-// ─── Swap & cascade logic ─────────────────────────────────────────────────────
-async function trySwap(fromIdx, toIdx) {
-  if (animating) return
-  const fr = rowOf(fromIdx), fc = colOf(fromIdx)
-  const tr = rowOf(toIdx),   tc = colOf(toIdx)
+// ─── Deterministic settle (gravity + refill) matching the server exactly ────────
+// Returns { newBoard, survivors:[{dest,fall}], newcomers:[{dest,fall}] }.
+function settleBoard(removedSet) {
+  const n = gridSize * gridSize
+  const newBoard = new Array(n).fill(-1)
+  const survivors = []
+  const newcomers = []
 
-  moveLog.push({ fromRow: fr, fromCol: fc, toRow: tr, toCol: tc, ts: performance.now() - gameStartTs })
-
-  const swapped = [...board]
-  ;[swapped[fromIdx], swapped[toIdx]] = [swapped[toIdx], swapped[fromIdx]]
-  const matches = findMatches(swapped)
-
-  if (matches.size === 0) {
-    // Invalid swap — brief shake on both tiles
-    combo.value = 0
-    multiplier.value = getMultiplier(0)
-    selectedIdx = -1
-    return
+  for (let col = 0; col < gridSize; col++) {
+    let write = gridSize - 1
+    for (let r = gridSize - 1; r >= 0; r--) {
+      const idx = idxOf(r, col)
+      if (!removedSet.has(idx)) {
+        const dest = idxOf(write, col)
+        newBoard[dest] = board[idx]
+        if (write !== r) survivors.push({ dest, fall: write - r })
+        write--
+      }
+    }
+    const newCount = write + 1 // rows 0..write are freshly spawned
+    for (let d = 0; d <= write; d++) {
+      newcomers.push({ dest: idxOf(d, col), fall: newCount })
+    }
   }
 
-  animating = true
-  selectedIdx = -1
-  board = swapped
-  combo.value++
-  multiplier.value = getMultiplier(combo.value)
-
-  await runCascade(1)
-
-  if (!hasPossibleMoves(board)) endGame()
-  animating = false
+  // Fill placeholders row-major with the shared PRNG — same order as server fillEmpty.
+  for (let i = 0; i < n; i++) {
+    if (newBoard[i] === -1) newBoard[i] = Math.floor(fillRng() * emojis.length)
+  }
+  return { newBoard, survivors, newcomers }
 }
 
-function wait(ms) { return new Promise(r => setTimeout(r, ms)) }
+// ─── Perform a match ─────────────────────────────────────────────────────────
+async function performMatch(cells) {
+  animating = true
+  clearHint()
 
-async function runCascade(cascadeLevel) {
-  const matches = findMatches(board)
-  if (matches.size === 0) return
+  // Log the move (relative ts, clamped so the server's monotonic + min-interval checks pass)
+  let ts = Math.round(performance.now() - gameStartTs)
+  if (lastLogTs !== null) ts = Math.max(ts, lastLogTs + 101)
+  moveLog.push({ cells: cells.map(i => ({ row: rowOf(i), col: colOf(i) })), ts })
 
-  // Score this cascade
-  const cascadeMultiplier = 1 + (cascadeLevel - 1) * 0.5
-  let roundScore = 0
-  matches.forEach(idx => { /* counted by group below */ })
+  // Combo (identical rule to server: driven purely by ts gaps)
+  if (lastLogTs !== null && (ts - lastLogTs) <= COMBO_WINDOW_MS) comboCount++
+  else comboCount = 1
+  lastLogTs = ts
+  lastMatchAbs = performance.now()
+  const mult = computeMultiplier(comboCount)
+  score.value += BASE_MATCH_POINTS * mult
+  combo.value = comboCount
+  multiplier.value = mult
+  announce.value = `Matched 3! +${BASE_MATCH_POINTS * mult}. Combo ${comboCount}x.`
+  vibrate(30)
 
-  // Group connected matches for scoring
-  const seen = new Set()
-  for (const idx of matches) {
-    if (seen.has(idx)) continue
-    // BFS to find the group
-    const group = new Set([idx])
-    const queue = [idx]
-    while (queue.length) {
-      const cur = queue.shift()
-      const r = rowOf(cur), c = colOf(cur)
-      for (const [nr, nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]) {
-        const nidx = idxOf(nr, nc)
-        if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && matches.has(nidx) && !group.has(nidx)) {
-          group.add(nidx); queue.push(nidx)
-        }
-      }
-    }
-    group.forEach(i => seen.add(i))
-    roundScore += scoreGroup(group, board)
-  }
-
-  score.value += Math.floor(roundScore * cascadeMultiplier * multiplier.value)
-
-  // Wiggle animation
+  // Removal animation
   const now = performance.now()
-  matches.forEach(idx => {
-    tiles[idx].state = TS.WIGGLE
-    tiles[idx].animStartMs = now
-  })
-  await wait(ANIMATION_WIGGLE_MS)
-
-  // Remove — pop animation + particle burst
-  const removeNow = performance.now()
-  matches.forEach(idx => {
+  const removedSet = new Set(cells)
+  for (const idx of cells) {
     tiles[idx].state = TS.REMOVING
-    tiles[idx].animStartMs = removeNow
+    tiles[idx].animStartMs = now
     fireExplosion(idx)
-  })
+  }
   await wait(ANIMATION_REMOVE_MS)
 
-  // Apply gravity to board and animate fall
-  const newBoard = [...board]
-  matches.forEach(idx => { newBoard[idx] = -1 })
-
-  // Calculate fall distances before gravity
-  const fallDistances = new Array(newBoard.length).fill(0)
-  for (let c = 0; c < gridSize; c++) {
-    let emptyCount = 0
-    for (let r = gridSize - 1; r >= 0; r--) {
-      const idx = idxOf(r, c)
-      if (newBoard[idx] === -1) {
-        emptyCount++
-      } else if (emptyCount > 0) {
-        fallDistances[idx] = emptyCount
-      }
-    }
-  }
-
-  // Apply gravity to board
-  for (let c = 0; c < gridSize; c++) {
-    let empty = gridSize - 1
-    for (let r = gridSize - 1; r >= 0; r--) {
-      const idx = idxOf(r, c)
-      if (newBoard[idx] !== -1) {
-        newBoard[idxOf(empty, c)] = newBoard[idx]
-        if (empty !== r) newBoard[idx] = -1
-        empty--
-      }
-    }
-  }
-
-  // Fill empty cells with new random tiles
-  const newNow = performance.now()
-  for (let i = 0; i < newBoard.length; i++) {
-    if (newBoard[i] === -1) {
-      newBoard[i] = Math.floor(Math.random() * emojis.length)
-    }
-  }
-
+  // Settle deterministically
+  const { newBoard, survivors, newcomers } = settleBoard(removedSet)
   board = newBoard
   initTiles(board)
 
-  // Animate falling tiles
   const fallNow = performance.now()
-  for (let c = 0; c < gridSize; c++) {
-    let emptyBelow = 0
-    for (let r = gridSize - 1; r >= 0; r--) {
-      const idx = idxOf(r, c)
-      if (matches.has(idx)) {
-        emptyBelow++
-      } else if (emptyBelow > 0) {
-        tiles[idx].state = TS.FALLING
-        tiles[idx].animStartMs = fallNow
-        tiles[idx].startVisualY = -(emptyBelow * (tileSize + TILE_GAP))
-        tiles[idx].visualY      = tiles[idx].startVisualY
-      }
-    }
-    // Mark top cells as appearing
-    let topEmpty = 0
-    for (let r = 0; r < gridSize; r++) {
-      const idx = idxOf(r, c)
-      if (tiles[idx].state === TS.NORMAL && r < emptyBelow) {
-        tiles[idx].state = TS.APPEARING
-        tiles[idx].animStartMs = fallNow
-        tiles[idx].alpha = 0
-        tiles[idx].startVisualY = -((emptyBelow - r) * (tileSize + TILE_GAP))
-        tiles[idx].visualY      = tiles[idx].startVisualY
-        topEmpty++
-      }
-    }
+  const step = tileSize + TILE_GAP
+  for (const { dest, fall } of survivors) {
+    const t = tiles[dest]
+    t.state = TS.FALLING
+    t.startVisualY = -(fall * step)
+    t.visualY = t.startVisualY
+    t.animStartMs = fallNow
   }
-
+  for (const { dest, fall } of newcomers) {
+    const t = tiles[dest]
+    t.state = TS.APPEARING
+    t.alpha = 0
+    t.startVisualY = -(fall * step)
+    t.visualY = t.startVisualY
+    t.animStartMs = fallNow
+  }
   await wait(ANIMATION_FALL_MS + 50)
 
-  // Reset animation states
-  tiles.forEach(t => {
+  for (const t of tiles) {
     if (t.state === TS.FALLING || t.state === TS.APPEARING) {
       t.state = TS.NORMAL
       t.visualY = 0
       t.alpha = 1
     }
-  })
+  }
 
-  // Check for chain reaction
-  await runCascade(cascadeLevel + 1)
+  animating = false
+  touchActivity()
+
+  // Terminal state: no more possible matches (rare with 8-dir; timer is the usual end)
+  if (!hasPossibleMoves(board)) endGame()
 }
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 // ─── Input handling ────────────────────────────────────────────────────────────
 function getCanvasPos(e) {
@@ -720,105 +729,79 @@ function getCanvasPos(e) {
   return { x: e.clientX - rect.left, y: e.clientY - rect.top }
 }
 
+function touchActivity() { lastActivityMs = performance.now(); clearHint() }
+function clearHint() { if (hintActive) { hintActive = false; hintSet = new Set() } }
+
 function onPointerDown(e) {
   if (animating || uiState.value !== 'playing') return
   e.preventDefault()
+  canvas.value?.setPointerCapture?.(e.pointerId)
   pointerDown = true
   const pos = getCanvasPos(e)
-  pointerStartX = pos.x
-  pointerStartY = pos.y
-  canvas.value?.setPointerCapture?.(e.pointerId)
-
-  // Immediately highlight the tile under the pointer
-  dragFromIdx  = hitTest(pos.x, pos.y)
-  dragHoverIdx = -1
+  pointerX = pos.x; pointerY = pos.y
+  touchActivity()
+  const idx = hitTest(pos.x, pos.y)
+  chain = idx === -1 ? [] : [idx]
+  if (idx !== -1) vibrate(8)
 }
 
 function onPointerMove(e) {
   if (!pointerDown) return
   e.preventDefault()
+  const pos = getCanvasPos(e)
+  pointerX = pos.x; pointerY = pos.y
+  if (animating || uiState.value !== 'playing' || chain.length === 0) return
 
-  if (animating || uiState.value !== 'playing' || dragFromIdx === -1) return
+  const idx = hitTest(pos.x, pos.y)
+  if (idx === -1) return
+  const last = chain[chain.length - 1]
+  if (idx === last) return
 
-  const pos    = getCanvasPos(e)
-  const overIdx = hitTest(pos.x, pos.y)
-
-  if (overIdx !== -1 && overIdx !== dragFromIdx && isAdjacent(dragFromIdx, overIdx)) {
-    const swapped = [...board]
-    ;[swapped[dragFromIdx], swapped[overIdx]] = [swapped[overIdx], swapped[dragFromIdx]]
-    dragHoverIdx = findMatches(swapped).size > 0 ? overIdx : -1
-  } else {
-    dragHoverIdx = -1
+  // Backtrack: sliding onto the second-to-last cell pops the last one off.
+  if (chain.length >= 2 && idx === chain[chain.length - 2]) {
+    chain.pop()
+    vibrate(6)
+    return
   }
+  if (chain.includes(idx)) return         // ignore other revisits
+  if (chain.length >= MAX_MATCH) return    // hard cap at 3
+  if (!isEightAdjacent(last, idx)) return  // keep the drag path contiguous
+
+  chain.push(idx)
+  vibrate(8)
 }
 
 function onPointerUp(e) {
   if (!pointerDown) return
   e.preventDefault()
   pointerDown = false
+  canvas.value?.releasePointerCapture?.(e.pointerId)
 
-  const fromIdx  = dragFromIdx
-  const hoverIdx = dragHoverIdx
-  dragFromIdx  = -1
-  dragHoverIdx = -1
-
+  const c = chain
+  chain = []
   if (animating || uiState.value !== 'playing') return
 
-  const pos = getCanvasPos(e)
-  const dx  = pos.x - pointerStartX
-  const dy  = pos.y - pointerStartY
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const threshold = tileSize * 0.35
-
-  if (fromIdx === -1) { selectedIdx = -1; return }
-
-  // Drag released over a valid adjacent swap target → perform swap immediately
-  if (hoverIdx !== -1) {
-    selectedIdx = -1
-    trySwap(fromIdx, hoverIdx)
-    return
+  if (c.length === MIN_MATCH) {
+    const first = board[c[0]]
+    const allSame = c.every(i => board[i] === first)
+    if (allSame) { performMatch(c); return }
   }
-
-  if (dist < threshold) {
-    // Tap
-    if (selectedIdx !== -1 && selectedIdx !== fromIdx && isAdjacent(selectedIdx, fromIdx)) {
-      // Two-tap swap: previously selected tile + this tap
-      const prevSel = selectedIdx
-      selectedIdx = -1
-      trySwap(prevSel, fromIdx)
-    } else if (selectedIdx === fromIdx) {
-      selectedIdx = -1  // tap same tile again: deselect
-    } else {
-      selectedIdx = fromIdx  // first tap: select
-    }
-  } else {
-    // Swipe: use drag direction as fallback
-    const swapIdx = getSwipeTarget(fromIdx, dx, dy)
-    if (swapIdx !== -1) {
-      selectedIdx = -1
-      trySwap(fromIdx, swapIdx)
-    } else {
-      selectedIdx = -1
-    }
+  // Invalid selection — brief red flash + error haptic so it never reads as "broken".
+  if (c.length > 0) {
+    failFlashSet = new Set(c)
+    failFlashUntil = performance.now() + FAIL_FLASH_MS
+    announce.value = 'No match — connect exactly 3 of the same icon.'
+    vibrate([20, 40, 20])
   }
+  touchActivity()
 }
 
-function onPointerLeave() {
-  pointerDown  = false
-  dragFromIdx  = -1
-  dragHoverIdx = -1
-}
+function onPointerLeave() { /* pointer capture keeps events flowing; ignore */ }
 
-function getSwipeTarget(fromIdx, dx, dy) {
-  const r = rowOf(fromIdx), c = colOf(fromIdx)
-  let tr, tc
-  if (Math.abs(dx) > Math.abs(dy)) {
-    tc = dx > 0 ? c + 1 : c - 1; tr = r
-  } else {
-    tr = dy > 0 ? r + 1 : r - 1; tc = c
-  }
-  if (tr < 0 || tr >= gridSize || tc < 0 || tc >= gridSize) return -1
-  return idxOf(tr, tc)
+function onPointerCancel(e) {
+  pointerDown = false
+  canvas.value?.releasePointerCapture?.(e.pointerId)
+  chain = []
 }
 
 // ─── Game lifecycle ────────────────────────────────────────────────────────────
@@ -851,17 +834,26 @@ async function startGame() {
     emojis      = data.emojis
     gridSize    = data.gridSize
     timeSeconds = data.timeSeconds
+    fillSeed    = data.fillSeed
+    fillRng     = makePRNG(fillSeed)
 
     score.value      = 0
     combo.value      = 0
     multiplier.value = 1
     timeLeft.value   = timeSeconds
     moveLog          = []
-    selectedIdx      = -1
-    dragFromIdx      = -1
-    dragHoverIdx     = -1
+    chain            = []
     particles        = []
+    comboCount       = 0
+    lastLogTs        = null
+    lastMatchAbs     = 0
+    failFlashSet     = new Set()
+    failFlashUntil   = 0
     animating        = false
+    ending           = false
+    hintActive       = false
+    hintSet          = new Set()
+    announce.value   = ''
 
     await fetchStatus() // refresh plays left
     playsLeft.value  = Math.max(0, playsLeft.value - 1) // optimistic
@@ -873,6 +865,7 @@ async function startGame() {
     initTiles(board)
     gameStartTs = performance.now()
     timerStart  = timeSeconds ? performance.now() : null
+    lastActivityMs = performance.now()
     rafId = requestAnimationFrame(gameLoop)
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'Failed to start game'
@@ -883,9 +876,12 @@ async function startGame() {
 }
 
 async function endGame() {
+  if (ending) return
+  ending = true
   if (rafId) { cancelAnimationFrame(rafId); rafId = null }
 
   finalScore.value = score.value
+  announce.value = `Game over. Final score ${score.value}.`
 
   try {
     const result = await $fetch('/api/game/reorbitmatch/end', {
@@ -894,7 +890,7 @@ async function endGame() {
       body: { moveLog }
     })
     pointsAwarded.value = result.pointsAwarded ?? 0
-    // Refresh high scores
+    if (typeof result.score === 'number') finalScore.value = result.score
     const status = await $fetch('/api/game/reorbitmatch/status', { credentials: 'include' })
     weekHigh.value    = status.weekHigh
     allTimeHigh.value = status.allTimeHigh
@@ -906,17 +902,15 @@ async function endGame() {
   uiState.value = 'gameover'
 }
 
-// ─── Resize observer ──────────────────────────────────────────────────────────
+// ─── Resize observer & lifecycle ────────────────────────────────────────────────
 let resizeObserver = null
 onMounted(async () => {
+  reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
   await fetchStatus()
   resizeObserver = new ResizeObserver(() => {
     if (uiState.value === 'playing') resizeCanvas()
   })
   if (canvasContainer.value) resizeObserver.observe(canvasContainer.value)
-
-  // Haptic helper (Android only)
-  window._vibrate = (ms) => { try { navigator.vibrate?.(ms) } catch {} }
 })
 
 onUnmounted(() => {
@@ -1053,6 +1047,62 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+/* How to Play trigger */
+.btn-howto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  font-weight: 600;
+  font-size: 0.8rem;
+  border: none;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.btn-howto:hover { color: #66bbff; }
+.howto-icon { flex-shrink: 0; }
+
+/* How to Play modal */
+.modal-card--howto { text-align: left; }
+
+.howto-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.howto-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: rgba(255,255,255,0.8);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.howto-list strong { color: #fff; font-weight: 700; }
+.howto-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a6e3c, #3399cc);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.howto-green { color: #3ddc84; font-weight: 700; }
+.howto-red   { color: #ff5a5a; font-weight: 700; }
+
 /* Spinner */
 .spinner {
   width: 40px; height: 40px;
@@ -1161,6 +1211,28 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* How-to hint under the board */
+.game-hint {
+  flex-shrink: 0;
+  text-align: center;
+  color: rgba(255,255,255,0.4);
+  font-size: 0.72rem;
+  padding: 4px 8px 6px;
+}
+
+/* Screen-reader-only live region */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Modal */

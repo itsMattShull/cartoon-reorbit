@@ -1,13 +1,31 @@
 // Server-only ReOrbit Match game engine. Never import this from pages/ or components/.
+//
+// Game model: drag-to-connect ("Dots"-style).
+//  - The player drags across the grid to select a chain of EXACTLY 3 tiles.
+//  - Adjacency is 8-directional (orthogonal + diagonal).
+//  - A move clears the 3 selected tiles ONLY if they all share the same color/emoji.
+//  - There are NO auto-cascades: only the manually selected tiles are removed. Tiles
+//    above fall down (gravity) and empty cells are refilled from the top.
+//  - Scoring: a flat amount per 3-match, multiplied by a combo multiplier that grows
+//    when matches are made in quick succession and resets after a pause.
+//
+// Anti-cheat: the board is generated server-side from a secret session token. Refills
+// use a SEPARATE, non-secret fillSeed that is shared with the client so both sides stay
+// bit-identical. The authoritative score is recomputed here by replaying the move log.
 
 const DEFAULT_EMOJIS = ['⭐', '🌙', '🚀', '🌍', '⚡', '💫', '🪐', '🎯']
-const MIN_MATCH = 3
-const MIN_MOVE_INTERVAL_MS = 100 // no human moves faster than 100ms
+const MIN_MATCH = 3           // a valid match is exactly this many tiles
+const MAX_MATCH = 3           // chain is capped at this many tiles
+const MIN_MOVE_INTERVAL_MS = 100 // no human makes two matches faster than this
+
+// Scoring — kept in sync with the client (pages/newsite/reorbitmatch.vue).
+const BASE_MATCH_POINTS = 30      // points for a single 3-match at 1x
+const COMBO_WINDOW_MS   = 2500    // consecutive matches within this window grow the combo
+const MAX_COMBO_MULT    = 8       // multiplier ceiling
 
 // splitmix32 seeded PRNG — fast and high-quality for 32-bit seeds.
-// We use a 128-bit session token and fold it down to a 64-bit pair of seeds.
+// We fold a 128-bit hex token down to a 64-bit pair of seeds.
 function makePRNG(seedHex) {
-  // Take first 16 hex chars as two 32-bit integers
   const hi = parseInt(seedHex.slice(0, 8), 16) >>> 0
   const lo = parseInt(seedHex.slice(8, 16), 16) >>> 0
   let s0 = hi >>> 0
@@ -30,105 +48,14 @@ function makePRNG(seedHex) {
   }
 }
 
-// Generate a flat board array of emoji indices
-function generateBoard(gridSize, emojiCount, seedHex) {
-  const rng = makePRNG(seedHex)
-  const board = []
-  const size = gridSize * gridSize
-
-  // Fill avoiding immediate 3-in-a-row matches at generation time
-  for (let i = 0; i < size; i++) {
-    const row = Math.floor(i / gridSize)
-    const col = i % gridSize
-    let emojiIdx
-    let attempts = 0
-    do {
-      emojiIdx = Math.floor(rng() * emojiCount)
-      attempts++
-    } while (attempts < 20 && wouldCreateMatchAt(board, row, col, gridSize, emojiIdx))
-    board.push(emojiIdx)
-  }
-  return board
+// 8-directional adjacency: two cells are neighbors iff Chebyshev distance is exactly 1.
+function isEightAdjacent(r1, c1, r2, c2) {
+  const dr = Math.abs(r1 - r2)
+  const dc = Math.abs(c1 - c2)
+  return dr <= 1 && dc <= 1 && (dr + dc) > 0
 }
 
-function wouldCreateMatchAt(board, row, col, gridSize, emojiIdx) {
-  const idx = row * gridSize + col
-  // Check left-left
-  if (col >= 2) {
-    const l1 = idx - 1
-    const l2 = idx - 2
-    if (board[l1] === emojiIdx && board[l2] === emojiIdx) return true
-  }
-  // Check up-up
-  if (row >= 2) {
-    const u1 = (row - 1) * gridSize + col
-    const u2 = (row - 2) * gridSize + col
-    if (board[u1] === emojiIdx && board[u2] === emojiIdx) return true
-  }
-  return false
-}
-
-// Returns array of match groups, each group is an array of {row, col} cells
-function findMatches(board, gridSize) {
-  const matched = new Set()
-  const groups = []
-
-  // Horizontal
-  for (let row = 0; row < gridSize; row++) {
-    let col = 0
-    while (col < gridSize) {
-      const baseIdx = row * gridSize + col
-      const baseVal = board[baseIdx]
-      if (baseVal === -1) { col++; continue }
-      let len = 1
-      while (col + len < gridSize && board[row * gridSize + col + len] === baseVal) len++
-      if (len >= MIN_MATCH) {
-        const group = []
-        for (let k = 0; k < len; k++) {
-          const key = `${row},${col + k}`
-          if (!matched.has(key)) { matched.add(key); group.push({ row, col: col + k }) }
-        }
-        if (group.length > 0) groups.push(group)
-      }
-      col += len
-    }
-  }
-
-  // Vertical
-  for (let col = 0; col < gridSize; col++) {
-    let row = 0
-    while (row < gridSize) {
-      const baseIdx = row * gridSize + col
-      const baseVal = board[baseIdx]
-      if (baseVal === -1) { row++; continue }
-      let len = 1
-      while (row + len < gridSize && board[(row + len) * gridSize + col] === baseVal) len++
-      if (len >= MIN_MATCH) {
-        const group = []
-        for (let k = 0; k < len; k++) {
-          const key = `${row + k},${col}`
-          if (!matched.has(key)) { matched.add(key); group.push({ row: row + k, col }) }
-        }
-        if (group.length > 0) groups.push(group)
-      }
-      row += len
-    }
-  }
-
-  return groups
-}
-
-function removeMatches(board, groups, gridSize) {
-  const copy = [...board]
-  for (const group of groups) {
-    for (const { row, col } of group) {
-      copy[row * gridSize + col] = -1
-    }
-  }
-  return copy
-}
-
-// Apply gravity: tiles fall down into empty slots (-1)
+// Apply gravity: tiles fall down into empty slots (-1). Column order preserved.
 function applyGravity(board, gridSize) {
   const copy = [...board]
   for (let col = 0; col < gridSize; col++) {
@@ -144,7 +71,8 @@ function applyGravity(board, gridSize) {
   return copy
 }
 
-// Fill empty cells (top rows) using PRNG
+// Fill empty cells (-1) in row-major order using the shared PRNG. The iteration order
+// here MUST match the client exactly so both boards stay identical after every refill.
 function fillEmpty(board, gridSize, emojiCount, rng) {
   const copy = [...board]
   for (let i = 0; i < copy.length; i++) {
@@ -153,114 +81,179 @@ function fillEmpty(board, gridSize, emojiCount, rng) {
   return copy
 }
 
-function applySwap(board, fromRow, fromCol, toRow, toCol, gridSize) {
-  const copy = [...board]
-  const fromIdx = fromRow * gridSize + fromCol
-  const toIdx = toRow * gridSize + toCol
-  ;[copy[fromIdx], copy[toIdx]] = [copy[toIdx], copy[fromIdx]]
-  return copy
-}
-
-function isAdjacent(fromRow, fromCol, toRow, toCol) {
-  const dr = Math.abs(toRow - fromRow)
-  const dc = Math.abs(toCol - fromCol)
-  return (dr === 1 && dc === 0) || (dr === 0 && dc === 1)
-}
-
-// Returns true if any swap on the board produces a match
+// Does any valid move exist? Equivalent (for k=3) to: some color has a same-color
+// 8-connected component of size >= 3. Proof: a size>=3 component's spanning tree has a
+// vertex of degree >= 2, giving a simple 3-vertex path = a draggable 3-chain. O(n).
 function hasPossibleMoves(board, gridSize) {
-  for (let row = 0; row < gridSize; row++) {
-    for (let col = 0; col < gridSize; col++) {
-      // Try swap right
-      if (col + 1 < gridSize) {
-        const b = applySwap(board, row, col, row, col + 1, gridSize)
-        if (findMatches(b, gridSize).length > 0) return true
-      }
-      // Try swap down
-      if (row + 1 < gridSize) {
-        const b = applySwap(board, row, col, row + 1, col, gridSize)
-        if (findMatches(b, gridSize).length > 0) return true
+  const n = gridSize * gridSize
+  const visited = new Uint8Array(n)
+  const stack = []
+  for (let start = 0; start < n; start++) {
+    if (visited[start]) continue
+    const color = board[start]
+    if (color === -1) { visited[start] = 1; continue }
+    // Flood-fill the same-color 8-connected component.
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+    let size = 0
+    while (stack.length) {
+      const idx = stack.pop()
+      size++
+      if (size >= MIN_MATCH) return true
+      const r = Math.floor(idx / gridSize)
+      const c = idx % gridSize
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
+          const nidx = nr * gridSize + nc
+          if (!visited[nidx] && board[nidx] === color) {
+            visited[nidx] = 1
+            stack.push(nidx)
+          }
+        }
       }
     }
   }
   return false
 }
 
-function getMultiplier(combo) {
-  if (combo < 2)  return 1
-  if (combo < 4)  return 2
-  if (combo < 6)  return 4
-  if (combo < 8)  return 8
-  return 16
+// Find one valid 3-chain (returns [{row,col},{row,col},{row,col}]) or null. Used for
+// the client idle hint and to guarantee a generated board is playable.
+function findHint(board, gridSize) {
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const color = board[r * gridSize + c]
+      if (color === -1) continue
+      // Collect same-color 8-neighbors of (r,c).
+      const neighbors = []
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
+          if (board[nr * gridSize + nc] === color) neighbors.push({ row: nr, col: nc })
+        }
+      }
+      if (neighbors.length >= 2) {
+        // (r,c) is a degree>=2 vertex → center of a 3-path.
+        return [neighbors[0], { row: r, col: c }, neighbors[1]]
+      }
+    }
+  }
+  return null
 }
 
-function scoreGroup(group) {
-  const n = group.length
-  const base = n * 10
-  if (n >= 5) return Math.round(base * 2)
-  if (n === 4) return Math.round(base * 1.5)
-  return base
-}
-
-// Replay entire game from initial board and move log. Returns computed score.
-// Throws if a move is invalid.
-export function replayGame(initialBoard, moveLog, gridSize, emojiCount, seedHex) {
+// Generate a flat board of emoji indices. Deterministic from seedHex. Guarantees at
+// least one valid 3-chain exists (the board is stored server-side, so the exact bytes
+// are authoritative; the guarantee just prevents shipping an instantly-dead board).
+function generateBoard(gridSize, emojiCount, seedHex) {
   const rng = makePRNG(seedHex)
-  // Advance rng to the same state used after board generation
-  // (We need to consume the rng calls made during generateBoard to keep state consistent)
-  // Actually we just pass the same seed for fill operations
-  const fillRng = makePRNG(seedHex.slice(16, 32) || seedHex)
+  const size = gridSize * gridSize
+  const board = new Array(size)
+  for (let i = 0; i < size; i++) board[i] = Math.floor(rng() * emojiCount)
 
+  if (!hasPossibleMoves(board, gridSize)) {
+    // Deterministic fallback: force a same-color L in the top-left corner. The three
+    // cells (0,0),(0,1),(1,0) are mutually 8-adjacent → a guaranteed size-3 component.
+    const color = board[0]
+    board[1] = color                 // (0,1)
+    board[gridSize] = color          // (1,0)
+  }
+  return board
+}
+
+// Validate a single chain move against the current board. Returns the matched color.
+// Throws on any malformed / illegal move. Never trusts client-supplied colors.
+function validateChain(board, cells, gridSize) {
+  if (!Array.isArray(cells) || cells.length !== MIN_MATCH) {
+    throw new Error('Chain must have exactly 3 cells')
+  }
+
+  const keys = new Set()
+  for (const cell of cells) {
+    if (!cell || !Number.isInteger(cell.row) || !Number.isInteger(cell.col)) {
+      throw new Error('Cell coordinates must be integers')
+    }
+    if (cell.row < 0 || cell.row >= gridSize || cell.col < 0 || cell.col >= gridSize) {
+      throw new Error('Cell out of bounds')
+    }
+    keys.add(`${cell.row},${cell.col}`)
+  }
+  if (keys.size !== MIN_MATCH) throw new Error('Chain cells must be distinct')
+
+  // Consecutive cells must be 8-adjacent (a connected drag path).
+  for (let i = 1; i < cells.length; i++) {
+    if (!isEightAdjacent(cells[i - 1].row, cells[i - 1].col, cells[i].row, cells[i].col)) {
+      throw new Error('Chain cells must be 8-adjacent in sequence')
+    }
+  }
+
+  // All cells must share the same non-empty color, read from the server's board.
+  const color = board[cells[0].row * gridSize + cells[0].col]
+  if (color === -1 || color == null) throw new Error('Chain includes an empty cell')
+  for (const { row, col } of cells) {
+    if (board[row * gridSize + col] !== color) throw new Error('Chain colors do not match')
+  }
+  return color
+}
+
+// Combo multiplier for a given streak length (1-based). Capped at MAX_COMBO_MULT.
+function getComboMultiplier(combo) {
+  if (combo <= 1) return 1
+  return Math.min(combo, MAX_COMBO_MULT)
+}
+
+// Replay the entire game from the initial board + move log. Returns the authoritative
+// score. Throws if any move is invalid. `fillSeedHex` drives deterministic refills and
+// must be the same value handed to the client at /start.
+function replayGame(initialBoard, moveLog, gridSize, emojiCount, fillSeedHex) {
+  const fillRng = makePRNG(fillSeedHex)
   let board = [...initialBoard]
   let score = 0
   let combo = 0
+  let lastTs = null
 
   for (const move of moveLog) {
-    const { fromRow, fromCol, toRow, toCol } = move
+    const cells = move?.cells
+    validateChain(board, cells, gridSize) // throws on any illegal move
 
-    // Validate move is within bounds and adjacent
-    if (
-      fromRow < 0 || fromRow >= gridSize || fromCol < 0 || fromCol >= gridSize ||
-      toRow < 0 || toRow >= gridSize || toCol < 0 || toCol >= gridSize
-    ) throw new Error('Move out of bounds')
+    // Combo is derived purely from move timestamps so it is reproducible here.
+    const ts = move.ts
+    if (lastTs !== null && (ts - lastTs) <= COMBO_WINDOW_MS) combo++
+    else combo = 1
+    lastTs = ts
 
-    if (!isAdjacent(fromRow, fromCol, toRow, toCol)) throw new Error('Non-adjacent swap')
+    score += BASE_MATCH_POINTS * getComboMultiplier(combo)
 
-    const swapped = applySwap(board, fromRow, fromCol, toRow, toCol, gridSize)
-    const initialMatches = findMatches(swapped, gridSize)
-
-    if (initialMatches.length === 0) {
-      // Invalid swap (no match) — still recorded by client as a rejected move
-      // Do not update board, do not increment combo
-      combo = 0
-      continue
-    }
-
-    // Valid swap — apply cascade
-    combo++
-    const multiplier = getMultiplier(combo)
-    let cascadeBoard = swapped
-    let cascadeLevel = 0
-
-    while (true) {
-      const matches = findMatches(cascadeBoard, gridSize)
-      if (matches.length === 0) break
-
-      const cascadeMultiplier = 1 + cascadeLevel * 0.5
-      for (const group of matches) {
-        score += Math.round(scoreGroup(group) * cascadeMultiplier * multiplier)
-      }
-
-      cascadeBoard = removeMatches(cascadeBoard, matches, gridSize)
-      cascadeBoard = applyGravity(cascadeBoard, gridSize)
-      cascadeBoard = fillEmpty(cascadeBoard, gridSize, emojiCount, fillRng)
-      cascadeLevel++
-    }
-
-    board = cascadeBoard
+    // Remove exactly the selected tiles, then settle once. No cascade.
+    for (const { row, col } of cells) board[row * gridSize + col] = -1
+    board = applyGravity(board, gridSize)
+    board = fillEmpty(board, gridSize, emojiCount, fillRng)
   }
 
   return Math.floor(score)
 }
 
-export { generateBoard, findMatches, hasPossibleMoves, applySwap, applyGravity, fillEmpty, getMultiplier, DEFAULT_EMOJIS, MIN_MOVE_INTERVAL_MS }
+export {
+  generateBoard,
+  validateChain,
+  hasPossibleMoves,
+  findHint,
+  applyGravity,
+  fillEmpty,
+  getComboMultiplier,
+  isEightAdjacent,
+  replayGame,
+  DEFAULT_EMOJIS,
+  MIN_MOVE_INTERVAL_MS,
+  MIN_MATCH,
+  MAX_MATCH,
+  BASE_MATCH_POINTS,
+  COMBO_WINDOW_MS,
+  MAX_COMBO_MULT
+}
