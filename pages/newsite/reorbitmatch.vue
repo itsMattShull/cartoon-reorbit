@@ -104,8 +104,9 @@
               <span class="modal-lb-value">{{ allTimeHigh.toLocaleString() }}</span>
             </div>
           </div>
-          <div v-if="pointsAwarded > 0" class="modal-points-notice">
-            +{{ pointsAwarded }} game points earned!
+          <div class="modal-points-notice" :class="{ 'modal-points-notice--zero': pointsAwarded === 0 }">
+            <template v-if="pointsAwarded > 0">+{{ pointsAwarded }} game points earned!</template>
+            <template v-else>No game points earned (daily limit reached)</template>
           </div>
           <div class="modal-actions">
             <button v-if="playsLeft > 0" class="btn-start" @click="startGame">
@@ -1258,6 +1259,11 @@ onUnmounted(() => {
   border-radius: 8px;
   padding: 0.5rem 1rem;
   margin-bottom: 1.25rem;
+}
+.modal-points-notice--zero {
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .modal-actions { display: flex; justify-content: center; }

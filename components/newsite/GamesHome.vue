@@ -1,34 +1,42 @@
 <template>
-  <div class="gameshome">
-    <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">
-      <img v-if="tiles.winball" :src="tiles.winball" alt="Winball" class="tile-img" />
-      <span v-else>Winball</span>
-    </NuxtLink>
-    <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">
-      <img v-if="tiles.lotto" :src="tiles.lotto" alt="Lotto" class="tile-img" />
-      <span v-else>Lotto</span>
-    </NuxtLink>
-    <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">
-      <img v-if="tiles.winwheel" :src="tiles.winwheel" alt="Win Wheel" class="tile-img" />
-      <span v-else>Win Wheel</span>
-    </NuxtLink>
-    <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">
-      <img v-if="tiles.clash" :src="tiles.clash" alt="gToons Clash" class="tile-img" />
-      <span v-else>gToons Clash</span>
-    </NuxtLink>
-    <a
-      href="https://playtko.win"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="quadrant quadrant--tko"
-    >
-      <img v-if="tiles.tko" :src="tiles.tko" alt="TKO" class="tile-img" />
-      <span v-else>TKO</span>
-    </a>
-    <NuxtLink to="/newsite/reorbitmatch" class="quadrant quadrant--reorbit">
-      <img v-if="tiles.reorbitmatch" :src="tiles.reorbitmatch" alt="ReOrbit Match" class="tile-img" />
-      <span v-else>ReOrbit Match</span>
-    </NuxtLink>
+  <div class="gameshome-wrap">
+    <div class="gh-nav">
+      <GreenButton :active="true">Games</GreenButton>
+      <NuxtLink to="/newsite/leaderboards" class="gh-nav-link">
+        <GreenButton>Leaderboards</GreenButton>
+      </NuxtLink>
+    </div>
+    <div class="gameshome">
+      <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">
+        <img v-if="tiles.winball" :src="tiles.winball" alt="Winball" class="tile-img" />
+        <span v-else>Winball</span>
+      </NuxtLink>
+      <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">
+        <img v-if="tiles.lotto" :src="tiles.lotto" alt="Lotto" class="tile-img" />
+        <span v-else>Lotto</span>
+      </NuxtLink>
+      <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">
+        <img v-if="tiles.winwheel" :src="tiles.winwheel" alt="Win Wheel" class="tile-img" />
+        <span v-else>Win Wheel</span>
+      </NuxtLink>
+      <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">
+        <img v-if="tiles.clash" :src="tiles.clash" alt="gToons Clash" class="tile-img" />
+        <span v-else>gToons Clash</span>
+      </NuxtLink>
+      <a
+        href="https://playtko.win"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="quadrant quadrant--tko"
+      >
+        <img v-if="tiles.tko" :src="tiles.tko" alt="TKO" class="tile-img" />
+        <span v-else>TKO</span>
+      </a>
+      <NuxtLink to="/newsite/reorbitmatch" class="quadrant quadrant--reorbit">
+        <img v-if="tiles.reorbitmatch" :src="tiles.reorbitmatch" alt="ReOrbit Match" class="tile-img" />
+        <span v-else>ReOrbit Match</span>
+      </NuxtLink>
+    </div>
   </div>
 </template>
 
@@ -38,12 +46,34 @@ const tiles = computed(() => tileData.value ?? {})
 </script>
 
 <style scoped>
+.gameshome-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.gh-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  padding: 6px 6px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.gh-nav::-webkit-scrollbar { display: none; }
+
+.gh-nav-link {
+  text-decoration: none;
+}
+
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: repeat(3, 1fr);
   width: 100%;
-  height: 100%;
+  flex: 1;
   gap: 6px;
   padding: 6px;
   box-sizing: border-box;
@@ -94,7 +124,7 @@ const tiles = computed(() => tileData.value ?? {})
 
 @media (max-width: 768px) {
   .gameshome {
-    height: max(200px, calc(100dvh - 240px));
+    height: max(200px, calc(100dvh - 276px));
     grid-template-rows: repeat(4, 1fr);
   }
   .quadrant--tko,
