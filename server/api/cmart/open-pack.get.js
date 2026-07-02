@@ -189,14 +189,18 @@ export default defineEventHandler(async (event) => {
   }
 
   return chosen.map(c => ({
-    id:         c.id,
-    name:       c.name,
-    assetPath:  c.assetPath,
-    rarity:     c.rarity,
-    isGtoon:    c.isGtoon,
-    cost:       c.cost,
-    power:      c.power,
-    mintNumber: mintNumbers[c.id],
-    inCmart:    inCmartFlags[c.id]
+    id:                      c.id,
+    name:                    c.name,
+    assetPath:               c.assetPath,
+    rarity:                  c.rarity,
+    isGtoon:                 c.isGtoon,
+    cost:                    c.cost,
+    power:                   c.power,
+    mintNumber:              mintNumbers[c.id],
+    inCmart:                 inCmartFlags[c.id],
+    isSecondEdition:         c.isSecondEdition,
+    secondEditionOverlayX:   c.secondEditionOverlayX,
+    secondEditionOverlayY:   c.secondEditionOverlayY,
+    secondEditionOverlaySize: c.secondEditionOverlaySize,
   }))
 })
