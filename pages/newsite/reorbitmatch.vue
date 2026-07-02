@@ -127,7 +127,7 @@ definePageMeta({ ssr: false })
 // ─── Game constants ────────────────────────────────────────────────────────────
 const TILE_GAP = 3
 const ANIMATION_WIGGLE_MS = 400
-const ANIMATION_REMOVE_MS = 200
+const ANIMATION_REMOVE_MS = 320
 const ANIMATION_FALL_MS   = 280
 const ANIMATION_APPEAR_MS = 180
 const MIN_MATCH = 3
@@ -172,6 +172,7 @@ let pointerStartY = 0
 let pointerDown  = false
 let dragFromIdx  = -1  // tile pressed on in current gesture (immediate visual feedback)
 let dragHoverIdx = -1  // adjacent tile being hovered over as a valid swap target
+let particles    = []  // burst particles [{x,y,vx,vy,color,size,startMs}]
 let configData   = null
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -190,6 +191,25 @@ function colOf(idx) { return idx % gridSize }
 function isAdjacent(aIdx, bIdx) {
   const ar = rowOf(aIdx), ac = colOf(aIdx), br = rowOf(bIdx), bc = colOf(bIdx)
   return (Math.abs(ar - br) === 1 && ac === bc) || (ar === br && Math.abs(ac - bc) === 1)
+}
+
+function fireExplosion(tileIdx) {
+  const row = rowOf(tileIdx), col = colOf(tileIdx)
+  const cx = tileCenterX(col), cy = tileCenterY(row)
+  const now = performance.now()
+  const colors = ['#FFD700', '#fff', '#FFD700', '#66bbff', '#fff', '#FFD700']
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2 + (Math.random() - 0.5) * 0.6
+    const speed = tileSize * (1.8 + Math.random() * 2.2)
+    particles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: colors[i % colors.length],
+      size: tileSize * (0.07 + Math.random() * 0.07),
+      startMs: now
+    })
+  }
 }
 
 // ─── Match finding ────────────────────────────────────────────────────────────
@@ -252,12 +272,12 @@ function initTiles(b) {
   tiles = b.map((emojiIdx, i) => ({
     emojiIdx,
     state: TS.NORMAL,
-    visualY: 0,       // offset from logical Y in pixels (for falling)
+    visualY: 0,       // current Y offset from logical row (for falling)
+    startVisualY: 0,  // Y offset at animation start (source for easing)
     alpha: 1,
     scale: 1,
     wiggleAngle: 0,
-    animStartMs: 0,
-    targetVisualY: 0
+    animStartMs: 0
   }))
 }
 
@@ -357,17 +377,31 @@ function renderFrame(nowMs) {
       scale = 1 + Math.abs(wobble) * 0.12
     } else if (tile.state === TS.REMOVING) {
       const t = Math.min(elapsed / ANIMATION_REMOVE_MS, 1)
-      alpha = 1 - t
-      scale = 1 - t * 0.4
+      if (t < 0.28) {
+        // Pop: quick scale-up flash
+        const pop = t / 0.28
+        scale = 1 + pop * 0.55
+        alpha = 1
+      } else {
+        // Burst: shrink to nothing while fading
+        const burst = (t - 0.28) / 0.72
+        scale = 1.55 * (1 - burst)
+        alpha = 1 - Math.pow(burst, 0.6)
+        tile.wiggleAngle = (tile.wiggleAngle || 0) + burst * 0.4
+      }
     } else if (tile.state === TS.FALLING) {
       const t = Math.min(elapsed / ANIMATION_FALL_MS, 1)
       const ease = 1 - Math.pow(1 - t, 3)
-      tile.visualY = tile.targetVisualY * (1 - ease)
+      tile.visualY = tile.startVisualY * (1 - ease)
       y = tileTop(row) + tile.visualY
     } else if (tile.state === TS.APPEARING) {
-      const t = Math.min(elapsed / ANIMATION_APPEAR_MS, 1)
-      alpha = t
-      scale = 0.6 + t * 0.4
+      const fadeT = Math.min(elapsed / ANIMATION_APPEAR_MS, 1)
+      const fallT = Math.min(elapsed / ANIMATION_FALL_MS, 1)
+      const ease  = 1 - Math.pow(1 - fallT, 3)
+      alpha = fadeT
+      scale = 0.6 + fadeT * 0.4
+      tile.visualY = tile.startVisualY * (1 - ease)
+      y = tileTop(row) + tile.visualY
     }
 
     ctx.save()
@@ -467,6 +501,30 @@ function renderFrame(nowMs) {
     ctx.setLineDash([])
     ctx.restore()
   }
+
+  // Burst particles from matched tile explosions
+  const PARTICLE_LIFE_MS = 500
+  particles = particles.filter(p => {
+    const age  = nowMs - p.startMs
+    if (age >= PARTICLE_LIFE_MS) return false
+    const t    = age / PARTICLE_LIFE_MS
+    const secs = age / 1000
+    ctx.save()
+    ctx.globalAlpha = Math.pow(1 - t, 1.4)
+    ctx.fillStyle   = p.color
+    ctx.shadowColor = p.color
+    ctx.shadowBlur  = 4
+    ctx.beginPath()
+    ctx.arc(
+      p.x + p.vx * secs,
+      p.y + p.vy * secs + 400 * secs * secs,
+      p.size * (1 - t * 0.6),
+      0, Math.PI * 2
+    )
+    ctx.fill()
+    ctx.restore()
+    return true
+  })
 }
 
 // ─── Game loop ────────────────────────────────────────────────────────────────
@@ -558,10 +616,12 @@ async function runCascade(cascadeLevel) {
   })
   await wait(ANIMATION_WIGGLE_MS)
 
-  // Remove
+  // Remove — pop animation + particle burst
+  const removeNow = performance.now()
   matches.forEach(idx => {
     tiles[idx].state = TS.REMOVING
-    tiles[idx].animStartMs = performance.now()
+    tiles[idx].animStartMs = removeNow
+    fireExplosion(idx)
   })
   await wait(ANIMATION_REMOVE_MS)
 
@@ -618,8 +678,8 @@ async function runCascade(cascadeLevel) {
       } else if (emptyBelow > 0) {
         tiles[idx].state = TS.FALLING
         tiles[idx].animStartMs = fallNow
-        tiles[idx].visualY = -(emptyBelow * (tileSize + TILE_GAP))
-        tiles[idx].targetVisualY = 0
+        tiles[idx].startVisualY = -(emptyBelow * (tileSize + TILE_GAP))
+        tiles[idx].visualY      = tiles[idx].startVisualY
       }
     }
     // Mark top cells as appearing
@@ -630,7 +690,8 @@ async function runCascade(cascadeLevel) {
         tiles[idx].state = TS.APPEARING
         tiles[idx].animStartMs = fallNow
         tiles[idx].alpha = 0
-        tiles[idx].visualY = -((emptyBelow - r) * (tileSize + TILE_GAP))
+        tiles[idx].startVisualY = -((emptyBelow - r) * (tileSize + TILE_GAP))
+        tiles[idx].visualY      = tiles[idx].startVisualY
         topEmpty++
       }
     }
@@ -798,6 +859,7 @@ async function startGame() {
     selectedIdx      = -1
     dragFromIdx      = -1
     dragHoverIdx     = -1
+    particles        = []
     animating        = false
 
     await fetchStatus() // refresh plays left
@@ -872,6 +934,7 @@ onUnmounted(() => {
   justify-content: center;
   min-height: 400px;
   position: relative;
+  background: #001230;
 }
 
 /* Landscape orientation warning */
@@ -1007,6 +1070,7 @@ onUnmounted(() => {
   height: 100%;
   min-height: 400px;
   gap: 0;
+  background: #001230;
 }
 
 /* HUD */
