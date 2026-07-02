@@ -30,12 +30,15 @@
               >
                 <span v-if="!originalOwnedSet.has(item.id)" class="pack-new-badge">New!</span>
                 <span v-if="!item.inCmart" class="pack-exclusive-badge">Pack Exclusive</span>
-                <img
-                  v-if="item.assetPath"
-                  :src="item.assetPath"
-                  :alt="item.name"
-                  class="pack-reveal-img"
-                />
+                <div class="pack-reveal-img-wrap">
+                  <img
+                    v-if="item.assetPath"
+                    :src="item.assetPath"
+                    :alt="item.name"
+                    class="pack-reveal-img"
+                  />
+                  <SecondEditionOverlay :ctoon="item" />
+                </div>
                 <p class="pack-reveal-name">{{ item.name }}</p>
                 <p class="pack-reveal-rarity">{{ item.rarity }}</p>
                 <p class="pack-reveal-mint">Mint #{{ item.mintNumber }}</p>
@@ -1017,11 +1020,17 @@ async function closeOverlay() {
   text-align: right;
 }
 
+:global(.pack-reveal-img-wrap) {
+  position: relative;
+  display: inline-block;
+  margin-top: 16px;
+}
+
 :global(.pack-reveal-img) {
   width: 80px;
   height: 80px;
   object-fit: contain;
-  margin-top: 16px;
+  display: block;
 }
 
 :global(.pack-reveal-name) {
