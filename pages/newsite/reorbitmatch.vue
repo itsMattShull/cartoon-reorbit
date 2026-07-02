@@ -33,6 +33,14 @@
             <button class="btn-start" @click="startGame" :disabled="starting">
               {{ starting ? 'Launching…' : 'Play' }}
             </button>
+            <button class="btn-howto" @click="showHowTo = true" aria-label="How to play">
+              <svg class="howto-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M9.1 9a3 3 0 1 1 4.4 3c-.9.6-1.5 1-1.5 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="12" cy="17.4" r="1.2" fill="currentColor"/>
+              </svg>
+              <span>How to Play</span>
+            </button>
           </div>
         </div>
 
@@ -122,6 +130,40 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- How to Play Modal -->
+    <Teleport to="body">
+      <div v-if="showHowTo" class="modal-backdrop" @click.self="showHowTo = false">
+        <div class="modal-card modal-card--howto" role="dialog" aria-modal="true" aria-label="How to Play">
+          <h2 class="modal-title">How to Play</h2>
+          <ol class="howto-list">
+            <li>
+              <span class="howto-num">1</span>
+              <span>Press and hold on a tile, then <strong>slide your finger or mouse</strong> across the board — up, down, sideways, or diagonally.</span>
+            </li>
+            <li>
+              <span class="howto-num">2</span>
+              <span>Connect <strong>exactly 3 tiles of the same icon</strong>. The trail glows <span class="howto-green">green</span> when your picks match and <span class="howto-red">red</span> when they don't.</span>
+            </li>
+            <li>
+              <span class="howto-num">3</span>
+              <span><strong>Let go</strong> to clear a matching trio. The tiles pop, everything above drops down, and new tiles fill in from the top.</span>
+            </li>
+            <li>
+              <span class="howto-num">4</span>
+              <span>Chain matches <strong>quickly</strong> to build your <strong>combo multiplier</strong> — it climbs up to 8× but resets if you pause too long.</span>
+            </li>
+            <li>
+              <span class="howto-num">5</span>
+              <span>Score as much as you can before time runs out. Slid onto a wrong tile? Slide back a step to undo it.</span>
+            </li>
+          </ol>
+          <div class="modal-actions">
+            <button class="btn-start" @click="showHowTo = false">Got it!</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -161,6 +203,7 @@ const allTimeHigh   = ref(0)
 const pointsAwarded = ref(0)
 const resetLabel = ref('')
 const announce   = ref('')
+const showHowTo  = ref(false)
 
 const canvas          = ref(null)
 const canvasContainer = ref(null)
@@ -1003,6 +1046,62 @@ onUnmounted(() => {
   padding: 0.65rem 2rem;
   cursor: pointer;
 }
+
+/* How to Play trigger */
+.btn-howto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  font-weight: 600;
+  font-size: 0.8rem;
+  border: none;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.btn-howto:hover { color: #66bbff; }
+.howto-icon { flex-shrink: 0; }
+
+/* How to Play modal */
+.modal-card--howto { text-align: left; }
+
+.howto-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.howto-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: rgba(255,255,255,0.8);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.howto-list strong { color: #fff; font-weight: 700; }
+.howto-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a6e3c, #3399cc);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.howto-green { color: #3ddc84; font-weight: 700; }
+.howto-red   { color: #ff5a5a; font-weight: 700; }
 
 /* Spinner */
 .spinner {
