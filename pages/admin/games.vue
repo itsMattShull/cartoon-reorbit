@@ -41,6 +41,48 @@
             <span v-if="!loadingGlobal">Save Global Settings</span>
             <span v-else>Saving…</span>
           </button>
+
+          <!-- Game Tile Images -->
+          <div class="mt-8 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Game Tile Images</h3>
+            <p class="text-xs text-gray-500 mb-4">Upload an image for each game tile on the Games page. Images replace the colored background.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div v-for="tile in gameTileSlots" :key="tile.slot" class="border rounded p-3 space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">{{ tile.label }}</h4>
+                <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center">
+                  <img
+                    v-if="gameTileImages[tile.slot]"
+                    :src="gameTileImages[tile.slot]"
+                    :alt="tile.label"
+                    class="w-full h-full object-cover"
+                  />
+                  <span v-else class="text-gray-400 text-xs">No image</span>
+                </div>
+                <input
+                  type="file"
+                  accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                  @change="onGameTileFile(tile.slot, $event)"
+                  class="block w-full text-xs"
+                />
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn-primary text-sm py-1 px-3"
+                    @click="uploadGameTile(tile.slot)"
+                    :disabled="!gameTileFiles[tile.slot] || uploadingGameTile[tile.slot]"
+                  >
+                    <span v-if="!uploadingGameTile[tile.slot]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="gameTileImages[tile.slot]"
+                    type="button"
+                    class="px-3 py-1 text-sm rounded border"
+                    @click="removeGameTile(tile.slot)"
+                  >Remove</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Winball -->
@@ -1199,6 +1241,12 @@ function clearSelection() {
 async function loadSettings() {
   const g = await $fetch('/api/admin/global-config')
   globalDailyPointLimit.value = g.dailyPointLimit
+  gameTileImages.value.winball      = g.gameTileWinballImagePath      || ''
+  gameTileImages.value.lotto        = g.gameTileLottoImagePath        || ''
+  gameTileImages.value.winwheel     = g.gameTileWinwheelImagePath     || ''
+  gameTileImages.value.clash        = g.gameTileClashImagePath        || ''
+  gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
+  gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1606,7 +1654,61 @@ async function saveTkoConfig() {
   }
 }
 
-// ── ReOrbit Match ────────────────────────────
+// ── Game Tile Images ─────────────────────────
+const gameTileSlots = [
+  { slot: 'winball',      label: 'Winball' },
+  { slot: 'lotto',        label: 'Lotto' },
+  { slot: 'winwheel',     label: 'Win Wheel' },
+  { slot: 'clash',        label: 'gToons Clash' },
+  { slot: 'tko',          label: 'TKO' },
+  { slot: 'reorbitmatch', label: 'ReOrbit Match' }
+]
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false })
+
+function onGameTileFile(slot, e) {
+  gameTileFiles.value[slot] = e.target.files?.[0] || null
+}
+
+async function uploadGameTile(slot) {
+  const file = gameTileFiles.value[slot]
+  if (!file) return
+  uploadingGameTile.value[slot] = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', file)
+    fd.append('slot', slot)
+    const res = await $fetch('/api/admin/game-tile-image', { method: 'POST', body: fd })
+    gameTileImages.value[slot] = res.assetPath
+    gameTileFiles.value[slot] = null
+    toastMessage.value = 'Game tile image uploaded.'
+    toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingGameTile.value[slot] = false
+  }
+}
+
+async function removeGameTile(slot) {
+  toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-tile-image', { method: 'DELETE', body: { slot } })
+    gameTileImages.value[slot] = ''
+    toastMessage.value = 'Game tile image removed.'
+    toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Remove failed'
+    toastType.value = 'error'
+  }
+}
+
+// ── ReOrbit Match ─────────────────────────────
 const reorbitPlaysPerPeriod  = ref(3)
 const reorbitPointsPerGame   = ref(50)
 const reorbitTimeSecondsInput = ref('')  // '' = unlimited (null)
