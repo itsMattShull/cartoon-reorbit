@@ -496,6 +496,10 @@ model User {
   // VPN detection
   vpnLogs VpnLog[]
 
+  // ReOrbit Match
+  reOrbitMatchScores ReOrbitMatchScore[]
+  reOrbitMatchPlays  ReOrbitMatchPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -958,6 +962,13 @@ model GameConfig {
   winWheelSoundPath String?
   winWheelSoundMode String?
 
+  // — ReOrbit Match settings —
+  reorbitPlaysPerPeriod Int     @default(3)
+  reorbitPointsPerGame  Int     @default(50)
+  reorbitTimeSeconds    Int?
+  reorbitEmojis         String[] @default([])
+  reorbitGridSize       Int     @default(8)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -997,6 +1008,13 @@ model GlobalGameConfig {
   secondEditionOverlayPath   String?
   secondEditionOverlayWidth  Int?     // natural pixel width of the uploaded overlay image
   secondEditionOverlayHeight Int?     // natural pixel height of the uploaded overlay image
+  // Game tile images shown on the Games page
+  gameTileWinballImagePath      String?
+  gameTileLottoImagePath        String?
+  gameTileWinwheelImagePath     String?
+  gameTileClashImagePath        String?
+  gameTileTkoImagePath          String?
+  gameTileReorbitmatchImagePath String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -2523,6 +2541,31 @@ model SurveyAnswers {
   createdAt        DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ── ReOrbit Match ─────────────────────────────────────────────────────────────
+
+model ReOrbitMatchScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model ReOrbitMatchPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 // ── VPN Detection ─────────────────────────────────────────────────────────────

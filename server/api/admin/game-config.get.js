@@ -128,6 +128,17 @@ export default defineEventHandler(async (event) => {
           },
           include: includeOptions
         })
+      } else if (gameName === 'ReOrbitMatch') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            reorbitPlaysPerPeriod: 3,
+            reorbitPointsPerGame: 50,
+            reorbitTimeSeconds: null,
+            reorbitEmojis: [],
+            reorbitGridSize: 8
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,

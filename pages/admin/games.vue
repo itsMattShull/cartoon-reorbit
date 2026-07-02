@@ -41,6 +41,48 @@
             <span v-if="!loadingGlobal">Save Global Settings</span>
             <span v-else>Saving…</span>
           </button>
+
+          <!-- Game Tile Images -->
+          <div class="mt-8 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Game Tile Images</h3>
+            <p class="text-xs text-gray-500 mb-4">Upload an image for each game tile on the Games page. Images replace the colored background.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div v-for="tile in gameTileSlots" :key="tile.slot" class="border rounded p-3 space-y-2">
+                <h4 class="text-sm font-semibold text-gray-700">{{ tile.label }}</h4>
+                <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center">
+                  <img
+                    v-if="gameTileImages[tile.slot]"
+                    :src="gameTileImages[tile.slot]"
+                    :alt="tile.label"
+                    class="w-full h-full object-cover"
+                  />
+                  <span v-else class="text-gray-400 text-xs">No image</span>
+                </div>
+                <input
+                  type="file"
+                  accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                  @change="onGameTileFile(tile.slot, $event)"
+                  class="block w-full text-xs"
+                />
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn-primary text-sm py-1 px-3"
+                    @click="uploadGameTile(tile.slot)"
+                    :disabled="!gameTileFiles[tile.slot] || uploadingGameTile[tile.slot]"
+                  >
+                    <span v-if="!uploadingGameTile[tile.slot]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="gameTileImages[tile.slot]"
+                    type="button"
+                    class="px-3 py-1 text-sm rounded border"
+                    @click="removeGameTile(tile.slot)"
+                  >Remove</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Winball -->
@@ -679,6 +721,70 @@
           </button>
         </section>
 
+        <!-- ReOrbit Match -->
+        <section v-if="activeTab === 'ReOrbitMatch'" role="tabpanel" aria-label="ReOrbit Match Settings">
+          <h2 class="text-2xl font-semibold mb-4">ReOrbit Match Settings</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="reorbitPlaysPerPeriod" min="1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="reorbitPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Time Per Game (seconds)</label>
+              <p class="text-xs text-gray-400 mb-1">Leave empty for unlimited time</p>
+              <input type="number" v-model="reorbitTimeSecondsInput" min="30" placeholder="Unlimited" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Grid Size (N×N)</label>
+              <p class="text-xs text-gray-400 mb-1">Board dimensions (4–10)</p>
+              <input type="number" v-model.number="reorbitGridSize" min="4" max="10" class="input" />
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Emojis</h3>
+            <p class="text-xs text-gray-400 mb-3">Min 4, max min(gridSize, 10). Leave empty to use defaults: ⭐ 🌙 🚀 🌍 ⚡ 💫 🪐 🎯</p>
+            <div class="flex gap-2 mb-3">
+              <input
+                type="text"
+                v-model="reorbitEmojiInput"
+                placeholder="Paste an emoji…"
+                class="input flex-1"
+                @keydown.enter.prevent="addReorbitEmoji"
+              />
+              <button
+                type="button"
+                @click="addReorbitEmoji"
+                class="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
+                :disabled="reorbitEmojis.length >= Math.min(reorbitGridSize, 10)"
+              >Add</button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <span
+                v-for="(e, i) in reorbitEmojis"
+                :key="i"
+                class="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-lg"
+              >
+                {{ e }}
+                <button type="button" class="ml-1 text-sm leading-none" @click="removeReorbitEmoji(i)">✕</button>
+              </span>
+              <span v-if="!reorbitEmojis.length" class="text-sm text-gray-400">Using defaults</span>
+            </div>
+          </div>
+
+          <button @click="saveReorbitConfig" :disabled="loadingReorbit" class="btn-primary">
+            <span v-if="!loadingReorbit">Save ReOrbit Match Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -815,11 +921,12 @@ definePageMeta({
 })
 
 const tabs = [
-  { key: 'Global',   label: 'Global Settings' },
-  { key: 'Winball',  label: 'Winball' },
-  { key: 'Clash',    label: 'gToon Clash' },
-  { key: 'Winwheel', label: 'Win Wheel' },
-  { key: 'TKO',      label: 'TKO' }
+  { key: 'Global',       label: 'Global Settings' },
+  { key: 'Winball',      label: 'Winball' },
+  { key: 'Clash',        label: 'gToon Clash' },
+  { key: 'Winwheel',     label: 'Win Wheel' },
+  { key: 'TKO',          label: 'TKO' },
+  { key: 'ReOrbitMatch', label: 'ReOrbit Match' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1134,6 +1241,12 @@ function clearSelection() {
 async function loadSettings() {
   const g = await $fetch('/api/admin/global-config')
   globalDailyPointLimit.value = g.dailyPointLimit
+  gameTileImages.value.winball      = g.gameTileWinballImagePath      || ''
+  gameTileImages.value.lotto        = g.gameTileLottoImagePath        || ''
+  gameTileImages.value.winwheel     = g.gameTileWinwheelImagePath     || ''
+  gameTileImages.value.clash        = g.gameTileClashImagePath        || ''
+  gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
+  gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1203,6 +1316,13 @@ async function loadSettings() {
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
+
+  const ro = await $fetch('/api/admin/game-config?gameName=ReOrbitMatch')
+  reorbitPlaysPerPeriod.value   = ro.reorbitPlaysPerPeriod ?? 3
+  reorbitPointsPerGame.value    = ro.reorbitPointsPerGame ?? 50
+  reorbitTimeSecondsInput.value = ro.reorbitTimeSeconds != null ? String(ro.reorbitTimeSeconds) : ''
+  reorbitEmojis.value           = ro.reorbitEmojis ?? []
+  reorbitGridSize.value         = ro.reorbitGridSize ?? 8
 }
 
 // Win Wheel state
@@ -1531,6 +1651,104 @@ async function saveTkoConfig() {
     toastMessage.value = 'Error saving TKO settings'; toastType.value = 'error'
   } finally {
     loadingTkoConfig.value = false
+  }
+}
+
+// ── Game Tile Images ─────────────────────────
+const gameTileSlots = [
+  { slot: 'winball',      label: 'Winball' },
+  { slot: 'lotto',        label: 'Lotto' },
+  { slot: 'winwheel',     label: 'Win Wheel' },
+  { slot: 'clash',        label: 'gToons Clash' },
+  { slot: 'tko',          label: 'TKO' },
+  { slot: 'reorbitmatch', label: 'ReOrbit Match' }
+]
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false })
+
+function onGameTileFile(slot, e) {
+  gameTileFiles.value[slot] = e.target.files?.[0] || null
+}
+
+async function uploadGameTile(slot) {
+  const file = gameTileFiles.value[slot]
+  if (!file) return
+  uploadingGameTile.value[slot] = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', file)
+    fd.append('slot', slot)
+    const res = await $fetch('/api/admin/game-tile-image', { method: 'POST', body: fd })
+    gameTileImages.value[slot] = res.assetPath
+    gameTileFiles.value[slot] = null
+    toastMessage.value = 'Game tile image uploaded.'
+    toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingGameTile.value[slot] = false
+  }
+}
+
+async function removeGameTile(slot) {
+  toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-tile-image', { method: 'DELETE', body: { slot } })
+    gameTileImages.value[slot] = ''
+    toastMessage.value = 'Game tile image removed.'
+    toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Remove failed'
+    toastType.value = 'error'
+  }
+}
+
+// ── ReOrbit Match ─────────────────────────────
+const reorbitPlaysPerPeriod  = ref(3)
+const reorbitPointsPerGame   = ref(50)
+const reorbitTimeSecondsInput = ref('')  // '' = unlimited (null)
+const reorbitEmojis          = ref([])
+const reorbitGridSize        = ref(8)
+const reorbitEmojiInput      = ref('')
+const loadingReorbit         = ref(false)
+
+function addReorbitEmoji() {
+  const e = reorbitEmojiInput.value.trim()
+  if (!e) return
+  const maxEmojis = Math.min(reorbitGridSize.value, 10)
+  if (reorbitEmojis.value.length >= maxEmojis) return
+  if (!reorbitEmojis.value.includes(e)) reorbitEmojis.value.push(e)
+  reorbitEmojiInput.value = ''
+}
+function removeReorbitEmoji(i) {
+  reorbitEmojis.value.splice(i, 1)
+}
+
+async function saveReorbitConfig() {
+  loadingReorbit.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:             'ReOrbitMatch',
+        reorbitPlaysPerPeriod: reorbitPlaysPerPeriod.value,
+        reorbitPointsPerGame:  reorbitPointsPerGame.value,
+        reorbitTimeSeconds:    reorbitTimeSecondsInput.value !== '' ? Number(reorbitTimeSecondsInput.value) : null,
+        reorbitEmojis:         reorbitEmojis.value,
+        reorbitGridSize:       reorbitGridSize.value
+      }
+    })
+    toastMessage.value = 'ReOrbit Match settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving ReOrbit Match settings'; toastType.value = 'error'
+  } finally {
+    loadingReorbit.value = false
   }
 }
 
