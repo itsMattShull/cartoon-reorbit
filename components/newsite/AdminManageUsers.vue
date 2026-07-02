@@ -591,7 +591,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const users    = ref([])
 const official = ref(null)
@@ -1109,6 +1109,12 @@ const dissolveStep = ref('')
 const dissolveSummary = ref(null)
 const dissolveCategoryCounts = ref(null)
 let dissolvePoller = null
+
+// Stop the dissolve status poller if this view is switched away from while a
+// dissolve is still running (the modal-close handler only fires on modal close).
+onBeforeUnmount(() => {
+  if (dissolvePoller) { clearInterval(dissolvePoller); dissolvePoller = null }
+})
 
 function defaultStartLocal() {
   const now = new Date()

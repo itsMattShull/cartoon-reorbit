@@ -71,6 +71,10 @@ export default defineEventHandler(async (event) => {
     quantity: uc.ctoon.quantity,
     isFirstEdition: uc.isFirstEdition,
     isHolidayItem: holidaySet.has(uc.ctoonId),
-    inPendingTrade: pendingTradeSet.has(uc.id)
+    inPendingTrade: pendingTradeSet.has(uc.id),
+    isSecondEdition: uc.ctoon.isSecondEdition,
+    secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
+    secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
+    secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
   }))
 })

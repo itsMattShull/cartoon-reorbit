@@ -27,6 +27,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='cMart' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='cMart'">cMart</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Second Editions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Second Editions'">Second Editions</button>
         </nav>
       </div>
 
@@ -390,6 +394,38 @@
         </div>
       </section>
 
+      <!-- Second Editions tab -->
+      <section v-if="activeTab==='Second Editions'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Upload the icon overlaid on the bottom-right corner of every Second Edition cToon's image
+          sitewide. Admins can adjust position and size per cToon on the Add/Edit cToon pages.
+        </p>
+        <div class="flex items-start gap-6 flex-wrap">
+          <div>
+            <div class="w-32 h-32 border rounded bg-gray-50 flex items-center justify-center overflow-hidden">
+              <img v-if="secondEditionOverlayPath" :src="secondEditionOverlayPath" alt="Second Edition overlay" class="max-w-full max-h-full object-contain" />
+              <span v-else class="text-xs text-gray-400">No image set</span>
+            </div>
+            <p v-if="secondEditionOverlayWidth" class="text-xs text-gray-500 mt-1 text-center">
+              {{ secondEditionOverlayWidth }}×{{ secondEditionOverlayHeight }}px
+            </p>
+          </div>
+          <div class="flex-1 min-w-[220px]">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Upload Overlay Icon (PNG or GIF)</label>
+            <input type="file" accept="image/png,image/gif" class="w-full" @change="handleOverlayFile" />
+            <p class="text-xs text-gray-500 mt-1">Max 3MB. Use a transparent PNG for best results.</p>
+            <p v-if="overlayUploadError" class="text-xs text-red-600 mt-1">{{ overlayUploadError }}</p>
+            <button
+              class="btn-primary mt-3"
+              :disabled="!overlayFile || savingOverlay"
+              @click="uploadOverlay"
+            >
+              <span v-if="!savingOverlay">Upload</span><span v-else>Uploading…</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -444,6 +480,58 @@ const featuredAuctionHours        = ref([])
 const featuredAuctionIntervalDays = ref(1)
 const featuredAuctionsPerSlot     = ref(1)
 
+// Second Editions state
+const secondEditionOverlayPath   = ref(null)
+const secondEditionOverlayWidth  = ref(null)
+const secondEditionOverlayHeight = ref(null)
+const overlayFile        = ref(null)
+const overlayUploadError = ref('')
+const savingOverlay       = ref(false)
+
+function handleOverlayFile(e) {
+  overlayUploadError.value = ''
+  const file = e.target.files?.[0]
+  if (!file) { overlayFile.value = null; return }
+  if (!['image/png', 'image/gif'].includes(file.type)) {
+    overlayUploadError.value = 'Only PNG or GIF files allowed.'
+    overlayFile.value = null
+    return
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    overlayUploadError.value = 'Image must be 3MB or smaller.'
+    overlayFile.value = null
+    return
+  }
+  overlayFile.value = file
+}
+
+async function uploadOverlay() {
+  if (!overlayFile.value) return
+  savingOverlay.value = true
+  overlayUploadError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', overlayFile.value)
+    const res = await fetch('/api/admin/global-config/second-edition-overlay', {
+      method: 'POST',
+      credentials: 'include',
+      body: fd
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.statusMessage || 'Upload failed')
+    const data = await res.json()
+    secondEditionOverlayPath.value   = data.secondEditionOverlayPath
+    secondEditionOverlayWidth.value  = data.secondEditionOverlayWidth
+    secondEditionOverlayHeight.value = data.secondEditionOverlayHeight
+    overlayFile.value = null
+    toast.value = { type: 'ok', msg: 'Second Edition overlay saved.' }
+  } catch (e) {
+    overlayUploadError.value = e?.message || 'Upload failed'
+  } finally {
+    savingOverlay.value = false
+    setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
 async function loadGlobal() {
   try {
     const g = await $fetch('/api/admin/global-config')
@@ -464,6 +552,9 @@ async function loadGlobal() {
     packPriceDecayDays.value            = Number(g?.packPriceDecayDays            ?? 7)
     packPriceFloor.value                = Number(g?.packPriceFloor                ?? 700)
     packMaxDefaultBuysPerUser.value     = Number(g?.packMaxDefaultBuysPerUser     ?? 5)
+    secondEditionOverlayPath.value   = g?.secondEditionOverlayPath   ?? null
+    secondEditionOverlayWidth.value  = g?.secondEditionOverlayWidth  ?? null
+    secondEditionOverlayHeight.value = g?.secondEditionOverlayHeight ?? null
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]

@@ -198,7 +198,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const logs = ref([])
 const total = ref(0)
@@ -326,6 +326,12 @@ watch(userQuery, () => {
 })
 
 let ctoonSuggestDebounceId = null
+
+onBeforeUnmount(() => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+  if (userSuggestDebounceId) clearTimeout(userSuggestDebounceId)
+  if (ctoonSuggestDebounceId) clearTimeout(ctoonSuggestDebounceId)
+})
 watch(ctoonQuery, () => {
   if (ctoonSuggestDebounceId) clearTimeout(ctoonSuggestDebounceId)
   ctoonSuggestDebounceId = setTimeout(fetchCtoonSuggestions, 250)

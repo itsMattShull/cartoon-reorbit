@@ -33,16 +33,21 @@ export default defineEventHandler(async (event) => {
   //   cz:…  — positional token from the public cZone view (no per-instance lookup possible)
   //   uc|…  — encoded token from all other endpoints (resolve to real UUID first)
   // For cz: tokens fall through to the ctoonId-only path so the modal still opens.
+  const editionInclude = {
+    relatedFirstEdition:  { select: { id: true, name: true, assetPath: true } },
+    relatedSecondEdition: { select: { id: true, name: true, assetPath: true } }
+  }
+
   if (userCtoonId?.startsWith('uc|')) {
     const realId = await resolveUserCtoonId(userCtoonId)
     if (realId) {
-      userCtoon = await prisma.userCtoon.findUnique({ where: { id: realId }, include: { ctoon: true } })
+      userCtoon = await prisma.userCtoon.findUnique({ where: { id: realId }, include: { ctoon: { include: editionInclude } } })
       if (userCtoon) ctoon = userCtoon.ctoon
     }
   } else if (userCtoonId && !isSyntheticUserCtoonId(userCtoonId) && !userCtoonId.startsWith('cz:')) {
     userCtoon = await prisma.userCtoon.findUnique({
       where: { id: userCtoonId },
-      include: { ctoon: true }
+      include: { ctoon: { include: editionInclude } }
     })
     if (userCtoon) ctoon = userCtoon.ctoon
   }
@@ -51,7 +56,7 @@ export default defineEventHandler(async (event) => {
     if (!ctoonId) {
       throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
     }
-    ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
+    ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId }, include: editionInclude })
     if (!ctoon) {
       throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
     }
@@ -173,7 +178,13 @@ export default defineEventHandler(async (event) => {
       tradedCount: overallTradeCount,
       successfulAuctions: overallSaleCount,
       avgSale: overallAvgSale,
-      medianSale: overallMedianSale
+      medianSale: overallMedianSale,
+      isSecondEdition: ctoon.isSecondEdition,
+      secondEditionOverlayX: ctoon.secondEditionOverlayX,
+      secondEditionOverlayY: ctoon.secondEditionOverlayY,
+      secondEditionOverlaySize: ctoon.secondEditionOverlaySize,
+      relatedFirstEdition: ctoon.relatedFirstEdition ?? null,
+      relatedSecondEdition: ctoon.relatedSecondEdition ?? null
     },
     userCtoon: userStats,
     ownedCount

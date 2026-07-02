@@ -12,15 +12,35 @@
 
       <!-- Header -->
       <div class="ctic-head">
-        <img
-          v-if="ctoon.assetPath"
-          :src="ctoon.assetPath"
-          :alt="ctoon.name || 'cToon'"
-          class="ctic-thumb"
-        />
+        <div class="ctic-thumb-wrap">
+          <img
+            v-if="ctoon.assetPath"
+            :src="ctoon.assetPath"
+            :alt="ctoon.name || 'cToon'"
+            class="ctic-thumb"
+          />
+          <SecondEditionOverlay :ctoon="ctoon" />
+        </div>
         <div class="ctic-head-info">
           <h3 class="ctic-name">{{ ctoon.name || 'cToon' }}</h3>
+          <span v-if="ctoon.isSecondEdition" class="ctic-2nd-badge">2nd Edition</span>
           <p class="ctic-subtitle">cToon details</p>
+          <button
+            v-if="ctoon.isSecondEdition && ctoon.relatedFirstEdition"
+            type="button"
+            class="ctic-edition-link"
+            @click="openRelatedEdition(ctoon.relatedFirstEdition.id)"
+          >
+            View First Edition: {{ ctoon.relatedFirstEdition.name }}
+          </button>
+          <button
+            v-else-if="!ctoon.isSecondEdition && ctoon.relatedSecondEdition"
+            type="button"
+            class="ctic-edition-link"
+            @click="openRelatedEdition(ctoon.relatedSecondEdition.id)"
+          >
+            View Second Edition: {{ ctoon.relatedSecondEdition.name }}
+          </button>
           <button
             v-if="ctoon.soundPath"
             type="button"
@@ -351,13 +371,19 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
+import SecondEditionOverlay from '@/components/newsite/SecondEditionOverlay.vue'
 import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
 
 const { isAdmin } = useAuth()
-const { isOpen, loading, error, data, context, close, notifyHolidayRedeem } = useCtoonModal()
+const { isOpen, loading, error, data, context, close, open, notifyHolidayRedeem } = useCtoonModal()
+
+function openRelatedEdition(ctoonId) {
+  if (!ctoonId) return
+  open({ ctoonId })
+}
 
 const ctoon = computed(() => data.value?.ctoon || {})
 const ctoonDescription = computed(() => String(ctoon.value?.description || '').trim())
@@ -848,6 +874,13 @@ function formatDate(value) {
   position: relative;
 }
 
+.ctic-thumb-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
 .ctic-thumb {
   width: 72px;
   height: 72px;
@@ -855,8 +888,35 @@ function formatDate(value) {
   background: rgba(0, 0, 0, 0.3);
   padding: 4px;
   border-radius: 4px;
-  flex-shrink: 0;
+  box-sizing: border-box;
 }
+
+.ctic-2nd-badge {
+  display: inline-block;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin: 2px 0;
+}
+
+.ctic-edition-link {
+  display: block;
+  margin-top: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #93c5fd;
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ctic-edition-link:hover { color: #bfdbfe; }
 
 .ctic-head-info {
   flex: 1;

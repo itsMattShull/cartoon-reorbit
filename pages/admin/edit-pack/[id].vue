@@ -279,7 +279,7 @@
 definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout:'admin' })
 
 /* ---------------- imports ---------------- */
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute, useFetch } from '#app'
 
 /* ---------------- route & pack fetch ---------------- */
@@ -485,12 +485,14 @@ function onManualWeight (rarity,id) {
   // rebalanceIfNeeded(rarity,id)
 }
 
-if (process.client) {
-  window.addEventListener('click', e => {
-    if (!e.target.closest('.cto-autocomplete'))
-      suggestionsOpen.value = false
-  })
+function handleOutsideClick(e) {
+  if (!e.target.closest('.cto-autocomplete'))
+    suggestionsOpen.value = false
 }
+if (process.client) window.addEventListener('click', handleOutsideClick)
+onBeforeUnmount(() => {
+  if (process.client) window.removeEventListener('click', handleOutsideClick)
+})
 
 /* ------------- load cToons & hydrate ------------ */
 const router = useRouter()

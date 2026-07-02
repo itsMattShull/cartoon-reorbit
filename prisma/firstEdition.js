@@ -1,38 +1,17 @@
 // scripts/updateFirstEditions.js
+// First Edition is now a property of the parent cToon (NOT isSecondEdition),
+// not something computed per-mint from mintNumber/initialQuantity.
 import { prisma } from '@/server/prisma'
 
 async function main() {
-  // 1. Load every UserCtoon with its current isFirstEdition, mintNumber, and parent initialQuantity
-  const all = await prisma.userCtoon.findMany({
-    select: {
-      id: true,
-      mintNumber: true,
-      isFirstEdition: true,
-      ctoon: {
-        select: {
-          initialQuantity: true
-        }
-      }
-    }
-  })
-
-  // 2. Loop and update mismatches
-  let updatedCount = 0
-  for (const { id, mintNumber, isFirstEdition, ctoon: { initialQuantity } } of all) {
-    const desiredIsFirst =
-      initialQuantity !== null &&
-      mintNumber != null &&
-      mintNumber <= initialQuantity
-
-    // If the stored flag doesn’t match what we want, flip it
-    if (isFirstEdition !== desiredIsFirst) {
-      await prisma.userCtoon.update({
-        where: { id },
-        data: { isFirstEdition: desiredIsFirst }
-      })
-      updatedCount++
-    }
-  }
+  const result = await prisma.$executeRaw`
+    UPDATE "UserCtoon" uc
+    SET "isFirstEdition" = NOT c."isSecondEdition"
+    FROM "Ctoon" c
+    WHERE uc."ctoonId" = c.id
+      AND uc."isFirstEdition" IS DISTINCT FROM (NOT c."isSecondEdition")
+  `
+  console.log(`Updated ${result} UserCtoon row(s).`)
 }
 
 main()

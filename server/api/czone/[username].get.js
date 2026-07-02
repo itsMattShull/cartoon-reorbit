@@ -111,7 +111,11 @@ export default defineEventHandler(async (event) => {
       ctoonId: uc.ctoon.id,
       isGtoon: uc.ctoon.isGtoon,
       cost: uc.ctoon.cost,
-      power: uc.ctoon.power
+      power: uc.ctoon.power,
+      isSecondEdition: uc.ctoon.isSecondEdition,
+      secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
+      secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
+      secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
     }
   }
 
@@ -208,7 +212,11 @@ export default defineEventHandler(async (event) => {
         ctoonId: meta.ctoonId ?? null,
         isGtoon: meta.isGtoon ?? null,
         cost: meta.cost ?? null,
-        power: meta.power ?? null
+        power: meta.power ?? null,
+        isSecondEdition: meta.isSecondEdition ?? null,
+        secondEditionOverlayX: meta.secondEditionOverlayX ?? null,
+        secondEditionOverlayY: meta.secondEditionOverlayY ?? null,
+        secondEditionOverlaySize: meta.secondEditionOverlaySize ?? null
       }
     })
     return {

@@ -428,7 +428,7 @@
 <script setup>
 // Meta & imports
 definePageMeta({ title: 'Admin - New Pack', middleware: ['auth','admin'], layout: 'admin' })
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from '#app'
 
 // 1️⃣ Basic pack fields
@@ -672,12 +672,14 @@ function addSetToSelection() {
 
 
 // Close dropdowns on outside click
-if (process.client) {
-  window.addEventListener('click', e => {
-    if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
-    if (!e.target.closest('.set-autocomplete')) setSuggestionsOpen.value = false
-  })
+function handleOutsideClick(e) {
+  if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
+  if (!e.target.closest('.set-autocomplete')) setSuggestionsOpen.value = false
 }
+if (process.client) window.addEventListener('click', handleOutsideClick)
+onBeforeUnmount(() => {
+  if (process.client) window.removeEventListener('click', handleOutsideClick)
+})
 
 // 7️⃣ Validation
 const countsValid = computed(() =>

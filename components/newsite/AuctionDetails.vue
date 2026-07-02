@@ -22,12 +22,16 @@
         <!-- cToon image -->
         <div class="adet-img-wrap adet-img-clickable" @click="openInfoModal">
           <img class="adet-img" :src="auction.ctoon.assetPath" :alt="auction.ctoon.name" draggable="false" />
+          <SecondEditionOverlay :ctoon="auction.ctoon" />
           <div v-if="ended" class="adet-ended-badge">Ended</div>
         </div>
 
         <!-- Details + actions -->
         <div class="adet-info">
-          <div class="adet-name">{{ auction.ctoon.name }}</div>
+          <div class="adet-name">
+            {{ auction.ctoon.name }}
+            <span v-if="auction.ctoon.isSecondEdition" class="adet-2nd-badge">2nd Edition</span>
+          </div>
 
           <div class="adet-meta">
             <span class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
@@ -460,6 +464,20 @@ onUnmounted(() => {
   font-size: 0.85rem;
   font-weight: bold;
   color: #fff;
+}
+
+.adet-2nd-badge {
+  display: inline-block;
+  margin-left: 6px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  vertical-align: middle;
 }
 
 .adet-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }

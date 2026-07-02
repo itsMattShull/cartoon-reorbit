@@ -26,21 +26,34 @@
           >{{ i + 1 }}</button>
         </template>
       </div>
-      <div class="cz-owner-info" v-if="zoneLoading || viewedOwner">
-        <template v-if="zoneLoading">
-          <div class="cz-owner-avatar cz-skeleton cz-skeleton-avatar"></div>
-          <div class="cz-owner-label">
-            <div class="cz-skeleton cz-skeleton-line cz-skeleton-username"></div>
-            <div class="cz-skeleton cz-skeleton-line cz-skeleton-lastseen"></div>
-          </div>
-        </template>
-        <template v-else>
-          <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
-          <div class="cz-owner-label">
-            <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
-            <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
-          </div>
-        </template>
+      <div class="cz-topbar-right">
+        <button
+          v-show="!cz.buildMode"
+          type="button"
+          class="cz-art-mode-btn"
+          :class="{ active: artMode }"
+          :aria-pressed="artMode ? 'true' : 'false'"
+          @click="artMode = !artMode"
+        >
+          <span class="cz-art-mode-icon">🎨</span>
+          <span class="cz-art-mode-label">Art Mode: {{ artMode ? 'On' : 'Off' }}</span>
+        </button>
+        <div class="cz-owner-info" v-if="zoneLoading || viewedOwner">
+          <template v-if="zoneLoading">
+            <div class="cz-owner-avatar cz-skeleton cz-skeleton-avatar"></div>
+            <div class="cz-owner-label">
+              <div class="cz-skeleton cz-skeleton-line cz-skeleton-username"></div>
+              <div class="cz-skeleton cz-skeleton-line cz-skeleton-lastseen"></div>
+            </div>
+          </template>
+          <template v-else>
+            <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
+            <div class="cz-owner-label">
+              <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
+              <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -73,6 +86,7 @@
               draggable="false"
               @load="e => onToonImgLoad(e, toon)"
             />
+            <SecondEditionOverlay v-if="!cz.buildMode" :ctoon="toon" :respect-art-mode="true" />
             <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
               <button
                 class="cz-bring-front-btn"
@@ -355,6 +369,11 @@ const innerScaleStyle = computed(() => ({
 const canvasEl       = ref(null)
 const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
+
+// Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
+// default; resets to off whenever the viewed cZone/user changes.
+const artMode = useArtMode()
+watch(viewedUsername, () => { artMode.value = false })
 
 // True while build-mode data is loading (prevents double-click and shows spinner on button)
 const buildLoading = ref(false)
@@ -1004,6 +1023,10 @@ function onGlobalUp(e) {
           x: clamp(x - w / 2, 0, canvasW() - w),
           y: clamp(y - h / 2, 0, canvasH() - h),
           width: w, height: h,
+          isSecondEdition: c.isSecondEdition,
+          secondEditionOverlayX: c.secondEditionOverlayX,
+          secondEditionOverlayY: c.secondEditionOverlayY,
+          secondEditionOverlaySize: c.secondEditionOverlaySize,
         })
       }
       img.src = c.assetPath
@@ -1257,6 +1280,37 @@ defineExpose({ save, clearZone })
 }
 .cz-zone-tab.active { background: var(--OrbitDarkBlue); color: #fff; border-color: transparent; }
 
+.cz-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cz-art-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 0.66rem;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cz-art-mode-btn:hover { background: rgba(0,0,0,0.32); }
+.cz-art-mode-btn.active {
+  background: var(--OrbitDarkBlue);
+  border-color: #fff;
+}
+.cz-art-mode-icon { font-size: 0.82rem; line-height: 1; }
+
 .cz-owner-info {
   display: flex;
   align-items: center;
@@ -1287,13 +1341,22 @@ defineExpose({ save, clearZone })
 @media (max-width: 768px) {
   .cz-topbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     height: auto;
     gap: 4px;
   }
-  .cz-owner-info {
-    order: -1;
+  .cz-topbar-left {
+    flex-wrap: wrap;
   }
+  .cz-topbar-right {
+    order: -1;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .cz-art-mode-btn { font-size: 0.6rem; padding: 0 8px; }
 }
 
 /* ── Canvas ── */

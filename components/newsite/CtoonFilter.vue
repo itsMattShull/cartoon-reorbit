@@ -89,12 +89,16 @@
       </div>
     </template>
 
-    <template v-if="showHideUnavailable">
+    <template v-if="showHideUnavailable || showExcludeSecondEditions">
       <hr class="cf-divider" />
       <div class="cf-page-filters">
-        <label class="cf-checkbox-row">
+        <label v-if="showHideUnavailable" class="cf-checkbox-row">
           <input type="checkbox" v-model="filter.hideUnavailable" />
           <span>Hide unavailable</span>
+        </label>
+        <label v-if="showExcludeSecondEditions" class="cf-checkbox-row">
+          <input type="checkbox" v-model="filter.excludeSecondEditions" />
+          <span>Exclude Second Editions</span>
         </label>
       </div>
     </template>
@@ -108,6 +112,7 @@
 <script setup>
 const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
+  showExcludeSecondEditions: { type: Boolean, default: false },
   showSortDir:         { type: Boolean, default: true  },
   showAuctionFilters:  { type: Boolean, default: false },
   showCommonFilters:   { type: Boolean, default: false },
@@ -176,6 +181,7 @@ function clearFilters() {
     sortField:       props.sortOptions[0]?.value ?? 'name',
     sortAsc:         true,
     hideUnavailable: false,
+    excludeSecondEditions: false,
   })
   if (props.showAuctionFilters || props.showCommonFilters) {
     Object.assign(aFilters.value, {

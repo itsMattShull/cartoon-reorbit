@@ -54,6 +54,10 @@ export default defineEventHandler(async () => {
       finalReleaseAt: true,
       initialReleaseQty: true,
       finalReleaseQty: true,
+      isSecondEdition: true,
+      secondEditionOverlayX: true,
+      secondEditionOverlayY: true,
+      secondEditionOverlaySize: true,
     }
   })
 

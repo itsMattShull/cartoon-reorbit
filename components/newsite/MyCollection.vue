@@ -26,7 +26,10 @@
       <template v-else>
         <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
           <template #header>
-            <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
+            <div class="card-img-wrap">
+              <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
+              <SecondEditionOverlay :ctoon="c" />
+            </div>
           </template>
           <template #middle>
             <span class="card-mint">#{{ c.mintNumber ?? '?' }}</span>
@@ -138,6 +141,9 @@ const ctoons = computed(() => {
 
   if (f.priceMax !== '')
     list = list.filter(c => c.price <= Number(f.priceMax))
+
+  if (f.excludeSecondEditions)
+    list = list.filter(c => !c.isSecondEdition)
 
   list = [...list].sort((a, b) => {
     let cmp = 0
@@ -305,6 +311,12 @@ onMounted(async () => {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.6);
   flex-shrink: 0;
+}
+
+.card-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .card-img {

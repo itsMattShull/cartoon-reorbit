@@ -127,6 +127,7 @@
           <template #header>
             <div class="ah-card-header" @click="openInfoModal(item)">
               <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="ah-card-img" draggable="false" />
+              <SecondEditionOverlay :ctoon="item" />
               <div class="ah-card-time-badge" :class="{ ended: isEnded(item.endAt) }">
                 <template v-if="!isEnded(item.endAt)">{{ formatRemaining(item.endAt) }}</template>
                 <template v-else>Ended</template>
@@ -418,6 +419,7 @@ function applyFilters(items) {
     if (rarities.length && !rarities.includes((item.rarity || '').toLowerCase()))    return false
     if (series && item.series !== series)                                             return false
     if (set    && item.set    !== set)                                                return false
+    if (filter.value.excludeSecondEditions && item.isSecondEdition)                  return false
     if (aFilters.value.featuredOnly  && !item.isFeatured)                            return false
     if (aFilters.value.selectedOwned === 'owned'   && !item.isOwned)                 return false
     if (aFilters.value.selectedOwned === 'unowned' && item.isOwned)                  return false

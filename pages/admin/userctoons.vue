@@ -180,7 +180,7 @@
 
 <script setup>
 definePageMeta({ title: 'Admin - User cToons', middleware: ['auth', 'admin'], layout: 'admin' })
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '~/components/Nav.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
@@ -257,15 +257,21 @@ function applyFilters() {
   loadNext()
 }
 
+let observer = null
+
 onMounted(() => {
   applyFilters()
-  const obs = new IntersectionObserver(
+  observer = new IntersectionObserver(
     entries => {
       if (entries[0].isIntersecting) loadNext()
     },
     { rootMargin: '200px' }
   )
-  if (sentinel.value) obs.observe(sentinel.value)
+  if (sentinel.value) observer.observe(sentinel.value)
+})
+
+onBeforeUnmount(() => {
+  if (observer) { observer.disconnect(); observer = null }
 })
 </script>
 

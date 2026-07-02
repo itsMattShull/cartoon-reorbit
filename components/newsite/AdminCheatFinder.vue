@@ -337,7 +337,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const tabs = [
   { id: 'duplicateIps', label: 'Duplicate IPs' },
@@ -509,6 +509,11 @@ watch(searchTerm, () => {
 })
 
 let vpnSearchDebounceId = null
+
+onBeforeUnmount(() => {
+  if (searchDebounceId) clearTimeout(searchDebounceId)
+  if (vpnSearchDebounceId) clearTimeout(vpnSearchDebounceId)
+})
 watch(vpnSearchTerm, (val) => {
   if (vpnSearchDebounceId) clearTimeout(vpnSearchDebounceId)
   // Only trigger a fetch when 0 chars (cleared) or 3+ chars

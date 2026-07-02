@@ -11,6 +11,9 @@ export default defineEventHandler(async () => {
     dailyNewUserPoints: cfg?.dailyNewUserPoints ?? 1000,
     czoneVisitPoints:   cfg?.czoneVisitPoints   ?? 20,
     czoneVisitMaxPerDay: cfg?.czoneVisitMaxPerDay ?? 10,
-    czoneCount: cfg?.czoneCount ?? 3
+    czoneCount: cfg?.czoneCount ?? 3,
+    secondEditionOverlayPath:   cfg?.secondEditionOverlayPath   ?? null,
+    secondEditionOverlayWidth:  cfg?.secondEditionOverlayWidth  ?? null,
+    secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null
   }
 })

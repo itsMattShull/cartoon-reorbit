@@ -230,7 +230,7 @@
 
 <script setup>
 definePageMeta({ title: 'Admin - Add Holiday Event', middleware: ['auth','admin'], layout: 'admin' })
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from '#app'
 
 const router = useRouter()
@@ -429,15 +429,17 @@ const invalidTooltip = computed(() => {
 })
 
 // Close dropdowns on outside click
-if (process.client) {
-  window.addEventListener('click', e => {
-    if (!e.target.closest('.cto-autocomplete')) {
-      itemsOpen.value = false
-      poolOpen.value = false
-      setsOpen.value = false
-    }
-  })
+function handleOutsideClick(e) {
+  if (!e.target.closest('.cto-autocomplete')) {
+    itemsOpen.value = false
+    poolOpen.value = false
+    setsOpen.value = false
+  }
 }
+if (process.client) window.addEventListener('click', handleOutsideClick)
+onBeforeUnmount(() => {
+  if (process.client) window.removeEventListener('click', handleOutsideClick)
+})
 
 /* ---------- Submit (send UTC ISO derived from Chicago time) ---------- */
 async function submit() {

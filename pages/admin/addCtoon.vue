@@ -35,6 +35,13 @@
           </div>
         </div>
 
+        <!-- Second Edition -->
+        <SecondEditionFields
+          v-model="secondEdition"
+          :ctoon-image-src="imagePreview"
+          :auto-note="autoSecondEditionNote"
+        />
+
         <!-- Sound Upload (optional) -->
         <div>
           <label class="block mb-1 font-medium">Upload cToon Sound (optional)</label>
@@ -324,6 +331,7 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
+import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 
 const router = useRouter()
 const name = ref('')
@@ -349,6 +357,18 @@ const setsOptions = ref([])
 const duplicateStatus = ref('idle')
 const duplicateMatch = ref(null)
 const duplicateError = ref('')
+const imagePreview = ref('')
+
+/* ── Second Edition ─────────────────────────────────────── */
+const secondEdition = ref({
+  isSecondEdition: false,
+  relatedFirstEditionId: null,
+  relatedFirstEditionName: '',
+  overlayX: 85,
+  overlayY: 85,
+  overlaySize: 100
+})
+const autoSecondEditionNote = ref('')
 /* ── NEW: G-toon state ───────────────────────────────── */
 const isGtoon     = ref(false)
 const cost        = ref(1)
@@ -466,6 +486,10 @@ function handleFile(e) {
   }
   imageFile.value = file
   type.value = file.type
+
+  if (imagePreview.value) URL.revokeObjectURL(imagePreview.value)
+  imagePreview.value = URL.createObjectURL(file)
+
   checkDuplicate(file)
 }
 
@@ -490,6 +514,24 @@ async function checkDuplicate(file) {
     const data = await res.json()
     duplicateMatch.value = data?.duplicate ? data.match : null
     duplicateStatus.value = 'done'
+
+    // Auto-set Second Edition when both duplicate-distance values are exactly 0
+    // (i.e. the image is pixel-identical to an existing cToon's image).
+    const m = duplicateMatch.value
+    if (m && m.phashDist === 0 && m.dhashDist === 0 && m.ctoon) {
+      secondEdition.value = {
+        ...secondEdition.value,
+        isSecondEdition: true,
+        relatedFirstEditionId: m.ctoon.id,
+        relatedFirstEditionName: m.ctoon.name,
+        overlayX: secondEdition.value.overlayX ?? 85,
+        overlayY: secondEdition.value.overlayY ?? 85,
+        overlaySize: secondEdition.value.overlaySize ?? 100
+      }
+      autoSecondEditionNote.value = `Auto-set from exact image match with "${m.ctoon.name}". You can change this.`
+    } else {
+      autoSecondEditionNote.value = ''
+    }
   } catch {
     duplicateStatus.value = 'error'
     duplicateError.value = 'Duplicate check failed.'
@@ -589,6 +631,14 @@ async function submitForm() {
   }
 
   if (soundFile.value) formData.append('sound', soundFile.value)
+
+  formData.append('isSecondEdition', secondEdition.value.isSecondEdition)
+  if (secondEdition.value.isSecondEdition) {
+    formData.append('relatedFirstEditionId', secondEdition.value.relatedFirstEditionId ?? '')
+    formData.append('secondEditionOverlayX', secondEdition.value.overlayX)
+    formData.append('secondEditionOverlayY', secondEdition.value.overlayY)
+    formData.append('secondEditionOverlaySize', secondEdition.value.overlaySize)
+  }
 
   const res = await fetch('/api/admin/ctoon', {
     method: 'POST',

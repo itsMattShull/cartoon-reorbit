@@ -214,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const items = ref([])
 const total = ref(0)
@@ -316,6 +316,10 @@ function clearFilters() {
 }
 
 let filterDebounceId = null
+
+onBeforeUnmount(() => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+})
 watch([usernameQuery, visitorIdQuery, ipQuery, duplicatesOnly], () => {
   if (filterDebounceId) clearTimeout(filterDebounceId)
   filterDebounceId = setTimeout(() => {

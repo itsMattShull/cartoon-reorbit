@@ -14,6 +14,7 @@
         loading="lazy"
         draggable="false"
       />
+      <SecondEditionOverlay :ctoon="ctoon" />
       <!-- Owned / Unowned badge -->
       <span v-if="badge" class="tc-badge" :class="badgeClassComputed">{{ badge }}</span>
       <!-- In Trade overlay -->

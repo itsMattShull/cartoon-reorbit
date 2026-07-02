@@ -180,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const pageSize = 100
 const page = ref(1)
@@ -245,6 +245,11 @@ function scheduleFilterFetch() {
 
 // Winner autocomplete
 let winnerSuggestDebounceId = null
+
+onBeforeUnmount(() => {
+  if (filterDebounceId) clearTimeout(filterDebounceId)
+  if (winnerSuggestDebounceId) clearTimeout(winnerSuggestDebounceId)
+})
 watch(winnerQuery, (val) => {
   if (winnerSuggestDebounceId) clearTimeout(winnerSuggestDebounceId)
   const trimmed = val.trim()
