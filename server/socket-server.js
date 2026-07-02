@@ -116,6 +116,7 @@ const marblesState = {
 let marblesWorld = null
 let marbleBodies = []     // parallel array to marblesState.marbles
 let marblesFinished = new Set()
+let marbleOffTrack  = new Set()   // indices of marbles outside track walls
 let marblesPhysInterval = null
 let marblesBroadcastInterval = null
 
@@ -187,6 +188,24 @@ function crSample(pts, t) {
 
 function buildCourseSamples() {
   return Array.from({ length: COURSE_N_SEGS }, (_, i) => crSample(COURSE_SPINE, i / (COURSE_N_SEGS - 1)))
+}
+
+// Precomputed once for off-track detection: [x, z] samples along the track spine
+const COURSE_SAMPLES = buildCourseSamples()
+// Threshold: marble center this far (XZ plane) from nearest spine point → off-track
+// COURSE_HALF_W(5) + wall thickness(0.3) + 1-unit buffer = 6.3
+const OFFTRACK_DIST2 = 6.3 * 6.3
+
+function isMarbleOffTrack(x, y, z) {
+  if (y < -5) return true        // fallen through the floor
+  if (z > 85) return false       // still in funnel / at race start, skip check
+  let minDist2 = Infinity
+  for (const [sx, sz] of COURSE_SAMPLES) {
+    const dx = x - sx, dz = z - sz
+    const d2 = dx * dx + dz * dz
+    if (d2 < minDist2) minDist2 = d2
+  }
+  return minDist2 > OFFTRACK_DIST2
 }
 
 function marblesSnapshot() {
@@ -440,12 +459,14 @@ function stopMarblesPhysics() {
   marblesWorld = null
   marbleBodies = []
   marblesFinished = new Set()
+  marbleOffTrack  = new Set()
 }
 
 function startMarblesPhysics() {
   const { world, marbleMat } = buildMarblesWorld()
   marblesWorld = world
   marblesFinished = new Set()
+  marbleOffTrack  = new Set()
 
   const positions = getMarbleStartPositions(marblesState.marbles.length)
   marbleBodies = marblesState.marbles.map((_, i) => {
@@ -469,12 +490,25 @@ function startMarblesPhysics() {
 
     if (marblesState.phase !== 'racing') return
 
+    // Update off-track status: marbles outside the track walls or below the floor
+    for (let i = 0; i < marbleBodies.length; i++) {
+      if (marblesFinished.has(i)) continue
+      const { x, y, z } = marbleBodies[i].position
+      if (isMarbleOffTrack(x, y, z)) {
+        marbleOffTrack.add(i)
+      } else {
+        marbleOffTrack.delete(i)
+      }
+    }
+
     // Collect all marbles that reached the finish this step using the approach-plane
     // dot-product test (see FINISH_NORM_X/Z constants).  Sort by dot descending so
     // the marble furthest past the finish wall is processed first and wins ties.
+    // Off-track marbles (flew over walls) are excluded from finish / winner logic.
     const crossedThisStep = []
     for (let i = 0; i < marbleBodies.length; i++) {
       if (marblesFinished.has(i)) continue
+      if (marbleOffTrack.has(i)) continue
       const dot = marbleBodies[i].position.x * FINISH_NORM_X + marbleBodies[i].position.z * FINISH_NORM_Z
       if (dot >= FINISH_DETECT_DOT) {
         crossedThisStep.push({ i, dot })
@@ -493,7 +527,7 @@ function startMarblesPhysics() {
       body.updateMassProperties()
 
       if (marblesFinished.size === 1) {
-        // First marble across = winner
+        // First marble across the finish while on-track = winner
         marblesState.winner = marblesState.marbles[i].username
         io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
         io.to(MARBLES_ROOM).emit('marbles:winner', { username: marblesState.winner })
@@ -506,6 +540,20 @@ function startMarblesPhysics() {
         return
       }
     }
+
+    // If every marble has either finished or gone off-track (and at least one finished),
+    // the race is over — don't wait for off-track marbles to eventually hit Y < -5.
+    if (marblesFinished.size > 0) {
+      let allAccountedFor = true
+      for (let i = 0; i < marbleBodies.length; i++) {
+        if (!marblesFinished.has(i) && !marbleOffTrack.has(i)) { allAccountedFor = false; break }
+      }
+      if (allAccountedFor) {
+        marblesState.phase = 'finished'
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+        stopMarblesPhysics()
+      }
+    }
   }, 1000 / 60)
 
   marblesBroadcastInterval = setInterval(() => {
@@ -514,6 +562,7 @@ function startMarblesPhysics() {
       x:  +body.position.x.toFixed(3),
       y:  +body.position.y.toFixed(3),
       z:  +body.position.z.toFixed(3),
+      offTrack: marbleOffTrack.has(i),
     }))
     io.to(MARBLES_ROOM).emit('marbles:tick', { positions })
   }, 1000 / 20)
