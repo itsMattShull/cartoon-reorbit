@@ -76,10 +76,6 @@
               :style="{ touchAction: 'none' }"
               draggable="false"
               @pointerdown="onPointerDown"
-              @pointerup="onPointerUp"
-              @pointermove="onPointerMove"
-              @pointerleave="onPointerLeave"
-              @pointercancel="onPointerCancel"
               @dragstart.prevent
               @contextmenu.prevent
               aria-label="Match-3 game grid"
@@ -699,11 +695,29 @@ function getCanvasPos(e) {
   return { x: e.clientX - rect.left, y: e.clientY - rect.top }
 }
 
+// While a drag is active we track it on `window`, not the canvas. Firefox delivers
+// canvas-scoped pointermove/pointerup unreliably during a captured drag (it can drop
+// moves when the pointer crosses the tile gaps or leaves the canvas, and sometimes loses
+// the final pointerup), which makes chains — diagonals especially — hard to complete.
+// Window listeners keep the whole drag flowing in every browser.
+function attachDragListeners() {
+  window.addEventListener('pointermove', onPointerMove, { passive: false })
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerCancel)
+}
+function detachDragListeners() {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerCancel)
+}
+
 function onPointerDown(e) {
   if (animating || uiState.value !== 'playing') return
   e.preventDefault()
-  canvas.value?.setPointerCapture?.(e.pointerId)
+  // setPointerCapture can throw in Firefox; the window listeners cover us regardless.
+  try { canvas.value?.setPointerCapture?.(e.pointerId) } catch {}
   pointerDown = true
+  attachDragListeners()
   const pos = getCanvasPos(e)
   pointerX = pos.x; pointerY = pos.y
   const idx = hitTest(pos.x, pos.y)
@@ -760,7 +774,8 @@ function onPointerUp(e) {
   if (!pointerDown) return
   e.preventDefault()
   pointerDown = false
-  canvas.value?.releasePointerCapture?.(e.pointerId)
+  detachDragListeners()
+  try { canvas.value?.releasePointerCapture?.(e.pointerId) } catch {}
 
   const c = chain
   chain = []
@@ -780,11 +795,10 @@ function onPointerUp(e) {
   }
 }
 
-function onPointerLeave() { /* pointer capture keeps events flowing; ignore */ }
-
 function onPointerCancel(e) {
   pointerDown = false
-  canvas.value?.releasePointerCapture?.(e.pointerId)
+  detachDragListeners()
+  try { canvas.value?.releasePointerCapture?.(e.pointerId) } catch {}
   chain = []
 }
 
@@ -897,6 +911,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null }
   resizeObserver?.disconnect()
+  detachDragListeners()
 })
 </script>
 
