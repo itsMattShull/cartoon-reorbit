@@ -25,7 +25,8 @@ export default defineEventHandler(async (event) => {
     durationDays,
     isFeatured,
     createCount = 1,
-    releaseEveryHours = 0
+    releaseEveryHours = 0,
+    mintMode // undefined | 'mint' | 'availableOnly' — set by the shortfall modal
   } = body || {}
 
   const isFeaturedFlag = !!isFeatured
@@ -63,58 +64,138 @@ export default defineEventHandler(async (event) => {
 
   if (!ctoonId) throw createError({ statusCode: 400, statusMessage: 'ctoonId required' })
 
-  const pending = await prisma.auctionOnly.findMany({
-    where: { isStarted: false },
-    select: { userCtoonId: true }
-  })
-  const pendingIds = pending.map(p => p.userCtoonId)
+  const TIME_BASED_CAP = 999999999
 
-  const available = await prisma.userCtoon.findMany({
-    where: {
-      userId: owner.id,
-      ctoonId,
-      id: { notIn: pendingIds }
-    },
-    orderBy: [
-      { mintNumber: 'asc' },
-      { createdAt: 'asc' }
-    ],
-    select: { id: true, mintNumber: true, createdAt: true }
-  })
-
-  if (available.length < count) {
-    throw createError({ statusCode: 400, statusMessage: `Not enough owned copies to create ${count} auctions` })
+  // Owner-owned copies of this cToon that are not already scheduled as a pending
+  // (unstarted) AuctionOnly. `client` may be the base prisma or a tx client.
+  async function loadAvailable(client) {
+    const pending = await client.auctionOnly.findMany({
+      where: { isStarted: false },
+      select: { userCtoonId: true }
+    })
+    const pendingIds = pending.map(p => p.userCtoonId)
+    return client.userCtoon.findMany({
+      where: { userId: owner.id, ctoonId, id: { notIn: pendingIds } },
+      orderBy: [{ mintNumber: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, mintNumber: true, createdAt: true }
+    })
   }
 
-  const sorted = [...available].sort((a, b) => {
-    const aMint = Number.isInteger(a.mintNumber) ? a.mintNumber : Number.POSITIVE_INFINITY
-    const bMint = Number.isInteger(b.mintNumber) ? b.mintNumber : Number.POSITIVE_INFINITY
-    if (aMint !== bMint) return aMint - bMint
-    return a.createdAt.getTime() - b.createdAt.getTime()
+  // Supply snapshot (authoritative cap lives on Ctoon.totalMinted / quantity).
+  const ctoonRow = await prisma.ctoon.findUnique({
+    where: { id: ctoonId },
+    select: { quantity: true, totalMinted: true, initialQuantity: true, mintLimitType: true }
   })
+  if (!ctoonRow) throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
 
-  let userCtoonIds = sorted.map(a => a.id)
-  if (ucIdIn) {
-    if (!userCtoonIds.includes(ucIdIn)) {
-      throw createError({ statusCode: 400, statusMessage: 'Selected copy is already scheduled' })
-    }
-    userCtoonIds = [ucIdIn, ...userCtoonIds.filter(id => id !== ucIdIn)]
-  }
-  userCtoonIds = userCtoonIds.slice(0, count)
+  // "Unlimited" = no hard cap: NULL quantity, or a time-based release still
+  // carrying the sentinel cap (finalized later). Either way we only ever mint
+  // the bounded shortfall, never the raw remaining supply.
+  const unlimited =
+    ctoonRow.quantity === null ||
+    (ctoonRow.mintLimitType === 'timeBased' && ctoonRow.quantity === TIME_BASED_CAP)
+  const remaining = unlimited
+    ? Infinity
+    : Math.max(0, Number(ctoonRow.quantity) - Number(ctoonRow.totalMinted))
 
-  const rows = userCtoonIds.map((id, idx) => {
-    const startsAt = new Date(normStarts.getTime() + idx * releaseHours * 3600000)
-    const endsAt = new Date(startsAt.getTime() + durationDays * 86400000)
+  const availablePre = await loadAvailable(prisma)
+  const availableCountPre = availablePre.length
+
+  // Shortfall without a decision → tell the client so it can show the modal.
+  if (availableCountPre < count && mintMode !== 'mint' && mintMode !== 'availableOnly') {
+    const shortfall = count - availableCountPre
+    const mintable = unlimited ? shortfall : Math.min(shortfall, remaining)
     return {
-      userCtoonId: id,
-      pricePoints,
-      startsAt,
-      endsAt,
-      isFeatured: isFeaturedFlag,
-      createdById: me.id ?? null
+      needsDecision: true,
+      requested: count,
+      available: availableCountPre,
+      unlimited,
+      quantity: unlimited ? null : Number(ctoonRow.quantity),
+      totalMinted: Number(ctoonRow.totalMinted),
+      remaining: unlimited ? null : remaining,
+      mintable,
+      willCreateWithMint: availableCountPre + mintable,
+      willCreateAvailableOnly: availableCountPre
     }
-  })
+  }
 
-  const created = await prisma.auctionOnly.createMany({ data: rows })
-  return { count: created.count }
+  // Atomically mint any needed copies (mint mode only) and create the auctions
+  // together, so a partial mint can never leave orphaned copies or orphaned rows.
+  const result = await prisma.$transaction(async (tx) => {
+    const available = await loadAvailable(tx)
+    const availableCount = available.length
+    const pool = [...available]
+
+    let minted = 0
+    if (mintMode === 'mint') {
+      const need = Math.max(0, count - availableCount)
+      for (let i = 0; i < need; i++) {
+        // Atomic increment with an in-SQL cap guard. Returns 0 rows once the cap
+        // is hit (e.g. a concurrent cMart mint got there first) → stop cleanly
+        // and auction only what we actually minted.
+        const rows = unlimited
+          ? await tx.$queryRaw`
+              UPDATE "Ctoon" SET "totalMinted" = "totalMinted" + 1
+              WHERE id = ${ctoonId}
+              RETURNING "totalMinted", "initialQuantity"`
+          : await tx.$queryRaw`
+              UPDATE "Ctoon" SET "totalMinted" = "totalMinted" + 1
+              WHERE id = ${ctoonId} AND "totalMinted" < "quantity"
+              RETURNING "totalMinted", "initialQuantity"`
+        if (!rows || !rows.length) break
+
+        const mintNumber = Number(rows[0].totalMinted)
+        const iq = rows[0].initialQuantity
+        const initialQuantity = iq == null ? null : Number(iq)
+        const isFirstEdition = initialQuantity === null || mintNumber <= initialQuantity
+
+        const uc = await tx.userCtoon.create({
+          data: { userId: owner.id, ctoonId, mintNumber, isFirstEdition, pricePaid: null },
+          select: { id: true, mintNumber: true, createdAt: true }
+        })
+        await tx.ctoonOwnerLog.create({
+          data: { userId: owner.id, ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber }
+        })
+        pool.push(uc)
+        minted++
+      }
+    }
+
+    const finalCount = Math.min(count, pool.length)
+    if (finalCount < 1) {
+      throw createError({ statusCode: 400, statusMessage: 'No copies available to create auctions' })
+    }
+
+    const sorted = [...pool].sort((a, b) => {
+      const aMint = Number.isInteger(a.mintNumber) ? a.mintNumber : Number.POSITIVE_INFINITY
+      const bMint = Number.isInteger(b.mintNumber) ? b.mintNumber : Number.POSITIVE_INFINITY
+      if (aMint !== bMint) return aMint - bMint
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    })
+
+    let userCtoonIds = sorted.map(a => a.id)
+    // Keep the admin's explicitly-selected copy first when present & still available.
+    if (ucIdIn && userCtoonIds.includes(ucIdIn)) {
+      userCtoonIds = [ucIdIn, ...userCtoonIds.filter(id => id !== ucIdIn)]
+    }
+    userCtoonIds = userCtoonIds.slice(0, finalCount)
+
+    const rows = userCtoonIds.map((id, idx) => {
+      const startsAt = new Date(normStarts.getTime() + idx * releaseHours * 3600000)
+      const endsAt = new Date(startsAt.getTime() + durationDays * 86400000)
+      return {
+        userCtoonId: id,
+        pricePoints,
+        startsAt,
+        endsAt,
+        isFeatured: isFeaturedFlag,
+        createdById: me.id ?? null
+      }
+    })
+
+    const created = await tx.auctionOnly.createMany({ data: rows })
+    return { count: created.count, minted, requested: count }
+  }, { timeout: 30000, maxWait: 10000 })
+
+  return result
 })

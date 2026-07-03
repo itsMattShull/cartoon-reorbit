@@ -1,6 +1,7 @@
 // server/utils/autoBid.js
 import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
+import { checkFeaturedEligibility } from '@/server/utils/featuredEligibility'
 
 /**
  * Public constant so API routes can use the same window everywhere.
@@ -59,6 +60,14 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
       highestBidderId: true,
       // 👇 needed so first auto-bid equals starting price (not increment from 0)
       initialBet: true, // If your column is named initialBid/initialPrice, rename accordingly
+      // 👇 needed to enforce the featured-auction bidding cap on proxy raises
+      isFeatured: true,
+      userCtoon: {
+        select: {
+          ctoonId: true,
+          ctoon: { select: { isSecondEdition: true, relatedFirstEditionId: true } }
+        }
+      }
     }
   })
   if (!auc) return { finalAuction: null, steps: [] }
@@ -74,12 +83,32 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
   const startPrice = Math.max(0, auc.initialBet || 0)
 
   // Pull all active autobids + current points up-front
-  const auto = await tx.auctionAutoBid.findMany({
+  let auto = await tx.auctionAutoBid.findMany({
     where: { auctionId, isActive: true },
     orderBy: { createdAt: 'asc' }, // FIFO for ties
     select: { userId: true, createdAt: true, maxAmount: true }
   })
   if (!auto.length) return { finalAuction: auc, steps }
+
+  // Featured cap enforcement for proxy raises: a user who set an auto-bid while
+  // eligible must not have their proxy keep bidding once they cross the featured
+  // ownership threshold. Drop now-ineligible auto-bidders before the proxy loop
+  // so their max can never raise the price. Strictly gated on isFeatured — a
+  // no-op for every ordinary auction.
+  if (auc.isFeatured) {
+    const featuredCtoon = {
+      ctoonId: auc.userCtoon?.ctoonId,
+      isSecondEdition: auc.userCtoon?.ctoon?.isSecondEdition,
+      relatedFirstEditionId: auc.userCtoon?.ctoon?.relatedFirstEditionId
+    }
+    if (featuredCtoon.ctoonId) {
+      const flags = await Promise.all(
+        auto.map(a => checkFeaturedEligibility(tx, a.userId, featuredCtoon))
+      )
+      auto = auto.filter((_, i) => flags[i].eligible)
+      if (!auto.length) return { finalAuction: auc, steps }
+    }
+  }
 
   // Collect balances and active lock sums (all contexts) for availability
   const ids = Array.from(new Set(auto.map(a => a.userId).concat(leader ? [leader] : [])))
