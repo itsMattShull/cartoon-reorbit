@@ -88,6 +88,22 @@ export default defineEventHandler(async (event) => {
   })
   const affectedSearchIds = [...new Set(affectedPrizes.map(p => p.cZoneSearchId))]
 
+  // Find affected CZone rows BEFORE opening the transaction. The CZone table
+  // has no index on `background`/`layoutData`, so this predicate requires a
+  // full-table scan with per-row JSONB unnesting — fine to run as a plain
+  // query (no deadline), but ruinous inside a Prisma interactive transaction,
+  // whose default 5s timeout it can blow past as the table grows, silently
+  // rolling back the whole edit (including the Background row itself).
+  const affectedCzones = await db.$queryRaw`
+    SELECT id FROM "CZone"
+    WHERE "background" = ${oldImagePath}
+       OR EXISTS (
+         SELECT 1 FROM jsonb_array_elements("layoutData"->'zones') AS z
+         WHERE z->>'background' = ${oldImagePath}
+       )
+  `
+  const affectedCzoneIds = affectedCzones.map((r) => r.id)
+
   try {
     await db.$transaction(async (tx) => {
       // Update the Background record
@@ -96,35 +112,37 @@ export default defineEventHandler(async (event) => {
         data: { imagePath: newImagePath, filename: newFilename, width, height, mimeType: imagePart.type }
       })
 
-      // Update CZone.background (top-level column)
-      await tx.$executeRaw`
-        UPDATE "CZone"
-        SET "background" = ${newImagePath}
-        WHERE "background" = ${oldImagePath}
-      `
+      // Targeted by primary key (from the pre-computed list above) so this
+      // stays fast — and within the transaction timeout — no matter how
+      // large the CZone table is.
+      if (affectedCzoneIds.length > 0) {
+        // Update CZone.background (top-level column)
+        await tx.$executeRaw`
+          UPDATE "CZone"
+          SET "background" = ${newImagePath}
+          WHERE id = ANY(${affectedCzoneIds}) AND "background" = ${oldImagePath}
+        `
 
-      // Update background references inside CZone.layoutData.zones JSON
-      await tx.$executeRaw`
-        UPDATE "CZone"
-        SET "layoutData" = jsonb_set(
-          "layoutData",
-          '{zones}',
-          COALESCE(
-            (SELECT jsonb_agg(
-              CASE WHEN zone->>'background' = ${oldImagePath}
-                THEN jsonb_set(zone, '{background}', to_jsonb(${newImagePath}::text))
-                ELSE zone
-              END
-            ) FROM jsonb_array_elements("layoutData"->'zones') AS zone),
-            '[]'::jsonb
+        // Update background references inside CZone.layoutData.zones JSON
+        await tx.$executeRaw`
+          UPDATE "CZone"
+          SET "layoutData" = jsonb_set(
+            "layoutData",
+            '{zones}',
+            COALESCE(
+              (SELECT jsonb_agg(
+                CASE WHEN zone->>'background' = ${oldImagePath}
+                  THEN jsonb_set(zone, '{background}', to_jsonb(${newImagePath}::text))
+                  ELSE zone
+                END
+              ) FROM jsonb_array_elements("layoutData"->'zones') AS zone),
+              '[]'::jsonb
+            )
           )
-        )
-        WHERE jsonb_typeof("layoutData"->'zones') = 'array'
-          AND EXISTS (
-            SELECT 1 FROM jsonb_array_elements("layoutData"->'zones') AS z
-            WHERE z->>'background' = ${oldImagePath}
-          )
-      `
+          WHERE id = ANY(${affectedCzoneIds})
+            AND jsonb_typeof("layoutData"->'zones') = 'array'
+        `
+      }
 
       // Replace old filename with new in CZoneSearchPrize.conditionBackgrounds
       await tx.$executeRaw`
@@ -132,8 +150,9 @@ export default defineEventHandler(async (event) => {
         SET "conditionBackgrounds" = array_replace("conditionBackgrounds", ${oldFilename}, ${newFilename})
         WHERE ${oldFilename} = ANY("conditionBackgrounds")
       `
-    })
+    }, { timeout: 20000, maxWait: 5000 })
   } catch (err) {
+    console.error('[backgrounds/replace-image] transaction failed:', err)
     // Transaction failed — delete the newly written file so it doesn't orphan on disk
     try { await unlink(outPath) } catch {}
     throw createError({ statusCode: 500, statusMessage: 'Failed to replace image' })
