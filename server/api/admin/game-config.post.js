@@ -97,6 +97,34 @@ function validatePayload(payload) {
       throw createError({ statusCode: 400, statusMessage: '"winWheelSoundMode" must be "repeat", "once", or null' })
     }
 
+  } else if (payload.gameName === 'ReOrbitMatch') {
+    if (payload.reorbitPlaysPerPeriod == null || typeof payload.reorbitPlaysPerPeriod !== 'number' || payload.reorbitPlaysPerPeriod < 1) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitPlaysPerPeriod" must be a positive number' })
+    }
+    if (payload.reorbitPointsPerGame == null || typeof payload.reorbitPointsPerGame !== 'number' || payload.reorbitPointsPerGame < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitPointsPerGame" must be a non-negative number' })
+    }
+    if (payload.reorbitTimeSeconds != null && (typeof payload.reorbitTimeSeconds !== 'number' || payload.reorbitTimeSeconds < 30)) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitTimeSeconds" must be null or a number >= 30' })
+    }
+    if (payload.reorbitComboMs == null || typeof payload.reorbitComboMs !== 'number' || payload.reorbitComboMs < 1000 || payload.reorbitComboMs > 15000) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitComboMs" must be a number between 1000 and 15000' })
+    }
+    if (payload.reorbitGridSize == null || typeof payload.reorbitGridSize !== 'number' || payload.reorbitGridSize < 4 || payload.reorbitGridSize > 10) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitGridSize" must be between 4 and 10' })
+    }
+    if (!Array.isArray(payload.reorbitEmojis)) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitEmojis" must be an array' })
+    }
+    const maxEmojis = Math.min(payload.reorbitGridSize, 10)
+    if (payload.reorbitEmojis.length > 0 && (payload.reorbitEmojis.length < 4 || payload.reorbitEmojis.length > maxEmojis)) {
+      throw createError({ statusCode: 400, statusMessage: `"reorbitEmojis" must have 4–${maxEmojis} items for a ${payload.reorbitGridSize}×${payload.reorbitGridSize} grid` })
+    }
+    for (const e of payload.reorbitEmojis) {
+      if (typeof e !== 'string' || e.trim().length === 0) {
+        throw createError({ statusCode: 400, statusMessage: 'Each emoji must be a non-empty string' })
+      }
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -121,6 +149,13 @@ export default defineEventHandler(async (event) => {
 
   const {
     gameName,
+    // ReOrbitMatch fields
+    reorbitPlaysPerPeriod,
+    reorbitPointsPerGame,
+    reorbitTimeSeconds = null,
+    reorbitEmojis = [],
+    reorbitGridSize,
+    reorbitComboMs,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -291,6 +326,17 @@ export default defineEventHandler(async (event) => {
           ...winballColors,
           ...winballPhysics
         }
+      } else if (gameName === 'ReOrbitMatch') {
+        const reorbitData = {
+          reorbitPlaysPerPeriod,
+          reorbitPointsPerGame,
+          reorbitTimeSeconds: reorbitTimeSeconds || null,
+          reorbitEmojis,
+          reorbitGridSize,
+          reorbitComboMs
+        }
+        createData = { ...createData, ...reorbitData }
+        updateData = { ...updateData, ...reorbitData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -446,6 +492,20 @@ export default defineEventHandler(async (event) => {
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
+          }
+        } else if (gameName === 'ReOrbitMatch') {
+          const changes = [
+            ['reorbitPlaysPerPeriod', before?.reorbitPlaysPerPeriod, reorbitPlaysPerPeriod],
+            ['reorbitPointsPerGame', before?.reorbitPointsPerGame, reorbitPointsPerGame],
+            ['reorbitTimeSeconds', before?.reorbitTimeSeconds ?? null, reorbitTimeSeconds || null],
+            ['reorbitGridSize', before?.reorbitGridSize, reorbitGridSize],
+            ['reorbitComboMs', before?.reorbitComboMs, reorbitComboMs],
+            ['reorbitEmojis', JSON.stringify(before?.reorbitEmojis ?? []), JSON.stringify(reorbitEmojis)]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (String(prev) !== String(next)) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:ReOrbitMatch', key, prevValue: prev, newValue: next })
+            }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {
           if (before?.pointsPerWin !== pointsPerWin) {

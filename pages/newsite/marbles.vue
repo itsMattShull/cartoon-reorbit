@@ -167,7 +167,8 @@ let labelContainer = null
 // Marbles whose Y dropped below the course floor are considered dead and
 // excluded from rankings/camera. Floor top surface is at Y = 0.
 const DEATH_Y = -5
-let deadMarbles = new Set()   // marble ids that have fallen off the course
+let deadMarbles    = new Set()   // marble ids that have fallen off the course
+let offTrackMarbles = new Set()  // marble ids that flew outside the track walls
 
 // Camera control state
 let isDragging = false, lastMouseX = 0, lastMouseY = 0
@@ -215,10 +216,16 @@ function connectSocket() {
         entry.targetPos.set(pos.x, pos.y, pos.z)
         if (!deadMarbles.has(pos.id) && pos.y < DEATH_Y) {
           deadMarbles.add(pos.id)
-          // Grey out the marble mesh so it's visually distinct
+          offTrackMarbles.delete(pos.id)
           entry.mesh.material.color.set(0x444444)
           entry.mesh.material.opacity = 0.35
           entry.mesh.material.transparent = true
+        } else if (!deadMarbles.has(pos.id)) {
+          if (pos.offTrack && !offTrackMarbles.has(pos.id)) {
+            offTrackMarbles.add(pos.id)
+          } else if (!pos.offTrack && offTrackMarbles.has(pos.id)) {
+            offTrackMarbles.delete(pos.id)
+          }
         }
       }
     }
@@ -623,6 +630,7 @@ function resetScene() {
   }
   labelDivMap.clear()
   deadMarbles.clear()
+  offTrackMarbles.clear()
 }
 
 // ─── Camera helpers ────────────────────────────────────────────────────────
@@ -645,7 +653,7 @@ function applyCameraOrbit() {
 function getLeaderPosition() {
   let minZ = Infinity, leader = null
   for (const [id, entry] of marbleMeshMap) {
-    if (deadMarbles.has(id)) continue
+    if (deadMarbles.has(id) || offTrackMarbles.has(id)) continue
     if (entry.targetPos.z < minZ) {
       minZ = entry.targetPos.z
       leader = entry.targetPos
@@ -659,8 +667,8 @@ function getMyMarblePosition() {
   if (!myUsername) return null
   for (const [id, entry] of marbleMeshMap) {
     if (entry.username === myUsername) {
-      // If own marble is dead, fall back to following the leader
-      return deadMarbles.has(id) ? getLeaderPosition() : entry.targetPos
+      // If own marble is dead or off-track, fall back to following the leader
+      return (deadMarbles.has(id) || offTrackMarbles.has(id)) ? getLeaderPosition() : entry.targetPos
     }
   }
   return null

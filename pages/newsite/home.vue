@@ -94,12 +94,14 @@ html.newsite-home body {
     height: auto;
   }
 
-  .home-image-cell {
-    aspect-ratio: 374 / 292;
-  }
-
   .home-image {
     height: auto;
+  }
+}
+
+@media (min-width: 769px) {
+  .home-image-cell {
+    aspect-ratio: 374 / 292;
   }
 }
 

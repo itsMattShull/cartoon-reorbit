@@ -766,6 +766,7 @@ async function saveOther() {
 
 onMounted(loadConfig)
 
+
 onMounted(async () => {
   try {
     const res = await $fetch('/api/admin/release-settings')
@@ -800,6 +801,13 @@ async function saveReleaseSettings() {
 <style scoped>
 .btn-primary{ background-color:#6366F1; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
 .btn-primary:disabled{ opacity:.5 }
+
+@media (max-width: 767px) {
+  .aspect-video {
+    aspect-ratio: unset;
+    min-height: 80px;
+  }
+}
 </style>
 
 
