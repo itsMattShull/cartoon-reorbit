@@ -106,6 +106,8 @@
             :status="instructionText"
             :remaining-energy="remainingEnergy"
             :disabled="!isSelecting || confirmed"
+            :placed-indexes="placedIndexes"
+            :selected-index="selectedIndex"
             @select="selectFromHand"
             @info="showCardInfo"
           />
@@ -325,9 +327,10 @@ function readyUp() {
   socket.emit('readyUpWithDeck', { roomId, userId: user.value.id, deckId: selectedDeckId.value })
 }
 
-const selected   = ref(null)
-const placements = ref([])
-const confirmed  = ref(false)
+const selected      = ref(null)
+const selectedIndex = ref(-1)
+const placements    = ref([])
+const confirmed     = ref(false)
 const log        = ref([])
 const summary    = ref(null)
 const infoCard   = ref(null)
@@ -353,6 +356,7 @@ const hasPlayable = computed(() =>
 const canConfirm = computed(() => placements.value.length > 0 || !hasPlayable.value)
 const pendingCost = computed(() => placements.value.reduce((s, p) => s + (p.card.cost || 0), 0))
 const remainingEnergy = computed(() => game.value.playerEnergy - pendingCost.value)
+const placedIndexes = computed(() => placements.value.map(p => p.handIndex))
 
 const instructionText = computed(() => {
   if (!game.value) return ''
@@ -388,8 +392,14 @@ function sameCard(a, b) {
   )
 }
 
-function selectFromHand(c) {
-  selected.value = sameCard(selected.value, c) ? null : c
+function selectFromHand(c, handIndex) {
+  if (selectedIndex.value === handIndex) {
+    selected.value = null
+    selectedIndex.value = -1
+  } else {
+    selected.value = c
+    selectedIndex.value = handIndex
+  }
 }
 
 function handlePlace(laneIdx) {
@@ -401,24 +411,28 @@ function handlePlace(laneIdx) {
     log.value.push('That lane is full.')
     return
   }
-  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
-  if (idx >= 0) {
-    placements.value.splice(idx, 1)
-    return
-  }
-  placements.value.push({ card: selected.value, laneIndex: laneIdx })
+  if (placements.value.some(p => p.handIndex === selectedIndex.value)) return
+  placements.value.push({ card: selected.value, laneIndex: laneIdx, handIndex: selectedIndex.value })
   selected.value = null
+  selectedIndex.value = -1
 }
 
-function handleUnplace(laneIdx) {
+function handleUnplace(laneIdx, card = null) {
   if (!isSelecting.value || confirmed.value) return
-  for (let i = placements.value.length - 1; i >= 0; i--) {
-    if (placements.value[i].laneIndex === laneIdx) {
-      const [removed] = placements.value.splice(i, 1)
-      selected.value = removed.card
-      break
+  // A specific ghost card was clicked → undo exactly that placement.
+  let idx = card
+    ? placements.value.findIndex(p => p.laneIndex === laneIdx && sameCard(p.card, card))
+    : -1
+  if (idx < 0) {
+    // Lane background click → undo the most recent placement in the lane.
+    for (let i = placements.value.length - 1; i >= 0; i--) {
+      if (placements.value[i].laneIndex === laneIdx) { idx = i; break }
     }
   }
+  if (idx < 0) return
+  const [removed] = placements.value.splice(idx, 1)
+  selected.value = removed.card
+  selectedIndex.value = removed.handIndex ?? -1
 }
 
 function confirmSelections() {
@@ -433,9 +447,10 @@ function confirmSelections() {
 }
 
 function resetLocal() {
-  placements.value = []
-  confirmed.value  = false
-  selected.value   = null
+  placements.value    = []
+  confirmed.value     = false
+  selected.value      = null
+  selectedIndex.value = -1
 }
 
 socket.on('phaseUpdate', state => {
