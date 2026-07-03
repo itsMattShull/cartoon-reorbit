@@ -175,6 +175,12 @@ const ANIMATION_APPEAR_MS = 200
 const MIN_MATCH = 3          // a valid match is exactly this many tiles
 const MAX_MATCH = 3          // chain is capped at this many tiles
 
+// Chain extension only registers a tile when the finger is within this fraction of the
+// tile size from the tile's CENTER. The gutters this leaves between tiles let a diagonal
+// drag pass a corner without grabbing the orthogonal neighbor it clips. Must stay below
+// ~0.7 so a clean diagonal never lands inside an above/below/side tile's hot zone.
+const CHAIN_HIT_RADIUS = 0.62
+
 // Scoring — MUST stay in sync with server/utils/reorbitMatchEngine.js
 const BASE_MATCH_POINTS = 30
 const DEFAULT_COMBO_WINDOW_MS = 3500  // fallback; server sends the configured value at /start
@@ -375,6 +381,24 @@ function hitTest(px, py) {
     }
   }
   return -1
+}
+
+// Center-based hit test for extending the chain: the nearest tile center wins, but only
+// if the finger is within CHAIN_HIT_RADIUS × tileSize of it. This leaves gutters between
+// tiles so a diagonal drag doesn't clip the orthogonal (above/below/side) neighbor.
+function hitTestChain(px, py) {
+  let best = -1
+  let bestD2 = Infinity
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const dx = px - tileCenterX(c)
+      const dy = py - tileCenterY(r)
+      const d2 = dx * dx + dy * dy
+      if (d2 < bestD2) { bestD2 = d2; best = idxOf(r, c) }
+    }
+  }
+  const radius = tileSize * CHAIN_HIT_RADIUS
+  return bestD2 <= radius * radius ? best : -1
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
@@ -703,7 +727,7 @@ function onPointerMove(e) {
   pointerX = pos.x; pointerY = pos.y
   if (animating || uiState.value !== 'playing' || chain.length === 0) return
 
-  const idx = hitTest(pos.x, pos.y)
+  const idx = hitTestChain(pos.x, pos.y)
   if (idx === -1) return
   const last = chain[chain.length - 1]
   if (idx === last) return
