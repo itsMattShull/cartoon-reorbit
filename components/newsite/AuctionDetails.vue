@@ -60,7 +60,8 @@
 
           <!-- Featured notice -->
           <div v-if="auction.isFeatured" class="adet-featured-notice">
-            ⭐ Featured — bidding restricted to users who haven't owned 2 mints in the last 30 days.
+            ⭐ Featured — you can't bid if you already own 2+<template v-if="auction.ctoon.isSecondEdition"> (1st + 2nd edition combined)</template>
+            or have received 2+ in the last 30 days.
           </div>
 
           <!-- ── Place bid ── -->

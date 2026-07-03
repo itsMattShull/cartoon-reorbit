@@ -5,9 +5,9 @@ import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
+import { assertFeaturedEligibility } from '@/server/utils/featuredEligibility'
 
 const ANTI_SNIPE_MS = 60_000
-const THIRTY_DAYS_MS  = 30 * 24 * 60 * 60 * 1000
 
 export default defineEventHandler(async (event) => {
   const fmt = (n) => Number(n || 0).toLocaleString('en-US')
@@ -72,6 +72,7 @@ export default defineEventHandler(async (event) => {
         userCtoon: {
           select: {
             ctoonId: true,
+            ctoon: { select: { isSecondEdition: true, relatedFirstEditionId: true } }
             // mintNumber: true, // add this if you ever need it
           }
         }
@@ -86,42 +87,16 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
     }
 
-    // Featured-auction eligibility: block if user currently owns >=2 of this cToon
-    // OR has owned >=2 in the last 30 days (distinct userCtoonIds in owner logs)
-    if (fresh.isFeatured && fresh.userCtoon?.ctoonId) {
-      // 1) Current ownership count (unburned)
-      const currentOwned = await tx.userCtoon.count({
-        where: {
-          userId,
-          ctoonId: fresh.userCtoon.ctoonId,
-          burnedAt: null,
-        }
-      })
-      if (currentOwned >= 2) {
-        throw createError({
-          statusCode: 403,
-          statusMessage: 'You are not eligible to bid on this featured auction',
-        })
+    // Featured-auction eligibility. For Second Edition cToons this counts copies
+    // across both editions (see server/utils/featuredEligibility.js).
+    await assertFeaturedEligibility(tx, userId, {
+      isFeatured: fresh.isFeatured,
+      ctoon: {
+        ctoonId: fresh.userCtoon?.ctoonId,
+        isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,
+        relatedFirstEditionId: fresh.userCtoon?.ctoon?.relatedFirstEditionId
       }
-
-      // 2) Ownership in last 30 days (distinct items)
-      const cutoff = new Date(Date.now() - THIRTY_DAYS_MS)
-      const recentOwnerships = await tx.ctoonOwnerLog.findMany({
-        where: {
-          userId,
-          ctoonId: fresh.userCtoon.ctoonId,
-          createdAt: { gte: cutoff },
-        },
-        select: { userCtoonId: true },
-        distinct: ['userCtoonId'],
-      })
-      if (recentOwnerships.length >= 2) {
-        throw createError({
-          statusCode: 403,
-          statusMessage: 'You are not eligible to bid on this featured auction',
-        })
-      }
-    }
+    })
 
     const now  = new Date()
     const preEnd = new Date(fresh.endAt)

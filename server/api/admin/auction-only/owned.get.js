@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     ],
     take: LIMIT,
     include: {
-      ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+      ctoon: { select: { id: true, name: true, rarity: true, assetPath: true, isSecondEdition: true } }
     }
   })
 
@@ -60,6 +60,7 @@ export default defineEventHandler(async (event) => {
     name: r.ctoon.name,
     rarity: r.ctoon.rarity,
     assetPath: r.ctoon.assetPath,
+    isSecondEdition: r.ctoon.isSecondEdition,
     mintNumber: r.mintNumber
   }))
   const ownedCtoonIds = new Set(owned.map(x => x.ctoonId))
@@ -70,7 +71,7 @@ export default defineEventHandler(async (event) => {
     where: {
       name: { contains: term, mode: 'insensitive' }
     },
-    select: { id: true, name: true, rarity: true, assetPath: true, quantity: true },
+    select: { id: true, name: true, rarity: true, assetPath: true, quantity: true, isSecondEdition: true },
     take: LIMIT * 2
   })
 
@@ -98,6 +99,7 @@ export default defineEventHandler(async (event) => {
       name: c.name,
       rarity: c.rarity,
       assetPath: c.assetPath,
+      isSecondEdition: c.isSecondEdition,
       mintNumber: null
     }))
 
