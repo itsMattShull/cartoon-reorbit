@@ -81,7 +81,9 @@
             :selected="selected"
             :remaining-energy="remainingEnergy"
             :disabled="!isSelecting || confirmed"
-            @select="c => (selected = c)"
+            :placed-indexes="placedIndexes"
+            :selected-index="selectedIndex"
+            @select="selectFromHand"
             @info="showCardInfo"
           />
 
@@ -190,6 +192,7 @@ const { user } = useAuth()
 const game = computed(() => battleState.value)
 
 const selected = ref(null)
+const selectedIndex = ref(-1)
 const placements = ref([])
 const confirmed = ref(false)
 const log = ref([])
@@ -224,6 +227,26 @@ const canConfirm = computed(() => placements.value.length > 0 || !hasPlayable.va
 
 const pendingCost = computed(() => placements.value.reduce((sum, p) => sum + (p.card.cost || 0), 0))
 const remainingEnergy = computed(() => game.value.playerEnergy - pendingCost.value)
+const placedIndexes = computed(() => placements.value.map(p => p.handIndex))
+
+function sameCard(a, b) {
+  if (!a || !b) return false
+  return (
+    a === b ||
+    (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId) ||
+    (a.instanceId && b.instanceId && a.instanceId === b.instanceId)
+  )
+}
+
+function selectFromHand(c, handIndex) {
+  if (selectedIndex.value === handIndex) {
+    selected.value = null
+    selectedIndex.value = -1
+  } else {
+    selected.value = c
+    selectedIndex.value = handIndex
+  }
+}
 
 const isSelecting = computed(
   () => game.value && (game.value.phase === 'select' || game.value.phase === 'setup')
@@ -305,27 +328,29 @@ function handlePlace(laneIdx) {
     return
   }
 
-  const sameCard = (a, b) =>
-    !!a && !!b && (a === b || (a.userCtoonId && b.userCtoonId && a.userCtoonId === b.userCtoonId))
-  const idx = placements.value.findIndex(p => sameCard(p.card, selected.value))
-  if (idx >= 0) {
-    placements.value.splice(idx, 1)
-    return
-  }
+  if (placements.value.some(p => p.handIndex === selectedIndex.value)) return
 
-  placements.value.push({ card: selected.value, laneIndex: laneIdx })
+  placements.value.push({ card: selected.value, laneIndex: laneIdx, handIndex: selectedIndex.value })
   selected.value = null
+  selectedIndex.value = -1
 }
 
-function handleUnplace(laneIdx) {
+function handleUnplace(laneIdx, card = null) {
   if (!isSelecting.value || confirmed.value) return
-  for (let i = placements.value.length - 1; i >= 0; i--) {
-    if (placements.value[i].laneIndex === laneIdx) {
-      const [removed] = placements.value.splice(i, 1)
-      selected.value = removed.card
-      break
+  // A specific ghost card was clicked → undo exactly that placement.
+  let idx = card
+    ? placements.value.findIndex(p => p.laneIndex === laneIdx && sameCard(p.card, card))
+    : -1
+  if (idx < 0) {
+    // Lane background click → undo the most recent placement in the lane.
+    for (let i = placements.value.length - 1; i >= 0; i--) {
+      if (placements.value[i].laneIndex === laneIdx) { idx = i; break }
     }
   }
+  if (idx < 0) return
+  const [removed] = placements.value.splice(idx, 1)
+  selected.value = removed.card
+  selectedIndex.value = removed.handIndex ?? -1
 }
 
 function confirmSelections() {
@@ -344,6 +369,7 @@ function resetLocal() {
   placements.value = []
   confirmed.value = false
   selected.value = null
+  selectedIndex.value = -1
 }
 
 onMounted(() => { wireSocket() })

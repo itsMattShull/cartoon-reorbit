@@ -37,7 +37,7 @@
           v-if="phase==='select' && !selected && hasPendingInLane(idx)"
           class="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200"
         >
-          Tap to undo
+          Tap a placed card to undo
         </div>
         <!-- ── Player cards on the left (order-1 on mobile, order-3 on md) ── -->
         <div class="grid grid-cols-2 gap-0.5 mb-3 w-full auto-rows-[9rem] order-1 md:order-3">
@@ -50,14 +50,19 @@
                 class="scale-75 md:scale-100"
                 @info="emit('info',$event)"
               />
-              <ClashCToonCard
+              <div
                 v-else-if="phase==='select' && !confirmed && ghostAtSlot(idx, i-1)"
-                :card="ghostAtSlot(idx, i-1)"
-                size="small"
-                :afford="false"
-                class="opacity-50 border-2 border-dashed scale-75 md:scale-100"
-                @info="emit('info',$event)"
-              />
+                class="cursor-pointer"
+                title="Tap to undo this placement"
+                @click.stop="emit('unplace', idx, ghostAtSlot(idx, i-1))"
+              >
+                <ClashCToonCard
+                  :card="ghostAtSlot(idx, i-1)"
+                  size="small"
+                  :afford="false"
+                  class="opacity-50 border-2 border-dashed scale-75 md:scale-100 pointer-events-none"
+                />
+              </div>
               <div v-else class="w-24 h-36"></div>
             </div>
           </template>
