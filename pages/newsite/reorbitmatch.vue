@@ -692,7 +692,19 @@ function wait(ms) { return new Promise(r => setTimeout(r, ms)) }
 function getCanvasPos(e) {
   if (!canvas.value) return { x: 0, y: 0 }
   const rect = canvas.value.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  // The board sits inside the newsite layout's `transform: scale(...)` wrapper, so the canvas
+  // is painted on screen at rect.width/height while tiles are drawn in the canvas's own
+  // coordinate space (canvas.width/height ÷ devicePixelRatio — matching renderFrame). Without
+  // converting between the two, a click lands off-target by the layout scale factor, and the
+  // error grows with distance from center (transform-origin: top center) — picking a far tile.
+  const drawW = canvas.value.width  / devicePixelRatio
+  const drawH = canvas.value.height / devicePixelRatio
+  const scaleX = rect.width  ? drawW / rect.width  : 1
+  const scaleY = rect.height ? drawH / rect.height : 1
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top)  * scaleY
+  }
 }
 
 // While a drag is active we track it on `window`, not the canvas. Firefox delivers
