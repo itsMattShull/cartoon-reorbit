@@ -136,7 +136,8 @@ export default defineEventHandler(async (event) => {
             reorbitPointsPerGame: 50,
             reorbitTimeSeconds: null,
             reorbitEmojis: [],
-            reorbitGridSize: 8
+            reorbitGridSize: 8,
+            reorbitComboMs: 3500
           }
         })
       } else {

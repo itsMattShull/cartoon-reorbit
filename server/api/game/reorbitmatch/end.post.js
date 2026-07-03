@@ -2,7 +2,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { replayGame, MIN_MOVE_INTERVAL_MS, BASE_MATCH_POINTS, MAX_COMBO_MULT } from '@/server/utils/reorbitMatchEngine'
+import { replayGame, MIN_MOVE_INTERVAL_MS, BASE_MATCH_POINTS, DEFAULT_COMBO_WINDOW_MS } from '@/server/utils/reorbitMatchEngine'
 
 const LOCK_TTL_MS = 15_000
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
@@ -65,6 +65,7 @@ export default defineEventHandler(async (event) => {
 
     const session = JSON.parse(raw)
     const { board, startTime, gridSize, emojiCount, fillSeed } = session
+    const comboWindowMs = session.comboWindowMs ?? DEFAULT_COMBO_WINDOW_MS
     const endTime = Date.now()
     const elapsedMs = endTime - startTime
 
@@ -102,14 +103,15 @@ export default defineEventHandler(async (event) => {
     // Server-side replay (score computed here, NOT from client)
     let computedScore
     try {
-      computedScore = replayGame(board, moveLog, gridSize, emojiCount, fillSeed)
+      computedScore = replayGame(board, moveLog, gridSize, emojiCount, fillSeed, comboWindowMs)
     } catch (err) {
       throw createError({ statusCode: 400, statusMessage: `Invalid move sequence: ${err.message}` })
     }
 
-    // Sanity-check: every match is exactly 3 tiles, so the tightest possible ceiling is
-    // one match per logged move at the max combo multiplier. Defense-in-depth vs replay bugs.
-    const theoreticalMax = moveLog.length * BASE_MATCH_POINTS * MAX_COMBO_MULT
+    // Sanity-check: the combo streak is the multiplier, so the tightest possible ceiling is
+    // an unbroken combo (1x + 2x + … + Nx) = N(N+1)/2 matches at base points. Defense-in-depth.
+    const n = moveLog.length
+    const theoreticalMax = BASE_MATCH_POINTS * (n * (n + 1) / 2)
     computedScore = Math.min(computedScore, theoreticalMax)
 
     // Load config for points-per-game

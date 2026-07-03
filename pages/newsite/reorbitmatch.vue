@@ -53,19 +53,13 @@
                 <span class="hud-label">Score</span>
                 <span class="hud-value">{{ score.toLocaleString() }}</span>
               </div>
-              <div class="hud-item" :class="{ 'hud-item--active': combo > 1 }">
+              <div class="hud-item" :class="{ 'hud-item--glow': combo > 1 }">
                 <span class="hud-label">Combo</span>
-                <span class="hud-value">{{ combo }}x</span>
+                <span class="hud-value hud-multiplier">{{ combo }}x</span>
               </div>
               <div v-if="timeSeconds" class="hud-item" :class="{ 'hud-item--warning': timeLeft <= 10 }">
                 <span class="hud-label">Time</span>
                 <span class="hud-value">{{ timeLeft }}s</span>
-              </div>
-            </div>
-            <div class="hud-row hud-row--secondary">
-              <div class="hud-item" :class="{ 'hud-item--glow': multiplier > 1 }">
-                <span class="hud-label">Multiplier</span>
-                <span class="hud-value hud-multiplier">{{ multiplier }}x</span>
               </div>
               <div class="hud-item">
                 <span class="hud-label">Plays Left</span>
@@ -151,7 +145,7 @@
             </li>
             <li>
               <span class="howto-num">4</span>
-              <span>Chain matches <strong>quickly</strong> to build your <strong>combo multiplier</strong> — it climbs up to 8× but resets if you pause too long.</span>
+              <span>Each match you chain in a row raises your <strong>combo multiplier</strong> — 2×, 3×, 4× and up. Keep matching before the combo cools down or it drops back to 1×.</span>
             </li>
             <li>
               <span class="howto-num">5</span>
@@ -180,10 +174,8 @@ const MAX_MATCH = 3          // chain is capped at this many tiles
 
 // Scoring — MUST stay in sync with server/utils/reorbitMatchEngine.js
 const BASE_MATCH_POINTS = 30
-const COMBO_WINDOW_MS   = 2500
-const MAX_COMBO_MULT    = 8
+const DEFAULT_COMBO_WINDOW_MS = 3500  // fallback; server sends the configured value at /start
 
-const HINT_DELAY_MS = 5000
 const FAIL_FLASH_MS = 380
 
 // Tile animation states
@@ -193,8 +185,7 @@ const TS = { NORMAL: 0, REMOVING: 1, FALLING: 2, APPEARING: 3 }
 const uiState    = ref('loading')  // loading | start | playing | gameover | noplays
 const starting   = ref(false)
 const score      = ref(0)
-const combo      = ref(0)
-const multiplier = ref(1)
+const combo      = ref(0)   // the combo streak, which is also the score multiplier
 const timeLeft   = ref(null)
 const playsLeft  = ref(0)
 const finalScore    = ref(0)
@@ -233,17 +224,15 @@ let pointerX    = 0
 let pointerY    = 0
 
 // Combo bookkeeping (mirrors the server's ts-driven combo)
+let comboWindowMs = DEFAULT_COMBO_WINDOW_MS // combo cooldown; set from /start config
 let comboCount  = 0
 let lastLogTs   = null    // relative ts of the previous logged match
 let lastMatchAbs = 0      // performance.now() of the previous match (for idle decay)
 
-// Feedback / hint
+// Feedback
 let particles     = []
 let failFlashSet  = new Set()
 let failFlashUntil = 0
-let hintSet       = new Set()
-let hintActive    = false
-let lastActivityMs = 0
 let reducedMotion = false
 
 let configData = null
@@ -281,7 +270,8 @@ function isEightAdjacent(a, b) {
   return dr <= 1 && dc <= 1 && (dr + dc) > 0
 }
 
-function computeMultiplier(c) { return c <= 1 ? 1 : Math.min(c, MAX_COMBO_MULT) }
+// The combo streak IS the multiplier (1st match 1x, 2nd chained 2x, …), no cap.
+function computeMultiplier(c) { return c < 1 ? 1 : c }
 
 function vibrate(pattern) { try { navigator.vibrate?.(pattern) } catch {} }
 
@@ -315,27 +305,6 @@ function hasPossibleMoves(b) {
     }
   }
   return false
-}
-
-// Find one valid 3-chain for the idle hint (returns [idx, idx, idx] or null)
-function findHint(b) {
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
-      const color = b[idxOf(r, c)]
-      if (color === -1) continue
-      const nbrs = []
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue
-          const nr = r + dr, nc = c + dc
-          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
-          if (b[idxOf(nr, nc)] === color) nbrs.push(idxOf(nr, nc))
-        }
-      }
-      if (nbrs.length >= 2) return [nbrs[0], idxOf(r, c), nbrs[1]]
-    }
-  }
-  return null
 }
 
 // ─── Particles ──────────────────────────────────────────────────────────────────
@@ -498,13 +467,11 @@ function renderFrame(nowMs) {
 
     const inChain  = chainSet.has(i)
     const inFlash  = flashing && failFlashSet.has(i)
-    const inHint   = hintActive && hintSet.has(i)
 
     ctx.save()
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
     ctx.translate(x + tileSize / 2, y + tileSize / 2)
     if (rot) ctx.rotate(rot)
-    if (inHint && !reducedMotion) scale *= 1 + Math.sin(nowMs / 160) * 0.06
     ctx.scale(scale, scale)
 
     const baseColor = TILE_COLORS[tile.emojiIdx % TILE_COLORS.length]
@@ -512,8 +479,6 @@ function renderFrame(nowMs) {
       ctx.shadowColor = '#ff5a5a'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff5a5a'
     } else if (inChain && feedback) {
       ctx.shadowColor = feedback; ctx.shadowBlur = 14; ctx.fillStyle = feedback
-    } else if (inHint) {
-      ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 12; ctx.fillStyle = baseColor
     } else {
       ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 4; ctx.fillStyle = baseColor
     }
@@ -598,19 +563,9 @@ function gameLoop(nowMs) {
 
   // Combo idle decay (display only; server recomputes authoritative combo from ts)
   if (comboCount > 0) {
-    const alive = (nowMs - lastMatchAbs) <= COMBO_WINDOW_MS
+    const alive = (nowMs - lastMatchAbs) <= comboWindowMs
     const dispC = alive ? comboCount : 0
-    const dispM = alive ? computeMultiplier(comboCount) : 1
     if (combo.value !== dispC) combo.value = dispC
-    if (multiplier.value !== dispM) multiplier.value = dispM
-  }
-
-  // Idle hint
-  if (uiState.value === 'playing' && !animating && !pointerDown && !hintActive) {
-    if (nowMs - lastActivityMs > HINT_DELAY_MS) {
-      const h = findHint(board)
-      if (h) { hintSet = new Set(h); hintActive = true }
-    }
   }
 
   renderFrame(nowMs)
@@ -652,22 +607,20 @@ function settleBoard(removedSet) {
 // ─── Perform a match ─────────────────────────────────────────────────────────
 async function performMatch(cells) {
   animating = true
-  clearHint()
 
   // Log the move (relative ts, clamped so the server's monotonic + min-interval checks pass)
   let ts = Math.round(performance.now() - gameStartTs)
   if (lastLogTs !== null) ts = Math.max(ts, lastLogTs + 101)
   moveLog.push({ cells: cells.map(i => ({ row: rowOf(i), col: colOf(i) })), ts })
 
-  // Combo (identical rule to server: driven purely by ts gaps)
-  if (lastLogTs !== null && (ts - lastLogTs) <= COMBO_WINDOW_MS) comboCount++
+  // Combo (identical rule to server: driven purely by ts gaps); the combo IS the multiplier
+  if (lastLogTs !== null && (ts - lastLogTs) <= comboWindowMs) comboCount++
   else comboCount = 1
   lastLogTs = ts
   lastMatchAbs = performance.now()
   const mult = computeMultiplier(comboCount)
   score.value += BASE_MATCH_POINTS * mult
   combo.value = comboCount
-  multiplier.value = mult
   announce.value = `Matched 3! +${BASE_MATCH_POINTS * mult}. Combo ${comboCount}x.`
   vibrate(30)
 
@@ -714,7 +667,6 @@ async function performMatch(cells) {
   }
 
   animating = false
-  touchActivity()
 
   // Terminal state: no more possible matches (rare with 8-dir; timer is the usual end)
   if (!hasPossibleMoves(board)) endGame()
@@ -729,9 +681,6 @@ function getCanvasPos(e) {
   return { x: e.clientX - rect.left, y: e.clientY - rect.top }
 }
 
-function touchActivity() { lastActivityMs = performance.now(); clearHint() }
-function clearHint() { if (hintActive) { hintActive = false; hintSet = new Set() } }
-
 function onPointerDown(e) {
   if (animating || uiState.value !== 'playing') return
   e.preventDefault()
@@ -739,7 +688,6 @@ function onPointerDown(e) {
   pointerDown = true
   const pos = getCanvasPos(e)
   pointerX = pos.x; pointerY = pos.y
-  touchActivity()
   const idx = hitTest(pos.x, pos.y)
   chain = idx === -1 ? [] : [idx]
   if (idx !== -1) vibrate(8)
@@ -793,7 +741,6 @@ function onPointerUp(e) {
     announce.value = 'No match — connect exactly 3 of the same icon.'
     vibrate([20, 40, 20])
   }
-  touchActivity()
 }
 
 function onPointerLeave() { /* pointer capture keeps events flowing; ignore */ }
@@ -836,10 +783,10 @@ async function startGame() {
     timeSeconds = data.timeSeconds
     fillSeed    = data.fillSeed
     fillRng     = makePRNG(fillSeed)
+    comboWindowMs = data.comboWindowMs ?? DEFAULT_COMBO_WINDOW_MS
 
     score.value      = 0
     combo.value      = 0
-    multiplier.value = 1
     timeLeft.value   = timeSeconds
     moveLog          = []
     chain            = []
@@ -851,8 +798,6 @@ async function startGame() {
     failFlashUntil   = 0
     animating        = false
     ending           = false
-    hintActive       = false
-    hintSet          = new Set()
     announce.value   = ''
 
     await fetchStatus() // refresh plays left
@@ -865,7 +810,6 @@ async function startGame() {
     initTiles(board)
     gameStartTs = performance.now()
     timerStart  = timeSeconds ? performance.now() : null
-    lastActivityMs = performance.now()
     rafId = requestAnimationFrame(gameLoop)
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'Failed to start game'
