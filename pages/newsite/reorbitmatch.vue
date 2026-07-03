@@ -74,11 +74,14 @@
               ref="canvas"
               class="game-canvas"
               :style="{ touchAction: 'none' }"
+              draggable="false"
               @pointerdown="onPointerDown"
               @pointerup="onPointerUp"
               @pointermove="onPointerMove"
               @pointerleave="onPointerLeave"
               @pointercancel="onPointerCancel"
+              @dragstart.prevent
+              @contextmenu.prevent
               aria-label="Match-3 game grid"
               role="img"
             ></canvas>
@@ -1066,6 +1069,13 @@ onUnmounted(() => {
   min-height: 400px;
   gap: 0;
   background: #001230;
+  /* Dragging to match must never select text/UI or fire the mobile tap-highlight */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 /* HUD */
@@ -1155,6 +1165,12 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 /* How-to hint under the board */
