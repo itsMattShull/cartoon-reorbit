@@ -17,27 +17,38 @@ export default defineEventHandler(async (event) => {
   }
 
   const id = event.context.params?.id
-  const { visibility } = await readBody(event)
+  const body = await readBody(event)
+  const updates = {}
 
-  if (!VALID_VISIBILITY.includes(visibility)) {
-    throw createError({ statusCode: 400, statusMessage: 'visibility must be PUBLIC or CODE_ONLY' })
+  if ('visibility' in body) {
+    if (!VALID_VISIBILITY.includes(body.visibility)) {
+      throw createError({ statusCode: 400, statusMessage: 'visibility must be PUBLIC or CODE_ONLY' })
+    }
+    updates.visibility = body.visibility
+  }
+
+  if ('label' in body) {
+    updates.label = body.label?.trim() || null
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Nothing to update' })
   }
 
   const bg = await db.background.findUnique({ where: { id } })
   if (!bg) throw createError({ statusCode: 404, statusMessage: 'Background not found' })
 
-  const updated = await db.background.update({
-    where: { id },
-    data: { visibility }
-  })
+  const updated = await db.background.update({ where: { id }, data: updates })
 
-  await logAdminChange(db, {
-    userId: me.id,
-    area: 'Background',
-    key: 'visibility',
-    prevValue: bg.visibility,
-    newValue: visibility
-  })
+  for (const [key, newValue] of Object.entries(updates)) {
+    await logAdminChange(db, {
+      userId: me.id,
+      area: 'Background',
+      key,
+      prevValue: bg[key],
+      newValue
+    })
+  }
 
-  return { id: updated.id, visibility: updated.visibility }
+  return { id: updated.id, label: updated.label, visibility: updated.visibility }
 })
