@@ -76,10 +76,6 @@
               :style="{ touchAction: 'none' }"
               draggable="false"
               @pointerdown="onPointerDown"
-              @pointerup="onPointerUp"
-              @pointermove="onPointerMove"
-              @pointerleave="onPointerLeave"
-              @pointercancel="onPointerCancel"
               @dragstart.prevent
               @contextmenu.prevent
               aria-label="Match-3 game grid"
@@ -175,11 +171,27 @@ const ANIMATION_APPEAR_MS = 200
 const MIN_MATCH = 3          // a valid match is exactly this many tiles
 const MAX_MATCH = 3          // chain is capped at this many tiles
 
-// Chain extension only registers a tile when the finger is within this fraction of the
-// tile size from the tile's CENTER. The gutters this leaves between tiles let a diagonal
-// drag pass a corner without grabbing the orthogonal neighbor it clips. Must stay below
-// ~0.7 so a clean diagonal never lands inside an above/below/side tile's hot zone.
-const CHAIN_HIT_RADIUS = 0.62
+// Chain extension is direction-based rather than position-based: the drag vector from the
+// current tile's center is snapped to the nearest of 8 compass directions, and the neighbor
+// in that direction is added. This gives every neighbor — diagonals included — an equal 45°
+// acceptance cone, so a diagonal drag has to be off by more than 22.5° before it slips into
+// the tile above/below/beside. CHAIN_COMMIT_FRACTION is how far (as a fraction of a tile) the
+// finger must travel from the current tile's center before the next tile is committed.
+const CHAIN_COMMIT_FRACTION    = 0.45
+// Sliding the finger back within this fraction of the previous tile's center pops the last
+// tile off the chain (undo a step).
+const CHAIN_BACKTRACK_FRACTION = 0.5
+// Neighbor offset [dRow, dCol] for each snapped direction, indexed by the 8-way sector below.
+const SECTOR_DIRS = [
+  [0, 1],   // 0:  right
+  [1, 1],   // 1:  down-right
+  [1, 0],   // 2:  down
+  [1, -1],  // 3:  down-left
+  [0, -1],  // 4:  left
+  [-1, -1], // 5:  up-left
+  [-1, 0],  // 6:  up
+  [-1, 1]   // 7:  up-right
+]
 
 // Scoring — MUST stay in sync with server/utils/reorbitMatchEngine.js
 const BASE_MATCH_POINTS = 30
@@ -271,13 +283,6 @@ function makePRNG(seedHex) {
 function idxOf(row, col) { return row * gridSize + col }
 function rowOf(idx) { return Math.floor(idx / gridSize) }
 function colOf(idx) { return idx % gridSize }
-
-// 8-directional adjacency (Chebyshev distance exactly 1)
-function isEightAdjacent(a, b) {
-  const dr = Math.abs(rowOf(a) - rowOf(b))
-  const dc = Math.abs(colOf(a) - colOf(b))
-  return dr <= 1 && dc <= 1 && (dr + dc) > 0
-}
 
 // The combo streak IS the multiplier (1st match 1x, 2nd chained 2x, …), no cap.
 function computeMultiplier(c) { return c < 1 ? 1 : c }
@@ -381,24 +386,6 @@ function hitTest(px, py) {
     }
   }
   return -1
-}
-
-// Center-based hit test for extending the chain: the nearest tile center wins, but only
-// if the finger is within CHAIN_HIT_RADIUS × tileSize of it. This leaves gutters between
-// tiles so a diagonal drag doesn't clip the orthogonal (above/below/side) neighbor.
-function hitTestChain(px, py) {
-  let best = -1
-  let bestD2 = Infinity
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
-      const dx = px - tileCenterX(c)
-      const dy = py - tileCenterY(r)
-      const d2 = dx * dx + dy * dy
-      if (d2 < bestD2) { bestD2 = d2; best = idxOf(r, c) }
-    }
-  }
-  const radius = tileSize * CHAIN_HIT_RADIUS
-  return bestD2 <= radius * radius ? best : -1
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
@@ -705,14 +692,44 @@ function wait(ms) { return new Promise(r => setTimeout(r, ms)) }
 function getCanvasPos(e) {
   if (!canvas.value) return { x: 0, y: 0 }
   const rect = canvas.value.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  // The board sits inside the newsite layout's `transform: scale(...)` wrapper, so the canvas
+  // is painted on screen at rect.width/height while tiles are drawn in the canvas's own
+  // coordinate space (canvas.width/height ÷ devicePixelRatio — matching renderFrame). Without
+  // converting between the two, a click lands off-target by the layout scale factor, and the
+  // error grows with distance from center (transform-origin: top center) — picking a far tile.
+  const drawW = canvas.value.width  / devicePixelRatio
+  const drawH = canvas.value.height / devicePixelRatio
+  const scaleX = rect.width  ? drawW / rect.width  : 1
+  const scaleY = rect.height ? drawH / rect.height : 1
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top)  * scaleY
+  }
+}
+
+// While a drag is active we track it on `window`, not the canvas. Firefox delivers
+// canvas-scoped pointermove/pointerup unreliably during a captured drag (it can drop
+// moves when the pointer crosses the tile gaps or leaves the canvas, and sometimes loses
+// the final pointerup), which makes chains — diagonals especially — hard to complete.
+// Window listeners keep the whole drag flowing in every browser.
+function attachDragListeners() {
+  window.addEventListener('pointermove', onPointerMove, { passive: false })
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerCancel)
+}
+function detachDragListeners() {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerCancel)
 }
 
 function onPointerDown(e) {
   if (animating || uiState.value !== 'playing') return
   e.preventDefault()
-  canvas.value?.setPointerCapture?.(e.pointerId)
+  // setPointerCapture can throw in Firefox; the window listeners cover us regardless.
+  try { canvas.value?.setPointerCapture?.(e.pointerId) } catch {}
   pointerDown = true
+  attachDragListeners()
   const pos = getCanvasPos(e)
   pointerX = pos.x; pointerY = pos.y
   const idx = hitTest(pos.x, pos.y)
@@ -727,30 +744,50 @@ function onPointerMove(e) {
   pointerX = pos.x; pointerY = pos.y
   if (animating || uiState.value !== 'playing' || chain.length === 0) return
 
-  const idx = hitTestChain(pos.x, pos.y)
-  if (idx === -1) return
-  const last = chain[chain.length - 1]
-  if (idx === last) return
+  const step = tileSize + TILE_GAP
 
-  // Backtrack: sliding onto the second-to-last cell pops the last one off.
-  if (chain.length >= 2 && idx === chain[chain.length - 2]) {
-    chain.pop()
-    vibrate(6)
-    return
+  // Backtrack: sliding the finger back toward the previous tile pops the last one off.
+  if (chain.length >= 2) {
+    const prev = chain[chain.length - 2]
+    const dxp = pos.x - tileCenterX(colOf(prev))
+    const dyp = pos.y - tileCenterY(rowOf(prev))
+    if (Math.hypot(dxp, dyp) <= step * CHAIN_BACKTRACK_FRACTION) {
+      chain.pop()
+      vibrate(6)
+      return
+    }
   }
-  if (chain.includes(idx)) return         // ignore other revisits
-  if (chain.length >= MAX_MATCH) return    // hard cap at 3
-  if (!isEightAdjacent(last, idx)) return  // keep the drag path contiguous
 
-  chain.push(idx)
-  vibrate(8)
+  // Extend toward the finger, one 8-neighbor at a time. Snapping the drag vector to the
+  // nearest of 8 directions gives diagonals the same 45° target as orthogonal moves, so a
+  // diagonal drag no longer slips into the tile above/below/beside it. Looping lets a fast
+  // flick fill in the tiles it skipped over.
+  let guard = 0
+  while (chain.length < MAX_MATCH && guard++ < gridSize) {
+    const last = chain[chain.length - 1]
+    const dx = pos.x - tileCenterX(colOf(last))
+    const dy = pos.y - tileCenterY(rowOf(last))
+    if (Math.hypot(dx, dy) < step * CHAIN_COMMIT_FRACTION) break  // finger hasn't left this tile
+
+    const sector = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8
+    const [dRow, dCol] = SECTOR_DIRS[sector]
+    const nr = rowOf(last) + dRow
+    const nc = colOf(last) + dCol
+    if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) break  // off the board
+    const idx = idxOf(nr, nc)
+    if (chain.includes(idx)) break  // don't revisit a tile already in the chain
+
+    chain.push(idx)
+    vibrate(8)
+  }
 }
 
 function onPointerUp(e) {
   if (!pointerDown) return
   e.preventDefault()
   pointerDown = false
-  canvas.value?.releasePointerCapture?.(e.pointerId)
+  detachDragListeners()
+  try { canvas.value?.releasePointerCapture?.(e.pointerId) } catch {}
 
   const c = chain
   chain = []
@@ -770,11 +807,10 @@ function onPointerUp(e) {
   }
 }
 
-function onPointerLeave() { /* pointer capture keeps events flowing; ignore */ }
-
 function onPointerCancel(e) {
   pointerDown = false
-  canvas.value?.releasePointerCapture?.(e.pointerId)
+  detachDragListeners()
+  try { canvas.value?.releasePointerCapture?.(e.pointerId) } catch {}
   chain = []
 }
 
@@ -887,6 +923,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null }
   resizeObserver?.disconnect()
+  detachDragListeners()
 })
 </script>
 
