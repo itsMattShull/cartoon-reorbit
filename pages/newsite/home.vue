@@ -99,6 +99,12 @@ html.newsite-home body {
   }
 }
 
+@media (min-width: 769px) {
+  .home-image-cell {
+    aspect-ratio: 374 / 292;
+  }
+}
+
 .home-image-cell {
   display: flex;
   align-items: center;
