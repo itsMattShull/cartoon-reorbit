@@ -746,6 +746,11 @@
               <p class="text-xs text-gray-400 mb-1">Board dimensions (4–10)</p>
               <input type="number" v-model.number="reorbitGridSize" min="4" max="10" class="input" />
             </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Combo Cooldown (ms)</label>
+              <p class="text-xs text-gray-400 mb-1">Time allowed between matches to keep the combo growing (1000–15000). Higher = combos are easier to hold.</p>
+              <input type="number" v-model.number="reorbitComboMs" min="1000" max="15000" step="500" class="input" />
+            </div>
           </div>
 
           <div class="mb-6 border rounded-lg p-4">
@@ -1323,6 +1328,7 @@ async function loadSettings() {
   reorbitTimeSecondsInput.value = ro.reorbitTimeSeconds != null ? String(ro.reorbitTimeSeconds) : ''
   reorbitEmojis.value           = ro.reorbitEmojis ?? []
   reorbitGridSize.value         = ro.reorbitGridSize ?? 8
+  reorbitComboMs.value          = ro.reorbitComboMs ?? 3500
 }
 
 // Win Wheel state
@@ -1714,6 +1720,7 @@ const reorbitPointsPerGame   = ref(50)
 const reorbitTimeSecondsInput = ref('')  // '' = unlimited (null)
 const reorbitEmojis          = ref([])
 const reorbitGridSize        = ref(8)
+const reorbitComboMs         = ref(3500)
 const reorbitEmojiInput      = ref('')
 const loadingReorbit         = ref(false)
 
@@ -1740,7 +1747,8 @@ async function saveReorbitConfig() {
         reorbitPointsPerGame:  reorbitPointsPerGame.value,
         reorbitTimeSeconds:    reorbitTimeSecondsInput.value !== '' ? Number(reorbitTimeSecondsInput.value) : null,
         reorbitEmojis:         reorbitEmojis.value,
-        reorbitGridSize:       reorbitGridSize.value
+        reorbitGridSize:       reorbitGridSize.value,
+        reorbitComboMs:        reorbitComboMs.value
       }
     })
     toastMessage.value = 'ReOrbit Match settings saved!'; toastType.value = 'success'

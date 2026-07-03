@@ -107,6 +107,9 @@ function validatePayload(payload) {
     if (payload.reorbitTimeSeconds != null && (typeof payload.reorbitTimeSeconds !== 'number' || payload.reorbitTimeSeconds < 30)) {
       throw createError({ statusCode: 400, statusMessage: '"reorbitTimeSeconds" must be null or a number >= 30' })
     }
+    if (payload.reorbitComboMs == null || typeof payload.reorbitComboMs !== 'number' || payload.reorbitComboMs < 1000 || payload.reorbitComboMs > 15000) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitComboMs" must be a number between 1000 and 15000' })
+    }
     if (payload.reorbitGridSize == null || typeof payload.reorbitGridSize !== 'number' || payload.reorbitGridSize < 4 || payload.reorbitGridSize > 10) {
       throw createError({ statusCode: 400, statusMessage: '"reorbitGridSize" must be between 4 and 10' })
     }
@@ -152,6 +155,7 @@ export default defineEventHandler(async (event) => {
     reorbitTimeSeconds = null,
     reorbitEmojis = [],
     reorbitGridSize,
+    reorbitComboMs,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -328,7 +332,8 @@ export default defineEventHandler(async (event) => {
           reorbitPointsPerGame,
           reorbitTimeSeconds: reorbitTimeSeconds || null,
           reorbitEmojis,
-          reorbitGridSize
+          reorbitGridSize,
+          reorbitComboMs
         }
         createData = { ...createData, ...reorbitData }
         updateData = { ...updateData, ...reorbitData }
@@ -494,6 +499,7 @@ export default defineEventHandler(async (event) => {
             ['reorbitPointsPerGame', before?.reorbitPointsPerGame, reorbitPointsPerGame],
             ['reorbitTimeSeconds', before?.reorbitTimeSeconds ?? null, reorbitTimeSeconds || null],
             ['reorbitGridSize', before?.reorbitGridSize, reorbitGridSize],
+            ['reorbitComboMs', before?.reorbitComboMs, reorbitComboMs],
             ['reorbitEmojis', JSON.stringify(before?.reorbitEmojis ?? []), JSON.stringify(reorbitEmojis)]
           ]
           for (const [key, prev, next] of changes) {

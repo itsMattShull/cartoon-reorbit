@@ -19,9 +19,8 @@ const MAX_MATCH = 3           // chain is capped at this many tiles
 const MIN_MOVE_INTERVAL_MS = 100 // no human makes two matches faster than this
 
 // Scoring — kept in sync with the client (pages/newsite/reorbitmatch.vue).
-const BASE_MATCH_POINTS = 30      // points for a single 3-match at 1x
-const COMBO_WINDOW_MS   = 2500    // consecutive matches within this window grow the combo
-const MAX_COMBO_MULT    = 8       // multiplier ceiling
+const BASE_MATCH_POINTS = 30            // points for a single 3-match at 1x
+const DEFAULT_COMBO_WINDOW_MS = 3500    // fallback combo window; admin-configurable per game
 
 // splitmix32 seeded PRNG — fast and high-quality for 32-bit seeds.
 // We fold a 128-bit hex token down to a 64-bit pair of seeds.
@@ -121,33 +120,6 @@ function hasPossibleMoves(board, gridSize) {
   return false
 }
 
-// Find one valid 3-chain (returns [{row,col},{row,col},{row,col}]) or null. Used for
-// the client idle hint and to guarantee a generated board is playable.
-function findHint(board, gridSize) {
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
-      const color = board[r * gridSize + c]
-      if (color === -1) continue
-      // Collect same-color 8-neighbors of (r,c).
-      const neighbors = []
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue
-          const nr = r + dr
-          const nc = c + dc
-          if (nr < 0 || nr >= gridSize || nc < 0 || nc >= gridSize) continue
-          if (board[nr * gridSize + nc] === color) neighbors.push({ row: nr, col: nc })
-        }
-      }
-      if (neighbors.length >= 2) {
-        // (r,c) is a degree>=2 vertex → center of a 3-path.
-        return [neighbors[0], { row: r, col: c }, neighbors[1]]
-      }
-    }
-  }
-  return null
-}
-
 // Generate a flat board of emoji indices. Deterministic from seedHex. Guarantees at
 // least one valid 3-chain exists (the board is stored server-side, so the exact bytes
 // are authoritative; the guarantee just prevents shipping an instantly-dead board).
@@ -202,16 +174,17 @@ function validateChain(board, cells, gridSize) {
   return color
 }
 
-// Combo multiplier for a given streak length (1-based). Capped at MAX_COMBO_MULT.
+// The combo streak IS the score multiplier: the 1st match is 1x, a 2nd chained match
+// is 2x, a 3rd is 3x, and so on with no cap.
 function getComboMultiplier(combo) {
-  if (combo <= 1) return 1
-  return Math.min(combo, MAX_COMBO_MULT)
+  return combo < 1 ? 1 : combo
 }
 
 // Replay the entire game from the initial board + move log. Returns the authoritative
 // score. Throws if any move is invalid. `fillSeedHex` drives deterministic refills and
-// must be the same value handed to the client at /start.
-function replayGame(initialBoard, moveLog, gridSize, emojiCount, fillSeedHex) {
+// must be the same value handed to the client at /start. `comboWindowMs` is the combo
+// cooldown (admin-configurable) and must match the value handed to the client.
+function replayGame(initialBoard, moveLog, gridSize, emojiCount, fillSeedHex, comboWindowMs = DEFAULT_COMBO_WINDOW_MS) {
   const fillRng = makePRNG(fillSeedHex)
   let board = [...initialBoard]
   let score = 0
@@ -224,7 +197,7 @@ function replayGame(initialBoard, moveLog, gridSize, emojiCount, fillSeedHex) {
 
     // Combo is derived purely from move timestamps so it is reproducible here.
     const ts = move.ts
-    if (lastTs !== null && (ts - lastTs) <= COMBO_WINDOW_MS) combo++
+    if (lastTs !== null && (ts - lastTs) <= comboWindowMs) combo++
     else combo = 1
     lastTs = ts
 
@@ -243,7 +216,6 @@ export {
   generateBoard,
   validateChain,
   hasPossibleMoves,
-  findHint,
   applyGravity,
   fillEmpty,
   getComboMultiplier,
@@ -254,6 +226,5 @@ export {
   MIN_MATCH,
   MAX_MATCH,
   BASE_MATCH_POINTS,
-  COMBO_WINDOW_MS,
-  MAX_COMBO_MULT
+  DEFAULT_COMBO_WINDOW_MS
 }

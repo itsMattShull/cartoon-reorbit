@@ -968,6 +968,7 @@ model GameConfig {
   reorbitTimeSeconds    Int?
   reorbitEmojis         String[] @default([])
   reorbitGridSize       Int     @default(8)
+  reorbitComboMs        Int     @default(3500)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
