@@ -33,9 +33,10 @@
       <div v-for="(c, idx) in cards" :key="idx" class="shrink-0">
         <ClashCToonCard
           :card="c"
-          :selected="selected === c"
-          :afford="c.cost <= remainingEnergy"
-          @select="() => { if (!disabled && c.cost <= energy) emit('select', c) }"
+          :selected="isSelected(c, idx)"
+          :afford="isPlaced(idx) || c.cost <= remainingEnergy"
+          :placed="isPlaced(idx)"
+          @select="() => { if (!disabled && !isPlaced(idx) && c.cost <= energy) emit('select', c, idx) }"
           @info="emit('info',$event)"
         />
       </div>
@@ -66,8 +67,23 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   remainingEnergy: { type: Number, default: 1 },
   status:   { type: String, default: '' },
+  // hand indexes of cards already placed on a lane this turn (pending placements).
+  // Index-based identity is required: the server re-broadcasts the battle state
+  // (fresh objects) every second and decks may contain duplicate cToons, so
+  // neither object references nor ctoon ids can identify a physical card.
+  placedIndexes: { type: Array, default: () => [] },
+  // hand index of the currently selected card (-1 = none / not tracked)
+  selectedIndex: { type: Number, default: -1 },
 })
 const emit = defineEmits(['select','info'])
+
+function isPlaced(idx) {
+  return props.placedIndexes.includes(idx)
+}
+
+function isSelected(c, idx) {
+  return props.selectedIndex >= 0 ? props.selectedIndex === idx : props.selected === c
+}
 
 const abilityLine = computed(() => {
   const c = props.selected

@@ -1,7 +1,7 @@
 <template>
   <div
     :class="outerClasses"
-    :draggable="afford !== false"
+    :draggable="afford !== false && !placed"
     @contextmenu.prevent
     @dragstart="dragStart"
     @pointerdown="startPress"
@@ -9,6 +9,16 @@
     @pointerleave="cancelPress"
     @pointercancel="cancelPress"
   >
+    <!-- placed-this-turn overlay -->
+    <div
+      v-if="placed"
+      class="absolute inset-0 z-10 bg-white/60 flex items-center justify-center rounded pointer-events-none"
+    >
+      <span class="bg-gray-800 text-white text-[10px] font-bold tracking-wide px-2 py-0.5 rounded -rotate-12 shadow">
+        PLAYED
+      </span>
+    </div>
+
     <div class="relative w-24 h-24">
       <!-- the toon art -->
       <img
@@ -49,6 +59,7 @@ const props = defineProps({
   card:     { type: Object,  required: true },
   selected: { type: Boolean, default: false },
   afford:   { type: Boolean, default: null },    // passed from ClashHand
+  placed:   { type: Boolean, default: false },   // already placed on a lane this turn
   size:     { type: String,  default: 'large' }  // 'large' | 'small'
 })
 const emit = defineEmits(['select','info'])
@@ -62,7 +73,7 @@ let pressTimer        = null
 let longPressFired    = false
 
 function startPress(evt) {
-  if (props.afford === false) return
+  if (props.afford === false && !props.placed) return
   evt.preventDefault()
   longPressFired = false
 
@@ -74,11 +85,11 @@ function startPress(evt) {
 }
 
 function endPress(evt) {
-  if (props.afford === false) return
+  if (props.afford === false && !props.placed) return
   clearTimeout(pressTimer)
 
   // if we didn’t already trigger the long-press, it’s a tap → select
-  if (!longPressFired) {
+  if (!longPressFired && !props.placed) {
     emit('select', props.card)
   }
 }
@@ -90,7 +101,7 @@ function cancelPress() {
 // build the container classes
 const outerClasses = computed(() => [
   // base layout
-  'flex flex-col items-center justify-center select-none transition', // transparent if small, white if large
+  'flex flex-col items-center justify-center select-none transition relative', // transparent if small, white if large
   isSmall.value ? 'bg-transparent' : 'bg-white',
   'w-24 text-xs rounded',
 
@@ -100,11 +111,13 @@ const outerClasses = computed(() => [
   // small cards are simply scaled down
   // isSmall.value && 'transform scale-75',
 
-  // afford / not afford
-  props.afford === false ? 'cursor-not-allowed opacity-30' : 'cursor-pointer',
+  // placed / afford / not afford
+  props.placed
+    ? 'cursor-not-allowed'
+    : (props.afford === false ? 'cursor-not-allowed opacity-30' : 'cursor-pointer'),
 
   // selected ring
-  props.selected && props.afford !== false && 'ring-2 ring-indigo-400',
+  props.selected && !props.placed && props.afford !== false && 'ring-2 ring-indigo-400',
 ])
 
 // overlay positions (hard-coded against your 96×96 template)

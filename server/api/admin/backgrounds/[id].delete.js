@@ -43,55 +43,78 @@ export default defineEventHandler(async (event) => {
   })
   const affectedSearchIds = [...new Set(affectedPrizes.map(p => p.cZoneSearchId))]
 
+  // Find affected CZone rows BEFORE opening the transaction. The CZone table
+  // has no index on `background`/`layoutData`, so this predicate requires a
+  // full-table scan with per-row JSONB unnesting — fine as a plain query (no
+  // deadline), but ruinous inside a Prisma interactive transaction, whose
+  // default 5s timeout it can blow past as the table grows, silently rolling
+  // back the whole delete.
+  const affectedCzones = await db.$queryRaw`
+    SELECT id FROM "CZone"
+    WHERE "background" = ${bg.imagePath}
+       OR EXISTS (
+         SELECT 1 FROM jsonb_array_elements("layoutData"->'zones') AS z
+         WHERE z->>'background' = ${bg.imagePath}
+       )
+  `
+  const affectedCzoneIds = affectedCzones.map((r) => r.id)
+
   // All DB operations run in a single transaction.
   // Junction rows with onDelete:Restrict must be deleted before the Background row.
   // File deletion happens AFTER the transaction commits so a DB failure never
   // leaves a missing file with a live DB record pointing at it.
-  await db.$transaction(async (tx) => {
-    await tx.achievementRewardBackground.deleteMany({ where: { backgroundId: id } })
-    await tx.rewardBackground.deleteMany({ where: { backgroundId: id } })
-    await tx.userBackground.deleteMany({ where: { backgroundId: id } })
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.achievementRewardBackground.deleteMany({ where: { backgroundId: id } })
+      await tx.rewardBackground.deleteMany({ where: { backgroundId: id } })
+      await tx.userBackground.deleteMany({ where: { backgroundId: id } })
 
-    // Clear CZone.background (top-level string column)
-    await tx.$executeRaw`
-      UPDATE "CZone"
-      SET "background" = ''
-      WHERE "background" = ${bg.imagePath}
-    `
+      // Targeted by primary key (from the pre-computed list above) so this
+      // stays fast — and within the transaction timeout — no matter how
+      // large the CZone table is.
+      if (affectedCzoneIds.length > 0) {
+        // Clear CZone.background (top-level string column)
+        await tx.$executeRaw`
+          UPDATE "CZone"
+          SET "background" = ''
+          WHERE id = ANY(${affectedCzoneIds}) AND "background" = ${bg.imagePath}
+        `
 
-    // Remove background key from any zone objects inside CZone.layoutData.zones
-    await tx.$executeRaw`
-      UPDATE "CZone"
-      SET "layoutData" = jsonb_set(
-        "layoutData",
-        '{zones}',
-        COALESCE(
-          (SELECT jsonb_agg(
-            CASE WHEN zone->>'background' = ${bg.imagePath}
-              THEN zone - 'background'
-              ELSE zone
-            END
-          ) FROM jsonb_array_elements("layoutData"->'zones') AS zone),
-          '[]'::jsonb
-        )
-      )
-      WHERE jsonb_typeof("layoutData"->'zones') = 'array'
-        AND EXISTS (
-          SELECT 1 FROM jsonb_array_elements("layoutData"->'zones') AS z
-          WHERE z->>'background' = ${bg.imagePath}
-        )
-    `
+        // Remove background key from any zone objects inside CZone.layoutData.zones
+        await tx.$executeRaw`
+          UPDATE "CZone"
+          SET "layoutData" = jsonb_set(
+            "layoutData",
+            '{zones}',
+            COALESCE(
+              (SELECT jsonb_agg(
+                CASE WHEN zone->>'background' = ${bg.imagePath}
+                  THEN zone - 'background'
+                  ELSE zone
+                END
+              ) FROM jsonb_array_elements("layoutData"->'zones') AS zone),
+              '[]'::jsonb
+            )
+          )
+          WHERE id = ANY(${affectedCzoneIds})
+            AND jsonb_typeof("layoutData"->'zones') = 'array'
+        `
+      }
 
-    // Remove this background's filename from CZoneSearchPrize.conditionBackgrounds arrays
-    await tx.$executeRaw`
-      UPDATE "CZoneSearchPrize"
-      SET "conditionBackgrounds" = array_remove("conditionBackgrounds", ${bg.filename})
-      WHERE ${bg.filename} = ANY("conditionBackgrounds")
-    `
+      // Remove this background's filename from CZoneSearchPrize.conditionBackgrounds arrays
+      await tx.$executeRaw`
+        UPDATE "CZoneSearchPrize"
+        SET "conditionBackgrounds" = array_remove("conditionBackgrounds", ${bg.filename})
+        WHERE ${bg.filename} = ANY("conditionBackgrounds")
+      `
 
-    // All child rows cleared — safe to delete the Background row
-    await tx.background.delete({ where: { id } })
-  })
+      // All child rows cleared — safe to delete the Background row
+      await tx.background.delete({ where: { id } })
+    }, { timeout: 20000, maxWait: 5000 })
+  } catch (err) {
+    console.error('[backgrounds/delete] transaction failed:', err)
+    throw createError({ statusCode: 500, statusMessage: 'Failed to delete background' })
+  }
 
   // DB committed — delete image file from disk (non-fatal if missing)
   try { await unlink(fsPathFromFilename(bg.filename)) } catch {}

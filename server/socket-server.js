@@ -1569,16 +1569,19 @@ async function startPvpMatch(roomId) {
   })
   pvpRooms.delete(roomId); // no longer a lobby entity
   syncDeletePvpRoom(roomId)  // remove lobby entry from Redis now that match is active
-  syncPvpMatch(roomId, pvpMatches.get(roomId))
+  const match = pvpMatches.get(roomId);
+  syncPvpMatch(roomId, match);
 
-  (async () => {
-    const match = pvpMatches.get(roomId);
-    const sockets = await io.in(roomId).fetchSockets();
-    for (const s of sockets) {
-      s.emit('gameStart', viewForUser(match, s.data.userId));
-    }
-  })();
   startPvpTimer(io, roomId)
+
+  const sockets = await io.in(roomId).fetchSockets();
+  for (const s of sockets) {
+    const snap = viewForUser(match, s.data.userId);
+    if (snap.phase === 'select' && !snap.selectEndsAt && match.selectDeadline) {
+      snap.selectEndsAt = match.selectDeadline;
+    }
+    s.emit('gameStart', snap);
+  }
 }
 
 function startPvpTimer(io, roomId) {

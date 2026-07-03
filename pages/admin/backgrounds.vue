@@ -502,6 +502,7 @@ async function confirmDelete() {
   deleteModal.error = ''
   try {
     await $fetch(`/api/admin/backgrounds/${deleteModal.bg.id}`, { method: 'DELETE' })
+    deleteModal.deleting = false
     closeDelete()
     await refreshNuxtData('backgrounds')
   } catch (err) {
