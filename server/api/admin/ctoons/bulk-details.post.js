@@ -40,8 +40,15 @@ export default defineEventHandler(async (event) => {
       mintLimitType: true,
       mintEndDate: true,
       type: true,
+      isSecondEdition: true,
+      relatedSecondEdition: { select: { id: true } },
     }
   })
 
-  return ctoons
+  // Flatten the relation into a simple boolean for consumers (e.g. the
+  // Make 2nd Ed modal) that just need to know eligibility, not the id.
+  return ctoons.map(c => {
+    const { relatedSecondEdition, ...rest } = c
+    return { ...rest, hasSecondEdition: Boolean(relatedSecondEdition) }
+  })
 })
