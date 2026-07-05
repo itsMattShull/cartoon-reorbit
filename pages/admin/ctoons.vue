@@ -5,7 +5,7 @@
     <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-16 md:mt-20">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 space-y-4 lg:space-y-0">
         <h1 class="text-2xl font-semibold">All cToons</h1>
-        <div class="flex space-x-2">
+        <div class="flex flex-wrap gap-2">
           <NuxtLink
             to="/admin/addCtoon"
             class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -32,6 +32,20 @@
             :title="isSearching ? 'Bulk edit filtered cToons' : 'Apply a filter or search first to enable bulk edit'"
           >
             Bulk Edit cToons
+          </button>
+
+          <button
+            :disabled="!isSearching"
+            @click="openMakeSecondEdition"
+            :class="[
+              'px-4 py-2 rounded font-medium transition-colors',
+              isSearching
+                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            ]"
+            :title="isSearching ? 'Create Second Edition versions of the filtered cToons' : 'Apply a filter or search first to enable Make 2nd Ed'"
+          >
+            Make 2nd Ed
           </button>
         </div>
       </div>
@@ -267,6 +281,14 @@
       @close="showBulkEditModal = false"
       @saved="onBulkSaved"
     />
+
+    <!-- Make 2nd Ed Modal -->
+    <MakeSecondEditionModal
+      v-if="showMakeSecondEditionModal"
+      :ctoon-ids="displayedCtoons.map(c => c.id)"
+      @close="showMakeSecondEditionModal = false"
+      @saved="onMakeSecondEditionSaved"
+    />
   </div>
 </template>
 
@@ -276,6 +298,7 @@ definePageMeta({ title: 'Admin - cToons', middleware: ['auth','admin'], layout: 
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
+import MakeSecondEditionModal from '~/components/MakeSecondEditionModal.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 /* Meta options from API */
@@ -291,6 +314,28 @@ function openBulkEdit() {
 async function onBulkSaved() {
   showBulkEditModal.value = false
   // Re-run current search/browse to reflect updates
+  if (isSearching.value) {
+    const q = String(searchTerm.value || '').trim()
+    await runSearch({ q: q.length >= 3 ? q : '', set: selectedSet.value, series: selectedSeries.value })
+  } else {
+    await loadPage(currentPage.value)
+  }
+}
+
+/* Make 2nd Ed modal */
+const showMakeSecondEditionModal = ref(false)
+function openMakeSecondEdition() {
+  if (!isSearching.value) return
+  showMakeSecondEditionModal.value = true
+}
+async function onMakeSecondEditionSaved(result) {
+  showMakeSecondEditionModal.value = false
+  const created = result?.created?.length || 0
+  const failed = result?.errors?.length || 0
+  let msg = `Created ${created} Second Edition${created !== 1 ? 's' : ''}.`
+  if (failed) msg += ` ${failed} record${failed !== 1 ? 's' : ''} could not be created.`
+  alert(msg)
+  // Re-run current search/browse to reflect the new records
   if (isSearching.value) {
     const q = String(searchTerm.value || '').trim()
     await runSearch({ q: q.length >= 3 ? q : '', set: selectedSet.value, series: selectedSeries.value })
