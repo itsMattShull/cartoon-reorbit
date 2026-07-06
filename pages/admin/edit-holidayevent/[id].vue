@@ -71,7 +71,12 @@
             >
               <img v-if="s.assetPath" :src="s.assetPath" class="w-8 h-8 object-cover rounded border border-gray-300" />
               <div class="flex-1 truncate">
-                <p class="truncate font-medium">{{ s.name }}</p>
+                <p class="truncate font-medium flex items-center gap-2">
+                  <span class="truncate">{{ s.name }}</span>
+                  <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                    {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                  </span>
+                </p>
                 <p class="text-xs text-gray-500">{{ s.rarity }}</p>
               </div>
             </li>
@@ -82,7 +87,10 @@
           <div v-for="id in itemIds" :key="id" class="flex items-center gap-3 px-4 py-2">
             <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-10 h-10 object-cover rounded border border-gray-300" />
             <div class="flex-1 truncate">
-              <p class="truncate font-medium">{{ lookup[id]?.name }}</p>
+              <p class="truncate font-medium flex items-center gap-2">
+                <span class="truncate">{{ lookup[id]?.name }}</span>
+                <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+              </p>
               <p class="text-xs text-gray-500">{{ lookup[id]?.rarity }}</p>
             </div>
             <button type="button" @click="toggleItem(lookup[id])" class="text-red-700 hover:underline text-sm focus-visible:outline-red-700">
@@ -129,7 +137,12 @@
             >
               <img v-if="s.assetPath" :src="s.assetPath" class="w-8 h-8 object-cover rounded border border-gray-300" />
               <div class="flex-1 truncate">
-                <p class="truncate font-medium">{{ s.name }}</p>
+                <p class="truncate font-medium flex items-center gap-2">
+                  <span class="truncate">{{ s.name }}</span>
+                  <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                    {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                  </span>
+                </p>
                 <p class="text-xs text-gray-500">{{ s.rarity }}</p>
               </div>
             </li>
@@ -140,7 +153,10 @@
           <div v-for="id in poolIds" :key="id" class="flex items-center gap-3 px-4 py-2">
             <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-10 h-10 object-cover rounded border border-gray-300" />
             <div class="flex-1 truncate">
-              <p class="truncate font-medium">{{ lookup[id]?.name }}</p>
+              <p class="truncate font-medium flex items-center gap-2">
+                <span class="truncate">{{ lookup[id]?.name }}</span>
+                <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+              </p>
             </div>
             <div class="flex items-center gap-1">
               <input v-model.number="poolWeights[id]" type="number" min="0" max="100" class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600" />
@@ -388,4 +404,16 @@ async function submit() {
 
 <style scoped>
 .cto-autocomplete ul { z-index: 60; }
+.edition-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.edition-badge-2nd { background: #7c3aed; color: #fff; }
+.edition-badge-1st { background: #e5e7eb; color: #374151; }
 </style>

@@ -228,7 +228,12 @@
                   >
                     <img :src="ctoon.assetPath" class="h-10 w-auto rounded" />
                     <div>
-                      <p class="font-medium">{{ ctoon.name }}</p>
+                      <p class="font-medium flex items-center gap-2">
+                        <span class="truncate">{{ ctoon.name }}</span>
+                        <span :class="ctoon.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                          {{ ctoon.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                        </span>
+                      </p>
                       <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
                     </div>
                   </li>
@@ -246,7 +251,10 @@
                     <button type="button" class="flex items-center gap-3 flex-1 text-left" @click="togglePrizeRow(row)">
                       <img :src="row.ctoon.assetPath" class="h-10 w-auto rounded" />
                       <div>
-                        <div class="font-medium">{{ row.ctoon.name }}</div>
+                        <div class="font-medium flex items-center gap-2">
+                          <span>{{ row.ctoon.name }}</span>
+                          <span v-if="row.ctoon.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                        </div>
                         <div class="text-xs text-gray-500">{{ row.ctoon.rarity }}</div>
                       </div>
                     </button>
@@ -349,7 +357,12 @@
                               >
                                 <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
                                 <div>
-                                  <p class="font-medium">{{ ctoon.name }}</p>
+                                  <p class="font-medium flex items-center gap-2">
+                                    <span class="truncate">{{ ctoon.name }}</span>
+                                    <span :class="ctoon.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                                      {{ ctoon.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                                    </span>
+                                  </p>
                                   <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
                                 </div>
                               </li>
@@ -357,7 +370,10 @@
                           </div>
                           <div v-if="row.conditionCtoonInZone" class="mt-2 flex items-center gap-3 bg-white border rounded px-2 py-1">
                             <img :src="row.conditionCtoonInZone.assetPath" class="h-8 w-auto rounded" />
-                            <div class="flex-1 text-sm">{{ row.conditionCtoonInZone.name }}</div>
+                            <div class="flex-1 text-sm flex items-center gap-2">
+                              <span>{{ row.conditionCtoonInZone.name }}</span>
+                              <span v-if="row.conditionCtoonInZone.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                            </div>
                             <button type="button" class="text-xs text-red-600" @click="clearConditionCtoonInZone(row)">Remove</button>
                           </div>
                         </div>
@@ -391,7 +407,12 @@
                               >
                                 <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
                                 <div>
-                                  <p class="font-medium">{{ ctoon.name }}</p>
+                                  <p class="font-medium flex items-center gap-2">
+                                    <span class="truncate">{{ ctoon.name }}</span>
+                                    <span :class="ctoon.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                                      {{ ctoon.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                                    </span>
+                                  </p>
                                   <p class="text-xs text-gray-500">{{ ctoon.rarity }}</p>
                                 </div>
                               </li>
@@ -400,7 +421,10 @@
                           <div v-if="row.conditionUserOwnsList.length" class="space-y-2">
                             <div v-for="entry in row.conditionUserOwnsList" :key="entry.ctoonId" class="flex items-center gap-3 bg-white border rounded px-2 py-1">
                               <img v-if="entry.ctoon?.assetPath" :src="entry.ctoon.assetPath" class="h-8 w-auto rounded" />
-                              <div class="flex-1 text-sm">{{ entry.ctoon?.name || entry.ctoonId }}</div>
+                              <div class="flex-1 text-sm flex items-center gap-2">
+                                <span>{{ entry.ctoon?.name || entry.ctoonId }}</span>
+                                <span v-if="entry.ctoon?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                              </div>
                               <div class="flex items-center gap-2">
                                 <label class="text-xs text-gray-500"># Owned</label>
                                 <input v-model.number="entry.count" type="number" min="1" step="1" class="w-20 border rounded px-2 py-1" />
@@ -1424,3 +1448,18 @@ onMounted(async () => {
   await Promise.all([loadSearches(), loadBackgrounds()])
 })
 </script>
+
+<style scoped>
+.edition-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.edition-badge-2nd { background: #7c3aed; color: #fff; }
+.edition-badge-1st { background: #e5e7eb; color: #374151; }
+</style>

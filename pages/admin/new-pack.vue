@@ -302,7 +302,12 @@
                   class="w-8 h-8 object-cover rounded border border-gray-300"
                 />
                 <div class="flex-1 truncate">
-                  <p class="truncate font-medium">{{ s.name }}</p>
+                  <p class="truncate font-medium flex items-center gap-2">
+                    <span class="truncate">{{ s.name }}</span>
+                    <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                      {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                    </span>
+                  </p>
                   <p class="text-xs text-gray-500">{{ s.rarity }}</p>
                 </div>
               </li>
@@ -374,7 +379,10 @@
                 class="w-10 h-10 object-cover rounded border border-gray-300"
               />
               <div class="flex-1 truncate">
-                <p class="truncate font-medium">{{ lookup[id]?.name }}</p>
+                <p class="truncate font-medium flex items-center gap-2">
+                  <span class="truncate">{{ lookup[id]?.name }}</span>
+                  <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                </p>
               </div>
 
               <!-- weight -->
@@ -778,6 +786,18 @@ async function submit() {
 }
 .weight-ok  { @apply bg-green-100 text-green-700; }
 .weight-bad { @apply bg-red-100   text-red-700;   }
+.edition-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.edition-badge-2nd { background: #7c3aed; color: #fff; }
+.edition-badge-1st { background: #e5e7eb; color: #374151; }
 .group-row:not(:last-child) {
   border-bottom: 1px solid theme('colors.gray.200');
 }

@@ -160,7 +160,10 @@
                     >
                       <img :src="c.assetPath" class="tr-sug-ctoon-img" />
                       <div>
-                        <div>{{ c.name }}</div>
+                        <div class="tr-suggest-name-row">
+                          <span>{{ c.name }}</span>
+                          <span v-if="c.isSecondEdition" class="tm-2nd-badge">2nd Edition</span>
+                        </div>
                         <div class="tr-suggest-dim">Highest Mint #{{ c.highestMint ?? '—' }}</div>
                       </div>
                     </button>
@@ -1627,6 +1630,7 @@ onBeforeUnmount(() => {
 .tr-booster-tag { margin-left: auto; font-size: 0.55rem; padding: 1px 4px; border-radius: 9999px; background: rgba(251,191,36,0.25); color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); }
 .tr-tradeable-tag { margin-left: auto; font-size: 0.55rem; padding: 1px 4px; border-radius: 9999px; background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
 .tr-ctoon-back-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.tr-suggest-name-row { display: flex; align-items: center; gap: 6px; }
 .tr-ctoon-back { background: none; border: none; color: var(--OrbitLightBlue); font-size: 0.65rem; cursor: pointer; font-family: inherit; padding: 0; }
 
 .tr-selected-user {

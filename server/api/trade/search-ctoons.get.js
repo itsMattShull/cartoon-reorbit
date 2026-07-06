@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
         mintNumber: true,
         user: { select: { username: true, avatar: true } },
         tradeListItems: { select: { userId: true } },
-        ctoon: { select: { id: true, name: true, assetPath: true } }
+        ctoon: { select: { id: true, name: true, assetPath: true, isSecondEdition: true } }
       }
     })
 
@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: row.ctoon.id,
       name: row.ctoon.name,
       assetPath: row.ctoon.assetPath,
+      isSecondEdition: row.ctoon.isSecondEdition,
       mintNumber: row.mintNumber,
       ownerUsername: row.user.username,
       ownerAvatar: row.user.avatar,
@@ -57,6 +58,7 @@ export default defineEventHandler(async (event) => {
       c."id" AS "ctoonId",
       c."name" AS "name",
       c."assetPath" AS "assetPath",
+      c."isSecondEdition" AS "isSecondEdition",
       MAX(uc."mintNumber") AS "highestMint"
     FROM "UserCtoon" uc
     JOIN "Ctoon" c ON c."id" = uc."ctoonId"
@@ -78,6 +80,7 @@ export default defineEventHandler(async (event) => {
     ctoonId: row.ctoonId,
     name: row.name,
     assetPath: row.assetPath,
+    isSecondEdition: row.isSecondEdition,
     highestMint: row.highestMint ?? 0
   }))
 })
