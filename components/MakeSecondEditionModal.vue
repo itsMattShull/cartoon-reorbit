@@ -42,9 +42,29 @@
             />
             <p v-if="showSetNameError" class="text-xs text-red-600 mt-1">Set Name is required.</p>
             <p class="text-xs text-blue-600 mt-1">
-              Every created cToon uses this Set value. All other details (image, name, rarity, series, etc.) are copied
-              from the original.
+              Every created cToon uses this Set value plus the In C-mart / Release DateTime below. All other details
+              (image, name, rarity, series, etc.) are copied from the original.
             </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-blue-200">
+              <div>
+                <label class="block text-sm font-semibold text-blue-800 mb-1">In C-mart</label>
+                <div class="flex items-center gap-2">
+                  <button type="button" @click="inCmart = true"
+                    :class="['px-3 py-1.5 text-sm rounded border', inCmart === true ? 'bg-green-600 text-white border-green-600' : 'border-gray-300 bg-white hover:bg-gray-50']">
+                    Yes
+                  </button>
+                  <button type="button" @click="inCmart = false"
+                    :class="['px-3 py-1.5 text-sm rounded border', inCmart === false ? 'bg-red-500 text-white border-red-500' : 'border-gray-300 bg-white hover:bg-gray-50']">
+                    No
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-blue-800 mb-1">Release DateTime (CDT)</label>
+                <input v-model="releaseDateTime" type="datetime-local" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white" />
+              </div>
+            </div>
           </div>
 
           <!-- Excluded banner -->
@@ -178,6 +198,8 @@ const showSetNameError = ref(false)
 const showExcluded = ref(false)
 const eligible = ref([])
 const excluded = ref([])
+const inCmart = ref(false)
+const releaseDateTime = ref(nextMondayAt8pmChicago())
 
 // ── Date helpers (America/Chicago) — same convention as BulkEditCtoonModal ──
 function nthSundayDay(year, monthNumber) {
@@ -203,6 +225,25 @@ function localToUtcIso(localStr) {
   const d = parseInt(datePart.split('-')[2], 10)
   const offset = isChicagoDst(y, m, d) ? '-05:00' : '-06:00'
   return new Date(`${datePart}T${timePart}:00${offset}`).toISOString()
+}
+
+function nextMondayAt8pmChicago() {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p => [p.type, p.value]))
+  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const currentDow = weekdayMap[parts.weekday]
+  let daysToAdd = (1 - currentDow + 7) % 7
+  if (daysToAdd === 0) daysToAdd = 7
+
+  const base = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)))
+  base.setUTCDate(base.getUTCDate() + daysToAdd)
+  const y = base.getUTCFullYear()
+  const m = String(base.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(base.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}T20:00`
 }
 
 // ── Load data ─────────────────────────────────────────────────────────
@@ -274,6 +315,7 @@ function selectNone() { eligible.value.forEach(r => { r.selected = false }) }
 // ── Submit ────────────────────────────────────────────────────────────
 async function submit() {
   if (!setName.value.trim()) { showSetNameError.value = true; return }
+  if (!releaseDateTime.value) { alert('Release DateTime is required.'); return }
   if (!selectedCount.value) return
 
   saving.value = true
@@ -293,7 +335,12 @@ async function submit() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setName: setName.value.trim(), records }),
+      body: JSON.stringify({
+        setName: setName.value.trim(),
+        inCmart: inCmart.value,
+        releaseDate: localToUtcIso(releaseDateTime.value),
+        records,
+      }),
     })
 
     if (!res.ok) {

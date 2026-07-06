@@ -40,6 +40,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Set Name is required.' })
   }
 
+  const inCmart = body?.inCmart === true
+  const releaseDate = body?.releaseDate ? new Date(body.releaseDate) : null
+  if (!releaseDate || isNaN(releaseDate)) {
+    throw createError({ statusCode: 400, statusMessage: 'A valid Release DateTime is required.' })
+  }
+  if (releaseDate <= new Date()) {
+    throw createError({ statusCode: 400, statusMessage: 'Release DateTime must be in the future.' })
+  }
+
   const rawRecords = Array.isArray(body?.records) ? body.records : []
   const seen = new Set()
   const records = []
@@ -85,6 +94,10 @@ export default defineEventHandler(async (event) => {
       errors.push({ id: rec.id, name: original.name, error: 'Already has a Second Edition' })
       continue
     }
+    if (inCmart && original.codeOnly) {
+      errors.push({ id: rec.id, name: original.name, error: 'Cannot be Code-Only and in C-mart' })
+      continue
+    }
 
     const mintLimitType = rec.mintLimitType === 'timeBased' ? 'timeBased' : 'defined'
     let mintEndDate = null
@@ -115,9 +128,7 @@ export default defineEventHandler(async (event) => {
           rarity: original.rarity,
           assetPath: original.assetPath,
           soundPath: original.soundPath,
-          releaseDate: original.releaseDate,
           price: original.price,
-          inCmart: original.inCmart,
           codeOnly: original.codeOnly,
           characters: original.characters,
           isGtoon: original.isGtoon,
@@ -127,8 +138,10 @@ export default defineEventHandler(async (event) => {
           abilityKey: original.abilityKey,
           abilityData: original.abilityData,
 
-          // New Set value
+          // Batch-level overrides (apply the same value to every created record)
           set: setName,
+          inCmart,
+          releaseDate,
 
           // Fresh mint pool — starts at 0 minted regardless of the original's counts
           quantity,
