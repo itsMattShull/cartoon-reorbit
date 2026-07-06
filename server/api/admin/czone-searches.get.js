@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
         orderBy: { chancePercent: 'desc' },
         include: {
           ctoon: {
-            select: { id: true, name: true, rarity: true, assetPath: true }
+            select: { id: true, name: true, rarity: true, assetPath: true, isSecondEdition: true }
           }
         }
       }

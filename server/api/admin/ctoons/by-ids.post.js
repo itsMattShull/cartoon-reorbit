@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
 
   const ctoons = await db.ctoon.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, rarity: true, assetPath: true }
+    select: { id: true, name: true, rarity: true, assetPath: true, isSecondEdition: true }
   })
 
   return ctoons
