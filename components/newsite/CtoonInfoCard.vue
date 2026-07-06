@@ -31,7 +31,7 @@
             class="ctic-edition-link"
             @click="openRelatedEdition(ctoon.relatedFirstEdition.id)"
           >
-            View First Edition: {{ ctoon.relatedFirstEdition.name }}
+            View 1st Edition: {{ ctoon.relatedFirstEdition.name }}
           </button>
           <button
             v-else-if="!ctoon.isSecondEdition && ctoon.relatedSecondEdition"
@@ -39,7 +39,7 @@
             class="ctic-edition-link"
             @click="openRelatedEdition(ctoon.relatedSecondEdition.id)"
           >
-            View Second Edition: {{ ctoon.relatedSecondEdition.name }}
+            View 2nd Edition: {{ ctoon.relatedSecondEdition.name }}
           </button>
           <button
             v-if="ctoon.soundPath"
@@ -914,7 +914,7 @@ function formatDate(value) {
   font-size: 0.72rem;
   text-align: left;
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
 }
 .ctic-edition-link:hover { color: #bfdbfe; }
 
