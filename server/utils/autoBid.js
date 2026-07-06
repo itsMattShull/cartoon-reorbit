@@ -82,6 +82,20 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
 
   const startPrice = Math.max(0, auc.initialBet || 0)
 
+  // When the current leader isn't an auto-bidder (they got there via a manual
+  // bid), we need to know when they placed that bid to break ties fairly:
+  // an auto-bidder whose max exactly matches the price should only reclaim
+  // the lead if their auto-bid predates this leader's bid.
+  let leaderBidAt = null
+  if (leader) {
+    const lastLeaderBid = await tx.bid.findFirst({
+      where: { auctionId, userId: leader },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true }
+    })
+    leaderBidAt = lastLeaderBid?.createdAt ?? new Date()
+  }
+
   // Pull all active autobids + current points up-front
   let auto = await tx.auctionAutoBid.findMany({
     where: { auctionId, isActive: true },
@@ -152,8 +166,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     }))
     const inList = list.some(x => x.userId === currentLeader)
     if (currentLeader && !inList) {
-      // Non-autobid leader can defend up to current price
-      list.push({ userId: currentLeader, cap: currentPrice, createdAt: new Date(0), hasAuto: false })
+      // Non-autobid leader can defend up to current price; their claim on
+      // that price dates to when they placed the bid that made them leader.
+      list.push({ userId: currentLeader, cap: currentPrice, createdAt: leaderBidAt ?? new Date(0), hasAuto: false })
     }
     return list
   }
@@ -173,17 +188,26 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     const minChallengerBid = leader ? (price + inc) : startPrice
 
     const list = capsAt(price, leader)
+    const leaderRec       = list.find(x => x.userId === leader)
+    const leadCap         = leaderRec?.cap ?? 0
+    const leaderCreatedAt = leaderRec?.createdAt ?? new Date(0)
 
-    // Eligible challengers (not the current leader) who can place at least minChallengerBid
+    // Eligible challengers: normally must clear price + increment outright.
+    // Additionally, an auto-bidder whose max exactly ties the current price
+    // may reclaim it from the current leader — but only if that auto-bid
+    // predates the leader's own bid (earlier commitment wins a tie; this is
+    // what lets a proxy bidder reclaim the lead when a manual bid lands
+    // exactly on their max, instead of the manual bid "cutting in line").
     const challengers = list
-      .filter(x => x.userId !== leader && x.cap >= minChallengerBid)
+      .filter(x => x.userId !== leader && (
+        x.cap >= minChallengerBid ||
+        (leader && x.cap === price && x.createdAt < leaderCreatedAt)
+      ))
       .sort((a, b) => (b.cap - a.cap) || (a.createdAt - b.createdAt))
 
     if (!challengers.length) break
 
-    const ch        = challengers[0]
-    const leaderRec = list.find(x => x.userId === leader)
-    const leadCap   = leaderRec?.cap ?? 0
+    const ch = challengers[0]
 
     // ⬅️ KEY CHANGE:
     // Need to beat "price + inc" only after at least one accepted bid exists.
@@ -215,7 +239,9 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     price = challengerBid
     let extendedEndAt = null
 
-    if (challengerBid > leadCap) {
+    // A tie goes to whoever committed to that amount earlier.
+    const challengerWinsTie = challengerBid === leadCap && ch.createdAt < leaderCreatedAt
+    if (challengerBid > leadCap || challengerWinsTie) {
       // Challenger becomes new leader
       if (leader) {
         outbids.push(leader) // previous leader was just outbid
