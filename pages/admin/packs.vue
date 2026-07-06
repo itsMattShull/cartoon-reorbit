@@ -43,7 +43,10 @@
                 <th class="px-4 py-3">Name</th>
                 <th class="px-4 py-3">Price</th>
                 <th class="px-4 py-3">Rarity Breakdown</th>
-                <th class="px-4 py-3">In C-mart</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3">Schedule (CST)</th>
+                <th class="px-4 py-3">Purchased</th>
+                <th class="px-4 py-3">Limits / User</th>
                 <th class="px-4 py-3">Created</th>
                 <th class="px-4 py-3">Action</th>
               </tr>
@@ -61,7 +64,20 @@
                 <td class="px-4 py-3 font-medium text-gray-900">{{ pack.name }}</td>
                 <td class="px-4 py-3">{{ formatPrice(pack.price) }}</td>
                 <td class="px-4 py-3 whitespace-nowrap">{{ formatRarity(pack.rarityConfigs) }}</td>
-                <td class="px-4 py-3">{{ pack.inCmart ? 'Yes' : 'No' }}</td>
+                <td class="px-4 py-3">
+                  <span class="status-badge" :class="`status-${packStatus(pack).tone}`">
+                    {{ packStatus(pack).label }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-xs">
+                  <div><span class="text-gray-500">Start:</span> {{ formatCst(pack.scheduledAt) }}</div>
+                  <div><span class="text-gray-500">End:</span> {{ formatCst(pack.scheduledOffAt) }}</div>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">{{ pack.purchasedCount.toLocaleString() }}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-xs">
+                  <div>{{ pack.dailyPurchaseLimit != null ? `${pack.dailyPurchaseLimit}/day` : 'Unlimited/day' }}</div>
+                  <div>{{ pack.maxBuysPerUser != null ? `${pack.maxBuysPerUser} total` : 'Unlimited total' }}</div>
+                </td>
                 <td class="px-4 py-3 whitespace-nowrap">{{ formatDate(pack.createdAt) }}</td>
                 <td class="px-4 py-3">
                   <NuxtLink
@@ -95,9 +111,22 @@
                 <!-- Info -->
                 <div class="space-y-1">
                   <h2 class="text-lg font-semibold">{{ pack.name }}</h2>
+                  <p class="text-sm flex items-center gap-2">
+                    <strong>Status:</strong>
+                    <span class="status-badge" :class="`status-${packStatus(pack).tone}`">
+                      {{ packStatus(pack).label }}
+                    </span>
+                  </p>
                   <p class="text-sm"><strong>Price:</strong> {{ formatPrice(pack.price) }}</p>
                   <p class="text-sm"><strong>Rarity:</strong> {{ formatRarity(pack.rarityConfigs) }}</p>
-                  <p class="text-sm"><strong>In C-mart:</strong> {{ pack.inCmart ? 'Yes' : 'No' }}</p>
+                  <p class="text-sm"><strong>Start (CST):</strong> {{ formatCst(pack.scheduledAt) }}</p>
+                  <p class="text-sm"><strong>End (CST):</strong> {{ formatCst(pack.scheduledOffAt) }}</p>
+                  <p class="text-sm"><strong>Purchased:</strong> {{ pack.purchasedCount.toLocaleString() }}</p>
+                  <p class="text-sm">
+                    <strong>Limits:</strong>
+                    {{ pack.dailyPurchaseLimit != null ? `${pack.dailyPurchaseLimit}/day` : 'Unlimited/day' }},
+                    {{ pack.maxBuysPerUser != null ? `${pack.maxBuysPerUser} total` : 'Unlimited total' }}
+                  </p>
                   <p class="text-sm"><strong>Created:</strong> {{ formatDate(pack.createdAt) }}</p>
                 </div>
                 <!-- Edit Button -->
@@ -191,8 +220,40 @@ function formatRarity (arr) {
 function formatDate (d) {
   return new Date(d).toLocaleDateString()
 }
+function formatCst (d) {
+  if (!d) return '—'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(new Date(d)) + ' CST'
+}
+function packStatus (p) {
+  const now = new Date()
+  const start = p.scheduledAt ? new Date(p.scheduledAt) : null
+  const end = p.scheduledOffAt ? new Date(p.scheduledOffAt) : null
+
+  if (start && now < start) return { label: 'Scheduled', tone: 'blue' }
+  if (end && now >= end) return { label: 'Ended', tone: 'gray' }
+  if (!start && !end) return p.inCmart ? { label: 'Live', tone: 'green' } : { label: 'Not Listed', tone: 'gray' }
+  return { label: 'Live', tone: 'green' }
+}
 
 onMounted(() => {
   fetchPacks()
 })
 </script>
+
+<style scoped>
+.status-badge {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-green { background: #dcfce7; color: #15803d; }
+.status-blue  { background: #dbeafe; color: #1d4ed8; }
+.status-gray  { background: #f3f4f6; color: #4b5563; }
+</style>

@@ -40,17 +40,24 @@ export default defineEventHandler(async (event) => {
     const take = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200)
     const skip = (pageNum - 1) * take
 
-    const [total, items] = await Promise.all([
+    const [total, rows] = await Promise.all([
       prisma.pack.count(),
       prisma.pack.findMany({
         include: {
-          rarityConfigs: true // include probabilities in list too
+          rarityConfigs: true, // include probabilities in list too
+          _count: { select: { userPacks: true, ctoonOptions: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,
         take
       })
     ])
+
+    const items = rows.map(({ _count, ...pack }) => ({
+      ...pack,
+      purchasedCount: _count.userPacks,
+      ctoonCount: _count.ctoonOptions
+    }))
 
     return { items, total, page: pageNum, limit: take }
   } catch (err) {
