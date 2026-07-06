@@ -37,11 +37,15 @@ export default defineEventHandler(async (event) => {
     ]
   }
 
+  // The 20-item cap keeps name-typeahead callers fast, but a set/series
+  // filter is used to browse/manage a whole set, so it must return everything.
+  const take = (bySet || bySer) ? undefined : 20
+
   // Base rows
   const ctoons = await prisma.ctoon.findMany({
     where,
     orderBy: [{ name: 'asc' }],
-    take: 20,
+    ...(take ? { take } : {}),
     select: {
       id: true,
       name: true,
