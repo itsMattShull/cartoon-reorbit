@@ -2,7 +2,7 @@
 <template>
   <Nav />
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16 md:mt-20">
+  <div class="p-4 sm:p-8 max-w-6xl mx-auto space-y-10 sm:space-y-14 mt-16 md:mt-20">
     <!-- 🡐 Back & title -->
     <div class="flex items-center gap-4">
       <NuxtLink
@@ -27,7 +27,7 @@
 
       <form
         @submit.prevent="submit"
-        class="space-y-16 bg-white shadow-lg rounded-xl p-8 border border-gray-200"
+        class="space-y-16 bg-white shadow-lg rounded-xl p-4 sm:p-8 border border-gray-200"
       >
         <!-- 1️⃣  BASIC INFO --------------------------------------------------- -->
         <section class="grid lg:grid-cols-2 gap-6">
@@ -192,14 +192,18 @@
                     @mousedown.prevent="toggleSelect(s)"
                     :class="['flex items-center gap-3 px-3 py-2 cursor-pointer',
                              idx===highlighted?'bg-blue-50':'hover:bg-gray-50']">
-                  <img v-if="s.assetPath" :src="s.assetPath"
-                       class="w-8 h-8 object-cover rounded border border-gray-300"/>
-                  <div class="flex-1 truncate">
-                    <p class="truncate font-medium flex items-center gap-2">
+                  <div class="relative shrink-0 w-12 h-12">
+                    <img v-if="s.assetPath" :src="s.assetPath"
+                         class="w-full h-full object-contain rounded border border-gray-300 bg-white"/>
+                    <SecondEditionOverlay :ctoon="s"/>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="truncate font-medium flex flex-wrap items-center gap-1.5">
                       <span class="truncate">{{ s.name }}</span>
                       <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
                         {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
                       </span>
+                      <span v-if="s.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
                     </p>
                     <p class="text-xs text-gray-500">{{ s.rarity }}</p>
                   </div>
@@ -214,56 +218,68 @@
         <section class="space-y-10">
           <div v-for="(ids, rarity) in grouped" :key="rarity"
                class="border border-gray-300 rounded-md">
-            <div class="flex items-center justify-between bg-gray-50 px-4 py-2 rounded-t-md">
-              <div class="flex items-center gap-3">
-                <h3 class="font-medium">{{ rarity }}</h3>
+            <div class="flex flex-wrap items-center gap-3 bg-gray-50 px-4 py-3 rounded-t-md">
+              <h3 class="font-medium">{{ rarity }}</h3>
 
-                <!-- cards / pack -->
-                <div class="flex items-center gap-1">
-                  <input v-model.number="countsByRarity[rarity].count" type="number"
-                         :min="1" :max="ids.length"
-                         class="w-16 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
-                  <span class="text-xs text-gray-500">cards</span>
-                </div>
-
-                <!-- probability -->
-                <div class="flex items-center gap-1 ml-4">
-                  <input v-model.number="countsByRarity[rarity].probabilityPercent" type="number"
-                         min="1" max="100"
-                         class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
-                  <span class="text-xs text-gray-500">%</span>
-                </div>
+              <!-- cards / pack -->
+              <div class="flex items-center gap-1">
+                <input v-model.number="countsByRarity[rarity].count" type="number"
+                       :min="1" :max="ids.length"
+                       class="w-16 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
+                <span class="text-xs text-gray-500">cards</span>
               </div>
 
-              <span class="weight-badge"
-                    :class="sumWeights(rarity)===100?'weight-ok':'weight-bad'">
-                {{ sumWeights(rarity) }} %
-              </span>
+              <!-- probability -->
+              <div class="flex items-center gap-1">
+                <input v-model.number="countsByRarity[rarity].probabilityPercent" type="number"
+                       min="1" max="100"
+                       class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
+                <span class="text-xs text-gray-500">%</span>
+              </div>
+
+              <div class="flex items-center gap-2 ml-auto">
+                <button type="button" @click="rebalance(rarity)"
+                        class="even-out-btn">
+                  Even out
+                </button>
+                <span class="weight-badge"
+                      :class="sumWeights(rarity)===100?'weight-ok':'weight-bad'">
+                  {{ sumWeights(rarity) }} %
+                </span>
+              </div>
             </div>
 
             <div>
               <div v-for="id in ids" :key="id"
-                   class="group-row flex items-center gap-3 px-4 py-2">
-                <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath"
-                     class="w-10 h-10 object-cover rounded border border-gray-300"/>
-                <div class="flex-1 truncate">
-                  <p class="truncate font-medium flex items-center gap-2">
-                    <span class="truncate">{{ lookup[id]?.name }}</span>
-                    <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
-                  </p>
+                   class="group-row flex flex-wrap items-center gap-3 px-4 py-3">
+                <div class="flex items-center gap-3 flex-1 min-w-[200px]">
+                  <div class="relative shrink-0 w-16 h-16">
+                    <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath"
+                         class="w-full h-full object-contain rounded border border-gray-300 bg-white"/>
+                    <SecondEditionOverlay :ctoon="lookup[id]"/>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="font-medium flex flex-wrap items-center gap-1.5">
+                      <span class="truncate">{{ lookup[id]?.name }}</span>
+                      <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                      <span v-if="lookup[id]?.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
+                    </p>
+                  </div>
                 </div>
 
-                <div class="flex items-center gap-1">
-                  <input v-model.number="weights[id]" type="number" min="1" max="100"
-                         class="w-20 rounded-md border border-gray-400 px-2 py-1 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-                         @input="onManualWeight(rarity,id)"/>
-                  <span class="text-xs text-gray-500">%</span>
-                </div>
+                <div class="flex items-center gap-3 ml-auto">
+                  <div class="flex items-center gap-1">
+                    <input v-model.number="weights[id]" type="number" min="1" max="100"
+                           class="w-20 rounded-md border border-gray-400 px-2 py-1 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                           @input="onManualWeight(rarity,id)"/>
+                    <span class="text-xs text-gray-500">%</span>
+                  </div>
 
-                <button type="button" @click="toggleSelect(lookup[id])"
-                        class="text-red-700 hover:underline text-sm">
-                  Remove
-                </button>
+                  <button type="button" @click="toggleSelect(lookup[id])"
+                          class="text-red-700 hover:underline text-sm shrink-0">
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -612,6 +628,19 @@ async function submit () {
 }
 .edition-badge-2nd { background: #7c3aed; color: #fff; }
 .edition-badge-1st { background: #e5e7eb; color: #374151; }
+.exclusive-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #d97706;
+  color: #fff;
+}
+.even-out-btn { @apply text-xs font-semibold text-blue-700 border border-blue-300 rounded-full px-2.5 py-1 hover:bg-blue-100 whitespace-nowrap; }
 .group-row:not(:last-child){ border-bottom:1px solid theme('colors.gray.200'); }
 input[type='number']{ min-width:4rem; }
 </style>
