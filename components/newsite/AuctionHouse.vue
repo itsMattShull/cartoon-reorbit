@@ -1,16 +1,6 @@
 <template>
   <div class="ah">
 
-    <!-- ── Detail view ────────────────────────────────────────────── -->
-    <AuctionDetails
-      v-if="selectedAuctionId"
-      :auction-id="selectedAuctionId"
-      @back="selectedAuctionId = null"
-    />
-
-    <!-- ── List view ─────────────────────────────────────────────── -->
-    <template v-if="!selectedAuctionId">
-
     <!-- ── Tabs + View toggle ─────────────────────────────────── -->
     <div class="ah-topbar">
       <div class="ah-tabs">
@@ -98,7 +88,7 @@
           </div>
 
           <!-- View button -->
-          <button class="ah-view" @click="selectedAuctionId = item.id">View</button>
+          <button class="ah-view" @click="goToAuction(item.id)">View</button>
         </div>
       </template>
     </div>
@@ -162,7 +152,7 @@
             </span>
           </template>
           <template #footer-right>
-            <button class="ah-card-view-btn" @click.stop="selectedAuctionId = item.id">View</button>
+            <button class="ah-card-view-btn" @click.stop="goToAuction(item.id)">View</button>
           </template>
         </ShortCard>
       </template>
@@ -176,8 +166,6 @@
       <button class="ah-pg-btn" :disabled="activePage >= totalPages"  @click="nextPage">›</button>
     </div>
 
-    </template><!-- end list view -->
-
   </div>
 </template>
 
@@ -186,8 +174,11 @@ const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
 const cmartCtoons = useState('cmartCtoons', () => [])
 const { open: openCtoonModal } = useCtoonModal()
+const router = useRouter()
 
-const selectedAuctionId = ref(null)
+function goToAuction(id) {
+  router.push(`/newsite/AuctionHouse/${id}`)
+}
 
 const TABS = [
   { id: 'current', label: 'Current'     },

@@ -3,8 +3,8 @@ export function auctionLink(auctionId) {
   // Keep this identical to your other DM base URL logic
   const isProd = process.env.NODE_ENV === 'production'
   return isProd
-    ? `https://www.cartoonreorbit.com/auction/${auctionId}`
-    : `http://localhost:3000/auction/${auctionId}`
+    ? `https://www.cartoonreorbit.com/newsite/AuctionHouse/${auctionId}`
+    : `http://localhost:3000/newsite/AuctionHouse/${auctionId}`
 }
 
 function getAnnouncementsBotToken() {
