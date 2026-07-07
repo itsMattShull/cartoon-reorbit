@@ -78,6 +78,7 @@
                   :class="originalOwnedSet.has(item.ctoonId) ? 'owned-badge--owned' : 'owned-badge--unowned'"
                 >{{ originalOwnedSet.has(item.ctoonId) ? 'Owned' : 'Unowned' }}</span>
                 <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="pack-preview-ctoon-img" />
+                <SecondEditionOverlay :ctoon="item" />
                 <p class="pack-preview-ctoon-name">{{ item.name }}</p>
                 <p class="pack-preview-ctoon-weight">{{ item.weight }}% chance</p>
               </div>
