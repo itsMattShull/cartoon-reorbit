@@ -9,6 +9,12 @@
 // instead of staying a fixed pixel size.
 export const SECOND_EDITION_PREVIEW_SIZE = 220
 
+// Shared across every component instance so the many cToon cards that each
+// call ensureLoaded() on mount (e.g. a cMart grid with hundreds of cards)
+// await one in-flight request instead of each firing their own — otherwise
+// the burst of concurrent fetches can exhaust the browser's connection pool.
+let loadPromise = null
+
 export function useSecondEditionOverlay() {
   const overlay = useState('secondEditionOverlayConfig', () => ({
     path: null,
@@ -19,17 +25,21 @@ export function useSecondEditionOverlay() {
 
   async function ensureLoaded() {
     if (overlay.value.loaded) return
-    try {
-      const cfg = await $fetch('/api/global-config')
-      overlay.value = {
-        path: cfg?.secondEditionOverlayPath || null,
-        width: cfg?.secondEditionOverlayWidth || 32,
-        height: cfg?.secondEditionOverlayHeight || 32,
-        loaded: true
-      }
-    } catch {
-      overlay.value = { path: null, width: null, height: null, loaded: true }
+    if (!loadPromise) {
+      loadPromise = $fetch('/api/global-config')
+        .then(cfg => {
+          overlay.value = {
+            path: cfg?.secondEditionOverlayPath || null,
+            width: cfg?.secondEditionOverlayWidth || 32,
+            height: cfg?.secondEditionOverlayHeight || 32,
+            loaded: true
+          }
+        })
+        .catch(() => {
+          overlay.value = { path: null, width: null, height: null, loaded: true }
+        })
     }
+    await loadPromise
   }
 
   // Renders the overlay centered at (overlayX%, overlayY%) of its container, with
