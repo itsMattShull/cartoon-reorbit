@@ -221,12 +221,13 @@ export async function notifyOutbidByUserId(prisma, userId, auctionId) {
         userCtoon: {
           select: {
             mintNumber: true,
-            ctoon: { select: { name: true } }
+            ctoon: { select: { name: true, isSecondEdition: true } }
           }
         }
       }
     })
     const ctoonName = auc?.userCtoon?.ctoon?.name || 'cToon'
+    const isSecondEdition = !!auc?.userCtoon?.ctoon?.isSecondEdition
     const mintNumber = auc?.userCtoon?.mintNumber ?? null
     const highestBid = auc?.highestBid ?? 0
 
@@ -234,7 +235,7 @@ export async function notifyOutbidByUserId(prisma, userId, auctionId) {
     const link = auctionLink(String(auctionId))
     const lines = [
       `⚠️ You’ve been outbid on an auction.`,
-      `• Item: ${ctoonName}${mintNumber != null ? ` (Mint #${mintNumber})` : ''}`,
+      `• Item: ${ctoonName}${isSecondEdition ? ' (Second Edition)' : ''}${mintNumber != null ? ` (Mint #${mintNumber})` : ''}`,
       `• Current highest bid: ${highestBid} pts`,
       ``,
       `View the auction: ${link}`
