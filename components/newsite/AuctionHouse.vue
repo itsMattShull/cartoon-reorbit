@@ -46,6 +46,7 @@
           <!-- Thumbnail -->
           <div class="ah-img-wrap" @click="openInfoModal(item)">
             <img class="ah-img" :src="item.assetPath" :alt="item.name" draggable="false" />
+            <SecondEditionOverlay :ctoon="item" />
             <span
               v-if="activeTab === 'current'"
               class="ah-own-badge"

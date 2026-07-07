@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: true, // needed to check Holiday flag
       burnedAt: true,
       mintNumber: true,
-      ctoon: { select: { rarity: true, name: true, assetPath: true } }
+      ctoon: { select: { rarity: true, name: true, assetPath: true, isSecondEdition: true } }
     }
   })
   if (!userCtoonRec || userCtoonRec.userId !== userId) {
@@ -228,7 +228,7 @@ export default defineEventHandler(async (event) => {
           ? 'https://www.cartoonreorbit.com'
           : `http://localhost:${config.public.socketPort || 3000}`)
 
-      const { name, rarity, assetPath } = userCtoonRec.ctoon || {}
+      const { name, rarity, assetPath, isSecondEdition } = userCtoonRec.ctoon || {}
       const mintNumber   = userCtoonRec.mintNumber
       const durationText = formatDuration(durationDays, durationMinutes)
 
@@ -241,6 +241,7 @@ export default defineEventHandler(async (event) => {
       const lines = [
         `**Rarity:** ${rarity ?? 'N/A'}`,
         ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
+        ...(isSecondEdition ? [`**Second Edition**`] : []),
         `**Starting Bid:** ${initialBet} pts`,
         `**Duration:** ${durationText}`
       ]
@@ -248,7 +249,7 @@ export default defineEventHandler(async (event) => {
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,
         embeds: [{
-          title: name ?? 'cToon',
+          title: `${name ?? 'cToon'}${isSecondEdition ? ' (Second Edition)' : ''}`,
           url: auctionLink,
           description: lines.join('\n'),
           ...(imageUrl ? { image: { url: imageUrl } } : {})
