@@ -1,7 +1,7 @@
 <template>
   <div class="gameshome-wrap">
     <div class="gh-nav">
-      <GreenButton :active="true">Games</GreenButton>
+      <GreenButton :active="true">Games Home</GreenButton>
       <NuxtLink to="/newsite/leaderboards" class="gh-nav-link">
         <GreenButton>Leaderboards</GreenButton>
       </NuxtLink>
