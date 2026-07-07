@@ -53,7 +53,15 @@ export default defineEventHandler(async (event) => {
         select: {
           weight:  true,
           ctoonId: true,
-          ctoon:   { select: { name: true, rarity: true, assetPath: true, isGtoon: true, cost: true, power: true } }
+          ctoon:   {
+            select: {
+              name: true, rarity: true, assetPath: true, isGtoon: true, cost: true, power: true,
+              isSecondEdition: true,
+              secondEditionOverlayX: true,
+              secondEditionOverlayY: true,
+              secondEditionOverlaySize: true
+            }
+          }
         }
       }
     }
@@ -72,7 +80,11 @@ export default defineEventHandler(async (event) => {
     isGtoon: o.ctoon.isGtoon,
     cost:    o.ctoon.cost,
     power:   o.ctoon.power,
-    weight:  o.weight
+    weight:  o.weight,
+    isSecondEdition:          o.ctoon.isSecondEdition,
+    secondEditionOverlayX:    o.ctoon.secondEditionOverlayX,
+    secondEditionOverlayY:    o.ctoon.secondEditionOverlayY,
+    secondEditionOverlaySize: o.ctoon.secondEditionOverlaySize
   }))
 
   return {
