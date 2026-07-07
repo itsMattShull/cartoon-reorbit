@@ -177,6 +177,18 @@ export default defineEventHandler(async (event) => {
 
   /* ── DB transaction ────────────────────────── */
   const result = await db.$transaction(async (tx) => {
+    /* re-arm the auto-listing cron whenever the go-live time actually changes —
+       otherwise a pack that already went live once (sentAt set) would never be
+       picked up again by markScheduledPacksInCmart(), which only considers
+       packs where sentAt is still null */
+    const existing = await tx.pack.findUnique({
+      where: { id: packId },
+      select: { scheduledAt: true }
+    })
+    const prevScheduledAtMs = existing?.scheduledAt ? existing.scheduledAt.getTime() : null
+    const nextScheduledAtMs = scheduledAt ? scheduledAt.getTime() : null
+    const scheduleRearmed = !!scheduledAt && prevScheduledAtMs !== nextScheduledAtMs
+
     /* update pack row */
     await tx.pack.update({
       where: { id: packId },
@@ -190,6 +202,7 @@ export default defineEventHandler(async (event) => {
         maxBuysPerUser:     meta.maxBuysPerUser     != null ? Number(meta.maxBuysPerUser)     : null,
         scheduledOffAt,
         scheduledAt,
+        ...(scheduleRearmed ? { sentAt: null } : {}),
         ...(imagePath ? { imagePath } : {})
       }
     })
