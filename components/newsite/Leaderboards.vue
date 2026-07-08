@@ -15,10 +15,7 @@
     <div v-if="activeTab === 'users'" class="lb-content">
       <div class="lb-grid">
         <div v-for="board in usersBoards" :key="board.key" class="lb-card">
-          <div class="lb-card-header" :class="board.headerClass">
-            <span class="lb-card-title">{{ board.title }}</span>
-            <button class="lb-viewall" @click="openModal(board)">View All</button>
-          </div>
+          <div class="lb-card-header" :class="board.headerClass">{{ board.title }}</div>
           <div v-if="board.pending" class="lb-loading">Loading…</div>
           <ul v-else class="lb-list">
             <li
@@ -45,10 +42,7 @@
       </div>
       <div class="lb-grid">
         <div v-for="board in gamesBoards" :key="board.key" class="lb-card">
-          <div class="lb-card-header" :class="board.headerClass">
-            <span class="lb-card-title">{{ board.title }}</span>
-            <button class="lb-viewall" @click="openModal(board)">View All</button>
-          </div>
+          <div class="lb-card-header" :class="board.headerClass">{{ board.title }}</div>
           <div v-if="board.pending" class="lb-loading">Loading…</div>
           <ul v-else class="lb-list">
             <li
@@ -67,15 +61,6 @@
         </div>
       </div>
     </div>
-
-    <LeaderboardModal
-      v-if="modal"
-      :title="modal.title"
-      :endpoint="modal.endpoint"
-      :params="modal.params"
-      :format-value="modal.formatValue"
-      @close="modal = null"
-    />
   </div>
 </template>
 
@@ -83,7 +68,6 @@
 import { useRequestHeaders } from '#app'
 
 const activeTab = ref('users')
-const modal = ref(null)
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
 
 const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [], headers })
@@ -98,37 +82,31 @@ const usersBoards = computed(() => [
   {
     key: 'points', title: 'Top Points', headerClass: 'lb-card-header--points',
     rows: pointsData.value, pending: pointsPending.value,
-    endpoint: '/api/points-leaderboard', params: {},
     formatValue: row => Number(row.points).toLocaleString()
   },
   {
     key: 'earners', title: 'Top Earners (7d)', headerClass: 'lb-card-header--earners',
     rows: earnersData.value, pending: earnersPending.value,
-    endpoint: '/api/leaderboard/trending-earners', params: {},
     formatValue: row => `+${Number(row.points).toLocaleString()}`
   },
   {
     key: 'spenders', title: 'Top Spenders (7d)', headerClass: 'lb-card-header--spenders',
     rows: spendersData.value, pending: spendersPending.value,
-    endpoint: '/api/leaderboard/trending-spenders', params: {},
     formatValue: row => Number(row.points).toLocaleString()
   },
   {
     key: 'acquirers', title: 'cToon Acquirers (7d)', headerClass: 'lb-card-header--acquirers',
     rows: acquirersData.value, pending: acquirersPending.value,
-    endpoint: '/api/leaderboard/active-ctoon-acquirers', params: {},
     formatValue: row => Number(row.count).toLocaleString()
   },
   {
     key: 'unique', title: 'Unique cToons', headerClass: 'lb-card-header--unique',
     rows: uniqueData.value, pending: uniquePending.value,
-    endpoint: '/api/leaderboard/unique-ctoons', params: {},
     formatValue: row => Number(row.count).toLocaleString()
   },
   {
     key: 'total', title: 'Total cToons', headerClass: 'lb-card-header--total',
     rows: totalData.value, pending: totalPending.value,
-    endpoint: '/api/leaderboard/total-ctoons', params: {},
     formatValue: row => Number(row.count).toLocaleString()
   },
 ])
@@ -137,31 +115,19 @@ const gamesBoards = computed(() => [
   {
     key: 'alltime', title: 'All Time', headerClass: 'lb-card-header--alltime',
     rows: gameData.value?.allTime, pending: gamePending.value,
-    endpoint: '/api/game/reorbitmatch/leaderboard', params: { period: 'allTime' },
     formatValue: row => Number(row.score).toLocaleString()
   },
   {
     key: 'monthly', title: 'This Month', headerClass: 'lb-card-header--monthly',
     rows: gameData.value?.monthly, pending: gamePending.value,
-    endpoint: '/api/game/reorbitmatch/leaderboard', params: { period: 'monthly' },
     formatValue: row => Number(row.score).toLocaleString()
   },
   {
     key: 'weekly', title: 'This Week', headerClass: 'lb-card-header--weekly',
     rows: gameData.value?.weekly, pending: gamePending.value,
-    endpoint: '/api/game/reorbitmatch/leaderboard', params: { period: 'weekly' },
     formatValue: row => Number(row.score).toLocaleString()
   },
 ])
-
-function openModal(board) {
-  modal.value = {
-    title: board.title,
-    endpoint: board.endpoint,
-    params: board.params,
-    formatValue: board.formatValue
-  }
-}
 </script>
 
 <style scoped>
@@ -231,41 +197,12 @@ function openModal(board) {
 }
 
 .lb-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 7px 10px;
   color: #fff;
-}
-
-.lb-card-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lb-viewall {
-  flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0.02em;
-  padding: 3px 10px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.lb-viewall:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .lb-card-header--points   { background: linear-gradient(90deg, #1a4a8a 0%, transparent 100%); border-bottom: 1px solid rgba(74,144,226,0.3); }

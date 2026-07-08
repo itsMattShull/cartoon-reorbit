@@ -1,7 +1,7 @@
 // server/api/leaderboard/active-ctoon-acquirers.get.js
-import { defineEventHandler, getQuery } from 'h3'
+import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
-import { mergeViewerRow, markSelf, LEADERBOARD_FULL_LIMIT } from '@/server/utils/leaderboardRank'
+import { mergeViewerRow } from '@/server/utils/leaderboardRank'
 
 const EXCLUDE_USER_ID = '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
 
@@ -53,7 +53,7 @@ const COMBINED_CTE = `
     )
 `
 
-function rankedTop(limit) {
+function rankedTop11() {
   return prisma.$queryRawUnsafe(`
     ${COMBINED_CTE}
     SELECT u."id" AS "userId", u."username", u."avatar", c."count",
@@ -64,7 +64,7 @@ function rankedTop(limit) {
       AND COALESCE(u."banned", false) = false
       AND u."id" <> '${EXCLUDE_USER_ID}'
     ORDER BY rank
-    LIMIT ${Number(limit)};
+    LIMIT 11;
   `)
 }
 
@@ -86,14 +86,8 @@ function rankedViewer(userId) {
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId || null
-  const { full } = getQuery(event)
 
-  if (full) {
-    const rows = await rankedTop(LEADERBOARD_FULL_LIMIT)
-    return markSelf(rows, userId)
-  }
-
-  const top11 = await rankedTop(11)
+  const top11 = await rankedTop11()
   let viewerRow = null
   if (userId && !top11.some(r => r.userId === userId)) {
     const res = await rankedViewer(userId)

@@ -1,7 +1,7 @@
-import { defineEventHandler, getQuery } from 'h3'
+import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { mergeViewerRow, markSelf, LEADERBOARD_FULL_LIMIT } from '@/server/utils/leaderboardRank'
+import { mergeViewerRow } from '@/server/utils/leaderboardRank'
 
 const CACHE_KEY  = 'reorbitmatch:leaderboard:v2'
 const CACHE_TTL  = 1800  // 30 minutes
@@ -13,7 +13,7 @@ const PERIOD_FILTERS = {
   weekly:  `AND s."createdAt" >= NOW() - INTERVAL '7 days'`,
 }
 
-function rankedTop(period, limit) {
+function rankedTop11(period) {
   const dateFilter = PERIOD_FILTERS[period]
   return prisma.$queryRawUnsafe(`
     SELECT u."id" AS "userId", u."username", u."avatar", MAX(s."score")::int AS "score",
@@ -26,7 +26,7 @@ function rankedTop(period, limit) {
       ${dateFilter}
     GROUP BY u."id", u."username", u."avatar"
     ORDER BY rank
-    LIMIT ${Number(limit)};
+    LIMIT 11;
   `)
 }
 
@@ -50,22 +50,15 @@ function rankedViewer(period, userId) {
 
 async function fetchTop11() {
   const [allTime, monthly, weekly] = await Promise.all([
-    rankedTop('allTime', 11),
-    rankedTop('monthly', 11),
-    rankedTop('weekly', 11),
+    rankedTop11('allTime'),
+    rankedTop11('monthly'),
+    rankedTop11('weekly'),
   ])
   return { allTime, monthly, weekly }
 }
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId || null
-  const { full, period: rawPeriod } = getQuery(event)
-  const period = ['allTime', 'monthly', 'weekly'].includes(rawPeriod) ? rawPeriod : 'allTime'
-
-  if (full) {
-    const rows = await rankedTop(period, LEADERBOARD_FULL_LIMIT)
-    return markSelf(rows, userId)
-  }
 
   let top11
   try {

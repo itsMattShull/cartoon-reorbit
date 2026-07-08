@@ -10,12 +10,3 @@ export function mergeViewerRow(top11Rows, viewerRow, userId) {
   }
   return rows.map(({ userId: _drop, ...rest }) => rest)
 }
-
-export function markSelf(rows, userId) {
-  return rows.map(({ userId: rowUserId, ...rest }) => ({
-    ...rest,
-    isSelf: userId != null && rowUserId === userId
-  }))
-}
-
-export const LEADERBOARD_FULL_LIMIT = 300
