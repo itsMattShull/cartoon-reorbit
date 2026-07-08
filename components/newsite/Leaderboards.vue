@@ -1,91 +1,35 @@
 <template>
   <div class="leaderboards">
     <div class="lb-nav">
-      <GreenButton :active="activeTab === 'users'" @click="activeTab = 'users'">Users</GreenButton>
-      <GreenButton :active="activeTab === 'games'" @click="activeTab = 'games'">Games</GreenButton>
       <NuxtLink to="/newsite/games" class="lb-nav-link">
         <GreenButton>Games Home</GreenButton>
       </NuxtLink>
+      <GreenButton :active="true">Leaderboards</GreenButton>
+      <div class="lb-nav-right">
+        <GreenButton :active="activeTab === 'users'" @click="activeTab = 'users'">Users</GreenButton>
+        <GreenButton :active="activeTab === 'games'" @click="activeTab = 'games'">Games</GreenButton>
+      </div>
     </div>
 
     <!-- Users Tab -->
     <div v-if="activeTab === 'users'" class="lb-content">
       <div class="lb-grid">
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--points">Top Points</div>
-          <div v-if="pointsPending" class="lb-loading">Loading…</div>
+        <div v-for="board in usersBoards" :key="board.key" class="lb-card">
+          <div class="lb-card-header" :class="board.headerClass">{{ board.title }}</div>
+          <div v-if="board.pending" class="lb-loading">Loading…</div>
           <ul v-else class="lb-list">
-            <li v-for="(row, i) in pointsData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
+            <li
+              v-for="row in board.rows"
+              :key="row.username"
+              class="lb-row"
+              :class="{ 'lb-row--self': row.isSelf }"
+            >
+              <span class="lb-rank">{{ row.rank }}</span>
+              <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
               <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ row.points.toLocaleString() }}</span>
+              <span class="lb-value">{{ board.formatValue(row) }}</span>
             </li>
-            <li v-if="!pointsData?.length" class="lb-empty">No data yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--earners">Top Earners (7d)</div>
-          <div v-if="earnersPending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in earnersData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">+{{ Number(row.points).toLocaleString() }}</span>
-            </li>
-            <li v-if="!earnersData?.length" class="lb-empty">No data yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--spenders">Top Spenders (7d)</div>
-          <div v-if="spendersPending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in spendersData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ Number(row.points).toLocaleString() }}</span>
-            </li>
-            <li v-if="!spendersData?.length" class="lb-empty">No data yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--acquirers">cToon Acquirers (7d)</div>
-          <div v-if="acquirersPending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in acquirersData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ Number(row.count).toLocaleString() }}</span>
-            </li>
-            <li v-if="!acquirersData?.length" class="lb-empty">No data yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--unique">Unique cToons</div>
-          <div v-if="uniquePending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in uniqueData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ Number(row.count).toLocaleString() }}</span>
-            </li>
-            <li v-if="!uniqueData?.length" class="lb-empty">No data yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--total">Total cToons</div>
-          <div v-if="totalPending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in totalData" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ Number(row.count).toLocaleString() }}</span>
-            </li>
-            <li v-if="!totalData?.length" class="lb-empty">No data yet</li>
+            <li v-if="!board.rows?.length" class="lb-empty">No data yet</li>
           </ul>
         </div>
       </div>
@@ -97,42 +41,22 @@
         <span class="lb-games-title">ReOrbit Match</span>
       </div>
       <div class="lb-grid">
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--alltime">All Time</div>
-          <div v-if="gamePending" class="lb-loading">Loading…</div>
+        <div v-for="board in gamesBoards" :key="board.key" class="lb-card">
+          <div class="lb-card-header" :class="board.headerClass">{{ board.title }}</div>
+          <div v-if="board.pending" class="lb-loading">Loading…</div>
           <ul v-else class="lb-list">
-            <li v-for="(row, i) in gameData?.allTime" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
+            <li
+              v-for="row in board.rows"
+              :key="row.username"
+              class="lb-row"
+              :class="{ 'lb-row--self': row.isSelf }"
+            >
+              <span class="lb-rank">{{ row.rank }}</span>
+              <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
               <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ row.score.toLocaleString() }}</span>
+              <span class="lb-value">{{ board.formatValue(row) }}</span>
             </li>
-            <li v-if="!gameData?.allTime?.length" class="lb-empty">No scores yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--monthly">This Month</div>
-          <div v-if="gamePending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in gameData?.monthly" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ row.score.toLocaleString() }}</span>
-            </li>
-            <li v-if="!gameData?.monthly?.length" class="lb-empty">No scores yet</li>
-          </ul>
-        </div>
-
-        <div class="lb-card">
-          <div class="lb-card-header lb-card-header--weekly">This Week</div>
-          <div v-if="gamePending" class="lb-loading">Loading…</div>
-          <ul v-else class="lb-list">
-            <li v-for="(row, i) in gameData?.weekly" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ i + 1 }}</span>
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-              <span class="lb-value">{{ row.score.toLocaleString() }}</span>
-            </li>
-            <li v-if="!gameData?.weekly?.length" class="lb-empty">No scores yet</li>
+            <li v-if="!board.rows?.length" class="lb-empty">No scores yet</li>
           </ul>
         </div>
       </div>
@@ -141,15 +65,69 @@
 </template>
 
 <script setup>
-const activeTab = ref('users')
+import { useRequestHeaders } from '#app'
 
-const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [] })
-const { data: earnersData, pending: earnersPending } = useFetch('/api/leaderboard/trending-earners', { default: () => [] })
-const { data: spendersData, pending: spendersPending } = useFetch('/api/leaderboard/trending-spenders', { default: () => [] })
-const { data: acquirersData, pending: acquirersPending } = useFetch('/api/leaderboard/active-ctoon-acquirers', { default: () => [] })
-const { data: uniqueData, pending: uniquePending } = useFetch('/api/leaderboard/unique-ctoons', { default: () => [] })
-const { data: totalData, pending: totalPending } = useFetch('/api/leaderboard/total-ctoons', { default: () => [] })
-const { data: gameData, pending: gamePending } = useFetch('/api/game/reorbitmatch/leaderboard', { default: () => null })
+const activeTab = ref('users')
+const headers = process.server ? useRequestHeaders(['cookie']) : undefined
+
+const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [], headers })
+const { data: earnersData, pending: earnersPending } = useFetch('/api/leaderboard/trending-earners', { default: () => [], headers })
+const { data: spendersData, pending: spendersPending } = useFetch('/api/leaderboard/trending-spenders', { default: () => [], headers })
+const { data: acquirersData, pending: acquirersPending } = useFetch('/api/leaderboard/active-ctoon-acquirers', { default: () => [], headers })
+const { data: uniqueData, pending: uniquePending } = useFetch('/api/leaderboard/unique-ctoons', { default: () => [], headers })
+const { data: totalData, pending: totalPending } = useFetch('/api/leaderboard/total-ctoons', { default: () => [], headers })
+const { data: gameData, pending: gamePending } = useFetch('/api/game/reorbitmatch/leaderboard', { default: () => null, headers })
+
+const usersBoards = computed(() => [
+  {
+    key: 'points', title: 'Top Points', headerClass: 'lb-card-header--points',
+    rows: pointsData.value, pending: pointsPending.value,
+    formatValue: row => Number(row.points).toLocaleString()
+  },
+  {
+    key: 'earners', title: 'Top Earners (7d)', headerClass: 'lb-card-header--earners',
+    rows: earnersData.value, pending: earnersPending.value,
+    formatValue: row => `+${Number(row.points).toLocaleString()}`
+  },
+  {
+    key: 'spenders', title: 'Top Spenders (7d)', headerClass: 'lb-card-header--spenders',
+    rows: spendersData.value, pending: spendersPending.value,
+    formatValue: row => Number(row.points).toLocaleString()
+  },
+  {
+    key: 'acquirers', title: 'cToon Acquirers (7d)', headerClass: 'lb-card-header--acquirers',
+    rows: acquirersData.value, pending: acquirersPending.value,
+    formatValue: row => Number(row.count).toLocaleString()
+  },
+  {
+    key: 'unique', title: 'Unique cToons', headerClass: 'lb-card-header--unique',
+    rows: uniqueData.value, pending: uniquePending.value,
+    formatValue: row => Number(row.count).toLocaleString()
+  },
+  {
+    key: 'total', title: 'Total cToons', headerClass: 'lb-card-header--total',
+    rows: totalData.value, pending: totalPending.value,
+    formatValue: row => Number(row.count).toLocaleString()
+  },
+])
+
+const gamesBoards = computed(() => [
+  {
+    key: 'alltime', title: 'All Time', headerClass: 'lb-card-header--alltime',
+    rows: gameData.value?.allTime, pending: gamePending.value,
+    formatValue: row => Number(row.score).toLocaleString()
+  },
+  {
+    key: 'monthly', title: 'This Month', headerClass: 'lb-card-header--monthly',
+    rows: gameData.value?.monthly, pending: gamePending.value,
+    formatValue: row => Number(row.score).toLocaleString()
+  },
+  {
+    key: 'weekly', title: 'This Week', headerClass: 'lb-card-header--weekly',
+    rows: gameData.value?.weekly, pending: gamePending.value,
+    formatValue: row => Number(row.score).toLocaleString()
+  },
+])
 </script>
 
 <style scoped>
@@ -175,6 +153,12 @@ const { data: gameData, pending: gamePending } = useFetch('/api/game/reorbitmatc
 
 .lb-nav-link {
   text-decoration: none;
+}
+
+.lb-nav-right {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -247,12 +231,27 @@ const { data: gameData, pending: gamePending } = useFetch('/api/game/reorbitmatc
 }
 .lb-row:last-child { border-bottom: none; }
 
+.lb-row--self {
+  background: rgba(126, 200, 240, 0.16);
+  border-left: 2px solid #7ec8f0;
+  border-bottom: 1px solid rgba(126, 200, 240, 0.2);
+}
+
 .lb-rank {
   width: 16px;
   flex-shrink: 0;
   font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.4);
   font-weight: 700;
+}
+
+.lb-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .lb-username {
