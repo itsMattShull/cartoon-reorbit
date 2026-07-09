@@ -71,7 +71,11 @@ function triangleWave(tSeconds, speed, amplitude, phaseOffsetSeconds) {
   let phase = ((tSeconds + phaseOffsetSeconds) % period + period) % period
   const quarter = period / 4
   if (phase < quarter) return (phase / quarter) * amplitude
-  if (phase < 3 * quarter) return amplitude - ((phase - quarter) / quarter) * amplitude * 2
+  // Middle leg spans 2*quarter (from +amplitude down to -amplitude), so the slope is
+  // amplitude/quarter, not 2*amplitude/quarter -- the old extra "* 2" here made the block
+  // swing past the board edge (up to 3x amplitude) before snapping back once phase crossed
+  // into the next leg, which is what caused the visible "pull back" glitch on new blocks.
+  if (phase < 3 * quarter) return amplitude - ((phase - quarter) / quarter) * amplitude
   return -amplitude + ((phase - 3 * quarter) / quarter) * amplitude
 }
 

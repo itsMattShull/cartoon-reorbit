@@ -7,9 +7,11 @@
     <div class="bg-white rounded-lg shadow-md max-w-2xl mx-auto">
       <!-- Tabs -->
       <div
+        ref="tabsScrollEl"
         class="border-b px-4 pt-4 overflow-x-auto no-scrollbar"
         role="tablist"
         aria-label="Game configuration sections"
+        @wheel="onTabsWheel"
       >
         <div class="flex gap-2 sm:gap-4 min-w-max">
           <button
@@ -986,6 +988,16 @@ const activeTab = ref('Global')
 async function switchTab(k) {
   activeTab.value = k
   if (k === 'TKO' && !tkoLoaded.value) await loadTkoEvents()
+}
+
+// Desktop mouse wheels only scroll vertically by default, so this tab strip (scrollbar
+// hidden for touch-friendly styling) would otherwise be unreachable without a trackpad.
+const tabsScrollEl = ref(null)
+function onTabsWheel(e) {
+  const el = tabsScrollEl.value
+  if (!el || el.scrollWidth <= el.clientWidth) return
+  el.scrollLeft += e.deltaY
+  e.preventDefault()
 }
 
 // ── Settings state ────────────────────────────
