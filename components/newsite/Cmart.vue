@@ -90,11 +90,13 @@
             @click="packPreviewVisible = false; buyPack(packPreviewPack)"
           >
             <template v-if="buyingPackIds.includes(packPreviewPack?.id)">Purchasing…</template>
-            <template v-else-if="cmartHalfPriceEnabled">
-              Buy for {{ displayPrice(packPreviewPack?.price).toLocaleString() }} pts
-              <span class="pack-price-original">{{ packPreviewPack?.price?.toLocaleString() }}</span>
+            <template v-else>
+              Buy for {{ displayPrice(packBasePrice(packPreviewPack)).toLocaleString() }} pts
+              <span
+                v-if="packPreviewPack && displayPrice(packBasePrice(packPreviewPack)) !== packPreviewPack.price"
+                class="pack-price-original"
+              >{{ packPreviewPack.price.toLocaleString() }}</span>
             </template>
-            <template v-else>Buy for {{ packPreviewPack?.price?.toLocaleString() }} pts</template>
           </GreenButton>
         </div>
       </div>
@@ -208,11 +210,13 @@
             @click="buyPack(pack)"
           >
             <template v-if="buyingPackIds.includes(pack.id)">Purchasing…</template>
-            <template v-else-if="cmartHalfPriceEnabled">
-              Buy for {{ displayPrice(pack.price).toLocaleString() }} pts
-              <span class="pack-price-original">{{ pack.price.toLocaleString() }}</span>
+            <template v-else>
+              Buy for {{ displayPrice(packBasePrice(pack)).toLocaleString() }} pts
+              <span
+                v-if="displayPrice(packBasePrice(pack)) !== pack.price"
+                class="pack-price-original"
+              >{{ pack.price.toLocaleString() }}</span>
             </template>
-            <template v-else>Buy for {{ pack.price.toLocaleString() }} pts</template>
           </GreenButton>
         </div>
       </template>
@@ -275,6 +279,13 @@ const cmartHalfPriceEnabled = ref(false)
 
 function displayPrice(originalPrice) {
   return cmartHalfPriceEnabled.value ? Math.floor(originalPrice / 2) : originalPrice
+}
+
+// Packs decay in price over time server-side; use the decayed price
+// (effectivePrice) as the basis for display/half-price, falling back to
+// the base price if it hasn't been fetched yet.
+function packBasePrice(pack) {
+  return pack?.effectivePrice ?? pack?.price ?? 0
 }
 
 // ── Packs state ──────────────────────────────────────────────
@@ -622,7 +633,7 @@ function resetPackSequence() {
 
 async function buyPack(pack) {
   if (buyingPackIds.value.includes(pack.id)) return
-  const price = displayPrice(pack.price)
+  const price = displayPrice(packBasePrice(pack))
   if (user.value && user.value.points < price) {
     showToast(`Not enough points — this pack costs ${price.toLocaleString()} pts.`, 'error')
     return
