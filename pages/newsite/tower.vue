@@ -88,6 +88,7 @@
     <Teleport to="body">
       <div v-if="uiState === 'gameover'" class="modal-backdrop" @click.self="uiState = 'start'">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Game Over">
+          <button class="modal-close" type="button" @click="goToGamesHome" aria-label="Close and return to Games Home">&times;</button>
           <h2 class="modal-title">{{ maxedOut ? 'Max Height Reached!' : 'Game Over!' }}</h2>
           <div class="modal-score-row">
             <span class="modal-score-label">Your Score</span>
@@ -236,7 +237,11 @@ function triangleWave(tSeconds, speed, amplitude, phaseOffsetSeconds) {
   let phase = ((tSeconds + phaseOffsetSeconds) % period + period) % period
   const quarter = period / 4
   if (phase < quarter) return (phase / quarter) * amplitude
-  if (phase < 3 * quarter) return amplitude - ((phase - quarter) / quarter) * amplitude * 2
+  // Middle leg spans 2*quarter (from +amplitude down to -amplitude), so the slope is
+  // amplitude/quarter, not 2*amplitude/quarter -- the old extra "* 2" here made the block
+  // swing past the board edge (up to 3x amplitude) before snapping back once phase crossed
+  // into the next leg, which is what caused the visible "pull back" glitch on new blocks.
+  if (phase < 3 * quarter) return amplitude - ((phase - quarter) / quarter) * amplitude
   return -amplitude + ((phase - 3 * quarter) / quarter) * amplitude
 }
 
@@ -502,6 +507,10 @@ function formatReset(isoString) {
   if (!isoString) return ''
   const d = new Date(isoString)
   return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(d)
+}
+
+function goToGamesHome() {
+  navigateTo('/newsite/games')
 }
 
 async function startGame() {
@@ -912,6 +921,7 @@ onUnmounted(() => {
 }
 
 .modal-card {
+  position: relative;
   background: rgba(10, 25, 55, 0.97);
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 20px;
@@ -922,6 +932,30 @@ onUnmounted(() => {
   overflow-y: auto;
   box-shadow: 0 16px 48px rgba(0,0,0,0.7);
   text-align: center;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  font-size: 1.4rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.modal-close:hover,
+.modal-close:focus-visible {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
 }
 
 .modal-title {
