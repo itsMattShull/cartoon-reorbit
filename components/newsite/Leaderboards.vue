@@ -38,7 +38,16 @@
     <!-- Games Tab -->
     <div v-else-if="activeTab === 'games'" class="lb-content">
       <div class="lb-games-header">
-        <span class="lb-games-title">ReOrbit Match</span>
+        <div class="lb-game-switcher">
+          <button
+            v-for="g in gameOptions"
+            :key="g.key"
+            type="button"
+            class="lb-game-pill"
+            :class="{ 'lb-game-pill--active': selectedGame === g.key }"
+            @click="selectedGame = g.key"
+          >{{ g.label }}</button>
+        </div>
       </div>
       <div class="lb-grid">
         <div v-for="board in gamesBoards" :key="board.key" class="lb-card">
@@ -76,7 +85,37 @@ const { data: spendersData, pending: spendersPending } = useFetch('/api/leaderbo
 const { data: acquirersData, pending: acquirersPending } = useFetch('/api/leaderboard/active-ctoon-acquirers', { default: () => [], headers })
 const { data: uniqueData, pending: uniquePending } = useFetch('/api/leaderboard/unique-ctoons', { default: () => [], headers })
 const { data: totalData, pending: totalPending } = useFetch('/api/leaderboard/total-ctoons', { default: () => [], headers })
-const { data: gameData, pending: gamePending } = useFetch('/api/game/reorbitmatch/leaderboard', { default: () => null, headers })
+
+// Games tab: multiple games now share this leaderboard view. Only the selected game's
+// leaderboard is fetched, and only once the Games tab is actually opened, so visiting the
+// Users tab (the default) never pulls either game's leaderboard data.
+const gameOptions = [
+  { key: 'reorbitmatch', label: 'ReOrbit Match', endpoint: '/api/game/reorbitmatch/leaderboard' },
+  { key: 'tower',        label: 'Tower Stack',   endpoint: '/api/game/tower/leaderboard' }
+]
+const selectedGame = ref('reorbitmatch')
+const gameDataCache = ref({})
+const gamePendingKey = ref(null)
+
+async function loadGameLeaderboard(key) {
+  if (Object.prototype.hasOwnProperty.call(gameDataCache.value, key)) return
+  gamePendingKey.value = key
+  try {
+    const opt = gameOptions.find(g => g.key === key)
+    gameDataCache.value[key] = await $fetch(opt.endpoint, { headers })
+  } catch {
+    gameDataCache.value[key] = null
+  } finally {
+    if (gamePendingKey.value === key) gamePendingKey.value = null
+  }
+}
+
+watch([activeTab, selectedGame], ([tab, game]) => {
+  if (tab === 'games') loadGameLeaderboard(game)
+}, { immediate: true })
+
+const gameData    = computed(() => gameDataCache.value[selectedGame.value] || null)
+const gamePending = computed(() => gamePendingKey.value === selectedGame.value)
 
 const usersBoards = computed(() => [
   {
@@ -173,14 +212,31 @@ const gamesBoards = computed(() => [
   margin-bottom: 10px;
 }
 
-.lb-games-title {
-  font-size: 1.1rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+.lb-game-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lb-game-pill {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.lb-game-pill:hover { color: rgba(255, 255, 255, 0.85); }
+
+.lb-game-pill--active {
+  color: #fff;
   background: linear-gradient(135deg, #4fc3f7, #ab47bc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  border-color: transparent;
 }
 
 .lb-grid {

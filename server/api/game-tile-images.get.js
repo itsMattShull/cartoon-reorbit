@@ -10,7 +10,8 @@ export default defineEventHandler(async () => {
       gameTileWinwheelImagePath:     true,
       gameTileClashImagePath:        true,
       gameTileTkoImagePath:          true,
-      gameTileReorbitmatchImagePath: true
+      gameTileReorbitmatchImagePath: true,
+      gameTileTowerImagePath:        true
     }
   })
 
@@ -20,6 +21,7 @@ export default defineEventHandler(async () => {
     winwheel:     cfg?.gameTileWinwheelImagePath     ?? null,
     clash:        cfg?.gameTileClashImagePath        ?? null,
     tko:          cfg?.gameTileTkoImagePath          ?? null,
-    reorbitmatch: cfg?.gameTileReorbitmatchImagePath ?? null
+    reorbitmatch: cfg?.gameTileReorbitmatchImagePath ?? null,
+    tower:        cfg?.gameTileTowerImagePath        ?? null
   }
 })

@@ -500,6 +500,10 @@ model User {
   reOrbitMatchScores ReOrbitMatchScore[]
   reOrbitMatchPlays  ReOrbitMatchPlay[]
 
+  // Tower Stack
+  towerStackScores TowerStackScore[]
+  towerStackPlays  TowerStackPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -970,6 +974,15 @@ model GameConfig {
   reorbitGridSize       Int     @default(8)
   reorbitComboMs        Int     @default(3500)
 
+  // — Tower Stack settings —
+  towerPlaysPerPeriod      Int   @default(3)
+  towerPointsPerGame       Int   @default(50)
+  towerBaseSpeed           Float @default(90)
+  towerSpeedGrowthPerLayer Float @default(0.03)
+  towerMaxSpeedMultiplier  Float @default(2.5)
+  towerPerfectEpsilon      Float @default(4)
+  towerMaxLayers           Int   @default(800)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -1016,6 +1029,7 @@ model GlobalGameConfig {
   gameTileClashImagePath        String?
   gameTileTkoImagePath          String?
   gameTileReorbitmatchImagePath String?
+  gameTileTowerImagePath        String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -2560,6 +2574,31 @@ model ReOrbitMatchScore {
 }
 
 model ReOrbitMatchPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+// ── Tower Stack ────────────────────────────────────────────────────────────────
+
+model TowerStackScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model TowerStackPlay {
   id        String   @id @default(uuid())
   userId    String
   createdAt DateTime @default(now())

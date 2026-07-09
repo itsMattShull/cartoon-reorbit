@@ -140,6 +140,19 @@ export default defineEventHandler(async (event) => {
             reorbitComboMs: 3500
           }
         })
+      } else if (gameName === 'TowerStack') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            towerPlaysPerPeriod: 3,
+            towerPointsPerGame: 50,
+            towerBaseSpeed: 90,
+            towerSpeedGrowthPerLayer: 0.03,
+            towerMaxSpeedMultiplier: 2.5,
+            towerPerfectEpsilon: 4,
+            towerMaxLayers: 800
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,
