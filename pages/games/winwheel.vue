@@ -371,7 +371,11 @@ async function spinWheel() {
   // New spin: ensure we wait for this round's result modal first
   hasShownResult.value = false
 
-  startSpinSound()
+  // Prime the audio context/buffer now, while we're still inside the click's user-gesture
+  // window -- but don't start the tick sequence's clock yet. That happens once rotation.value
+  // is actually set below, so the audio's slow-down curve stays in sync with the wheel's own
+  // spinDurationMs CSS transition instead of racing ahead of it during the /spin network call.
+  primeSpinSound()
 
   // optimistic
   user.value.points -= spinCost.value
@@ -391,6 +395,7 @@ async function spinWheel() {
     const fullTurns = 5
     const wedgeMid  = startOffset + sliceAngle/2 + sliceIndex*sliceAngle
     rotation.value  = fullTurns*360 - wedgeMid
+    startSpinSound()
 
     setTimeout(async () => {
       stopSpinSound()
@@ -483,10 +488,16 @@ function playSpinSoundOnce() {
   }
 }
 
+function primeSpinSound() {
+  if (!winWheelSoundPath.value) return
+  ensureAudioContext()
+  void prepareSpinSoundBuffer()
+}
+
 function startSpinSound() {
   if (!winWheelSoundPath.value) return
   stopSpinSound()
-  void prepareSpinSoundBuffer()
+  primeSpinSound()
   if (winWheelSoundMode.value === 'once') {
     playSpinSoundOnce()
     return
