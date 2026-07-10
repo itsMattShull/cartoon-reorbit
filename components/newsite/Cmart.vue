@@ -808,10 +808,11 @@ async function closeOverlay() {
   display: flex;
   flex-direction: row;
   gap: 6px;
-  padding: 6px 6px 0;
+  padding: 6px;
   overflow-x: auto;
   scrollbar-width: none;
   flex-shrink: 0;
+  background: var(--bg-color);
 }
 
 .cmart-header {
