@@ -112,21 +112,25 @@
     <div class="cmart-header">Cartoon ReOrbit cMart</div>
     <div v-if="cmartHalfPriceEnabled" class="cmart-sale-banner">🏷️ 50% Off Sale! All prices are half price.</div>
 
+    <!-- ── Active Sale banner — floats over the top-right corner of the
+         whole panel (overlapping the header), positioned here (rather than
+         inside .cmart-grid) so it isn't clipped by that scroll container ── -->
+    <div v-if="cmartTab === 'ctoons' && !loading && activeSale" class="sale-banner">
+      <img
+        v-if="activeSale.imagePath && !saleImageFailed"
+        :src="activeSale.imagePath"
+        :alt="activeSale.name"
+        class="sale-banner-img"
+        @error="saleImageFailed = true"
+      />
+      <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
+    </div>
+
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
       <!-- ── Active Sale showcase (sits above the cards grid, sized to its
            own content — not a grid item, see .cmart-grid CSS note) ────── -->
       <div v-if="!loading && activeSale" class="sale-showcase">
-        <div class="sale-banner">
-          <img
-            v-if="activeSale.imagePath && !saleImageFailed"
-            :src="activeSale.imagePath"
-            :alt="activeSale.name"
-            class="sale-banner-img"
-            @error="saleImageFailed = true"
-          />
-          <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
-        </div>
         <div class="sale-grid">
             <ShortCard
               v-for="item in activeSale.items"
@@ -840,7 +844,6 @@ async function closeOverlay() {
 
 /* ── Sale showcase ───────────────────────────────────────────── */
 .sale-showcase {
-  position: relative;
   flex-shrink: 0;
   padding: 6px;
   margin-bottom: 4px;
@@ -849,13 +852,15 @@ async function closeOverlay() {
   border-bottom: 2px solid var(--OrbitLightBlue, #3399CC);
 }
 
-/* Floats over the top-right corner of the grid rather than taking up its
-   own row — the badge is sized to its own natural image dimensions. */
+/* Floats over the top-right corner of the whole panel, overlapping the
+   header bar, rather than being scoped to the sale showcase box below it
+   (which scrolls out of view inside .cmart-grid) — the badge is sized to
+   its own natural image dimensions. Positioned relative to .cmart. */
 .sale-banner {
   position: absolute;
-  top: -10px;
+  top: -18px;
   right: -6px;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1379,7 +1384,7 @@ async function closeOverlay() {
   }
 
   .sale-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
   }
 
