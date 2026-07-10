@@ -1,6 +1,7 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isSyntheticUserCtoonId, resolveUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { getActiveSale } from '@/server/utils/activeSaleCache'
 
 function asString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -67,6 +68,10 @@ export default defineEventHandler(async (event) => {
     _max: { mintNumber: true }
   })
   const highestMint = mintAgg._max.mintNumber ?? ctoon.totalMinted ?? 0
+
+  const activeSale = await getActiveSale()
+  const activeSaleItem = activeSale?.items?.find(item => item.ctoon.id === ctoon.id) || null
+  const saleImagePath = activeSaleItem ? (activeSale.imagePath || null) : null
 
   const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount] = await Promise.all([
     prisma.auction.findFirst({
@@ -184,7 +189,8 @@ export default defineEventHandler(async (event) => {
       secondEditionOverlayY: ctoon.secondEditionOverlayY,
       secondEditionOverlaySize: ctoon.secondEditionOverlaySize,
       relatedFirstEdition: ctoon.relatedFirstEdition ?? null,
-      relatedSecondEdition: ctoon.relatedSecondEdition ?? null
+      relatedSecondEdition: ctoon.relatedSecondEdition ?? null,
+      saleImagePath
     },
     userCtoon: userStats,
     ownedCount
