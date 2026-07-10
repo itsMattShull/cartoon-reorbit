@@ -80,13 +80,20 @@ function triangleWave(tSeconds, speed, amplitude, phaseOffsetSeconds) {
 }
 
 // Center position of the moving block for layer n at elapsed seconds `tSeconds` since that
-// layer began. Axis alternates by parity of n; direction of the initial phase alternates too
-// (deterministic, matches the reference game's left/right/left/right entrance pattern).
+// layer began. Axis alternates by parity of n. Each layer's block must ENTER already at the
+// board edge and slide toward the opposite edge -- never drift outward first -- so the phase
+// offset is anchored to a triangleWave turning point (quarter/3*quarter), not an arbitrary
+// fraction of the period. Which edge it enters from alternates by layer parity (deterministic,
+// matches the reference game's left/right/left/right entrance pattern); the per-session jitter
+// only decides which side layer 1 starts from, preserving jitter's anti-cheat role (see file
+// header) without letting it place the block mid-swing at the start of a layer.
 function movingCenterAt(n, tSeconds, cfg, jitter) {
   const speed = layerSpeed(n, cfg, jitter)
   const amplitude = cfg.boardHalfRange
   const period = (4 * amplitude) / speed
-  const phaseOffset = jitter.phaseFrac * period
+  const quarter = period / 4
+  const startsPositive = (jitter.phaseFrac < 0.5) === (n % 2 === 1)
+  const phaseOffset = startsPositive ? quarter : 3 * quarter
   return triangleWave(tSeconds, speed, amplitude, phaseOffset)
 }
 

@@ -245,11 +245,15 @@ function triangleWave(tSeconds, speed, amplitude, phaseOffsetSeconds) {
   return -amplitude + ((phase - 3 * quarter) / quarter) * amplitude
 }
 
+// MUST mirror movingCenterAt in towerStackEngine.js exactly (see that file for why the phase
+// offset is anchored to a turning point instead of an arbitrary fraction of the period).
 function movingCenterAt(n, tSeconds) {
   const speed = layerSpeed(n)
   const amplitude = cfg.boardHalfRange
   const period = (4 * amplitude) / speed
-  const phaseOffset = jitter.phaseFrac * period
+  const quarter = period / 4
+  const startsPositive = (jitter.phaseFrac < 0.5) === (n % 2 === 1)
+  const phaseOffset = startsPositive ? quarter : 3 * quarter
   return triangleWave(tSeconds, speed, amplitude, phaseOffset)
 }
 
