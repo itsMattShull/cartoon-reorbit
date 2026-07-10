@@ -179,7 +179,6 @@
               </template>
             </ShortCard>
         </div>
-        <div class="sale-divider">More cToons</div>
       </div>
 
       <div v-if="loading" class="cmart-cards-grid">
@@ -841,10 +840,8 @@ async function closeOverlay() {
 
 /* ── Sale showcase ───────────────────────────────────────────── */
 .sale-showcase {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   flex-shrink: 0;
-  gap: 4px;
   padding: 6px;
   margin-bottom: 4px;
   border-radius: 8px;
@@ -852,24 +849,26 @@ async function closeOverlay() {
   border-bottom: 2px solid var(--OrbitLightBlue, #3399CC);
 }
 
+/* Floats over the top-right corner of the grid rather than taking up its
+   own row — the badge is sized to its own natural image dimensions. */
 .sale-banner {
-  position: relative;
-  width: 100%;
-  height: 160px;
-  flex-shrink: 0;
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--OrbitDarkBlue, #336699);
+  transform: rotate(10deg);
+  pointer-events: none;
 }
 
 .sale-banner-img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: 200px;
+  max-height: 160px;
 }
 
 .sale-banner-title {
@@ -882,7 +881,6 @@ async function closeOverlay() {
 }
 
 .sale-banner-title--fallback {
-  width: 100%;
   border-radius: 6px;
   padding: 14px 8px;
   font-size: 1.15rem;
@@ -894,16 +892,6 @@ async function closeOverlay() {
   grid-auto-rows: var(--shortcard-height);
   gap: 4px;
   flex-shrink: 0;
-}
-
-.sale-divider {
-  margin-top: 6px;
-  text-align: center;
-  font-size: 0.7rem;
-  font-weight: bold;
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .sale-price-stack {
@@ -1391,7 +1379,7 @@ async function closeOverlay() {
   }
 
   .sale-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
     grid-auto-rows: auto;
   }
 
@@ -1401,8 +1389,9 @@ async function closeOverlay() {
     aspect-ratio: 3 / 4;
   }
 
-  .sale-banner {
-    height: 100px;
+  .sale-banner-img {
+    max-width: 130px;
+    max-height: 110px;
   }
 
   .sale-banner-title {
