@@ -90,6 +90,7 @@ export default defineEventHandler(async (event) => {
               select: {
                 ctoonId: true,
                 quantity: true,
+                endBonusAt: true,
                 ctoon: { select: { id: true, name: true } }
               }
             },

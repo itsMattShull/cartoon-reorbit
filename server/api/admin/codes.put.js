@@ -30,6 +30,18 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(rewards) || rewards.length === 0) throw createError({ statusCode: 400, statusMessage: 'At least one reward batch is required.' })
   if (prerequisites && !Array.isArray(prerequisites)) throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
 
+  // A ctoon's End Bonus Date/Time must be after both "now" and the code's own
+  // (newly submitted) start date/time, if that start date/time is still in the future.
+  const now = new Date()
+  const endBonusMin = startsDate && startsDate > now ? startsDate : now
+  function parseEndBonusAt(raw, where) {
+    if (raw == null || raw === '') return null
+    const dt = new Date(raw)
+    if (isNaN(dt.getTime())) throw createError({ statusCode: 400, statusMessage: `Invalid endBonusAt in ${where}.` })
+    if (dt <= endBonusMin) throw createError({ statusCode: 400, statusMessage: `endBonusAt in ${where} must be after the code's start date/time and after now.` })
+    return dt
+  }
+
   const existing = await prisma.claimCode.findUnique({
     where: { code },
     include: {
@@ -84,7 +96,8 @@ export default defineEventHandler(async (event) => {
     const fixedCreates = r.ctoons.map((c, j) => {
       if (!c?.ctoonId || typeof c.ctoonId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in rewards[${i}].ctoons[${j}].` })
       if (typeof c.quantity !== 'number' || c.quantity < 1) throw createError({ statusCode: 400, statusMessage: `Invalid quantity in rewards[${i}].ctoons[${j}].` })
-      return { ctoonId: c.ctoonId, quantity: c.quantity }
+      const endBonusAt = parseEndBonusAt(c.endBonusAt, `rewards[${i}].ctoons[${j}]`)
+      return { ctoonId: c.ctoonId, quantity: c.quantity, endBonusAt }
     })
     return {
       points: points ?? 0,
@@ -134,7 +147,7 @@ export default defineEventHandler(async (event) => {
       rewards: (cc.rewards || []).map(r => ({
         points: r.points ?? 0,
         pooledUniqueCount: r.pooledUniqueCount ?? null,
-        ctoons: (r.ctoons || []).map(x => ({ ctoonId: x.ctoonId, quantity: x.quantity })),
+        ctoons: (r.ctoons || []).map(x => ({ ctoonId: x.ctoonId, quantity: x.quantity, endBonusAt: x.endBonusAt ? new Date(x.endBonusAt).toISOString() : null })),
         pool: (r.poolCtoons || []).map(x => ({ ctoonId: x.ctoonId, weight: x.weight })),
         backgrounds: (r.backgrounds || []).map(b => b.backgroundId)
       })),

@@ -403,6 +403,8 @@ const statusImage = computed(() => {
 
   if (isSoldOut) return '/images/soldout.png'
 
+  if (ctoon.value?.saleImagePath) return ctoon.value.saleImagePath
+
   const releaseDate = ctoon.value?.releaseDate
   if (releaseDate) {
     const releaseTime = new Date(releaseDate).getTime()
@@ -427,7 +429,9 @@ const statusImageAlt = computed(() => {
     case '/images/new.png': return 'New release'
     case '/images/goingfast.png': return 'Going fast'
     case '/images/soldout.png': return 'Sold out'
-    default: return 'cToon status'
+    default: return ctoon.value?.saleImagePath && statusImage.value === ctoon.value.saleImagePath
+      ? 'On sale'
+      : 'cToon status'
   }
 })
 

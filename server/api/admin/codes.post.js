@@ -29,6 +29,18 @@ export default defineEventHandler(async (event) => {
   if (!Array.isArray(rewards) || rewards.length === 0) throw createError({ statusCode: 400, statusMessage: 'At least one reward batch is required.' })
   if (prerequisites && !Array.isArray(prerequisites)) throw createError({ statusCode: 400, statusMessage: 'prerequisites must be an array.' })
 
+  // A ctoon's End Bonus Date/Time must be after both "now" and the code's own
+  // start date/time (if that start date/time is still in the future).
+  const now = new Date()
+  const endBonusMin = startsDate && startsDate > now ? startsDate : now
+  function parseEndBonusAt(raw, where) {
+    if (raw == null || raw === '') return null
+    const dt = new Date(raw)
+    if (isNaN(dt.getTime())) throw createError({ statusCode: 400, statusMessage: `Invalid endBonusAt in ${where}.` })
+    if (dt <= endBonusMin) throw createError({ statusCode: 400, statusMessage: `endBonusAt in ${where} must be after the code's start date/time and after now.` })
+    return dt
+  }
+
   const prereqCreates = (prerequisites || []).map((p, i) => {
     if (!p?.ctoonId || typeof p.ctoonId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in prerequisites[${i}].` })
     return { ctoonId: p.ctoonId }
@@ -96,7 +108,8 @@ export default defineEventHandler(async (event) => {
     const ctoonCreates = r.ctoons.map((c, j) => {
       if (!c?.ctoonId || typeof c.ctoonId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid ctoonId in rewards[${i}].ctoons[${j}].` })
       if (typeof c.quantity !== 'number' || c.quantity < 1) throw createError({ statusCode: 400, statusMessage: `Invalid quantity in rewards[${i}].ctoons[${j}].` })
-      return { ctoonId: c.ctoonId, quantity: c.quantity }
+      const endBonusAt = parseEndBonusAt(c.endBonusAt, `rewards[${i}].ctoons[${j}]`)
+      return { ctoonId: c.ctoonId, quantity: c.quantity, endBonusAt }
     })
     return {
       points: points ?? 0,

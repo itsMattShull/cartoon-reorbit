@@ -112,24 +112,26 @@
     <div class="cmart-header">Cartoon ReOrbit cMart</div>
     <div v-if="cmartHalfPriceEnabled" class="cmart-sale-banner">🏷️ 50% Off Sale! All prices are half price.</div>
 
+    <!-- ── Active Sale banner — floats over the top-right corner of the
+         whole panel (overlapping the header), positioned here (rather than
+         inside .cmart-grid) so it isn't clipped by that scroll container ── -->
+    <div v-if="cmartTab === 'ctoons' && !loading && activeSale" class="sale-banner">
+      <img
+        v-if="activeSale.imagePath && !saleImageFailed"
+        :src="activeSale.imagePath"
+        :alt="activeSale.name"
+        class="sale-banner-img"
+        @error="saleImageFailed = true"
+      />
+      <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
+    </div>
+
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
-      <template v-if="loading">
-        <ShortCard v-for="n in 100" :key="'skel-' + n" class="skel-card">
-          <template #header><div class="skel-img" /></template>
-          <template #middle><div class="skel-line skel-name" /></template>
-          <template #footer-left><div class="skel-line skel-price" /></template>
-          <template #footer-right><div class="skel-line skel-btn" /></template>
-        </ShortCard>
-      </template>
-      <template v-else>
-        <!-- ── Active Sale showcase ─────────────────────────────── -->
-        <div v-if="activeSale" class="sale-showcase">
-          <div class="sale-banner">
-            <img v-if="activeSale.imagePath" :src="activeSale.imagePath" :alt="activeSale.name" class="sale-banner-img" />
-            <div class="sale-banner-title">🔥 {{ activeSale.name }}</div>
-          </div>
-          <div class="sale-grid">
+      <!-- ── Active Sale showcase (sits above the cards grid, sized to its
+           own content — not a grid item, see .cmart-grid CSS note) ────── -->
+      <div v-if="!loading && activeSale" class="sale-showcase">
+        <div class="sale-grid">
             <ShortCard
               v-for="item in activeSale.items"
               :key="'sale-' + item.ctoon.id"
@@ -180,12 +182,19 @@
                 </GreenButton>
               </template>
             </ShortCard>
-          </div>
-          <div class="sale-divider">More cToons</div>
         </div>
-      </template>
-      <div v-if="!loading && !ctoons.length" class="cmart-status">No cToons available.</div>
-      <template v-else-if="!loading">
+      </div>
+
+      <div v-if="loading" class="cmart-cards-grid">
+        <ShortCard v-for="n in 100" :key="'skel-' + n" class="skel-card">
+          <template #header><div class="skel-img" /></template>
+          <template #middle><div class="skel-line skel-name" /></template>
+          <template #footer-left><div class="skel-line skel-price" /></template>
+          <template #footer-right><div class="skel-line skel-btn" /></template>
+        </ShortCard>
+      </div>
+      <div v-else-if="!ctoons.length" class="cmart-status">No cToons available.</div>
+      <div v-else class="cmart-cards-grid">
         <ShortCard
           v-for="c in ctoons"
           :key="c.id"
@@ -244,7 +253,7 @@
             </template>
           </template>
         </ShortCard>
-      </template>
+      </div>
     </div>
 
     <!-- ── Packs grid ────────────────────────────────────────────── -->
@@ -414,6 +423,7 @@ const originalOwnedSet = computed(() => new Set(ownedCtoonIds.value))
 
 // ── Active Sale showcase ─────────────────────────────────────
 const activeSale = ref(null)
+const saleImageFailed = ref(false)
 
 function isSaleItemSoldOut(item) {
   const c = item.ctoon
@@ -422,7 +432,9 @@ function isSaleItemSoldOut(item) {
 
 async function loadActiveSale() {
   try {
-    activeSale.value = await $fetch('/api/cmart/active-sale')
+    const sale = await $fetch('/api/cmart/active-sale')
+    if (sale?.id !== activeSale.value?.id) saleImageFailed.value = false
+    activeSale.value = sale
   } catch (err) {
     console.error('Cmart: failed to load active sale', err)
   }
@@ -832,28 +844,37 @@ async function closeOverlay() {
 
 /* ── Sale showcase ───────────────────────────────────────────── */
 .sale-showcase {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 6px;
+  flex-shrink: 0;
+  padding: 6px;
   margin-bottom: 4px;
+  border-radius: 8px;
+  background: var(--OrbitDarkBlue, #336699);
   border-bottom: 2px solid var(--OrbitLightBlue, #3399CC);
 }
 
+/* Floats over the top-right corner of the whole panel, overlapping the
+   header bar, rather than being scoped to the sale showcase box below it
+   (which scrolls out of view inside .cmart-grid) — the badge is sized to
+   its own natural image dimensions. Positioned relative to .cmart. */
 .sale-banner {
-  position: relative;
-  width: 100%;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--OrbitDarkBlue, #336699);
+  --sale-banner-top: 5px;
+  position: absolute;
+  top: var(--sale-banner-top);
+  right: -6px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(10deg);
+  pointer-events: none;
 }
 
 .sale-banner-img {
   display: block;
-  width: 100%;
+  width: auto;
+  height: auto;
+  max-width: 200px;
   max-height: 160px;
-  object-fit: cover;
 }
 
 .sale-banner-title {
@@ -865,21 +886,18 @@ async function closeOverlay() {
   background: rgba(0, 0, 0, 0.35);
 }
 
+.sale-banner-title--fallback {
+  border-radius: 6px;
+  padding: 14px 8px;
+  font-size: 1.15rem;
+}
+
 .sale-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: var(--shortcard-height);
   gap: 4px;
-}
-
-.sale-divider {
-  margin-top: 6px;
-  text-align: center;
-  font-size: 0.7rem;
-  font-weight: bold;
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 .sale-price-stack {
@@ -923,23 +941,34 @@ async function closeOverlay() {
 }
 
 /* ── cToons grid ─────────────────────────────────────────────── */
+/* .cmart-grid is just the scroll container (flex column) so the sale
+   showcase can sit above the regular-cards grid, sized to its own natural
+   content, while both still scroll away together. It used to be the grid
+   itself with the sale-showcase as a full-width spanning grid item, but
+   CSS Grid's "auto" row-track sizing badly under-measured that item's
+   actual (deeply-nested, variable-row-count) content height, which then
+   either clipped it or made it overlap the row below — a nested grid inside
+   a flex column just isn't something Grid's intrinsic sizing handles well. */
 .cmart-grid {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  /* minmax (not a fixed value) so the full-width sale-showcase row can grow to
-     fit its content while ordinary card rows still size to --shortcard-height. */
-  grid-auto-rows: minmax(var(--shortcard-height), auto);
-  grid-auto-flow: row;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
   padding: 4px;
   box-sizing: border-box;
 }
 
-.cmart-grid :deep(.sc) {
+.cmart-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: var(--shortcard-height);
+  grid-auto-flow: row;
+  gap: 4px;
+}
+
+.cmart-cards-grid :deep(.sc) {
   width: 100%;
 }
 
@@ -1336,12 +1365,12 @@ async function closeOverlay() {
 }
 
 @media (max-width: 768px) {
-  .cmart-grid {
+  .cmart-cards-grid {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
   }
 
-  .cmart-grid :deep(.sc) {
+  .cmart-cards-grid :deep(.sc) {
     width: 100%;
     height: auto;
     aspect-ratio: 3 / 4;
@@ -1366,8 +1395,13 @@ async function closeOverlay() {
     aspect-ratio: 3 / 4;
   }
 
+  .sale-banner {
+    --sale-banner-top: 41px;
+  }
+
   .sale-banner-img {
-    max-height: 100px;
+    max-width: 130px;
+    max-height: 110px;
   }
 
   .sale-banner-title {
