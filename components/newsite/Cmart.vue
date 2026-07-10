@@ -126,8 +126,14 @@
         <!-- ── Active Sale showcase ─────────────────────────────── -->
         <div v-if="activeSale" class="sale-showcase">
           <div class="sale-banner">
-            <img v-if="activeSale.imagePath" :src="activeSale.imagePath" :alt="activeSale.name" class="sale-banner-img" />
-            <div class="sale-banner-title">🔥 {{ activeSale.name }}</div>
+            <img
+              v-if="activeSale.imagePath && !saleImageFailed"
+              :src="activeSale.imagePath"
+              :alt="activeSale.name"
+              class="sale-banner-img"
+              @error="saleImageFailed = true"
+            />
+            <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
           </div>
           <div class="sale-grid">
             <ShortCard
@@ -414,6 +420,7 @@ const originalOwnedSet = computed(() => new Set(ownedCtoonIds.value))
 
 // ── Active Sale showcase ─────────────────────────────────────
 const activeSale = ref(null)
+const saleImageFailed = ref(false)
 
 function isSaleItemSoldOut(item) {
   const c = item.ctoon
@@ -422,7 +429,9 @@ function isSaleItemSoldOut(item) {
 
 async function loadActiveSale() {
   try {
-    activeSale.value = await $fetch('/api/cmart/active-sale')
+    const sale = await $fetch('/api/cmart/active-sale')
+    if (sale?.id !== activeSale.value?.id) saleImageFailed.value = false
+    activeSale.value = sale
   } catch (err) {
     console.error('Cmart: failed to load active sale', err)
   }
@@ -836,8 +845,10 @@ async function closeOverlay() {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding-bottom: 6px;
+  padding: 6px;
   margin-bottom: 4px;
+  border-radius: 8px;
+  background: var(--OrbitDarkBlue, #336699);
   border-bottom: 2px solid var(--OrbitLightBlue, #3399CC);
 }
 
@@ -852,6 +863,7 @@ async function closeOverlay() {
 .sale-banner-img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 5;
   max-height: 160px;
   object-fit: cover;
 }
@@ -863,6 +875,12 @@ async function closeOverlay() {
   font-weight: bold;
   color: #fff;
   background: rgba(0, 0, 0, 0.35);
+}
+
+.sale-banner-title--fallback {
+  border-radius: 6px;
+  padding: 14px 8px;
+  font-size: 1.15rem;
 }
 
 .sale-grid {
