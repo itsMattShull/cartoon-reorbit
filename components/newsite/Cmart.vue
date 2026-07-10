@@ -498,10 +498,11 @@ let toastTimer = null
 function showToast(message, type = 'success') {
   if (toastTimer) clearTimeout(toastTimer)
   const rect = cmartEl.value?.closest('.main-content')?.getBoundingClientRect()
-  if (rect) {
-    toast.top  = rect.top + 16
-    toast.left = rect.left + rect.width / 2
-  }
+  // Clamp to the top of the viewport so the toast is always visible even
+  // when the page has been scrolled down (e.g. on mobile, where the whole
+  // page scrolls and main-content's top can move off-screen).
+  toast.top  = Math.max(rect ? rect.top + 16 : 16, 16)
+  toast.left = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
   toast.message = message
   toast.type    = type
   toast.visible = true
