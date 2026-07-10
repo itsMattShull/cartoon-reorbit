@@ -855,11 +855,10 @@ async function closeOverlay() {
 .sale-banner {
   position: relative;
   width: 100%;
-  height: 160px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   border-radius: 6px;
   overflow: hidden;
   background: var(--OrbitDarkBlue, #336699);
@@ -867,9 +866,9 @@ async function closeOverlay() {
 
 .sale-banner-img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: 100%;
 }
 
 .sale-banner-title {
@@ -1399,10 +1398,6 @@ async function closeOverlay() {
     width: 100%;
     height: auto;
     aspect-ratio: 3 / 4;
-  }
-
-  .sale-banner {
-    height: 100px;
   }
 
   .sale-banner-title {
