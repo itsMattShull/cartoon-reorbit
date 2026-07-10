@@ -114,28 +114,20 @@
 
     <!-- ── cToons grid ───────────────────────────────────────────── -->
     <div v-if="cmartTab === 'ctoons'" class="cmart-grid">
-      <template v-if="loading">
-        <ShortCard v-for="n in 100" :key="'skel-' + n" class="skel-card">
-          <template #header><div class="skel-img" /></template>
-          <template #middle><div class="skel-line skel-name" /></template>
-          <template #footer-left><div class="skel-line skel-price" /></template>
-          <template #footer-right><div class="skel-line skel-btn" /></template>
-        </ShortCard>
-      </template>
-      <template v-else>
-        <!-- ── Active Sale showcase ─────────────────────────────── -->
-        <div v-if="activeSale" class="sale-showcase">
-          <div class="sale-banner">
-            <img
-              v-if="activeSale.imagePath && !saleImageFailed"
-              :src="activeSale.imagePath"
-              :alt="activeSale.name"
-              class="sale-banner-img"
-              @error="saleImageFailed = true"
-            />
-            <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
-          </div>
-          <div class="sale-grid">
+      <!-- ── Active Sale showcase (sits above the cards grid, sized to its
+           own content — not a grid item, see .cmart-grid CSS note) ────── -->
+      <div v-if="!loading && activeSale" class="sale-showcase">
+        <div class="sale-banner">
+          <img
+            v-if="activeSale.imagePath && !saleImageFailed"
+            :src="activeSale.imagePath"
+            :alt="activeSale.name"
+            class="sale-banner-img"
+            @error="saleImageFailed = true"
+          />
+          <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
+        </div>
+        <div class="sale-grid">
             <ShortCard
               v-for="item in activeSale.items"
               :key="'sale-' + item.ctoon.id"
@@ -186,12 +178,20 @@
                 </GreenButton>
               </template>
             </ShortCard>
-          </div>
-          <div class="sale-divider">More cToons</div>
         </div>
-      </template>
-      <div v-if="!loading && !ctoons.length" class="cmart-status">No cToons available.</div>
-      <template v-else-if="!loading">
+        <div class="sale-divider">More cToons</div>
+      </div>
+
+      <div v-if="loading" class="cmart-cards-grid">
+        <ShortCard v-for="n in 100" :key="'skel-' + n" class="skel-card">
+          <template #header><div class="skel-img" /></template>
+          <template #middle><div class="skel-line skel-name" /></template>
+          <template #footer-left><div class="skel-line skel-price" /></template>
+          <template #footer-right><div class="skel-line skel-btn" /></template>
+        </ShortCard>
+      </div>
+      <div v-else-if="!ctoons.length" class="cmart-status">No cToons available.</div>
+      <div v-else class="cmart-cards-grid">
         <ShortCard
           v-for="c in ctoons"
           :key="c.id"
@@ -250,7 +250,7 @@
             </template>
           </template>
         </ShortCard>
-      </template>
+      </div>
     </div>
 
     <!-- ── Packs grid ────────────────────────────────────────────── -->
@@ -841,9 +841,9 @@ async function closeOverlay() {
 
 /* ── Sale showcase ───────────────────────────────────────────── */
 .sale-showcase {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 4px;
   padding: 6px;
   margin-bottom: 4px;
@@ -855,6 +855,11 @@ async function closeOverlay() {
 .sale-banner {
   position: relative;
   width: 100%;
+  height: 160px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
   overflow: hidden;
   background: var(--OrbitDarkBlue, #336699);
@@ -863,8 +868,7 @@ async function closeOverlay() {
 .sale-banner-img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 5;
-  max-height: 160px;
+  height: 100%;
   object-fit: cover;
 }
 
@@ -878,6 +882,7 @@ async function closeOverlay() {
 }
 
 .sale-banner-title--fallback {
+  width: 100%;
   border-radius: 6px;
   padding: 14px 8px;
   font-size: 1.15rem;
@@ -888,6 +893,7 @@ async function closeOverlay() {
   grid-template-columns: repeat(5, 1fr);
   grid-auto-rows: var(--shortcard-height);
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .sale-divider {
@@ -941,23 +947,34 @@ async function closeOverlay() {
 }
 
 /* ── cToons grid ─────────────────────────────────────────────── */
+/* .cmart-grid is just the scroll container (flex column) so the sale
+   showcase can sit above the regular-cards grid, sized to its own natural
+   content, while both still scroll away together. It used to be the grid
+   itself with the sale-showcase as a full-width spanning grid item, but
+   CSS Grid's "auto" row-track sizing badly under-measured that item's
+   actual (deeply-nested, variable-row-count) content height, which then
+   either clipped it or made it overlap the row below — a nested grid inside
+   a flex column just isn't something Grid's intrinsic sizing handles well. */
 .cmart-grid {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--OrbitLightBlue) transparent;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  /* minmax (not a fixed value) so the full-width sale-showcase row can grow to
-     fit its content while ordinary card rows still size to --shortcard-height. */
-  grid-auto-rows: minmax(var(--shortcard-height), auto);
-  grid-auto-flow: row;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
   padding: 4px;
   box-sizing: border-box;
 }
 
-.cmart-grid :deep(.sc) {
+.cmart-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: var(--shortcard-height);
+  grid-auto-flow: row;
+  gap: 4px;
+}
+
+.cmart-cards-grid :deep(.sc) {
   width: 100%;
 }
 
@@ -1354,12 +1371,12 @@ async function closeOverlay() {
 }
 
 @media (max-width: 768px) {
-  .cmart-grid {
+  .cmart-cards-grid {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
   }
 
-  .cmart-grid :deep(.sc) {
+  .cmart-cards-grid :deep(.sc) {
     width: 100%;
     height: auto;
     aspect-ratio: 3 / 4;
@@ -1384,8 +1401,8 @@ async function closeOverlay() {
     aspect-ratio: 3 / 4;
   }
 
-  .sale-banner-img {
-    max-height: 100px;
+  .sale-banner {
+    height: 100px;
   }
 
   .sale-banner-title {
