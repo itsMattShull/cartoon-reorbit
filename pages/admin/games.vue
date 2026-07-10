@@ -7,9 +7,11 @@
     <div class="bg-white rounded-lg shadow-md max-w-2xl mx-auto">
       <!-- Tabs -->
       <div
+        ref="tabsScrollEl"
         class="border-b px-4 pt-4 overflow-x-auto no-scrollbar"
         role="tablist"
         aria-label="Game configuration sections"
+        @wheel="onTabsWheel"
       >
         <div class="flex gap-2 sm:gap-4 min-w-max">
           <button
@@ -790,6 +792,54 @@
           </button>
         </section>
 
+        <!-- Tower Stack -->
+        <section v-if="activeTab === 'TowerStack'" role="tabpanel" aria-label="Tower Stack Settings">
+          <h2 class="text-2xl font-semibold mb-4">Tower Stack Settings</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="towerPlaysPerPeriod" min="1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="towerPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Base Speed</label>
+              <p class="text-xs text-gray-400 mb-1">Starting speed of the sliding block (world units/sec)</p>
+              <input type="number" v-model.number="towerBaseSpeed" min="1" step="1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Speed Growth Per Layer</label>
+              <p class="text-xs text-gray-400 mb-1">How much faster each layer gets (0.03 = +3% per layer)</p>
+              <input type="number" v-model.number="towerSpeedGrowthPerLayer" min="0" step="0.005" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier</label>
+              <p class="text-xs text-gray-400 mb-1">Speed growth caps at this multiple of the base speed</p>
+              <input type="number" v-model.number="towerMaxSpeedMultiplier" min="1" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Perfect Alignment Tolerance</label>
+              <p class="text-xs text-gray-400 mb-1">Taps within this distance of dead-center don't trim the tower's width</p>
+              <input type="number" v-model.number="towerPerfectEpsilon" min="0" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Layers</label>
+              <p class="text-xs text-gray-400 mb-1">Run ends automatically past this height (10–2000)</p>
+              <input type="number" v-model.number="towerMaxLayers" min="10" max="2000" class="input" />
+            </div>
+          </div>
+
+          <button @click="saveTowerConfig" :disabled="loadingTower" class="btn-primary">
+            <span v-if="!loadingTower">Save Tower Stack Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -931,12 +981,23 @@ const tabs = [
   { key: 'Clash',        label: 'gToon Clash' },
   { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'TKO',          label: 'TKO' },
-  { key: 'ReOrbitMatch', label: 'ReOrbit Match' }
+  { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
+  { key: 'TowerStack',   label: 'Tower Stack' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
   activeTab.value = k
   if (k === 'TKO' && !tkoLoaded.value) await loadTkoEvents()
+}
+
+// Desktop mouse wheels only scroll vertically by default, so this tab strip (scrollbar
+// hidden for touch-friendly styling) would otherwise be unreachable without a trackpad.
+const tabsScrollEl = ref(null)
+function onTabsWheel(e) {
+  const el = tabsScrollEl.value
+  if (!el || el.scrollWidth <= el.clientWidth) return
+  el.scrollLeft += e.deltaY
+  e.preventDefault()
 }
 
 // ── Settings state ────────────────────────────
@@ -1252,6 +1313,7 @@ async function loadSettings() {
   gameTileImages.value.clash        = g.gameTileClashImagePath        || ''
   gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
+  gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1329,6 +1391,15 @@ async function loadSettings() {
   reorbitEmojis.value           = ro.reorbitEmojis ?? []
   reorbitGridSize.value         = ro.reorbitGridSize ?? 8
   reorbitComboMs.value          = ro.reorbitComboMs ?? 3500
+
+  const tw = await $fetch('/api/admin/game-config?gameName=TowerStack')
+  towerPlaysPerPeriod.value      = tw.towerPlaysPerPeriod ?? 3
+  towerPointsPerGame.value       = tw.towerPointsPerGame ?? 50
+  towerBaseSpeed.value           = tw.towerBaseSpeed ?? 90
+  towerSpeedGrowthPerLayer.value = tw.towerSpeedGrowthPerLayer ?? 0.03
+  towerMaxSpeedMultiplier.value  = tw.towerMaxSpeedMultiplier ?? 2.5
+  towerPerfectEpsilon.value      = tw.towerPerfectEpsilon ?? 4
+  towerMaxLayers.value           = tw.towerMaxLayers ?? 800
 }
 
 // Win Wheel state
@@ -1667,11 +1738,12 @@ const gameTileSlots = [
   { slot: 'winwheel',     label: 'Win Wheel' },
   { slot: 'clash',        label: 'gToons Clash' },
   { slot: 'tko',          label: 'TKO' },
-  { slot: 'reorbitmatch', label: 'ReOrbit Match' }
+  { slot: 'reorbitmatch', label: 'ReOrbit Match' },
+  { slot: 'tower',        label: 'Tower Stack' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -1724,6 +1796,16 @@ const reorbitComboMs         = ref(3500)
 const reorbitEmojiInput      = ref('')
 const loadingReorbit         = ref(false)
 
+// ── Tower Stack ────────────────────────────────
+const towerPlaysPerPeriod      = ref(3)
+const towerPointsPerGame       = ref(50)
+const towerBaseSpeed           = ref(90)
+const towerSpeedGrowthPerLayer = ref(0.03)
+const towerMaxSpeedMultiplier  = ref(2.5)
+const towerPerfectEpsilon      = ref(4)
+const towerMaxLayers           = ref(800)
+const loadingTower              = ref(false)
+
 function addReorbitEmoji() {
   const e = reorbitEmojiInput.value.trim()
   if (!e) return
@@ -1757,6 +1839,31 @@ async function saveReorbitConfig() {
     toastMessage.value = 'Error saving ReOrbit Match settings'; toastType.value = 'error'
   } finally {
     loadingReorbit.value = false
+  }
+}
+
+async function saveTowerConfig() {
+  loadingTower.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                 'TowerStack',
+        towerPlaysPerPeriod:      towerPlaysPerPeriod.value,
+        towerPointsPerGame:       towerPointsPerGame.value,
+        towerBaseSpeed:           towerBaseSpeed.value,
+        towerSpeedGrowthPerLayer: towerSpeedGrowthPerLayer.value,
+        towerMaxSpeedMultiplier:  towerMaxSpeedMultiplier.value,
+        towerPerfectEpsilon:      towerPerfectEpsilon.value,
+        towerMaxLayers:           towerMaxLayers.value
+      }
+    })
+    toastMessage.value = 'Tower Stack settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving Tower Stack settings'; toastType.value = 'error'
+  } finally {
+    loadingTower.value = false
   }
 }
 

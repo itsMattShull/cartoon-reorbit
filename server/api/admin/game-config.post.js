@@ -125,6 +125,28 @@ function validatePayload(payload) {
         throw createError({ statusCode: 400, statusMessage: 'Each emoji must be a non-empty string' })
       }
     }
+  } else if (payload.gameName === 'TowerStack') {
+    if (payload.towerPlaysPerPeriod == null || typeof payload.towerPlaysPerPeriod !== 'number' || payload.towerPlaysPerPeriod < 1) {
+      throw createError({ statusCode: 400, statusMessage: '"towerPlaysPerPeriod" must be a positive number' })
+    }
+    if (payload.towerPointsPerGame == null || typeof payload.towerPointsPerGame !== 'number' || payload.towerPointsPerGame < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"towerPointsPerGame" must be a non-negative number' })
+    }
+    if (payload.towerBaseSpeed == null || typeof payload.towerBaseSpeed !== 'number' || payload.towerBaseSpeed <= 0) {
+      throw createError({ statusCode: 400, statusMessage: '"towerBaseSpeed" must be a positive number' })
+    }
+    if (payload.towerSpeedGrowthPerLayer == null || typeof payload.towerSpeedGrowthPerLayer !== 'number' || payload.towerSpeedGrowthPerLayer < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"towerSpeedGrowthPerLayer" must be a non-negative number' })
+    }
+    if (payload.towerMaxSpeedMultiplier == null || typeof payload.towerMaxSpeedMultiplier !== 'number' || payload.towerMaxSpeedMultiplier < 1) {
+      throw createError({ statusCode: 400, statusMessage: '"towerMaxSpeedMultiplier" must be a number >= 1' })
+    }
+    if (payload.towerPerfectEpsilon == null || typeof payload.towerPerfectEpsilon !== 'number' || payload.towerPerfectEpsilon < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"towerPerfectEpsilon" must be a non-negative number' })
+    }
+    if (payload.towerMaxLayers == null || typeof payload.towerMaxLayers !== 'number' || payload.towerMaxLayers < 10 || payload.towerMaxLayers > 2000) {
+      throw createError({ statusCode: 400, statusMessage: '"towerMaxLayers" must be between 10 and 2000' })
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -156,6 +178,14 @@ export default defineEventHandler(async (event) => {
     reorbitEmojis = [],
     reorbitGridSize,
     reorbitComboMs,
+    // TowerStack fields
+    towerPlaysPerPeriod,
+    towerPointsPerGame,
+    towerBaseSpeed,
+    towerSpeedGrowthPerLayer,
+    towerMaxSpeedMultiplier,
+    towerPerfectEpsilon,
+    towerMaxLayers,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -337,6 +367,18 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...reorbitData }
         updateData = { ...updateData, ...reorbitData }
+      } else if (gameName === 'TowerStack') {
+        const towerData = {
+          towerPlaysPerPeriod,
+          towerPointsPerGame,
+          towerBaseSpeed,
+          towerSpeedGrowthPerLayer,
+          towerMaxSpeedMultiplier,
+          towerPerfectEpsilon,
+          towerMaxLayers
+        }
+        createData = { ...createData, ...towerData }
+        updateData = { ...updateData, ...towerData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -505,6 +547,21 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (String(prev) !== String(next)) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:ReOrbitMatch', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'TowerStack') {
+          const changes = [
+            ['towerPlaysPerPeriod', before?.towerPlaysPerPeriod, towerPlaysPerPeriod],
+            ['towerPointsPerGame', before?.towerPointsPerGame, towerPointsPerGame],
+            ['towerBaseSpeed', before?.towerBaseSpeed, towerBaseSpeed],
+            ['towerSpeedGrowthPerLayer', before?.towerSpeedGrowthPerLayer, towerSpeedGrowthPerLayer],
+            ['towerMaxSpeedMultiplier', before?.towerMaxSpeedMultiplier, towerMaxSpeedMultiplier],
+            ['towerPerfectEpsilon', before?.towerPerfectEpsilon, towerPerfectEpsilon],
+            ['towerMaxLayers', before?.towerMaxLayers, towerMaxLayers]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:TowerStack', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

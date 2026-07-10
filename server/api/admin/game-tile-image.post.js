@@ -23,7 +23,8 @@ const SLOT_FIELD = {
   winwheel:     'gameTileWinwheelImagePath',
   clash:        'gameTileClashImagePath',
   tko:          'gameTileTkoImagePath',
-  reorbitmatch: 'gameTileReorbitmatchImagePath'
+  reorbitmatch: 'gameTileReorbitmatchImagePath',
+  tower:        'gameTileTowerImagePath'
 }
 
 export default defineEventHandler(async (event) => {
