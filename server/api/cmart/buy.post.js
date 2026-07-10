@@ -42,25 +42,37 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // Allow if in cMart OR part of an active holiday event
+    // Allow if in cMart OR part of an active holiday event OR part of an active Sale.
+    // A Sale grants a cToon temporary cMart availability for its window, even if the
+    // cToon isn't normally listed (inCmart=false) or its releaseDate hasn't passed.
     const now = new Date()
-    const activeHolidayItem = await prisma.holidayEventItem.findFirst({
-      where: {
-        ctoonId,
-        event: {
-          isActive: true,
-          startsAt: { lte: now },
-          endsAt:   { gte: now }
+    const [activeHolidayItem, activeSaleItem] = await Promise.all([
+      prisma.holidayEventItem.findFirst({
+        where: {
+          ctoonId,
+          event: {
+            isActive: true,
+            startsAt: { lte: now },
+            endsAt:   { gte: now }
+          }
         }
-      }
-    })
+      }),
+      prisma.saleCtoon.findFirst({
+        where: {
+          ctoonId,
+          sale: { startAt: { lte: now }, endAt: { gte: now } }
+        },
+        select: { id: true, saleId: true, price: true, perDayLimit: true },
+        orderBy: { createdAt: 'asc' }
+      })
+    ])
 
-    if (!ctoon || (!ctoon.inCmart && !activeHolidayItem)) {
+    if (!ctoon || (!ctoon.inCmart && !activeHolidayItem && !activeSaleItem)) {
       throw createError({ statusCode: 404, statusMessage: 'cToon not for sale, get hacked noob.' })
     }
 
-    // Release window gating (two-phase)
-    if (ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
+    // Release window gating (two-phase) — a Sale bypasses this the same way inCmart does.
+    if (!activeSaleItem && ctoon.releaseDate && new Date(ctoon.releaseDate).getTime() > now.getTime()) {
       throw createError({ statusCode: 403, statusMessage: 'cToon not released yet.  Quit being a cheater.' })
     }
 
@@ -126,14 +138,23 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // — Resolve effective price (apply global half-price discount if active)
+    // — Resolve effective price. An active Sale price takes priority over (and is
+    // not stacked with) the global half-price toggle — the two discount mechanisms
+    // are independent. Note: this is only used for the wallet pre-check below; the
+    // worker re-derives the sale price itself right before charging so a stale value
+    // here (e.g. an admin edits/deletes the sale between this check and the job
+    // running) can never overcharge or undercharge the user.
     let effectivePrice = ctoon.price
-    try {
-      const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartHalfPriceEnabled: true } })
-      if (cfg?.cmartHalfPriceEnabled === true) {
-        effectivePrice = Math.floor(ctoon.price / 2)
-      }
-    } catch {}
+    if (activeSaleItem) {
+      effectivePrice = activeSaleItem.price
+    } else {
+      try {
+        const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartHalfPriceEnabled: true } })
+        if (cfg?.cmartHalfPriceEnabled === true) {
+          effectivePrice = Math.floor(ctoon.price / 2)
+        }
+      } catch {}
+    }
 
     // — Verify available points (total - active locks)
     const [wallet, activeLocks] = await Promise.all([
@@ -153,8 +174,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Not enough available points.' })
     }
 
-    // — Enqueue the mint job
-    const job = await mintQueue.add('mintCtoon', { userId, ctoonId, effectivePrice })
+    // — Enqueue the mint job. saleId tells the worker to re-derive sale price/limit
+    // itself (it does not trust effectivePrice for sale-priced items — see worker).
+    const job = await mintQueue.add('mintCtoon', { userId, ctoonId, effectivePrice, saleId: activeSaleItem?.saleId ?? null })
 
     // — Set up a QueueEvents listener on the same queue
     queueEvents = new QueueEvents(mintQueue.name, { connection: redisConnection })
@@ -176,6 +198,7 @@ export default defineEventHandler(async (event) => {
       if (/sold out/i.test(msg))                statusCode = 410
       else if (/minting period/i.test(msg))      statusCode = 410
       else if (/insufficient points/i.test(msg)) statusCode = 400
+      else if (/daily limit/i.test(msg))         statusCode = 429
       else if (/purchase limit/i.test(msg))      statusCode = 403
       else if (/not-for-sale/i.test(msg))        statusCode = 404
 

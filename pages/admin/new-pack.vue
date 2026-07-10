@@ -447,7 +447,7 @@ const inCmart     = ref(false)
 const scheduledAtLocal    = ref('')
 const scheduledOffAtLocal = ref('')
 const sellOutBehavior     = ref('REMOVE_ON_ANY_RARITY_EMPTY')
-const dailyPurchaseLimit  = ref(null)
+const dailyPurchaseLimit  = ref(5)
 const maxBuysPerUser      = ref(null)
 const globalDefaultMaxBuys = ref(null)
 

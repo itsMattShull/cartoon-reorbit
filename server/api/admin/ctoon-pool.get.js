@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
       initialQuantity: true,
       inCmart: true,
       isSecondEdition: true,
+      price: true,
       _count: { select: { owners: true } } // minted so far
     }
   })

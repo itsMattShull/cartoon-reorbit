@@ -6,6 +6,7 @@
     <div class="newsite-admin-body">
       <AdminAnalytics v-if="!section" />
       <AdminManageUsers v-else-if="section === 'manageUsers'" />
+      <AdminManageSales v-else-if="section === 'manageSales'" />
       <AdminCheatFinder v-else-if="section === 'cheatFinder'" />
       <AdminDeviceFingerprintLogs v-else-if="section === 'deviceFingerprints'" />
       <AdminAuthLogs v-else-if="section === 'authLogs'" />

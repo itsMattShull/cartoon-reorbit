@@ -294,6 +294,8 @@ model Ctoon {
   cZoneSearchAppearances CZoneSearchAppearance[]
   cZoneSearchCaptures   CZoneSearchCapture[]
   cmartPurchaseLogs     CmartPurchaseLog[]
+  saleItems             SaleCtoon[]
+  saleDailyPurchases    SaleDailyPurchase[]
 
   @@index([isSecondEdition])
   @@index([name])
@@ -444,6 +446,8 @@ model User {
   adImagesCreated          AdImage[]                   @relation("AdImagesCreatedBy")
   winballGrandPrizeCreated WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCreatedBy")
   announcementsCreated     Announcement[]              @relation("AnnouncementsCreatedBy")
+  salesCreated             Sale[]                      @relation("SaleCreatedBy")
+  saleDailyPurchases       SaleDailyPurchase[]
   // Ban notes relations
   banNotes                 UserBanNote[]               @relation("BanNoteUser")
   banNotesAuthored         UserBanNote[]               @relation("BanNoteAdmin")
@@ -2507,14 +2511,70 @@ model CmartPurchaseLog {
   id        String   @id @default(uuid())
   userId    String
   ctoonId   String
+  saleId    String?
   createdAt DateTime @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+  sale  Sale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([ctoonId, createdAt])
   @@index([createdAt])
+  @@index([userId, ctoonId, saleId, createdAt])
+}
+
+// ── cMart Sales ──────────────────────────────────────────────────────────
+
+model Sale {
+  id          String   @id @default(uuid())
+  name        String
+  imagePath   String?
+  startAt     DateTime
+  endAt       DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+
+  createdBy      User                @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  items          SaleCtoon[]
+  purchaseLogs   CmartPurchaseLog[]
+  dailyPurchases SaleDailyPurchase[]
+
+  @@index([startAt, endAt])
+}
+
+model SaleCtoon {
+  id          String   @id @default(uuid())
+  saleId      String
+  ctoonId     String
+  price       Int
+  perDayLimit Int
+  createdAt   DateTime @default(now())
+
+  sale  Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([saleId, ctoonId])
+  @@index([ctoonId])
+}
+
+// Atomic per-user/per-cToon/per-sale/per-day purchase counter, used the same
+// way Ctoon.totalMinted is: increment-then-check inside a transaction so the
+// row lock serializes concurrent buyers instead of racing on a count() read.
+model SaleDailyPurchase {
+  id          String   @id @default(uuid())
+  userId      String
+  ctoonId     String
+  saleId      String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+  sale  Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ctoonId, saleId, windowStart])
 }
 
 // ── Survey Answers (identity signal + 3000-point reward) ──────────────────────
