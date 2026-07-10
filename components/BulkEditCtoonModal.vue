@@ -250,7 +250,7 @@
                   <!-- Mint Limit Type -->
                   <div>
                     <label class="block text-xs font-medium text-gray-500 mb-1">Mint Limit</label>
-                    <select v-model="row.current.mintLimitType"
+                    <select v-model="row.current.mintLimitType" @change="onRowMintLimitTypeChange(i)"
                       :class="['w-full border rounded px-2 py-1.5 text-sm bg-white', fieldChanged(row, 'mintLimitType') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']">
                       <option value="defined">Defined Number Limit</option>
                       <option value="timeBased">Time Based Limit</option>
@@ -438,6 +438,7 @@ onMounted(async () => {
           assetPath: c.assetPath,
           original,
           current: { ...original },
+          prevMintLimitType: original.mintLimitType,
         }
       })
   } catch (err) {
@@ -447,21 +448,65 @@ onMounted(async () => {
   }
 })
 
+// ── Mint defaults (from global rarity default settings) ───────────────
+const MINT_DEFAULTS_FALLBACK = {
+  Common:      { quantity: 160, initialQuantity: 160, perUserLimit: 7 },
+  Uncommon:    { quantity: 120, initialQuantity: 120, perUserLimit: 5 },
+  Rare:        { quantity: 80,  initialQuantity: 80,  perUserLimit: 3 },
+  'Very Rare': { quantity: 60,  initialQuantity: 60,  perUserLimit: 2 },
+  'Crazy Rare':{ quantity: 40,  initialQuantity: 40,  perUserLimit: 1 },
+}
+
+function mintDefaultsForRarity(rarity) {
+  const d = rarityDefaults.value?.[rarity]
+  if (d) {
+    return {
+      quantity: d.totalQuantity ?? null,
+      initialQuantity: d.initialQuantity ?? null,
+      perUserLimit: d.perUserLimit ?? null,
+    }
+  }
+  return MINT_DEFAULTS_FALLBACK[rarity] || { quantity: null, initialQuantity: null, perUserLimit: null }
+}
+
+// Apply the global default total/initial quantity + per-user limit for the row's rarity
+function applyDefinedMintDefaults(row) {
+  const d = mintDefaultsForRarity(row.current.rarity)
+  row.current.quantity = d.quantity
+  row.current.initialQuantity = d.initialQuantity
+  row.current.perUserLimit = d.perUserLimit
+}
+
 // ── Bulk apply ────────────────────────────────────────────────────────
 function applyBulk(field, value) {
   if (value === '' || value === null || value === undefined) return
   for (const row of rows.value) {
+    const prevMintLimitType = row.current.mintLimitType
     row.current[field] = value
     // Auto-price on rarity change
     if (field === 'rarity') {
       row.current.price = rarityPrice(value)
     }
+    // Switching from Time Based to Defined: seed quantity fields from global defaults
+    if (field === 'mintLimitType' && value === 'defined' && prevMintLimitType === 'timeBased') {
+      applyDefinedMintDefaults(row)
+    }
+    row.prevMintLimitType = row.current.mintLimitType
   }
 }
 
 function onRowRarityChange(i) {
   const rarity = rows.value[i].current.rarity
   rows.value[i].current.price = rarityPrice(rarity)
+}
+
+function onRowMintLimitTypeChange(i) {
+  const row = rows.value[i]
+  const now = row.current.mintLimitType
+  if (row.prevMintLimitType === 'timeBased' && now === 'defined') {
+    applyDefinedMintDefaults(row)
+  }
+  row.prevMintLimitType = now
 }
 
 // Watch bulk rarity to also update bulk price display (no side-effects on rows here — applyBulk handles that)
