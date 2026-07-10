@@ -857,8 +857,9 @@ async function closeOverlay() {
    (which scrolls out of view inside .cmart-grid) — the badge is sized to
    its own natural image dimensions. Positioned relative to .cmart. */
 .sale-banner {
+  --sale-banner-top: 5px;
   position: absolute;
-  top: -18px;
+  top: var(--sale-banner-top);
   right: -6px;
   z-index: 3;
   display: flex;
@@ -1392,6 +1393,10 @@ async function closeOverlay() {
     width: 100%;
     height: auto;
     aspect-ratio: 3 / 4;
+  }
+
+  .sale-banner {
+    --sale-banner-top: 41px;
   }
 
   .sale-banner-img {
