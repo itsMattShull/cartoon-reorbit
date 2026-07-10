@@ -29,7 +29,10 @@ export default defineEventHandler(async () => {
   const ctoons = await prisma.ctoon.findMany({
     where: {
       inCmart: true,
-      releaseDate: { lte: twoWeeksAhead }
+      releaseDate: { lte: twoWeeksAhead },
+      // cToons in an active Sale are shown only in the Sale showcase section
+      // (see /api/cmart/active-sale), not duplicated in this normal grid.
+      saleItems: { none: { sale: { startAt: { lte: now }, endAt: { gte: now } } } }
     },
     orderBy: { releaseDate: 'desc' },
     select: {

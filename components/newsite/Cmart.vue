@@ -102,6 +102,12 @@
       </div>
     </Teleport>
 
+    <!-- ── Section nav (moved here from the sidebar) ───────────────── -->
+    <div class="cm-nav">
+      <GreenButton :active="cmartTab === 'ctoons'" @click="cmartTab = 'ctoons'">cToons</GreenButton>
+      <GreenButton :active="cmartTab === 'packs'" @click="cmartTab = 'packs'">Packs</GreenButton>
+    </div>
+
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="cmart-header">Cartoon ReOrbit cMart</div>
     <div v-if="cmartHalfPriceEnabled" class="cmart-sale-banner">🏷️ 50% Off Sale! All prices are half price.</div>
@@ -116,8 +122,70 @@
           <template #footer-right><div class="skel-line skel-btn" /></template>
         </ShortCard>
       </template>
-      <div v-else-if="!ctoons.length" class="cmart-status">No cToons available.</div>
       <template v-else>
+        <!-- ── Active Sale showcase ─────────────────────────────── -->
+        <div v-if="activeSale" class="sale-showcase">
+          <div class="sale-banner">
+            <img v-if="activeSale.imagePath" :src="activeSale.imagePath" :alt="activeSale.name" class="sale-banner-img" />
+            <div class="sale-banner-title">🔥 {{ activeSale.name }}</div>
+          </div>
+          <div class="sale-grid">
+            <ShortCard
+              v-for="item in activeSale.items"
+              :key="'sale-' + item.ctoon.id"
+              :style="isSaleItemSoldOut(item)
+                ? { '--footer-left-width': '100%', '--footer-right-width': '0%' }
+                : {}"
+            >
+              <template #header>
+                <div class="card-header-wrap" @click.stop="openInfo(item.ctoon)">
+                  <img
+                    v-if="item.ctoon.assetPath"
+                    :src="item.ctoon.assetPath"
+                    :alt="item.ctoon.name"
+                    class="card-img"
+                  />
+                  <SecondEditionOverlay :ctoon="item.ctoon" />
+                  <span
+                    class="owned-badge"
+                    :class="originalOwnedSet.has(item.ctoon.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
+                  >{{ originalOwnedSet.has(item.ctoon.id) ? 'Owned' : 'Unowned' }}</span>
+                </div>
+              </template>
+              <template #middle>
+                <div class="card-middle-row">
+                  <span class="card-name">{{ item.ctoon.name }}</span>
+                  <span
+                    class="rarity-badge"
+                    :style="{ background: rarityInfo(item.ctoon.rarity).bg, color: rarityInfo(item.ctoon.rarity).fg }"
+                    :title="item.ctoon.rarity"
+                  >{{ rarityInfo(item.ctoon.rarity).label }}</span>
+                </div>
+              </template>
+              <template #footer-left>
+                <span v-if="isSaleItemSoldOut(item)" class="card-sold-out">Sold Out</span>
+                <span v-else class="card-price sale-price-stack">
+                  <span class="sale-price-now">{{ item.price.toLocaleString() }} pts</span>
+                  <span v-if="item.price !== item.ctoon.price" class="pack-price-original">{{ item.ctoon.price.toLocaleString() }}</span>
+                </span>
+              </template>
+              <template #footer-right>
+                <GreenButton
+                  v-if="!isSaleItemSoldOut(item)"
+                  class="card-buy"
+                  :disabled="buyingIds.includes(item.ctoon.id)"
+                  @click="buy(item.ctoon, item.price)"
+                >
+                  {{ buyingIds.includes(item.ctoon.id) ? '…' : 'Buy' }}
+                </GreenButton>
+              </template>
+            </ShortCard>
+          </div>
+          <div class="sale-divider">More cToons</div>
+        </div>
+      </template>
+      <div v-if="!loading && !ctoons.length" class="cmart-status">No cToons available.</div>
+      <template v-else-if="!loading">
         <ShortCard
           v-for="c in ctoons"
           :key="c.id"
@@ -344,10 +412,27 @@ async function openPackPreview(pack) {
 
 const originalOwnedSet = computed(() => new Set(ownedCtoonIds.value))
 
+// ── Active Sale showcase ─────────────────────────────────────
+const activeSale = ref(null)
+
+function isSaleItemSoldOut(item) {
+  const c = item.ctoon
+  return c.quantity != null && c.totalMinted >= c.quantity
+}
+
+async function loadActiveSale() {
+  try {
+    activeSale.value = await $fetch('/api/cmart/active-sale')
+  } catch (err) {
+    console.error('Cmart: failed to load active sale', err)
+  }
+}
+
 // ── Reactive clock for countdowns ────────────────────────────
 const nowTs = ref(Date.now())
 let _tick = null
 let _refreshTimer = null
+let _saleRefreshTimer = null
 
 // Only Defined Number Limit cToons have a 2-phase cap guard.
 // Returns the currently-active cap: initialCap before finalReleaseAt, full
@@ -532,7 +617,8 @@ onMounted(async () => {
   try {
     const [ctoonRes, upgradesRes] = await Promise.all([
       $fetch('/api/cmart'),
-      $fetch('/api/cmart/upgrades-config').catch(() => ({}))
+      $fetch('/api/cmart/upgrades-config').catch(() => ({})),
+      loadActiveSale()
     ])
     allCtoons.value = ctoonRes
     cmartHalfPriceEnabled.value = upgradesRes?.cmartHalfPriceEnabled === true
@@ -545,11 +631,21 @@ onMounted(async () => {
   await fetchPacks()
   await loadOwnedCtoonIds()
   _tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
+  // The Sale's start/end boundary isn't tied to any cToon's own release timer,
+  // so it needs its own light poll (separate from scheduleNextRefresh) to pick
+  // up a sale starting/ending mid-session.
+  _saleRefreshTimer = setInterval(async () => {
+    await loadActiveSale()
+    try {
+      allCtoons.value = await $fetch('/api/cmart')
+    } catch {}
+  }, 60000)
 })
 
 onUnmounted(() => {
   if (_tick) clearInterval(_tick)
   if (_refreshTimer) clearTimeout(_refreshTimer)
+  if (_saleRefreshTimer) clearInterval(_saleRefreshTimer)
 })
 
 function describePurchaseError(err, kind = 'cToon') {
@@ -593,9 +689,12 @@ function describePurchaseError(err, kind = 'cToon') {
   return raw || `Couldn't complete the ${kind} purchase. Please try again.`
 }
 
-async function buy(ctoon) {
+async function buy(ctoon, priceOverride = null) {
   if (buyingIds.value.includes(ctoon.id)) return
-  const price = displayPrice(ctoon.price)
+  // priceOverride is used for Sale showcase purchases (the sale price, not the
+  // normal displayPrice()/half-price calculation) — the server always resolves
+  // the authoritative charge itself regardless of what's sent here.
+  const price = priceOverride != null ? priceOverride : displayPrice(ctoon.price)
   if (user.value && user.value.points < price) {
     showToast(`Not enough points — this cToon costs ${price.toLocaleString()} pts.`, 'error')
     return
@@ -611,7 +710,8 @@ async function buy(ctoon) {
     const [ctoonRes] = await Promise.all([
       $fetch('/api/cmart'),
       fetchSelf({ force: true }),
-      loadOwnedCtoonIds()
+      loadOwnedCtoonIds(),
+      loadActiveSale()
     ])
     allCtoons.value = ctoonRes
     scheduleNextRefresh()
@@ -703,6 +803,16 @@ async function closeOverlay() {
   --img-scale: 0.7;
 }
 
+.cm-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  padding: 6px 6px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
 .cmart-header {
   flex-shrink: 0;
   width: 100%;
@@ -716,6 +826,72 @@ async function closeOverlay() {
   color: #ffffff;
   background: var(--OrbitLightBlue);
   box-sizing: border-box;
+}
+
+/* ── Sale showcase ───────────────────────────────────────────── */
+.sale-showcase {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 2px solid var(--OrbitLightBlue, #3399CC);
+}
+
+.sale-banner {
+  position: relative;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--OrbitDarkBlue, #336699);
+}
+
+.sale-banner-img {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+.sale-banner-title {
+  padding: 4px 8px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.sale-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-auto-rows: var(--shortcard-height);
+  gap: 4px;
+}
+
+.sale-divider {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sale-price-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.15;
+}
+
+.sale-price-now {
+  font-size: 0.75rem;
+  color: #ffd700;
+  white-space: nowrap;
 }
 
 .cmart-sale-banner {
@@ -752,7 +928,9 @@ async function closeOverlay() {
   scrollbar-color: var(--OrbitLightBlue) transparent;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  grid-auto-rows: var(--shortcard-height);
+  /* minmax (not a fixed value) so the full-width sale-showcase row can grow to
+     fit its content while ordinary card rows still size to --shortcard-height. */
+  grid-auto-rows: minmax(var(--shortcard-height), auto);
   grid-auto-flow: row;
   gap: 4px;
   padding: 4px;
@@ -1173,6 +1351,25 @@ async function closeOverlay() {
 
   :global(.pack-reveal-grid) {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sale-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  .sale-grid :deep(.sc) {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 4;
+  }
+
+  .sale-banner-img {
+    max-height: 100px;
+  }
+
+  .sale-banner-title {
+    font-size: 0.85rem;
   }
 }
 

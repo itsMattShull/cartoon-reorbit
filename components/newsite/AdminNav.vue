@@ -50,7 +50,7 @@ const menus = [
       { id: 'analytics',     label: 'Analytics',    to: '/newsite/admin' },
       { id: 'manageUsers',   label: 'Manage Users', to: '/newsite/admin/manageUsers' },
       { id: 'czoneContest',  label: 'cZone Contest', to: '/newsite/admin/czoneContest' },
-      { id: 'core-placeholder-2', label: 'Placeholder', to: null },
+      { id: 'manageSales',   label: 'Manage Sales', to: '/newsite/admin/manageSales' },
       { id: 'core-placeholder-3', label: 'Placeholder', to: null },
       { id: 'core-placeholder-4', label: 'Placeholder', to: null },
       { id: 'core-placeholder-5', label: 'Placeholder', to: null },

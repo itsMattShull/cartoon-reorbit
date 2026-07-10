@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
+import { getDailyWindowStart } from '../utils/centralTime.js'
 
 const connection = {
   host: process.env.REDIS_HOST,
@@ -16,6 +17,20 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     // Fetch cToon details
     const ctoon = await prisma.ctoon.findUnique({ where: { id: ctoonId } })
     if (!ctoon) throw new Error('Invalid or not-for-sale cToon')
+
+    // Re-derive the active Sale fresh (never trust the HTTP layer's saleId/price for
+    // charging — an admin could edit/delete the sale, or the job could sit queued,
+    // between buy.post.js's check and this worker running).
+    const activeSale = (!isSpecial)
+      ? await prisma.saleCtoon.findFirst({
+          where: {
+            ctoonId,
+            sale: { startAt: { lte: new Date() }, endAt: { gte: new Date() } }
+          },
+          select: { saleId: true, price: true, perDayLimit: true },
+          orderBy: { createdAt: 'asc' }
+        })
+      : null
 
     // ───────────────────── Time-based mint window guard ─────────────────────
     // Special mints (code redemption, cZone capture) bypass this guard so
@@ -89,13 +104,19 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     const totalPoints = wallet?.points ?? 0
     const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
     const availablePoints = totalPoints - lockedSum
-    const chargePrice = (typeof effectivePrice === 'number' && effectivePrice >= 0) ? effectivePrice : ctoon.price
+    // A freshly-verified active Sale price always wins over the (possibly stale)
+    // effectivePrice passed from the HTTP layer.
+    const chargePrice = activeSale
+      ? activeSale.price
+      : ((typeof effectivePrice === 'number' && effectivePrice >= 0) ? effectivePrice : ctoon.price)
     if (!isSpecial && availablePoints < chargePrice) {
       throw new Error('Insufficient points')
     }
 
-    // Per-user limit enforcement
-    if (!isSpecial) {
+    // Per-user limit enforcement. An active Sale's per-day limit fully replaces the
+    // cToon's normal perUserLimit / timeBasedLimitCount checks for the duration of
+    // the sale (see the atomic SaleDailyPurchase counter inside the transaction below).
+    if (!isSpecial && !activeSale) {
       if (ctoon.mintLimitType === 'timeBased') {
         // ── Time-based release purchase limits (replaces 48h perUserLimit for this type) ──
         // Resolve limit: per-cToon override first, then rarity defaults from global config,
@@ -230,6 +251,26 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       const isFirstEdition =
         updatedCtoon.initialQuantity === null || mintNumber <= updatedCtoon.initialQuantity
 
+      // 1b) Sale per-day limit — atomic increment-then-check on a single counter row
+      // (same pattern as the totalMinted increment above) so the row lock serializes
+      // concurrent buyers instead of racing on a count() read.
+      if (activeSale) {
+        const windowStart = getDailyWindowStart()
+        const counter = await tx.saleDailyPurchase.upsert({
+          where: {
+            userId_ctoonId_saleId_windowStart: {
+              userId, ctoonId, saleId: activeSale.saleId, windowStart
+            }
+          },
+          create: { userId, ctoonId, saleId: activeSale.saleId, windowStart, count: 1 },
+          update: { count: { increment: 1 } },
+          select: { count: true }
+        })
+        if (counter.count > activeSale.perDayLimit) {
+          throw new Error(`Daily limit reached — you can buy ${activeSale.perDayLimit} of this cToon per day during this sale (resets at 8pm CST)`)
+        }
+      }
+
       // 2) If not special, deduct points + log
       if (!isSpecial) {
         const updated = await tx.userPoints.update({
@@ -270,7 +311,7 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       // 5) Log cMart purchase for bot-clicker detection metrics
       if (!isSpecial) {
         await tx.cmartPurchaseLog.create({
-          data: { userId, ctoonId }
+          data: { userId, ctoonId, saleId: activeSale?.saleId ?? null }
         })
       }
     })
