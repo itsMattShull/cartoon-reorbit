@@ -63,17 +63,26 @@ export default defineEventHandler(async (event) => {
 
   const pointsToAward = rewardDefs.reduce((s, r) => s + (r.points ?? 0), 0)
 
-  // Fixed awards
+  // Fixed awards — skip any ctoon whose bonus window has already ended.
+  const now = new Date()
   const ctoonAwards = rewardDefs.flatMap(r =>
-    r.ctoons.map(rc => ({
-      ctoonId: rc.ctoon.id,
-      name: rc.ctoon.name,
-      quantity: rc.quantity,
-      initialQuantity: rc.ctoon.initialQuantity ?? 0,
-      assetPath: rc.ctoon.assetPath,
-      rarity: rc.ctoon.rarity,
-      set: rc.ctoon.set
-    }))
+    r.ctoons
+      .filter(rc => {
+        if (!rc.endBonusAt || rc.endBonusAt >= now) return true
+        console.log('[redeem] skipped ctoon: bonus window ended', {
+          codeId: claimCode.id, ctoonId: rc.ctoon.id, userId, endBonusAt: rc.endBonusAt, redeemedAt: now
+        })
+        return false
+      })
+      .map(rc => ({
+        ctoonId: rc.ctoon.id,
+        name: rc.ctoon.name,
+        quantity: rc.quantity,
+        initialQuantity: rc.ctoon.initialQuantity ?? 0,
+        assetPath: rc.ctoon.assetPath,
+        rarity: rc.ctoon.rarity,
+        set: rc.ctoon.set
+      }))
   )
 
   // Pooled awards (unique without replacement)

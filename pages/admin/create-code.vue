@@ -193,11 +193,16 @@
         <!-- cToon Rewards -->
         <div>
           <label class="block font-medium mb-1">cToon Rewards</label>
+          <p class="text-sm text-gray-500 mb-2">
+            Optionally set an End Bonus Date/Time (CST) per cToon below — if set, that cToon is only
+            given out when redeemed between the code's Available At time and that cToon's End Bonus
+            Date/Time. Leave blank to give it out normally whenever the code is redeemed.
+          </p>
 
           <div
             v-for="(rc, idx) in ctoonRewards"
             :key="idx"
-            class="flex items-center space-x-2 mb-2"
+            class="border rounded p-3 mb-2 grid grid-cols-2 sm:grid-cols-[1fr_auto_5rem_auto] gap-2 sm:items-center"
           >
             <!-- per-row datalist fed by filtered options -->
             <datalist :id="`ctoon-list-${idx}`">
@@ -208,41 +213,57 @@
               />
             </datalist>
 
-            <input
-              :value="rc.ctoonName"
-              @input="e => { 
-                const val = e.target.value;
-                rc.ctoonName = val; 
-                onCtoonInput(val);
-              }"
-              :list="`ctoon-list-${idx}`"
-              type="text"
-              required
-              class="flex-1 border rounded p-2"
-              placeholder="Type 3+ characters to search"
-            />
+            <div class="col-span-2 sm:col-span-1">
+              <label class="text-xs text-gray-500 sm:hidden">cToon</label>
+              <input
+                :value="rc.ctoonName"
+                @input="e => {
+                  const val = e.target.value;
+                  rc.ctoonName = val;
+                  onCtoonInput(val);
+                }"
+                :list="`ctoon-list-${idx}`"
+                type="text"
+                required
+                class="w-full border rounded p-2 text-base"
+                placeholder="Type 3+ characters to search"
+              />
+            </div>
 
             <img
               v-if="findCtoonByInput(rc.ctoonName)"
               :src="findCtoonByInput(rc.ctoonName).assetPath"
-              class="w-8 h-8 object-cover rounded"
+              class="w-8 h-8 object-cover rounded justify-self-center"
               alt="cToon preview"
             />
 
-            <input
-              v-model.number="rc.quantity"
-              type="number"
-              min="1"
-              class="w-20 border rounded p-2"
-              placeholder="Qty"
-            />
+            <div>
+              <label class="text-xs text-gray-500 sm:hidden">Qty</label>
+              <input
+                v-model.number="rc.quantity"
+                type="number"
+                min="1"
+                class="w-full sm:w-20 border rounded p-2 text-base"
+                placeholder="Qty"
+              />
+            </div>
+
             <button
               type="button"
               @click="removeCtoonReward(idx)"
-              class="text-red-600 hover:underline"
+              class="text-red-600 hover:underline justify-self-end sm:justify-self-auto p-2 -m-2"
             >
               Remove
             </button>
+
+            <div class="col-span-2">
+              <label class="text-xs text-gray-500">End Bonus Date/Time (CST) &middot; optional</label>
+              <input
+                v-model="rc.endBonusAt"
+                type="datetime-local"
+                class="w-full border rounded p-2 text-base"
+              />
+            </div>
           </div>
 
           <button
@@ -277,6 +298,7 @@
             Save Code
           </button>
           <p v-if="error" class="mt-2 text-red-600">{{ error }}</p>
+          <p v-if="!error && warning" class="mt-2 text-amber-600">{{ warning }}</p>
         </div>
       </form>
     </div>
@@ -295,32 +317,7 @@ definePageMeta({
 })
 
 const router = useRouter()
-
-function isoToCSTLocal(iso) {
-  const date = new Date(iso)
-  const parts = date.toLocaleString('en-US', {
-    timeZone: 'America/Chicago',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  }).split(', ')
-  const [m, d, y] = parts[0].split('/')
-  const time = parts[1]
-  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${time}`
-}
-
-function cstLocalToISO(localStr) {
-  if (!localStr) return null
-  const approxUTC = new Date(localStr + ':00Z')
-  const cstStr = approxUTC.toLocaleString('en-US', {
-    timeZone: 'America/Chicago',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  }).split(', ')
-  const [m2, d2, y2] = cstStr[0].split('/')
-  const cstEquivStr = `${y2}-${m2}-${d2}T${cstStr[1]}`
-  const diffMs = new Date(localStr + ':00Z') - new Date(cstEquivStr + ':00Z')
-  return new Date(approxUTC.getTime() + diffMs).toISOString()
-}
+const { isoToCSTLocal, cstLocalToISO } = useCentralTime()
 
 // form state
 const code = ref('')
@@ -329,9 +326,10 @@ const startsAt = ref(isoToCSTLocal(new Date().toISOString()))
 const expiresAt = ref('')        // datetime-local string, optional
 const points = ref(0)
 const ctoonRewards = ref([
-  { ctoonName: '', quantity: 1 }
+  { ctoonName: '', quantity: 1, endBonusAt: '' }
 ])
 const error = ref('')
+const warning = ref('')
 const bgOptions = ref([])
 
 const pooledEnabled   = ref(false)
@@ -463,7 +461,7 @@ onMounted(async () => {
 
 // add/remove cToon reward entries
 function addCtoonReward() {
-  ctoonRewards.value.push({ ctoonName: '', quantity: 1 })
+  ctoonRewards.value.push({ ctoonName: '', quantity: 1, endBonusAt: '' })
 }
 function removeCtoonReward(index) {
   ctoonRewards.value.splice(index, 1)
@@ -472,6 +470,7 @@ function removeCtoonReward(index) {
 // form submission
 async function submitForm() {
   error.value = ''
+  warning.value = ''
 
   // basic validation
   if (!code.value.trim()) {
@@ -568,6 +567,12 @@ async function submitForm() {
     if (poolUniqueCount.value > validPool.length) { error.value = 'Number to give out cannot exceed pool size.'; return }
     rewardBlock.pool = { uniqueCount: poolUniqueCount.value, items: validPool }
   } else {
+    const startsDateObj = startsIso ? new Date(startsIso) : null
+    const nowDate = new Date()
+    const endBonusMin = startsDateObj && startsDateObj > nowDate ? startsDateObj : nowDate
+    const expiresDateObj = expiresIso ? new Date(expiresIso) : null
+    const warnings = []
+
     const validCtoons = []
     for (const r of ctoonRewards.value) {
       const name = (r.ctoonName||'').trim()
@@ -581,9 +586,28 @@ async function submitForm() {
         }
         return
       }
-      validCtoons.push({ ctoonId: resolved.id, quantity: r.quantity })
+
+      let endBonusIso = null
+      if (r.endBonusAt) {
+        endBonusIso = cstLocalToISO(r.endBonusAt)
+        const ebDate = new Date(endBonusIso)
+        if (isNaN(ebDate.getTime())) {
+          error.value = `Invalid End Bonus Date/Time for “${name}”.`
+          return
+        }
+        if (ebDate <= endBonusMin) {
+          error.value = `End Bonus Date/Time for “${name}” must be after the code's start date/time and after now.`
+          return
+        }
+        if (expiresDateObj && ebDate > expiresDateObj) {
+          warnings.push(`“${name}”'s End Bonus Date/Time is after the code's Expires At — the code will stop working first, so this bonus window will never take effect.`)
+        }
+      }
+
+      validCtoons.push({ ctoonId: resolved.id, quantity: r.quantity, endBonusAt: endBonusIso })
     }
     rewardBlock.ctoons = validCtoons
+    warning.value = warnings.join(' ')
   }
 
   const payload = {

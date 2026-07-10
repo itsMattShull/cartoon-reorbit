@@ -663,10 +663,13 @@ model RewardCtoonPool {
 }
 
 model RewardCtoon {
-  id       String @id @default(uuid())
-  rewardId String
-  ctoonId  String
-  quantity Int    @default(1)
+  id         String    @id @default(uuid())
+  rewardId   String
+  ctoonId    String
+  quantity   Int       @default(1)
+  // When set, this ctoon is only awarded if redeemed at or before this UTC instant
+  // (entered/displayed as CST in the admin UI). Null = awarded normally, no bonus window.
+  endBonusAt DateTime?
 
   reward ClaimCodeReward @relation(fields: [rewardId], references: [id])
   ctoon  Ctoon           @relation(fields: [ctoonId], references: [id])
