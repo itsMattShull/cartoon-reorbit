@@ -68,10 +68,11 @@
           </select>
         </div>
 
-        <!-- Price (read-only) -->
+        <!-- Price -->
         <div>
           <label class="block mb-1 font-medium">Price</label>
-          <input type="number" v-model.number="price" readonly class="w-full border rounded p-2 bg-gray-100" />
+          <input type="number" min="0" v-model.number="price" class="w-full border rounded p-2" />
+          <p class="text-sm text-gray-500">Defaults based on rarity, but you can adjust it here.</p>
         </div>
 
         <!-- Release Date (CDT) -->
