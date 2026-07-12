@@ -126,7 +126,7 @@ export default defineEventHandler(async (event) => {
 
   let qe
   try {
-    const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true })
+    const job = await mintQueue.add('mintCtoon', { userId, ctoonId: appearance.ctoonId, isSpecial: true, method: 'CZONE_SEARCH' })
     qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
     await qe.waitUntilReady()
     await job.waitUntilFinished(qe)

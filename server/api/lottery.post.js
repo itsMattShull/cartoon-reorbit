@@ -133,7 +133,8 @@ export default defineEventHandler(async (event) => {
             userId: me.id,
             ctoonId: awardedCtoon.id,
             userCtoonId: newUserCtoon.id,
-            mintNumber
+            mintNumber,
+            method: 'LOTTERY'
           }
         })
       })

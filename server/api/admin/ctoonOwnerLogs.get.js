@@ -65,6 +65,7 @@ export default defineEventHandler(async (event) => {
       include: {
         user:  { select: { id: true, username: true } },
         ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } },
+        counterparty: { select: { id: true, username: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip,

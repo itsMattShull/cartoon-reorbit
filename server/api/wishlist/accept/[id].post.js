@@ -121,7 +121,15 @@ export default defineEventHandler(async (event) => {
       where: { userCtoonId: uc.id, userId: { not: initiatorId } }
     })
     await tx.ctoonOwnerLog.create({
-      data: { userId: initiatorId, ctoonId: transferred.ctoonId, userCtoonId: transferred.id, mintNumber: transferred.mintNumber }
+      data: {
+        userId: initiatorId,
+        ctoonId: transferred.ctoonId,
+        userCtoonId: transferred.id,
+        mintNumber: transferred.mintNumber,
+        method: 'TRADE',
+        counterpartyUserId: recipientId,
+        counterpartyUsername: me.username
+      }
     })
 
     // record the traded cToon on the offer as REQUESTED (initiator requested it)

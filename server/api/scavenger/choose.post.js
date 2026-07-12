@@ -121,7 +121,7 @@ export default defineEventHandler(async (event) => {
       if (available.length) {
         const pick = available[Math.floor(Math.random() * available.length)].id
         // Mint and wait
-        const job = await mintQueue.add('mintCtoon', { userId, ctoonId: pick, isSpecial: true })
+        const job = await mintQueue.add('mintCtoon', { userId, ctoonId: pick, isSpecial: true, method: 'SCAVENGER_HUNT' })
         const qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
         await qe.waitUntilReady()
         try { await job.waitUntilFinished(qe); ctoonId = pick } finally { await qe.close() }

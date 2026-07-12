@@ -186,11 +186,58 @@
               <div><span class="font-medium">User:</span> {{ selected?.user?.username || 'Unknown' }}</div>
               <div><span class="font-medium">cToon:</span> {{ selected?.ctoon?.name || 'Unknown' }} <span class="text-gray-500">({{ selected?.ctoon?.rarity || '-' }})</span></div>
               <div><span class="font-medium">Mint #:</span> {{ selected?.mintNumber ?? '—' }}</div>
-              <div><span class="font-medium">UserCtoonId:</span> <span class="font-mono break-all">{{ selected?.userCtoonId }}</span></div>
+              <div class="flex items-center gap-2">
+                <span class="font-medium">How Obtained:</span> {{ describeMethod(selected) }}
+                <button
+                  v-if="!selected?.method"
+                  class="text-blue-600 underline text-sm"
+                  :disabled="investigateLoading"
+                  @click="investigate(selected)"
+                >
+                  {{ investigateLoading ? 'Searching…' : 'Investigate' }}
+                </button>
+              </div>
+              <div class="text-sm text-gray-500"><span class="font-medium">UserCtoonId:</span> <span class="font-mono break-all">{{ selected?.userCtoonId }}</span></div>
               <div class="text-sm text-gray-500"><span class="font-medium">cToon ID:</span> <span class="font-mono break-all">{{ selected?.ctoonId }}</span></div>
               <div class="text-sm text-gray-500"><span class="font-medium">User ID:</span> <span class="font-mono break-all">{{ selected?.userId }}</span></div>
             </div>
           </div>
+
+          <!-- Investigation results -->
+          <div v-if="investigateResult" class="mt-6 border-t pt-4">
+            <h3 class="font-semibold mb-2">Nearby records (±{{ investigateResult.windowSeconds }}s of acquisition time)</h3>
+            <div v-if="!investigateResult.candidates.length" class="text-sm text-gray-500 mb-3">
+              No matching records found in that window. Try widening the window below.
+            </div>
+            <ul v-else class="space-y-2 mb-3">
+              <li
+                v-for="(c, i) in investigateResult.candidates"
+                :key="i"
+                class="border rounded p-2 text-sm"
+                :class="i === 0 ? 'border-blue-400 bg-blue-50' : ''"
+              >
+                <div class="font-medium">
+                  {{ c.label }}
+                  <span v-if="c.counterpartyUsername"> with {{ c.counterpartyUsername }}</span>
+                  <span class="text-gray-500 font-normal">({{ c.deltaSeconds >= 0 ? '+' : '' }}{{ c.deltaSeconds }}s)</span>
+                </div>
+                <div class="text-gray-600">{{ c.detail }}</div>
+                <div class="text-gray-400 text-xs">{{ formatTs(c.at) }}</div>
+              </li>
+            </ul>
+            <div v-if="investigateResult.activity.length" class="text-xs text-gray-500 mb-3">
+              <div class="font-medium mb-1">Other nearby points activity:</div>
+              <div v-for="(a, i) in investigateResult.activity" :key="i">
+                {{ a.method || 'Unknown' }} ({{ a.direction }} {{ a.points }}) — {{ a.deltaSeconds >= 0 ? '+' : '' }}{{ a.deltaSeconds }}s
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-sm">Window (seconds):</label>
+              <input v-model.number="investigateWindow" type="number" min="10" max="3600" class="border rounded px-2 py-1 w-24 text-sm" />
+              <button class="border px-2 py-1 rounded text-sm" @click="investigate(selected)">Re-search</button>
+            </div>
+          </div>
+
           <div class="mt-6 flex gap-2">
             <button class="border px-3 py-1 rounded" @click="copy(selected?.userCtoonId)">Copy UserCtoonId</button>
             <button class="border px-3 py-1 rounded" @click="copy(selected?.ctoonId)">Copy cToonId</button>
@@ -237,11 +284,63 @@ const showingRange = computed(() => {
 // Modal
 const showModal = ref(false)
 const selected = ref(null)
-function openModal(log) { selected.value = log; showModal.value = true }
+const investigateResult = ref(null)
+const investigateLoading = ref(false)
+const investigateWindow = ref(300)
+function openModal(log) {
+  selected.value = log
+  investigateResult.value = null
+  investigateWindow.value = 300
+  showModal.value = true
+}
 function closeModal() { showModal.value = false }
+
+async function investigate(log) {
+  if (!log?.id || investigateLoading.value) return
+  investigateLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/ctoonOwnerLogs/investigate', {
+      params: { id: log.id, windowSeconds: investigateWindow.value }
+    })
+    investigateResult.value = res
+  } catch {
+    investigateResult.value = { windowSeconds: investigateWindow.value, candidates: [], activity: [] }
+  } finally {
+    investigateLoading.value = false
+  }
+}
 
 // Helpers
 function shorten(id) { return !id ? '' : (id.length > 12 ? `${id.slice(0,6)}…${id.slice(-4)}` : id) }
+
+const METHOD_LABELS = {
+  CMART: 'cMart',
+  PACK: 'Pack',
+  TRADE: 'Trade',
+  AUCTION: 'Auction',
+  WINBALL: 'Winball',
+  WINWHEEL: 'Win Wheel',
+  CZONE_CONTEST: 'cZone Contest',
+  CZONE_SEARCH: 'cZone Search',
+  HOLIDAY: 'Holiday Event',
+  STARTER_SET: 'Starter Set',
+  CODE_REDEEM: 'Redeemed Code',
+  LOTTERY: 'Lottery',
+  ACHIEVEMENT: 'Achievement Reward',
+  SCAVENGER_HUNT: 'Scavenger Hunt',
+  ADMIN_GRANT: 'Admin Grant',
+  ADMIN_CORRECTION: 'Admin Correction',
+  DISSOLVE: 'Inactivity Reclaim'
+}
+function describeMethod(log) {
+  if (!log?.method) return 'Unknown'
+  const label = METHOD_LABELS[log.method] || log.method
+  const counterpartyName = log.counterparty?.username || log.counterpartyUsername
+  if ((log.method === 'TRADE' || log.method === 'AUCTION') && counterpartyName) {
+    return `${label} with ${counterpartyName}`
+  }
+  return label
+}
 function formatTs(ts) { try { return new Date(ts).toLocaleString() } catch { return String(ts || '') } }
 function img(p) { return !p ? '' : (p.startsWith('http') ? p : p) }
 async function copy(text) { if (text) try { await navigator.clipboard.writeText(text) } catch {} }

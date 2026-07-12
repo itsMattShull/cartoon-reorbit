@@ -145,7 +145,7 @@ export default defineEventHandler(async (event) => {
     for (const award of ctoonAwards) {
       for (let i = 0; i < award.quantity; i++) {
         const { ctoonId, name } = award
-        const job = await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
+        const job = await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true, method: 'CODE_REDEEM' })
         await job.waitUntilFinished(qe)
         const minted = await prisma.userCtoon.findFirst({
           where: { userId, ctoonId },

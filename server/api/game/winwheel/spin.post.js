@@ -199,7 +199,8 @@ export default defineEventHandler(async (event) => {
         const job = await mintQueue.add('mintCtoon', {
           userId,
           ctoonId: ctoonIdToMint,
-          isSpecial: true
+          isSpecial: true,
+          method: 'WINWHEEL'
         })
         // Second arg to waitUntilFinished is the client-side wait TTL in ms.
         // The `timeout` field on add() options does not exist in BullMQ v5.

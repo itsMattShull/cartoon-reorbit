@@ -143,6 +143,12 @@ export default defineEventHandler(async (event) => {
       const newOwner = tc.role === 'OFFERED'
         ? offer.recipientId
         : offer.initiatorId
+      const counterpartyUserId = tc.role === 'OFFERED'
+        ? offer.initiatorId
+        : offer.recipientId
+      const counterpartyUsername = tc.role === 'OFFERED'
+        ? initiator.username
+        : me.username
 
       const updatedUC = await tx.userCtoon.update({
         where: { id: tc.userCtoonId },
@@ -161,7 +167,10 @@ export default defineEventHandler(async (event) => {
           userId:      newOwner,
           ctoonId:     updatedUC.ctoonId,
           userCtoonId: updatedUC.id,
-          mintNumber:  updatedUC.mintNumber
+          mintNumber:  updatedUC.mintNumber,
+          method:      'TRADE',
+          counterpartyUserId,
+          counterpartyUsername
         }
       })
     }

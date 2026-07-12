@@ -207,7 +207,7 @@ export default defineEventHandler(async (event) => {
         })
 
         await tx.ctoonOwnerLog.create({
-          data: { userId: officialId, userCtoonId: row.id, ctoonId: row.ctoon?.id ?? null, mintNumber: row.mintNumber ?? null }
+          data: { userId: officialId, userCtoonId: row.id, ctoonId: row.ctoon?.id ?? null, mintNumber: row.mintNumber ?? null, method: 'ADMIN_CORRECTION' }
         })
       })
       transferredCount++ // caller will override to sourceTransferredCount when needed

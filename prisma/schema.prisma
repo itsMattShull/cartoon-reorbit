@@ -441,6 +441,7 @@ model User {
   backgroundsCreated       Background[]                @relation("BackgroundCreatedBy")
   ownedBackgrounds         UserBackground[]            @relation("User_UserBackgrounds")
   ownerLogs                CtoonOwnerLog[]
+  ownerLogsAsCounterparty  CtoonOwnerLog[]             @relation("CtoonOwnerLogCounterparty")
   holidayRedemptions       HolidayRedemption[]
   auctionsOnlyCreated      AuctionOnly[]               @relation("AuctionOnlyCreatedBy")
   adImagesCreated          AdImage[]                   @relation("AdImagesCreatedBy")
@@ -1536,16 +1537,20 @@ model AuctionAutoBid {
 }
 
 model CtoonOwnerLog {
-  id          String   @id @default(uuid())
-  userId      String?
-  ctoonId     String?
-  userCtoonId String?
-  mintNumber  Int? // snapshot at the time of ownership
-  createdAt   DateTime @default(now())
+  id                   String   @id @default(uuid())
+  userId               String?
+  ctoonId              String?
+  userCtoonId          String?
+  mintNumber           Int? // snapshot at the time of ownership
+  method               String? // e.g. CMART, PACK, TRADE, AUCTION, WINBALL, WINWHEEL, CZONE_CONTEST, CZONE_SEARCH, HOLIDAY, STARTER_SET, CODE_REDEEM, LOTTERY, ADMIN_GRANT
+  counterpartyUserId   String? // other party for TRADE/AUCTION transfers
+  counterpartyUsername String? // snapshot, survives counterparty account deletion
+  createdAt            DateTime @default(now())
 
-  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  ctoon     Ctoon?     @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
-  userCtoon UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ctoon       Ctoon?     @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
+  userCtoon   UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
+  counterparty User?     @relation("CtoonOwnerLogCounterparty", fields: [counterpartyUserId], references: [id], onDelete: SetNull)
 
   @@index([userCtoonId, createdAt])
   @@index([ctoonId, createdAt])
