@@ -168,7 +168,7 @@ export default defineEventHandler(async (event) => {
       if (!existing) {
         await mintQueue.add(
           'mintCtoon',
-          { userId, ctoonId: gpCtoon.id, isSpecial: true },
+          { userId, ctoonId: gpCtoon.id, isSpecial: true, method: 'WINBALL' },
           { jobId: `winball-gp-${userId}-${gpCtoon.id}` }
         )
         grandPrizeCtoonName = gpCtoon.name

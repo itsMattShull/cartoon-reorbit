@@ -252,7 +252,7 @@ export default defineEventHandler(async (event) => {
               where: { userCtoonId: uc.id, userId: { not: officialId } }
             })
             await tx.ctoonOwnerLog.create({
-              data: { userId: officialId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber ?? null }
+              data: { userId: officialId, ctoonId: uc.ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber ?? null, method: 'ADMIN_CORRECTION' }
             })
           })
           ctoonsTransferred++

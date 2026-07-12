@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
   // 6) Enqueue mints
   await Promise.all(
     toMint.map(ctoonId =>
-      mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
+      mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true, method: 'STARTER_SET' })
     )
   )
 

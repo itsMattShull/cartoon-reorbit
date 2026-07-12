@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
   for (const { ctoonId, qty } of winnerCtoons) {
     const quantity = qty ?? 1
     for (let i = 0; i < quantity; i++) {
-      await mintQueue.add('mintCtoon', { userId: winnerUserId, ctoonId, isSpecial: true })
+      await mintQueue.add('mintCtoon', { userId: winnerUserId, ctoonId, isSpecial: true, method: 'CZONE_CONTEST' })
     }
   }
 
@@ -102,7 +102,7 @@ export default defineEventHandler(async (event) => {
   for (const { ctoonId, qty } of participantCtoons) {
     const quantity = qty ?? 1
     for (let i = 0; i < quantity; i++) {
-      await mintQueue.add('mintCtoon', { userId: winnerUserId, ctoonId, isSpecial: true })
+      await mintQueue.add('mintCtoon', { userId: winnerUserId, ctoonId, isSpecial: true, method: 'CZONE_CONTEST' })
     }
   }
 
@@ -110,7 +110,7 @@ export default defineEventHandler(async (event) => {
     for (const { ctoonId, qty } of participantCtoons) {
       const quantity = qty ?? 1
       for (let i = 0; i < quantity; i++) {
-        await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true })
+        await mintQueue.add('mintCtoon', { userId, ctoonId, isSpecial: true, method: 'CZONE_CONTEST' })
       }
     }
   }

@@ -10,7 +10,8 @@ const connection = {
 
 // Create a BullMQ worker to process mint jobs
 const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
-    const { userId, ctoonId, isSpecial = false, effectivePrice, userPackId = null } = job.data
+    const { userId, ctoonId, isSpecial = false, effectivePrice, userPackId = null, method = null } = job.data
+    const resolvedMethod = method || (userPackId ? 'PACK' : (isSpecial ? null : 'CMART'))
 
     const TIME_BASED_CAP = 999999999
 
@@ -304,7 +305,8 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
           userId,
           ctoonId,
           userCtoonId: uc.id,
-          mintNumber: uc.mintNumber
+          mintNumber: uc.mintNumber,
+          method: resolvedMethod
         }
       })
 

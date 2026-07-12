@@ -276,7 +276,8 @@ export default defineEventHandler(async (event) => {
       userId,
       ctoonId: resultCtoonId,
       isSpecial: true,
-      bypassHolidayWindowCheck: true
+      bypassHolidayWindowCheck: true,
+      method: 'HOLIDAY'
     })
 
     // Wait for worker to finish
