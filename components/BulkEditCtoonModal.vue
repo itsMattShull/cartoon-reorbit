@@ -57,12 +57,13 @@
                 </datalist>
               </div>
 
-              <!-- Price (auto from rarity, display-only) -->
+              <!-- Price -->
               <div>
-                <label class="block text-sm font-medium mb-1">Price <span class="text-xs text-gray-400">(auto from rarity)</span></label>
-                <input :value="bulk.rarity ? rarityPrice(bulk.rarity) : ''" readonly
-                  placeholder="— set rarity first —"
-                  class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-gray-100 cursor-not-allowed" />
+                <label class="block text-sm font-medium mb-1">Price</label>
+                <input v-model.number="bulk.price" type="number" min="0"
+                  @input="applyBulk('price', bulk.price)"
+                  placeholder="— no change —"
+                  class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
               </div>
 
               <!-- In C-mart -->
@@ -205,11 +206,11 @@
                     </datalist>
                   </div>
 
-                  <!-- Price (auto from rarity) -->
+                  <!-- Price -->
                   <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Price <span class="text-gray-400">(auto)</span></label>
-                    <input :value="row.current.price" readonly
-                      :class="['w-full border rounded px-2 py-1.5 text-sm cursor-not-allowed', fieldChanged(row, 'price') ? 'border-yellow-400 bg-yellow-100' : 'border-gray-300 bg-gray-100']" />
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Price</label>
+                    <input v-model.number="row.current.price" type="number" min="0"
+                      :class="['w-full border rounded px-2 py-1.5 text-sm', fieldChanged(row, 'price') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']" />
                   </div>
 
                   <!-- In C-mart -->
@@ -335,6 +336,7 @@ const bulk = reactive({
   series: '',
   inCmart: null,
   codeOnly: null,
+  price: null,
   perUserLimit: null,
   quantity: null,
   initialQuantity: null,
