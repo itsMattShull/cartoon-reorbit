@@ -2905,6 +2905,14 @@ async function performAuctionClose(auctionId) {
     })
     resolvedCreatorId = official?.id || null
   }
+  let resolvedCreatorUsername = null
+  if (resolvedCreatorId) {
+    const seller = await db.user.findUnique({
+      where: { id: resolvedCreatorId },
+      select: { username: true }
+    })
+    resolvedCreatorUsername = seller?.username || null
+  }
 
   // Highest bid placed before auction end; earliest timestamp breaks ties
   const winningBid = await db.bid.findFirst({
@@ -2962,7 +2970,10 @@ async function performAuctionClose(auctionId) {
           userId:      winningBid.userId,
           ctoonId:     uc.ctoonId,
           userCtoonId: uc.id,
-          mintNumber:  uc.mintNumber
+          mintNumber:  uc.mintNumber,
+          method:      'AUCTION',
+          counterpartyUserId: resolvedCreatorId,
+          counterpartyUsername: resolvedCreatorUsername
         }
       })
 

@@ -154,7 +154,7 @@ export default defineEventHandler(async (event) => {
           select: { id: true, mintNumber: true, createdAt: true }
         })
         await tx.ctoonOwnerLog.create({
-          data: { userId: owner.id, ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber }
+          data: { userId: owner.id, ctoonId, userCtoonId: uc.id, mintNumber: uc.mintNumber, method: 'ADMIN_GRANT' }
         })
         pool.push(uc)
         minted++

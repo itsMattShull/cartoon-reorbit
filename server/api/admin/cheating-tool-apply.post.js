@@ -243,7 +243,8 @@ export default defineEventHandler(async (event) => {
             userId: officialId,
             ctoonId: uc.ctoonId,
             userCtoonId: uc.id,
-            mintNumber: uc.mintNumber ?? null
+            mintNumber: uc.mintNumber ?? null,
+            method: 'ADMIN_CORRECTION'
           }
         })
       })

@@ -111,7 +111,8 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
           userId: officialId,
           userCtoonId: uc.id,
           ctoonId: uc.ctoon?.id ?? null,
-          mintNumber: uc.mintNumber ?? null
+          mintNumber: uc.mintNumber ?? null,
+          method: 'DISSOLVE'
         }
       })
       ctoonsTransferred++

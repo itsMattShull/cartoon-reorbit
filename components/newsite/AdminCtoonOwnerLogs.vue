@@ -180,6 +180,7 @@
                 <div><span class="font-medium">User:</span> {{ selected?.user?.username || 'Unknown' }}</div>
                 <div><span class="font-medium">cToon:</span> {{ selected?.ctoon?.name || 'Unknown' }} <span class="text-gray-500">({{ selected?.ctoon?.rarity || '-' }})</span></div>
                 <div><span class="font-medium">Mint #:</span> {{ selected?.mintNumber ?? '—' }}</div>
+                <div><span class="font-medium">How Obtained:</span> {{ describeMethod(selected) }}</div>
                 <div><span class="font-medium">UserCtoonId:</span> <span class="font-mono break-all">{{ selected?.userCtoonId }}</span></div>
                 <div class="text-[10px] text-gray-500"><span class="font-medium">cToon ID:</span> <span class="font-mono break-all">{{ selected?.ctoonId }}</span></div>
                 <div class="text-[10px] text-gray-500"><span class="font-medium">User ID:</span> <span class="font-mono break-all">{{ selected?.userId }}</span></div>
@@ -229,6 +230,35 @@ function openModal(log) { selected.value = log; showModal.value = true }
 function closeModal() { showModal.value = false }
 
 function shorten(id) { return !id ? '' : (id.length > 12 ? `${id.slice(0,6)}…${id.slice(-4)}` : id) }
+
+const METHOD_LABELS = {
+  CMART: 'cMart',
+  PACK: 'Pack',
+  TRADE: 'Trade',
+  AUCTION: 'Auction',
+  WINBALL: 'Winball',
+  WINWHEEL: 'Win Wheel',
+  CZONE_CONTEST: 'cZone Contest',
+  CZONE_SEARCH: 'cZone Search',
+  HOLIDAY: 'Holiday Event',
+  STARTER_SET: 'Starter Set',
+  CODE_REDEEM: 'Redeemed Code',
+  LOTTERY: 'Lottery',
+  ACHIEVEMENT: 'Achievement Reward',
+  SCAVENGER_HUNT: 'Scavenger Hunt',
+  ADMIN_GRANT: 'Admin Grant',
+  ADMIN_CORRECTION: 'Admin Correction',
+  DISSOLVE: 'Inactivity Reclaim'
+}
+function describeMethod(log) {
+  if (!log?.method) return 'Unknown'
+  const label = METHOD_LABELS[log.method] || log.method
+  const counterpartyName = log.counterparty?.username || log.counterpartyUsername
+  if ((log.method === 'TRADE' || log.method === 'AUCTION') && counterpartyName) {
+    return `${label} with ${counterpartyName}`
+  }
+  return label
+}
 function formatTs(ts) { try { return new Date(ts).toLocaleString() } catch { return String(ts || '') } }
 function img(p) { return !p ? '' : (p.startsWith('http') ? p : p) }
 async function copy(text) { if (text) try { await navigator.clipboard.writeText(text) } catch {} }

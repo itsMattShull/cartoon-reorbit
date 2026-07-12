@@ -240,7 +240,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
       const lim = rc?.ctoon?.quantity
       let canGive = lim == null ? qty : Math.max(0, Math.min(qty, lim - minted))
       for (let i = 0; i < canGive; i++) {
-        await mintQueue.add('mintCtoon', { userId, ctoonId: rc.ctoonId, isSpecial: true })
+        await mintQueue.add('mintCtoon', { userId, ctoonId: rc.ctoonId, isSpecial: true, method: 'ACHIEVEMENT' })
       }
       if (canGive > 0) {
         awardSummary.ctoons.push({
