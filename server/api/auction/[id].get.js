@@ -1,6 +1,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { findConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -42,9 +43,25 @@ export default defineEventHandler(async (event) => {
     ? Math.max(...bids.map((b) => b.amount))
     : auction.initialBet
 
+  // Featured auctions: a user can't hold the lead on more than one active
+  // featured auction for the same cToon (1st/2nd edition combined) at a time.
+  let blockedByFeaturedLead = false
+  if (auction.isFeatured) {
+    const conflict = await findConcurrentFeaturedLead(prisma, userId, {
+      excludeAuctionId: auction.id,
+      ctoon: {
+        ctoonId: auction.userCtoon.ctoonId,
+        isSecondEdition: auction.userCtoon.ctoon.isSecondEdition,
+        relatedFirstEditionId: auction.userCtoon.ctoon.relatedFirstEditionId
+      }
+    })
+    blockedByFeaturedLead = !!conflict
+  }
+
   return {
     id: auction.id,
     isFeatured: auction.isFeatured,
+    blockedByFeaturedLead,
     ctoon: {
       id:         auction.userCtoon.ctoonId,
       userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
