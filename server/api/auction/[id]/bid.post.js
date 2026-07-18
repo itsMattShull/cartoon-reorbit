@@ -5,7 +5,7 @@ import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
-import { assertFeaturedEligibility } from '@/server/utils/featuredEligibility'
+import { assertFeaturedEligibility, assertNoConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 
 const ANTI_SNIPE_MS = 60_000
 
@@ -91,6 +91,18 @@ export default defineEventHandler(async (event) => {
     // across both editions (see server/utils/featuredEligibility.js).
     await assertFeaturedEligibility(tx, userId, {
       isFeatured: fresh.isFeatured,
+      ctoon: {
+        ctoonId: fresh.userCtoon?.ctoonId,
+        isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,
+        relatedFirstEditionId: fresh.userCtoon?.ctoon?.relatedFirstEditionId
+      }
+    })
+
+    // A user can't hold the lead on more than one active featured auction for
+    // the same cToon (1st/2nd edition combined) at a time.
+    await assertNoConcurrentFeaturedLead(tx, userId, {
+      isFeatured: fresh.isFeatured,
+      excludeAuctionId: auctionId,
       ctoon: {
         ctoonId: fresh.userCtoon?.ctoonId,
         isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,
