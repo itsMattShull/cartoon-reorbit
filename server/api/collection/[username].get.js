@@ -56,7 +56,21 @@ export default defineEventHandler(async (event) => {
     return mA - mB
   })
 
-  return rows.map(uc => ({
+  const TIME_BASED_CAP = 999999999
+  const now = new Date()
+
+  return rows.map(uc => {
+    // If a time-based cToon's mint window has closed but the finalization job
+    // hasn't written the real quantity yet (sentinel still in place), substitute
+    // totalMinted so the collection displays the actual count instead of "???".
+    const effectiveQuantity = (
+      uc.ctoon.mintLimitType === 'timeBased' &&
+      uc.ctoon.mintEndDate &&
+      new Date(uc.ctoon.mintEndDate) <= now &&
+      uc.ctoon.quantity === TIME_BASED_CAP
+    ) ? uc.ctoon.totalMinted : uc.ctoon.quantity
+
+    return {
     id: encodeUserCtoonId(uc.userId, uc.ctoonId, uc.mintNumber),
     ctoonId: uc.ctoonId,
     assetPath: uc.ctoon.assetPath,
@@ -68,7 +82,7 @@ export default defineEventHandler(async (event) => {
     cost: uc.ctoon.cost,
     power: uc.ctoon.power,
     mintNumber: uc.mintNumber,
-    quantity: uc.ctoon.quantity,
+    quantity: effectiveQuantity,
     isFirstEdition: uc.isFirstEdition,
     isHolidayItem: holidaySet.has(uc.ctoonId),
     inPendingTrade: pendingTradeSet.has(uc.id),
@@ -76,5 +90,6 @@ export default defineEventHandler(async (event) => {
     secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
     secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
     secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
-  }))
+    }
+  })
 })
