@@ -52,9 +52,20 @@ export default defineEventHandler(async (event) => {
   if (userPack.opened) throw createError({ statusCode: 400, statusMessage: 'Pack already opened' })
 
   /* ── 1. Build pools & choose cToons ─────────────────────── */
+  const TIME_BASED_CAP = 999999999
+
   const poolByRarity = {}
   for (const opt of userPack.pack.ctoonOptions) {
     const c = opt.ctoon
+
+    // Time-based mint window guard: once mintEndDate has passed, treat the
+    // cToon as depleted even if the finalize job hasn't written the real
+    // quantity yet (still the TIME_BASED_CAP sentinel) — same logic buy.post.js
+    // uses, so packs can't keep minting a cToon whose window already closed.
+    if (c.mintLimitType === 'timeBased' && c.mintEndDate && new Date(c.mintEndDate) <= new Date()) {
+      if (c.quantity === TIME_BASED_CAP) continue
+    }
+
     if (c.quantity !== null) {
       const minted = await db.userCtoon.count({ where: { ctoonId: c.id } })
       if (minted >= c.quantity) continue
