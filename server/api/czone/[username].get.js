@@ -100,11 +100,23 @@ export default defineEventHandler(async (event) => {
   const ownedSet = new Set(ownedUserCtoons.map((uc) => uc.id))
 
   // Helper: Enrich a single userCtoon ID with metadata
+  const TIME_BASED_CAP = 999999999
+  const now = new Date()
   const ctoonMeta = {}
   for (const uc of ownedUserCtoons) {
+    // If a time-based cToon's mint window has closed but the finalization job
+    // hasn't written the real quantity yet (sentinel still in place), substitute
+    // totalMinted so the cZone displays the actual count instead of "???".
+    const effectiveQuantity = (
+      uc.ctoon.mintLimitType === 'timeBased' &&
+      uc.ctoon.mintEndDate &&
+      new Date(uc.ctoon.mintEndDate) <= now &&
+      uc.ctoon.quantity === TIME_BASED_CAP
+    ) ? uc.ctoon.totalMinted : uc.ctoon.quantity
+
     ctoonMeta[uc.id] = {
       mintNumber: uc.mintNumber,
-      quantity: uc.ctoon.quantity,
+      quantity: effectiveQuantity,
       series: uc.ctoon.series,
       rarity: uc.ctoon.rarity,
       isFirstEdition: uc.isFirstEdition,

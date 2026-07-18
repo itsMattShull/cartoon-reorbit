@@ -61,7 +61,21 @@ export default defineEventHandler(async (event) => {
   const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
 
   // shape response
-  return filtered.map(uc => ({
+  const TIME_BASED_CAP = 999999999
+  const now = new Date()
+
+  return filtered.map(uc => {
+    // If a time-based cToon's mint window has closed but the finalization job
+    // hasn't written the real quantity yet (sentinel still in place), substitute
+    // totalMinted so the collection displays the actual count instead of "???".
+    const effectiveQuantity = (
+      uc.ctoon.mintLimitType === 'timeBased' &&
+      uc.ctoon.mintEndDate &&
+      new Date(uc.ctoon.mintEndDate) <= now &&
+      uc.ctoon.quantity === TIME_BASED_CAP
+    ) ? uc.ctoon.totalMinted : uc.ctoon.quantity
+
+    return {
     id: uc.id,
     userId: uc.userId,
     ctoonId: uc.ctoonId,
@@ -76,7 +90,7 @@ export default defineEventHandler(async (event) => {
     cost: uc.ctoon.cost,
     power: uc.ctoon.power,
     mintNumber: uc.mintNumber,
-    quantity: uc.ctoon.quantity,
+    quantity: effectiveQuantity,
     isFirstEdition: uc.isFirstEdition,
     acquiredAt: uc.createdAt,
     auctions: uc.auctions || [],
@@ -85,5 +99,6 @@ export default defineEventHandler(async (event) => {
     secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
     secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
     secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
-  }))
+    }
+  })
 })

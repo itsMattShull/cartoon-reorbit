@@ -69,6 +69,17 @@ export default defineEventHandler(async (event) => {
   })
   const highestMint = mintAgg._max.mintNumber ?? ctoon.totalMinted ?? 0
 
+  // If a time-based cToon's mint window has closed but the finalization job
+  // hasn't written the real quantity yet (sentinel still in place), substitute
+  // totalMinted so the modal displays the actual count instead of "???".
+  const TIME_BASED_CAP = 999999999
+  const effectiveQuantity = (
+    ctoon.mintLimitType === 'timeBased' &&
+    ctoon.mintEndDate &&
+    new Date(ctoon.mintEndDate) <= new Date() &&
+    ctoon.quantity === TIME_BASED_CAP
+  ) ? ctoon.totalMinted : ctoon.quantity
+
   const activeSale = await getActiveSale()
   const activeSaleItem = activeSale?.items?.find(item => item.ctoon.id === ctoon.id) || null
   const saleImagePath = activeSaleItem ? (activeSale.imagePath || null) : null
@@ -163,7 +174,7 @@ export default defineEventHandler(async (event) => {
       characters: ctoon.characters,
       releaseDate: ctoon.releaseDate,
       highestMint,
-      quantity: ctoon.quantity,
+      quantity: effectiveQuantity,
       inCmart: ctoon.inCmart,
       price: ctoon.price,
       soundPath: ctoon.soundPath ?? null,
