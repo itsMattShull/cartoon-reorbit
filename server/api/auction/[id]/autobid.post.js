@@ -5,7 +5,7 @@ import { useRuntimeConfig } from '#imports'
 import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
-import { assertFeaturedEligibility } from '@/server/utils/featuredEligibility'
+import { assertFeaturedEligibility, assertNoConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 
 const ANTI_SNIPE_MS = 60_000
 
@@ -63,6 +63,18 @@ export default defineEventHandler(async (event) => {
   // This check must happen before the upsert so an ineligible user's auto-bid is never saved.
   await assertFeaturedEligibility(db, userId, {
     isFeatured: auc.isFeatured,
+    ctoon: {
+      ctoonId: auc.userCtoon?.ctoonId,
+      isSecondEdition: auc.userCtoon?.ctoon?.isSecondEdition,
+      relatedFirstEditionId: auc.userCtoon?.ctoon?.relatedFirstEditionId
+    }
+  })
+
+  // A user can't hold the lead on more than one active featured auction for
+  // the same cToon (1st/2nd edition combined) at a time.
+  await assertNoConcurrentFeaturedLead(db, userId, {
+    isFeatured: auc.isFeatured,
+    excludeAuctionId: auctionId,
     ctoon: {
       ctoonId: auc.userCtoon?.ctoonId,
       isSecondEdition: auc.userCtoon?.ctoon?.isSecondEdition,
@@ -158,6 +170,17 @@ export default defineEventHandler(async (event) => {
     // cToons this counts copies across both editions.
     await assertFeaturedEligibility(tx, userId, {
       isFeatured: fresh.isFeatured,
+      ctoon: {
+        ctoonId: fresh.userCtoon?.ctoonId,
+        isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,
+        relatedFirstEditionId: fresh.userCtoon?.ctoon?.relatedFirstEditionId
+      }
+    })
+
+    // Re-check the concurrent-featured-lead rule inside txn to avoid races
+    await assertNoConcurrentFeaturedLead(tx, userId, {
+      isFeatured: fresh.isFeatured,
+      excludeAuctionId: auctionId,
       ctoon: {
         ctoonId: fresh.userCtoon?.ctoonId,
         isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,

@@ -61,7 +61,7 @@
           <!-- Featured notice -->
           <div v-if="auction.isFeatured" class="adet-featured-notice">
             ⭐ Featured — you can't bid if you already own 2+<template v-if="auction.ctoon.isSecondEdition"> (1st + 2nd edition combined)</template>
-            or have received 2+ in the last 30 days.
+            or have received 2+ in the last 30 days. You also can't lead more than one active featured auction for this cToon at the same time.
           </div>
 
           <!-- ── Place bid ── -->
@@ -74,6 +74,7 @@
               {{ hasBids ? `Raise to ${nextBidAmount} pts` : `Bid ${nextBidAmount} pts` }}
             </button>
             <div v-if="isTopBidder" class="adet-hint">You are the highest bidder.</div>
+            <div v-else-if="blockedByFeaturedLead" class="adet-hint warn">You're already leading another active featured auction for this cToon — you can only lead one at a time.</div>
             <div v-else-if="!canBid" class="adet-hint warn">Need {{ Math.max(0, nextBidAmount - userPoints) }} more pts (have {{ userPoints }}).</div>
           </div>
 
@@ -87,6 +88,7 @@
                 v-model.number="autoBidInput"
                 :placeholder="`> ${displayedBid} pts`"
                 min="0"
+                :disabled="blockedByFeaturedLead"
               />
               <button class="adet-autobid-set" :disabled="!canSaveAutoBid" @click="saveAutoBid">
                 {{ myAutoBid ? 'Update' : 'Set' }}
@@ -97,6 +99,7 @@
               Max: {{ myAutoBid.maxAmount }} pts
               <span v-if="!myAutoBid.isActive" class="adet-dim"> (inactive)</span>
             </div>
+            <div v-if="blockedByFeaturedLead" class="adet-hint warn">Auto-Bid disabled — you're already leading another active featured auction for this cToon.</div>
           </div>
         </div>
       </div>
@@ -151,7 +154,8 @@ const autoBidInput = ref(null)
 const currentTopBidder = ref(null)
 const toast = reactive({ message: '', type: 'success' })
 const now   = ref(new Date())
-let timer, socket
+const blockedByFeaturedLead = ref(false)
+let timer, featuredLeadTimer, socket
 
 // ── Computed ─────────────────────────────────────────────────────
 const ended = computed(() => auction.value.endAt && new Date(auction.value.endAt) <= now.value)
@@ -178,10 +182,10 @@ const isTopBidder = computed(() =>
   user.value?.username && currentTopBidder.value === user.value.username
 )
 const canBid = computed(() =>
-  !ended.value && !isTopBidder.value && userPoints.value >= nextBidAmount.value
+  !ended.value && !isTopBidder.value && !blockedByFeaturedLead.value && userPoints.value >= nextBidAmount.value
 )
 const canSaveAutoBid = computed(() => {
-  if (ended.value) return false
+  if (ended.value || blockedByFeaturedLead.value) return false
   const v = Number(autoBidInput.value)
   return Number.isFinite(v) && v > displayedBid.value && v <= userPoints.value
 })
@@ -221,12 +225,24 @@ async function loadAuction() {
   auction.value.highestBid = data.highestBid ?? data.currentBid ?? 0
   bids.value       = data.bids || []
   userPoints.value = pts.points
+  blockedByFeaturedLead.value = !!data.blockedByFeaturedLead
   currentTopBidder.value = topBidderFromHistory.value ?? data.highestBidderUsername ?? null
   recentSales.value = await $fetch(`/api/auction/${props.auctionId}/getRecentAuctions`)
   try {
     const ab = await $fetch(`/api/auction/${props.auctionId}/autobid`)
     myAutoBid.value    = ab || null
     autoBidInput.value = ab?.maxAmount ?? null
+  } catch {}
+}
+
+// The lead-conflict flag can go stale (e.g. the user gets outbid on the
+// other featured auction while sitting on this page), so re-check it
+// periodically rather than only at initial load.
+async function refreshFeaturedLead() {
+  if (!auction.value?.isFeatured || ended.value) return
+  try {
+    const data = await $fetch(`/api/auction/${props.auctionId}`)
+    blockedByFeaturedLead.value = !!data.blockedByFeaturedLead
   } catch {}
 }
 
@@ -323,11 +339,15 @@ onMounted(async () => {
   await loadAuction()
   loading.value = false
   timer = setInterval(() => { now.value = new Date() }, 1000)
+  if (auction.value.isFeatured) {
+    featuredLeadTimer = setInterval(refreshFeaturedLead, 30_000)
+  }
   connectSocket()
 })
 
 onUnmounted(() => {
   clearInterval(timer)
+  clearInterval(featuredLeadTimer)
   if (socket) {
     socket.emit('leave-auction', { auctionId: props.auctionId })
     socket.disconnect()

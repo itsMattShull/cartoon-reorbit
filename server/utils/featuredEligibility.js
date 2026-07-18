@@ -86,3 +86,50 @@ export async function assertFeaturedEligibility(client, userId, { isFeatured, ct
     })
   }
 }
+
+/**
+ * A user may not hold the lead on more than one ACTIVE featured auction for
+ * the same cToon (1st/2nd edition combined) at a time. Finds another active
+ * featured auction, other than `excludeAuctionId`, where the user is
+ * currently the highest bidder for the same counted cToon set.
+ *
+ * @param {import('@prisma/client').PrismaClient} client  prisma or a tx client
+ * @param {string} userId
+ * @param {{ excludeAuctionId: string, ctoon: { ctoonId?: string|null, isSecondEdition?: boolean|null, relatedFirstEditionId?: string|null } }} opts
+ * @returns {Promise<{ id: string }|null>}
+ */
+export async function findConcurrentFeaturedLead(client, userId, { excludeAuctionId, ctoon }) {
+  const ctoonIds = resolveFeaturedCtoonIds(ctoon)
+  if (!ctoonIds.length) return null
+
+  return client.auction.findFirst({
+    where: {
+      id: { not: excludeAuctionId },
+      isFeatured: true,
+      status: 'ACTIVE',
+      endAt: { gt: new Date() },
+      highestBidderId: userId,
+      userCtoon: { ctoonId: { in: ctoonIds } }
+    },
+    select: { id: true }
+  })
+}
+
+/**
+ * Throwing guard for the manual-bid / set-autobid endpoints. No-op when the
+ * auction is not featured.
+ *
+ * @param {import('@prisma/client').PrismaClient} client
+ * @param {string} userId
+ * @param {{ isFeatured?: boolean|null, excludeAuctionId: string, ctoon: object }} opts
+ */
+export async function assertNoConcurrentFeaturedLead(client, userId, { isFeatured, excludeAuctionId, ctoon }) {
+  if (!isFeatured) return
+  const conflict = await findConcurrentFeaturedLead(client, userId, { excludeAuctionId, ctoon })
+  if (conflict) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'You are already the leading bidder on another active featured auction for this cToon'
+    })
+  }
+}
