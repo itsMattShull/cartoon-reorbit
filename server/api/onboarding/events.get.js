@@ -8,6 +8,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const now = new Date()
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+
   const [holidayEvents, czoneSearches, czoneContests] = await Promise.all([
     db.holidayEvent.findMany({
       where: {
@@ -39,11 +41,21 @@ export default defineEventHandler(async (event) => {
     }),
     db.cZoneContest.findMany({
       where: {
-        startDate: { lte: now },
-        distributedAt: null,
         OR: [
-          { endDate: { gte: now } },
-          { endVotingDate: { gte: now } }
+          // Active for submission
+          { startDate: { lte: now }, endDate: { gte: now } },
+          // Active for voting
+          { endVotingDate: { not: null, gte: now }, endDate: { lt: now } },
+          // Closed but not yet distributed
+          {
+            distributedAt: null,
+            OR: [
+              { endVotingDate: null, endDate: { lt: now } },
+              { endVotingDate: { not: null, lt: now } }
+            ]
+          },
+          // Closed and distributed within the last 3 days
+          { distributedAt: { gte: threeDaysAgo } }
         ]
       },
       orderBy: { endDate: 'asc' },
@@ -52,7 +64,8 @@ export default defineEventHandler(async (event) => {
         name: true,
         startDate: true,
         endDate: true,
-        endVotingDate: true
+        endVotingDate: true,
+        distributedAt: true
       }
     })
   ])
@@ -71,12 +84,25 @@ export default defineEventHandler(async (event) => {
       startAt: row.startAt.toISOString(),
       endAt: row.endAt.toISOString()
     })),
-    czoneContests: czoneContests.map((row) => ({
-      id: row.id,
-      name: row.name,
-      startDate: row.startDate.toISOString(),
-      endDate: row.endDate.toISOString(),
-      endVotingDate: row.endVotingDate ? row.endVotingDate.toISOString() : null
-    }))
+    czoneContests: czoneContests.map((row) => {
+      let status = 'closed'
+      if (row.startDate <= now && row.endDate >= now) {
+        status = 'submission'
+      } else if (row.endVotingDate && row.endDate < now && row.endVotingDate >= now) {
+        status = 'voting'
+      } else if (row.distributedAt) {
+        status = 'distributed'
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        startDate: row.startDate.toISOString(),
+        endDate: row.endDate.toISOString(),
+        endVotingDate: row.endVotingDate ? row.endVotingDate.toISOString() : null,
+        distributedAt: row.distributedAt ? row.distributedAt.toISOString() : null,
+        status
+      }
+    })
   }
 })

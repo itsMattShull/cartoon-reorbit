@@ -164,8 +164,14 @@
                       {{ displayName(contest.name, 'cZone Contest') }}
                     </NuxtLink>
                     <p class="text-xs text-white/50">
-                      <template v-if="contest.endVotingDate && new Date() > new Date(contest.endDate)">
+                      <template v-if="contest.status === 'voting'">
                         Voting open until {{ formatDate(contest.endVotingDate) }}
+                      </template>
+                      <template v-else-if="contest.status === 'distributed'">
+                        Winners distributed {{ formatDate(contest.distributedAt) }}
+                      </template>
+                      <template v-else-if="contest.status === 'closed'">
+                        Closed, awaiting distribution
                       </template>
                       <template v-else>
                         Active {{ formatDateRange(contest.startDate, contest.endDate) }}
