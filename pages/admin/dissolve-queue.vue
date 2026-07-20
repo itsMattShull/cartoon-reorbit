@@ -41,6 +41,8 @@
                 <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
                 <div class="text-xs text-gray-500 mt-0.5">
                   {{ entry.rarity }}
+                  <span v-if="entry.series"> · {{ entry.series }}</span>
+                  <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
                   <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
@@ -67,7 +69,7 @@
         <div class="p-4 border-b">
           <h2 class="font-semibold">All Queue Entries</h2>
           <p class="text-xs text-gray-500 mt-0.5">
-            <template v-if="searchQuery.length > 0 || categoryFilter !== 'ALL'">
+            <template v-if="hasActiveFilters">
               {{ filteredEntries.length }} of {{ allEntries.length }} entries match
             </template>
             <template v-else>
@@ -87,6 +89,27 @@
               <option value="POKEMON">Pokémon</option>
               <option value="CRAZY_RARE">Crazy Rare</option>
               <option value="UNSCHEDULED">Unscheduled</option>
+            </select>
+            <select
+              v-model="rarityFilter"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="ALL">All Rarities</option>
+              <option v-for="r in rarityOptions" :key="r" :value="r">{{ r }}</option>
+            </select>
+            <select
+              v-model="seriesFilter"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="ALL">All Series</option>
+              <option v-for="s in seriesOptions" :key="s" :value="s">{{ s }}</option>
+            </select>
+            <select
+              v-model="setFilter"
+              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="ALL">All Sets</option>
+              <option v-for="s in setOptions" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="relative w-full sm:w-80">
@@ -142,6 +165,8 @@
                 <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
                 <div class="text-xs text-gray-500 mt-0.5">
                   {{ entry.rarity }}
+                  <span v-if="entry.series"> · {{ entry.series }}</span>
+                  <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
                   <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
@@ -162,7 +187,7 @@
           </div>
         </div>
         <div v-else class="p-6 text-center text-sm text-gray-400">
-          {{ (searchQuery.length > 0 || categoryFilter !== 'ALL') ? 'No entries match your filters' : 'No entries in the dissolve queue' }}
+          {{ hasActiveFilters ? 'No entries match your filters' : 'No entries in the dissolve queue' }}
         </div>
 
         <!-- Pagination -->
@@ -262,6 +287,27 @@ const searchContainer = ref(null)
 // Category filter
 const categoryFilter = ref('ALL')
 
+// Rarity / series / set filters
+const rarityFilter = ref('ALL')
+const seriesFilter = ref('ALL')
+const setFilter    = ref('ALL')
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(v => v != null && v !== ''))].sort((a, b) => a.localeCompare(b))
+}
+
+const rarityOptions = computed(() => uniqueSorted(allEntries.value.map(e => e.rarity)))
+const seriesOptions = computed(() => uniqueSorted(allEntries.value.map(e => e.series)))
+const setOptions    = computed(() => uniqueSorted(allEntries.value.map(e => e.set)))
+
+const hasActiveFilters = computed(() =>
+  searchQuery.value.length > 0 ||
+  categoryFilter.value !== 'ALL' ||
+  rarityFilter.value !== 'ALL' ||
+  seriesFilter.value !== 'ALL' ||
+  setFilter.value !== 'ALL'
+)
+
 // Pagination
 const currentPage = ref(1)
 const pageSize    = 50
@@ -279,6 +325,15 @@ const filteredEntries = computed(() => {
     result = result.filter(e => !e.scheduledFor)
   } else if (categoryFilter.value !== 'ALL') {
     result = result.filter(e => e.category === categoryFilter.value)
+  }
+  if (rarityFilter.value !== 'ALL') {
+    result = result.filter(e => e.rarity === rarityFilter.value)
+  }
+  if (seriesFilter.value !== 'ALL') {
+    result = result.filter(e => e.series === seriesFilter.value)
+  }
+  if (setFilter.value !== 'ALL') {
+    result = result.filter(e => e.set === setFilter.value)
   }
   if (!searchQuery.value.trim()) return result
   const q = searchQuery.value.trim().toLowerCase()
@@ -304,8 +359,8 @@ watch(searchQuery, (val) => {
   showSuggestions.value = val.trim().length >= 3
 })
 
-// Reset to page 1 when category filter changes
-watch(categoryFilter, () => {
+// Reset to page 1 when any filter changes
+watch([categoryFilter, rarityFilter, seriesFilter, setFilter], () => {
   currentPage.value = 1
 })
 
