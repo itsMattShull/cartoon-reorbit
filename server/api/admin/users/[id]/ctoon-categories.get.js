@@ -1,6 +1,7 @@
 // server/api/admin/users/[id]/ctoon-categories.get.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { getFeaturedDissolveConfig, isCtoonFeatured } from '@/server/utils/featuredDissolveConfig'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -20,19 +21,18 @@ export default defineEventHandler(async (event) => {
   const ctoons = await prisma.userCtoon.findMany({
     where: { userId: id, burnedAt: null },
     select: {
-      ctoon: { select: { series: true, rarity: true } }
+      ctoon: { select: { series: true, rarity: true, set: true } }
     }
   })
 
-  let pokemon = 0, crazyRare = 0, other = 0
+  const featuredConfig = await getFeaturedDissolveConfig()
+
+  let featured = 0, other = 0
 
   for (const uc of ctoons) {
-    const isPokemon   = (uc.ctoon?.series || '').toLowerCase() === 'pokemon'
-    const isCrazyRare = (uc.ctoon?.rarity || '').toLowerCase() === 'crazy rare'
-    if (isPokemon)        pokemon++
-    else if (isCrazyRare) crazyRare++
-    else                  other++
+    if (isCtoonFeatured(uc.ctoon, featuredConfig)) featured++
+    else other++
   }
 
-  return { pokemon, crazyRare, other, total: ctoons.length }
+  return { featured, other, total: ctoons.length }
 })

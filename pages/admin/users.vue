@@ -427,42 +427,22 @@
                    class="flex-1 text-xs border rounded px-2 py-1" />
           </div>
 
-          <!-- Pokémon category -->
-          <div class="rounded border border-blue-100 bg-blue-50 p-2 space-y-1.5">
-            <p class="text-xs font-medium text-blue-700">
-              Pokémon
-              <span class="ml-1 font-normal text-blue-500">
-                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.pokemon : '…' }} cToons)
-              </span>
-            </p>
-            <div class="flex items-center gap-2">
-              <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
-              <input v-model.number="dissolveSchedule.pokemonCadenceDays" type="number" min="1"
-                     class="w-24 text-xs border rounded px-2 py-1" />
-            </div>
-            <div class="flex items-center gap-2">
-              <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
-              <input v-model.number="dissolveSchedule.pokemonPerCadence" type="number" min="1"
-                     class="w-24 text-xs border rounded px-2 py-1" />
-            </div>
-          </div>
-
-          <!-- Crazy Rare category -->
+          <!-- Featured category -->
           <div class="rounded border border-purple-100 bg-purple-50 p-2 space-y-1.5">
             <p class="text-xs font-medium text-purple-700">
-              Crazy Rare
+              Featured
               <span class="ml-1 font-normal text-purple-500">
-                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.crazyRare : '…' }} cToons)
+                ({{ dissolveCategoryCounts ? dissolveCategoryCounts.featured : '…' }} cToons)
               </span>
             </p>
             <div class="flex items-center gap-2">
               <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
-              <input v-model.number="dissolveSchedule.crazyRareCadenceDays" type="number" min="1"
+              <input v-model.number="dissolveSchedule.featuredCadenceDays" type="number" min="1"
                      class="w-24 text-xs border rounded px-2 py-1" />
             </div>
             <div class="flex items-center gap-2">
               <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
-              <input v-model.number="dissolveSchedule.crazyRarePerCadence" type="number" min="1"
+              <input v-model.number="dissolveSchedule.featuredPerCadence" type="number" min="1"
                      class="w-24 text-xs border rounded px-2 py-1" />
             </div>
           </div>
@@ -1100,13 +1080,11 @@ function defaultStartLocal() {
 
 function defaultDissolveSchedule() {
   return {
-    startAtLocal:          defaultStartLocal(),
-    pokemonCadenceDays:    7,
-    pokemonPerCadence:     2,
-    crazyRareCadenceDays:  7,
-    crazyRarePerCadence:   1,
-    otherCadenceDays:      7,
-    otherPerCadence:       10,
+    startAtLocal:        defaultStartLocal(),
+    featuredCadenceDays: 7,
+    featuredPerCadence:  2,
+    otherCadenceDays:    7,
+    otherPerCadence:     10,
   }
 }
 
@@ -1192,13 +1170,11 @@ async function confirmDissolve() {
       method: 'POST',
       body: {
         scheduleConfig: {
-          startAtUtc:            new Date(s.startAtLocal + ':00-06:00').toISOString(),
-          pokemonCadenceDays:    s.pokemonCadenceDays,
-          pokemonPerCadence:     s.pokemonPerCadence,
-          crazyRareCadenceDays:  s.crazyRareCadenceDays,
-          crazyRarePerCadence:   s.crazyRarePerCadence,
-          otherCadenceDays:      s.otherCadenceDays,
-          otherPerCadence:       s.otherPerCadence,
+          startAtUtc:          new Date(s.startAtLocal + ':00-06:00').toISOString(),
+          featuredCadenceDays: s.featuredCadenceDays,
+          featuredPerCadence:  s.featuredPerCadence,
+          otherCadenceDays:    s.otherCadenceDays,
+          otherPerCadence:     s.otherPerCadence,
         }
       }
     })
