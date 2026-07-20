@@ -531,7 +531,7 @@ onUnmounted(() => {
 
 .card {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 4;
   min-width: 0;
   min-height: 0;
   background: transparent;
