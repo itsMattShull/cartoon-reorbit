@@ -79,22 +79,12 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, 1fr) 0.85fr;
+  grid-template-rows: repeat(4, 1fr);
   width: 100%;
   flex: 1;
   gap: 6px;
   padding: 6px;
   box-sizing: border-box;
-}
-
-/* Tower Stack spans both columns on its own row */
-.quadrant--tower {
-  grid-column: 1 / -1;
-}
-
-/* ReOrbit Memory gets its own (shorter) full-width row below Tower Stack */
-.quadrant--reorbitmemory {
-  grid-column: 1 / -1;
 }
 
 .quadrant {
@@ -147,11 +137,6 @@ const tiles = computed(() => tileData.value ?? {})
     grid-template-columns: 1fr;
     grid-template-rows: repeat(8, minmax(70px, 1fr));
     height: max(300px, calc(100dvh - 276px));
-  }
-
-  .quadrant--tower,
-  .quadrant--reorbitmemory {
-    grid-column: auto;
   }
 }
 </style>
