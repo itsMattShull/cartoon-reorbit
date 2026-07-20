@@ -1038,6 +1038,13 @@ model GlobalGameConfig {
   gameTileTkoImagePath          String?
   gameTileReorbitmatchImagePath String?
   gameTileTowerImagePath        String?
+  // Account-dissolve "featured auction" rules: cToons matching any of these
+  // rarities/series/sets are marked isFeatured when an account is dissolved.
+  // Each is a JSON array of strings, edited via the "Edit Featured" modal on
+  // /admin/dissolve-queue.
+  featuredDissolveRarities Json     @default("[]")
+  featuredDissolveSeries   Json     @default("[]")
+  featuredDissolveSets     Json     @default("[]")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -1648,7 +1655,7 @@ model AuctionOnly {
 model DissolveAuctionQueue {
   id           String    @id @default(uuid())
   userCtoonId  String    @unique
-  category     String    @default("OTHER")  // "POKEMON" | "CRAZY_RARE" | "OTHER"
+  category     String    @default("OTHER")  // "FEATURED" | "OTHER"
   isFeatured   Boolean   @default(false)
   scheduledFor DateTime?                     // UTC; null = not yet scheduled
   createdAt    DateTime  @default(now())
