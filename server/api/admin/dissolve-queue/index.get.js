@@ -26,9 +26,8 @@ export default defineEventHandler(async (event) => {
   })
 
   const byCategory = {
-    POKEMON:    { total: 0, scheduled: 0, unscheduled: 0 },
-    CRAZY_RARE: { total: 0, scheduled: 0, unscheduled: 0 },
-    OTHER:      { total: 0, scheduled: 0, unscheduled: 0 },
+    FEATURED: { total: 0, scheduled: 0, unscheduled: 0 },
+    OTHER:    { total: 0, scheduled: 0, unscheduled: 0 },
   }
 
   for (const e of allEntries) {

@@ -18,8 +18,7 @@ export default defineEventHandler(async (event) => {
   const {
     startAtUtc,
     cadenceDays,
-    pokemonPerCadence,
-    crazyRarePerCadence,
+    featuredPerCadence,
     otherPerCadence,
     reschedule = false,
   } = body
@@ -30,9 +29,8 @@ export default defineEventHandler(async (event) => {
   if (!cadenceDays || Number(cadenceDays) < 1) throw createError({ statusCode: 400, statusMessage: 'cadenceDays must be >= 1' })
 
   const perCategory = {
-    POKEMON:    Number(pokemonPerCadence)   || 0,
-    CRAZY_RARE: Number(crazyRarePerCadence) || 0,
-    OTHER:      Number(otherPerCadence)     || 0,
+    FEATURED: Number(featuredPerCadence) || 0,
+    OTHER:    Number(otherPerCadence)    || 0,
   }
 
   // Fetch entries to schedule
@@ -54,7 +52,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Group by category
-  const grouped = { POKEMON: [], CRAZY_RARE: [], OTHER: [] }
+  const grouped = { FEATURED: [], OTHER: [] }
   for (const e of entries) grouped[e.category]?.push(e.id)
 
   let scheduled = 0

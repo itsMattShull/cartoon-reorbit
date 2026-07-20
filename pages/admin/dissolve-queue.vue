@@ -5,7 +5,10 @@
     <div class="max-w-5xl mx-auto mt-6 space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold">Dissolve Queue</h1>
-        <button @click="loadData" class="text-sm text-blue-600 underline">Refresh</button>
+        <div class="flex items-center gap-4">
+          <button @click="openFeaturedModal" class="text-sm text-blue-600 underline">Edit Featured</button>
+          <button @click="loadData" class="text-sm text-blue-600 underline">Refresh</button>
+        </div>
       </div>
 
       <!-- Summary cards -->
@@ -86,8 +89,7 @@
               class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value="ALL">All Categories</option>
-              <option value="POKEMON">Pokémon</option>
-              <option value="CRAZY_RARE">Crazy Rare</option>
+              <option value="FEATURED">Featured</option>
               <option value="UNSCHEDULED">Unscheduled</option>
             </select>
             <select
@@ -228,13 +230,8 @@
                    class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Pokémon / cadence</label>
-            <input v-model.number="form.pokemonPerCadence" type="number" min="1"
-                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
-          </div>
-          <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Crazy Rare / cadence</label>
-            <input v-model.number="form.crazyRarePerCadence" type="number" min="1"
+            <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Featured / cadence</label>
+            <input v-model.number="form.featuredPerCadence" type="number" min="1"
                    class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
           </div>
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -260,6 +257,90 @@
             :disabled="scheduling"
             class="w-full sm:w-auto px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
           >{{ scheduling ? 'Scheduling…' : 'Apply Schedule' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Featured modal -->
+    <div v-if="showFeaturedModal" class="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-black/40" @click.self="closeFeaturedModal">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="p-4 sm:p-5 border-b">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-lg">Edit Featured</h2>
+            <button @click="closeFeaturedModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          </div>
+          <p class="text-xs text-gray-600 mt-2 leading-relaxed">
+            When an account is dissolved, its cToons are transferred to the official account and queued
+            for auction. Any cToon that matches a checked rarity, series, or set below is marked as a
+            <span class="font-medium">featured</span> auction when it's queued. Checking a box here does
+            not change anything already in the queue until you click Save — at that point every entry
+            currently in the dissolve queue (scheduled or not) is re-evaluated against these rules too.
+          </p>
+        </div>
+
+        <div class="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+          <!-- Rarities -->
+          <div>
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Rarities</h3>
+            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+              <label v-for="r in orderedRarityOptions" :key="r"
+                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" :value="r" v-model="featuredForm.rarities" class="rounded border-gray-300" />
+                {{ r }}
+              </label>
+            </div>
+          </div>
+
+          <!-- Series -->
+          <div>
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Series</h3>
+            <input
+              v-model="seriesSearch"
+              type="text"
+              placeholder="Filter series… (3+ characters)"
+              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+              <label v-for="s in orderedSeriesOptions" :key="s"
+                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" :value="s" v-model="featuredForm.series" class="rounded border-gray-300" />
+                {{ s }}
+              </label>
+              <div v-if="!orderedSeriesOptions.length" class="px-3 py-2 text-sm text-gray-400">No matches</div>
+            </div>
+          </div>
+
+          <!-- Sets -->
+          <div>
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Sets</h3>
+            <input
+              v-model="setSearch"
+              type="text"
+              placeholder="Filter sets… (3+ characters)"
+              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+              <label v-for="s in orderedSetOptions" :key="s"
+                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" :value="s" v-model="featuredForm.sets" class="rounded border-gray-300" />
+                {{ s }}
+              </label>
+              <div v-if="!orderedSetOptions.length" class="px-3 py-2 text-sm text-gray-400">No matches</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 sm:p-5 border-t">
+          <div v-if="featuredError" class="mb-3 text-xs text-red-600">{{ featuredError }}</div>
+          <div v-if="featuredSuccess" class="mb-3 text-xs text-emerald-600">{{ featuredSuccess }}</div>
+          <div class="flex items-center justify-end gap-3">
+            <button @click="closeFeaturedModal" class="px-4 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+            <button
+              @click="saveFeaturedConfig"
+              :disabled="savingFeatured"
+              class="px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+            >{{ savingFeatured ? 'Saving…' : 'Save' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -313,9 +394,8 @@ const currentPage = ref(1)
 const pageSize    = 50
 
 const categories = [
-  { key: 'POKEMON',    label: 'Pokémon' },
-  { key: 'CRAZY_RARE', label: 'Crazy Rare' },
-  { key: 'OTHER',      label: 'Other' },
+  { key: 'FEATURED', label: 'Featured' },
+  { key: 'OTHER',    label: 'Other' },
 ]
 
 // Filter across all entries (not just current page)
@@ -395,12 +475,11 @@ function defaultStartLocal() {
 }
 
 const form = ref({
-  startAtLocal:        defaultStartLocal(),
-  cadenceDays:         7,
-  pokemonPerCadence:   2,
-  crazyRarePerCadence: 1,
-  otherPerCadence:     10,
-  reschedule:          false,
+  startAtLocal:       defaultStartLocal(),
+  cadenceDays:        7,
+  featuredPerCadence: 2,
+  otherPerCadence:    10,
+  reschedule:         false,
 })
 
 const scheduling      = ref(false)
@@ -437,12 +516,11 @@ async function applySchedule() {
     const res = await $fetch('/api/admin/dissolve-queue/schedule', {
       method: 'POST',
       body: {
-        startAtUtc:          new Date(f.startAtLocal).toISOString(),
-        cadenceDays:         f.cadenceDays,
-        pokemonPerCadence:   f.pokemonPerCadence,
-        crazyRarePerCadence: f.crazyRarePerCadence,
-        otherPerCadence:     f.otherPerCadence,
-        reschedule:          f.reschedule,
+        startAtUtc:         new Date(f.startAtLocal).toISOString(),
+        cadenceDays:        f.cadenceDays,
+        featuredPerCadence: f.featuredPerCadence,
+        otherPerCadence:    f.otherPerCadence,
+        reschedule:         f.reschedule,
       }
     })
     scheduleSuccess.value = `Scheduled ${res.scheduled} entries.`
@@ -481,8 +559,95 @@ function fmtCST(iso) {
 }
 
 function categoryChip(cat) {
-  if (cat === 'POKEMON')    return 'bg-blue-100 text-blue-700'
-  if (cat === 'CRAZY_RARE') return 'bg-purple-100 text-purple-700'
+  if (cat === 'FEATURED') return 'bg-purple-100 text-purple-700'
   return 'bg-gray-100 text-gray-600'
+}
+
+// ── Edit Featured modal ────────────────────────────────────────────────────
+const showFeaturedModal = ref(false)
+const savingFeatured    = ref(false)
+const featuredError     = ref('')
+const featuredSuccess   = ref('')
+
+const seriesSearch = ref('')
+const setSearch    = ref('')
+
+const featuredForm = ref({ rarities: [], series: [], sets: [] })
+const featuredOptions = ref({ rarities: [], series: [], sets: [] })
+
+// Checked items first (alphabetical within each group), then unchecked (alphabetical).
+function orderChecked(options, checked) {
+  const checkedSet = new Set(checked)
+  const checkedItems   = options.filter(o => checkedSet.has(o)).sort((a, b) => a.localeCompare(b))
+  const uncheckedItems = options.filter(o => !checkedSet.has(o)).sort((a, b) => a.localeCompare(b))
+  return [...checkedItems, ...uncheckedItems]
+}
+
+// Checked items always stay visible even if they don't match the active filter,
+// so a selection can't silently disappear while searching.
+function filterOptions(options, checked, search) {
+  const q = search.trim().toLowerCase()
+  if (q.length < 3) return options
+  const checkedSet = new Set(checked)
+  return options.filter(o => checkedSet.has(o) || o.toLowerCase().includes(q))
+}
+
+const orderedRarityOptions = computed(() =>
+  orderChecked(featuredOptions.value.rarities, featuredForm.value.rarities)
+)
+const orderedSeriesOptions = computed(() =>
+  orderChecked(filterOptions(featuredOptions.value.series, featuredForm.value.series, seriesSearch.value), featuredForm.value.series)
+)
+const orderedSetOptions = computed(() =>
+  orderChecked(filterOptions(featuredOptions.value.sets, featuredForm.value.sets, setSearch.value), featuredForm.value.sets)
+)
+
+async function openFeaturedModal() {
+  featuredError.value   = ''
+  featuredSuccess.value = ''
+  seriesSearch.value    = ''
+  setSearch.value       = ''
+  showFeaturedModal.value = true
+  try {
+    const data = await $fetch('/api/admin/dissolve-featured-config', { headers })
+    featuredForm.value = {
+      rarities: [...(data.selected?.rarities || [])],
+      series:   [...(data.selected?.series   || [])],
+      sets:     [...(data.selected?.sets     || [])],
+    }
+    featuredOptions.value = {
+      rarities: data.options?.rarities || [],
+      series:   data.options?.series   || [],
+      sets:     data.options?.sets     || [],
+    }
+  } catch (e) {
+    featuredError.value = e?.data?.statusMessage || 'Failed to load featured config.'
+  }
+}
+
+function closeFeaturedModal() {
+  showFeaturedModal.value = false
+}
+
+async function saveFeaturedConfig() {
+  savingFeatured.value = true
+  featuredError.value   = ''
+  featuredSuccess.value = ''
+  try {
+    const res = await $fetch('/api/admin/dissolve-featured-config', {
+      method: 'POST',
+      body: {
+        rarities: featuredForm.value.rarities,
+        series:   featuredForm.value.series,
+        sets:     featuredForm.value.sets,
+      }
+    })
+    featuredSuccess.value = `Saved. ${res.updated} queue ${res.updated === 1 ? 'entry' : 'entries'} updated.`
+    await loadData()
+  } catch (e) {
+    featuredError.value = e?.data?.statusMessage || 'Failed to save featured config.'
+  } finally {
+    savingFeatured.value = false
+  }
 }
 </script>
