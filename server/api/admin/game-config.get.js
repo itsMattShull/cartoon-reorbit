@@ -153,6 +153,18 @@ export default defineEventHandler(async (event) => {
             towerMaxLayers: 800
           }
         })
+      } else if (gameName === 'ReOrbitMemory') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            reorbitMemoryPlaysPerPeriod: 3,
+            reorbitMemoryPointsPerGame: 50,
+            reorbitMemoryPairs: 8,
+            reorbitMemoryTimeSeconds: null,
+            reorbitMemoryFlipBackDelayMs: 800,
+            reorbitMemoryCardBackImagePath: null
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,

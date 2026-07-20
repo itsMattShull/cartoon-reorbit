@@ -40,6 +40,10 @@
         <img v-if="tiles.tower" :src="tiles.tower" alt="Tower Stack" class="tile-img" />
         <span v-else>Tower Stack</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/reorbitmemory" class="quadrant quadrant--reorbitmemory">
+        <img v-if="tiles.reorbitmemory" :src="tiles.reorbitmemory" alt="ReOrbit Memory" class="tile-img" />
+        <span v-else>ReOrbit Memory</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -75,7 +79,7 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr) 0.85fr;
   width: 100%;
   flex: 1;
   gap: 6px;
@@ -83,8 +87,13 @@ const tiles = computed(() => tileData.value ?? {})
   box-sizing: border-box;
 }
 
-/* 7th tile spans both columns on its own row */
+/* Tower Stack spans both columns on its own row */
 .quadrant--tower {
+  grid-column: 1 / -1;
+}
+
+/* ReOrbit Memory gets its own (shorter) full-width row below Tower Stack */
+.quadrant--reorbitmemory {
   grid-column: 1 / -1;
 }
 
@@ -131,15 +140,17 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--tko        { background: #8a1a32; }
 .quadrant--reorbit    { background: #1a6a8a; }
 .quadrant--tower      { background: #5a2a8a; }
+.quadrant--reorbitmemory { background: #2a7a5a; }
 
 @media (max-width: 768px) {
   .gameshome {
     grid-template-columns: 1fr;
-    grid-template-rows: repeat(7, minmax(70px, 1fr));
+    grid-template-rows: repeat(8, minmax(70px, 1fr));
     height: max(300px, calc(100dvh - 276px));
   }
 
-  .quadrant--tower {
+  .quadrant--tower,
+  .quadrant--reorbitmemory {
     grid-column: auto;
   }
 }

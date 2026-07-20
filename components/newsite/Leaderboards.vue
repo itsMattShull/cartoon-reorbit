@@ -91,7 +91,8 @@ const { data: totalData, pending: totalPending } = useFetch('/api/leaderboard/to
 // Users tab (the default) never pulls either game's leaderboard data.
 const gameOptions = [
   { key: 'reorbitmatch', label: 'ReOrbit Match', endpoint: '/api/game/reorbitmatch/leaderboard' },
-  { key: 'tower',        label: 'Tower Stack',   endpoint: '/api/game/tower/leaderboard' }
+  { key: 'tower',        label: 'Tower Stack',   endpoint: '/api/game/tower/leaderboard' },
+  { key: 'reorbitmemory', label: 'ReOrbit Memory', endpoint: '/api/game/reorbitmemory/leaderboard', lowerIsBetter: true }
 ]
 const selectedGame = ref('reorbitmatch')
 const gameDataCache = ref({})
@@ -150,21 +151,30 @@ const usersBoards = computed(() => [
   },
 ])
 
+// ReOrbit Memory's "score" column holds moves taken (lower is better), so its rows are
+// labeled "moves" instead of formatted like a points total.
+const gameValueLabel = computed(() => {
+  const opt = gameOptions.find(g => g.key === selectedGame.value)
+  return opt?.lowerIsBetter
+    ? row => `${Number(row.score).toLocaleString()} move${row.score === 1 ? '' : 's'}`
+    : row => Number(row.score).toLocaleString()
+})
+
 const gamesBoards = computed(() => [
   {
     key: 'alltime', title: 'All Time', headerClass: 'lb-card-header--alltime',
     rows: gameData.value?.allTime, pending: gamePending.value,
-    formatValue: row => Number(row.score).toLocaleString()
+    formatValue: gameValueLabel.value
   },
   {
     key: 'monthly', title: 'This Month', headerClass: 'lb-card-header--monthly',
     rows: gameData.value?.monthly, pending: gamePending.value,
-    formatValue: row => Number(row.score).toLocaleString()
+    formatValue: gameValueLabel.value
   },
   {
     key: 'weekly', title: 'This Week', headerClass: 'lb-card-header--weekly',
     rows: gameData.value?.weekly, pending: gamePending.value,
-    formatValue: row => Number(row.score).toLocaleString()
+    formatValue: gameValueLabel.value
   },
 ])
 </script>

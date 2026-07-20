@@ -17,17 +17,6 @@ const baseDir = process.env.NODE_ENV === 'production'
 
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/gif'])
 
-const SLOT_FIELD = {
-  winball:      'gameTileWinballImagePath',
-  lotto:        'gameTileLottoImagePath',
-  winwheel:     'gameTileWinwheelImagePath',
-  clash:        'gameTileClashImagePath',
-  tko:          'gameTileTkoImagePath',
-  reorbitmatch: 'gameTileReorbitmatchImagePath',
-  tower:        'gameTileTowerImagePath',
-  reorbitmemory: 'gameTileReorbitmemoryImagePath'
-}
-
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
   const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
@@ -36,16 +25,9 @@ export default defineEventHandler(async (event) => {
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'No form data' })
 
-  let filePart = null
-  let slot = ''
-  for (const p of parts) {
-    if (p.filename) filePart = p
-    else if (p.name === 'slot') slot = Buffer.isBuffer(p.data) ? p.data.toString('utf-8').trim() : String(p.data ?? '').trim()
-  }
-
+  const filePart = parts.find(p => p.filename)
   if (!filePart) throw createError({ statusCode: 400, statusMessage: 'Missing image file' })
   if (!ALLOWED.has(filePart.type)) throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPG, SVG, or GIF allowed' })
-  if (!SLOT_FIELD[slot]) throw createError({ statusCode: 400, statusMessage: `Invalid slot "${slot}"` })
 
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'game-tiles')
@@ -58,30 +40,29 @@ export default defineEventHandler(async (event) => {
     : filePart.type === 'image/gif' ? '.gif'
     : '.jpg'
   )
-  const filename = `${slot}-${Date.now()}${safeExt}`
+  const filename = `reorbitmemory-cardback-${Date.now()}${safeExt}`
   await writeFile(join(uploadDir, filename), filePart.data)
 
   const assetPath = process.env.NODE_ENV === 'production'
     ? `/images/game-tiles/${filename}`
     : `/game-tiles/${filename}`
 
-  const field = SLOT_FIELD[slot]
-  const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-  await db.globalGameConfig.upsert({
-    where: { id: 'singleton' },
-    create: { id: 'singleton', dailyPointLimit: 100, [field]: assetPath },
-    update: { [field]: assetPath, updatedAt: new Date() }
+  const before = await db.gameConfig.findUnique({ where: { gameName: 'ReOrbitMemory' } })
+  await db.gameConfig.upsert({
+    where: { gameName: 'ReOrbitMemory' },
+    create: { gameName: 'ReOrbitMemory', reorbitMemoryCardBackImagePath: assetPath },
+    update: { reorbitMemoryCardBackImagePath: assetPath, updatedAt: new Date() }
   })
 
-  if ((before?.[field] ?? null) !== assetPath) {
+  if ((before?.reorbitMemoryCardBackImagePath ?? null) !== assetPath) {
     await logAdminChange(db, {
       userId: me.id,
-      area: 'GlobalGameConfig',
-      key: field,
-      prevValue: before?.[field] ?? null,
+      area: 'GameConfig:ReOrbitMemory',
+      key: 'reorbitMemoryCardBackImagePath',
+      prevValue: before?.reorbitMemoryCardBackImagePath ?? null,
       newValue: assetPath
     }).catch(() => {})
   }
 
-  return { assetPath, slot }
+  return { assetPath }
 })
