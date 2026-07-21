@@ -147,6 +147,26 @@ function validatePayload(payload) {
     if (payload.towerMaxLayers == null || typeof payload.towerMaxLayers !== 'number' || payload.towerMaxLayers < 10 || payload.towerMaxLayers > 2000) {
       throw createError({ statusCode: 400, statusMessage: '"towerMaxLayers" must be between 10 and 2000' })
     }
+  } else if (payload.gameName === 'ReOrbitMemory') {
+    if (payload.reorbitMemoryPlaysPerPeriod == null || typeof payload.reorbitMemoryPlaysPerPeriod !== 'number' || payload.reorbitMemoryPlaysPerPeriod < 1) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryPlaysPerPeriod" must be a positive number' })
+    }
+    if (payload.reorbitMemoryPointsPerGame == null || typeof payload.reorbitMemoryPointsPerGame !== 'number' || payload.reorbitMemoryPointsPerGame < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryPointsPerGame" must be a non-negative number' })
+    }
+    const validPairs = [6, 8, 10, 12]
+    if (payload.reorbitMemoryPairs == null || !validPairs.includes(payload.reorbitMemoryPairs)) {
+      throw createError({ statusCode: 400, statusMessage: `"reorbitMemoryPairs" must be one of ${validPairs.join(', ')}` })
+    }
+    if (payload.reorbitMemoryTimeSeconds != null && (typeof payload.reorbitMemoryTimeSeconds !== 'number' || payload.reorbitMemoryTimeSeconds < 30)) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryTimeSeconds" must be null or a number >= 30' })
+    }
+    if (payload.reorbitMemoryFlipBackDelayMs == null || typeof payload.reorbitMemoryFlipBackDelayMs !== 'number' || payload.reorbitMemoryFlipBackDelayMs < 300 || payload.reorbitMemoryFlipBackDelayMs > 3000) {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryFlipBackDelayMs" must be between 300 and 3000' })
+    }
+    if (payload.reorbitMemoryCardBackImagePath != null && typeof payload.reorbitMemoryCardBackImagePath !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryCardBackImagePath" must be a string or null' })
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -186,6 +206,13 @@ export default defineEventHandler(async (event) => {
     towerMaxSpeedMultiplier,
     towerPerfectEpsilon,
     towerMaxLayers,
+    // ReOrbitMemory fields
+    reorbitMemoryPlaysPerPeriod,
+    reorbitMemoryPointsPerGame,
+    reorbitMemoryPairs,
+    reorbitMemoryTimeSeconds = null,
+    reorbitMemoryFlipBackDelayMs,
+    reorbitMemoryCardBackImagePath = null,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -379,6 +406,17 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...towerData }
         updateData = { ...updateData, ...towerData }
+      } else if (gameName === 'ReOrbitMemory') {
+        const memoryData = {
+          reorbitMemoryPlaysPerPeriod,
+          reorbitMemoryPointsPerGame,
+          reorbitMemoryPairs,
+          reorbitMemoryTimeSeconds: reorbitMemoryTimeSeconds || null,
+          reorbitMemoryFlipBackDelayMs,
+          reorbitMemoryCardBackImagePath: reorbitMemoryCardBackImagePath || null
+        }
+        createData = { ...createData, ...memoryData }
+        updateData = { ...updateData, ...memoryData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -562,6 +600,20 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:TowerStack', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'ReOrbitMemory') {
+          const changes = [
+            ['reorbitMemoryPlaysPerPeriod', before?.reorbitMemoryPlaysPerPeriod, reorbitMemoryPlaysPerPeriod],
+            ['reorbitMemoryPointsPerGame', before?.reorbitMemoryPointsPerGame, reorbitMemoryPointsPerGame],
+            ['reorbitMemoryPairs', before?.reorbitMemoryPairs, reorbitMemoryPairs],
+            ['reorbitMemoryTimeSeconds', before?.reorbitMemoryTimeSeconds ?? null, reorbitMemoryTimeSeconds || null],
+            ['reorbitMemoryFlipBackDelayMs', before?.reorbitMemoryFlipBackDelayMs, reorbitMemoryFlipBackDelayMs],
+            ['reorbitMemoryCardBackImagePath', before?.reorbitMemoryCardBackImagePath || null, reorbitMemoryCardBackImagePath || null]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:ReOrbitMemory', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

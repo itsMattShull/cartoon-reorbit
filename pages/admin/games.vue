@@ -840,6 +840,77 @@
           </button>
         </section>
 
+        <!-- ReOrbit Memory -->
+        <section v-if="activeTab === 'ReOrbitMemory'" role="tabpanel" aria-label="ReOrbit Memory Settings">
+          <h2 class="text-2xl font-semibold mb-4">ReOrbit Memory Settings</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="reorbitMemoryPlaysPerPeriod" min="1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="reorbitMemoryPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Number of Pairs</label>
+              <p class="text-xs text-gray-400 mb-1">Board size — kept small enough to stay tappable on phones</p>
+              <select v-model.number="reorbitMemoryPairs" class="input">
+                <option :value="6">6 pairs (3×4 — 12 cards)</option>
+                <option :value="8">8 pairs (4×4 — 16 cards)</option>
+                <option :value="10">10 pairs (4×5 — 20 cards)</option>
+                <option :value="12">12 pairs (4×6 — 24 cards)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Time Per Game (seconds)</label>
+              <p class="text-xs text-gray-400 mb-1">Leave empty for unlimited time</p>
+              <input type="number" v-model="reorbitMemoryTimeSecondsInput" min="30" placeholder="Unlimited" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Flip-back Delay (ms)</label>
+              <p class="text-xs text-gray-400 mb-1">How long a mismatched pair stays face up before flipping back (300–3000)</p>
+              <input type="number" v-model.number="reorbitMemoryFlipBackDelayMs" min="300" max="3000" step="100" class="input" />
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Card Back Image</h3>
+            <p class="text-xs text-gray-500 mb-3">Shown on the back of every face-down card. Card fronts are random cToon images, chosen automatically each game.</p>
+            <div class="w-24 h-32 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
+              <img
+                v-if="reorbitMemoryCardBackImage"
+                :src="reorbitMemoryCardBackImage"
+                alt="Card back"
+                class="w-full h-full object-cover"
+              />
+              <span v-else class="text-gray-400 text-xs px-1 text-center">No image</span>
+            </div>
+            <input
+              type="file"
+              accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+              @change="onReorbitMemoryCardBackFile"
+              class="block w-full text-xs mb-2"
+            />
+            <button
+              class="btn-primary text-sm py-1 px-3"
+              @click="uploadReorbitMemoryCardBack"
+              :disabled="!reorbitMemoryCardBackFile || uploadingReorbitMemoryCardBack"
+            >
+              <span v-if="!uploadingReorbitMemoryCardBack">Upload</span>
+              <span v-else>Uploading…</span>
+            </button>
+          </div>
+
+          <button @click="saveReorbitMemoryConfig" :disabled="loadingReorbitMemory" class="btn-primary">
+            <span v-if="!loadingReorbitMemory">Save ReOrbit Memory Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -982,7 +1053,8 @@ const tabs = [
   { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'TKO',          label: 'TKO' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
-  { key: 'TowerStack',   label: 'Tower Stack' }
+  { key: 'TowerStack',   label: 'Tower Stack' },
+  { key: 'ReOrbitMemory', label: 'ReOrbit Memory' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1314,6 +1386,7 @@ async function loadSettings() {
   gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
   gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
+  gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1400,6 +1473,14 @@ async function loadSettings() {
   towerMaxSpeedMultiplier.value  = tw.towerMaxSpeedMultiplier ?? 2.5
   towerPerfectEpsilon.value      = tw.towerPerfectEpsilon ?? 4
   towerMaxLayers.value           = tw.towerMaxLayers ?? 800
+
+  const rm = await $fetch('/api/admin/game-config?gameName=ReOrbitMemory')
+  reorbitMemoryPlaysPerPeriod.value    = rm.reorbitMemoryPlaysPerPeriod ?? 3
+  reorbitMemoryPointsPerGame.value     = rm.reorbitMemoryPointsPerGame ?? 50
+  reorbitMemoryPairs.value             = rm.reorbitMemoryPairs ?? 8
+  reorbitMemoryTimeSecondsInput.value  = rm.reorbitMemoryTimeSeconds != null ? String(rm.reorbitMemoryTimeSeconds) : ''
+  reorbitMemoryFlipBackDelayMs.value   = rm.reorbitMemoryFlipBackDelayMs ?? 800
+  reorbitMemoryCardBackImage.value     = rm.reorbitMemoryCardBackImagePath || ''
 }
 
 // Win Wheel state
@@ -1739,11 +1820,12 @@ const gameTileSlots = [
   { slot: 'clash',        label: 'gToons Clash' },
   { slot: 'tko',          label: 'TKO' },
   { slot: 'reorbitmatch', label: 'ReOrbit Match' },
-  { slot: 'tower',        label: 'Tower Stack' }
+  { slot: 'tower',        label: 'Tower Stack' },
+  { slot: 'reorbitmemory', label: 'ReOrbit Memory' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -1805,6 +1887,64 @@ const towerMaxSpeedMultiplier  = ref(2.5)
 const towerPerfectEpsilon      = ref(4)
 const towerMaxLayers           = ref(800)
 const loadingTower              = ref(false)
+
+// ── ReOrbit Memory ────────────────────────────
+const reorbitMemoryPlaysPerPeriod  = ref(3)
+const reorbitMemoryPointsPerGame   = ref(50)
+const reorbitMemoryPairs           = ref(8)
+const reorbitMemoryTimeSecondsInput = ref('')  // '' = unlimited (null)
+const reorbitMemoryFlipBackDelayMs = ref(800)
+const reorbitMemoryCardBackImage   = ref('')
+const reorbitMemoryCardBackFile    = ref(null)
+const uploadingReorbitMemoryCardBack = ref(false)
+const loadingReorbitMemory         = ref(false)
+
+function onReorbitMemoryCardBackFile(e) {
+  reorbitMemoryCardBackFile.value = e.target.files?.[0] || null
+}
+
+async function uploadReorbitMemoryCardBack() {
+  const file = reorbitMemoryCardBackFile.value
+  if (!file) return
+  uploadingReorbitMemoryCardBack.value = true; toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', file)
+    const res = await $fetch('/api/admin/reorbitmemory-cardback-image', { method: 'POST', body: fd })
+    reorbitMemoryCardBackImage.value = res.assetPath
+    reorbitMemoryCardBackFile.value = null
+    toastMessage.value = 'Card back image uploaded.'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Upload failed'; toastType.value = 'error'
+  } finally {
+    uploadingReorbitMemoryCardBack.value = false
+  }
+}
+
+async function saveReorbitMemoryConfig() {
+  loadingReorbitMemory.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                      'ReOrbitMemory',
+        reorbitMemoryPlaysPerPeriod:   reorbitMemoryPlaysPerPeriod.value,
+        reorbitMemoryPointsPerGame:    reorbitMemoryPointsPerGame.value,
+        reorbitMemoryPairs:            reorbitMemoryPairs.value,
+        reorbitMemoryTimeSeconds:      reorbitMemoryTimeSecondsInput.value !== '' ? Number(reorbitMemoryTimeSecondsInput.value) : null,
+        reorbitMemoryFlipBackDelayMs:  reorbitMemoryFlipBackDelayMs.value,
+        reorbitMemoryCardBackImagePath: reorbitMemoryCardBackImage.value || null
+      }
+    })
+    toastMessage.value = 'ReOrbit Memory settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving ReOrbit Memory settings'; toastType.value = 'error'
+  } finally {
+    loadingReorbitMemory.value = false
+  }
+}
 
 function addReorbitEmoji() {
   const e = reorbitEmojiInput.value.trim()
