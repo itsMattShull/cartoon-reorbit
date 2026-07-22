@@ -58,7 +58,17 @@
           <div>
             <label class="block text-sm font-medium text-gray-700">Daily Game Point Cap</label>
             <input type="number" class="input" v-model.number="dailyPointLimit" />
-            <p class="text-xs text-gray-500 mt-1">Max points from games per 24h window.</p>
+            <p class="text-xs text-gray-500 mt-1">Max points from games (excluding TKO) per 24h window.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">TKO Daily Points Cap</label>
+            <input type="number" class="input" v-model.number="tkoDailyPointLimit" />
+            <p class="text-xs text-gray-500 mt-1">Max points from TKO wins per 24h window (separate pool, same 8pm CST reset).</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">TKO Points Per Win</label>
+            <input type="number" min="0" class="input" v-model.number="tkoPointsPerWin" />
+            <p class="text-xs text-gray-500 mt-1">Points awarded to the winner of each TKO round.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Max cZone Visits Per Day</label>
@@ -472,6 +482,8 @@ const dailyLoginPoints     = ref(500)
 const dailyNewUserPoints   = ref(1000)
 const czoneVisitPoints     = ref(20)
 const dailyPointLimit      = ref(250)
+const tkoDailyPointLimit   = ref(250)
+const tkoPointsPerWin      = ref(300)
 const czoneVisitMaxPerDay  = ref(10)
 const czoneCount           = ref(3)
 const phashDuplicateThreshold = ref(14)
@@ -540,6 +552,7 @@ async function loadGlobal() {
     dailyNewUserPoints.value   = Number(g?.dailyNewUserPoints   ?? 1000)
     czoneVisitPoints.value     = Number(g?.czoneVisitPoints     ?? 20)
     dailyPointLimit.value      = Number(g?.dailyPointLimit      ?? 250)
+    tkoDailyPointLimit.value   = Number(g?.tkoDailyPointLimit   ?? 250)
     czoneVisitMaxPerDay.value  = Number(g?.czoneVisitMaxPerDay  ?? 10)
     czoneCount.value           = Number(g?.czoneCount           ?? 3)
     phashDuplicateThreshold.value = Number(g?.phashDuplicateThreshold ?? 14)
@@ -569,6 +582,12 @@ async function loadGlobal() {
   } catch (e) {
     console.error('Failed to load global config', e)
   }
+  try {
+    const tc = await $fetch('/api/admin/game-config?gameName=TKO')
+    tkoPointsPerWin.value = Number(tc?.pointsPerWin ?? 300)
+  } catch (e) {
+    console.error('Failed to load TKO config', e)
+  }
 }
 
 async function saveGlobal() {
@@ -581,8 +600,16 @@ async function saveGlobal() {
         dailyNewUserPoints:   Number(dailyNewUserPoints.value),
         czoneVisitPoints:     Number(czoneVisitPoints.value),
         dailyPointLimit:      Number(dailyPointLimit.value),
+        tkoDailyPointLimit:   Number(tkoDailyPointLimit.value),
         czoneVisitMaxPerDay:  Number(czoneVisitMaxPerDay.value),
         czoneCount:           Number(czoneCount.value)
+      }
+    })
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:     'TKO',
+        pointsPerWin: Number(tkoPointsPerWin.value)
       }
     })
     toast.value = { type: 'ok', msg: 'Global points saved.' }

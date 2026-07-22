@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
       data: {
         id: 'singleton',
         dailyPointLimit: 250,
+        tkoDailyPointLimit: 250,
         dailyLoginPoints: 500,
         dailyNewUserPoints: 1000,
         czoneVisitPoints: 20,

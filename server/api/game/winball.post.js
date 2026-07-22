@@ -116,7 +116,8 @@ export default defineEventHandler(async (event) => {
   // before any GamePointLog row is written.
   const { toGive, remaining } = await prisma.$transaction(async (tx) => {
     const agg = await tx.gamePointLog.aggregate({
-      where: { userId, createdAt: { gte: boundary } }, _sum: { points: true }
+      where: { userId, createdAt: { gte: boundary }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
+      _sum: { points: true }
     })
     const used = agg._sum.points || 0
     const global = await tx.globalGameConfig.findUnique({ where: { id: 'singleton' } })
@@ -125,7 +126,7 @@ export default defineEventHandler(async (event) => {
     const toGive = Math.min(award.points, remaining)
 
     if (toGive > 0) {
-      await tx.gamePointLog.create({ data: { userId, points: toGive } })
+      await tx.gamePointLog.create({ data: { userId, points: toGive, gameName: 'Winball' } })
       const updated = await tx.userPoints.upsert({
         where: { userId },
         create: { userId, points: toGive },

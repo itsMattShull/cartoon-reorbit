@@ -111,11 +111,12 @@ export default defineEventHandler(async (event) => {
       }),
       tx.globalGameConfig.findUnique({
         where: { id: 'singleton' },
-        select: { dailyPointLimit: true }
+        select: { tkoDailyPointLimit: true }
       }),
       tx.gamePointLog.aggregate({
         where: {
           userId: winnerUser.id,
+          gameName: 'TKO',
           createdAt: { gte: getChicagoGameBoundary() }
         },
         _sum: { points: true }
@@ -123,13 +124,13 @@ export default defineEventHandler(async (event) => {
     ])
 
     const pointsPerWin = Number(tkoConfig?.pointsPerWin ?? 300)
-    const cap = Number(globalConfig?.dailyPointLimit ?? 250)
+    const cap = Number(globalConfig?.tkoDailyPointLimit ?? 250)
     const used = Number(usedAgg._sum.points ?? 0)
     const remaining = Math.max(0, cap - used)
     const toGive = Math.max(0, Math.min(pointsPerWin, remaining))
     if (toGive <= 0) return 0
 
-    await tx.gamePointLog.create({ data: { userId: winnerUser.id, points: toGive } })
+    await tx.gamePointLog.create({ data: { userId: winnerUser.id, points: toGive, gameName: 'TKO' } })
     const updated = await tx.userPoints.upsert({
       where: { userId: winnerUser.id },
       create: { userId: winnerUser.id, points: toGive },

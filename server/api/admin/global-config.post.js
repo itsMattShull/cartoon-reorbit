@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const {
     dailyPointLimit,
+    tkoDailyPointLimit,
     dailyLoginPoints,
     dailyNewUserPoints,
     czoneVisitPoints,
@@ -55,6 +56,7 @@ export default defineEventHandler(async (event) => {
   const payload = {
     dailyPointLimit: Number(dailyPointLimit),
     // allow partial updates; coerce to number if provided else keep existing via upsert+update
+    tkoDailyPointLimit: (typeof tkoDailyPointLimit === 'number') ? Number(tkoDailyPointLimit) : undefined,
     dailyLoginPoints:   (typeof dailyLoginPoints   === 'number') ? Number(dailyLoginPoints)   : undefined,
     dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
     czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined,
@@ -85,6 +87,7 @@ export default defineEventHandler(async (event) => {
       create: {
         id: 'singleton',
         dailyPointLimit: payload.dailyPointLimit,
+        tkoDailyPointLimit: payload.tkoDailyPointLimit ?? 250,
         dailyLoginPoints:   payload.dailyLoginPoints   ?? 500,
         dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
         czoneVisitPoints:   payload.czoneVisitPoints   ?? 20,
@@ -111,6 +114,7 @@ export default defineEventHandler(async (event) => {
       update: {
         dailyPointLimit: payload.dailyPointLimit,
         // only update fields that were provided
+        ...(payload.tkoDailyPointLimit !== undefined ? { tkoDailyPointLimit: payload.tkoDailyPointLimit } : {}),
         ...(payload.dailyLoginPoints   !== undefined ? { dailyLoginPoints:   payload.dailyLoginPoints }   : {}),
         ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
         ...(payload.czoneVisitPoints    !== undefined ? { czoneVisitPoints:    payload.czoneVisitPoints }    : {}),
@@ -133,6 +137,7 @@ export default defineEventHandler(async (event) => {
     // Log field-level changes
     const fields = [
       'dailyPointLimit',
+      'tkoDailyPointLimit',
       'dailyLoginPoints',
       'dailyNewUserPoints',
       'czoneVisitPoints',
