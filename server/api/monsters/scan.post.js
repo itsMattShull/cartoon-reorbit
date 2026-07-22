@@ -507,7 +507,7 @@ export default defineEventHandler(async (event) => {
       if (globalConfig) {
         const cutoffUTC = getGamePointBoundaryUtc()
         const agg = await tx.gamePointLog.aggregate({
-          where: { userId, createdAt: { gte: cutoffUTC } },
+          where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
           _sum: { points: true }
         })
         const used = agg._sum.points || 0
@@ -517,7 +517,7 @@ export default defineEventHandler(async (event) => {
       }
 
       if (toGive > 0) {
-        await tx.gamePointLog.create({ data: { userId, points: toGive } })
+        await tx.gamePointLog.create({ data: { userId, points: toGive, gameName: 'Monsters' } })
         const updatedPoints = await tx.userPoints.upsert({
           where: { userId },
           update: { points: { increment: toGive } },

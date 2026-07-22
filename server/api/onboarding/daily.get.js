@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
       where: { userId, method: 'cZone Visit', createdAt: { gte: dailyWindowStart } }
     }),
     db.gamePointLog.aggregate({
-      where: { userId, createdAt: { gte: dailyWindowStart } },
+      where: { userId, createdAt: { gte: dailyWindowStart }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
       _sum: { points: true }
     }),
     db.wheelSpinLog.count({
