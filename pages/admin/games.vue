@@ -39,6 +39,10 @@
             <label class="block text-sm font-medium text-gray-700">Daily Point Cap</label>
             <input type="number" v-model.number="globalDailyPointLimit" class="input" />
           </div>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700">Daily TKO Points Cap</label>
+            <input type="number" v-model.number="globalTkoDailyPointLimit" class="input" />
+          </div>
           <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="btn-primary">
             <span v-if="!loadingGlobal">Save Global Settings</span>
             <span v-else>Saving…</span>
@@ -1074,6 +1078,7 @@ function onTabsWheel(e) {
 
 // ── Settings state ────────────────────────────
 const globalDailyPointLimit = ref(100)
+const globalTkoDailyPointLimit = ref(250)
 const loadingGlobal         = ref(false)
 const leftCupPoints         = ref(0)
 const rightCupPoints        = ref(0)
@@ -1379,6 +1384,7 @@ function clearSelection() {
 async function loadSettings() {
   const g = await $fetch('/api/admin/global-config')
   globalDailyPointLimit.value = g.dailyPointLimit
+  globalTkoDailyPointLimit.value = g.tkoDailyPointLimit
   gameTileImages.value.winball      = g.gameTileWinballImagePath      || ''
   gameTileImages.value.lotto        = g.gameTileLottoImagePath        || ''
   gameTileImages.value.winwheel     = g.gameTileWinwheelImagePath     || ''
@@ -1707,7 +1713,10 @@ async function saveGlobalConfig() {
   try {
     await $fetch('/api/admin/global-config', {
       method: 'POST',
-      body: { dailyPointLimit: globalDailyPointLimit.value }
+      body: {
+        dailyPointLimit: globalDailyPointLimit.value,
+        tkoDailyPointLimit: globalTkoDailyPointLimit.value
+      }
     })
     toastMessage.value = 'Global settings saved!'; toastType.value = 'success'
   } catch {
