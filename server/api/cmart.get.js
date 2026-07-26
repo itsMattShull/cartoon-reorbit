@@ -11,9 +11,12 @@ function computeInitialCap(totalQty, percent, overrideQty) {
   return Math.max(1, raw)
 }
 
+const SALE_FEATURED_LOOKAHEAD_MS = 24 * 60 * 60 * 1000 // 24 hours — keep in sync with activeSaleCache.js
+
 export default defineEventHandler(async () => {
   const now = new Date()
   const twoWeeksAhead = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000)
+  const saleLookaheadEnd = new Date(now.getTime() + SALE_FEATURED_LOOKAHEAD_MS)
 
   // Load global release settings (with safe defaults)
   let initialPercent = 75
@@ -30,9 +33,10 @@ export default defineEventHandler(async () => {
     where: {
       inCmart: true,
       releaseDate: { lte: twoWeeksAhead },
-      // cToons in an active Sale are shown only in the Sale showcase section
-      // (see /api/cmart/active-sale), not duplicated in this normal grid.
-      saleItems: { none: { sale: { startAt: { lte: now }, endAt: { gte: now } } } }
+      // cToons in an active Sale, or one starting within the next 24h, are
+      // shown only in the Sale showcase section (see /api/cmart/active-sale),
+      // not duplicated in this normal grid.
+      saleItems: { none: { sale: { startAt: { lte: saleLookaheadEnd }, endAt: { gte: now } } } }
     },
     orderBy: { releaseDate: 'desc' },
     select: {

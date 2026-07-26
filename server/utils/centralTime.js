@@ -90,3 +90,18 @@ export function getDailyWindowStart(now = new Date()) {
   const offsetMs = zonalMs - utcGuessMs
   return new Date(utcGuessMs - offsetMs)
 }
+
+/**
+ * Returns the start of the current rolling 24h purchase window for a Sale,
+ * anchored to the Sale's own startAt rather than the global 8pm CST reset
+ * used elsewhere. Windows are [startAt, startAt+24h), [startAt+24h,
+ * startAt+48h), etc. Pure elapsed-ms arithmetic (not wall-clock based), so
+ * DST transitions don't affect it the way they would a Chicago-local calc.
+ */
+export function getSaleDailyWindowStart(saleStartAt, now = new Date()) {
+  const startMs = new Date(saleStartAt).getTime()
+  const dayMs = 24 * 60 * 60 * 1000
+  const elapsedMs = now.getTime() - startMs
+  const bucketIndex = Math.max(0, Math.floor(elapsedMs / dayMs))
+  return new Date(startMs + bucketIndex * dayMs)
+}

@@ -172,8 +172,15 @@
                 </span>
               </template>
               <template #footer-right>
+                <button
+                  v-if="!isSaleItemSoldOut(item) && saleIsUpcoming"
+                  class="card-countdown"
+                  disabled
+                >
+                  {{ formatSaleCountdown() }}
+                </button>
                 <GreenButton
-                  v-if="!isSaleItemSoldOut(item)"
+                  v-else-if="!isSaleItemSoldOut(item)"
                   class="card-buy"
                   :disabled="buyingIds.includes(item.ctoon.id)"
                   @click="buy(item.ctoon, item.price)"
@@ -430,11 +437,51 @@ function isSaleItemSoldOut(item) {
   return c.quantity != null && c.totalMinted >= c.quantity
 }
 
+// True while the featured sale hasn't started yet (server sends it up to 24h
+// ahead of startAt so the showcase can display a countdown instead of Buy).
+const saleIsUpcoming = computed(() => {
+  if (!activeSale.value?.startAt) return false
+  return new Date(activeSale.value.startAt).getTime() > nowTs.value
+})
+
+function formatSaleCountdown() {
+  if (!activeSale.value?.startAt) return ''
+  const ms = new Date(activeSale.value.startAt).getTime() - nowTs.value
+  if (ms <= 0) return ''
+
+  const totalSec = Math.floor(ms / 1000)
+  if (ms >= 60 * 60 * 1000) {
+    const h = Math.floor(totalSec / 3600)
+    const m = Math.floor((totalSec % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}m ${s}s`
+}
+
+// Fires a one-off refresh right as the featured sale's startAt passes, so the
+// countdown button swaps to Buy promptly instead of waiting on the 60s poll.
+let _saleTransitionTimer = null
+function scheduleSaleTransition() {
+  if (_saleTransitionTimer) clearTimeout(_saleTransitionTimer)
+  const startTs = activeSale.value?.startAt ? new Date(activeSale.value.startAt).getTime() : null
+  if (!startTs || startTs <= Date.now()) return
+
+  _saleTransitionTimer = setTimeout(async () => {
+    await loadActiveSale()
+    try {
+      allCtoons.value = await $fetch('/api/cmart')
+    } catch {}
+  }, Math.max(startTs - Date.now() + 1000, 1000))
+}
+
 async function loadActiveSale() {
   try {
     const sale = await $fetch('/api/cmart/active-sale')
     if (sale?.id !== activeSale.value?.id) saleImageFailed.value = false
     activeSale.value = sale
+    scheduleSaleTransition()
   } catch (err) {
     console.error('Cmart: failed to load active sale', err)
   }
@@ -659,6 +706,7 @@ onUnmounted(() => {
   if (_tick) clearInterval(_tick)
   if (_refreshTimer) clearTimeout(_refreshTimer)
   if (_saleRefreshTimer) clearInterval(_saleRefreshTimer)
+  if (_saleTransitionTimer) clearTimeout(_saleTransitionTimer)
 })
 
 function describePurchaseError(err, kind = 'cToon') {
