@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
-import { logAdminChange } from '../utils/adminChangeLog.js'
+import { logAdminChange, buildSeizureAuditPayload } from '../utils/adminChangeLog.js'
 import { scheduleDissolveAuctionLaunch } from '../utils/queues.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 
@@ -83,13 +83,14 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
   // ── Step 2: cToons ───────────────────────────────────────────────────────
   const userCtoons = await prisma.userCtoon.findMany({
     where: { userId, burnedAt: null },
-    select: { id: true, ctoon: { select: { id: true, rarity: true, series: true, set: true } }, mintNumber: true }
+    select: { id: true, ctoon: { select: { id: true, name: true, rarity: true, series: true, set: true } }, mintNumber: true }
   })
   const total = userCtoons.length
 
   const featuredConfig = await getFeaturedDissolveConfig()
 
   const queuedEntries = []  // { id, category } — tracked for Step 9 scheduling
+  const transferredCtoons = []  // audit detail for confirmed successful transfers only
 
   for (let i = 0; i < userCtoons.length; i++) {
     const uc = userCtoons[i]
@@ -119,6 +120,12 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
         }
       })
       ctoonsTransferred++
+      transferredCtoons.push({
+        name: uc.ctoon?.name ?? 'cToon',
+        rarity: uc.ctoon?.rarity ?? null,
+        mintNumber: uc.mintNumber ?? null,
+        takenFromUsername: target.username
+      })
 
       const isFeatured = isCtoonFeatured(uc.ctoon, featuredConfig)
       const category   = isFeatured ? 'FEATURED' : 'OTHER'
@@ -282,13 +289,13 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
 
   await logAdminChange(prisma, {
     userId: adminId,
+    targetUserId: userId,
+    targetUsername: target.username,
     area: 'Admin:Users',
     key: 'dissolveUser',
     prevValue: { active: target.active, banned: target.banned },
     newValue: {
       active: false,
-      pointsTransferred,
-      ctoonsTransferred,
       ctoonsQueued,
       auctionsReassigned,
       bidsDeleted,
@@ -297,7 +304,14 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       autoBidsDeleted,
       autoBidsReassigned,
       tradeOffersWithdrawn,
-      tradeOffersRejected
+      tradeOffersRejected,
+      ...buildSeizureAuditPayload({
+        action: 'dissolve',
+        target: target.username,
+        pointsRemoved: pointsTransferred,
+        pointsRecipient: officialUsername,
+        ctoons: transferredCtoons
+      })
     }
   })
 
