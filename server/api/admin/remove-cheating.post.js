@@ -1,5 +1,6 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { scheduleAuctionClose } from '@/server/utils/queues'
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms))
 
@@ -235,6 +236,9 @@ export default defineEventHandler(async (event) => {
       errorSink.push({ userCtoonId: row.id, phase: 'auction', message: String(e?.message || e) })
       return null
     }
+
+    // Schedule the BullMQ job that will close this auction at endAt
+    await scheduleAuctionClose(created.auctionId, endAt)
 
     // phase 3: discord
     try {
