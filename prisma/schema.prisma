@@ -1021,6 +1021,7 @@ model GlobalGameConfig {
   dhashDuplicateThreshold        Int      @default(16)
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
+  czoneContestDiscordChannelId   String?
   // Scavenger Hunt settings
   scavengerChancePercent         Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours         Int      @default(24) // cooldown between completed hunts per user
