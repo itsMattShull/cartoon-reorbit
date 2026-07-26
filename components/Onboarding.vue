@@ -290,6 +290,7 @@ const items = computed(() => {
   const czonePoints = Number(cfg.czoneVisitPoints ?? 0)
   const czoneTotal = formatNumber(czoneVisits * czonePoints)
   const dailyPointLimit = formatNumber(cfg.dailyPointLimit)
+  const tkoDailyPointLimit = formatNumber(cfg.tkoDailyPointLimit)
   const winwheelMax = Number(cfg.winwheelMaxDailySpins ?? 0)
   const lottoCountRaw = Number(cfg.lottoCountPerDay ?? 0)
   const scanLimit = Number(cfg.monsterDailyScanLimit ?? 0)
@@ -314,7 +315,12 @@ const items = computed(() => {
     {
       id: 'games',
       done: Boolean(st.gamePointsComplete),
-      text: `Play Winball, ReOrbit Match, gToons Clash, TKO, or scan for Monsters to win up to ${dailyPointLimit} points.`
+      text: `Play Winball, ReOrbit Match, gToons Clash, or scan for Monsters to win up to ${dailyPointLimit} points.`
+    },
+    {
+      id: 'tko',
+      done: Boolean(st.tkoPointsComplete),
+      text: `Play TKO to win up to ${tkoDailyPointLimit} points.`
     },
     {
       id: 'winwheel',
