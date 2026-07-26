@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { mintQueue } from '@/server/utils/queues'
+import { announceCZoneContestWinner } from '@/server/utils/discord'
 
 export default defineEventHandler(async (event) => {
   const { id } = event.context.params
@@ -115,6 +116,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Fire the Discord announcement without blocking the admin's response — Discord being
+  // slow/unreachable must never make a successful, already-committed distribution look failed.
+  // announceCZoneContestWinner never throws; this catch is just a safety net.
+  announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes)
+    .catch(e => console.error('cZone contest Discord announcement failed:', e?.message || e))
+
   return {
     ok: true,
     winnerId,
@@ -122,3 +129,28 @@ export default defineEventHandler(async (event) => {
     participantsAwarded: participantUserIds.length
   }
 })
+
+async function announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes) {
+  const ctoonIds = [
+    ...(winnerPrizes.ctoons ?? []).map(c => c.ctoonId),
+    ...(participantPrizes.ctoons ?? []).map(c => c.ctoonId)
+  ].filter(Boolean)
+
+  const ctoons = ctoonIds.length
+    ? await prisma.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, name: true } })
+    : []
+  const nameById = new Map(ctoons.map(c => [c.id, c.name]))
+
+  const withNames = (prizes) => ({
+    ...prizes,
+    ctoons: (prizes.ctoons ?? []).map(c => ({ name: nameById.get(c.ctoonId), quantity: c.qty ?? 1 }))
+  })
+
+  await announceCZoneContestWinner(prisma, {
+    contestName: contest.name,
+    winnerUserId,
+    winnerPrizeSummary: withNames(winnerPrizes),
+    participantPrizeSummary: withNames(participantPrizes),
+    participantCount: contest.submissions.length
+  })
+}

@@ -31,6 +31,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Second Editions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Second Editions'">Second Editions</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='Discord' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Discord'">Discord</button>
         </nav>
       </div>
 
@@ -436,6 +440,37 @@
         </div>
       </section>
 
+      <!-- Discord tab -->
+      <section v-if="activeTab==='Discord'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Configure where Discord announcements for site events are posted. More announcement
+          types may be added here over time.
+        </p>
+        <div class="max-w-md">
+          <label for="czoneContestDiscordChannelId" class="block text-sm font-medium text-gray-700">
+            cZone Contest Winner Channel ID
+          </label>
+          <input
+            id="czoneContestDiscordChannelId"
+            v-model.trim="czoneContestDiscordChannelId"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            class="input"
+            placeholder="123456789012345678"
+          />
+          <p class="text-xs text-gray-500 mt-1">
+            When an admin distributes cZone Contest prizes, an announcement is posted here.
+            Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
+          </p>
+        </div>
+        <div>
+          <button class="btn-primary" :disabled="savingDiscord" @click="saveDiscord">
+            {{ savingDiscord ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -457,6 +492,8 @@ const savingRarity = ref(false)
 const savingDuplicates = ref(false)
 const savingAuctions = ref(false)
 const savingCmart = ref(false)
+const savingDiscord = ref(false)
+const czoneContestDiscordChannelId = ref('')
 
 // cMart state
 const firstAdditionalCzoneCost      = ref(25000)
@@ -568,6 +605,7 @@ async function loadGlobal() {
     secondEditionOverlayPath.value   = g?.secondEditionOverlayPath   ?? null
     secondEditionOverlayWidth.value  = g?.secondEditionOverlayWidth  ?? null
     secondEditionOverlayHeight.value = g?.secondEditionOverlayHeight ?? null
+    czoneContestDiscordChannelId.value = g?.czoneContestDiscordChannelId ?? ''
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]
@@ -730,6 +768,24 @@ async function saveCmart() {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
   } finally {
     savingCmart.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function saveDiscord() {
+  savingDiscord.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config', {
+      method: 'POST',
+      body: {
+        dailyPointLimit: Number(dailyPointLimit.value),
+        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value
+      }
+    })
+    toast.value = { type: 'ok', msg: 'Discord settings saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || e?.data?.statusMessage || 'Save failed' }
+  } finally {
+    savingDiscord.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
 }
 
