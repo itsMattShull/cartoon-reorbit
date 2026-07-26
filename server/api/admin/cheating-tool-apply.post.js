@@ -1,5 +1,6 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAdminChange, buildSeizureAuditPayload } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   // admin auth
@@ -109,7 +110,7 @@ export default defineEventHandler(async (event) => {
   const targetCurrentOwned = allInstanceIds.length
     ? await prisma.userCtoon.findMany({
         where: { id: { in: allInstanceIds }, userId: targetId, burnedAt: null },
-        select: { id: true, ctoonId: true, mintNumber: true }
+        select: { id: true, ctoonId: true, mintNumber: true, ctoon: { select: { name: true, rarity: true } } }
       })
     : []
 
@@ -226,6 +227,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Step 2: Transfer cToons target still owns → CartoonReOrbitOfficial
+  const transferredCtoons = []  // audit detail for confirmed successful transfers only
   for (const uc of targetCurrentOwned) {
     try {
       await prisma.$transaction(async (tx) => {
@@ -249,10 +251,33 @@ export default defineEventHandler(async (event) => {
         })
       })
       ctoonsTransferred++
+      transferredCtoons.push({
+        name: uc.ctoon?.name ?? 'cToon',
+        rarity: uc.ctoon?.rarity ?? null,
+        mintNumber: uc.mintNumber ?? null,
+        takenFromUsername: target
+      })
     } catch (e) {
       errors.push({ phase: 'transfer', userCtoonId: uc.id, message: String(e?.message || e) })
     }
   }
+
+  await logAdminChange(prisma, {
+    userId: me.id,
+    targetUserId: targetId,
+    targetUsername: target,
+    area: 'Admin:CheatingTool',
+    key: 'cheatingToolApply',
+    prevValue: { suspects },
+    newValue: buildSeizureAuditPayload({
+      action: 'cheatingToolApply',
+      target,
+      involvedAccounts: suspects,
+      pointsRemoved,
+      pointsRecipient: 'CartoonReOrbitOfficial',
+      ctoons: transferredCtoons
+    })
+  })
 
   return {
     target,

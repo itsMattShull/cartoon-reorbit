@@ -1082,14 +1082,14 @@ async function awardClashWinPoints(userId) {
 
     toGive = await db.$transaction(async (tx) => {
       const agg = await tx.gamePointLog.aggregate({
-        where: { userId, createdAt: { gte: cutoffUTC } },
+        where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
         _sum:  { points: true }
       })
       const used = agg._sum.points || 0
       const remaining = Math.max(0, cap - used)
       const give = Math.min(pointsPerWin, remaining)
       if (give > 0) {
-        await tx.gamePointLog.create({ data: { userId, points: give } })
+        await tx.gamePointLog.create({ data: { userId, points: give, gameName: 'Clash' } })
         const updated = await tx.userPoints.upsert({
           where:  { userId },
           create: { userId, points: give },
@@ -1187,14 +1187,14 @@ async function endMatch(io, match, result) {
         // where two concurrent match completions both pass the cap check.
         toGive = await db.$transaction(async (tx) => {
           const agg = await tx.gamePointLog.aggregate({
-            where: { userId, createdAt: { gte: cutoffUTC } },
+            where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
             _sum: { points: true }
           });
           const usedSinceCutoff = agg._sum.points || 0;
           const remaining = Math.max(0, cap - usedSinceCutoff);
           const give = Math.min(pointsPerWin, remaining);
           if (give > 0) {
-            await tx.gamePointLog.create({ data: { userId, points: give } });
+            await tx.gamePointLog.create({ data: { userId, points: give, gameName: 'Clash' } });
             const updated = await tx.userPoints.upsert({
               where: { userId },
               create: { userId, points: give },

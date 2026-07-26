@@ -297,7 +297,11 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 }
 
 // New: Send to a channel by its ID (no lookup by name)
-export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null) {
+// mentionUserIds: allowlist of Discord user IDs permitted to be pinged by this message.
+// Everything else (content text, @everyone/@here, roles, other users) is blocked at the
+// API level via allowed_mentions, so message content built from user-controlled strings
+// (usernames, contest/item names, etc.) can never trigger an unintended mass-ping.
+export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = []) {
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
   const authHeader = rawToken.startsWith('Bot ') ? rawToken : `Bot ${rawToken}`
@@ -308,7 +312,11 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
         'Authorization': authHeader,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({
+        content,
+        allowed_mentions: { parse: [], users: mentionUserIds }
+      }),
+      signal: AbortSignal.timeout(5000)
     })
     // console.log('sendGuildChannelMessageById succeeded')
     return true
@@ -365,8 +373,69 @@ export async function announceAchievement(prisma, userId, achievementTitle, rewa
     if (trimmedRole) {
       msg += ` You also received the ${trimmedRole} role.`
     }
-    await sendGuildChannelMessageById(channelId, msg, botToken)
+    await sendGuildChannelMessageById(channelId, msg, botToken, [user.discordId])
   } catch {
     // swallow in worker/cron context
+  }
+}
+
+function formatPrizeSummary(prizes) {
+  if (!prizes) return ''
+  const parts = []
+  const points = Number(prizes.points || 0)
+  if (points > 0) parts.push(`${points} points`)
+  if (Array.isArray(prizes.ctoons)) {
+    for (const ctoon of prizes.ctoons) {
+      if (!ctoon?.name || !ctoon?.quantity) continue
+      parts.push(ctoon.quantity > 1 ? `${ctoon.name} ×${ctoon.quantity}` : ctoon.name)
+    }
+  }
+  const backgroundCount = Array.isArray(prizes.backgroundIds) ? prizes.backgroundIds.length : 0
+  if (backgroundCount > 0) {
+    parts.push(backgroundCount === 1 ? '1 cZone background' : `${backgroundCount} cZone backgrounds`)
+  }
+  return formatList(parts)
+}
+
+// Announce a distributed cZone Contest to the configured Discord channel.
+// Never throws — failures are logged only, since prize distribution has already
+// succeeded by the time this is called and must not be reported as failed.
+export async function announceCZoneContestWinner(prisma, {
+  contestName,
+  winnerUserId,
+  winnerPrizeSummary,
+  participantPrizeSummary,
+  participantCount = 0
+}) {
+  try {
+    const [config, winner] = await Promise.all([
+      prisma.globalGameConfig.findUnique({
+        where: { id: 'singleton' },
+        select: { czoneContestDiscordChannelId: true }
+      }),
+      prisma.user.findUnique({
+        where: { id: winnerUserId },
+        select: { discordId: true, username: true, inGuild: true }
+      })
+    ])
+
+    const channelId = (config?.czoneContestDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !botToken || !winner) return
+
+    const canPing = !!winner.discordId && winner.inGuild !== false
+    const winnerMention = canPing ? `<@${winner.discordId}>` : (winner.username || 'The winner')
+
+    let msg = `🏆 Congrats ${winnerMention}! You won the **${contestName}** cZone Contest!`
+    const winnerParts = formatPrizeSummary(winnerPrizeSummary)
+    if (winnerParts) msg += `\n🥇 First place prize: ${winnerParts}.`
+    const participantParts = formatPrizeSummary(participantPrizeSummary)
+    if (participantParts && participantCount > 0) {
+      msg += `\n🎁 All ${participantCount} participant${participantCount === 1 ? '' : 's'} received: ${participantParts}.`
+    }
+
+    await sendGuildChannelMessageById(channelId, msg, botToken, canPing ? [winner.discordId] : [])
+  } catch (e) {
+    console.error('announceCZoneContestWinner failed:', e?.message || e)
   }
 }

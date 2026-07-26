@@ -1,5 +1,6 @@
 import { defineEventHandler, readBody, getRequestHeader, createError, createEventStream } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAdminChange, buildSeizureAuditPayload } from '@/server/utils/adminChangeLog'
 
 const FALLBACK_RARITY_PRICES = {
   'Common':       100,
@@ -240,6 +241,7 @@ export default defineEventHandler(async (event) => {
       // ── 5. Transfer each cToon ───────────────────────────────────────────
       let ctoonsTransferred = 0
       const ctoonErrors = []
+      const transferredCtoons = []  // audit detail for confirmed successful transfers only
 
       for (const uc of targetCurrentOwned) {
         try {
@@ -256,6 +258,12 @@ export default defineEventHandler(async (event) => {
             })
           })
           ctoonsTransferred++
+          transferredCtoons.push({
+            name: uc.ctoon?.name ?? 'cToon',
+            rarity: uc.ctoon?.rarity ?? null,
+            mintNumber: uc.mintNumber ?? null,
+            takenFromUsername: target
+          })
           await push({
             type: 'step',
             phase: 'ctoon',
@@ -279,7 +287,25 @@ export default defineEventHandler(async (event) => {
         }
       }
 
-      // ── 6. Final summary ─────────────────────────────────────────────────
+      // ── 6. Audit log (single write, after all mutations complete) ────────
+      await logAdminChange(prisma, {
+        userId: me.id,
+        targetUserId: targetId,
+        targetUsername: target,
+        area: 'Admin:CheatingTool',
+        key: 'cheatingToolApply',
+        prevValue: { suspects },
+        newValue: buildSeizureAuditPayload({
+          action: 'cheatingToolApply',
+          target,
+          involvedAccounts: suspects,
+          pointsRemoved,
+          pointsRecipient: 'CartoonReOrbitOfficial',
+          ctoons: transferredCtoons
+        })
+      })
+
+      // ── 7. Final summary ─────────────────────────────────────────────────
       await push({
         type: 'complete',
         pointsRemoved,

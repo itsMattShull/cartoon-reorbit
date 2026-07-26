@@ -1,5 +1,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { scheduleAuctionClose } from '@/server/utils/queues'
+import { logAdminChange, buildSeizureAuditPayload } from '@/server/utils/adminChangeLog'
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms))
 
@@ -47,6 +49,7 @@ export default defineEventHandler(async (event) => {
   const targetId   = idByName.get(target)
   const sourceIds  = sources.map(n => idByName.get(n))
   const officialId = idByName.get('CartoonReOrbitOfficial')
+  const usernameById = new Map(users.map(u => [u.id, u.username]))
 
   // target’s ever-owned items
   const everRows = await prisma.ctoonOwnerLog.findMany({
@@ -101,9 +104,11 @@ export default defineEventHandler(async (event) => {
   let sourceAuctionsCreated = 0
   let sourceTransferredCount = 0
   let deactivatedCount = 0
+  const deactivatedUsernames = []
 
   const targetErrors = [] // [{userCtoonId, phase, message}]
   const sourceErrors = []
+  const transferredCtoons = []  // audit detail for confirmed successful transfers only (regardless of auction outcome)
 
   const now = new Date()
   const endAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
@@ -211,6 +216,12 @@ export default defineEventHandler(async (event) => {
         })
       })
       transferredCount++ // caller will override to sourceTransferredCount when needed
+      transferredCtoons.push({
+        name: row.ctoon?.name ?? 'cToon',
+        rarity: row.ctoon?.rarity ?? null,
+        mintNumber: row.mintNumber ?? null,
+        takenFromUsername: usernameById.get(row.userId) ?? null
+      })
     } catch (e) {
       errorSink.push({ userCtoonId: row.id, phase: 'transfer', message: String(e?.message || e) })
       return null
@@ -235,6 +246,9 @@ export default defineEventHandler(async (event) => {
       errorSink.push({ userCtoonId: row.id, phase: 'auction', message: String(e?.message || e) })
       return null
     }
+
+    // Schedule the BullMQ job that will close this auction at endAt
+    await scheduleAuctionClose(created.auctionId, endAt)
 
     // phase 3: discord
     try {
@@ -313,15 +327,38 @@ export default defineEventHandler(async (event) => {
 
     // deactivate sources
     try {
+      const activeSourcesBefore = await prisma.user.findMany({
+        where: { id: { in: sourceIds }, active: true },
+        select: { username: true }
+      })
       const { count } = await prisma.user.updateMany({
         where: { id: { in: sourceIds }, active: true },
-        data:  { active: false, banned: true } 
+        data:  { active: false, banned: true }
       })
       deactivatedCount = count
+      deactivatedUsernames.push(...activeSourcesBefore.map(u => u.username))
     } catch (e) {
       sourceErrors.push({ userCtoonId: null, phase: 'deactivate_sources', message: String(e?.message || e) })
     }
   }
+
+  await logAdminChange(prisma, {
+    userId: me.id,
+    targetUserId: targetId,
+    targetUsername: target,
+    area: 'Admin:CheckCheating',
+    key: 'checkCheatingEnforce',
+    prevValue: { sources },
+    newValue: buildSeizureAuditPayload({
+      action: 'checkCheatingEnforce',
+      target,
+      involvedAccounts: sources,
+      accountsDeactivated: deactivatedUsernames,
+      pointsRemoved,
+      pointsRecipient: 'CartoonReOrbitOfficial',
+      ctoons: transferredCtoons
+    })
+  })
 
   return {
     target,

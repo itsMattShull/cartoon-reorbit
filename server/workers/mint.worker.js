@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
-import { getDailyWindowStart } from '../utils/centralTime.js'
+import { getSaleDailyWindowStart } from '../utils/centralTime.js'
 
 const connection = {
   host: process.env.REDIS_HOST,
@@ -28,7 +28,7 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
             ctoonId,
             sale: { startAt: { lte: new Date() }, endAt: { gte: new Date() } }
           },
-          select: { saleId: true, price: true, perDayLimit: true },
+          select: { saleId: true, price: true, perDayLimit: true, sale: { select: { startAt: true } } },
           orderBy: { createdAt: 'asc' }
         })
       : null
@@ -255,8 +255,11 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       // 1b) Sale per-day limit — atomic increment-then-check on a single counter row
       // (same pattern as the totalMinted increment above) so the row lock serializes
       // concurrent buyers instead of racing on a count() read.
+      // The window is a rolling 24h period anchored to the Sale's own startAt
+      // (not the global 8pm CST reset), so the limit always resets exactly
+      // 24h after the sale began, regardless of when a user happens to buy.
       if (activeSale) {
-        const windowStart = getDailyWindowStart()
+        const windowStart = getSaleDailyWindowStart(activeSale.sale.startAt)
         const counter = await tx.saleDailyPurchase.upsert({
           where: {
             userId_ctoonId_saleId_windowStart: {
@@ -268,7 +271,7 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
           select: { count: true }
         })
         if (counter.count > activeSale.perDayLimit) {
-          throw new Error(`Daily limit reached — you can buy ${activeSale.perDayLimit} of this cToon per day during this sale (resets at 8pm CST)`)
+          throw new Error(`Daily limit reached — you can buy ${activeSale.perDayLimit} of this cToon per 24-hour period during this sale`)
         }
       }
 

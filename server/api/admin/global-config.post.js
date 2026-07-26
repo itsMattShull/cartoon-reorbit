@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const {
     dailyPointLimit,
+    tkoDailyPointLimit,
     dailyLoginPoints,
     dailyNewUserPoints,
     czoneVisitPoints,
@@ -41,7 +42,8 @@ export default defineEventHandler(async (event) => {
     packPriceDecayAmount,
     packPriceDecayDays,
     packPriceFloor,
-    packMaxDefaultBuysPerUser
+    packMaxDefaultBuysPerUser,
+    czoneContestDiscordChannelId
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -52,9 +54,19 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  let czoneContestDiscordChannelIdValue
+  if (czoneContestDiscordChannelId !== undefined) {
+    const trimmed = typeof czoneContestDiscordChannelId === 'string' ? czoneContestDiscordChannelId.trim() : ''
+    if (trimmed && !/^\d{17,20}$/.test(trimmed)) {
+      throw createError({ statusCode: 400, statusMessage: 'Discord Channel ID must be a numeric channel/snowflake ID' })
+    }
+    czoneContestDiscordChannelIdValue = trimmed || null
+  }
+
   const payload = {
     dailyPointLimit: Number(dailyPointLimit),
     // allow partial updates; coerce to number if provided else keep existing via upsert+update
+    tkoDailyPointLimit: (typeof tkoDailyPointLimit === 'number') ? Number(tkoDailyPointLimit) : undefined,
     dailyLoginPoints:   (typeof dailyLoginPoints   === 'number') ? Number(dailyLoginPoints)   : undefined,
     dailyNewUserPoints: (typeof dailyNewUserPoints === 'number') ? Number(dailyNewUserPoints) : undefined,
     czoneVisitPoints:   (typeof czoneVisitPoints   === 'number') ? Number(czoneVisitPoints)   : undefined,
@@ -74,7 +86,8 @@ export default defineEventHandler(async (event) => {
     packPriceDecayAmount:      (typeof packPriceDecayAmount      === 'number') ? Math.max(0, packPriceDecayAmount)      : undefined,
     packPriceDecayDays:        (typeof packPriceDecayDays        === 'number') ? Math.max(1, packPriceDecayDays)        : undefined,
     packPriceFloor:            (typeof packPriceFloor            === 'number') ? Math.max(0, packPriceFloor)            : undefined,
-    packMaxDefaultBuysPerUser: (typeof packMaxDefaultBuysPerUser === 'number') ? Math.max(1, packMaxDefaultBuysPerUser) : undefined
+    packMaxDefaultBuysPerUser: (typeof packMaxDefaultBuysPerUser === 'number') ? Math.max(1, packMaxDefaultBuysPerUser) : undefined,
+    czoneContestDiscordChannelId: czoneContestDiscordChannelIdValue
   }
 
   // 3) Upsert the singleton global config row
@@ -85,6 +98,7 @@ export default defineEventHandler(async (event) => {
       create: {
         id: 'singleton',
         dailyPointLimit: payload.dailyPointLimit,
+        tkoDailyPointLimit: payload.tkoDailyPointLimit ?? 250,
         dailyLoginPoints:   payload.dailyLoginPoints   ?? 500,
         dailyNewUserPoints: payload.dailyNewUserPoints ?? 1000,
         czoneVisitPoints:   payload.czoneVisitPoints   ?? 20,
@@ -106,11 +120,13 @@ export default defineEventHandler(async (event) => {
         packPriceDecayAmount:      payload.packPriceDecayAmount      ?? 100,
         packPriceDecayDays:        payload.packPriceDecayDays        ?? 7,
         packPriceFloor:            payload.packPriceFloor            ?? 700,
-        packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser ?? 5
+        packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser ?? 5,
+        czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId ?? null
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
         // only update fields that were provided
+        ...(payload.tkoDailyPointLimit !== undefined ? { tkoDailyPointLimit: payload.tkoDailyPointLimit } : {}),
         ...(payload.dailyLoginPoints   !== undefined ? { dailyLoginPoints:   payload.dailyLoginPoints }   : {}),
         ...(payload.dailyNewUserPoints !== undefined ? { dailyNewUserPoints: payload.dailyNewUserPoints } : {}),
         ...(payload.czoneVisitPoints    !== undefined ? { czoneVisitPoints:    payload.czoneVisitPoints }    : {}),
@@ -126,13 +142,15 @@ export default defineEventHandler(async (event) => {
         ...(payload.packPriceDecayAmount      !== undefined ? { packPriceDecayAmount:      payload.packPriceDecayAmount }      : {}),
         ...(payload.packPriceDecayDays        !== undefined ? { packPriceDecayDays:        payload.packPriceDecayDays }        : {}),
         ...(payload.packPriceFloor            !== undefined ? { packPriceFloor:            payload.packPriceFloor }            : {}),
-        ...(payload.packMaxDefaultBuysPerUser !== undefined ? { packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser } : {})
+        ...(payload.packMaxDefaultBuysPerUser !== undefined ? { packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser } : {}),
+        ...(payload.czoneContestDiscordChannelId !== undefined ? { czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId } : {})
       }
     })
     clearUpgradesConfigCache()
     // Log field-level changes
     const fields = [
       'dailyPointLimit',
+      'tkoDailyPointLimit',
       'dailyLoginPoints',
       'dailyNewUserPoints',
       'czoneVisitPoints',
@@ -147,7 +165,8 @@ export default defineEventHandler(async (event) => {
       'packPriceDecayAmount',
       'packPriceDecayDays',
       'packPriceFloor',
-      'packMaxDefaultBuysPerUser'
+      'packMaxDefaultBuysPerUser',
+      'czoneContestDiscordChannelId'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined

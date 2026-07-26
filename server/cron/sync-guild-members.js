@@ -799,6 +799,7 @@ async function startDueAuctions() {
 
           return {
             auctionId: created.id,
+            endAt: new Date(fresh.endsAt),
             initialBet,
             durationDays,
             ctoon: row.userCtoon.ctoon,
@@ -809,6 +810,9 @@ async function startDueAuctions() {
         })
 
         if (!result) continue
+
+        // Schedule the BullMQ job that will close this auction at endAt
+        await scheduleAuctionClose(result.auctionId, result.endAt)
 
         // Holiday flag for messaging
         const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({

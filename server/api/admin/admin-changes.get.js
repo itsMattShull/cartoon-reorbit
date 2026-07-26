@@ -6,12 +6,14 @@ export default defineEventHandler(async (event) => {
   // Auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
-  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch {}
+  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) }
+  catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
 
   const q = getQuery(event)
-  const userId = q.userId ? String(q.userId) : undefined
-  const area   = q.area ? String(q.area) : undefined
+  const userId         = q.userId ? String(q.userId) : undefined
+  const area           = q.area ? String(q.area) : undefined
+  const targetUsername = q.targetUsername ? String(q.targetUsername).trim() : undefined
   const start  = q.start ? new Date(String(q.start)) : undefined
   const end    = q.end   ? new Date(String(q.end))   : undefined
   const limit  = q.limit ? Math.min(1000, Math.max(1, Number(q.limit))) : 250
@@ -19,6 +21,7 @@ export default defineEventHandler(async (event) => {
   const where = {}
   if (userId) where.userId = userId
   if (area) where.area = area
+  if (targetUsername) where.targetUsername = { contains: targetUsername, mode: 'insensitive' }
   if (start || end) where.createdAt = {}
   if (start) where.createdAt.gte = start
   if (end)   where.createdAt.lte = end
@@ -27,7 +30,10 @@ export default defineEventHandler(async (event) => {
     where,
     orderBy: { createdAt: 'desc' },
     take: limit,
-    include: { user: { select: { id: true, username: true, discordTag: true } } }
+    include: {
+      user: { select: { id: true, username: true, discordTag: true } },
+      targetUser: { select: { id: true, username: true, discordTag: true } }
+    }
   })
 
   // shape response: include formatted CDT time for convenience
@@ -45,6 +51,8 @@ export default defineEventHandler(async (event) => {
     key: r.key,
     prevValue: r.prevValue,
     newValue: r.newValue,
+    targetUserId: r.targetUserId,
+    targetUsername: r.targetUsername ?? r.targetUser?.username ?? null,
     createdAt: r.createdAt,
     createdAtCdt: fmt(r.createdAt)
   }))

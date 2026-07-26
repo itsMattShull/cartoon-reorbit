@@ -462,8 +462,9 @@ model User {
   cZoneSearchCaptures             CZoneSearchCapture[]
 
   // Admin change logs (inverse)
-  adminChangeLogs AdminChangeLog[]
-  lottoUser       LottoUser?
+  adminChangeLogs         AdminChangeLog[]
+  targetedAdminChangeLogs AdminChangeLog[] @relation("AdminChangeLogTarget")
+  lottoUser               LottoUser?
   lottoLogs       LottoLog[]
   // Achievements back‑relation
   achievements    AchievementUser[]
@@ -836,6 +837,7 @@ model GamePointLog {
   id        String   @id @default(uuid())
   userId    String
   points    Int
+  gameName  String? // e.g. 'TKO'; null/other values share the general daily game pool
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
@@ -1010,6 +1012,7 @@ model GameConfig {
 model GlobalGameConfig {
   id                             String   @id @default(uuid())
   dailyPointLimit                Int      @default(100)
+  tkoDailyPointLimit             Int      @default(250)
   dailyLoginPoints               Int      @default(500)
   dailyNewUserPoints             Int      @default(1000)
   czoneVisitPoints               Int      @default(20)
@@ -1019,6 +1022,7 @@ model GlobalGameConfig {
   dhashDuplicateThreshold        Int      @default(16)
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
+  czoneContestDiscordChannelId   String?
   // Scavenger Hunt settings
   scavengerChancePercent         Int      @default(5) // 0–100; 0 disables
   scavengerCooldownHours         Int      @default(24) // cooldown between completed hunts per user
@@ -1871,19 +1875,23 @@ model ScavengerTriggerLog {
 
 // ── Admin change auditing ─────────────────────────────────────────────
 model AdminChangeLog {
-  id        String   @id @default(uuid())
-  userId    String
-  area      String // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
-  key       String // specific field or setting key
-  prevValue String?
-  newValue  String?
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String // the admin who performed the action
+  area           String // e.g., 'GlobalGameConfig', 'GameConfig:Winwheel', 'HomepageConfig'
+  key            String // specific field or setting key
+  prevValue      String?
+  newValue       String?
+  targetUserId   String? // the user the action was performed on/against, if any
+  targetUsername String? // denormalized snapshot of targetUser's username at write time (survives renames/mangling)
+  createdAt      DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetUser User? @relation("AdminChangeLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([area, createdAt])
+  @@index([targetUserId, createdAt])
 }
 
 // Per-user lotto state (current odds and daily purchases)
