@@ -14,8 +14,10 @@
 // average, falling back to cMart price) of every cToon in the trade that
 // has one, divided by how many of those cToons had a known reference value.
 // That single imputed number is then recorded against every cToon in the
-// trade for that day. cToons with no known reference anywhere in the trade
-// are skipped (no basis to price them from).
+// trade for that day. A trade where nothing has a known reference anywhere
+// still records volume, with avgPrice NULL — the trade happened even though
+// there's no basis to price it, and the Economy page's activity rankings would
+// otherwise ignore every cToon that has never been auctioned or sold in cMart.
 //
 // Reference values used for imputation reflect *current* auction averages,
 // not a historical snapshot as of the trade's date — acceptable for a
@@ -154,9 +156,12 @@ async function aggregateTrades(sinceDate) {
         knownCount++
       }
     }
-    if (knownCount === 0) continue // nothing in this trade has a known value to impute from
+    // Nothing in this trade has a known value to impute a price from. The trade
+    // still happened, so its volume is recorded and only the price contribution
+    // is skipped — dropping the whole offer used to make a never-auctioned,
+    // non-cMart cToon read as zero trades no matter how often it changed hands.
+    const impliedValue = knownCount > 0 ? knownValueSum / knownCount : null
 
-    const impliedValue = knownValueSum / knownCount
     const day = new Date(Date.UTC(
       offer.updatedAt.getUTCFullYear(),
       offer.updatedAt.getUTCMonth(),
@@ -166,9 +171,12 @@ async function aggregateTrades(sinceDate) {
 
     const dayMap = byDay.get(dayKey) || new Map()
     for (const ctoonId of ctoonIds) {
-      const agg = dayMap.get(ctoonId) || { sum: 0, count: 0 }
-      agg.sum += impliedValue
+      const agg = dayMap.get(ctoonId) || { sum: 0, pricedCount: 0, count: 0 }
       agg.count += 1
+      if (impliedValue != null) {
+        agg.sum += impliedValue
+        agg.pricedCount += 1
+      }
       dayMap.set(ctoonId, agg)
     }
     byDay.set(dayKey, dayMap)
@@ -184,7 +192,7 @@ async function aggregateTrades(sinceDate) {
         ctoonId,
         source: 'TRADE',
         date,
-        avgPrice: agg.sum / agg.count,
+        avgPrice: agg.pricedCount > 0 ? agg.sum / agg.pricedCount : null,
         volume: agg.count
       })
     }

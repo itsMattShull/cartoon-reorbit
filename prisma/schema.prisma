@@ -1265,17 +1265,28 @@ enum EconomySource {
 }
 
 model CtoonPriceDaily {
-  id       String        @id @default(uuid())
-  ctoonId  String
-  source   EconomySource
-  date     DateTime // truncated to day (UTC)
-  avgPrice Float
+  id      String        @id @default(uuid())
+  ctoonId String
+  source  EconomySource
+  date    DateTime // truncated to day (UTC)
+  // NULL means "this activity happened but couldn't be priced" — a trade where
+  // nothing involved had a known reference value. Volume is still recorded so
+  // the Economy page's activity rankings aren't biased toward cToons that
+  // already have auction/cMart pricing. Readers must exclude NULLs from
+  // weighted averages (SUM(...) FILTER (WHERE "avgPrice" IS NOT NULL)).
+  avgPrice Float?
   volume   Int // number of transactions this cToon appeared in that day
 
   ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
 
   @@unique([ctoonId, source, date])
   @@index([source, date, ctoonId])
+  // Trending filters on date with no source predicate, so the index above can't
+  // serve it (no btree skip-scan before PG18) and it seq-scans today.
+  @@index([date, ctoonId, volume])
+  // Makes the Browse "most traded/auctioned" all-time aggregate index-only and
+  // pre-grouped by ctoonId.
+  @@index([source, ctoonId, volume])
 }
 
 // Singleton cursor tracking how far server/cron/economy-aggregate.js has
