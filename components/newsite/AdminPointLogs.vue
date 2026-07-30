@@ -22,6 +22,13 @@
             <label for="toDate" class="mr-1 text-[11px] font-medium">To</label>
             <input id="toDate" v-model="toDate" type="date" class="border rounded px-1.5 py-0.5 text-xs" />
           </div>
+          <div class="flex items-center">
+            <label for="methodFilter" class="mr-1 text-[11px] font-medium">Method</label>
+            <select id="methodFilter" v-model="methodFilter" class="border rounded px-1.5 py-0.5 text-xs">
+              <option value="">All</option>
+              <option v-for="m in methods" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
         </div>
 
         <div class="mb-2 text-[11px] text-gray-600">
@@ -72,23 +79,40 @@
             <div
               v-for="log in logs"
               :key="log.id"
-              class="bg-gray-100 rounded-lg p-2 flex flex-col text-[11px]"
+              class="bg-gray-100 rounded-lg p-3 text-xs"
             >
-              <div class="flex justify-between">
-                <div>
-                  <p class="font-semibold">{{ log.user?.username ?? '—' }}</p>
-                  <p class="capitalize">{{ log.direction }}</p>
-                  <p>Points: {{ log.points }}</p>
-                  <p>Method: {{ log.method || '—' }}</p>
-                </div>
-                <p class="text-[10px] whitespace-nowrap">
-                  {{ new Date(log.createdAt).toLocaleString('en-US', {
-                    year: 'numeric', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                    timeZone: 'America/Chicago'
-                  }) }}
-                </p>
+              <div class="flex items-start justify-between gap-2 mb-1.5">
+                <p class="font-semibold text-sm truncate">{{ log.user?.username ?? '—' }}</p>
+                <span
+                  class="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+                  :class="log.direction === 'increase'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-700'"
+                >{{ log.direction }}</span>
               </div>
+
+              <div class="grid grid-cols-2 gap-y-1 gap-x-2 mb-1.5">
+                <div>
+                  <p class="text-[10px] text-gray-500">Points</p>
+                  <p class="font-medium tabular-nums">{{ log.points }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-gray-500">New Total</p>
+                  <p class="font-medium tabular-nums">{{ log.total }}</p>
+                </div>
+                <div class="col-span-2">
+                  <p class="text-[10px] text-gray-500">Method</p>
+                  <p class="font-medium break-words">{{ log.method || '—' }}</p>
+                </div>
+              </div>
+
+              <p class="text-[10px] text-gray-500 border-t border-gray-200 pt-1">
+                {{ new Date(log.createdAt).toLocaleString('en-US', {
+                  year: 'numeric', month: 'short', day: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
+                  timeZone: 'America/Chicago', timeZoneName: 'short'
+                }) }}
+              </p>
             </div>
           </div>
         </div>
@@ -120,6 +144,8 @@ const loading = ref(false)
 const searchTerm = ref('')
 const fromDate = ref('')
 const toDate = ref('')
+const methodFilter = ref('')
+const methods = ref([])
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const showingRange = computed(() => {
@@ -148,12 +174,14 @@ async function fetchLogs() {
       limit: pageSize,
       username: searchTerm.value.trim() || undefined,
       from: fromDate.value || undefined,
-      to: toDate.value || undefined
+      to: toDate.value || undefined,
+      method: methodFilter.value || undefined
     }
     const res = await $fetch('/api/admin/points-log', { query })
     logs.value = res.items || []
     total.value = res.total || 0
     if (res.page) page.value = res.page
+    if (Array.isArray(res.methods)) methods.value = res.methods
   } catch {
     logs.value = []
     total.value = 0
@@ -179,7 +207,7 @@ let filterDebounceId = null
 onBeforeUnmount(() => {
   if (filterDebounceId) clearTimeout(filterDebounceId)
 })
-watch([searchTerm, fromDate, toDate], () => {
+watch([searchTerm, fromDate, toDate, methodFilter], () => {
   if (filterDebounceId) clearTimeout(filterDebounceId)
   filterDebounceId = setTimeout(() => {
     page.value = 1
