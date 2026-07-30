@@ -862,10 +862,12 @@ model GamePointLog {
   id        String   @id @default(uuid())
   userId    String
   points    Int
-  gameName  String? // e.g. 'TKO'; null/other values share the general daily game pool
+  gameName  String? // e.g. 'TKO', 'Clash' (share the combat daily pool); null/other values share the general daily game pool
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, gameName, createdAt])
 }
 
 model PointsLog {

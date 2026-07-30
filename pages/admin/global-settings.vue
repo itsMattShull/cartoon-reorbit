@@ -62,12 +62,12 @@
           <div>
             <label class="block text-sm font-medium text-gray-700">Daily Game Point Cap</label>
             <input type="number" class="input" v-model.number="dailyPointLimit" />
-            <p class="text-xs text-gray-500 mt-1">Max points from games (excluding TKO) per 24h window.</p>
+            <p class="text-xs text-gray-500 mt-1">Max points from Winball, ReOrbit Match, and Monster scans per 24h window (excludes TKO and gToons Clash).</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">TKO Daily Points Cap</label>
+            <label class="block text-sm font-medium text-gray-700">TKO / gToons Clash Daily Points Cap</label>
             <input type="number" class="input" v-model.number="tkoDailyPointLimit" />
-            <p class="text-xs text-gray-500 mt-1">Max points from TKO wins per 24h window (separate pool, same 8pm CST reset).</p>
+            <p class="text-xs text-gray-500 mt-1">Combined max points from TKO and gToons Clash wins per 24h window (shared pool, same 8pm CST reset).</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">TKO Points Per Win</label>

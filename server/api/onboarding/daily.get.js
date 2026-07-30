@@ -1,6 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
+import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 const getChicagoDailyBoundary = () => {
   const chicagoNow = DateTime.now().setZone('America/Chicago')
@@ -71,11 +72,15 @@ export default defineEventHandler(async (event) => {
       where: { userId, method: 'cZone Visit', createdAt: { gte: dailyWindowStart } }
     }),
     db.gamePointLog.aggregate({
-      where: { userId, createdAt: { gte: dailyWindowStart }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
+      where: {
+        userId,
+        createdAt: { gte: dailyWindowStart },
+        OR: [{ gameName: null }, { gameName: { notIn: COMBAT_POOL_GAME_NAMES } }]
+      },
       _sum: { points: true }
     }),
     db.gamePointLog.aggregate({
-      where: { userId, gameName: 'TKO', createdAt: { gte: dailyWindowStart } },
+      where: { userId, gameName: { in: COMBAT_POOL_GAME_NAMES }, createdAt: { gte: dailyWindowStart } },
       _sum: { points: true }
     }),
     db.wheelSpinLog.count({
