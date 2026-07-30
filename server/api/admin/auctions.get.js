@@ -21,7 +21,9 @@ export default defineEventHandler(async (event) => {
     hasBidder = '',
     ctoonName = '',
     characters = '',
-    rarity = ''
+    rarity = '',
+    priceOp = '',
+    priceValue = ''
   } = getQuery(event)
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1)
   const take = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 100))
@@ -38,6 +40,23 @@ export default defineEventHandler(async (event) => {
   }
   if (hasBidder === 'has') where.highestBidderId = { not: null }
   if (hasBidder === 'none') where.highestBidderId = null
+
+  // Sold-price filter: only meaningful for ended auctions that actually sold.
+  // A valid price filter takes precedence over status/hasBidder above, since
+  // "ended & sold" is a stricter, well-defined scope.
+  const priceValueStr = String(priceValue).trim()
+  const parsedPriceValue = Number(priceValueStr)
+  const isValidPriceFilter =
+    (priceOp === 'gt' || priceOp === 'lt') &&
+    /^\d+$/.test(priceValueStr) &&
+    Number.isInteger(parsedPriceValue) &&
+    parsedPriceValue >= 0 &&
+    parsedPriceValue <= 2147483647
+  if (isValidPriceFilter) {
+    where.status = 'CLOSED'
+    where.winnerId = { not: null }
+    where.highestBid = { [priceOp]: parsedPriceValue }
+  }
 
   const ctoonFilters = {}
   if (ctoonName) {

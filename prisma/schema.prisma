@@ -1203,7 +1203,7 @@ model Auction {
   autoBids AuctionAutoBid[]
 
   @@index([userCtoonId, status])
-  @@index([status, winnerId])
+  @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])
 }
 

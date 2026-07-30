@@ -79,7 +79,8 @@
           <select
             id="statusFilter"
             v-model="selectedStatus"
-            class="w-full border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            :disabled="isPriceFilterActive"
+            class="w-full border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
           >
             <option value="">All</option>
             <option v-for="status in statusOptions" :key="status" :value="status">{{ status }}</option>
@@ -91,12 +92,42 @@
           <select
             id="bidderFilter"
             v-model="selectedHasBidder"
-            class="w-full border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            :disabled="isPriceFilterActive"
+            class="w-full border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
           >
             <option v-for="opt in hasBidderOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
+        </div>
+
+        <div class="col-span-2">
+          <label for="priceValue" class="block text-[10px] font-medium text-gray-700 mb-0.5">
+            Sold Price (ended &amp; sold auctions only)
+          </label>
+          <div class="flex gap-1">
+            <select
+              id="priceOp"
+              v-model="priceOp"
+              class="border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">—</option>
+              <option value="gt">More than</option>
+              <option value="lt">Less than</option>
+            </select>
+            <input
+              id="priceValue"
+              v-model="priceValue"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="e.g. 3000"
+              class="w-full border rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+          <div v-if="isPriceFilterActive" class="mt-0.5 text-[10px] text-gray-500">
+            Showing only CLOSED auctions with a winner; Status &amp; Has Bidder filters are disabled.
+          </div>
         </div>
       </div>
 
@@ -196,6 +227,8 @@ const winnerSuggestions = ref([])
 const selectedRarity = ref('')
 const selectedStatus = ref('')
 const selectedHasBidder = ref('')
+const priceOp = ref('')
+const priceValue = ref('')
 
 const statusOptions = ['ACTIVE', 'CLOSED', 'CANCELLED']
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
@@ -206,6 +239,7 @@ const hasBidderOptions = [
 ]
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const isPriceFilterActive = computed(() => priceOp.value !== '' && priceValue.value.trim() !== '')
 
 function scrollTop() {
   if (process.client) window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -222,7 +256,9 @@ async function fetchAuctions() {
       characters: characterQuery.value.trim() || undefined,
       rarity: selectedRarity.value || undefined,
       status: selectedStatus.value || undefined,
-      hasBidder: selectedHasBidder.value || undefined
+      hasBidder: selectedHasBidder.value || undefined,
+      priceOp: isPriceFilterActive.value ? priceOp.value : undefined,
+      priceValue: isPriceFilterActive.value ? priceValue.value.trim() : undefined
     }
   })
   auctions.value = res.items || []
@@ -285,6 +321,25 @@ watch([selectedStatus, selectedHasBidder, selectedRarity], async () => {
   await fetchAuctions()
   await nextTick()
   scrollTop()
+})
+
+// Numeric-only input: strip any non-digit characters as the user types.
+watch(priceValue, (val) => {
+  const digitsOnly = val.replace(/\D/g, '')
+  if (digitsOnly !== val) priceValue.value = digitsOnly
+})
+
+// While the price filter is active, Status & Has Bidder are disabled and
+// forced back to "All" so the UI never shows a stale, conflicting selection.
+watch(isPriceFilterActive, (active) => {
+  if (active) {
+    selectedStatus.value = ''
+    selectedHasBidder.value = ''
+  }
+})
+
+watch([priceOp, priceValue], () => {
+  scheduleFilterFetch()
 })
 
 watch(page, async () => {
