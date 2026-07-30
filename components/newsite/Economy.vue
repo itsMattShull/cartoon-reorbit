@@ -18,7 +18,15 @@
     <div class="stat-row">
       <div class="stat-card">
         <div class="stat-label">Avg Points / Player</div>
-        <div class="stat-value">{{ summary ? formatNumber(summary.avgPointsPerPlayer) : '—' }}</div>
+        <div class="stat-value">{{ summary ? formatNumber(summary.avgPointsPerPlayer, 0) : '—' }}</div>
+        <div v-if="summary" class="stat-foot">Median {{ formatNumber(summary.medianPointsPerPlayer) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Net Points (7d)</div>
+        <div class="stat-value" :class="netPointsClass">
+          {{ summary ? formatSigned(summary.netPoints7d) : '—' }}
+        </div>
+        <div v-if="summary" class="stat-foot">Issued minus spent</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Total Trades</div>
@@ -29,6 +37,35 @@
         <div class="stat-value">{{ summary ? formatNumber(summary.totalAuctionVolume) : '—' }}</div>
       </div>
     </div>
+
+    <!-- Net points issued -->
+    <section class="economy-section">
+      <h2 class="section-title">Net Points Issued</h2>
+      <p class="section-sub">Daily points earned minus spent, last 30 days (dashed line = 7-day average)</p>
+      <div v-if="netSeries.length" class="chart-container">
+        <canvas ref="netCanvas"></canvas>
+      </div>
+      <p v-else class="empty-note">No points activity recorded yet.</p>
+      <p class="chart-note">
+        A net of 0 means no point inflation. Positive net means inflation; negative net means deflation.
+      </p>
+
+      <div v-if="inflation" class="inflation-row">
+        <div class="inflation-card">
+          <div class="stat-label">Inflation — Year to Date</div>
+          <div class="stat-value">{{ formatPercent(inflation.ytdPct) }}</div>
+          <div class="stat-foot">{{ inflationWord(inflation.ytdPct) }} since Jan 1</div>
+        </div>
+        <div class="inflation-card">
+          <div class="stat-label">Inflation — Last 30 Days</div>
+          <div class="stat-value">{{ formatPercent(inflation.last30Pct) }}</div>
+          <div class="stat-foot">{{ inflationWord(inflation.last30Pct) }} over 30 days</div>
+        </div>
+      </div>
+      <p v-if="inflation" class="chart-note">
+        Measured as the change in the circulating player point supply over each period.
+      </p>
+    </section>
 
     <!-- Trending -->
     <section class="economy-section">
@@ -118,8 +155,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRequestHeaders } from '#app'
+import {
+  Chart, LineController, LineElement, PointElement,
+  LinearScale, CategoryScale, Tooltip, Legend
+} from 'chart.js'
+
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend)
 
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
 
@@ -157,8 +200,80 @@ const { data: trending, refresh: refreshTrending } = useFetch('/api/economy/tren
 
 watch(windowValue, () => refreshTrending())
 
+// Net points issued (last 30 days) + inflation rates — not window-dependent,
+// so it isn't refetched when the window toggle changes.
+const { data: netPoints } = useFetch('/api/economy/net-points', { headers })
+const netSeries = computed(() => netPoints.value?.series || [])
+const inflation = computed(() => netPoints.value?.inflation || null)
+
+const netPointsClass = computed(() => {
+  const v = summary.value?.netPoints7d
+  if (v == null) return ''
+  return v >= 0 ? 'stat-value--pos' : 'stat-value--neg'
+})
+
+const netCanvas = ref(null)
+let netChart = null
+
+async function renderNetChart() {
+  if (!netSeries.value.length) return
+  await nextTick()
+  if (!netCanvas.value) return
+  if (netChart) netChart.destroy()
+
+  netChart = new Chart(netCanvas.value.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: netSeries.value.map(p => p.period.slice(5)), // MM-DD
+      datasets: [
+        {
+          label: 'Net points',
+          data: netSeries.value.map(p => p.net),
+          borderColor: '#66CC00',
+          backgroundColor: '#66CC00',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.15
+        },
+        {
+          label: '7-day avg',
+          data: netSeries.value.map(p => p.movingAvg7Day),
+          borderColor: '#FFB000',
+          backgroundColor: '#FFB000',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          tension: 0.15
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { color: '#fff', boxWidth: 12 } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#fff', maxTicksLimit: 6, autoSkip: true },
+          grid: { color: 'rgba(255,255,255,0.1)' }
+        },
+        y: {
+          ticks: { color: '#fff', maxTicksLimit: 6 },
+          grid: { color: 'rgba(255,255,255,0.1)' }
+        }
+      }
+    }
+  })
+}
+
+watch(netPoints, renderNetChart)
+
 let pollHandle = null
 onMounted(() => {
+  renderNetChart()
   pollHandle = setInterval(() => {
     if (anyModalOpen.value) return
     refreshSummary()
@@ -167,6 +282,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   if (pollHandle) clearInterval(pollHandle)
+  if (netChart) netChart.destroy()
 })
 
 // Browse all cToons
@@ -205,9 +321,28 @@ async function loadBrowse() {
 
 watch([debouncedQuery, browsePage], loadBrowse, { immediate: true })
 
-function formatNumber(n) {
+function formatNumber(n, maximumFractionDigits = 0) {
   if (n == null) return '—'
-  return Number(n).toLocaleString()
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits })
+}
+
+function formatSigned(n) {
+  if (n == null) return '—'
+  const v = Number(n)
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString()}`
+}
+
+function formatPercent(n) {
+  if (n == null) return 'N/A'
+  const v = Number(n)
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`
+}
+
+function inflationWord(n) {
+  if (n == null) return 'Not enough data'
+  if (n > 0) return 'Inflation'
+  if (n < 0) return 'Deflation'
+  return 'Flat'
 }
 
 function formatPrice(n) {
@@ -292,6 +427,49 @@ function formatPrice(n) {
 .stat-value {
   font-size: 1.3rem;
   font-weight: 800;
+}
+
+.stat-value--pos {
+  color: #8CE046;
+}
+
+.stat-value--neg {
+  color: #FF8A7A;
+}
+
+.stat-foot {
+  margin-top: 2px;
+  font-size: 0.68rem;
+  opacity: 0.6;
+}
+
+.chart-container {
+  position: relative;
+  height: 220px;
+  padding: 4px;
+}
+
+.chart-note {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  line-height: 1.35;
+}
+
+.inflation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.inflation-card {
+  flex: 1 1 160px;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
 }
 
 .economy-section {
