@@ -353,9 +353,8 @@ function formatPrice(n) {
 
 <style scoped>
 .economy {
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
+  width: var(--main-content-width, 800px);
+  min-width: var(--main-content-width, 800px);
   padding: 16px;
   box-sizing: border-box;
   color: var(--text-color, #fff);
