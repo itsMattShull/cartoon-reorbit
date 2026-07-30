@@ -2,8 +2,10 @@ import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { decryptIp } from '@/server/utils/ip-encrypt'
 import { redis } from '@/server/utils/redis'
+import { computeGroupKey, groupsCacheKey } from '@/server/utils/cheatFinderKey'
 
 const CACHE_TTL_SECONDS = 1800 // 30 minutes
+const TYPE = 'duplicateVpn'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -23,13 +25,39 @@ export default defineEventHandler(async (event) => {
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
 
-  // Cache check
-  const cacheKey = `admin:duplicate-vpn:${page}:${limit}:${searchTerm}`
+  // Build (or reuse from cache) the full deduped, confirmed-filtered group
+  // list under a single cache key per type (see duplicate-users.get.js for
+  // why this replaced per-page/search cache keys).
+  let groups
+  const cacheKey = groupsCacheKey(TYPE)
   try {
     const hit = await redis.get(cacheKey)
-    if (hit) return JSON.parse(hit)
+    if (hit) groups = JSON.parse(hit)
   } catch {}
 
+  if (!groups) {
+    groups = await buildVpnGroups()
+    try { await redis.set(cacheKey, JSON.stringify(groups), 'EX', CACHE_TTL_SECONDS) } catch {}
+  }
+
+  const filteredGroups = searchTerm
+    ? groups.filter(g =>
+        g.aliases.some(a => String(a.username || '').toLowerCase().includes(searchTerm))
+      )
+    : groups
+
+  const total = filteredGroups.length
+  const paged = filteredGroups.slice(skip, skip + limit).map((g) => ({
+    ...g,
+    aliases: g.aliases.map((a) => ({ ...a }))
+  }))
+
+  await enrichAliases(paged)
+
+  return { groups: paged, total, page, limit }
+})
+
+async function buildVpnGroups() {
   const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
 
   const vpnLogs = await prisma.vpnLog.findMany({
@@ -124,15 +152,22 @@ export default defineEventHandler(async (event) => {
     })
     .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime())
 
-  const filteredGroups = searchTerm
-    ? groups.filter(g =>
-        g.aliases.some(a => String(a.username || '').toLowerCase().includes(searchTerm))
-      )
-    : groups
+  // Attach a stable groupKey and drop any group already confirmed as not cheating.
+  const keyedGroups = groups.map((g) => ({
+    ...g,
+    groupKey: computeGroupKey(TYPE, g.aliases.map((a) => a.username))
+  }))
 
-  const total = filteredGroups.length
-  const paged = filteredGroups.slice(skip, skip + limit)
+  const confirmedRows = await prisma.cheatFinderConfirmation.findMany({
+    where: { type: TYPE },
+    select: { groupKey: true }
+  })
+  const confirmedKeys = new Set(confirmedRows.map((r) => r.groupKey))
 
+  return keyedGroups.filter((g) => !confirmedKeys.has(g.groupKey))
+}
+
+async function enrichAliases(paged) {
   // Enrich aliases with points, ctoon count, fingerprint, and trade partners
   const userIds = Array.from(
     new Set(paged.flatMap(g => g.aliases.map(a => a.userId).filter(Boolean)))
@@ -212,8 +247,4 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
-
-  const result = { groups: paged, total, page, limit }
-  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
-  return result
-})
+}
