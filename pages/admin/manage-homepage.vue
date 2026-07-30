@@ -6,28 +6,31 @@
     <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
       <!-- Tabs -->
       <div class="border-b mb-6">
-        <nav class="flex gap-4">
+        <nav class="flex gap-1 sm:gap-4 overflow-x-auto flex-nowrap -mb-px">
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Homepage' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Homepage'">Homepage</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Home' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Home'">Home</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Sidebar' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Sidebar'">Sidebar</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Other' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Other'">Other</button>
-
+          <button
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            :class="activeTab==='Favicon' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Favicon'">Favicon</button>
         </nav>
       </div>
 
@@ -390,6 +393,56 @@
         </div>
       </section>
 
+      <!-- Favicon tab -->
+      <section v-if="activeTab==='Favicon'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Upload one image (PNG, JPG, or WEBP) and it will replace the site's favicon and all
+          meta/touch icons used site-wide. It will be automatically cropped to a centered square.
+          Changes may take a minute to appear everywhere due to browser caching.
+        </p>
+
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Master Icon Image</h2>
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div class="relative w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="faviconPreviewUrl || faviconSourcePath" :src="faviconPreviewUrl || faviconSourcePath" alt="Favicon preview" class="max-h-full max-w-full object-contain" @load="onFaviconPreviewLoad" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+              <!-- Square crop-boundary overlay so admins can see what will be kept before saving -->
+              <div v-if="faviconPreviewUrl" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div class="border-2 border-dashed border-indigo-500/80" :style="cropOverlayStyle"></div>
+              </div>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <label for="favicon-file-input" class="block text-sm font-medium text-gray-700">Choose image</label>
+              <input id="favicon-file-input" type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/webp,.webp"
+                @change="onFaviconFile($event)" class="block w-full text-sm" />
+              <p v-if="faviconPreviewUrl" class="text-xs text-gray-500">
+                Dashed box shows the centered square that will be used — anything outside it is cropped away.
+              </p>
+              <div v-if="faviconFile" class="text-xs text-gray-600 truncate">Selected: {{ faviconFile.name }}</div>
+            </div>
+          </div>
+
+          <!-- A handful of representative generated sizes — not all ~20, to keep this usable on mobile -->
+          <div v-if="faviconPreviewUrl" class="flex items-end gap-4 pt-2">
+            <div v-for="s in [16, 32, 96, 180]" :key="s" class="flex flex-col items-center gap-1">
+              <img :src="faviconPreviewUrl" :style="{ width: Math.min(s, 64) + 'px', height: Math.min(s, 64) + 'px' }" class="object-cover border rounded" :alt="s + 'px preview'" />
+              <span class="text-[10px] text-gray-500">{{ s }}px</span>
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <button class="btn-primary inline-flex items-center gap-2" :disabled="!faviconFile || faviconSaving" @click="saveFavicon">
+              <svg v-if="faviconSaving" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              <span v-if="!faviconSaving">Save Favicon</span><span v-else>Generating icons… this can take a few seconds</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -459,6 +512,61 @@ const middleSidebarFiles = reactive({ 1: null, 2: null, 3: null })
 
 const saving = ref(false)
 const toast  = ref(null)
+
+// Favicon tab state
+const faviconFile = ref(null)
+const faviconPreviewUrl = ref(null)
+const faviconSourcePath = ref('')
+const faviconSaving = ref(false)
+const faviconBoxPx = 128 // matches the w-32 h-32 preview box
+const cropOverlayStyle = ref({ width: `${faviconBoxPx}px`, height: `${faviconBoxPx}px` })
+
+function onFaviconPreviewLoad(e) {
+  const img = e.target
+  const nw = img.naturalWidth
+  const nh = img.naturalHeight
+  if (!nw || !nh) return
+  // Replicate object-contain's rendered size within the fixed preview box,
+  // then draw the centered square crop boundary sharp will actually keep.
+  const scale = Math.min(faviconBoxPx / nw, faviconBoxPx / nh)
+  const dispW = nw * scale
+  const dispH = nh * scale
+  const side = Math.min(dispW, dispH)
+  cropOverlayStyle.value = { width: `${side}px`, height: `${side}px` }
+}
+
+function onFaviconFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (faviconPreviewUrl.value) { URL.revokeObjectURL(faviconPreviewUrl.value); faviconPreviewUrl.value = null } } catch (e) {}
+  faviconFile.value = f
+  if (f) faviconPreviewUrl.value = URL.createObjectURL(f)
+}
+
+async function loadFaviconConfig() {
+  try {
+    const cfg = await $fetch('/api/admin/favicon')
+    faviconSourcePath.value = cfg.faviconSourcePath || ''
+  } catch {}
+}
+
+async function saveFavicon() {
+  if (!faviconFile.value) return
+  faviconSaving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('image', faviconFile.value)
+    const res = await $fetch('/api/admin/favicon', { method: 'POST', body: fd })
+    faviconSourcePath.value = res.faviconSourcePath || ''
+    try { if (faviconPreviewUrl.value) URL.revokeObjectURL(faviconPreviewUrl.value) } catch (e) {}
+    faviconPreviewUrl.value = null
+    faviconFile.value = null
+    toast.value = { type: 'ok', msg: 'Favicon updated. It may take a minute to appear everywhere due to browser caching.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    faviconSaving.value = false; setTimeout(() => { toast.value = null }, 4000)
+  }
+}
 
 // Release settings state
 const releasePercent = ref(75)
@@ -603,6 +711,7 @@ onBeforeUnmount(() => {
     const u = previewUrls.value[k]
     if (u) { try { URL.revokeObjectURL(u) } catch (e) {} }
   }
+  if (faviconPreviewUrl.value) { try { URL.revokeObjectURL(faviconPreviewUrl.value) } catch (e) {} }
 })
 
 async function loadConfig() {
@@ -765,6 +874,7 @@ async function saveOther() {
 }
 
 onMounted(loadConfig)
+onMounted(loadFaviconConfig)
 
 
 onMounted(async () => {
