@@ -129,6 +129,18 @@
             Showing only CLOSED auctions with a winner; Status &amp; Has Bidder filters are disabled.
           </div>
         </div>
+
+        <div class="flex items-end">
+          <label class="flex items-center gap-1.5 text-[11px] text-gray-700">
+            <input
+              id="excludeOfficialWinner"
+              v-model="excludeOfficialWinner"
+              type="checkbox"
+              class="rounded border-gray-300 focus:ring-indigo-500"
+            />
+            Hide official account wins
+          </label>
+        </div>
       </div>
 
       <div class="mb-2 text-[11px] text-gray-600">
@@ -229,6 +241,7 @@ const selectedStatus = ref('')
 const selectedHasBidder = ref('')
 const priceOp = ref('')
 const priceValue = ref('')
+const excludeOfficialWinner = ref(false)
 
 const statusOptions = ['ACTIVE', 'CLOSED', 'CANCELLED']
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
@@ -258,7 +271,8 @@ async function fetchAuctions() {
       status: selectedStatus.value || undefined,
       hasBidder: selectedHasBidder.value || undefined,
       priceOp: isPriceFilterActive.value ? priceOp.value : undefined,
-      priceValue: isPriceFilterActive.value ? priceValue.value.trim() : undefined
+      priceValue: isPriceFilterActive.value ? priceValue.value.trim() : undefined,
+      excludeOfficialWinner: excludeOfficialWinner.value ? '1' : undefined
     }
   })
   auctions.value = res.items || []
@@ -340,6 +354,16 @@ watch(isPriceFilterActive, (active) => {
 
 watch([priceOp, priceValue], () => {
   scheduleFilterFetch()
+})
+
+watch(excludeOfficialWinner, async () => {
+  if (page.value !== 1) {
+    page.value = 1
+    return
+  }
+  await fetchAuctions()
+  await nextTick()
+  scrollTop()
 })
 
 watch(page, async () => {

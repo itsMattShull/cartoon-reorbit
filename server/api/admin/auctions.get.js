@@ -23,7 +23,8 @@ export default defineEventHandler(async (event) => {
     characters = '',
     rarity = '',
     priceOp = '',
-    priceValue = ''
+    priceValue = '',
+    excludeOfficialWinner = ''
   } = getQuery(event)
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1)
   const take = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 100))
@@ -41,6 +42,9 @@ export default defineEventHandler(async (event) => {
   if (hasBidder === 'has') where.highestBidderId = { not: null }
   if (hasBidder === 'none') where.highestBidderId = null
 
+  // winnerId conditions accumulate across filters below (AND'd together).
+  const winnerIdFilter = {}
+
   // Sold-price filter: only meaningful for ended auctions that actually sold.
   // A valid price filter takes precedence over status/hasBidder above, since
   // "ended & sold" is a stricter, well-defined scope.
@@ -54,9 +58,21 @@ export default defineEventHandler(async (event) => {
     parsedPriceValue <= 2147483647
   if (isValidPriceFilter) {
     where.status = 'CLOSED'
-    where.winnerId = { not: null }
+    winnerIdFilter.not = null
     where.highestBid = { [priceOp]: parsedPriceValue }
   }
+
+  // Exclude auctions won by the official account (e.g. auto-bid safety-net wins).
+  if (excludeOfficialWinner === '1' || excludeOfficialWinner === 'true') {
+    const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+    const official = await prisma.user.findUnique({
+      where: { username: officialUsername },
+      select: { id: true }
+    })
+    if (official) winnerIdFilter.notIn = [official.id]
+  }
+
+  if (Object.keys(winnerIdFilter).length) where.winnerId = winnerIdFilter
 
   const ctoonFilters = {}
   if (ctoonName) {
