@@ -419,9 +419,16 @@ function formatVolume(n) {
 </script>
 
 <style scoped>
+/* Fluid, like every other newsite page component (.ah, .cmart, .all-ctoons,
+   .leaderboards). On desktop the layout's .main-content is a fixed
+   var(--main-content-width) box, so this still resolves to 800px and the
+   internal vertical scroll is unchanged; at <=768px .main-content switches to
+   width:100% + overflow-x:auto, and a fixed min-width here is what used to
+   leave ~half the page off-screen behind a horizontal pan. */
 .economy {
-  width: var(--main-content-width, 800px);
-  min-width: var(--main-content-width, 800px);
+  width: 100%;
+  max-width: var(--main-content-width, 800px);
+  min-width: 0;
   height: 100%;
   padding: 16px;
   box-sizing: border-box;
@@ -466,12 +473,9 @@ function formatVolume(n) {
   background: var(--OrbitLightBlue, #3399CC);
 }
 
-/* Filters & sort.
-   This page's content box is a fixed var(--main-content-width, 800px) that the
-   layout pans horizontally on phones, so every control here is capped to the
-   leftmost ~340px — the part visible on a 390px viewport without panning.
-   Sizes are intrinsic rather than breakpoint-driven for the same reason: a
-   viewport media query can't tell you how much of an 800px box is on screen. */
+/* Filters & sort. The panel is capped well under the container width because
+   full-width form controls read as broken at 800px; it shrinks with the page on
+   narrow screens rather than being pinned to a breakpoint. */
 .filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -521,6 +525,7 @@ function formatVolume(n) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
   max-width: 340px;
   padding: 12px;
   margin-bottom: 12px;
@@ -601,14 +606,13 @@ function formatVolume(n) {
   cursor: not-allowed;
 }
 
-/* Wraps rather than scrolls: a horizontal scroller nested inside an already
-   horizontally-panned page is close to unusable on touch. */
+/* Wraps rather than scrolls, so no chip can end up off-screen on a narrow
+   viewport where it's also the only visible undo for an active filter. */
 .filter-chip-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  max-width: 340px;
   margin-bottom: 14px;
 }
 
@@ -842,13 +846,44 @@ function formatVolume(n) {
   cursor: not-allowed;
 }
 
-@media (max-width: 640px) {
+/* 768px is the layout's own MOBILE_BREAKPOINT (layouts/newsite-template.vue) —
+   the point where .main-content stops being a fixed 800px box and starts
+   tracking the viewport. Below it this component is genuinely narrow; above it
+   it's always 800px no matter how wide the window is, so a smaller breakpoint
+   here would fire in a range where nothing had actually changed size. */
+@media (max-width: 768px) {
+  .economy {
+    padding: 12px;
+  }
+
   .economy-title {
     font-size: 1.3rem;
   }
 
   .ctoon-row--browse {
     align-items: flex-start;
+  }
+
+  /* Narrow enough that single-line ellipsis eats most of a real cToon name
+     ("1 Year Anniversary Miss Sara Bellum"). Wrapping costs a line; truncating
+     costs the identity of the row. */
+  .ctoon-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Let the name claim the rest of the thumbnail's line so the price chips wrap
+     underneath it. Otherwise the name is flex-shrinkable to nothing and three
+     70px chips truncate it to an ellipsis. 46px = 36px thumb + 10px row gap. */
+  .ctoon-row--browse .ctoon-name {
+    flex: 1 1 calc(100% - 46px);
+  }
+
+  /* Right-aligned chips read as misaligned once they wrap onto their own line. */
+  .ctoon-row--browse .ctoon-price-chip {
+    align-items: flex-start;
+    min-width: 64px;
   }
 }
 </style>
