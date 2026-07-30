@@ -42,10 +42,29 @@
     <section class="economy-section">
       <h2 class="section-title">Net Points Issued</h2>
       <p class="section-sub">Daily points earned minus spent, last 30 days (dashed line = 7-day average)</p>
-      <div v-if="netPoints?.length" class="chart-container">
+      <div v-if="netSeries.length" class="chart-container">
         <canvas ref="netCanvas"></canvas>
       </div>
       <p v-else class="empty-note">No points activity recorded yet.</p>
+      <p class="chart-note">
+        A net of 0 means no point inflation. Positive net means inflation; negative net means deflation.
+      </p>
+
+      <div v-if="inflation" class="inflation-row">
+        <div class="inflation-card">
+          <div class="stat-label">Inflation — Year to Date</div>
+          <div class="stat-value">{{ formatPercent(inflation.ytdPct) }}</div>
+          <div class="stat-foot">{{ inflationWord(inflation.ytdPct) }} since Jan 1</div>
+        </div>
+        <div class="inflation-card">
+          <div class="stat-label">Inflation — Last 30 Days</div>
+          <div class="stat-value">{{ formatPercent(inflation.last30Pct) }}</div>
+          <div class="stat-foot">{{ inflationWord(inflation.last30Pct) }} over 30 days</div>
+        </div>
+      </div>
+      <p v-if="inflation" class="chart-note">
+        Measured as the change in the circulating player point supply over each period.
+      </p>
     </section>
 
     <!-- Trending -->
@@ -181,9 +200,11 @@ const { data: trending, refresh: refreshTrending } = useFetch('/api/economy/tren
 
 watch(windowValue, () => refreshTrending())
 
-// Net points issued (last 30 days) — not window-dependent, so it isn't
-// refetched when the window toggle changes.
+// Net points issued (last 30 days) + inflation rates — not window-dependent,
+// so it isn't refetched when the window toggle changes.
 const { data: netPoints } = useFetch('/api/economy/net-points', { headers })
+const netSeries = computed(() => netPoints.value?.series || [])
+const inflation = computed(() => netPoints.value?.inflation || null)
 
 const netPointsClass = computed(() => {
   const v = summary.value?.netPoints7d
@@ -195,7 +216,7 @@ const netCanvas = ref(null)
 let netChart = null
 
 async function renderNetChart() {
-  if (!netPoints.value?.length) return
+  if (!netSeries.value.length) return
   await nextTick()
   if (!netCanvas.value) return
   if (netChart) netChart.destroy()
@@ -203,11 +224,11 @@ async function renderNetChart() {
   netChart = new Chart(netCanvas.value.getContext('2d'), {
     type: 'line',
     data: {
-      labels: netPoints.value.map(p => p.period.slice(5)), // MM-DD
+      labels: netSeries.value.map(p => p.period.slice(5)), // MM-DD
       datasets: [
         {
           label: 'Net points',
-          data: netPoints.value.map(p => p.net),
+          data: netSeries.value.map(p => p.net),
           borderColor: '#66CC00',
           backgroundColor: '#66CC00',
           borderWidth: 2,
@@ -216,7 +237,7 @@ async function renderNetChart() {
         },
         {
           label: '7-day avg',
-          data: netPoints.value.map(p => p.movingAvg7Day),
+          data: netSeries.value.map(p => p.movingAvg7Day),
           borderColor: '#FFB000',
           backgroundColor: '#FFB000',
           borderWidth: 2,
@@ -309,6 +330,19 @@ function formatSigned(n) {
   if (n == null) return '—'
   const v = Number(n)
   return `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString()}`
+}
+
+function formatPercent(n) {
+  if (n == null) return 'N/A'
+  const v = Number(n)
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`
+}
+
+function inflationWord(n) {
+  if (n == null) return 'Not enough data'
+  if (n > 0) return 'Inflation'
+  if (n < 0) return 'Deflation'
+  return 'Flat'
 }
 
 function formatPrice(n) {
@@ -413,6 +447,29 @@ function formatPrice(n) {
   position: relative;
   height: 220px;
   padding: 4px;
+}
+
+.chart-note {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  line-height: 1.35;
+}
+
+.inflation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.inflation-card {
+  flex: 1 1 160px;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 14px;
 }
 
 .economy-section {
