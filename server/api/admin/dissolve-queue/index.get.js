@@ -38,18 +38,20 @@ export default defineEventHandler(async (event) => {
   }
 
   const mapEntry = (e) => ({
-    id:           e.id,
-    category:     e.category,
-    isFeatured:   e.isFeatured,
-    priority:     e.priority,
-    scheduledFor: e.scheduledFor,
-    createdAt:    e.createdAt,
-    ctoonName:    e.userCtoon?.ctoon?.name ?? null,
-    ctoonImage:   e.userCtoon?.ctoon?.assetPath ?? null,
-    rarity:       e.userCtoon?.ctoon?.rarity ?? null,
-    series:       e.userCtoon?.ctoon?.series ?? null,
-    set:          e.userCtoon?.ctoon?.set ?? null,
-    mintNumber:   e.userCtoon?.mintNumber ?? null,
+    id:             e.id,
+    category:       e.category,
+    isFeatured:     e.isFeatured,
+    priority:       e.priority,
+    fromInactive:   e.fromInactive,
+    sourceUsername: e.sourceUsername,
+    scheduledFor:   e.scheduledFor,
+    createdAt:      e.createdAt,
+    ctoonName:      e.userCtoon?.ctoon?.name ?? null,
+    ctoonImage:     e.userCtoon?.ctoon?.assetPath ?? null,
+    rarity:         e.userCtoon?.ctoon?.rarity ?? null,
+    series:         e.userCtoon?.ctoon?.series ?? null,
+    set:            e.userCtoon?.ctoon?.set ?? null,
+    mintNumber:     e.userCtoon?.mintNumber ?? null,
   })
 
   // Next 20 scheduled entries

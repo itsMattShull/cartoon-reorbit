@@ -531,7 +531,7 @@ async function enforceDormantAccounts() {
       active: true,
       lastActivity: { lte: cutoff },
     },
-    select: { id: true, discordId: true }
+    select: { id: true, discordId: true, username: true }
   })
 
   const featuredConfig = await getFeaturedDissolveConfig()
@@ -605,8 +605,8 @@ async function enforceDormantAccounts() {
         // auction queue, ahead of admin-initiated (non-priority) dissolves
         await tx.dissolveAuctionQueue.upsert({
           where:  { userCtoonId: uc.id },
-          update: { priority: true },
-          create: { userCtoonId: uc.id, category, isFeatured, priority: true }
+          update: { priority: true, fromInactive: true, sourceUsername: u.username },
+          create: { userCtoonId: uc.id, category, isFeatured, priority: true, fromInactive: true, sourceUsername: u.username }
         })
       }
 

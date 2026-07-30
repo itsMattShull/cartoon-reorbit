@@ -133,7 +133,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       const queueEntry = await prisma.dissolveAuctionQueue.upsert({
         where:  { userCtoonId: uc.id },
         update: {},
-        create: { userCtoonId: uc.id, category, isFeatured },
+        create: { userCtoonId: uc.id, category, isFeatured, fromInactive: false, sourceUsername: target.username },
         select: { id: true, category: true }
       })
       queuedEntries.push({ id: queueEntry.id, category: queueEntry.category })
