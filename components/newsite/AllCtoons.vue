@@ -3,6 +3,17 @@
 
     <div class="ac-header">All cToons</div>
 
+    <div v-if="filter.set || filter.series" class="ac-active-filters">
+      <span v-if="filter.set" class="ac-filter-chip">
+        Set: <strong>{{ filter.set }}</strong>
+        <button class="ac-filter-chip-x" aria-label="Clear set filter" @click="filter.set = ''">✕</button>
+      </span>
+      <span v-if="filter.series" class="ac-filter-chip">
+        Series: <strong>{{ filter.series }}</strong>
+        <button class="ac-filter-chip-x" aria-label="Clear series filter" @click="filter.series = ''">✕</button>
+      </span>
+    </div>
+
     <!-- ── Pagination (top) ─────────────────────────────────────── -->
     <div class="ac-pagination">
       <button class="ac-pg-btn" :disabled="groupPage <= 1" @click="prevGroupPage">‹</button>
@@ -292,6 +303,49 @@ onMounted(async () => {
   background: var(--OrbitLightBlue);
   box-sizing: border-box;
 }
+
+.ac-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 0;
+  flex-shrink: 0;
+}
+
+.ac-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--OrbitDarkBlue);
+  color: #fff;
+  font-size: 0.68rem;
+  border-radius: 12px;
+  padding: 3px 6px 3px 10px;
+  max-width: 100%;
+}
+
+.ac-filter-chip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.ac-filter-chip-x {
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ac-filter-chip-x:hover { background: rgba(255, 255, 255, 0.3); }
 
 .ac-scroll {
   flex: 1;
