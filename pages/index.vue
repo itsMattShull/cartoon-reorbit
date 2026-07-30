@@ -399,6 +399,15 @@ onBeforeUnmount(() => { clearTimeout(timer); abortCtrl.abort() })
 /* ── SEO (existing) ─────────────────────────────────────────── */
 const url = useRequestURL()
 const siteName = 'Cartoon ReOrbit'
+
+// Cache-busting for the favicon/meta-icon set: admin-uploaded icons overwrite
+// the same filenames in place, so a version query string is the only way
+// browsers pick up an update without a hard refresh.
+const { data: globalConfig } = await useAsyncData('global-config-public', () => $fetch('/api/global-config'))
+const faviconV = computed(() => globalConfig.value?.faviconVersion ? `?v=${globalConfig.value.faviconVersion}` : '')
+function iconHref(path) {
+  return `${path}${faviconV.value}`
+}
 const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
 const description = 'Collect cToons, build cZones, and trade through live auctions and mini-games. Free, community-driven remake of Cartoon Orbit. Not affiliated with Cartoon Network.'
 const ogImage = 'https://www.cartoonreorbit.com/images/atom-icon.png'
@@ -426,19 +435,20 @@ useHead({
   htmlAttrs: { lang: 'en' },
   link: [
     { rel: 'canonical', href: url.href },
-    { rel: 'apple-touch-icon', sizes: '57x57', href: '/images/apple-icon-57x57.png' },
-    { rel: 'apple-touch-icon', sizes: '60x60', href: '/images/apple-icon-60x60.png' },
-    { rel: 'apple-touch-icon', sizes: '72x72', href: '/images/apple-icon-72x72.png' },
-    { rel: 'apple-touch-icon', sizes: '76x76', href: '/images/apple-icon-76x76.png' },
-    { rel: 'apple-touch-icon', sizes: '114x114', href: '/images/apple-icon-114x114.png' },
-    { rel: 'apple-touch-icon', sizes: '120x120', href: '/images/apple-icon-120x120.png' },
-    { rel: 'apple-touch-icon', sizes: '144x144', href: '/images/apple-icon-144x144.png' },
-    { rel: 'apple-touch-icon', sizes: '152x152', href: '/images/apple-icon-152x152.png' },
-    { rel: 'apple-touch-icon', sizes: '180x180', href: '/images/apple-icon-180x180.png' },
-    { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/images/android-icon-192x192.png' },
-    { rel: 'icon', type: 'image/png', sizes: '32x32',  href: '/images/favicon-32x32.png' },
-    { rel: 'icon', type: 'image/png', sizes: '96x96',  href: '/images/favicon-96x96.png' },
-    { rel: 'icon', type: 'image/png', sizes: '16x16',  href: '/images/favicon-16x16.png' },
+    { rel: 'apple-touch-icon', sizes: '57x57', href: iconHref('/images/apple-icon-57x57.png') },
+    { rel: 'apple-touch-icon', sizes: '60x60', href: iconHref('/images/apple-icon-60x60.png') },
+    { rel: 'apple-touch-icon', sizes: '72x72', href: iconHref('/images/apple-icon-72x72.png') },
+    { rel: 'apple-touch-icon', sizes: '76x76', href: iconHref('/images/apple-icon-76x76.png') },
+    { rel: 'apple-touch-icon', sizes: '114x114', href: iconHref('/images/apple-icon-114x114.png') },
+    { rel: 'apple-touch-icon', sizes: '120x120', href: iconHref('/images/apple-icon-120x120.png') },
+    { rel: 'apple-touch-icon', sizes: '144x144', href: iconHref('/images/apple-icon-144x144.png') },
+    { rel: 'apple-touch-icon', sizes: '152x152', href: iconHref('/images/apple-icon-152x152.png') },
+    { rel: 'apple-touch-icon', sizes: '180x180', href: iconHref('/images/apple-icon-180x180.png') },
+    { rel: 'icon', type: 'image/png', sizes: '192x192', href: iconHref('/images/android-icon-192x192.png') },
+    { rel: 'icon', type: 'image/png', sizes: '32x32',  href: iconHref('/images/favicon-32x32.png') },
+    { rel: 'icon', type: 'image/png', sizes: '96x96',  href: iconHref('/images/favicon-96x96.png') },
+    { rel: 'icon', type: 'image/png', sizes: '16x16',  href: iconHref('/images/favicon-16x16.png') },
+    { rel: 'shortcut icon', href: iconHref('/images/favicon.ico') },
     { rel: 'manifest', href: '/images/manifest.json' },
   ],
   meta: [
@@ -447,7 +457,7 @@ useHead({
     { name: 'viewport', content: 'width=device-width, initial-scale=1' },
     { name: 'format-detection', content: 'telephone=no' },
     { name: 'msapplication-TileColor', content: '#ffffff' },
-    { name: 'msapplication-TileImage', content: '/images/ms-icon-144x144.png' },
+    { name: 'msapplication-TileImage', content: iconHref('/images/ms-icon-144x144.png') },
     { name: 'theme-color', content: '#ffffff' },
   ],
   script: [
