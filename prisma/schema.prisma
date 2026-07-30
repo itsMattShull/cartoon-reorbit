@@ -296,6 +296,7 @@ model Ctoon {
   cmartPurchaseLogs      CmartPurchaseLog[]
   saleItems              SaleCtoon[]
   saleDailyPurchases     SaleDailyPurchase[]
+  priceDaily             CtoonPriceDaily[]
 
   @@index([isSecondEdition])
   @@index([name])
@@ -1248,6 +1249,41 @@ model Bid {
 
   auction Auction @relation(fields: [auctionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+}
+
+// ── Economy page ─────────────────────────────────────────────────
+// Daily per-cToon price/volume aggregates, one row per (ctoon, source, day).
+// Populated by server/cron/economy-aggregate.js; read live by server/api/economy/*.
+// AUCTION rows come straight from closed+won Auctions. TRADE rows use an
+// "implied value" imputed from each accepted TradeOffer (see the cron job for
+// the formula), since trades don't carry a native per-cToon price.
+enum EconomySource {
+  AUCTION
+  TRADE
+}
+
+model CtoonPriceDaily {
+  id       String        @id @default(uuid())
+  ctoonId  String
+  source   EconomySource
+  date     DateTime // truncated to day (UTC)
+  avgPrice Float
+  volume   Int // number of transactions this cToon appeared in that day
+
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+
+  @@unique([ctoonId, source, date])
+  @@index([source, date, ctoonId])
+}
+
+// Singleton cursor tracking how far server/cron/economy-aggregate.js has
+// processed, so each run only rescans days touched since the last run
+// instead of re-aggregating all-time history every time.
+model EconomyAggregateCursor {
+  id                     String   @id @default("singleton")
+  lastAuctionProcessedAt DateTime @default("1970-01-01T00:00:00Z")
+  lastTradeProcessedAt   DateTime @default("1970-01-01T00:00:00Z")
+  updatedAt              DateTime @updatedAt
 }
 
 model ClashGame {
