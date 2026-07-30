@@ -400,6 +400,7 @@ model User {
   clashDecks                ClashDeck[]
   logins                    LoginLog[]
   deviceFingerprintLogs     DeviceFingerprintLog[]
+  cheatFinderConfirmations  CheatFinderConfirmation[]
   gamePointLogs             GamePointLog[]
   pointsLogs                PointsLog[]
   lockedPoints              LockedPoints[]
@@ -815,6 +816,7 @@ model LoginLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([ip])
+  @@index([createdAt])
 }
 
 model DeviceFingerprintLog {
@@ -833,14 +835,39 @@ model DeviceFingerprintLog {
   @@index([createdAt])
 }
 
+// Tracks admin decisions on Cheat Finder matches (e.g. "Duplicate IPs",
+// "Duplicate VPN") so groups reviewed and confirmed as not-cheating stay
+// hidden from future listings until unconfirmed. groupKey is deterministic
+// from `type` + the sorted set of alias usernames in the match (see
+// server/utils/cheatFinderKey.js), so it's recomputed server-side rather
+// than trusted from the client.
+model CheatFinderConfirmation {
+  id                  String   @id @default(uuid())
+  type                String
+  groupKey            String
+  aliasUsernames      String[]
+  note                String?
+  confirmedByUserId   String
+  confirmedByUsername String?
+  confirmedAt         DateTime @default(now())
+
+  confirmedBy User @relation(fields: [confirmedByUserId], references: [id])
+
+  @@unique([type, groupKey])
+  @@index([type])
+  @@index([confirmedAt])
+}
+
 model GamePointLog {
   id        String   @id @default(uuid())
   userId    String
   points    Int
-  gameName  String? // e.g. 'TKO'; null/other values share the general daily game pool
+  gameName  String? // e.g. 'TKO', 'Clash' (share the combat daily pool); null/other values share the general daily game pool
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, gameName, createdAt])
 }
 
 model PointsLog {
@@ -1203,7 +1230,7 @@ model Auction {
   autoBids AuctionAutoBid[]
 
   @@index([userCtoonId, status])
-  @@index([status, winnerId])
+  @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])
 }
 
@@ -1670,18 +1697,23 @@ model AuctionOnly {
 }
 
 model DissolveAuctionQueue {
-  id           String    @id @default(uuid())
-  userCtoonId  String    @unique
-  category     String    @default("OTHER") // "FEATURED" | "OTHER"
-  isFeatured   Boolean   @default(false)
-  scheduledFor DateTime? // UTC; null = not yet scheduled
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(uuid())
+  userCtoonId    String    @unique
+  category       String    @default("OTHER") // "FEATURED" | "OTHER"
+  isFeatured     Boolean   @default(false)
+  priority       Boolean   @default(false) // true = jump to the front of the queue (e.g. 9-month inactivity dissolves)
+  fromInactive   Boolean   @default(false) // true = queued via the automatic 9-month inactivity dissolve
+  sourceUsername String? // username of the dissolved account this cToon came from
+  scheduledFor   DateTime? // UTC; null = not yet scheduled
+  createdAt      DateTime  @default(now())
 
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
 
   @@index([createdAt])
   @@index([category])
   @@index([scheduledFor])
+  @@index([priority])
+  @@index([fromInactive])
 }
 
 model HomepageConfig {
@@ -2751,4 +2783,5 @@ model VpnLog {
 
   @@index([userId])
   @@index([ip])
+  @@index([detectedAt])
 }

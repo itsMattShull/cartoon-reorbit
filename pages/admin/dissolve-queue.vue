@@ -50,7 +50,9 @@
                   <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
                 </div>
+                <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-xs text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
               </div>
               <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
@@ -173,7 +175,9 @@
                   <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
                 </div>
+                <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-xs text-gray-500 mt-1">
                   {{ entry.scheduledFor ? fmtCST(entry.scheduledFor) : 'Not scheduled' }}
                 </div>

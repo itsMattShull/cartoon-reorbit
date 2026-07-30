@@ -34,18 +34,7 @@ Object.assign(filter.value, {
 activeTab.value = q.tab === 'AllSeries' ? 'AllSeries' : 'AllSets'
 
 watch([filter, activeTab], () => {
-  const f = filter.value
-  const query = {}
-  if (f.name)                   query.name      = f.name
-  if (f.rarities.length)        query.rarities  = f.rarities.join(',')
-  if (f.owned !== 'all')        query.owned     = f.owned
-  if (f.wishlist)               query.wishlist  = 'true'
-  if (f.sortField !== 'name')   query.sortField = f.sortField
-  if (!f.sortAsc)               query.sortAsc   = 'false'
-  if (f.set)                    query.set       = f.set
-  if (f.series)                 query.series    = f.series
-  if (activeTab.value !== 'AllSets') query.tab  = activeTab.value
-  router.replace({ query })
+  router.replace({ query: filterToQuery(filter.value, activeTab.value) })
 }, { deep: true })
 </script>
 

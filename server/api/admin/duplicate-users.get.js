@@ -2,8 +2,10 @@ import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { decryptIp } from '@/server/utils/ip-encrypt'
 import { redis } from '@/server/utils/redis'
+import { computeGroupKey, groupsCacheKey } from '@/server/utils/cheatFinderKey'
 
 const CACHE_TTL_SECONDS = 1800 // 30 minutes
+const TYPE = 'duplicateIps'
 
 export default defineEventHandler(async (event) => {
   // 1. Admin auth
@@ -24,14 +26,43 @@ export default defineEventHandler(async (event) => {
   const skip = (page - 1) * limit
   const searchTerm = String(query.username || '').trim().toLowerCase()
 
-  // 2. Cache check
-  const cacheKey = `admin:duplicate-users:${page}:${limit}:${searchTerm}`
+  // 2. Build (or reuse from cache) the full deduped, confirmed-filtered
+  // group list. This is cached under a single key per type — independent of
+  // page/limit/search — so confirming a match can invalidate it with one
+  // DEL instead of scanning a page/search-keyed keyspace.
+  let dedupedGroups
+  const cacheKey = groupsCacheKey(TYPE)
   try {
     const hit = await redis.get(cacheKey)
-    if (hit) return JSON.parse(hit)
+    if (hit) dedupedGroups = JSON.parse(hit)
   } catch {}
 
-  // 3. Fetch login logs with user info — limit to last 90 days to avoid loading the full table
+  if (!dedupedGroups) {
+    dedupedGroups = await buildDedupedGroups()
+    try { await redis.set(cacheKey, JSON.stringify(dedupedGroups), 'EX', CACHE_TTL_SECONDS) } catch {}
+  }
+
+  const filteredGroups = searchTerm
+    ? dedupedGroups.filter((group) =>
+      (group.aliases || []).some((alias) =>
+        String(alias.username || '').toLowerCase().includes(searchTerm)
+      )
+    )
+    : dedupedGroups
+
+  const total = filteredGroups.length
+  const paged = filteredGroups.slice(skip, skip + limit).map((g) => ({
+    ...g,
+    aliases: g.aliases.map((a) => ({ ...a }))
+  }))
+
+  await enrichAliases(paged)
+
+  return { groups: paged, total, page, limit }
+})
+
+async function buildDedupedGroups() {
+  // Fetch login logs with user info — limit to last 90 days to avoid loading the full table
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const logs = await prisma.loginLog.findMany({
     where: { createdAt: { gte: since } },
@@ -107,23 +138,30 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const dedupedGroups = Array.from(dedupedByAliases.values())
+  let dedupedGroups = Array.from(dedupedByAliases.values())
     .sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime())
 
-  const filteredGroups = searchTerm
-    ? dedupedGroups.filter((group) =>
-      (group.aliases || []).some((alias) =>
-        String(alias.username || '').toLowerCase().includes(searchTerm)
-      )
-    )
-    : dedupedGroups
+  // Attach a stable groupKey (used by the confirm/unconfirm endpoints and
+  // the frontend) and drop any group an admin has already confirmed as not
+  // cheating.
+  dedupedGroups = dedupedGroups.map((g) => ({
+    ...g,
+    groupKey: computeGroupKey(TYPE, g.aliases.map((a) => a.username))
+  }))
 
-  const total = filteredGroups.length
-  const paged = filteredGroups.slice(skip, skip + limit)
+  const confirmedRows = await prisma.cheatFinderConfirmation.findMany({
+    where: { type: TYPE },
+    select: { groupKey: true }
+  })
+  const confirmedKeys = new Set(confirmedRows.map((r) => r.groupKey))
+  dedupedGroups = dedupedGroups.filter((g) => !confirmedKeys.has(g.groupKey))
 
-  // 6. Enrich aliases on the paged groups with points, ctoon count, and
-  //    latest fingerprint visitorId. Batch by userId so we don't fan out
-  //    queries per alias.
+  return dedupedGroups
+}
+
+// Enrich aliases on the paged groups with points, ctoon count, and latest
+// fingerprint visitorId. Batch by userId so we don't fan out queries per alias.
+async function enrichAliases(paged) {
   const userIds = Array.from(
     new Set(paged.flatMap((g) => g.aliases.map((a) => a.userId).filter(Boolean)))
   )
@@ -210,8 +248,4 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
-
-  const result = { groups: paged, total, page, limit }
-  try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
-  return result
-})
+}

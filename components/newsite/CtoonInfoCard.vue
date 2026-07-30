@@ -119,11 +119,25 @@
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Set</div>
-                <div class="ctic-value">{{ formatValue(ctoon.set) }}</div>
+                <NuxtLink
+                  v-if="ctoon.set"
+                  :to="{ path: '/newsite/allCtoons', query: setLinkQuery }"
+                  class="ctic-value ctic-value--link"
+                  :aria-label="`View all cToons in the ${ctoon.set} set`"
+                  @click="goToFiltered('set', ctoon.set, $event)"
+                >{{ ctoon.set }}</NuxtLink>
+                <div v-else class="ctic-value">N/A</div>
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Series</div>
-                <div class="ctic-value">{{ formatValue(ctoon.series) }}</div>
+                <NuxtLink
+                  v-if="ctoon.series"
+                  :to="{ path: '/newsite/allCtoons', query: seriesLinkQuery }"
+                  class="ctic-value ctic-value--link"
+                  :aria-label="`View all cToons in the ${ctoon.series} series`"
+                  @click="goToFiltered('series', ctoon.series, $event)"
+                >{{ ctoon.series }}</NuxtLink>
+                <div v-else class="ctic-value">N/A</div>
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Release Date</div>
@@ -391,6 +405,57 @@ const userCtoon = computed(() => data.value?.userCtoon || null)
 const ownedCount = computed(() => data.value?.ownedCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => formatQuantity(ctoon.value?.quantity))
+
+const route = useRoute()
+
+// Building the target Set/Series filter: keep Ownership/Wishlist/Sort as the
+// user left them, but drop Name/Rarity since a stale text or rarity filter
+// could hide items in the set/series the user just asked to browse.
+function buildFilterLinkTarget(type, value) {
+  const current = useAllCtoonsFilter().value
+  return {
+    name: '',
+    rarities: [],
+    owned: current.owned,
+    wishlist: current.wishlist,
+    sortField: current.sortField,
+    sortAsc: current.sortAsc,
+    set: type === 'set' ? value : '',
+    series: type === 'series' ? value : '',
+  }
+}
+
+const setLinkQuery = computed(() => (
+  ctoon.value?.set
+    ? filterToQuery(buildFilterLinkTarget('set', ctoon.value.set), 'AllSets')
+    : {}
+))
+const seriesLinkQuery = computed(() => (
+  ctoon.value?.series
+    ? filterToQuery(buildFilterLinkTarget('series', ctoon.value.series), 'AllSeries')
+    : {}
+))
+
+function goToFiltered(type, value, event) {
+  if (!value) return
+  // Let modifier/middle-clicks fall through to the browser's native
+  // "open in new tab" behavior instead of hijacking them.
+  if (event && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+    return
+  }
+  // Already on All cToons: mutate the shared filter state directly so the
+  // grid updates immediately. Prevent NuxtLink's own navigation here so we
+  // don't fire a second, redundant router call racing the page's own
+  // filter -> URL watcher.
+  if (route.path === '/newsite/allCtoons') {
+    event?.preventDefault()
+    Object.assign(useAllCtoonsFilter().value, buildFilterLinkTarget(type, value))
+    useAllCtoonsTab().value = type === 'series' ? 'AllSeries' : 'AllSets'
+  }
+  // Otherwise let the NuxtLink's own navigation run normally; the
+  // destination page reads set/series/tab straight from the URL query.
+  close()
+}
 
 const statusImage = computed(() => {
   const totalQuantity = ctoon.value?.quantity
@@ -1047,6 +1112,36 @@ function formatDate(value) {
 .ctic-value {
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.ctic-value--link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #93c5fd;
+  text-decoration: none;
+  background: rgba(147, 197, 253, 0.14);
+  border-radius: 4px;
+  padding: 5px 8px;
+  margin: -5px -8px;
+  min-height: 28px;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+.ctic-value--link::after {
+  content: '\203A';
+  font-weight: 700;
+  opacity: 0.85;
+}
+.ctic-value--link:hover,
+.ctic-value--link:active {
+  color: #bfdbfe;
+  background: rgba(147, 197, 253, 0.24);
+  text-decoration: underline;
+}
+.ctic-value--link:focus-visible {
+  outline: 2px solid var(--OrbitLightBlue);
+  outline-offset: 1px;
 }
 
 .ctic-sub {

@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
   const limit = Math.min(Math.max(parseInt(query.limit || '100', 10), 1), 200)
   const skip = (page - 1) * limit
   const username = typeof query.username === 'string' ? query.username.trim() : ''
+  const method = typeof query.method === 'string' ? query.method.trim() : ''
   const from = query.from ? parseStartYMD(String(query.from)) : null
   const to = query.to ? parseEndYMD(String(query.to)) : null
 
@@ -39,6 +40,7 @@ export default defineEventHandler(async (event) => {
     ...(username
       ? { user: { username: { contains: username, mode: 'insensitive' } } }
       : {}),
+    ...(method ? { method } : {}),
     ...(from || to
       ? {
           createdAt: {
@@ -49,7 +51,7 @@ export default defineEventHandler(async (event) => {
       : {})
   }
 
-  const [total, logs] = await Promise.all([
+  const [total, logs, methodRows] = await Promise.all([
     prisma.pointsLog.count({ where }),
     prisma.pointsLog.findMany({
       where,
@@ -57,8 +59,15 @@ export default defineEventHandler(async (event) => {
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { id: true, username: true } } }
+    }),
+    prisma.pointsLog.findMany({
+      distinct: ['method'],
+      select: { method: true },
+      orderBy: { method: 'asc' }
     })
   ])
+
+  const methods = methodRows.map(r => r.method).filter(Boolean)
 
   const items = logs.map(l => ({
     id:        l.id,
@@ -70,5 +79,5 @@ export default defineEventHandler(async (event) => {
     createdAt: l.createdAt
   }))
 
-  return { items, total, page, limit }
+  return { items, total, page, limit, methods }
 })

@@ -3,6 +3,7 @@ import { defineEventHandler, createError, readBody } from 'h3'
 import { mintQueue } from '../../utils/queues'  // import BullMQ queue
 
 import { prisma } from '@/server/prisma'
+import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -116,7 +117,7 @@ export default defineEventHandler(async (event) => {
   // before any GamePointLog row is written.
   const { toGive, remaining } = await prisma.$transaction(async (tx) => {
     const agg = await tx.gamePointLog.aggregate({
-      where: { userId, createdAt: { gte: boundary }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
+      where: { userId, createdAt: { gte: boundary }, OR: [{ gameName: null }, { gameName: { notIn: COMBAT_POOL_GAME_NAMES } }] },
       _sum: { points: true }
     })
     const used = agg._sum.points || 0

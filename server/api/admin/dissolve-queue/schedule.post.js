@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   // Fetch entries to schedule
   const entries = await prisma.dissolveAuctionQueue.findMany({
     where: reschedule ? {} : { scheduledFor: null },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     select: { id: true, category: true, scheduledFor: true }
   })
 

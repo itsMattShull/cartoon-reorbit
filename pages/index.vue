@@ -401,7 +401,7 @@ const url = useRequestURL()
 const siteName = 'Cartoon ReOrbit'
 const title = 'Cartoon ReOrbit — Free Fan-Made Cartoon Orbit Remake'
 const description = 'Collect cToons, build cZones, and trade through live auctions and mini-games. Free, community-driven remake of Cartoon Orbit. Not affiliated with Cartoon Network.'
-const ogImage = 'https://www.cartoonreorbit.com/images/newlogo.gif'
+const ogImage = 'https://www.cartoonreorbit.com/images/atom-icon.png'
 
 useSeoMeta({
   title,
@@ -447,7 +447,7 @@ useHead({
     { name: 'viewport', content: 'width=device-width, initial-scale=1' },
     { name: 'format-detection', content: 'telephone=no' },
     { name: 'msapplication-TileColor', content: '#ffffff' },
-    { name: 'msapplication-TileImage', content: '/ms-icon-144x144.png' },
+    { name: 'msapplication-TileImage', content: '/images/ms-icon-144x144.png' },
     { name: 'theme-color', content: '#ffffff' },
   ],
   script: [
@@ -458,7 +458,7 @@ useHead({
         '@type': 'Organization',
         name: siteName,
         url: url.origin,
-        logo: `${url.origin}/newlogo.gif`
+        logo: `${url.origin}/images/atom-icon.png`
       })
     },
     {

@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { MIN_FLIP_INTERVAL_MS } from '@/server/utils/reorbitMemoryEngine'
+import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 const LOCK_TTL_MS = 15_000
 
@@ -86,7 +87,7 @@ export default defineEventHandler(async (event) => {
       try {
         await prisma.$transaction(async (tx) => {
           const agg = await tx.gamePointLog.aggregate({
-            where: { userId, createdAt: { gte: boundary }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
+            where: { userId, createdAt: { gte: boundary }, OR: [{ gameName: null }, { gameName: { notIn: COMBAT_POOL_GAME_NAMES } }] },
             _sum: { points: true }
           })
           const usedToday = Number(agg._sum?.points || 0)
