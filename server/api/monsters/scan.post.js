@@ -3,6 +3,7 @@ import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 import { createHmac, randomBytes } from 'node:crypto'
+import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 // ---- helpers ----
 
@@ -507,7 +508,7 @@ export default defineEventHandler(async (event) => {
       if (globalConfig) {
         const cutoffUTC = getGamePointBoundaryUtc()
         const agg = await tx.gamePointLog.aggregate({
-          where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
+          where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { notIn: COMBAT_POOL_GAME_NAMES } }] },
           _sum: { points: true }
         })
         const used = agg._sum.points || 0

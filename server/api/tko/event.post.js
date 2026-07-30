@@ -1,38 +1,21 @@
 import { defineEventHandler, readBody, createError } from 'h3'
+import { timingSafeEqual } from 'crypto'
 import { prisma } from '@/server/prisma'
 import { processAchievementsForUser } from '@/server/utils/achievements'
+import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
-function getChicagoGameBoundary(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    hour12: false
-  }).formatToParts(now)
-  let cYear, cMonth, cDay, cHour
-  for (const p of parts) {
-    if (p.type === 'year') cYear = Number(p.value)
-    if (p.type === 'month') cMonth = Number(p.value)
-    if (p.type === 'day') cDay = Number(p.value)
-    if (p.type === 'hour') cHour = Number(p.value)
-  }
-  const utcHour = now.getUTCHours()
-  let offsetHour = utcHour - cHour
-  if (offsetHour > 12) offsetHour -= 24
-  if (offsetHour < -12) offsetHour += 24
-
-  let boundaryUtcMs = Date.UTC(cYear, cMonth - 1, cDay, 20 + offsetHour, 0, 0, 0)
-  if (now.getTime() < boundaryUtcMs) boundaryUtcMs -= 24 * 60 * 60 * 1000
-  return new Date(boundaryUtcMs)
+function timingSafeStringEqual(a, b) {
+  const bufA = Buffer.from(String(a ?? ''))
+  const bufB = Buffer.from(String(b ?? ''))
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
 }
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
 
   const passcode = process.env.TKO_PASSCODE
-  if (!passcode || body?.auth?.passcode !== passcode) {
+  if (!passcode || !timingSafeStringEqual(body?.auth?.passcode, passcode)) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
@@ -102,7 +85,7 @@ export default defineEventHandler(async (event) => {
 
     if (!counted || !winnerUser?.id) return 0
 
-    const [tkoConfig, globalConfig, usedAgg] = await Promise.all([
+    const [tkoConfig, globalConfig] = await Promise.all([
       tx.gameConfig.upsert({
         where: { gameName: 'TKO' },
         create: { gameName: 'TKO', pointsPerWin: 300 },
@@ -112,41 +95,17 @@ export default defineEventHandler(async (event) => {
       tx.globalGameConfig.findUnique({
         where: { id: 'singleton' },
         select: { tkoDailyPointLimit: true }
-      }),
-      tx.gamePointLog.aggregate({
-        where: {
-          userId: winnerUser.id,
-          gameName: 'TKO',
-          createdAt: { gte: getChicagoGameBoundary() }
-        },
-        _sum: { points: true }
       })
     ])
 
-    const pointsPerWin = Number(tkoConfig?.pointsPerWin ?? 300)
-    const cap = Number(globalConfig?.tkoDailyPointLimit ?? 250)
-    const used = Number(usedAgg._sum.points ?? 0)
-    const remaining = Math.max(0, cap - used)
-    const toGive = Math.max(0, Math.min(pointsPerWin, remaining))
-    if (toGive <= 0) return 0
-
-    await tx.gamePointLog.create({ data: { userId: winnerUser.id, points: toGive, gameName: 'TKO' } })
-    const updated = await tx.userPoints.upsert({
-      where: { userId: winnerUser.id },
-      create: { userId: winnerUser.id, points: toGive },
-      update: { points: { increment: toGive } }
+    return awardCappedGamePoints(tx, {
+      userId: winnerUser.id,
+      gameName: 'TKO',
+      poolGameNames: COMBAT_POOL_GAME_NAMES,
+      pointsPerWin: Number(tkoConfig?.pointsPerWin ?? 300),
+      cap: Number(globalConfig?.tkoDailyPointLimit ?? 250),
+      method: 'Game - TKO'
     })
-    await tx.pointsLog.create({
-      data: {
-        userId: winnerUser.id,
-        points: toGive,
-        total: updated.points,
-        method: 'Game - TKO',
-        direction: 'increase'
-      }
-    })
-
-    return toGive
   })
 
   // Trigger achievement processing for the winner if they have a reorbit account

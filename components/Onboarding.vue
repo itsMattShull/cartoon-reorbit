@@ -315,12 +315,12 @@ const items = computed(() => {
     {
       id: 'games',
       done: Boolean(st.gamePointsComplete),
-      text: `Play Winball, ReOrbit Match, gToons Clash, or scan for Monsters to win up to ${dailyPointLimit} points.`
+      text: `Play Winball, ReOrbit Match, or scan for Monsters to win up to ${dailyPointLimit} points.`
     },
     {
       id: 'tko',
       done: Boolean(st.tkoPointsComplete),
-      text: `Play TKO to win up to ${tkoDailyPointLimit} points.`
+      text: `Play TKO or gToons Clash to win up to ${tkoDailyPointLimit} combined points.`
     },
     {
       id: 'winwheel',

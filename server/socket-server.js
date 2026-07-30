@@ -6,7 +6,6 @@ import { createServer }  from 'http'
 import { Server }        from 'socket.io'
 import { createAdapter } from '@socket.io/redis-adapter'
 import { prisma as db }  from './prisma.js'
-import { DateTime } from 'luxon'
 import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
@@ -21,6 +20,7 @@ import { fileURLToPath }  from 'node:url'
 import { randomUUID }     from 'crypto'
 import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
+import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1061,46 +1061,26 @@ async function settleStakes(recordId, { outcome, winnerUserId, whoLeftUserId } =
 async function awardClashWinPoints(userId) {
   let toGive = 0
   try {
-    const clashConfig  = await db.gameConfig.findUnique({
-      where: { gameName: 'Clash' },
-      select: { pointsPerWin: true }
-    })
-    const globalConfig = await db.globalGameConfig.findUnique({
-      where: { id: 'singleton' },
-      select: { dailyPointLimit: true }
-    })
+    const [clashConfig, globalConfig] = await Promise.all([
+      db.gameConfig.findUnique({
+        where: { gameName: 'Clash' },
+        select: { pointsPerWin: true }
+      }),
+      db.globalGameConfig.findUnique({
+        where: { id: 'singleton' },
+        select: { tkoDailyPointLimit: true }
+      })
+    ])
     if (!clashConfig || !globalConfig) return 0
 
-    const { pointsPerWin }         = clashConfig
-    const { dailyPointLimit: cap } = globalConfig
-
-    const nowCST    = DateTime.now().setZone('America/Chicago')
-    const cutoffCST = nowCST.hour >= 20
-      ? nowCST.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
-      : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
-    const cutoffUTC = cutoffCST.toUTC().toJSDate()
-
-    toGive = await db.$transaction(async (tx) => {
-      const agg = await tx.gamePointLog.aggregate({
-        where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
-        _sum:  { points: true }
-      })
-      const used = agg._sum.points || 0
-      const remaining = Math.max(0, cap - used)
-      const give = Math.min(pointsPerWin, remaining)
-      if (give > 0) {
-        await tx.gamePointLog.create({ data: { userId, points: give, gameName: 'Clash' } })
-        const updated = await tx.userPoints.upsert({
-          where:  { userId },
-          create: { userId, points: give },
-          update: { points: { increment: give } }
-        })
-        await tx.pointsLog.create({
-          data: { userId, points: give, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
-        })
-      }
-      return give
-    })
+    toGive = await db.$transaction((tx) => awardCappedGamePoints(tx, {
+      userId,
+      gameName: 'Clash',
+      poolGameNames: COMBAT_POOL_GAME_NAMES,
+      pointsPerWin: clashConfig.pointsPerWin,
+      cap: globalConfig.tkoDailyPointLimit,
+      method: 'Game - gToons Clash'
+    }))
   } catch (e) {
     console.error('Failed to award PvP Clash points:', e)
   }
@@ -1161,51 +1141,30 @@ async function endMatch(io, match, result) {
     try {
       const userId = match.playerUserId;
 
-      // 1) Load Clash config (pointsPerWin)
-      const clashConfig = await db.gameConfig.findUnique({
-        where: { gameName: 'Clash' },
-        select: { pointsPerWin: true }
-      });
-
-      // 2) Load the singleton global cap
-      const globalConfig = await db.globalGameConfig.findUnique({
-        where: { id: 'singleton' },
-        select: { dailyPointLimit: true }
-      });
+      // 1) Load Clash config (pointsPerWin) and the shared TKO/Clash daily cap
+      const [clashConfig, globalConfig] = await Promise.all([
+        db.gameConfig.findUnique({
+          where: { gameName: 'Clash' },
+          select: { pointsPerWin: true }
+        }),
+        db.globalGameConfig.findUnique({
+          where: { id: 'singleton' },
+          select: { tkoDailyPointLimit: true }
+        })
+      ]);
 
       if (clashConfig && globalConfig) {
-        const { pointsPerWin }         = clashConfig;
-        const { dailyPointLimit: cap } = globalConfig;
-
-        const nowCST    = DateTime.now().setZone('America/Chicago');
-        const cutoffCST = nowCST.hour >= 20
-          ? nowCST.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
-          : nowCST.minus({ days: 1 }).set({ hour: 20, minute: 0, second: 0, millisecond: 0 });
-        const cutoffUTC = cutoffCST.toUTC().toJSDate();
-
-        // 6-8) Sum cap usage and award atomically to prevent TOCTOU races
-        // where two concurrent match completions both pass the cap check.
-        toGive = await db.$transaction(async (tx) => {
-          const agg = await tx.gamePointLog.aggregate({
-            where: { userId, createdAt: { gte: cutoffUTC }, OR: [{ gameName: null }, { gameName: { not: 'TKO' } }] },
-            _sum: { points: true }
-          });
-          const usedSinceCutoff = agg._sum.points || 0;
-          const remaining = Math.max(0, cap - usedSinceCutoff);
-          const give = Math.min(pointsPerWin, remaining);
-          if (give > 0) {
-            await tx.gamePointLog.create({ data: { userId, points: give, gameName: 'Clash' } });
-            const updated = await tx.userPoints.upsert({
-              where: { userId },
-              create: { userId, points: give },
-              update: { points: { increment: give } }
-            });
-            await tx.pointsLog.create({
-              data: { userId, points: give, total: updated.points, method: 'Game - gToons Clash', direction: 'increase' }
-            });
-          }
-          return give;
-        });
+        // Sum cap usage and award atomically (with a per-user advisory lock)
+        // to prevent TOCTOU races where concurrent match completions, or a
+        // concurrent TKO award, both pass the cap check.
+        toGive = await db.$transaction((tx) => awardCappedGamePoints(tx, {
+          userId,
+          gameName: 'Clash',
+          poolGameNames: COMBAT_POOL_GAME_NAMES,
+          pointsPerWin: clashConfig.pointsPerWin,
+          cap: globalConfig.tkoDailyPointLimit,
+          method: 'Game - gToons Clash'
+        }));
       }
     } catch (err) {
       console.error('Failed to award Clash points:', err);
