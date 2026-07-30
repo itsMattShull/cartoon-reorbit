@@ -2,8 +2,10 @@
 // Daily aggregation for the Economy page: turns raw Auction/TradeOffer
 // activity into per-cToon-per-day price/volume rows (CtoonPriceDaily),
 // which server/api/economy/* reads live. Scheduled from
-// server/cron/sync-guild-members.js; can also be run on demand with
-// `npm run economy:aggregate` (useful for the first backfill).
+// server/cron/sync-guild-members.js, and also triggered on demand (Redis-gated)
+// by server/utils/economyFreshness.js from the Economy API routes themselves —
+// so the page self-heals even if that cron worker isn't deployed. Can also be
+// run by hand with `npm run economy:aggregate` (useful for a full rebuild).
 //
 // AUCTION rows come straight from closed+won Auctions (real prices).
 // TRADE rows don't have a native per-cToon price — trades swap cToons (and

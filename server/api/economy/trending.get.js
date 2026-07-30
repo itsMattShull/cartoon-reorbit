@@ -4,6 +4,7 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { isValidWindow, resolveWindowCutoffSql, MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
+import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 
 const CACHE_TTL = 60
 const cacheKey = (window) => `economy:trending:${window}:v1`
@@ -38,6 +39,8 @@ export default defineEventHandler(async (event) => {
     const cached = await redis.get(key)
     if (cached) return JSON.parse(cached)
   } catch {}
+
+  await ensureEconomyDataFresh()
 
   const trending = await computeTrending(window)
   try {
