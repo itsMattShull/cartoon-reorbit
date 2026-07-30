@@ -7,6 +7,7 @@ import { prisma } from '@/server/prisma'
 import { Prisma } from '@prisma/client'
 import { redis } from '@/server/utils/redis'
 import { MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
+import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 
 const PAGE_SIZE = 20
 const MAX_QUERY_LEN = 100
@@ -60,6 +61,7 @@ export default defineEventHandler(async (event) => {
   const ctoonIds = ctoons.map(c => c.id)
   let priceRows = []
   if (ctoonIds.length) {
+    await ensureEconomyDataFresh()
     priceRows = await prisma.$queryRaw`
       SELECT
         "ctoonId", "source",
