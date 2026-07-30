@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
         }
       }
     },
-    orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'asc' }]
+    orderBy: [{ priority: 'desc' }, { scheduledFor: 'asc' }, { createdAt: 'asc' }]
   })
 
   const byCategory = {
@@ -41,6 +41,7 @@ export default defineEventHandler(async (event) => {
     id:           e.id,
     category:     e.category,
     isFeatured:   e.isFeatured,
+    priority:     e.priority,
     scheduledFor: e.scheduledFor,
     createdAt:    e.createdAt,
     ctoonName:    e.userCtoon?.ctoon?.name ?? null,

@@ -10,6 +10,7 @@ import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queu
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
+import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -294,10 +295,6 @@ function daysAgo(n) {
   const now = Date.now()
   return new Date(now - n * MS_PER_DAY)
 }
-function addDays(date, n) {
-  return new Date(date.getTime() + n * MS_PER_DAY)
-}
-
 async function recordDailyActivity() {
   const now = new Date()
   const end = startOfUtcDay(now)
@@ -513,9 +510,20 @@ async function sendInactivityWarnings() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3) enforce at 270 days, 02:20
-// Zero points, schedule auctions for all UserCtoons, disable account.
+// Zero points, transfer UserCtoons to the official account and queue them at
+// the front of the dissolve auction queue, disable account.
 async function enforceDormantAccounts() {
   const cutoff = daysAgo(270)
+
+  const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+  const official = await prisma.user.findUnique({
+    where: { username: officialUsername },
+    select: { id: true }
+  })
+  if (!official) {
+    console.error(`[enforceDormantAccounts] Official account not found: ${officialUsername}`)
+    return
+  }
 
   // fetch batch to avoid huge transactions
   const batch = await prisma.user.findMany({
@@ -525,6 +533,8 @@ async function enforceDormantAccounts() {
     },
     select: { id: true, discordId: true }
   })
+
+  const featuredConfig = await getFeaturedDissolveConfig()
 
   for (const u of batch) {
     // DM best-effort
@@ -555,49 +565,48 @@ async function enforceDormantAccounts() {
         })
       }
 
-      // 3.2 move all UserCtoons to AuctionOnly (skip ones already auctioned/listed)
+      // 3.2 transfer UserCtoons to the official account and queue for dissolve auction
       const userCtoons = await tx.userCtoon.findMany({
         where: { userId: u.id, burnedAt: null },
-        select: { id: true, ctoon: { select: { rarity: true } } }
+        select: { id: true, mintNumber: true, ctoon: { select: { id: true, rarity: true, series: true, set: true } } }
       })
-      const now = new Date()
-      const endsAt = addDays(now, 3)
-      const rarityFloor = (r) => {
-        const s = (r || '').trim().toLowerCase()
-        if (s === 'common') return 25
-        if (s === 'uncommon') return 50
-        if (s === 'rare') return 100
-        if (s === 'very rare') return 187
-        if (s === 'crazy rare') return 312
-        return 50
-      }
 
       for (const uc of userCtoons) {
-        // ensure not already active auction
-        const hasActive = await tx.auction.findFirst({
+        const activeAuction = await tx.auction.findFirst({
           where: { userCtoonId: uc.id, status: 'ACTIVE' },
           select: { id: true }
         })
-        const hasPending = await tx.auctionOnly.findFirst({
-          where: { userCtoonId: uc.id, isStarted: false },
-          select: { id: true }
-        })
-        if (hasActive || hasPending) continue
 
-        await tx.auctionOnly.create({
+        if (activeAuction) {
+          await tx.auction.updateMany({
+            where: { userCtoonId: uc.id, status: 'ACTIVE' },
+            data: { creatorId: official.id }
+          })
+          await tx.userCtoon.update({ where: { id: uc.id }, data: { isTradeable: false } })
+          continue
+        }
+
+        await tx.userCtoon.update({ where: { id: uc.id }, data: { userId: official.id, isTradeable: false } })
+        await tx.userTradeListItem.deleteMany({ where: { userCtoonId: uc.id, userId: { not: official.id } } })
+        await tx.ctoonOwnerLog.create({
           data: {
+            userId: official.id,
             userCtoonId: uc.id,
-            pricePoints: rarityFloor(uc.ctoon?.rarity),
-            startsAt: now,
-            endsAt,
-            isStarted: false,
+            ctoonId: uc.ctoon?.id ?? null,
+            mintNumber: uc.mintNumber ?? null,
+            method: 'DISSOLVE_INACTIVE'
           }
         })
 
-        // lock tradeability to avoid private transfers
-        await tx.userCtoon.update({
-          where: { id: uc.id },
-          data: { isTradeable: false }
+        const isFeatured = isCtoonFeatured(uc.ctoon, featuredConfig)
+        const category   = isFeatured ? 'FEATURED' : 'OTHER'
+
+        // priority: true jumps these cToons to the front of the dissolve
+        // auction queue, ahead of admin-initiated (non-priority) dissolves
+        await tx.dissolveAuctionQueue.upsert({
+          where:  { userCtoonId: uc.id },
+          update: { priority: true },
+          create: { userCtoonId: uc.id, category, isFeatured, priority: true }
         })
       }
 

@@ -1699,6 +1699,7 @@ model DissolveAuctionQueue {
   userCtoonId  String    @unique
   category     String    @default("OTHER") // "FEATURED" | "OTHER"
   isFeatured   Boolean   @default(false)
+  priority     Boolean   @default(false) // true = jump to the front of the queue (e.g. 9-month inactivity dissolves)
   scheduledFor DateTime? // UTC; null = not yet scheduled
   createdAt    DateTime  @default(now())
 
@@ -1707,6 +1708,7 @@ model DissolveAuctionQueue {
   @@index([createdAt])
   @@index([category])
   @@index([scheduledFor])
+  @@index([priority])
 }
 
 model HomepageConfig {
