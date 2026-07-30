@@ -10,6 +10,12 @@ import { Prisma } from '@prisma/client'
 // return null (and the client should render "Not enough data yet") instead.
 export const MIN_SAMPLE_SIZE = 3
 
+// The official/system account. It holds an enormous point balance that isn't
+// real player wealth, so including it makes "average points per player" wildly
+// unrepresentative. Every leaderboard and the admin points-distribution chart
+// already exclude this same id.
+export const EXCLUDED_SYSTEM_USER_ID = '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
+
 // All-time average closed-auction sale price per cToon, batched across a
 // list of ctoonIds. Same underlying query as server/api/ctoon/valuations.post.js.
 export async function getAuctionReferenceValues(ctoonIds) {
