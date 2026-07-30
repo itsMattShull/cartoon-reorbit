@@ -1,7 +1,11 @@
 <template>
   <Modal close-on-backdrop @close="$emit('close')">
-    <h3 class="tv-title">Top 10 Most Valuable — {{ source === 'AUCTION' ? 'Auction' : 'Trade' }}</h3>
-    <p class="tv-sub">{{ windowLabel }} · anonymous aggregate data</p>
+    <!-- Count-aware: exclusions can leave fewer than 10 rows, and a "Top 10"
+         heading over four entries reads as a bug. -->
+    <h3 class="tv-title">
+      Top {{ rows.length || 10 }} Most Valuable — {{ source === 'AUCTION' ? 'Auction' : 'Trade' }}
+    </h3>
+    <p class="tv-sub">{{ windowLabel }} · anonymous aggregate data{{ exclusionSuffix }}</p>
 
     <p v-if="pending" class="tv-empty">Loading…</p>
     <p v-else-if="error" class="tv-empty">Couldn't load this list. Try again shortly.</p>
@@ -20,39 +24,73 @@
         <span class="tv-price">{{ formatPrice(row.avgPrice) }}</span>
       </li>
     </ul>
-    <p v-else class="tv-empty">Not enough {{ source === 'AUCTION' ? 'auction' : 'trade' }} activity yet.</p>
+    <p v-else class="tv-empty">
+      {{ exclusionSuffix
+        ? 'No cToons match your filters.'
+        : `Not enough ${source === 'AUCTION' ? 'auction' : 'trade'} activity yet.` }}
+    </p>
   </Modal>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   source: { type: String, required: true }, // 'AUCTION' | 'TRADE'
-  window: { type: String, default: 'all' }
+  window: { type: String, default: 'all' },
+  hideGtoons: { type: Boolean, default: false },
+  hidePokemon: { type: Boolean, default: false }
 })
 const emit = defineEmits(['close', 'select'])
 
 const WINDOW_LABELS = { '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' }
 const windowLabel = computed(() => WINDOW_LABELS[props.window] || 'All time')
 
+const exclusionSuffix = computed(() => {
+  const parts = []
+  if (props.hideGtoons) parts.push('gToons')
+  if (props.hidePokemon) parts.push('Pokémon')
+  return parts.length ? ` · excluding ${parts.join(' and ')}` : ''
+})
+
 const rows = ref([])
 const pending = ref(true)
 const error = ref(false)
 
-onMounted(async () => {
+// Watched rather than fetched once on mount: the modal stays open while the
+// window pill and filters behind it can still change, and it silently went
+// stale on a window change before this.
+let reqId = 0
+async function load() {
+  const myId = ++reqId
   pending.value = true
   error.value = false
   try {
-    rows.value = await $fetch('/api/economy/top-valuable', {
-      query: { source: props.source, window: props.window }
+    const res = await $fetch('/api/economy/top-valuable', {
+      query: {
+        source: props.source,
+        window: props.window,
+        hideGtoons: props.hideGtoons ? '1' : undefined,
+        hidePokemon: props.hidePokemon ? '1' : undefined
+      }
     })
+    if (myId !== reqId) return
+    rows.value = res
   } catch {
+    if (myId !== reqId) return
     error.value = true
   } finally {
-    pending.value = false
+    if (myId === reqId) pending.value = false
   }
-})
+}
+
+watch(
+  () => [props.source, props.window, props.hideGtoons, props.hidePokemon],
+  load,
+  { immediate: true }
+)
+
+onBeforeUnmount(() => { reqId++ })
 
 function select(row) {
   emit('select', row.ctoonId)
