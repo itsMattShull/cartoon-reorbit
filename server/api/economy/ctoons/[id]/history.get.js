@@ -5,6 +5,7 @@
 import { defineEventHandler, getQuery, getRouterParam, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isValidSource, MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
+import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 
 function bucketKey(date, granularity) {
   const d = new Date(date)
@@ -46,6 +47,8 @@ export default defineEventHandler(async (event) => {
   if (!ctoon) {
     throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
   }
+
+  await ensureEconomyDataFresh()
 
   const rows = await prisma.ctoonPriceDaily.findMany({
     where: { ctoonId, source },

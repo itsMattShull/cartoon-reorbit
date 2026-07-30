@@ -1206,8 +1206,12 @@ cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'Americ
 // run to avoid overlapping load on Auction/UserCtoon tables. Also kicked off once
 // on startup (advisory-lock + cursor guarded) so a fresh deploy doesn't wait until
 // 4:10am for data. Deliberately not awaited: the first run backfills all history
-// and must not delay registering the schedules below. Run it by hand at any time
-// with `npm run economy:aggregate`.
+// and must not delay registering the schedules below.
+//
+// Belt-and-suspenders only: server/utils/economyFreshness.js already triggers
+// this same aggregation on demand (Redis-gated) from the Economy API routes
+// themselves, so the page stays fresh even if this worker process isn't
+// running. This schedule just keeps data warm proactively when it is.
 runEconomyAggregate().catch(err =>
   console.error('[economy-aggregate] startup run failed:', err?.message || err)
 )
