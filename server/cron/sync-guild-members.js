@@ -10,6 +10,7 @@ import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queu
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
+import { runEconomyAggregate } from './economy-aggregate.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
@@ -1200,3 +1201,10 @@ cron.schedule('*/15 * * * *', runTournamentCron)
 
 // Weekly cZone contest auto-creation — runs every minute and checks if it's time
 cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'America/Chicago' })
+
+// Economy page daily price/volume aggregation — offset from the 3am achievements
+// run to avoid overlapping load on Auction/UserCtoon tables. Runs once on
+// startup too (advisory-lock + cursor guarded, so this is always safe/cheap)
+// so the first deploy doesn't have to wait until 4:10am for data to appear.
+await runEconomyAggregate()
+cron.schedule('10 4 * * *', runEconomyAggregate, { timezone: 'America/Chicago' })
