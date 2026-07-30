@@ -61,20 +61,32 @@ export default defineEventHandler(async (event) => {
   const buckets = new Map()
   for (const row of rows) {
     const key = bucketKey(row.date, granularity)
-    const bucket = buckets.get(key) || { key, weightedSum: 0, volume: 0 }
-    bucket.weightedSum += row.avgPrice * row.volume
+    const bucket = buckets.get(key) || { key, weightedSum: 0, volume: 0, pricedVolume: 0 }
+    // avgPrice is NULL for activity with no basis to price it (see
+    // server/cron/economy-aggregate.js) — it still counts toward volume, but
+    // averaging it in would multiply by null and poison the bucket.
+    if (row.avgPrice != null) {
+      bucket.weightedSum += row.avgPrice * row.volume
+      bucket.pricedVolume += row.volume
+    }
     bucket.volume += row.volume
     buckets.set(key, bucket)
   }
 
   const points = [...buckets.values()]
     .sort((a, b) => a.key.localeCompare(b.key))
-    .map((b) => ({
-      period: b.key,
-      volume: b.volume,
-      avgPrice: b.volume >= MIN_SAMPLE_SIZE ? Math.round((b.weightedSum / b.volume) * 100) / 100 : null,
-      insufficientData: b.volume < MIN_SAMPLE_SIZE
-    }))
+    .map((b) => {
+      const insufficientData = b.pricedVolume < MIN_SAMPLE_SIZE
+      return {
+        period: b.key,
+        // Withheld below the sample threshold for the same reason the price is:
+        // "traded exactly once, in this week" identifies the trade as surely as
+        // its price would.
+        volume: insufficientData ? null : b.volume,
+        avgPrice: insufficientData ? null : Math.round((b.weightedSum / b.pricedVolume) * 100) / 100,
+        insufficientData
+      }
+    })
 
   return {
     ctoonId: ctoon.id,
