@@ -1697,18 +1697,23 @@ model AuctionOnly {
 }
 
 model DissolveAuctionQueue {
-  id           String    @id @default(uuid())
-  userCtoonId  String    @unique
-  category     String    @default("OTHER") // "FEATURED" | "OTHER"
-  isFeatured   Boolean   @default(false)
-  scheduledFor DateTime? // UTC; null = not yet scheduled
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(uuid())
+  userCtoonId    String    @unique
+  category       String    @default("OTHER") // "FEATURED" | "OTHER"
+  isFeatured     Boolean   @default(false)
+  priority       Boolean   @default(false) // true = jump to the front of the queue (e.g. 9-month inactivity dissolves)
+  fromInactive   Boolean   @default(false) // true = queued via the automatic 9-month inactivity dissolve
+  sourceUsername String? // username of the dissolved account this cToon came from
+  scheduledFor   DateTime? // UTC; null = not yet scheduled
+  createdAt      DateTime  @default(now())
 
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
 
   @@index([createdAt])
   @@index([category])
   @@index([scheduledFor])
+  @@index([priority])
+  @@index([fromInactive])
 }
 
 model HomepageConfig {
