@@ -13,6 +13,7 @@
     "achievements": "node server/workers/achievements.worker.js",
     "content-analyzer": "node server/workers/content-analyzer.worker.js",
     "guildchecker": "node ./server/cron/sync-guild-members.js",
+    "economy:aggregate": "node ./server/cron/economy-aggregate-run.js",
     "build": "nuxt build",
     "start": "nuxt start",
     "lint": "eslint .",

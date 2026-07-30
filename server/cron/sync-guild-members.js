@@ -1203,8 +1203,12 @@ cron.schedule('*/15 * * * *', runTournamentCron)
 cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'America/Chicago' })
 
 // Economy page daily price/volume aggregation — offset from the 3am achievements
-// run to avoid overlapping load on Auction/UserCtoon tables. Runs once on
-// startup too (advisory-lock + cursor guarded, so this is always safe/cheap)
-// so the first deploy doesn't have to wait until 4:10am for data to appear.
-await runEconomyAggregate()
+// run to avoid overlapping load on Auction/UserCtoon tables. Also kicked off once
+// on startup (advisory-lock + cursor guarded) so a fresh deploy doesn't wait until
+// 4:10am for data. Deliberately not awaited: the first run backfills all history
+// and must not delay registering the schedules below. Run it by hand at any time
+// with `npm run economy:aggregate`.
+runEconomyAggregate().catch(err =>
+  console.error('[economy-aggregate] startup run failed:', err?.message || err)
+)
 cron.schedule('10 4 * * *', runEconomyAggregate, { timezone: 'America/Chicago' })
