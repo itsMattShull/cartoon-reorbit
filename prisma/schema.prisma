@@ -1089,6 +1089,11 @@ model GlobalGameConfig {
   featuredDissolveRarities       Json     @default("[]")
   featuredDissolveSeries         Json     @default("[]")
   featuredDissolveSets           Json     @default("[]")
+  // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
+  // faviconVersion is bumped on every upload and appended as a cache-busting
+  // query string to every icon URL rendered in pages/index.vue's useHead.
+  faviconVersion                 BigInt?
+  faviconSourcePath              String? // original master upload, retained for re-generation/audit
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 }

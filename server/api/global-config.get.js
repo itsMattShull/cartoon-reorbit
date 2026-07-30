@@ -14,6 +14,7 @@ export default defineEventHandler(async () => {
     czoneCount: cfg?.czoneCount ?? 3,
     secondEditionOverlayPath:   cfg?.secondEditionOverlayPath   ?? null,
     secondEditionOverlayWidth:  cfg?.secondEditionOverlayWidth  ?? null,
-    secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null
+    secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null,
+    faviconVersion: cfg?.faviconVersion ? cfg.faviconVersion.toString() : null
   }
 })

@@ -54,6 +54,7 @@
     "nodemailer": "^7.0.6",
     "nuxt": "^3.17.2",
     "pg": "^8.15.6",
+    "png-to-ico": "^2.1.8",
     "sharp": "^0.33.5",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
