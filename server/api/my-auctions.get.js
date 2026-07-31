@@ -142,6 +142,7 @@ export default defineEventHandler(async (event) => {
           userId: true,
           ctoonId: true,
           mintNumber: true,
+          burnedAt: true,
           ctoon: {
             select: {
               assetPath: true,
@@ -178,6 +179,19 @@ export default defineEventHandler(async (event) => {
     orderBy: { endAt: 'desc' },
   })
 
+  // An auction that closed without a winner never changed hands, so the cToon is
+  // still sitting in the creator's collection and can go straight back up.
+  // Gate on who owns it *now*, not on who created the auction: after an unsold
+  // close the cToon is tradeable again and may since have been traded away,
+  // while the closed auction still carries this user as its creator.
+  const canRelistAuction = (a) => (
+    a.status === 'CLOSED' &&
+    a.winnerId === null &&
+    a.userCtoon?.userId === userId &&
+    !a.userCtoon?.burnedAt &&
+    (a.userCtoon?.auctions?.length ?? 0) === 0
+  )
+
   const items = auctions.map(a => ({
     id:               a.id,
     status:           a.status,
@@ -209,6 +223,7 @@ export default defineEventHandler(async (event) => {
     isOwned:          a.userCtoon?.userId === userId,
     isOwner:          a.userCtoon?.userId === userId,
     hasActiveAuction: (a.userCtoon?.auctions?.length ?? 0) > 0,
+    canRelist:        canRelistAuction(a),
   }))
 
   const filtered = applyAuctionFilters(items, {

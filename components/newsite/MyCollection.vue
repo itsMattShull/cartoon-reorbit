@@ -4,14 +4,6 @@
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="mc-header">My Collection</div>
 
-    <!-- ── Auction modal ──────────────────────────────────────────── -->
-    <AuctionModal
-      v-if="auctionCtoon"
-      :ctoon="auctionCtoon"
-      @close="auctionCtoon = null"
-      @created="onAuctionCreated"
-    />
-
     <!-- ── Pagination (top) ─────────────────────────────────────── -->
     <div class="mc-pagination">
       <button class="mc-pg-btn" :disabled="currentPage <= 1" @click="prevPage">‹</button>
@@ -89,7 +81,8 @@ function rarityColor(rarity) {
 const allCtoons   = useState('myCollectionCtoons', () => [])
 const loading     = ref(true)
 const filter      = useNewSiteCtoonFilter()
-const auctionCtoon = ref(null)
+// The modal itself is mounted once in layouts/newsite-template.vue.
+const { open: openAuctionModal, createdSignal, lastCreated } = useAuctionModal()
 
 const PAGE_SIZE   = 30
 const currentPage = ref(1)
@@ -102,7 +95,7 @@ function hasActiveAuction(c) {
 
 function openAuction(c) {
   if (hasActiveAuction(c)) return
-  auctionCtoon.value = c
+  openAuctionModal({ ctoon: c })
 }
 
 async function toggleTradeList(c) {
@@ -113,12 +106,11 @@ async function toggleTradeList(c) {
   }
 }
 
-function onAuctionCreated(userCtoonId) {
-  // Mark the ctoon as having an active auction so button could be disabled in future
-  const ctoon = allCtoons.value.find(c => c.id === userCtoonId)
+// Mark the ctoon as having an active auction so its button stays disabled.
+watch(createdSignal, () => {
+  const ctoon = allCtoons.value.find(c => c.id === lastCreated.value)
   if (ctoon) ctoon.hasActiveAuction = true
-  auctionCtoon.value = null
-}
+})
 
 const ctoons = computed(() => {
   const f = filter.value

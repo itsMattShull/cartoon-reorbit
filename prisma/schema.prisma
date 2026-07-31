@@ -1240,6 +1240,10 @@ model Auction {
   @@index([userCtoonId, status])
   @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])
+  // /api/my-auctions filters on creatorId and orders by endAt desc. Postgres
+  // doesn't index foreign keys automatically, so without this the "My Auctions"
+  // tab sequentially scans every auction ever created.
+  @@index([creatorId, endAt])
 }
 
 model Bid {
