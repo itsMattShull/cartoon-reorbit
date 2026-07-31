@@ -1,5 +1,10 @@
 <template>
-  <CtoonFilter :sort-options="myCollectionSortOptions" :source-ctoons="myCtoons" :show-exclude-second-editions="true" />
+  <CtoonFilter
+    :sort-options="myCollectionSortOptions"
+    :source-ctoons="myCtoons"
+    :show-exclude-second-editions="true"
+    :show-duplicates-only="true"
+  />
 </template>
 
 <script setup>
