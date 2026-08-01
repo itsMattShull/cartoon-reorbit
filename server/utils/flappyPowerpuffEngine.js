@@ -4,7 +4,7 @@
 // deliberately NOT shared, because shipping them in the client bundle would tell a bot exactly
 // which limits to stay under.
 //
-// Game model: classic "flappy" side-scroller in a FIXED 480x960 world.
+// Game model: classic "flappy" side-scroller in a FIXED 480x760 world.
 //  - The girl's x is pinned at BIRD_X. The world scrolls left past her.
 //  - Gravity pulls her down continuously; each flap RESETS her vertical velocity to
 //    `flapVelocity` (it does not add to it — that's what makes the motion a clean sequence of
@@ -61,22 +61,26 @@
 // reported for flagging rather than used to hard-reject.
 
 // ── World geometry (a coordinate-system choice, not a difficulty knob, so not admin-tunable) ──
-// The world is a FIXED 480x960 rectangle, letterboxed into whatever viewport the player has.
+// The world is a FIXED 480x760 rectangle, letterboxed into whatever viewport the player has.
+// The 0.63 aspect is chosen to match the canvas a real phone actually gets AFTER the site's
+// adbar and nav (measured: iPhone 15 Pro 385x607, Pixel 7 401x692), so the letterbox bars are
+// near zero on those and the play column stays as wide as possible. A taller world wasted
+// ~21% of an iPhone 15 Pro's width and ~45% of an iPhone SE's.
 // This is the fairness guarantee: the visible world width IS the reaction time, so if it
 // varied by device, a desktop player would see ~3 buildings of look-ahead and a phone player
 // ~1 — a 2.6x difficulty gap on a shared leaderboard.
 const WORLD_W = 480
-const WORLD_H = 960
+const WORLD_H = 760
 const BIRD_X = 132
 const BIRD_W = 52
 const BIRD_H = 38
 const PIPE_W = 84
-const GROUND_H = 96
-const GROUND_Y = WORLD_H - GROUND_H // 864 — street level
-const START_Y = 380
-const GAP_MARGIN_TOP = 90 // gap never opens tighter than this to the top of the world
-const GAP_MARGIN_BOTTOM = 40 // ...nor to the street
-const MAX_GAP_DELTA = 170 // cap the vertical jump between consecutive gaps, so a run stays humanly playable
+const GROUND_H = 80
+const GROUND_Y = WORLD_H - GROUND_H // 680 — street level
+const START_Y = 300
+const GAP_MARGIN_TOP = 70 // gap never opens tighter than this to the top of the world
+const GAP_MARGIN_BOTTOM = 30 // ...nor to the street
+const MAX_GAP_DELTA = 130 // cap the vertical jump between consecutive gaps, so a run stays humanly playable
 const HITBOX_FORGIVENESS = 1 // world units shaved off each side of the girl's box, server-side only
 
 // Half the distance at which the girl's box and a building's box start to overlap.
@@ -97,10 +101,10 @@ const GAP_CLEARANCE_STDDEV_FLOOR = 6 // world units
 // clamped here as well, including on the way back OUT of the Redis session at /end — the
 // session blob is not more trustworthy than the row it came from.
 const CFG_BOUNDS = {
-  gravity: { min: 100, max: 5000, def: 1900 },
-  flapVelocity: { min: -1200, max: -50, def: -560 },
+  gravity: { min: 100, max: 5000, def: 1500 },
+  flapVelocity: { min: -1200, max: -50, def: -440 },
   scrollSpeed: { min: 20, max: 1000, def: 200 },
-  pipeGap: { min: 60, max: 600, def: 250 },
+  pipeGap: { min: 60, max: 600, def: 215 },
   pipeSpacing: { min: 120, max: 2000, def: 330 },
   speedGrowthPerPipe: { min: 0, max: 0.5, def: 0.02 },
   maxSpeedMultiplier: { min: 1, max: 5, def: 2 },

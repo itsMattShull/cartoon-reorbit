@@ -920,7 +920,7 @@
           <h2 class="text-2xl font-semibold mb-4">Flappy Powerpuff Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Distances and speeds are in <strong>world units</strong>, not pixels. The game runs in a
-            fixed 480&times;960 world that is letterboxed into whatever screen the player has, so
+            fixed 480&times;760 world that is letterboxed into whatever screen the player has, so
             these values mean the same thing on every device. Values outside the listed ranges are
             rejected, and the game engine clamps again on its own.
           </p>
@@ -1598,10 +1598,10 @@ async function loadSettings() {
   const fp = await $fetch('/api/admin/game-config?gameName=FlappyPowerpuff')
   flappyPlaysPerPeriod.value     = fp.flappyPlaysPerPeriod ?? 3
   flappyPointsPerGame.value      = fp.flappyPointsPerGame ?? 50
-  flappyGravity.value            = fp.flappyGravity ?? 1900
-  flappyFlapVelocity.value       = fp.flappyFlapVelocity ?? -560
+  flappyGravity.value            = fp.flappyGravity ?? 1500
+  flappyFlapVelocity.value       = fp.flappyFlapVelocity ?? -440
   flappyScrollSpeed.value        = fp.flappyScrollSpeed ?? 200
-  flappyPipeGap.value            = fp.flappyPipeGap ?? 250
+  flappyPipeGap.value            = fp.flappyPipeGap ?? 215
   flappyPipeSpacing.value        = fp.flappyPipeSpacing ?? 330
   flappySpeedGrowthPerPipe.value = fp.flappySpeedGrowthPerPipe ?? 0.02
   flappyMaxSpeedMultiplier.value = fp.flappyMaxSpeedMultiplier ?? 2
@@ -2025,10 +2025,10 @@ const loadingTower              = ref(false)
 // ── Flappy Powerpuff ──────────────────────────
 const flappyPlaysPerPeriod     = ref(3)
 const flappyPointsPerGame      = ref(50)
-const flappyGravity            = ref(1900)
-const flappyFlapVelocity       = ref(-560)
+const flappyGravity            = ref(1500)
+const flappyFlapVelocity       = ref(-440)
 const flappyScrollSpeed        = ref(200)
-const flappyPipeGap            = ref(250)
+const flappyPipeGap            = ref(215)
 const flappyPipeSpacing        = ref(330)
 const flappySpeedGrowthPerPipe = ref(0.02)
 const flappyMaxSpeedMultiplier = ref(2)

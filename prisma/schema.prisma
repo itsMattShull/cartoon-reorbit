@@ -1045,10 +1045,10 @@ model GameConfig {
   // Engine-side hard bounds live in CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js.
   flappyPlaysPerPeriod     Int     @default(3)
   flappyPointsPerGame      Int     @default(50)
-  flappyGravity            Float   @default(1900)
-  flappyFlapVelocity       Float   @default(-560) // negative = upward
+  flappyGravity            Float   @default(1500)
+  flappyFlapVelocity       Float   @default(-440) // negative = upward
   flappyScrollSpeed        Float   @default(200)
-  flappyPipeGap            Float   @default(250)
+  flappyPipeGap            Float   @default(215)
   flappyPipeSpacing        Float   @default(330)
   flappySpeedGrowthPerPipe Float   @default(0.02)
   flappyMaxSpeedMultiplier Float   @default(2)

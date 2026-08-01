@@ -171,21 +171,21 @@ const CHARACTERS = [
 ]
 
 // ─── World geometry — MUST mirror server/utils/flappyPowerpuffEngine.js ───────────────────
-// The world is a FIXED 480x960 rectangle letterboxed into the viewport. That fixed size is
+// The world is a FIXED 480x760 rectangle letterboxed into the viewport. That fixed size is
 // the fairness guarantee: visible world width IS reaction time, so a viewport-dependent world
 // would hand desktop players ~3 buildings of look-ahead and phone players ~1.
 const WORLD_W = 480
-const WORLD_H = 960
+const WORLD_H = 760
 const BIRD_X = 132
 const BIRD_W = 52
 const BIRD_H = 38
 const PIPE_W = 84
-const GROUND_H = 96
+const GROUND_H = 80
 const GROUND_Y = WORLD_H - GROUND_H
-const START_Y = 380
-const GAP_MARGIN_TOP = 90
-const GAP_MARGIN_BOTTOM = 40
-const MAX_GAP_DELTA = 170
+const START_Y = 300
+const GAP_MARGIN_TOP = 70
+const GAP_MARGIN_BOTTOM = 30
+const MAX_GAP_DELTA = 130
 const OVERLAP_HALF_W = (PIPE_W + BIRD_W) / 2
 const LEAD_IN = WORLD_W - BIRD_X + PIPE_W / 2
 
@@ -448,7 +448,7 @@ function buildCityStrip() {
   if (!cityImg?.complete || !cityImg.naturalWidth) { cityStrip = null; return }
   // The skyline sits low and short so it reads as distant city rather than competing with
   // the obstacle towers for the player's attention.
-  const bandH = Math.round((GROUND_Y - 470) * scale)
+  const bandH = Math.round((GROUND_Y - 370) * scale)
   if (bandH <= 0) { cityStrip = null; return }
   const aspect = cityImg.naturalWidth / cityImg.naturalHeight
   const tileW = Math.max(1, Math.round(bandH * aspect))
@@ -603,7 +603,7 @@ function renderFrame(t) {
 
   // Score, drawn in world units so it occupies the same fraction of the play area on every
   // device instead of shrinking to an unreadable DOM label on a phone.
-  const fontPx = Math.round(64 * scale)
+  const fontPx = Math.round(58 * scale)
   ctx.font = `700 ${fontPx}px system-ui, -apple-system, "Segoe UI", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
@@ -611,7 +611,7 @@ function renderFrame(t) {
   ctx.strokeStyle = C_SCORE_STROKE
   ctx.fillStyle = C_SCORE
   const sx = wx(WORLD_W / 2)
-  const sy = wy(70)
+  const sy = wy(56)
   ctx.strokeText(String(score.value), sx, sy)
   ctx.fillText(String(score.value), sx, sy)
 }

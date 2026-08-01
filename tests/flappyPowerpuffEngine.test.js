@@ -76,7 +76,7 @@ test('a run with no flaps scores zero and terminates', () => {
 test('falling from rest reaches the street before the first building arrives', () => {
   // Defaults must not let a player score by doing nothing at all.
   const arrivals = arrivalTimesFor(1, CFG)
-  const fallTime = Math.sqrt((2 * (GROUND_Y - BIRD_H / 2 - 380)) / CFG.gravity)
+  const fallTime = Math.sqrt((2 * (GROUND_Y - BIRD_H / 2 - 300)) / CFG.gravity)
   assert.ok(fallTime < arrivals[0], `street at ${fallTime}s must precede building 1 at ${arrivals[0]}s`)
 })
 
@@ -163,7 +163,7 @@ test('gap centers stay inside the world and never jump further than MAX_GAP_DELT
   for (let i = 0; i < gaps.length; i++) {
     assert.ok(gaps[i] - half >= 0, 'gap must not open above the world')
     assert.ok(gaps[i] + half <= GROUND_Y, 'gap must not open below the street')
-    if (i > 0) assert.ok(Math.abs(gaps[i] - gaps[i - 1]) <= 170 + 1e-9)
+    if (i > 0) assert.ok(Math.abs(gaps[i] - gaps[i - 1]) <= 130 + 1e-9)
   }
 })
 

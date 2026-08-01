@@ -1,13 +1,13 @@
 -- AddField: Flappy Powerpuff settings on GameConfig
--- Values are in world units (the game runs in a fixed 480x960 world, letterboxed into the
+-- Values are in world units (the game runs in a fixed 480x760 world, letterboxed into the
 -- player's viewport). Engine-side hard bounds live in server/utils/flappyPowerpuffEngine.js.
 ALTER TABLE "GameConfig"
   ADD COLUMN IF NOT EXISTS "flappyPlaysPerPeriod"     INTEGER          NOT NULL DEFAULT 3,
   ADD COLUMN IF NOT EXISTS "flappyPointsPerGame"      INTEGER          NOT NULL DEFAULT 50,
-  ADD COLUMN IF NOT EXISTS "flappyGravity"            DOUBLE PRECISION NOT NULL DEFAULT 1900,
-  ADD COLUMN IF NOT EXISTS "flappyFlapVelocity"       DOUBLE PRECISION NOT NULL DEFAULT -560,
+  ADD COLUMN IF NOT EXISTS "flappyGravity"            DOUBLE PRECISION NOT NULL DEFAULT 1500,
+  ADD COLUMN IF NOT EXISTS "flappyFlapVelocity"       DOUBLE PRECISION NOT NULL DEFAULT -440,
   ADD COLUMN IF NOT EXISTS "flappyScrollSpeed"        DOUBLE PRECISION NOT NULL DEFAULT 200,
-  ADD COLUMN IF NOT EXISTS "flappyPipeGap"            DOUBLE PRECISION NOT NULL DEFAULT 250,
+  ADD COLUMN IF NOT EXISTS "flappyPipeGap"            DOUBLE PRECISION NOT NULL DEFAULT 215,
   ADD COLUMN IF NOT EXISTS "flappyPipeSpacing"        DOUBLE PRECISION NOT NULL DEFAULT 330,
   ADD COLUMN IF NOT EXISTS "flappySpeedGrowthPerPipe" DOUBLE PRECISION NOT NULL DEFAULT 0.02,
   ADD COLUMN IF NOT EXISTS "flappyMaxSpeedMultiplier" DOUBLE PRECISION NOT NULL DEFAULT 2,
