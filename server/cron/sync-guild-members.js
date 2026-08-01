@@ -12,6 +12,7 @@ import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
+import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -833,9 +834,13 @@ async function startDueAuctions() {
         // Discord notification (best effort)
         await sendAuctionDiscordAnnouncement(result, isHolidayItem)
       } catch (e2) {
+        console.error('[startDueAuctions] failed to activate AuctionOnly', row.id, e2)
+        await logAuctionOnlyError('activation', e2, row.id)
       }
     }
   } catch (e3) {
+    console.error('[startDueAuctions] failed', e3)
+    await logAuctionOnlyError('activation', e3, null)
   }
 }
 
