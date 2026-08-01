@@ -1750,6 +1750,16 @@ model AuctionOnly {
   @@index([endsAt])
 }
 
+model AuctionOnlyErrorLog {
+  id            String   @id @default(uuid())
+  auctionOnlyId String? // best-effort reference; not a FK since the source row may never have been created (schedule errors) or may be long gone
+  context       String // "schedule" | "activation"
+  message       String
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model DissolveAuctionQueue {
   id             String    @id @default(uuid())
   userCtoonId    String    @unique
