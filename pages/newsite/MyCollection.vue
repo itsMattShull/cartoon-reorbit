@@ -15,18 +15,12 @@ definePageMeta({
 const { setSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('MyCollectionSidebar')
 
+import { newSiteCtoonFilterDefaults } from '@/composables/useNewSiteCtoonFilter'
+
 const filter = useNewSiteCtoonFilter()
-Object.assign(filter.value, {
-  name:            '',
-  rarities:        [],
-  series:          '',
-  set:             '',
-  priceMin:        '',
-  priceMax:        '',
-  sortField:       'acquiredDate',
-  sortAsc:         false,
-  hideUnavailable: false,
-  excludeSecondEditions: false,
+Object.assign(filter.value, newSiteCtoonFilterDefaults(), {
+  sortField: 'acquiredDate',
+  sortAsc:   false,
 })
 </script>
 

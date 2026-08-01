@@ -613,6 +613,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
+import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 
 const route = useRoute()
@@ -1280,14 +1281,8 @@ function buildRarityOptions(list) {
 function sortAlpha(arr) { return [...arr].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })) }
 function uniqueTruthies(arr) { return [...new Set(arr.map(x => (x ?? '').toString().trim()).filter(Boolean))] }
 
-const dupIdsOther = computed(() => {
-  const m = new Map(); for (const c of otherCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
-  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
-})
-const dupIdsSelf = computed(() => {
-  const m = new Map(); for (const c of selfCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
-  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
-})
+const dupIdsOther = computed(() => duplicateCtoonIds(otherCtoons.value))
+const dupIdsSelf  = computed(() => duplicateCtoonIds(selfCtoons.value))
 
 function applyFilters(items, f, ctx) {
   const nameQ = f.nameQuery?.toLowerCase().trim()
