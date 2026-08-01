@@ -13,6 +13,7 @@ import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
+import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -26,6 +27,23 @@ const baseDir = process.env.NODE_ENV === 'production'
 const announcementsDir = (process.env.PUBLIC_BASE_URL || process.env.NODE_ENV === 'production')
   ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
   : join(baseDir, 'public', 'announcements')
+
+// This process runs many unrelated cron jobs (Discord sync, achievements,
+// AuctionOnly activation, tournament scheduling, ...) back to back at startup
+// and hourly. Without these handlers, an unhandled rejection thrown by any one
+// of them (e.g. a transient DB blip in a job unrelated to auctions) crashes the
+// whole process — silently killing AuctionOnly activation (startDueAuctions)
+// along with everything else, with nothing written to AuctionOnlyErrorLog
+// since the crash never touches that code path. Keep the process alive and
+// record it so it's visible in the admin Error Log instead.
+process.on('unhandledRejection', (reason) => {
+  console.error('[guild-checker] Unhandled rejection (process kept alive):', reason)
+  logAuctionOnlyError('process', reason instanceof Error ? reason : new Error(String(reason)), null).catch(() => {})
+})
+process.on('uncaughtException', (err) => {
+  console.error('[guild-checker] Uncaught exception (process kept alive):', err)
+  logAuctionOnlyError('process', err, null).catch(() => {})
+})
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -726,114 +744,18 @@ async function syncGuildMembers() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function startDueAuctions() {
-  const rarityFloor = (r) => {
-    const s = (r || '').trim().toLowerCase()
-    if (s === 'common') return 25
-    if (s === 'uncommon') return 50
-    if (s === 'rare') return 100
-    if (s === 'very rare') return 187
-    if (s === 'crazy rare') return 312
-    return 50
-  }
-
   try {
     const now = new Date()
 
     const due = await prisma.auctionOnly.findMany({
       where: { isStarted: false, startsAt: { lte: now } },
       orderBy: { startsAt: 'asc' },
-      include: {
-        userCtoon: {
-          select: {
-            id: true,
-            mintNumber: true,
-            ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
-          }
-        }
-      }
+      include: AUCTION_ONLY_ROW_INCLUDE
     })
 
     for (const row of due) {
       try {
-        // Transaction: double-check state, create auction, lock tradeability, mark started
-        const result = await prisma.$transaction(async (tx) => {
-          const fresh = await tx.auctionOnly.findUnique({
-            where: { id: row.id },
-            select: {
-              id: true,
-              isStarted: true,
-              userCtoonId: true,
-              pricePoints: true,
-              startsAt: true,
-              endsAt: true,
-              isFeatured: true
-            }
-          })
-          if (!fresh || fresh.isStarted) return null
-
-          const active = await tx.auction.findFirst({
-            where: { userCtoonId: fresh.userCtoonId, status: 'ACTIVE' },
-            select: { id: true }
-          })
-          if (active) {
-            await tx.auctionOnly.update({ where: { id: fresh.id }, data: { isStarted: true } })
-            return null
-          }
-
-          const floor = rarityFloor(row.userCtoon?.ctoon?.rarity)
-          const initialBet = Math.max(Number(fresh.pricePoints || 0), floor)
-
-          const ms = new Date(fresh.endsAt).getTime() - new Date(fresh.startsAt).getTime()
-          const durationDays = Math.max(1, Math.min(5, Math.round(ms / 86400000) || 1))
-
-          const created = await tx.auction.create({
-            data: {
-              userCtoonId: fresh.userCtoonId,
-              initialBet,
-              duration: durationDays,
-              endAt: new Date(fresh.endsAt),
-              creatorId: row.userCtoon?.creatorId,
-              isFeatured: fresh.isFeatured,        // ← carry flag onto Auction
-              auctionOnlyId: fresh.id,
-            },
-            select: { id: true }
-          })
-
-          await tx.userCtoon.update({
-            where: { id: fresh.userCtoonId },
-            data: { isTradeable: false }
-          })
-
-          await tx.auctionOnly.update({
-            where: { id: fresh.id },
-            data: { isStarted: true }
-          })
-
-          return {
-            auctionId: created.id,
-            endAt: new Date(fresh.endsAt),
-            initialBet,
-            durationDays,
-            ctoon: row.userCtoon.ctoon,
-            mintNumber: row.userCtoon.mintNumber,
-            ctoonId: row.userCtoon.ctoon.id,
-            isFeatured: fresh.isFeatured,        // optional, if you ever need it downstream
-          }
-        })
-
-        if (!result) continue
-
-        // Schedule the BullMQ job that will close this auction at endAt
-        await scheduleAuctionClose(result.auctionId, result.endAt)
-
-        // Holiday flag for messaging
-        const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-          where: { ctoonId: result.ctoonId },
-          select: { id: true }
-        }))
-
-        // Discord notification (best effort)
-        await sendAuctionDiscordAnnouncement(result, isHolidayItem)
+        await activateAuctionOnlyRow(row)
       } catch (e2) {
         console.error('[startDueAuctions] failed to activate AuctionOnly', row.id, e2)
         await logAuctionOnlyError('activation', e2, row.id)

@@ -225,31 +225,59 @@
         <template v-else>
           <div v-if="history.length" class="bg-gray-50 rounded-lg border divide-y">
             <div v-for="h in history" :key="h.id" class="p-3 sm:p-4">
-              <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
+              <div class="flex flex-col gap-3">
+                <div class="flex items-start gap-3 min-w-0 flex-wrap">
                   <img
                     v-if="h.ctoon?.assetPath"
                     :src="h.ctoon.assetPath"
                     class="w-12 h-12 rounded object-cover border shrink-0"
                     alt="cToon"
                   />
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1 basis-40">
                     <div class="font-medium truncate">{{ h.ctoon?.name || 'Unknown cToon' }}</div>
-                    <div class="text-xs text-gray-500 truncate">
+                    <div class="text-xs text-gray-500 break-words">
                       <span v-if="h.mintNumber !== null && h.mintNumber !== undefined">Mint #{{ h.mintNumber }} • </span>
                       <span v-if="h.ownerUsername">{{ h.ownerUsername }} • </span>
                       {{ fmtCST(h.startsAt) }}
                     </div>
                   </div>
-                </div>
-
-                <div class="flex items-center gap-2 sm:shrink-0">
                   <span
-                    class="px-2 py-1 rounded text-xs font-medium border-l-4"
+                    class="px-2 py-1 rounded text-xs font-medium border-l-4 shrink-0 whitespace-nowrap"
                     :class="historyStatusBadgeClass(h.status)"
                   >
                     {{ historyStatusLabel(h.status) }}
                   </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    v-if="h.status === 'stuck' && confirmingStartId !== h.id"
+                    type="button"
+                    class="px-3 py-1.5 text-sm rounded border border-green-600 text-green-700 hover:bg-green-50 min-h-[40px]"
+                    :disabled="startingId === h.id"
+                    @click="confirmingStartId = h.id"
+                  >
+                    Start Now
+                  </button>
+
+                  <template v-else-if="confirmingStartId === h.id">
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 text-sm rounded bg-green-600 text-white hover:bg-green-700 min-h-[40px] disabled:opacity-50"
+                      :disabled="startingId === h.id"
+                      @click="startHistoryItem(h)"
+                    >
+                      {{ startingId === h.id ? 'Starting…' : 'Confirm Start' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 text-sm rounded border min-h-[40px]"
+                      :disabled="startingId === h.id"
+                      @click="confirmingStartId = null"
+                    >
+                      Cancel
+                    </button>
+                  </template>
 
                   <button
                     v-if="h.removable && confirmingId !== h.id"
@@ -280,7 +308,12 @@
                     </button>
                   </template>
 
-                  <span v-else class="text-xs text-gray-400 italic">Not removable</span>
+                  <span
+                    v-if="h.status !== 'stuck' && !h.removable && confirmingId !== h.id"
+                    class="text-xs text-gray-400 italic"
+                  >
+                    Not removable
+                  </span>
                 </div>
               </div>
 
@@ -330,6 +363,8 @@ const historyError = ref('')
 const historyLoading = ref(false)
 const confirmingId = ref(null)
 const removingId = ref(null)
+const confirmingStartId = ref(null)
+const startingId = ref(null)
 const historyErrors = ref({})
 
 const editing = ref(null)
@@ -375,12 +410,14 @@ function formatPts(n) {
 function errorContextLabel(context) {
   if (context === 'activation') return 'Go-live'
   if (context === 'removal') return 'Removal'
+  if (context === 'process') return 'Process Crash'
   return 'Scheduling'
 }
 
 function errorContextBadgeClass(context) {
   if (context === 'activation') return 'bg-orange-100 text-orange-800'
   if (context === 'removal') return 'bg-red-100 text-red-800'
+  if (context === 'process') return 'bg-red-200 text-red-900'
   return 'bg-purple-100 text-purple-800'
 }
 
@@ -460,6 +497,7 @@ function closeModal() {
   editing.value = null
   editError.value = ''
   confirmingId.value = null
+  confirmingStartId.value = null
   removeAllError.value = ''
 }
 
@@ -628,6 +666,27 @@ async function loadHistory() {
     historyError.value = e.message
   } finally {
     historyLoading.value = false
+  }
+}
+
+async function startHistoryItem(h) {
+  historyErrors.value = { ...historyErrors.value, [h.id]: '' }
+  startingId.value = h.id
+  try {
+    const res = await fetch(`/api/admin/auction-only/${h.id}/start`, {
+      method: 'POST',
+      credentials: 'include'
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || err.statusMessage || `Start failed (status ${res.status})`)
+    }
+    confirmingStartId.value = null
+    await loadHistory()
+  } catch (e) {
+    historyErrors.value = { ...historyErrors.value, [h.id]: e.message }
+  } finally {
+    startingId.value = null
   }
 }
 
