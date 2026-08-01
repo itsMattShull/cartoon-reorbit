@@ -142,6 +142,59 @@ test('normalizeConfig clamps hostile values into safe ranges', () => {
   assert.equal(c.extraLifeScore, 0)
 })
 
+test('physics knobs are clamped and actually change the world', () => {
+  const c = normalizeConfig({
+    shipRadius: 9999, bulletSpeed: -5, bulletLifeTicks: 1,
+    respawnInvulnTicks: -10, powerupRadius: 0, powerupLifeTicks: 999999,
+    asteroidLargeRadius: 500, asteroidMediumRadius: 0, asteroidSmallRadius: 1e9
+  })
+  assert.equal(c.shipRadius, 40)
+  assert.equal(c.bulletSpeed, 1)
+  assert.equal(c.bulletLifeTicks, 10)
+  assert.equal(c.respawnInvulnTicks, 0)
+  assert.equal(c.powerupRadius, 5)
+  assert.equal(c.powerupLifeTicks, 3600)
+  assert.equal(c.asteroidLargeRadius, 80)
+  assert.equal(c.asteroidMediumRadius, 6)
+  assert.equal(c.asteroidSmallRadius, 40)
+
+  // Missing physics values fall back to the documented defaults, not the range minimum —
+  // start.post.js passes undefined for every field before a config row exists.
+  const d = normalizeConfig({})
+  assert.equal(d.shipRadius, 13)
+  assert.equal(d.bulletSpeed, 6.2)
+  assert.equal(d.bulletLifeTicks, 66)
+  assert.equal(d.asteroidLargeRadius, 34)
+})
+
+test('a physics change produces a genuinely different run', () => {
+  // If the admin panel is going to expose these, they have to actually reach the simulation.
+  const log = humanLog(80)
+  const base = simulate(SEED, {}, log, MAX_TICKS)
+  for (const tweak of [
+    { bulletSpeed: 2 },
+    { bulletLifeTicks: 15 },
+    { shipRadius: 34 },
+    { asteroidLargeRadius: 70 }
+  ]) {
+    const changed = simulate(SEED, tweak, log, MAX_TICKS)
+    assert.notEqual(
+      `${changed.score}/${changed.tick}`,
+      `${base.score}/${base.tick}`,
+      `changing ${Object.keys(tweak)[0]} had no effect on the run`
+    )
+  }
+})
+
+test('a retuned physics config still replays deterministically', () => {
+  const cfg = { shipRadius: 20, bulletSpeed: 9, bulletLifeTicks: 120, asteroidLargeRadius: 50 }
+  const log = humanLog(100)
+  const a = simulate(SEED, cfg, log, MAX_TICKS)
+  const b = simulate(SEED, cfg, log, MAX_TICKS)
+  assert.equal(a.score, b.score)
+  assert.equal(a.tick, b.tick)
+})
+
 test('normalizeConfig survives NaN and missing input', () => {
   const c = normalizeConfig({ asteroidSpeed: NaN, turnRate: 'nope', startingLives: null })
   assert.equal(c.asteroidSpeed, 1.15)

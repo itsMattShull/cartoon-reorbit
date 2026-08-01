@@ -230,6 +230,22 @@
 <script setup>
 definePageMeta({ ssr: false })
 
+// Zoom is disabled for this page only. nuxt.config.js sets the app-wide viewport, and
+// overriding it there would kill pinch-zoom on every page of the site — an accessibility
+// regression well outside the scope of one arcade game. useHead's entry is scoped to this
+// component and is torn down on unmount, so the global viewport reapplies on the way out.
+//
+// Note that `user-scalable=no` and `maximum-scale` are IGNORED by iOS Safari (Apple stopped
+// honouring them in iOS 10, deliberately, for accessibility). They still do the job on Android
+// Chrome and older browsers, but on iPhone the actual work is done by `touch-action: none` in
+// the stylesheet plus the gesture handlers in onMounted below.
+useHead({
+  meta: [{
+    name: 'viewport',
+    content: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+  }]
+})
+
 import {
   WORLD_W, WORLD_H, MS_PER_TICK, TRIG_STEPS,
   IN_LEFT, IN_RIGHT, IN_THRUST,
@@ -458,7 +474,6 @@ function draw() {
   // ship
   const s = sim.ship
   if (s.alive) {
-    const half = sim.puTicks[PU_GREEN] > 0
     const invuln = isInvulnerable(sim)
     // Flash while invulnerable, but never flash *out* so long that the player loses the ship.
     const blink = invuln && Math.floor(performance.now() / 90) % 2 === 0
@@ -477,7 +492,9 @@ function draw() {
     }
 
     ctx.globalAlpha = blink ? 0.45 : 1
-    const size = (half ? 34 : 62)
+    // Draw the sprite proportional to the (admin-configurable) collision radius, so a retuned
+    // hitbox and the art can never disagree. shipRadius() already accounts for Green halving it.
+    const size = shipRadius(sim) * 4.8
     if (shipReady) {
       ctx.drawImage(shipImg, -size / 2, -size / 2, size, size)
     } else {
@@ -783,6 +800,36 @@ async function endGame() {
   uiState.value = 'gameover'
 }
 
+// CSS user-select is the main defence, but a few mobile browsers still begin a selection or a
+// drag from a long-press before the style applies. Cancelling the events outright is the
+// belt-and-braces: a selection started mid-run swallows the next touch, which can strand a
+// control in the "held" state because its pointerup never fires.
+function blockSelection(e) {
+  if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
+}
+
+// ─── Zoom suppression ───────────────────────────────────────────────────────────
+// iOS Safari ignores user-scalable=no, so the meta tag alone does not stop a pinch there.
+// These WebKit-only gesture events are what it actually listens to, and cancelling them is
+// the supported way to refuse a pinch. They never fire on Android/Chrome, which honours the
+// viewport meta and touch-action instead — so between the two, every mobile browser is covered.
+function blockGesture(e) {
+  e.preventDefault()
+}
+
+// Belt-and-braces for the pinch itself: any touch that becomes multi-finger inside the game is
+// not a gesture we support, so cancel it before the browser can interpret it as a zoom.
+// Registered with { passive: false }, without which preventDefault is a no-op on touchmove.
+function blockMultiTouch(e) {
+  if (e.touches && e.touches.length > 1) e.preventDefault()
+}
+
+// Double-tap zoom is already handled by touch-action, but Safari can still synthesise a
+// dblclick-driven zoom on some versions; refusing it costs nothing.
+function blockDoubleTapZoom(e) {
+  if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
+}
+
 let resizeObserver = null
 let landscapeMql = null
 function onVisibilityChange() { if (document.hidden) pauseGame(); else resumeGame() }
@@ -812,6 +859,15 @@ onMounted(async () => {
   window.addEventListener('blur', onWindowBlur)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  document.addEventListener('selectstart', blockSelection)
+  document.addEventListener('dragstart', blockSelection)
+  // passive:false is required — a passive listener cannot preventDefault, which would make
+  // both the pinch and the multi-touch guards silently do nothing.
+  document.addEventListener('gesturestart', blockGesture, { passive: false })
+  document.addEventListener('gesturechange', blockGesture, { passive: false })
+  document.addEventListener('gestureend', blockGesture, { passive: false })
+  document.addEventListener('touchmove', blockMultiTouch, { passive: false })
+  document.addEventListener('dblclick', blockDoubleTapZoom, { passive: false })
 })
 
 // Re-observe the container each time the game view mounts (v-if swaps it out between runs).
@@ -829,11 +885,74 @@ onUnmounted(() => {
   window.removeEventListener('blur', onWindowBlur)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  document.removeEventListener('selectstart', blockSelection)
+  document.removeEventListener('dragstart', blockSelection)
+  document.removeEventListener('gesturestart', blockGesture)
+  document.removeEventListener('gesturechange', blockGesture)
+  document.removeEventListener('gestureend', blockGesture)
+  document.removeEventListener('touchmove', blockMultiTouch)
+  document.removeEventListener('dblclick', blockDoubleTapZoom)
   landscapeMql?.removeEventListener?.('change', onLandscapeChange)
 })
 </script>
 
 <style scoped>
+/* ── Nothing in this game is selectable ────────────────────────────────────────
+   A drag across the canvas or a long-press on a control would otherwise start a text
+   selection, which on mobile pops the copy/paste callout, hijacks the next touch, and can
+   leave a control stuck "held" because its pointerup never arrives. The rules cover the
+   modals too: they are Teleported to <body>, but they still carry this component's scope
+   attribute, so a scoped selector reaches them.
+
+   `*` here is scoped by Vue to this component's elements only, so no other page is affected. */
+.ast-wrapper,
+.ast-wrapper *,
+.modal-backdrop,
+.modal-backdrop * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-touch-callout: none;      /* no iOS long-press callout */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Images and the canvas must not be draggable — dragging the ship sprite out of the page is
+   both possible and disruptive by default on desktop. */
+.ast-wrapper img,
+.ast-wrapper canvas,
+.modal-backdrop img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── No zooming anywhere in the game ──────────────────────────────────────────
+   `touch-action: none` on every surface stops pinch-zoom AND double-tap zoom, which an
+   accidental two-finger touch or a fast double-tap on a control would otherwise trigger
+   mid-run. `manipulation` is deliberately NOT used here: the spec has it permit "continuous
+   zooming", so it blocks double-tap zoom but still lets a pinch through.
+
+   touch-action is not inherited, so it has to be set on descendants explicitly rather than
+   just on the wrapper. Clicks are unaffected — touch-action governs browser gestures, not
+   event dispatch, so buttons still work normally. */
+.ast-wrapper,
+.ast-wrapper *,
+.modal-backdrop,
+.modal-backdrop * {
+  touch-action: none;
+}
+
+/* The one exception: the How to Play / Game Over card has to stay scrollable on a short
+   phone. `pan-y` allows that single gesture while still refusing pinch and double-tap zoom.
+   Its children need it too — the gesture is resolved from the element the touch starts on,
+   and text fills the card, so a `none` child would block the scroll. Declared after the
+   blanket rule above at equal specificity, so source order lets it win. */
+.modal-card,
+.modal-card * {
+  touch-action: pan-y;
+}
+
 /* ── Shell ─────────────────────────────────────────────────────────────────── */
 .ast-wrapper {
   width: 100%;
@@ -1130,7 +1249,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.ctrl {
+/* Two classes deep on purpose: this must outrank the `.ast-wrapper button` rule above, which
+   sets touch-action: manipulation. The controls need `none` — `manipulation` still permits
+   panning, so dragging a control would scroll the page mid-run. */
+.controls .ctrl {
   flex: 1;
   /* Comfortably above the 44px minimum touch target, and short enough to leave the board
      the majority of a phone's vertical space. */
@@ -1150,8 +1272,8 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
   transition: filter 0.1s;
 }
-.ctrl--thrust { flex: 1.5; font-size: 0.82rem; background: linear-gradient(180deg, #ff9d3d, #e8761a); border-bottom-color: #9c4a08; }
-.ctrl--on { filter: brightness(1.3); transform: translateY(2px); border-bottom-width: 2px; }
+.controls .ctrl--thrust { flex: 1.5; font-size: 0.82rem; background: linear-gradient(180deg, #ff9d3d, #e8761a); border-bottom-color: #9c4a08; }
+.controls .ctrl--on { filter: brightness(1.3); transform: translateY(2px); border-bottom-width: 2px; }
 
 .game-hint {
   flex-shrink: 0;
@@ -1326,7 +1448,7 @@ onUnmounted(() => {
 
 /* Give the board more of the screen on very short viewports. */
 @media (max-height: 620px) {
-  .ctrl { min-height: 46px; }
+  .controls .ctrl { min-height: 46px; }
   .game-hint { display: none; }
 }
 </style>
