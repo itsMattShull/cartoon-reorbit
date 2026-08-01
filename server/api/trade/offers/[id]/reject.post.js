@@ -44,10 +44,20 @@ export default defineEventHandler(async (event) => {
   const nextStatus = userId === offer.initiatorId ? 'WITHDRAWN' : 'REJECTED'
 
   await prisma.$transaction(async (tx) => {
-    await tx.tradeOffer.update({
-      where: { id: offerId },
+    // Conditional claim, for the same reason as accept.post.js: the status
+    // check above is outside the transaction, and an accept or a counter can
+    // commit in between. Claiming the offer row first also keeps the lock
+    // ordering identical across all three terminal transitions.
+    const claimed = await tx.tradeOffer.updateMany({
+      where: { id: offerId, status: 'PENDING' },
       data: { status: nextStatus, updatedAt: new Date() }
     })
+    if (claimed.count !== 1) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'This offer is no longer pending.'
+      })
+    }
 
     await tx.lockedPoints.updateMany({
       where: {

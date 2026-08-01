@@ -21,10 +21,21 @@ export const useTradePageFilters = () => {
   const tradeLoadingWishlist = useState('tradeLoadingWishlist', () => false)
   const tradeTargetWishlistCount = useState('tradeTargetWishlistCount', () => 0)
 
+  // ── Counter-offer mode ────────────────────────────────────────────
+  // Lives here rather than in Trade.vue because tradeActiveTab/tradeTargetUser/
+  // tradeCurrentStep already do. A counter held in a component-local ref would
+  // be dropped when the user navigates away mid-build while the wizard state
+  // around it survived — and the send would then silently go out as a plain
+  // offer, leaving the original still pending.
+  const tradeCounterSourceId = useState('tradeCounterSourceId', () => null)
+  const tradeCounterSummary = useState('tradeCounterSummary', () => null)
+
   return {
     tradeActiveTab,
     tradeTargetUser,
     tradeCurrentStep,
+    tradeCounterSourceId,
+    tradeCounterSummary,
     tradeFiltersOther,
     tradeFiltersSelf,
     tradeSetOptionsOther,
