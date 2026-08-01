@@ -10,7 +10,28 @@ export default defineEventHandler(async (event) => {
   }
 
   const { username } = event.context.params
-  const { filter } = getQuery(event)
+  const { filter, excludeTradeOfferId } = getQuery(event)
+
+  // When building a counter to an offer, that offer's cToons are exactly the
+  // ones being re-proposed, so they must not come back flagged inPendingTrade —
+  // the UI greys those out and refuses to let them be deselected, which would
+  // make the counter uneditable. Scoped to a single offer id: cToons committed
+  // to any *other* pending trade are still flagged.
+  // Honoured only for an offer the requester is actually party to. The flag is
+  // display-only (the counter endpoint re-derives its own exemption), but an
+  // unchecked id would let anyone probe whether a given cToon sits in a
+  // specific pending trade.
+  let excludeOfferId = null
+  if (typeof excludeTradeOfferId === 'string' && excludeTradeOfferId) {
+    const party = await prisma.tradeOffer.findFirst({
+      where: {
+        id: excludeTradeOfferId,
+        OR: [{ initiatorId: requesterId }, { recipientId: requesterId }]
+      },
+      select: { id: true }
+    })
+    excludeOfferId = party?.id ?? null
+  }
 
   const userWithCtoons = await prisma.user.findUnique({
     where: { username },
@@ -27,7 +48,9 @@ export default defineEventHandler(async (event) => {
   if (!userWithCtoons) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
   const userCtoonIds = userWithCtoons.ctoons.map(uc => uc.id)
-  const ids = userWithCtoons.ctoons.map(uc => uc.ctoonId)
+  // De-duplicated: a user owning many copies of the same cToon would otherwise
+  // send an IN-list the size of their whole collection, most of it repeats.
+  const ids = [...new Set(userWithCtoons.ctoons.map(uc => uc.ctoonId))]
   const holidayRows = ids.length
     ? await prisma.holidayEventItem.findMany({ where: { ctoonId: { in: ids } }, select: { ctoonId: true } })
     : []
@@ -35,7 +58,13 @@ export default defineEventHandler(async (event) => {
 
   const pendingTradeRows = userCtoonIds.length
     ? await prisma.tradeOfferCtoon.findMany({
-        where: { userCtoonId: { in: userCtoonIds }, tradeOffer: { status: 'PENDING' } },
+        where: {
+          userCtoonId: { in: userCtoonIds },
+          tradeOffer: {
+            status: 'PENDING',
+            ...(excludeOfferId ? { id: { not: excludeOfferId } } : {})
+          }
+        },
         select: { userCtoonId: true }
       })
     : []

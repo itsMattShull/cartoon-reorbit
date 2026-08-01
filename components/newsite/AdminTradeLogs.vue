@@ -235,7 +235,7 @@ const userSuggestions = ref([])
 const selectedStatus = ref('')
 const fromDate = ref('')
 const toDate = ref('')
-const statusOptions = ['PENDING', 'ACCEPTED', 'REJECTED', 'WITHDRAWN']
+const statusOptions = ['PENDING', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'COUNTERED']
 
 // Derived
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
