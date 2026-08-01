@@ -8,9 +8,10 @@ import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 const LOCK_TTL_MS = 20_000
 
-// An input-log entry is {t,a} — two small integers. MAX_INPUT_EVENTS of those serialize well
-// under 256 KB; this guard rejects oversized bodies before readBody parses them.
-const MAX_BODY_BYTES = 256 * 1024
+// An input-log entry is {t,a} — two small integers, roughly 20 bytes serialized. A full
+// MAX_INPUT_EVENTS log is therefore ~240 KB; this guard rejects oversized bodies before
+// readBody parses them, with headroom so a legitimate maximum-length run is never refused.
+const MAX_BODY_BYTES = 512 * 1024
 
 function lockKey(userId)    { return `asteroid:lock:${userId}` }
 function sessionKey(userId) { return `asteroid:session:${userId}` }

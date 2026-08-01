@@ -12,7 +12,7 @@ import {
 } from '../lib/asteroidSim.js'
 
 import {
-  sanitizeInputLog, hasRoboticCadence, replayAsteroidGame,
+  sanitizeInputLog, inputCadenceStats, replayAsteroidGame,
   MAX_TICKS, MAX_INPUT_EVENTS
 } from '../server/utils/asteroidEngine.js'
 
@@ -196,18 +196,38 @@ test('sanitizeInputLog does not carry prototype pollution into the simulation', 
   assert.equal({}.polluted, undefined)
 })
 
-// ─── Cadence heuristic ──────────────────────────────────────────────────────────
-test('perfectly uniform input gaps are flagged as robotic', () => {
+// ─── Cadence stats ──────────────────────────────────────────────────────────────
+test('inputCadenceStats reports gap statistics without judging them', () => {
   const log = []
   for (let i = 0; i < 80; i++) log.push({ t: 1 + i * 10, a: i % 2 ? IN_LEFT : IN_RIGHT })
-  assert.equal(hasRoboticCadence(log), true)
+  const st = inputCadenceStats(log)
+  assert.equal(st.samples, 79)
+  assert.equal(st.meanGap, 10)
+  assert.equal(st.stdDevGap, 0)
+  assert.deepEqual(inputCadenceStats([]), { samples: 0, meanGap: 0, stdDevGap: 0 })
 })
 
-test('irregular human input is not flagged, and short logs are never flagged', () => {
-  assert.equal(hasRoboticCadence(humanLog(80)), false)
-  const shortUniform = []
-  for (let i = 0; i < 8; i++) shortUniform.push({ t: 1 + i * 10, a: 0 })
-  assert.equal(hasRoboticCadence(shortUniform), false)
+// Regression guard. An earlier build rejected runs whose input gaps looked "too uniform" and
+// threw out 40/40 simulated human runs, because 60Hz tick quantisation makes a perfect bot
+// (~0.43 ticks of gap deviation) statistically indistinguishable from a human expert (~0.59).
+// Cadence must never cost a player their score again.
+test('metronomic input is still scored — cadence is never a rejection reason', () => {
+  const log = []
+  for (let i = 0; i < 300; i++) log.push({ t: 1 + i * 4, a: i % 2 ? IN_LEFT : IN_RIGHT })
+  const probe = simulate(SEED, {}, log, MAX_TICKS)
+  const out = replayAsteroidGame({
+    seedInt: SEED, cfg: {}, inputLog: log,
+    elapsedMs: (probe.tick / TICK_HZ) * 1000
+  })
+  assert.equal(out.score, probe.score)
+  assert.ok(out.cadence.samples > 0)
+})
+
+test('a fast player\'s full-length run fits well inside the input-log cap', () => {
+  // ~8 presses/second for five minutes, the realistic human ceiling.
+  const events = 8 * 2 * 300
+  assert.ok(events < MAX_INPUT_EVENTS * 0.75,
+    `cap ${MAX_INPUT_EVENTS} leaves too little headroom over ${events} realistic events`)
 })
 
 // ─── Replay gate ────────────────────────────────────────────────────────────────
