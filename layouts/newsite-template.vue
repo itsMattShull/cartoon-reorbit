@@ -265,6 +265,13 @@ html.newsite-active body {
     <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
+    <AuctionModal
+      v-if="auctionModalIsOpen && auctionModalCtoon"
+      :ctoon="auctionModalCtoon"
+      :prefill="auctionModalPrefill"
+      @close="closeAuctionModal"
+      @created="onAuctionCreated"
+    />
   </div>
   <Onboarding />
 </template>
@@ -272,6 +279,17 @@ html.newsite-active body {
 <script setup>
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
+const {
+  isOpen:  auctionModalIsOpen,
+  ctoon:   auctionModalCtoon,
+  prefill: auctionModalPrefill,
+  close:   closeAuctionModal,
+  notifyCreated: notifyAuctionCreated
+} = useAuctionModal()
+
+function onAuctionCreated(userCtoonId) {
+  notifyAuctionCreated(userCtoonId)
+}
 const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
 const czoneState = useNewSiteCzoneState()
 

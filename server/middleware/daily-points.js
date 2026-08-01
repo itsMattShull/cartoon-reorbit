@@ -2,6 +2,7 @@
 import { DateTime } from 'luxon'
 import { prisma }   from '@/server/prisma'
 import { defineEventHandler } from 'h3'
+import { isHotPath } from '@/server/utils/hotPaths'
 
 let cachedGlobalConfig     = null
 let cachedGlobalConfigTime = 0
@@ -15,6 +16,11 @@ export default defineEventHandler(async (event) => {
   // page. Every page load calls /api/auth/me, so the daily award still
   // triggers reliably.
   if (!event.path.startsWith('/api')) return
+
+  // Per-interaction game endpoints opt out for the same reason: one "Guess that cToon!"
+  // run is ~25 POSTs, and each would otherwise cost an upsert plus an interactive
+  // transaction on the same UserPoints row.
+  if (isHotPath(event.path)) return
 
   const userId = event.context.userId
   if (!userId) return

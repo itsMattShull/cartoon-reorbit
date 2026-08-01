@@ -26,6 +26,8 @@ const SLOT_FIELD = {
   reorbitmatch: 'gameTileReorbitmatchImagePath',
   tower:        'gameTileTowerImagePath',
   reorbitmemory: 'gameTileReorbitmemoryImagePath',
+  guessctoon:   'gameTileGuessctoonImagePath',
+  asteroid:     'gameTileAsteroidImagePath',
   flappy:       'gameTileFlappyImagePath'
 }
 

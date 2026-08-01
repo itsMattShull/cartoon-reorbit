@@ -44,6 +44,14 @@
         <img v-if="tiles.reorbitmemory" :src="tiles.reorbitmemory" alt="ReOrbit Memory" class="tile-img" />
         <span v-else>ReOrbit Memory</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/guessctoon" class="quadrant quadrant--guessctoon">
+        <img v-if="tiles.guessctoon" :src="tiles.guessctoon" alt="Guess that cToon!" class="tile-img" />
+        <span v-else>Guess that cToon!</span>
+      </NuxtLink>
+      <NuxtLink to="/newsite/asteroid" class="quadrant quadrant--asteroid">
+        <img v-if="tiles.asteroid" :src="tiles.asteroid" alt="Operation A.S.T.E.R.O.I.D." class="tile-img" />
+        <span v-else>Operation A.S.T.E.R.O.I.D.</span>
+      </NuxtLink>
       <NuxtLink to="/newsite/flappypowerpuff" class="quadrant quadrant--flappy">
         <img v-if="tiles.flappy" :src="tiles.flappy" alt="Flappy Powerpuff!" class="tile-img" />
         <span v-else>Flappy Powerpuff!</span>
@@ -86,8 +94,12 @@ const tiles = computed(() => tileData.value ?? {})
    3x3 also fits the 800x669 desktop main-content box far better than 2x5 would. */
 .gameshome {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
+  /* 11 tiles in 2 columns needs 6 rows — bump this when a game is added. */
+  grid-template-rows: repeat(6, 1fr);
+  /* Belt and braces: an 12th tile would otherwise land in an implicit auto-height row and
+     collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
+     height. */
   grid-auto-rows: 1fr;
   width: 100%;
   flex: 1;
@@ -140,7 +152,9 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--reorbit    { background: #1a6a8a; }
 .quadrant--tower      { background: #5a2a8a; }
 .quadrant--reorbitmemory { background: #2a7a5a; }
-.quadrant--flappy     { background: #2f6f9e; }
+.quadrant--guessctoon    { background: #8a2a5a; }
+.quadrant--asteroid      { background: #2b2062; }
+.quadrant--flappy        { background: #2f6f9e; }
 
 /* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
    scaled and brightened. */
@@ -154,10 +168,15 @@ const tiles = computed(() => tileData.value ?? {})
      overflows into a nested scroller inside an already-scrolling page. The tiles are images,
      so 2-up at ~190px is still a comfortable tap target. */
   .gameshome {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    /* Eleven 70px-minimum rows can't fit in a fixed 100dvh-based height, so the grid used to
+       overflow into a nested scroller inside the page's own scroller — on iOS the outer
+       page then refuses to scroll until the inner one bottoms out. Let the page scroll
+       instead. svh, not dvh, so the URL bar collapsing doesn't resize the tiles. */
     grid-template-rows: none;
-    grid-auto-rows: minmax(88px, auto);
+    grid-auto-rows: minmax(84px, auto);
     height: auto;
+    min-height: calc(100svh - 276px);
   }
 }
 </style>

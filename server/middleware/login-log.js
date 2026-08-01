@@ -4,8 +4,14 @@ import { prisma } from '@/server/prisma'
 import { isPrivateIp } from '@/server/utils/vpn-check'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 import { enqueueVpnCheck } from '@/server/utils/vpn-queue'
+import { isHotPath } from '@/server/utils/hotPaths'
 
 export default defineEventHandler(async (event) => {
+  // Per-interaction game endpoints skip the login/IP bookkeeping — a 25-question run would
+  // otherwise repeat the same two lookups 25 times over. The surrounding page navigation
+  // still logs the session normally.
+  if (isHotPath(event.path)) return
+
   const userId = event.context?.userId
   if (!userId) return
 

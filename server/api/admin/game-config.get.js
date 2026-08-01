@@ -153,6 +153,10 @@ export default defineEventHandler(async (event) => {
             towerMaxLayers: 800
           }
         })
+      } else if (gameName === 'OperationAsteroid') {
+        // Column defaults come from the migration / schema, which mirror DEFAULT_CONFIG in
+        // lib/asteroidSim.js — so an empty create() already produces a playable game.
+        config = await db.gameConfig.create({ data: { gameName } })
       } else if (gameName === 'ReOrbitMemory') {
         config = await db.gameConfig.create({
           data: {
@@ -163,6 +167,20 @@ export default defineEventHandler(async (event) => {
             reorbitMemoryTimeSeconds: null,
             reorbitMemoryFlipBackDelayMs: 800,
             reorbitMemoryCardBackImagePath: null
+          }
+        })
+      } else if (gameName === 'GuessCtoon') {
+        // The migration seeds this row too; this branch covers a config fetched on an
+        // environment where that migration has not run yet.
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            guessCtoonScoredPlaysPerPeriod: 3,
+            guessCtoonPointsPerGame: 50,
+            guessCtoonSecondsPerQuestion: 12,
+            guessCtoonChoices: 4,
+            guessCtoonMaxQuestions: 25,
+            guessCtoonMinStreakForPoints: 3
           }
         })
       } else if (gameName === 'FlappyPowerpuff') {

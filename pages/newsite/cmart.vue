@@ -3,6 +3,8 @@
 </template>
 
 <script setup>
+import { newSiteCtoonFilterDefaults } from '@/composables/useNewSiteCtoonFilter'
+
 definePageMeta({
   layout: 'newsite-template',
   middleware: 'newsite',
@@ -22,16 +24,9 @@ const route    = useRoute()
 const router   = useRouter()
 
 // ── Initialize filter state (reset then apply URL params) ──────────────────
-Object.assign(filter.value, {
-  name:            '',
-  rarities:        [],
-  series:          '',
-  set:             '',
-  priceMin:        '',
-  priceMax:        '',
-  sortField:       'releaseDate',
-  sortAsc:         false,
-  hideUnavailable: false,
+Object.assign(filter.value, newSiteCtoonFilterDefaults(), {
+  sortField: 'releaseDate',
+  sortAsc:   false,
 })
 Object.assign(aFilters.value, {
   featuredOnly:  false,

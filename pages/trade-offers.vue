@@ -396,6 +396,8 @@ function statusClasses(status) {
     case 'PENDING':  return `${base} bg-yellow-100 text-yellow-800`
     case 'ACCEPTED': return `${base} bg-green-100 text-green-800`
     case 'REJECTED': return `${base} bg-red-100 text-red-800`
+    // A countered offer was replaced by a revised one, not turned down.
+    case 'COUNTERED': return `${base} bg-blue-100 text-blue-800`
     case 'WITHDRAWN': return `${base} bg-gray-100 text-gray-800`
     default:         return `${base} bg-gray-100 text-gray-800`
   }

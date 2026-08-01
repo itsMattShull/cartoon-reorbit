@@ -8,6 +8,48 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
+// ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
+// Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
+// the admin change log can all be driven from one list and cannot drift apart.
+// The ranges mirror normalizeConfig() in lib/asteroidSim.js.
+const ASTEROID_NUMERIC_RANGES = [
+  ['asteroidRankedPlaysPerPeriod', 0, 100],
+  ['asteroidPointsPerGame',        0, 100000],
+  ['asteroidStartingLives',        1, 9],
+  ['asteroidStartAsteroids',       1, 12],
+  ['asteroidAsteroidsPerWave',     0, 4],
+  ['asteroidAsteroidSpeed',        0.2, 4],
+  ['asteroidWaveSpeedGrowth',      0, 0.5],
+  ['asteroidMaxSpeedMultiplier',   1, 5],
+  ['asteroidTurnRate',             1, 24],
+  ['asteroidThrustAccel',          0.02, 1],
+  ['asteroidMaxShipSpeed',         1, 16],
+  ['asteroidShipDrag',             0.9, 1],
+  ['asteroidFireIntervalTicks',    3, 60],
+  ['asteroidExtraLifeScore',       0, 1000000],
+  ['asteroidPointsLarge',          0, 10000],
+  ['asteroidPointsMedium',         0, 10000],
+  ['asteroidPointsSmall',          0, 10000],
+  ['asteroidWaveClearBonus',       0, 100000],
+  ['asteroidPowerupIntervalTicks', 60, 36000],
+  ['asteroidPowerupChancePercent', 0, 100],
+  ['asteroidPowerupBlueTicks',     0, 7200],
+  ['asteroidPowerupRedTicks',      0, 7200],
+  ['asteroidPowerupGreenTicks',    0, 7200]
+]
+
+const ASTEROID_BOOLEAN_FIELDS = [
+  'asteroidPowerupsEnabled',
+  'asteroidPowerupBlueEnabled',
+  'asteroidPowerupRedEnabled',
+  'asteroidPowerupGreenEnabled'
+]
+
+const ASTEROID_FIELDS = [
+  ...ASTEROID_NUMERIC_RANGES.map(([k]) => k),
+  ...ASTEROID_BOOLEAN_FIELDS
+]
+
 function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName"' })
@@ -167,6 +209,42 @@ function validatePayload(payload) {
     if (payload.reorbitMemoryCardBackImagePath != null && typeof payload.reorbitMemoryCardBackImagePath !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryCardBackImagePath" must be a string or null' })
     }
+  } else if (payload.gameName === 'OperationAsteroid') {
+    // Ranges here MUST stay in sync with normalizeConfig() in lib/asteroidSim.js, which is
+    // the last line of defence: it re-clamps everything at /start, so a value that slipped past
+    // this check still cannot produce a world the simulation is unstable in.
+    for (const [key, lo, hi] of ASTEROID_NUMERIC_RANGES) {
+      const v = payload[key]
+      if (v == null || typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a number between ${lo} and ${hi}` })
+      }
+    }
+    for (const key of ASTEROID_BOOLEAN_FIELDS) {
+      if (typeof payload[key] !== 'boolean') {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a boolean` })
+      }
+    }
+  } else if (payload.gameName === 'GuessCtoon') {
+    // Plays are unlimited; this caps how many per day COUNT. 0 is legal — it turns scoring
+    // off entirely while leaving the game playable.
+    if (payload.guessCtoonScoredPlaysPerPeriod == null || typeof payload.guessCtoonScoredPlaysPerPeriod !== 'number' || payload.guessCtoonScoredPlaysPerPeriod < 0 || payload.guessCtoonScoredPlaysPerPeriod > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonScoredPlaysPerPeriod" must be between 0 and 100' })
+    }
+    if (payload.guessCtoonPointsPerGame == null || typeof payload.guessCtoonPointsPerGame !== 'number' || payload.guessCtoonPointsPerGame < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonPointsPerGame" must be a non-negative number' })
+    }
+    if (payload.guessCtoonSecondsPerQuestion == null || typeof payload.guessCtoonSecondsPerQuestion !== 'number' || payload.guessCtoonSecondsPerQuestion < 4 || payload.guessCtoonSecondsPerQuestion > 120) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonSecondsPerQuestion" must be between 4 and 120' })
+    }
+    if (payload.guessCtoonChoices == null || typeof payload.guessCtoonChoices !== 'number' || payload.guessCtoonChoices < 3 || payload.guessCtoonChoices > 6) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonChoices" must be between 3 and 6' })
+    }
+    if (payload.guessCtoonMaxQuestions == null || typeof payload.guessCtoonMaxQuestions !== 'number' || payload.guessCtoonMaxQuestions < 5 || payload.guessCtoonMaxQuestions > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonMaxQuestions" must be between 5 and 100' })
+    }
+    if (payload.guessCtoonMinStreakForPoints == null || typeof payload.guessCtoonMinStreakForPoints !== 'number' || payload.guessCtoonMinStreakForPoints < 0 || payload.guessCtoonMinStreakForPoints > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonMinStreakForPoints" must be between 0 and 100' })
+    }
   } else if (payload.gameName === 'FlappyPowerpuff') {
     // Ranges mirror CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js. The engine clamps
     // again at /start and /end regardless — this endpoint is only one of several write paths
@@ -243,6 +321,13 @@ export default defineEventHandler(async (event) => {
     reorbitMemoryTimeSeconds = null,
     reorbitMemoryFlipBackDelayMs,
     reorbitMemoryCardBackImagePath = null,
+    // GuessCtoon fields
+    guessCtoonScoredPlaysPerPeriod,
+    guessCtoonPointsPerGame,
+    guessCtoonSecondsPerQuestion,
+    guessCtoonChoices,
+    guessCtoonMaxQuestions,
+    guessCtoonMinStreakForPoints,
     // FlappyPowerpuff fields
     flappyPlaysPerPeriod,
     flappyPointsPerGame,
@@ -452,6 +537,11 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...towerData }
         updateData = { ...updateData, ...towerData }
+      } else if (gameName === 'OperationAsteroid') {
+        const asteroidData = {}
+        for (const key of ASTEROID_FIELDS) asteroidData[key] = body[key]
+        createData = { ...createData, ...asteroidData }
+        updateData = { ...updateData, ...asteroidData }
       } else if (gameName === 'ReOrbitMemory') {
         const memoryData = {
           reorbitMemoryPlaysPerPeriod,
@@ -463,6 +553,17 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...memoryData }
         updateData = { ...updateData, ...memoryData }
+      } else if (gameName === 'GuessCtoon') {
+        const guessData = {
+          guessCtoonScoredPlaysPerPeriod,
+          guessCtoonPointsPerGame,
+          guessCtoonSecondsPerQuestion,
+          guessCtoonChoices,
+          guessCtoonMaxQuestions,
+          guessCtoonMinStreakForPoints
+        }
+        createData = { ...createData, ...guessData }
+        updateData = { ...updateData, ...guessData }
       } else if (gameName === 'FlappyPowerpuff') {
         // Image paths are written by /api/admin/flappy-image, so a settings save must not
         // clobber them back to null when the form didn't send them.
@@ -670,6 +771,14 @@ export default defineEventHandler(async (event) => {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:TowerStack', key, prevValue: prev, newValue: next })
             }
           }
+        } else if (gameName === 'OperationAsteroid') {
+          for (const key of ASTEROID_FIELDS) {
+            const prev = before?.[key]
+            const next = body[key]
+            if (String(prev) !== String(next)) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:OperationAsteroid', key, prevValue: prev, newValue: next })
+            }
+          }
         } else if (gameName === 'ReOrbitMemory') {
           const changes = [
             ['reorbitMemoryPlaysPerPeriod', before?.reorbitMemoryPlaysPerPeriod, reorbitMemoryPlaysPerPeriod],
@@ -682,6 +791,20 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:ReOrbitMemory', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'GuessCtoon') {
+          const changes = [
+            ['guessCtoonScoredPlaysPerPeriod', before?.guessCtoonScoredPlaysPerPeriod, guessCtoonScoredPlaysPerPeriod],
+            ['guessCtoonPointsPerGame', before?.guessCtoonPointsPerGame, guessCtoonPointsPerGame],
+            ['guessCtoonSecondsPerQuestion', before?.guessCtoonSecondsPerQuestion, guessCtoonSecondsPerQuestion],
+            ['guessCtoonChoices', before?.guessCtoonChoices, guessCtoonChoices],
+            ['guessCtoonMaxQuestions', before?.guessCtoonMaxQuestions, guessCtoonMaxQuestions],
+            ['guessCtoonMinStreakForPoints', before?.guessCtoonMinStreakForPoints, guessCtoonMinStreakForPoints]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:GuessCtoon', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'FlappyPowerpuff') {

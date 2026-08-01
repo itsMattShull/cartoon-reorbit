@@ -97,6 +97,27 @@ export default defineEventHandler(async (event) => {
 
   // 6) Transfer cToons, move points, log, accept
   await prisma.$transaction(async (tx) => {
+    // Claim the offer before touching anything else. The status check above
+    // runs outside this transaction, so without this a counter or a second
+    // accept committing in between would still let the transfers below run —
+    // paying the initiator's points out twice and moving cToons that are, by
+    // then, committed to a different pending offer.
+    //
+    // Claiming first also fixes the lock ordering: every terminal transition
+    // (accept, reject, counter) now takes the TradeOffer row lock before the
+    // LockedPoints one, so an accept racing a counter blocks instead of
+    // deadlocking.
+    const claimed = await tx.tradeOffer.updateMany({
+      where: { id: offerId, status: 'PENDING' },
+      data: { status: 'ACCEPTED', updatedAt: new Date() }
+    })
+    if (claimed.count !== 1) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'This offer is no longer pending.'
+      })
+    }
+
     if (offer.pointsOffered > 0) {
       const initiatorPoints = await tx.userPoints.update({
         where: { userId: offer.initiatorId },
@@ -150,10 +171,20 @@ export default defineEventHandler(async (event) => {
         ? initiator.username
         : me.username
 
-      const updatedUC = await tx.userCtoon.update({
-        where: { id: tc.userCtoonId },
+      // Conditional on the expected current owner: the ownership checks above
+      // run outside this transaction, so a concurrently-accepted offer holding
+      // the same cToon could otherwise transfer it twice, leaving one
+      // counterparty having paid for nothing.
+      const moved = await tx.userCtoon.updateMany({
+        where: { id: tc.userCtoonId, userId: counterpartyUserId, burnedAt: null },
         data:  { userId: newOwner }
       })
+      if (moved.count !== 1) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'One or more cToons in this trade are no longer available.'
+        })
+      }
 
       await tx.userTradeListItem.deleteMany({
         where: {
@@ -165,9 +196,9 @@ export default defineEventHandler(async (event) => {
       await tx.ctoonOwnerLog.create({
         data: {
           userId:      newOwner,
-          ctoonId:     updatedUC.ctoonId,
-          userCtoonId: updatedUC.id,
-          mintNumber:  updatedUC.mintNumber,
+          ctoonId:     tc.userCtoon.ctoonId,
+          userCtoonId: tc.userCtoonId,
+          mintNumber:  tc.userCtoon.mintNumber,
           method:      'TRADE',
           counterpartyUserId,
           counterpartyUsername
@@ -175,10 +206,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    await tx.tradeOffer.update({
-      where: { id: offerId },
-      data:  { status: 'ACCEPTED' }
-    })
+    // Status was already claimed at the top of this transaction.
   })
 
   try {

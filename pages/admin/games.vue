@@ -844,6 +844,158 @@
           </button>
         </section>
 
+        <!-- Operation A.S.T.E.R.O.I.D. -->
+        <section v-if="activeTab === 'OperationAsteroid'" role="tabpanel" aria-label="Operation A.S.T.E.R.O.I.D. Settings">
+          <h2 class="text-2xl font-semibold mb-4">Operation A.S.T.E.R.O.I.D. Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Plays are unlimited. Only the first few runs each day are ranked — those are the ones
+            that record a score and award points. Timing values are in ticks; the game runs at 60
+            ticks per second.
+          </p>
+
+          <h3 class="text-lg font-semibold mb-2">Plays &amp; Points</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ranked Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Runs per 24-hour period that count for the leaderboard (resets 8 PM CT). Set 0 to make every run practice.</p>
+              <input type="number" v-model.number="asteroidRankedPlaysPerPeriod" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward the daily cap when a ranked run ends</p>
+              <input type="number" v-model.number="asteroidPointsPerGame" min="0" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Difficulty</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Starting Lives</label>
+              <input type="number" v-model.number="asteroidStartingLives" min="1" max="9" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Starting Asteroids</label>
+              <p class="text-xs text-gray-400 mb-1">Large asteroids in wave 1 (1–12)</p>
+              <input type="number" v-model.number="asteroidStartAsteroids" min="1" max="12" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Asteroids Added Per Wave</label>
+              <input type="number" v-model.number="asteroidAsteroidsPerWave" min="0" max="4" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Asteroid Speed</label>
+              <p class="text-xs text-gray-400 mb-1">World units per tick for a large asteroid (0.2–4)</p>
+              <input type="number" v-model.number="asteroidAsteroidSpeed" min="0.2" max="4" step="0.05" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Wave Speed Growth</label>
+              <p class="text-xs text-gray-400 mb-1">0.06 = asteroids get 6% faster each wave</p>
+              <input type="number" v-model.number="asteroidWaveSpeedGrowth" min="0" max="0.5" step="0.01" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier</label>
+              <p class="text-xs text-gray-400 mb-1">Wave speed growth caps here (1–5)</p>
+              <input type="number" v-model.number="asteroidMaxSpeedMultiplier" min="1" max="5" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Turn Rate</label>
+              <p class="text-xs text-gray-400 mb-1">Heading steps per tick out of 1024 (1–24). 6 ≈ a full turn in 1.7s.</p>
+              <input type="number" v-model.number="asteroidTurnRate" min="1" max="24" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Thrust Acceleration</label>
+              <input type="number" v-model.number="asteroidThrustAccel" min="0.02" max="1" step="0.005" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Ship Speed</label>
+              <input type="number" v-model.number="asteroidMaxShipSpeed" min="1" max="16" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ship Drag</label>
+              <p class="text-xs text-gray-400 mb-1">Velocity kept each tick (0.9–1). 1 = no drag, pure inertia.</p>
+              <input type="number" v-model.number="asteroidShipDrag" min="0.9" max="1" step="0.001" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Ticks between auto-fired shots (3–60). Blue power-up halves this.</p>
+              <input type="number" v-model.number="asteroidFireIntervalTicks" min="3" max="60" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Extra Life Score</label>
+              <p class="text-xs text-gray-400 mb-1">Award a life every this many points. 0 disables.</p>
+              <input type="number" v-model.number="asteroidExtraLifeScore" min="0" max="1000000" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Scoring</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Large Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsLarge" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Medium Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsMedium" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Small Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsSmall" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Wave Clear Bonus</label>
+              <input type="number" v-model.number="asteroidWaveClearBonus" min="0" max="100000" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Power-Ups</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div class="sm:col-span-2 flex flex-wrap gap-4">
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupsEnabled" /> Power-ups enabled
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupBlueEnabled" /> Blue (2x fire rate)
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupRedEnabled" /> Red (invincibility)
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupGreenEnabled" /> Green (half size)
+              </label>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Spawn Interval (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Ticks between spawn attempts (60–36000). 900 = every 15s.</p>
+              <input type="number" v-model.number="asteroidPowerupIntervalTicks" min="60" max="36000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Spawn Chance (%)</label>
+              <p class="text-xs text-gray-400 mb-1">Chance each attempt actually drops a power-up</p>
+              <input type="number" v-model.number="asteroidPowerupChancePercent" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Blue Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">600 = 10s</p>
+              <input type="number" v-model.number="asteroidPowerupBlueTicks" min="0" max="7200" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Red Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">420 = 7s</p>
+              <input type="number" v-model.number="asteroidPowerupRedTicks" min="0" max="7200" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Green Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">720 = 12s</p>
+              <input type="number" v-model.number="asteroidPowerupGreenTicks" min="0" max="7200" class="input" />
+            </div>
+          </div>
+
+          <button @click="saveAsteroidConfig" :disabled="loadingAsteroid" class="btn-primary">
+            <span v-if="!loadingAsteroid">Save Operation A.S.T.E.R.O.I.D. Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- ReOrbit Memory -->
         <section v-if="activeTab === 'ReOrbitMemory'" role="tabpanel" aria-label="ReOrbit Memory Settings">
           <h2 class="text-2xl font-semibold mb-4">ReOrbit Memory Settings</h2>
@@ -911,6 +1063,64 @@
 
           <button @click="saveReorbitMemoryConfig" :disabled="loadingReorbitMemory" class="btn-primary">
             <span v-if="!loadingReorbitMemory">Save ReOrbit Memory Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
+        <!-- Guess that cToon! -->
+        <section v-if="activeTab === 'GuessCtoon'" role="tabpanel" aria-label="Guess that cToon Settings">
+          <h2 class="text-2xl font-semibold mb-4">Guess that cToon! Settings</h2>
+
+          <p class="text-sm text-gray-500 mb-4">
+            Plays are unlimited. Only the first few runs each day count toward points and the
+            leaderboard — everything after that is playable as practice.
+            Saved changes apply to new games within about a minute, and never disrupt a run
+            already in progress.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Scoring Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">
+                Runs per 24-hour period (resets 8 PM CT) that count for points and the
+                leaderboard. Set to 0 to make every run practice-only.
+              </p>
+              <input type="number" v-model.number="guessCtoonScoredPlaysPerPeriod" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward the shared daily cap when a scoring run ends</p>
+              <input type="number" v-model.number="guessCtoonPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Seconds Per cToon</label>
+              <p class="text-xs text-gray-400 mb-1">Countdown per question — running out counts as a wrong answer (4–120)</p>
+              <input type="number" v-model.number="guessCtoonSecondsPerQuestion" min="4" max="120" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Answer Choices</label>
+              <p class="text-xs text-gray-400 mb-1">How many names to pick from, including the correct one</p>
+              <select v-model.number="guessCtoonChoices" class="input">
+                <option :value="3">3 choices</option>
+                <option :value="4">4 choices</option>
+                <option :value="5">5 choices</option>
+                <option :value="6">6 choices</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Questions Per Run</label>
+              <p class="text-xs text-gray-400 mb-1">Longest possible streak — answering them all is a perfect run (5–100)</p>
+              <input type="number" v-model.number="guessCtoonMaxQuestions" min="5" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Minimum Streak For Points</label>
+              <p class="text-xs text-gray-400 mb-1">Runs shorter than this record a score but earn no points</p>
+              <input type="number" v-model.number="guessCtoonMinStreakForPoints" min="0" max="100" class="input" />
+            </div>
+          </div>
+
+          <button @click="saveGuessCtoonConfig" :disabled="loadingGuessCtoon" class="btn-primary">
+            <span v-if="!loadingGuessCtoon">Save Guess that cToon! Settings</span>
             <span v-else>Saving…</span>
           </button>
         </section>
@@ -1164,6 +1374,8 @@ const tabs = [
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
   { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
+  { key: 'GuessCtoon',   label: 'Guess that cToon!' },
+  { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
   { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' }
 ]
 const activeTab = ref('Global')
@@ -1498,8 +1710,10 @@ async function loadSettings() {
   gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
   gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
+  gameTileImages.value.asteroid     = g.gameTileAsteroidImagePath     || ''
   gameTileImages.value.flappy       = g.gameTileFlappyImagePath       || ''
   gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
+  gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1587,6 +1801,13 @@ async function loadSettings() {
   towerPerfectEpsilon.value      = tw.towerPerfectEpsilon ?? 4
   towerMaxLayers.value           = tw.towerMaxLayers ?? 800
 
+  const ast = await $fetch('/api/admin/game-config?gameName=OperationAsteroid')
+  // Column defaults are NOT NULL in the schema, so a present config always has every key; the
+  // ?? keeps the existing ref default if the API ever omits one.
+  for (const key of ASTEROID_FIELD_KEYS) {
+    if (ast[key] != null) asteroidCfg[key].value = ast[key]
+  }
+
   const rm = await $fetch('/api/admin/game-config?gameName=ReOrbitMemory')
   reorbitMemoryPlaysPerPeriod.value    = rm.reorbitMemoryPlaysPerPeriod ?? 3
   reorbitMemoryPointsPerGame.value     = rm.reorbitMemoryPointsPerGame ?? 50
@@ -1611,6 +1832,14 @@ async function loadSettings() {
   flappyImages.value.bubbles     = fp.flappyBubblesImagePath || ''
   flappyImages.value.buttercup   = fp.flappyButtercupImagePath || ''
   flappyImages.value.city        = fp.flappyCityImagePath || ''
+
+  const gc = await $fetch('/api/admin/game-config?gameName=GuessCtoon')
+  guessCtoonScoredPlaysPerPeriod.value = gc.guessCtoonScoredPlaysPerPeriod ?? 3
+  guessCtoonPointsPerGame.value        = gc.guessCtoonPointsPerGame ?? 50
+  guessCtoonSecondsPerQuestion.value   = gc.guessCtoonSecondsPerQuestion ?? 12
+  guessCtoonChoices.value              = gc.guessCtoonChoices ?? 4
+  guessCtoonMaxQuestions.value         = gc.guessCtoonMaxQuestions ?? 25
+  guessCtoonMinStreakForPoints.value   = gc.guessCtoonMinStreakForPoints ?? 3
 }
 
 // Win Wheel state
@@ -1955,11 +2184,13 @@ const gameTileSlots = [
   { slot: 'reorbitmatch', label: 'ReOrbit Match' },
   { slot: 'tower',        label: 'Tower Stack' },
   { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
+  { slot: 'guessctoon',   label: 'Guess that cToon!' },
+  { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
   { slot: 'flappy',       label: 'Flappy Powerpuff' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', flappy: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, flappy: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, flappy: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -2021,6 +2252,51 @@ const towerMaxSpeedMultiplier  = ref(2.5)
 const towerPerfectEpsilon      = ref(4)
 const towerMaxLayers           = ref(800)
 const loadingTower              = ref(false)
+
+// ── Operation A.S.T.E.R.O.I.D. ────────────────
+// Defaults mirror DEFAULT_CONFIG in lib/asteroidSim.js. Declared as one map so the template,
+// the loader and the saver all iterate the same key list instead of repeating 27 names.
+const loadingAsteroid = ref(false)
+const asteroidRankedPlaysPerPeriod = ref(3)
+const asteroidPointsPerGame        = ref(50)
+const asteroidStartingLives        = ref(3)
+const asteroidStartAsteroids       = ref(4)
+const asteroidAsteroidsPerWave     = ref(1)
+const asteroidAsteroidSpeed        = ref(1.15)
+const asteroidWaveSpeedGrowth      = ref(0.06)
+const asteroidMaxSpeedMultiplier   = ref(2.2)
+const asteroidTurnRate             = ref(6)
+const asteroidThrustAccel          = ref(0.145)
+const asteroidMaxShipSpeed         = ref(5.6)
+const asteroidShipDrag             = ref(0.992)
+const asteroidFireIntervalTicks    = ref(13)
+const asteroidExtraLifeScore       = ref(10000)
+const asteroidPointsLarge          = ref(20)
+const asteroidPointsMedium         = ref(50)
+const asteroidPointsSmall          = ref(100)
+const asteroidWaveClearBonus       = ref(250)
+const asteroidPowerupsEnabled      = ref(true)
+const asteroidPowerupBlueEnabled   = ref(true)
+const asteroidPowerupRedEnabled    = ref(true)
+const asteroidPowerupGreenEnabled  = ref(true)
+const asteroidPowerupIntervalTicks = ref(900)
+const asteroidPowerupChancePercent = ref(65)
+const asteroidPowerupBlueTicks     = ref(600)
+const asteroidPowerupRedTicks      = ref(420)
+const asteroidPowerupGreenTicks    = ref(720)
+
+const asteroidCfg = {
+  asteroidRankedPlaysPerPeriod, asteroidPointsPerGame,
+  asteroidStartingLives, asteroidStartAsteroids, asteroidAsteroidsPerWave,
+  asteroidAsteroidSpeed, asteroidWaveSpeedGrowth, asteroidMaxSpeedMultiplier,
+  asteroidTurnRate, asteroidThrustAccel, asteroidMaxShipSpeed, asteroidShipDrag,
+  asteroidFireIntervalTicks, asteroidExtraLifeScore,
+  asteroidPointsLarge, asteroidPointsMedium, asteroidPointsSmall, asteroidWaveClearBonus,
+  asteroidPowerupsEnabled, asteroidPowerupBlueEnabled, asteroidPowerupRedEnabled,
+  asteroidPowerupGreenEnabled, asteroidPowerupIntervalTicks, asteroidPowerupChancePercent,
+  asteroidPowerupBlueTicks, asteroidPowerupRedTicks, asteroidPowerupGreenTicks
+}
+const ASTEROID_FIELD_KEYS = Object.keys(asteroidCfg)
 
 // ── Flappy Powerpuff ──────────────────────────
 const flappyPlaysPerPeriod     = ref(3)
@@ -2157,6 +2433,39 @@ async function saveReorbitMemoryConfig() {
   }
 }
 
+// ── Guess that cToon! ──────────────────────────────────────────────────────────
+const guessCtoonScoredPlaysPerPeriod = ref(3)
+const guessCtoonPointsPerGame        = ref(50)
+const guessCtoonSecondsPerQuestion   = ref(12)
+const guessCtoonChoices              = ref(4)
+const guessCtoonMaxQuestions         = ref(25)
+const guessCtoonMinStreakForPoints   = ref(3)
+const loadingGuessCtoon              = ref(false)
+
+async function saveGuessCtoonConfig() {
+  loadingGuessCtoon.value = true
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                       'GuessCtoon',
+        guessCtoonScoredPlaysPerPeriod: guessCtoonScoredPlaysPerPeriod.value,
+        guessCtoonPointsPerGame:        guessCtoonPointsPerGame.value,
+        guessCtoonSecondsPerQuestion:   guessCtoonSecondsPerQuestion.value,
+        guessCtoonChoices:              guessCtoonChoices.value,
+        guessCtoonMaxQuestions:         guessCtoonMaxQuestions.value,
+        guessCtoonMinStreakForPoints:   guessCtoonMinStreakForPoints.value
+      }
+    })
+    toastMessage.value = 'Guess that cToon! settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving Guess that cToon! settings'; toastType.value = 'error'
+  } finally {
+    loadingGuessCtoon.value = false
+  }
+}
+
 function addReorbitEmoji() {
   const e = reorbitEmojiInput.value.trim()
   if (!e) return
@@ -2215,6 +2524,25 @@ async function saveTowerConfig() {
     toastMessage.value = 'Error saving Tower Stack settings'; toastType.value = 'error'
   } finally {
     loadingTower.value = false
+  }
+}
+
+// ── Operation A.S.T.E.R.O.I.D. ───────────────
+// The field list is shared by the loader and the saver so a new knob only has to be named once
+// here (and in ASTEROID_NUMERIC_RANGES / ASTEROID_BOOLEAN_FIELDS server-side).
+async function saveAsteroidConfig() {
+  loadingAsteroid.value = true; toastMessage.value = ''
+  try {
+    const body = { gameName: 'OperationAsteroid' }
+    for (const key of ASTEROID_FIELD_KEYS) body[key] = asteroidCfg[key].value
+    await $fetch('/api/admin/game-config', { method: 'POST', body })
+    toastMessage.value = 'Operation A.S.T.E.R.O.I.D. settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    const msg = err?.data?.statusMessage || 'Error saving Operation A.S.T.E.R.O.I.D. settings'
+    toastMessage.value = msg; toastType.value = 'error'
+  } finally {
+    loadingAsteroid.value = false
   }
 }
 

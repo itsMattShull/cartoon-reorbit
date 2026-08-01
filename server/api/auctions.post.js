@@ -9,6 +9,11 @@ import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
+import { rarityFloor } from '@/server/utils/auctionPriceSuggestion'
+
+// Longest listing the UI offers: 5 days, or 12 hours for the sub-day presets.
+const MAX_DURATION_DAYS = 5
+const MAX_DURATION_MINUTES = 12 * 60
 
 function formatDuration(days, minutes) {
   if (minutes > 0) {
@@ -49,6 +54,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
+  // Bound the duration. Without this a negative value puts endAt in the past and
+  // a huge one locks the cToon out of trading for years while overflowing the
+  // BullMQ delay. Re-listing sends a duration the client reconstructed from the
+  // previous auction, so this can't be left to the UI.
+  const days = Number(durationDays)
+  const minutes = Number(durationMinutes)
+  if (!Number.isInteger(days) || !Number.isInteger(minutes) ||
+      days < 0 || days > MAX_DURATION_DAYS ||
+      minutes < 0 || minutes > MAX_DURATION_MINUTES ||
+      (days === 0 && minutes === 0)) {
+    throw createError({ statusCode: 422, statusMessage: 'Invalid auction duration' })
+  }
+
+  if (!Number.isInteger(Number(initialBet)) || Number(initialBet) <= 0) {
+    throw createError({ statusCode: 422, statusMessage: 'Initial bet must be a positive whole number' })
+  }
+
   const resolvedUserCtoonId = await resolveUserCtoonId(userCtoonId)
   if (!resolvedUserCtoonId) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
@@ -72,23 +94,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'This cToon has been burned and cannot be auctioned' })
   }
 
-  // Helper: map rarity -> insta-bid floor (must match client)
-  const rarityToExpectedBid = (rarityRaw) => {
-    const r = (rarityRaw || '').trim().toLowerCase()
-    switch (r) {
-      case 'common': return 25
-      case 'uncommon': return 50
-      case 'rare': return 100
-      case 'very rare': return 187
-      case 'crazy rare': return 312
-      case 'code only': return 50
-      case 'prize only': return 50
-      case 'auction only': return 50
-      default: return 50
-    }
-  }
-
-  const expectedInitialBet = rarityToExpectedBid(userCtoonRec.ctoon?.rarity)
+  // Rarity -> insta-bid floor. Shared with the pricing hint so the two can't drift.
+  const expectedInitialBet = rarityFloor(userCtoonRec.ctoon?.rarity)
 
   // Enforce minimum initial bet
   if (Number(initialBet) < expectedInitialBet) {
@@ -120,8 +127,8 @@ export default defineEventHandler(async (event) => {
 
   // 5. Compute endAt
   const nowMs    = Date.now()
-  const daysMs   = durationDays * 24 * 60 * 60 * 1000
-  const minsMs   = durationMinutes * 60 * 1000
+  const daysMs   = days * 24 * 60 * 60 * 1000
+  const minsMs   = minutes * 60 * 1000
   const endAtUtc = new Date(nowMs + daysMs + minsMs).toISOString()
 
   // 6. Create auction
@@ -129,7 +136,7 @@ export default defineEventHandler(async (event) => {
     data: {
       userCtoonId: resolvedUserCtoonId,
       initialBet: Number(initialBet),
-      duration: durationDays,
+      duration: days,
       endAt: endAtUtc,
       ...(userId ? { creatorId: userId } : {})
     }
@@ -230,7 +237,7 @@ export default defineEventHandler(async (event) => {
 
       const { name, rarity, assetPath, isSecondEdition } = userCtoonRec.ctoon || {}
       const mintNumber   = userCtoonRec.mintNumber
-      const durationText = formatDuration(durationDays, durationMinutes)
+      const durationText = formatDuration(days, minutes)
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
       const rawImageUrl = assetPath

@@ -66,6 +66,11 @@ export default defineEventHandler(async (event) => {
       include: {
         initiator: { select: { id: true, username: true } },
         recipient: { select: { id: true, username: true } },
+        // Lineage only — ids, never the other offer's contents. Both offers in
+        // a counter chain always have the same two parties, but there is no
+        // reason to re-serialize a whole second offer to say "this was
+        // countered".
+        counteredBy: { select: { id: true } },
         ctoons: {
           include: {
             userCtoon: {
@@ -87,7 +92,10 @@ export default defineEventHandler(async (event) => {
     const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon)
 
     // Decision timestamp is when status left PENDING. We use updatedAt.
-    const decisionAt = o.status !== 'PENDING' ? o.updatedAt : null
+    // COUNTERED is excluded: nobody decided anything, the offer was superseded
+    // by a revised one, and reporting it as a decision made a negotiation look
+    // like a wall of rejections.
+    const decisionAt = (o.status !== 'PENDING' && o.status !== 'COUNTERED') ? o.updatedAt : null
 
     return {
       id: o.id,
@@ -98,7 +106,9 @@ export default defineEventHandler(async (event) => {
       ctoonsRequested,
       status: o.status,
       createdAt: o.createdAt,      // ISO UTC
-      decisionAt                   // ISO UTC or null
+      decisionAt,                  // ISO UTC or null
+      counteredOfferId: o.counteredOfferId,   // the offer this one replaced
+      counteredByOfferId: o.counteredBy?.id ?? null // the offer that replaced this one
     }
   })
 
