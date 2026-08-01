@@ -1269,6 +1269,10 @@ model Auction {
   winnerAt           DateTime?
   endingSoonNotified Boolean       @default(false)
   isFeatured         Boolean       @default(false)
+  // Back-reference to the AuctionOnly listing that activated into this Auction
+  // (set at activation time in server/cron/sync-guild-members.js). Nullable/not a
+  // FK since the AuctionOnly row can later be deleted while this Auction lives on.
+  auctionOnlyId      String?       @unique
 
   userCtoon     UserCtoon @relation(fields: [userCtoonId], references: [id])
   creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
