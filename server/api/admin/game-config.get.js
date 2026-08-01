@@ -153,6 +153,10 @@ export default defineEventHandler(async (event) => {
             towerMaxLayers: 800
           }
         })
+      } else if (gameName === 'OperationAsteroid') {
+        // Column defaults come from the migration / schema, which mirror DEFAULT_CONFIG in
+        // lib/asteroidSim.js — so an empty create() already produces a playable game.
+        config = await db.gameConfig.create({ data: { gameName } })
       } else if (gameName === 'ReOrbitMemory') {
         config = await db.gameConfig.create({
           data: {

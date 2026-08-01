@@ -8,6 +8,48 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
+// ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
+// Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
+// the admin change log can all be driven from one list and cannot drift apart.
+// The ranges mirror normalizeConfig() in lib/asteroidSim.js.
+const ASTEROID_NUMERIC_RANGES = [
+  ['asteroidRankedPlaysPerPeriod', 0, 100],
+  ['asteroidPointsPerGame',        0, 100000],
+  ['asteroidStartingLives',        1, 9],
+  ['asteroidStartAsteroids',       1, 12],
+  ['asteroidAsteroidsPerWave',     0, 4],
+  ['asteroidAsteroidSpeed',        0.2, 4],
+  ['asteroidWaveSpeedGrowth',      0, 0.5],
+  ['asteroidMaxSpeedMultiplier',   1, 5],
+  ['asteroidTurnRate',             1, 24],
+  ['asteroidThrustAccel',          0.02, 1],
+  ['asteroidMaxShipSpeed',         1, 16],
+  ['asteroidShipDrag',             0.9, 1],
+  ['asteroidFireIntervalTicks',    3, 60],
+  ['asteroidExtraLifeScore',       0, 1000000],
+  ['asteroidPointsLarge',          0, 10000],
+  ['asteroidPointsMedium',         0, 10000],
+  ['asteroidPointsSmall',          0, 10000],
+  ['asteroidWaveClearBonus',       0, 100000],
+  ['asteroidPowerupIntervalTicks', 60, 36000],
+  ['asteroidPowerupChancePercent', 0, 100],
+  ['asteroidPowerupBlueTicks',     0, 7200],
+  ['asteroidPowerupRedTicks',      0, 7200],
+  ['asteroidPowerupGreenTicks',    0, 7200]
+]
+
+const ASTEROID_BOOLEAN_FIELDS = [
+  'asteroidPowerupsEnabled',
+  'asteroidPowerupBlueEnabled',
+  'asteroidPowerupRedEnabled',
+  'asteroidPowerupGreenEnabled'
+]
+
+const ASTEROID_FIELDS = [
+  ...ASTEROID_NUMERIC_RANGES.map(([k]) => k),
+  ...ASTEROID_BOOLEAN_FIELDS
+]
+
 function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName"' })
@@ -166,6 +208,21 @@ function validatePayload(payload) {
     }
     if (payload.reorbitMemoryCardBackImagePath != null && typeof payload.reorbitMemoryCardBackImagePath !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryCardBackImagePath" must be a string or null' })
+    }
+  } else if (payload.gameName === 'OperationAsteroid') {
+    // Ranges here MUST stay in sync with normalizeConfig() in lib/asteroidSim.js, which is
+    // the last line of defence: it re-clamps everything at /start, so a value that slipped past
+    // this check still cannot produce a world the simulation is unstable in.
+    for (const [key, lo, hi] of ASTEROID_NUMERIC_RANGES) {
+      const v = payload[key]
+      if (v == null || typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a number between ${lo} and ${hi}` })
+      }
+    }
+    for (const key of ASTEROID_BOOLEAN_FIELDS) {
+      if (typeof payload[key] !== 'boolean') {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a boolean` })
+      }
     }
   } else if (payload.gameName === 'GuessCtoon') {
     // Plays are unlimited; this caps how many per day COUNT. 0 is legal — it turns scoring
@@ -434,6 +491,11 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...towerData }
         updateData = { ...updateData, ...towerData }
+      } else if (gameName === 'OperationAsteroid') {
+        const asteroidData = {}
+        for (const key of ASTEROID_FIELDS) asteroidData[key] = body[key]
+        createData = { ...createData, ...asteroidData }
+        updateData = { ...updateData, ...asteroidData }
       } else if (gameName === 'ReOrbitMemory') {
         const memoryData = {
           reorbitMemoryPlaysPerPeriod,
@@ -639,6 +701,14 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:TowerStack', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'OperationAsteroid') {
+          for (const key of ASTEROID_FIELDS) {
+            const prev = before?.[key]
+            const next = body[key]
+            if (String(prev) !== String(next)) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:OperationAsteroid', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'ReOrbitMemory') {

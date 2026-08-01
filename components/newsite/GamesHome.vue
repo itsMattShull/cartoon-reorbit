@@ -48,6 +48,10 @@
         <img v-if="tiles.guessctoon" :src="tiles.guessctoon" alt="Guess that cToon!" class="tile-img" />
         <span v-else>Guess that cToon!</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/asteroid" class="quadrant quadrant--asteroid">
+        <img v-if="tiles.asteroid" :src="tiles.asteroid" alt="Operation A.S.T.E.R.O.I.D." class="tile-img" />
+        <span v-else>Operation A.S.T.E.R.O.I.D.</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -83,6 +87,7 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  /* 10 tiles in 2 columns needs 5 rows — bump this when a game is added. */
   grid-template-rows: repeat(5, 1fr);
   width: 100%;
   flex: 1;
@@ -136,14 +141,12 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--tower      { background: #5a2a8a; }
 .quadrant--reorbitmemory { background: #2a7a5a; }
 .quadrant--guessctoon    { background: #8a2a5a; }
-
-/* Ninth tile in a two-column grid would otherwise sit alone with an empty cell beside it. */
-.quadrant--guessctoon { grid-column: 1 / -1; }
+.quadrant--asteroid      { background: #2b2062; }
 
 @media (max-width: 768px) {
   .gameshome {
     grid-template-columns: 1fr;
-    /* Nine 70px-minimum rows can't fit in a fixed 100dvh-based height, so the grid used to
+    /* Ten 70px-minimum rows can't fit in a fixed 100dvh-based height, so the grid used to
        overflow into a nested scroller inside the page's own scroller — on iOS the outer
        page then refuses to scroll until the inner one bottoms out. Let the page scroll
        instead. svh, not dvh, so the URL bar collapsing doesn't resize the tiles. */
@@ -152,7 +155,5 @@ const tiles = computed(() => tileData.value ?? {})
     height: auto;
     min-height: calc(100svh - 276px);
   }
-
-  .quadrant--guessctoon { grid-column: auto; }
 }
 </style>
