@@ -794,6 +794,7 @@ async function startDueAuctions() {
               endAt: new Date(fresh.endsAt),
               creatorId: row.userCtoon?.creatorId,
               isFeatured: fresh.isFeatured,        // ← carry flag onto Auction
+              auctionOnlyId: fresh.id,
             },
             select: { id: true }
           })
