@@ -230,6 +230,22 @@
 <script setup>
 definePageMeta({ ssr: false })
 
+// Zoom is disabled for this page only. nuxt.config.js sets the app-wide viewport, and
+// overriding it there would kill pinch-zoom on every page of the site — an accessibility
+// regression well outside the scope of one arcade game. useHead's entry is scoped to this
+// component and is torn down on unmount, so the global viewport reapplies on the way out.
+//
+// Note that `user-scalable=no` and `maximum-scale` are IGNORED by iOS Safari (Apple stopped
+// honouring them in iOS 10, deliberately, for accessibility). They still do the job on Android
+// Chrome and older browsers, but on iPhone the actual work is done by `touch-action: none` in
+// the stylesheet plus the gesture handlers in onMounted below.
+useHead({
+  meta: [{
+    name: 'viewport',
+    content: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+  }]
+})
+
 import {
   WORLD_W, WORLD_H, MS_PER_TICK, TRIG_STEPS,
   IN_LEFT, IN_RIGHT, IN_THRUST,
@@ -792,6 +808,28 @@ function blockSelection(e) {
   if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
 }
 
+// ─── Zoom suppression ───────────────────────────────────────────────────────────
+// iOS Safari ignores user-scalable=no, so the meta tag alone does not stop a pinch there.
+// These WebKit-only gesture events are what it actually listens to, and cancelling them is
+// the supported way to refuse a pinch. They never fire on Android/Chrome, which honours the
+// viewport meta and touch-action instead — so between the two, every mobile browser is covered.
+function blockGesture(e) {
+  e.preventDefault()
+}
+
+// Belt-and-braces for the pinch itself: any touch that becomes multi-finger inside the game is
+// not a gesture we support, so cancel it before the browser can interpret it as a zoom.
+// Registered with { passive: false }, without which preventDefault is a no-op on touchmove.
+function blockMultiTouch(e) {
+  if (e.touches && e.touches.length > 1) e.preventDefault()
+}
+
+// Double-tap zoom is already handled by touch-action, but Safari can still synthesise a
+// dblclick-driven zoom on some versions; refusing it costs nothing.
+function blockDoubleTapZoom(e) {
+  if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
+}
+
 let resizeObserver = null
 let landscapeMql = null
 function onVisibilityChange() { if (document.hidden) pauseGame(); else resumeGame() }
@@ -823,6 +861,13 @@ onMounted(async () => {
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('selectstart', blockSelection)
   document.addEventListener('dragstart', blockSelection)
+  // passive:false is required — a passive listener cannot preventDefault, which would make
+  // both the pinch and the multi-touch guards silently do nothing.
+  document.addEventListener('gesturestart', blockGesture, { passive: false })
+  document.addEventListener('gesturechange', blockGesture, { passive: false })
+  document.addEventListener('gestureend', blockGesture, { passive: false })
+  document.addEventListener('touchmove', blockMultiTouch, { passive: false })
+  document.addEventListener('dblclick', blockDoubleTapZoom, { passive: false })
 })
 
 // Re-observe the container each time the game view mounts (v-if swaps it out between runs).
@@ -842,6 +887,11 @@ onUnmounted(() => {
   window.removeEventListener('keyup', onKeyUp)
   document.removeEventListener('selectstart', blockSelection)
   document.removeEventListener('dragstart', blockSelection)
+  document.removeEventListener('gesturestart', blockGesture)
+  document.removeEventListener('gesturechange', blockGesture)
+  document.removeEventListener('gestureend', blockGesture)
+  document.removeEventListener('touchmove', blockMultiTouch)
+  document.removeEventListener('dblclick', blockDoubleTapZoom)
   landscapeMql?.removeEventListener?.('change', onLandscapeChange)
 })
 </script>
@@ -877,17 +927,29 @@ onUnmounted(() => {
   -webkit-user-select: none;
 }
 
-/* Buttons: `manipulation` kills the 300ms double-tap-to-zoom gesture without disabling the
-   scrolling that the How to Play modal needs. */
-.ast-wrapper button,
-.modal-backdrop button {
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
+/* ── No zooming anywhere in the game ──────────────────────────────────────────
+   `touch-action: none` on every surface stops pinch-zoom AND double-tap zoom, which an
+   accidental two-finger touch or a fast double-tap on a control would otherwise trigger
+   mid-run. `manipulation` is deliberately NOT used here: the spec has it permit "continuous
+   zooming", so it blocks double-tap zoom but still lets a pinch through.
+
+   touch-action is not inherited, so it has to be set on descendants explicitly rather than
+   just on the wrapper. Clicks are unaffected — touch-action governs browser gestures, not
+   event dispatch, so buttons still work normally. */
+.ast-wrapper,
+.ast-wrapper *,
+.modal-backdrop,
+.modal-backdrop * {
+  touch-action: none;
 }
 
-/* The modal body still has to scroll on a short phone, so it keeps pan gestures. */
-.modal-card {
+/* The one exception: the How to Play / Game Over card has to stay scrollable on a short
+   phone. `pan-y` allows that single gesture while still refusing pinch and double-tap zoom.
+   Its children need it too — the gesture is resolved from the element the touch starts on,
+   and text fills the card, so a `none` child would block the scroll. Declared after the
+   blanket rule above at equal specificity, so source order lets it win. */
+.modal-card,
+.modal-card * {
   touch-action: pan-y;
 }
 
