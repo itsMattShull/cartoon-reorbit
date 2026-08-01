@@ -1134,14 +1134,31 @@ model TradeOffer {
   initiatorId   String // who is making the offer
   recipientId   String // who will receive the offer
   pointsOffered Int      @default(0)
-  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN
+  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  /// Set when this offer was created as a counter to another offer. The
+  /// countered offer is closed out as COUNTERED in the same transaction that
+  /// creates this one, so an offer can only ever be countered once — hence
+  /// @unique, which lets the database enforce that rather than the app.
+  counteredOfferId String? @unique
 
   initiator User @relation("OfferInitiator", fields: [initiatorId], references: [id])
   recipient User @relation("OfferRecipient", fields: [recipientId], references: [id])
 
+  /// The earlier offer this one replaced.
+  counteredOffer TradeOffer? @relation("TradeCounter", fields: [counteredOfferId], references: [id], onDelete: SetNull)
+
+  /// The counter that replaced this offer, if any.
+  counteredBy TradeOffer? @relation("TradeCounter")
+
   ctoons TradeOfferCtoon[]
+
+  // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
+  // pending-trade lookups filter on status. Neither column was indexed.
+  @@index([recipientId, status, createdAt])
+  @@index([initiatorId, status, createdAt])
 }
 
 /// Join table tying a specific UserCtoon to a TradeOffer,
@@ -1156,6 +1173,10 @@ model TradeOfferCtoon {
   userCtoon  UserCtoon  @relation(fields: [userCtoonId], references: [id])
 
   @@unique([tradeOfferId, userCtoonId, role])
+  // The "is this cToon already in a pending trade" guards, and every collection
+  // load, filter on userCtoonId alone. The unique above leads with tradeOfferId
+  // so it cannot serve those — they were sequential scans of the whole table.
+  @@index([userCtoonId])
 }
 
 /// Are we offering this cToon, or requesting it?

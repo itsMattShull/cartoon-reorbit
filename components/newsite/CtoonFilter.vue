@@ -89,7 +89,7 @@
       </div>
     </template>
 
-    <template v-if="showHideUnavailable || showExcludeSecondEditions">
+    <template v-if="showHideUnavailable || showExcludeSecondEditions || showDuplicatesOnly">
       <hr class="cf-divider" />
       <div class="cf-page-filters">
         <label v-if="showHideUnavailable" class="cf-checkbox-row">
@@ -99,6 +99,14 @@
         <label v-if="showExcludeSecondEditions" class="cf-checkbox-row">
           <input type="checkbox" v-model="filter.excludeSecondEditions" />
           <span>Exclude Second Editions</span>
+        </label>
+        <label
+          v-if="showDuplicatesOnly"
+          class="cf-checkbox-row"
+          title="Show only cToons you own two or more copies of. Counts the exact same print — a first and second edition of the same character are separate cToons."
+        >
+          <input type="checkbox" v-model="filter.duplicatesOnly" />
+          <span>Duplicates only</span>
         </label>
       </div>
     </template>
@@ -110,9 +118,12 @@
 </template>
 
 <script setup>
+import { newSiteCtoonFilterDefaults } from '@/composables/useNewSiteCtoonFilter'
+
 const props = defineProps({
   showHideUnavailable: { type: Boolean, default: false },
   showExcludeSecondEditions: { type: Boolean, default: false },
+  showDuplicatesOnly:  { type: Boolean, default: false },
   showSortDir:         { type: Boolean, default: true  },
   showAuctionFilters:  { type: Boolean, default: false },
   showCommonFilters:   { type: Boolean, default: false },
@@ -171,17 +182,11 @@ function toggleRarity(val) {
 }
 
 function clearFilters() {
-  Object.assign(filter.value, {
-    name:            '',
-    rarities:        [],
-    series:          '',
-    set:             '',
-    priceMin:        '',
-    priceMax:        '',
-    sortField:       props.sortOptions[0]?.value ?? 'name',
-    sortAsc:         true,
-    hideUnavailable: false,
-    excludeSecondEditions: false,
+  Object.assign(filter.value, newSiteCtoonFilterDefaults(), {
+    // Clearing deliberately differs from the composable defaults: fall back to
+    // whichever sort this page lists first, ascending.
+    sortField: props.sortOptions[0]?.value ?? 'name',
+    sortAsc:   true,
   })
   if (props.showAuctionFilters || props.showCommonFilters) {
     Object.assign(aFilters.value, {
@@ -348,6 +353,19 @@ function clearFilters() {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.85);
   line-height: 1.2;
+}
+
+/* The desktop sidebar is deliberately dense, but a ~13px tall checkbox row is
+   not a usable tap target. Scoped to these rows only. */
+@media (max-width: 768px) {
+  .cf-checkbox-row { padding: 8px 0; }
+
+  .cf-checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  .cf-checkbox-row span { font-size: 0.85rem; }
 }
 
 /* ── Clear ── */

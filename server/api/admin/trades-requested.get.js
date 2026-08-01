@@ -47,7 +47,11 @@ export default defineEventHandler(async (event) => {
     return result
   }
 
-  // 4) Aggregate trades requested by selected period
+  // 4) Aggregate trades requested by selected period.
+  //
+  // Counters are excluded (counteredOfferId IS NOT NULL) so this stays a count
+  // of negotiations started, not turns taken. Without the filter a single trade
+  // haggled back and forth four times would report as four trades requested.
   if (groupBy === 'weekly') {
     // Week starts per Postgres date_trunc('week', ...) (Monday)
     const rows = await prisma.$queryRaw`
@@ -56,6 +60,7 @@ export default defineEventHandler(async (event) => {
         COUNT(*)::int AS count
       FROM "TradeOffer"
       WHERE "createdAt" >= ${startDate}
+        AND "counteredOfferId" IS NULL
       GROUP BY period
       ORDER BY period
     `
@@ -69,6 +74,7 @@ export default defineEventHandler(async (event) => {
         COUNT(*)::int AS count
       FROM "TradeOffer"
       WHERE "createdAt" >= ${startDate}
+        AND "counteredOfferId" IS NULL
       GROUP BY period
       ORDER BY period
     `
@@ -82,6 +88,7 @@ export default defineEventHandler(async (event) => {
       COUNT(*)::int AS count
     FROM "TradeOffer"
     WHERE "createdAt" >= ${startDate}
+      AND "counteredOfferId" IS NULL
     GROUP BY period
     ORDER BY period
   `

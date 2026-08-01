@@ -28,8 +28,8 @@
             <div class="tr-list-head">
               <span class="tr-col-user">From</span>
               <span class="tr-col-pts">Points</span>
-              <span class="tr-col-ct">↓ Off.</span>
-              <span class="tr-col-ct">↑ Req.</span>
+              <span class="tr-col-ct tr-col-off">↓ Off.</span>
+              <span class="tr-col-ct tr-col-req">↑ Req.</span>
               <span class="tr-col-stat">Status</span>
               <span class="tr-col-date">Date</span>
               <span class="tr-col-act"></span>
@@ -43,8 +43,8 @@
                 <NuxtLink :to="`/newsite/czone/${offer.initiator.username}`" class="tr-link">{{ offer.initiator.username }}</NuxtLink>
               </span>
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
-              <span class="tr-col-ct">{{ countByRole(offer, 'OFFERED') }}</span>
-              <span class="tr-col-ct">{{ countByRole(offer, 'REQUESTED') }}</span>
+              <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
+              <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
               <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
               <span class="tr-col-date">{{ formatDate(offer.createdAt) }}</span>
               <span class="tr-col-act"><button class="tr-view-btn" @click="viewOffer(offer)">View</button></span>
@@ -62,8 +62,8 @@
             <div class="tr-list-head">
               <span class="tr-col-user">To</span>
               <span class="tr-col-pts">Points</span>
-              <span class="tr-col-ct">↓ Off.</span>
-              <span class="tr-col-ct">↑ Req.</span>
+              <span class="tr-col-ct tr-col-off">↓ Off.</span>
+              <span class="tr-col-ct tr-col-req">↑ Req.</span>
               <span class="tr-col-stat">Status</span>
               <span class="tr-col-date">Date</span>
               <span class="tr-col-act"></span>
@@ -77,8 +77,8 @@
                 <NuxtLink :to="`/newsite/czone/${offer.recipient.username}`" class="tr-link">{{ offer.recipient.username }}</NuxtLink>
               </span>
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
-              <span class="tr-col-ct">{{ countByRole(offer, 'OFFERED') }}</span>
-              <span class="tr-col-ct">{{ countByRole(offer, 'REQUESTED') }}</span>
+              <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
+              <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
               <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
               <span class="tr-col-date">{{ formatDate(offer.createdAt) }}</span>
               <span class="tr-col-act"><button class="tr-view-btn" @click="viewOffer(offer)">View</button></span>
@@ -89,6 +89,28 @@
 
       <!-- ─ CREATE TRADE ─ -->
       <template v-else-if="tradeActiveTab === 'create'">
+
+        <!-- Counter banner: in-flow, above everything, on every step -->
+        <div v-if="isCounterMode" class="tr-counter-banner">
+          <div class="tr-counter-main">
+            <span class="tr-counter-title">
+              Countering <strong>{{ tradeCounterSummary?.username }}</strong>'s offer
+            </span>
+            <span class="tr-counter-note">
+              Sending this will decline their original offer.
+            </span>
+            <span v-if="tradeCounterSummary?.theirPointsOffered" class="tr-counter-warn">
+              Their {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts can't be
+              requested back — points only travel from the sender of an offer.
+            </span>
+            <span v-if="counterMissingCount" class="tr-counter-warn">
+              {{ counterMissingCount }} cToon{{ counterMissingCount === 1 ? '' : 's' }} from the
+              original {{ counterMissingCount === 1 ? 'is' : 'are' }} no longer available and
+              {{ counterMissingCount === 1 ? 'was' : 'were' }} left out.
+            </span>
+          </div>
+          <button class="tr-counter-cancel" @click="cancelCounter">Cancel counter</button>
+        </div>
 
         <!-- Step 0: User picker -->
         <div class="tr-user-picker">
@@ -211,8 +233,29 @@
               <span v-if="isLoadingCreateValuations" class="tr-sel-total-val tr-sel-total-dim">…</span>
               <span v-else-if="step1SelectedTotal != null" class="tr-sel-total-val">~{{ step1SelectedTotal.toLocaleString() }} pts</span>
             </div>
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length" @click="tradeCurrentStep = 2">
+            <!--
+              Countering an offer that was points-only leaves nothing to mirror
+              into the request side, so requiring a selection here would dead-end
+              the flow. The server still rejects a wholly empty offer.
+            -->
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
+            </button>
+          </div>
+
+          <!-- Selected strip: the only place the full selection is visible at
+               once, since the grid paginates at 50 and filters can hide picks. -->
+          <div v-if="selectedTargetCtoons.length" class="tr-chips">
+            <span class="tr-chips-label">Requesting {{ selectedTargetCtoons.length }}:</span>
+            <button
+              v-for="c in selectedTargetCtoons"
+              :key="c.id"
+              class="tr-chip"
+              @click="removeSelectedTarget(c)"
+            >
+              <span class="tr-chip-name">{{ c.name }}</span>
+              <span v-if="c.mintNumber != null" class="tr-chip-mint">#{{ c.mintNumber }}</span>
+              <span class="tr-chip-x" aria-hidden="true">✕</span>
             </button>
           </div>
 
@@ -251,7 +294,12 @@
           </template>
 
           <div class="tr-step-footer">
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length" @click="tradeCurrentStep = 2">
+            <!--
+              Countering an offer that was points-only leaves nothing to mirror
+              into the request side, so requiring a selection here would dead-end
+              the flow. The server still rejects a wholly empty offer.
+            -->
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
             </button>
           </div>
@@ -300,6 +348,20 @@
             </div>
           </div>
 
+          <div v-if="selectedInitiatorCtoons.length" class="tr-chips">
+            <span class="tr-chips-label">Offering {{ selectedInitiatorCtoons.length }}:</span>
+            <button
+              v-for="c in selectedInitiatorCtoons"
+              :key="c.id"
+              class="tr-chip"
+              @click="removeSelectedInitiator(c)"
+            >
+              <span class="tr-chip-name">{{ c.name }}</span>
+              <span v-if="c.mintNumber != null" class="tr-chip-mint">#{{ c.mintNumber }}</span>
+              <span class="tr-chip-x" aria-hidden="true">✕</span>
+            </button>
+          </div>
+
           <div v-if="loadingCollections.self" class="tr-loading">Loading collection…</div>
           <template v-else>
             <div v-if="!filteredSelf.length" class="tr-empty">
@@ -344,13 +406,15 @@
         <template v-if="tradeTargetUser && tradeCurrentStep === 3">
           <div class="tr-step-header">
             <div class="tr-step-title-group">
-              <span class="tr-step-title">Confirm Offer</span>
+              <span class="tr-step-title">{{ isCounterMode ? 'Confirm Counter' : 'Confirm Offer' }}</span>
               <span class="tr-step-hint">Review before sending</span>
             </div>
             <div class="tr-step-btns">
               <button class="tr-btn-secondary" @click="tradeCurrentStep = 2">← Back</button>
+              <!-- Short label on purpose: .tr-step-header has no mobile breakpoint
+                   and .tr { overflow: hidden } clips rather than scrolls. -->
               <button class="tr-btn-green" :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer" @click="sendOffer">
-                {{ makingOffer ? 'Sending…' : 'Make Offer' }}
+                {{ makingOffer ? 'Sending…' : (isCounterMode ? 'Send Counter' : 'Make Offer') }}
               </button>
             </div>
           </div>
@@ -573,26 +637,37 @@
           </div>
 
           <!-- Modal footer -->
+          <!--
+            Order matters: Counter sits between Accept and Close so it is never
+            adjacent to Reject. On mobile these wrap to a 2x2 grid, which would
+            otherwise put the two one-tap-destructive actions side by side.
+          -->
           <div class="tm-foot">
             <button
               v-if="isRecipient && currentOffer.status === 'PENDING'"
               class="tm-btn tm-btn-accept"
               :disabled="isProcessing"
               @click="acceptOffer"
-            >Accept Offer</button>
+            >Accept</button>
+            <button
+              v-if="isRecipient && currentOffer.status === 'PENDING'"
+              class="tm-btn tm-btn-counter"
+              :disabled="isProcessing"
+              @click="startCounter(currentOffer)"
+            >Counter</button>
+            <button class="tm-btn tm-btn-close" @click="closeModal">Close</button>
             <button
               v-if="isRecipient && currentOffer.status === 'PENDING'"
               class="tm-btn tm-btn-reject"
               :disabled="isProcessing"
               @click="rejectOffer"
-            >Reject Offer</button>
+            >Reject</button>
             <button
               v-if="isInitiator && currentOffer.status === 'PENDING'"
               class="tm-btn tm-btn-reject"
               :disabled="isProcessing"
               @click="rejectOffer"
-            >Withdraw Offer</button>
-            <button class="tm-btn tm-btn-close" @click="closeModal">Close</button>
+            >Withdraw</button>
           </div>
 
           <div v-if="modalToast.show" class="tm-toast" :class="modalToast.type">{{ modalToast.message }}</div>
@@ -613,6 +688,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
+import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 
 const route = useRoute()
@@ -631,6 +707,8 @@ const {
   tradeActiveTab,
   tradeTargetUser,
   tradeCurrentStep,
+  tradeCounterSourceId,
+  tradeCounterSummary,
   tradeFiltersOther,
   tradeFiltersSelf,
   tradeSetOptionsOther,
@@ -1136,7 +1214,19 @@ async function selectCtoonMint(item) {
 async function selectTargetUser(u, options = {}) {
   await ensureSelfLoaded()
   if (isSelfUsername(u.username)) { targetError.value = "You can't trade with yourself."; return }
-  if (!options.keepPreselect) manualPreselectUserCtoonId.value = null
+  if (!options.keepPreselect) {
+    manualPreselectUserCtoonId.value = null
+    // Picking a different partner from the search box ends counter mode — a
+    // counter can only ever go back to whoever sent the original, so leaving
+    // the banner up here would promise something the server would refuse.
+    if (tradeCounterSourceId.value) {
+      tradeCounterSourceId.value = null
+      tradeCounterSummary.value = null
+      counterMissingCount.value = 0
+      selectedTargetCtoons.value = []
+      selectedInitiatorCtoons.value = []
+    }
+  }
   tradeTargetUser.value = u; pageOther.value = 1; pageSelf.value = 1
   userQuery.value = u.username; showUserSuggest.value = false; showCtoonSuggest.value = false
   highlightedIndex.value = -1; tradeCurrentStep.value = 1
@@ -1154,6 +1244,10 @@ async function clearTarget(focusInput = false) {
   ctoonQuery.value = ''; ctoonResults.value = []; ctoonMintResults.value = []; ctoonMode.value = 'ctoon'
   activeCtoon.value = null; highlightedCtoonIndex.value = -1; showCtoonSuggest.value = false
   manualPreselectUserCtoonId.value = null
+  // Counter state is reset here because this is the single reset point the
+  // wizard already funnels through (sendOffer and "Change" both call it).
+  tradeCounterSourceId.value = null; tradeCounterSummary.value = null
+  preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0
   selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
   pageOther.value = 1; pageSelf.value = 1
@@ -1203,9 +1297,15 @@ async function bootstrapCollections() {
   loadingCollections.other = true; loadingCollections.self = true
   try {
     await fetchSelf()
+    // In counter mode both collections must be fetched with the countered offer
+    // excluded, or every cToon being re-proposed comes back inPendingTrade —
+    // rendered disabled and impossible to deselect.
+    const params = tradeCounterSourceId.value
+      ? { excludeTradeOfferId: tradeCounterSourceId.value }
+      : undefined
     const [other, self, otherTrade, selfTrade] = await Promise.all([
-      $fetch(`/api/collection/${tradeTargetUser.value.username}`),
-      $fetch(`/api/collection/${user.value.username}`),
+      $fetch(`/api/collection/${tradeTargetUser.value.username}`, { params }),
+      $fetch(`/api/collection/${user.value.username}`, { params }),
       $fetch(`/api/trade-list/users/${tradeTargetUser.value.username}`).catch(() => []),
       $fetch('/api/trade-list').catch(() => []),
     ])
@@ -1214,7 +1314,7 @@ async function bootstrapCollections() {
     otherTradeList.value = Array.isArray(otherTrade) ? otherTrade : []
     selfTradeList.value = Array.isArray(selfTrade) ? selfTrade : []
     updateFilterOptions()
-    applyPreselectedTargetCtoon()
+    applyPreselectedCtoons()
   } finally { loadingCollections.other = false; loadingCollections.self = false }
 }
 
@@ -1253,11 +1353,68 @@ watch(tradeCurrentStep, step => {
   }
 })
 
-function applyPreselectedTargetCtoon() {
+/**
+ * Stable identity for a cToon across the two id spaces this page has to bridge.
+ * /api/collection/:username returns a synthetic `uc|userId|ctoonId|mint` token,
+ * while the trade-offer endpoints return the real UserCtoon UUID — so the two
+ * payloads can only be matched on (ctoonId, mintNumber), which both carry.
+ * Same approach as components/newsite/CzoneEdit.vue.
+ */
+function toonKey(item) {
+  return `${item?.ctoonId ?? 'x'}|${item?.mintNumber ?? 'x'}`
+}
+
+// Keys queued by the counter flow, applied once the collections land. Arrays
+// rather than the single id the search-preselect used, and two-sided, because a
+// counter mirrors cToons into both the request and the offer.
+const preselectTargetKeys = ref([])
+const preselectSelfKeys = ref([])
+
+/** How many mirrored cToons could not be found; surfaced in the counter banner. */
+const counterMissingCount = ref(0)
+
+function applyPreselectedCtoons() {
+  // Single-item preselect from the cToon search / czone deep links.
   const preselectId = manualPreselectUserCtoonId.value || (route.query.userCtoonId ? String(route.query.userCtoonId) : null)
-  if (!preselectId) return
-  const match = otherCtoons.value.find(c => c.id === preselectId)
-  if (match && !selectedTargetCtoonsMap.value.has(match.id)) selectedTargetCtoons.value.push(match)
+  if (preselectId) {
+    const match = otherCtoons.value.find(c => c.id === preselectId)
+    if (match && !selectedTargetCtoonsMap.value.has(match.id)) selectedTargetCtoons.value.push(match)
+  }
+
+  if (!preselectTargetKeys.value.length && !preselectSelfKeys.value.length) return
+
+  // Match by key, then push the collection objects themselves — the grid and the
+  // selection maps both key off the synthetic id, so pushing anything else would
+  // leave the selection invisible and un-toggleable.
+  const pick = (pool, keys) => {
+    const byKey = new Map()
+    for (const c of pool) {
+      const k = toonKey(c)
+      if (!byKey.has(k)) byKey.set(k, c)
+    }
+    const found = []
+    let missing = 0
+    for (const k of keys) {
+      const hit = byKey.get(k)
+      if (hit) found.push(hit); else missing++
+    }
+    return { found, missing }
+  }
+
+  const target = pick(otherCtoons.value, preselectTargetKeys.value)
+  const self = pick(selfCtoons.value, preselectSelfKeys.value)
+
+  // Replace wholesale rather than pushing in a loop: one synchronous assignment
+  // per array means the valuation watchers fire once each instead of per item.
+  selectedTargetCtoons.value = target.found
+  selectedInitiatorCtoons.value = self.found
+  // A cToon can go missing between the offer being made and the counter being
+  // built — traded away, burned, or put up for auction. Silently dropping it
+  // would leave the user staring at a shorter list than they expected.
+  counterMissingCount.value = target.missing + self.missing
+
+  preselectTargetKeys.value = []
+  preselectSelfKeys.value = []
 }
 
 function toggleTargetCtoon(c) {
@@ -1280,14 +1437,8 @@ function buildRarityOptions(list) {
 function sortAlpha(arr) { return [...arr].sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })) }
 function uniqueTruthies(arr) { return [...new Set(arr.map(x => (x ?? '').toString().trim()).filter(Boolean))] }
 
-const dupIdsOther = computed(() => {
-  const m = new Map(); for (const c of otherCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
-  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
-})
-const dupIdsSelf = computed(() => {
-  const m = new Map(); for (const c of selfCtoons.value) m.set(c.ctoonId, (m.get(c.ctoonId) || 0) + 1)
-  return new Set([...m].filter(([, n]) => n > 1).map(([id]) => id))
-})
+const dupIdsOther = computed(() => duplicateCtoonIds(otherCtoons.value))
+const dupIdsSelf  = computed(() => duplicateCtoonIds(selfCtoons.value))
 
 function applyFilters(items, f, ctx) {
   const nameQ = f.nameQuery?.toLowerCase().trim()
@@ -1303,6 +1454,11 @@ function applyFilters(items, f, ctx) {
     if (f.owned === 'unowned' && isOwned) return false
     return true
   }).sort((a, b) => {
+    // Selected items first. Without this a mirrored counter's pre-selections
+    // scatter across pages of a 50-per-page grid and the user has no way to see
+    // what was picked for them.
+    const aS = ctx.selectedIds.has(a.id); const bS = ctx.selectedIds.has(b.id)
+    if (aS !== bS) return aS ? -1 : 1
     const aO = ctx.ownedPredicate(a); const bO = ctx.ownedPredicate(b)
     return aO === bO ? 0 : (aO ? 1 : -1)
   })
@@ -1310,12 +1466,14 @@ function applyFilters(items, f, ctx) {
 
 const filteredOther = computed(() => applyFilters(otherCtoons.value, tradeFiltersOther.value, {
   ownedPredicate: c => selfOwnedIdsCreate.value.has(c.ctoonId),
-  dupIds: dupIdsOther.value, tradeListIds: otherTradeListIds.value
+  dupIds: dupIdsOther.value, tradeListIds: otherTradeListIds.value,
+  selectedIds: selectedTargetCtoonsMap.value
 }))
 const filteredSelf = computed(() => {
   let list = applyFilters(selfCtoons.value, tradeFiltersSelf.value, {
     ownedPredicate: c => targetOwnedIds.value.has(c.ctoonId),
-    dupIds: dupIdsSelf.value, tradeListIds: selfTradeListIds.value
+    dupIds: dupIdsSelf.value, tradeListIds: selfTradeListIds.value,
+    selectedIds: selectedInitiatorCtoonsMap.value
   })
   if (tradeFiltersSelf.value.wishlistOnly) list = list.filter(c => targetWishlistIds.value.has(c.ctoonId))
   return list
@@ -1364,8 +1522,11 @@ function buildNameSuggestions(q, list) {
 const pointsToOffer = ref(0)
 const makingOffer = ref(false)
 
+const isCounterMode = computed(() => !!tradeCounterSourceId.value)
+
 async function sendOffer() {
   if (!tradeTargetUser.value || pointsToOffer.value < 0) return
+  const counterId = tradeCounterSourceId.value
   const payload = {
     recipientUsername: tradeTargetUser.value.username,
     ctoonIdsRequested: selectedTargetCtoons.value.map(c => c.id),
@@ -1374,14 +1535,80 @@ async function sendOffer() {
   }
   try {
     makingOffer.value = true
-    await $fetch('/api/trade/offers', { method: 'POST', body: payload })
-    showPageToast('Trade offer sent!', 'success')
+    if (counterId) {
+      // The counter endpoint always addresses the original's initiator, so it
+      // takes no recipient — one less thing that can be pointed elsewhere.
+      const { recipientUsername, ...counterBody } = payload
+      await $fetch(`/api/trade/offers/${counterId}/counter`, { method: 'POST', body: counterBody })
+      showPageToast('Counter offer sent!', 'success')
+    } else {
+      await $fetch('/api/trade/offers', { method: 'POST', body: payload })
+      showPageToast('Trade offer sent!', 'success')
+    }
     await clearTarget(false)
     switchTab('outgoing')
   } catch (e) {
     const msg = e?.data?.statusMessage || e?.statusMessage || e?.message || 'Please try again.'
-    showPageToast(`Failed to send offer: ${msg}`, 'error')
+    showPageToast(`Failed to send ${counterId ? 'counter' : 'offer'}: ${msg}`, 'error')
   } finally { makingOffer.value = false }
+}
+
+// ── Counter offers ────────────────────────────────────────────────
+/**
+ * Turns an incoming offer into a pre-filled counter: their offered cToons become
+ * what we're requesting, their requested cToons become what we're offering.
+ *
+ * Nothing is rejected here. The original stays PENDING until the counter is
+ * actually sent, at which point the server closes it out in the same
+ * transaction — so abandoning this flow leaves the original untouched, and a
+ * dropped connection can't destroy an offer without creating its replacement.
+ */
+async function startCounter(offer) {
+  const mine = offer.ctoons.filter(tc => tc.role === 'REQUESTED').map(tc => tc.userCtoon)
+  const theirs = offer.ctoons.filter(tc => tc.role === 'OFFERED').map(tc => tc.userCtoon)
+
+  closeModal()
+  await clearTarget(false)
+
+  tradeCounterSourceId.value = offer.id
+  tradeCounterSummary.value = {
+    username: offer.initiator.username,
+    // Carried purely to be shown: TradeOffer models points in one direction
+    // only (initiator → recipient), so points they offered cannot be mirrored
+    // into a request. Saying so beats silently dropping the value.
+    theirPointsOffered: Number(offer.pointsOffered) || 0,
+  }
+  preselectTargetKeys.value = theirs.map(toonKey)
+  preselectSelfKeys.value = mine.map(toonKey)
+
+  tradeActiveTab.value = 'create'
+  findTab.value = 'user'
+  await selectTargetUser(
+    { username: offer.initiator.username, avatar: offer.initiator.avatar },
+    { keepPreselect: true }
+  )
+  showPageToast(`Building a counter to ${offer.initiator.username}'s offer.`, 'success')
+  await nextTick()
+  // The document, not .tr-content, is the scroller on mobile, and the modal
+  // leaves the page scrolled to wherever the offer row was.
+  if (process.client) document.querySelector('.tr-topbar')?.scrollIntoView({ block: 'start' })
+}
+
+/** Drops counter mode but keeps the selections, so it is safe to tap by accident. */
+function cancelCounter() {
+  tradeCounterSourceId.value = null
+  tradeCounterSummary.value = null
+  counterMissingCount.value = 0
+  showPageToast('Counter cancelled — this will send as a new offer.', 'success')
+}
+
+function removeSelectedTarget(c) {
+  const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
+  if (i >= 0) selectedTargetCtoons.value.splice(i, 1)
+}
+function removeSelectedInitiator(c) {
+  const i = selectedInitiatorCtoons.value.findIndex(x => x.id === c.id)
+  if (i >= 0) selectedInitiatorCtoons.value.splice(i, 1)
 }
 
 // ── Global click to close suggestions ────────────────────────────
@@ -1424,7 +1651,13 @@ function countByRole(offer, role) { return offer.ctoons.filter(c => c.role === r
 function formatDate(iso) { return new Date(iso).toLocaleDateString() }
 function formatDateTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) }
 function statusBadgeClass(status) {
-  return { PENDING: 'badge-pending', ACCEPTED: 'badge-accepted', REJECTED: 'badge-rejected', WITHDRAWN: 'badge-withdrawn' }[status] || 'badge-withdrawn'
+  return {
+    PENDING: 'badge-pending',
+    ACCEPTED: 'badge-accepted',
+    REJECTED: 'badge-rejected',
+    WITHDRAWN: 'badge-withdrawn',
+    COUNTERED: 'badge-countered'
+  }[status] || 'badge-withdrawn'
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────
@@ -1548,33 +1781,90 @@ onBeforeUnmount(() => {
     align-items: center;
   }
 
+  /* Addressed by class, not position. These were :nth-child() selectors, which
+     silently reassign every cell to the wrong slot the moment a column is
+     added or removed from the row markup. */
+
   /* Row 1: username (span 2 cols) | status badge */
-  .tr-row > :nth-child(1) {
+  .tr-row > .tr-col-user {
     grid-column: 1 / 3; grid-row: 1;
     font-size: 0.72rem; font-weight: bold; text-align: left;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .tr-row > :nth-child(5) { grid-column: 3; grid-row: 1; text-align: right; }
+  .tr-row > .tr-col-stat { grid-column: 3; grid-row: 1; text-align: right; }
 
   /* Row 2: points (span 2 cols) */
-  .tr-row > :nth-child(2) {
+  .tr-row > .tr-col-pts {
     grid-column: 1 / 3; grid-row: 2;
     text-align: left; font-size: 0.65rem;
   }
-  .tr-row > :nth-child(2)::before { content: "Pts: "; color: rgba(255,255,255,0.4); }
+  .tr-row > .tr-col-pts::before { content: "Pts: "; color: rgba(255,255,255,0.4); }
 
   /* Row 3: offered count | requested count */
-  .tr-row > :nth-child(3) { grid-column: 1; grid-row: 3; text-align: left; font-size: 0.65rem; }
-  .tr-row > :nth-child(4) { grid-column: 2; grid-row: 3; text-align: left; font-size: 0.65rem; }
-  .tr-row > :nth-child(3)::before { content: "↓ Off: "; color: rgba(255,255,255,0.4); }
-  .tr-row > :nth-child(4)::before { content: "↑ Req: "; color: rgba(255,255,255,0.4); }
+  .tr-row > .tr-col-off { grid-column: 1; grid-row: 3; text-align: left; font-size: 0.65rem; }
+  .tr-row > .tr-col-req { grid-column: 2; grid-row: 3; text-align: left; font-size: 0.65rem; }
+  .tr-row > .tr-col-off::before { content: "↓ Off: "; color: rgba(255,255,255,0.4); }
+  .tr-row > .tr-col-req::before { content: "↑ Req: "; color: rgba(255,255,255,0.4); }
 
   /* Row 4: date | view button */
-  .tr-row > :nth-child(6) {
+  .tr-row > .tr-col-date {
     grid-column: 1 / 3; grid-row: 4;
     text-align: left; font-size: 0.6rem; color: rgba(255,255,255,0.4);
   }
-  .tr-row > :nth-child(7) { grid-column: 3; grid-row: 2 / 5; align-self: center; }
+  .tr-row > .tr-col-act { grid-column: 3; grid-row: 2 / 5; align-self: center; }
+}
+
+/* ── Counter banner ── */
+/* In normal flow rather than sticky: on mobile the layout gives .main-content
+   height:auto, so .tr-content never becomes a scrollport and a sticky child
+   would pin to a box that never scrolls, sliding off-screen with the page. */
+.tr-counter-banner {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px; margin-bottom: 6px;
+  background: rgba(96,165,250,0.12);
+  border: 1px solid rgba(96,165,250,0.4);
+  border-left: 3px solid var(--OrbitLightBlue);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.tr-counter-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tr-counter-title { font-size: 0.72rem; color: white; }
+.tr-counter-note { font-size: 0.62rem; color: rgba(255,255,255,0.6); }
+.tr-counter-warn { font-size: 0.62rem; color: #fbbf24; }
+.tr-counter-cancel {
+  flex-shrink: 0; padding: 6px 10px; min-height: 32px;
+  border-radius: 3px; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.25); color: rgba(255,255,255,0.85);
+  font-size: 0.62rem; font-family: inherit; cursor: pointer; white-space: nowrap;
+}
+.tr-counter-cancel:hover { background: rgba(0,0,0,0.4); color: white; }
+
+/* ── Selected chips ── */
+.tr-chips {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 6px 8px; margin-bottom: 4px;
+  background: rgba(0,0,0,0.25); border-radius: 4px; flex-shrink: 0;
+}
+.tr-chips-label {
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.5); font-weight: bold; margin-right: 2px;
+}
+.tr-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 7px; min-height: 28px;
+  background: var(--OrbitLightBlue); color: white;
+  border: none; border-radius: 3px;
+  font-size: 0.62rem; font-family: inherit; cursor: pointer; max-width: 190px;
+}
+.tr-chip:hover { filter: brightness(1.15); }
+.tr-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-chip-mint { opacity: 0.75; flex-shrink: 0; }
+.tr-chip-x { opacity: 0.8; flex-shrink: 0; font-size: 0.7rem; }
+
+@media (max-width: 640px) {
+  .tr-counter-banner { flex-direction: column; }
+  .tr-counter-cancel { align-self: flex-start; min-height: 36px; }
+  .tr-chip { min-height: 32px; }
 }
 
 /* ── Status badges ── */
@@ -1585,6 +1875,8 @@ onBeforeUnmount(() => {
 .badge-accepted { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
 .badge-rejected { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
 .badge-withdrawn { background: rgba(156,163,175,0.2); color: #9ca3af; border: 1px solid rgba(156,163,175,0.3); }
+/* Distinct from rejected: a countered offer was replaced, not turned down. */
+.badge-countered { background: rgba(96,165,250,0.2); color: #60a5fa; border: 1px solid rgba(96,165,250,0.35); }
 
 /* ── Create Trade: User picker ── */
 .tr-user-picker {
@@ -2009,6 +2301,9 @@ onBeforeUnmount(() => {
 /* Modal footer */
 .tm-foot {
   display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  /* Wraps because the recipient's footer carries four buttons; without this
+     they shrink past their labels instead of moving to a second row. */
+  flex-wrap: wrap;
   padding: 8px 14px; background: var(--OrbitDarkBlue);
   border-top: 1px solid rgba(255,255,255,0.12); flex-shrink: 0;
 }
@@ -2019,10 +2314,25 @@ onBeforeUnmount(() => {
 .tm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .tm-btn-accept { background: #16a34a; color: white; }
 .tm-btn-accept:hover:not(:disabled) { background: #15803d; }
+.tm-btn-counter { background: var(--OrbitLightBlue); color: white; }
+.tm-btn-counter:hover:not(:disabled) { filter: brightness(1.15); }
 .tm-btn-reject { background: #b91c1c; color: white; }
 .tm-btn-reject:hover:not(:disabled) { background: #991b1b; }
 .tm-btn-close { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.2); }
 .tm-btn-close:hover { background: rgba(255,255,255,0.2); color: white; }
+
+/* Four buttons do not fit one row inside .tm-panel (max-width: 94vw) on a
+   ~360px screen. A 2x2 grid keeps every label on one line and gets the tap
+   targets up to 44px; the DOM order puts Reject diagonally opposite Accept so
+   the destructive action is never adjacent to the one people mean to hit. */
+@media (max-width: 640px) {
+  .tm-foot { gap: 6px; }
+  .tm-btn {
+    flex: 1 1 calc(50% - 3px);
+    min-height: 44px;
+    font-size: 0.75rem;
+  }
+}
 
 /* Modal toast */
 .tm-toast {
