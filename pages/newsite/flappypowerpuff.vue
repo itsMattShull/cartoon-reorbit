@@ -154,10 +154,16 @@ definePageMeta({
 
 // viewport-fit=cover is what makes env(safe-area-inset-*) resolve to anything but 0. The site
 // default has no viewport-fit, so without this every safe-area rule on the page is dead CSS.
+//
+// maximum-scale/user-scalable are the Android and older-browser half of the no-zoom rule; iOS
+// Safari has ignored them since iOS 10, so the rest is done with touch-action and the gesture
+// handlers below. The html class is what scopes all of it to this page — Nuxt adds it on
+// entry and drops it on leave, so zoom keeps working everywhere else on the site.
 useHead({
+  htmlAttrs: { class: 'flappy-no-zoom' },
   meta: [{
     name: 'viewport',
-    content: 'width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no'
+    content: 'width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, viewport-fit=cover, user-scalable=no'
   }]
 })
 
@@ -897,6 +903,18 @@ function backToSelect() {
   uiState.value = 'select'
 }
 
+// ─── Zoom suppression (this page only) ───────────────────────────────────────────────────
+// iOS Safari ignores user-scalable=no and maximum-scale, so pinch-zoom has to be cancelled at
+// the event level. `gesture*` is the Safari-only pinch API; the touch handlers cover engines
+// that don't fire it. Every handler is bound on mount and removed on unmount, so no other page
+// inherits this.
+function preventGesture(e) { e.preventDefault() }
+function preventMultiTouch(e) {
+  // Single-finger touches must pass through untouched or flapping breaks — only a second
+  // finger (i.e. a pinch) is cancelled.
+  if (e.touches && e.touches.length > 1) e.preventDefault()
+}
+
 function onVisibility() {
   if (document.hidden) {
     if (running && pauseBeganAt === null) {
@@ -944,6 +962,14 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   awaitingKeyUp = true
+
+  // Non-passive: a passive listener cannot preventDefault, so the zoom would still happen.
+  document.addEventListener('gesturestart', preventGesture, { passive: false })
+  document.addEventListener('gesturechange', preventGesture, { passive: false })
+  document.addEventListener('gestureend', preventGesture, { passive: false })
+  document.addEventListener('touchstart', preventMultiTouch, { passive: false })
+  document.addEventListener('touchmove', preventMultiTouch, { passive: false })
+  document.addEventListener('dblclick', preventGesture, { passive: false })
 })
 
 onBeforeUnmount(() => {
@@ -954,6 +980,12 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  document.removeEventListener('gesturestart', preventGesture)
+  document.removeEventListener('gesturechange', preventGesture)
+  document.removeEventListener('gestureend', preventGesture)
+  document.removeEventListener('touchstart', preventMultiTouch)
+  document.removeEventListener('touchmove', preventMultiTouch)
+  document.removeEventListener('dblclick', preventGesture)
   try { audioCtx?.close?.() } catch {}
 })
 </script>
@@ -966,13 +998,35 @@ onBeforeUnmount(() => {
   min-height: var(--play-h);
   box-sizing: border-box;
   color: #e8f4fb;
-  /* The whole play region swallows gestures, not just the canvas: a tap landing on the HUD
-     should never scroll the page or zoom. */
-  touch-action: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
+  /* pan-y, not none: the start panel can overflow a short phone, and touch-action: none here
+     would leave the Play button unreachable. pan-y still blocks pinch-zoom and double-tap
+     zoom — the play area below re-tightens this to none. */
+  touch-action: pan-y;
 }
+
+/* Nothing in this game is selectable. A drag that starts a text selection mid-run leaves the
+   selection highlight stuck over the canvas and swallows subsequent taps, which reads as the
+   game freezing. The -webkit- prefix is the one that matters: Safari (iOS and macOS) ignores
+   the unprefixed property, so without it selection still worked on exactly the devices where
+   an accidental drag is most likely. The universal selector is deliberate — user-select
+   inherits, but UA stylesheets re-assert it on buttons, inputs and images. */
+.flappy-wrapper,
+.flappy-wrapper * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Kills the iOS long-press callout ("Copy / Look Up" over the sprites) and the desktop
+     drag-the-image ghost. */
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Belt and braces: if a selection is somehow started (e.g. Ctrl+A), it renders invisibly
+   rather than painting a highlight over the play area. */
+.flappy-wrapper ::selection { background: transparent; }
+.flappy-wrapper ::-moz-selection { background: transparent; }
 
 .center-content {
   flex: 1;
@@ -1037,6 +1091,9 @@ onBeforeUnmount(() => {
   width: min(28vw, 104px);
   height: min(28vw, 104px);
   object-fit: contain;
+  /* The button owns the tap; without this a press landing on the sprite can start an image
+     drag instead of selecting the character. */
+  pointer-events: none;
 }
 
 /* The three characters differ mainly by colour, so the name is not decoration. */
@@ -1106,6 +1163,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   flex: 1;
   min-height: var(--play-h);
+  /* Full gesture capture once a run is on: no pan, no zoom, no double-tap. */
+  touch-action: none;
 }
 
 .hud-strip {
@@ -1256,4 +1315,43 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+</style>
+
+<!-- Unscoped: has to reach <html>/<body>, which the page component does not own. The
+     .flappy-no-zoom class is added by useHead on entry and removed on leave, so these rules
+     apply on this page only and zoom keeps working across the rest of the site. -->
+<style>
+/* pan-y allows normal vertical scrolling but withholds the pinch-zoom and double-tap-zoom
+   permissions, so the browser refuses both without breaking the page. */
+html.flappy-no-zoom,
+html.flappy-no-zoom body {
+  touch-action: pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Nothing anywhere on this page is selectable, including the surrounding nav and adbar. A
+   drag or Ctrl+A that starts on the chrome and sweeps across the canvas would otherwise leave
+   a live selection over the play area mid-run. Scoped to this page by the html class, so the
+   same nav stays selectable everywhere else. */
+html.flappy-no-zoom body,
+html.flappy-no-zoom body * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Inputs are exempt — there are none on this page today, but a future search or chat box in
+   the layout must stay usable. */
+html.flappy-no-zoom body input,
+html.flappy-no-zoom body textarea,
+html.flappy-no-zoom body [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+html.flappy-no-zoom body ::selection { background: transparent; }
+html.flappy-no-zoom body ::-moz-selection { background: transparent; }
 </style>
