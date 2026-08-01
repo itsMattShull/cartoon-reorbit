@@ -844,6 +844,207 @@
           </button>
         </section>
 
+        <!-- Operation A.S.T.E.R.O.I.D. -->
+        <section v-if="activeTab === 'OperationAsteroid'" role="tabpanel" aria-label="Operation A.S.T.E.R.O.I.D. Settings">
+          <h2 class="text-2xl font-semibold mb-4">Operation A.S.T.E.R.O.I.D. Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Plays are unlimited. Only the first few runs each day are ranked — those are the ones
+            that record a score and award points. Timing values are in ticks; the game runs at 60
+            ticks per second.
+          </p>
+
+          <h3 class="text-lg font-semibold mb-2">Plays &amp; Points</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ranked Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Runs per 24-hour period that count for the leaderboard (resets 8 PM CT). Set 0 to make every run practice.</p>
+              <input type="number" v-model.number="asteroidRankedPlaysPerPeriod" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward the daily cap when a ranked run ends</p>
+              <input type="number" v-model.number="asteroidPointsPerGame" min="0" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Difficulty</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Starting Lives</label>
+              <input type="number" v-model.number="asteroidStartingLives" min="1" max="9" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Starting Asteroids</label>
+              <p class="text-xs text-gray-400 mb-1">Large asteroids in wave 1 (1–12)</p>
+              <input type="number" v-model.number="asteroidStartAsteroids" min="1" max="12" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Asteroids Added Per Wave</label>
+              <input type="number" v-model.number="asteroidAsteroidsPerWave" min="0" max="4" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Asteroid Speed</label>
+              <p class="text-xs text-gray-400 mb-1">World units per tick for a large asteroid (0.2–4)</p>
+              <input type="number" v-model.number="asteroidAsteroidSpeed" min="0.2" max="4" step="0.05" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Wave Speed Growth</label>
+              <p class="text-xs text-gray-400 mb-1">0.06 = asteroids get 6% faster each wave</p>
+              <input type="number" v-model.number="asteroidWaveSpeedGrowth" min="0" max="0.5" step="0.01" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier</label>
+              <p class="text-xs text-gray-400 mb-1">Wave speed growth caps here (1–5)</p>
+              <input type="number" v-model.number="asteroidMaxSpeedMultiplier" min="1" max="5" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Turn Rate</label>
+              <p class="text-xs text-gray-400 mb-1">Heading steps per tick out of 1024 (1–24). 6 ≈ a full turn in 1.7s.</p>
+              <input type="number" v-model.number="asteroidTurnRate" min="1" max="24" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Thrust Acceleration</label>
+              <input type="number" v-model.number="asteroidThrustAccel" min="0.02" max="1" step="0.005" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Ship Speed</label>
+              <input type="number" v-model.number="asteroidMaxShipSpeed" min="1" max="16" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ship Drag</label>
+              <p class="text-xs text-gray-400 mb-1">Velocity kept each tick (0.9–1). 1 = no drag, pure inertia.</p>
+              <input type="number" v-model.number="asteroidShipDrag" min="0.9" max="1" step="0.001" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Ticks between auto-fired shots (3–60). Blue power-up halves this.</p>
+              <input type="number" v-model.number="asteroidFireIntervalTicks" min="3" max="60" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Extra Life Score</label>
+              <p class="text-xs text-gray-400 mb-1">Award a life every this many points. 0 disables.</p>
+              <input type="number" v-model.number="asteroidExtraLifeScore" min="0" max="1000000" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Physics &amp; Geometry</h3>
+          <p class="text-xs text-gray-500 mb-2">
+            Sizes are in world units on the fixed 640&times;480 playfield. Durations are in ticks
+            (60 per second). Changing these alters how the game feels but never how it is scored.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ship Collision Radius</label>
+              <p class="text-xs text-gray-400 mb-1">Bigger is easier to hit (4&ndash;40). The Green power-up halves this.</p>
+              <input type="number" v-model.number="asteroidShipRadius" min="4" max="40" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Bullet Speed</label>
+              <p class="text-xs text-gray-400 mb-1">World units per tick, added to the ship's own velocity (1&ndash;20)</p>
+              <input type="number" v-model.number="asteroidBulletSpeed" min="1" max="20" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Bullet Range (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">How long a shot lives before fizzling (10&ndash;300). Longer means the auto-cannon sweeps more of the field.</p>
+              <input type="number" v-model.number="asteroidBulletLifeTicks" min="10" max="300" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Respawn Invulnerability (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Grace period after losing a life (0&ndash;600). 96 &asymp; 1.6s.</p>
+              <input type="number" v-model.number="asteroidRespawnInvulnTicks" min="0" max="600" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Power-Up Pickup Radius</label>
+              <input type="number" v-model.number="asteroidPowerupRadius" min="5" max="40" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Power-Up Lifetime (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">How long an uncollected power-up waits (60&ndash;3600). 600 = 10s.</p>
+              <input type="number" v-model.number="asteroidPowerupLifeTicks" min="60" max="3600" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Large Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidLargeRadius" min="10" max="80" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Medium Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidMediumRadius" min="6" max="60" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Small Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidSmallRadius" min="3" max="40" step="0.5" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Scoring</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Large Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsLarge" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Medium Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsMedium" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Small Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsSmall" min="0" max="10000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Wave Clear Bonus</label>
+              <input type="number" v-model.number="asteroidWaveClearBonus" min="0" max="100000" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Power-Ups</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div class="sm:col-span-2 flex flex-wrap gap-4">
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupsEnabled" /> Power-ups enabled
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupBlueEnabled" /> Blue (2x fire rate)
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupRedEnabled" /> Red (invincibility)
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="asteroidPowerupGreenEnabled" /> Green (half size)
+              </label>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Spawn Interval (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Ticks between spawn attempts (60–36000). 900 = every 15s.</p>
+              <input type="number" v-model.number="asteroidPowerupIntervalTicks" min="60" max="36000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Spawn Chance (%)</label>
+              <p class="text-xs text-gray-400 mb-1">Chance each attempt actually drops a power-up</p>
+              <input type="number" v-model.number="asteroidPowerupChancePercent" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Blue Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">600 = 10s</p>
+              <input type="number" v-model.number="asteroidPowerupBlueTicks" min="0" max="7200" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Red Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">420 = 7s</p>
+              <input type="number" v-model.number="asteroidPowerupRedTicks" min="0" max="7200" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Green Duration (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">720 = 12s</p>
+              <input type="number" v-model.number="asteroidPowerupGreenTicks" min="0" max="7200" class="input" />
+            </div>
+          </div>
+
+          <button @click="saveAsteroidConfig" :disabled="loadingAsteroid" class="btn-primary">
+            <span v-if="!loadingAsteroid">Save Operation A.S.T.E.R.O.I.D. Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- ReOrbit Memory -->
         <section v-if="activeTab === 'ReOrbitMemory'" role="tabpanel" aria-label="ReOrbit Memory Settings">
           <h2 class="text-2xl font-semibold mb-4">ReOrbit Memory Settings</h2>
@@ -969,6 +1170,111 @@
 
           <button @click="saveGuessCtoonConfig" :disabled="loadingGuessCtoon" class="btn-primary">
             <span v-if="!loadingGuessCtoon">Save Guess that cToon! Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
+        <!-- Flappy Powerpuff -->
+        <section v-if="activeTab === 'FlappyPowerpuff'" role="tabpanel" aria-label="Flappy Powerpuff Settings">
+          <h2 class="text-2xl font-semibold mb-4">Flappy Powerpuff Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Distances and speeds are in <strong>world units</strong>, not pixels. The game runs in a
+            fixed 480&times;760 world that is letterboxed into whatever screen the player has, so
+            these values mean the same thing on every device. Values outside the listed ranges are
+            rejected, and the game engine clamps again on its own.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ranked Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">Runs per 24 hours that earn points and count for the leaderboard (resets 8 PM CT). Players can keep playing unranked after this.</p>
+              <input type="number" v-model.number="flappyPlaysPerPeriod" min="1" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Flat points for finishing a ranked run, capped by the global daily limit</p>
+              <input type="number" v-model.number="flappyPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Gravity (100–5000)</label>
+              <p class="text-xs text-gray-400 mb-1">How fast she accelerates downward. Higher = twitchier.</p>
+              <input type="number" v-model.number="flappyGravity" min="100" max="5000" step="50" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Flap Strength (−1200 to −50)</label>
+              <p class="text-xs text-gray-400 mb-1">Upward speed set by each tap. Negative is up. Should be roughly gravity ÷ 3.4 for a comfortable rhythm.</p>
+              <input type="number" v-model.number="flappyFlapVelocity" min="-1200" max="-50" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Scroll Speed (20–1000)</label>
+              <p class="text-xs text-gray-400 mb-1">How fast the city moves past at the start of a run</p>
+              <input type="number" v-model.number="flappyScrollSpeed" min="20" max="1000" step="5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Gap Height (60–600)</label>
+              <p class="text-xs text-gray-400 mb-1">Opening between the top and bottom skyscraper. She is 38 units tall.</p>
+              <input type="number" v-model.number="flappyPipeGap" min="60" max="600" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Building Spacing (120–2000)</label>
+              <p class="text-xs text-gray-400 mb-1">Distance between consecutive skyscrapers</p>
+              <input type="number" v-model.number="flappyPipeSpacing" min="120" max="2000" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Speed Growth Per Building (0–0.5)</label>
+              <p class="text-xs text-gray-400 mb-1">Fraction added to the scroll speed for each building passed</p>
+              <input type="number" v-model.number="flappySpeedGrowthPerPipe" min="0" max="0.5" step="0.005" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier (1–5)</label>
+              <p class="text-xs text-gray-400 mb-1">Ceiling the speed growth plateaus at</p>
+              <input type="number" v-model.number="flappyMaxSpeedMultiplier" min="1" max="5" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Score (1–100000)</label>
+              <p class="text-xs text-gray-400 mb-1">Safety cap — scores are clamped here. Bounds how much work one submission can ask of the server.</p>
+              <input type="number" v-model.number="flappyMaxScore" min="1" max="100000" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Session Length (30–1800s)</label>
+              <p class="text-xs text-gray-400 mb-1">How long a started game stays valid before it must be submitted</p>
+              <input type="number" v-model.number="flappyMaxSessionSeconds" min="30" max="1800" step="30" class="input" />
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Game Artwork</h3>
+            <p class="text-xs text-gray-500 mb-3">
+              Overrides the built-in artwork. Uploads are re-encoded to WebP and resized, so large
+              files are fine to drop in. Leave a slot empty to use the default.
+            </p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div v-for="s in flappyImageSlots" :key="s.slot">
+                <p class="text-sm font-medium text-gray-700 mb-1">{{ s.label }}</p>
+                <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
+                  <img v-if="flappyImages[s.slot]" :src="flappyImages[s.slot]" :alt="s.label" class="w-full h-full object-contain" />
+                  <span v-else class="text-gray-400 text-xs px-1 text-center">Default</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,image/webp,.webp"
+                  class="block w-full text-xs mb-1"
+                  @change="onFlappyImageFile(s.slot, $event)"
+                />
+                <button
+                  class="btn-primary text-xs py-1 px-2"
+                  :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
+                  @click="uploadFlappyImage(s.slot)"
+                >
+                  <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
+                  <span v-else>Uploading…</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button @click="saveFlappyConfig" :disabled="loadingFlappy" class="btn-primary">
+            <span v-if="!loadingFlappy">Save Flappy Powerpuff Settings</span>
             <span v-else>Saving…</span>
           </button>
         </section>
@@ -1117,7 +1423,9 @@ const tabs = [
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
   { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
-  { key: 'GuessCtoon',   label: 'Guess that cToon!' }
+  { key: 'GuessCtoon',   label: 'Guess that cToon!' },
+  { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
+  { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1451,6 +1759,8 @@ async function loadSettings() {
   gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
   gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
+  gameTileImages.value.asteroid     = g.gameTileAsteroidImagePath     || ''
+  gameTileImages.value.flappy       = g.gameTileFlappyImagePath       || ''
   gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
   gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
 
@@ -1540,6 +1850,13 @@ async function loadSettings() {
   towerPerfectEpsilon.value      = tw.towerPerfectEpsilon ?? 4
   towerMaxLayers.value           = tw.towerMaxLayers ?? 800
 
+  const ast = await $fetch('/api/admin/game-config?gameName=OperationAsteroid')
+  // Column defaults are NOT NULL in the schema, so a present config always has every key; the
+  // ?? keeps the existing ref default if the API ever omits one.
+  for (const key of ASTEROID_FIELD_KEYS) {
+    if (ast[key] != null) asteroidCfg[key].value = ast[key]
+  }
+
   const rm = await $fetch('/api/admin/game-config?gameName=ReOrbitMemory')
   reorbitMemoryPlaysPerPeriod.value    = rm.reorbitMemoryPlaysPerPeriod ?? 3
   reorbitMemoryPointsPerGame.value     = rm.reorbitMemoryPointsPerGame ?? 50
@@ -1547,6 +1864,23 @@ async function loadSettings() {
   reorbitMemoryTimeSecondsInput.value  = rm.reorbitMemoryTimeSeconds != null ? String(rm.reorbitMemoryTimeSeconds) : ''
   reorbitMemoryFlipBackDelayMs.value   = rm.reorbitMemoryFlipBackDelayMs ?? 800
   reorbitMemoryCardBackImage.value     = rm.reorbitMemoryCardBackImagePath || ''
+
+  const fp = await $fetch('/api/admin/game-config?gameName=FlappyPowerpuff')
+  flappyPlaysPerPeriod.value     = fp.flappyPlaysPerPeriod ?? 3
+  flappyPointsPerGame.value      = fp.flappyPointsPerGame ?? 50
+  flappyGravity.value            = fp.flappyGravity ?? 1500
+  flappyFlapVelocity.value       = fp.flappyFlapVelocity ?? -440
+  flappyScrollSpeed.value        = fp.flappyScrollSpeed ?? 200
+  flappyPipeGap.value            = fp.flappyPipeGap ?? 215
+  flappyPipeSpacing.value        = fp.flappyPipeSpacing ?? 330
+  flappySpeedGrowthPerPipe.value = fp.flappySpeedGrowthPerPipe ?? 0.02
+  flappyMaxSpeedMultiplier.value = fp.flappyMaxSpeedMultiplier ?? 2
+  flappyMaxScore.value           = fp.flappyMaxScore ?? 500
+  flappyMaxSessionSeconds.value  = fp.flappyMaxSessionSeconds ?? 900
+  flappyImages.value.blossom     = fp.flappyBlossomImagePath || ''
+  flappyImages.value.bubbles     = fp.flappyBubblesImagePath || ''
+  flappyImages.value.buttercup   = fp.flappyButtercupImagePath || ''
+  flappyImages.value.city        = fp.flappyCityImagePath || ''
 
   const gc = await $fetch('/api/admin/game-config?gameName=GuessCtoon')
   guessCtoonScoredPlaysPerPeriod.value = gc.guessCtoonScoredPlaysPerPeriod ?? 3
@@ -1899,11 +2233,13 @@ const gameTileSlots = [
   { slot: 'reorbitmatch', label: 'ReOrbit Match' },
   { slot: 'tower',        label: 'Tower Stack' },
   { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
-  { slot: 'guessctoon',   label: 'Guess that cToon!' }
+  { slot: 'guessctoon',   label: 'Guess that cToon!' },
+  { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
+  { slot: 'flappy',       label: 'Flappy Powerpuff' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -1965,6 +2301,140 @@ const towerMaxSpeedMultiplier  = ref(2.5)
 const towerPerfectEpsilon      = ref(4)
 const towerMaxLayers           = ref(800)
 const loadingTower              = ref(false)
+
+// ── Operation A.S.T.E.R.O.I.D. ────────────────
+// Defaults mirror DEFAULT_CONFIG in lib/asteroidSim.js. Declared as one map so the template,
+// the loader and the saver all iterate the same key list instead of repeating 27 names.
+const loadingAsteroid = ref(false)
+const asteroidRankedPlaysPerPeriod = ref(3)
+const asteroidPointsPerGame        = ref(50)
+const asteroidStartingLives        = ref(3)
+const asteroidStartAsteroids       = ref(4)
+const asteroidAsteroidsPerWave     = ref(1)
+const asteroidAsteroidSpeed        = ref(1.15)
+const asteroidWaveSpeedGrowth      = ref(0.06)
+const asteroidMaxSpeedMultiplier   = ref(2.2)
+const asteroidTurnRate             = ref(6)
+const asteroidThrustAccel          = ref(0.145)
+const asteroidMaxShipSpeed         = ref(5.6)
+const asteroidShipDrag             = ref(0.992)
+const asteroidFireIntervalTicks    = ref(13)
+const asteroidExtraLifeScore       = ref(10000)
+const asteroidShipRadius           = ref(13)
+const asteroidBulletSpeed          = ref(6.2)
+const asteroidBulletLifeTicks      = ref(66)
+const asteroidRespawnInvulnTicks   = ref(96)
+const asteroidPowerupRadius        = ref(13)
+const asteroidPowerupLifeTicks     = ref(600)
+const asteroidLargeRadius          = ref(34)
+const asteroidMediumRadius         = ref(20)
+const asteroidSmallRadius          = ref(11)
+const asteroidPointsLarge          = ref(20)
+const asteroidPointsMedium         = ref(50)
+const asteroidPointsSmall          = ref(100)
+const asteroidWaveClearBonus       = ref(250)
+const asteroidPowerupsEnabled      = ref(true)
+const asteroidPowerupBlueEnabled   = ref(true)
+const asteroidPowerupRedEnabled    = ref(true)
+const asteroidPowerupGreenEnabled  = ref(true)
+const asteroidPowerupIntervalTicks = ref(900)
+const asteroidPowerupChancePercent = ref(65)
+const asteroidPowerupBlueTicks     = ref(600)
+const asteroidPowerupRedTicks      = ref(420)
+const asteroidPowerupGreenTicks    = ref(720)
+
+const asteroidCfg = {
+  asteroidRankedPlaysPerPeriod, asteroidPointsPerGame,
+  asteroidStartingLives, asteroidStartAsteroids, asteroidAsteroidsPerWave,
+  asteroidAsteroidSpeed, asteroidWaveSpeedGrowth, asteroidMaxSpeedMultiplier,
+  asteroidTurnRate, asteroidThrustAccel, asteroidMaxShipSpeed, asteroidShipDrag,
+  asteroidFireIntervalTicks, asteroidExtraLifeScore,
+  asteroidShipRadius, asteroidBulletSpeed, asteroidBulletLifeTicks,
+  asteroidRespawnInvulnTicks, asteroidPowerupRadius, asteroidPowerupLifeTicks,
+  asteroidLargeRadius, asteroidMediumRadius, asteroidSmallRadius,
+  asteroidPointsLarge, asteroidPointsMedium, asteroidPointsSmall, asteroidWaveClearBonus,
+  asteroidPowerupsEnabled, asteroidPowerupBlueEnabled, asteroidPowerupRedEnabled,
+  asteroidPowerupGreenEnabled, asteroidPowerupIntervalTicks, asteroidPowerupChancePercent,
+  asteroidPowerupBlueTicks, asteroidPowerupRedTicks, asteroidPowerupGreenTicks
+}
+const ASTEROID_FIELD_KEYS = Object.keys(asteroidCfg)
+
+// ── Flappy Powerpuff ──────────────────────────
+const flappyPlaysPerPeriod     = ref(3)
+const flappyPointsPerGame      = ref(50)
+const flappyGravity            = ref(1500)
+const flappyFlapVelocity       = ref(-440)
+const flappyScrollSpeed        = ref(200)
+const flappyPipeGap            = ref(215)
+const flappyPipeSpacing        = ref(330)
+const flappySpeedGrowthPerPipe = ref(0.02)
+const flappyMaxSpeedMultiplier = ref(2)
+const flappyMaxScore           = ref(500)
+const flappyMaxSessionSeconds  = ref(900)
+const loadingFlappy            = ref(false)
+const flappyImageSlots = [
+  { slot: 'blossom',   label: 'Blossom' },
+  { slot: 'bubbles',   label: 'Bubbles' },
+  { slot: 'buttercup', label: 'Buttercup' },
+  { slot: 'city',      label: 'City Backdrop' }
+]
+const flappyImages      = ref({ blossom: '', bubbles: '', buttercup: '', city: '' })
+const flappyImageFiles  = ref({ blossom: null, bubbles: null, buttercup: null, city: null })
+const uploadingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
+
+function onFlappyImageFile(slot, e) {
+  flappyImageFiles.value[slot] = e.target.files?.[0] || null
+}
+
+async function uploadFlappyImage(slot) {
+  const file = flappyImageFiles.value[slot]
+  if (!file) return
+  uploadingFlappyImage.value[slot] = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('slot', slot)
+    fd.append('image', file)
+    const res = await $fetch('/api/admin/flappy-image', { method: 'POST', body: fd })
+    flappyImages.value[slot] = res.assetPath
+    flappyImageFiles.value[slot] = null
+    toastMessage.value = 'Image uploaded!'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error uploading image'; toastType.value = 'error'
+  } finally {
+    uploadingFlappyImage.value[slot] = false
+  }
+}
+
+async function saveFlappyConfig() {
+  loadingFlappy.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                 'FlappyPowerpuff',
+        flappyPlaysPerPeriod:     flappyPlaysPerPeriod.value,
+        flappyPointsPerGame:      flappyPointsPerGame.value,
+        flappyGravity:            flappyGravity.value,
+        flappyFlapVelocity:       flappyFlapVelocity.value,
+        flappyScrollSpeed:        flappyScrollSpeed.value,
+        flappyPipeGap:            flappyPipeGap.value,
+        flappyPipeSpacing:        flappyPipeSpacing.value,
+        flappySpeedGrowthPerPipe: flappySpeedGrowthPerPipe.value,
+        flappyMaxSpeedMultiplier: flappyMaxSpeedMultiplier.value,
+        flappyMaxScore:           flappyMaxScore.value,
+        flappyMaxSessionSeconds:  flappyMaxSessionSeconds.value
+      }
+    })
+    toastMessage.value = 'Flappy Powerpuff settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error saving Flappy Powerpuff settings'; toastType.value = 'error'
+  } finally {
+    loadingFlappy.value = false
+  }
+}
 
 // ── ReOrbit Memory ────────────────────────────
 const reorbitMemoryPlaysPerPeriod  = ref(3)
@@ -2115,6 +2585,25 @@ async function saveTowerConfig() {
     toastMessage.value = 'Error saving Tower Stack settings'; toastType.value = 'error'
   } finally {
     loadingTower.value = false
+  }
+}
+
+// ── Operation A.S.T.E.R.O.I.D. ───────────────
+// The field list is shared by the loader and the saver so a new knob only has to be named once
+// here (and in ASTEROID_NUMERIC_RANGES / ASTEROID_BOOLEAN_FIELDS server-side).
+async function saveAsteroidConfig() {
+  loadingAsteroid.value = true; toastMessage.value = ''
+  try {
+    const body = { gameName: 'OperationAsteroid' }
+    for (const key of ASTEROID_FIELD_KEYS) body[key] = asteroidCfg[key].value
+    await $fetch('/api/admin/game-config', { method: 'POST', body })
+    toastMessage.value = 'Operation A.S.T.E.R.O.I.D. settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    const msg = err?.data?.statusMessage || 'Error saving Operation A.S.T.E.R.O.I.D. settings'
+    toastMessage.value = msg; toastType.value = 'error'
+  } finally {
+    loadingAsteroid.value = false
   }
 }
 

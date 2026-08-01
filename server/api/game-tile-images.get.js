@@ -13,7 +13,9 @@ export default defineEventHandler(async () => {
       gameTileReorbitmatchImagePath: true,
       gameTileTowerImagePath:        true,
       gameTileReorbitmemoryImagePath: true,
-      gameTileGuessctoonImagePath:   true
+      gameTileGuessctoonImagePath:   true,
+      gameTileAsteroidImagePath:     true,
+      gameTileFlappyImagePath:       true
     }
   })
 
@@ -26,6 +28,8 @@ export default defineEventHandler(async () => {
     reorbitmatch: cfg?.gameTileReorbitmatchImagePath ?? null,
     tower:        cfg?.gameTileTowerImagePath        ?? null,
     reorbitmemory: cfg?.gameTileReorbitmemoryImagePath ?? null,
-    guessctoon:   cfg?.gameTileGuessctoonImagePath    ?? null
+    guessctoon:   cfg?.gameTileGuessctoonImagePath    ?? null,
+    asteroid:     cfg?.gameTileAsteroidImagePath      ?? null,
+    flappy:       cfg?.gameTileFlappyImagePath        ?? null
   }
 })

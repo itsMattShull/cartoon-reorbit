@@ -9,7 +9,7 @@ definePageMeta({
   showAdbar: true,
   showNav: true,
   title: 'Leaderboards',
-  description: 'See the top players on Cartoon ReOrbit — points leaders, cToon collectors, and ReOrbit Match high scores.'
+  description: 'See the top players on Cartoon ReOrbit — points leaders, cToon collectors, and arcade high scores from ReOrbit Match, Tower Stack and Flappy Powerpuff.'
 })
 
 const { clearSidebarMiddle } = useNewsiteLayout()

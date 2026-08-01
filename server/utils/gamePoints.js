@@ -50,3 +50,56 @@ export async function awardCappedGamePoints(tx, { userId, gameName, poolGameName
 
 // TKO and gToons Clash wins draw from the same daily "combat" pool.
 export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash']
+
+/**
+ * Awards points from the GENERAL daily pool — everything that is not TKO or gToons Clash
+ * (Winball, ReOrbit Match, Tower Stack, ReOrbit Memory, Flappy Powerpuff, monster scans).
+ *
+ * This is the mirror image of `awardCappedGamePoints`: that one sums `gameName IN (names)`,
+ * which is right for the combat pool but wrong here — the general pool is defined by
+ * EXCLUSION, so summing only this game's own rows would hand each game its own private cap
+ * and inflate the site-wide daily total. Passing a general-pool game to
+ * `awardCappedGamePoints` is a bug, not a shortcut.
+ *
+ * Like its sibling it must be called inside an open interactive transaction, and it takes the
+ * same advisory lock on the userId first. That lock is the point: the per-game Redis locks
+ * used by the arcade endpoints are keyed per game, so without it a player can finish Tower
+ * Stack, ReOrbit Memory and Flappy simultaneously, have all three transactions read
+ * `usedToday = 0` under READ COMMITTED, and collect three games' worth of points against one
+ * shared cap.
+ *
+ * Returns the number of points actually awarded (0 if the pool is exhausted).
+ */
+export async function awardGeneralPoolGamePoints(tx, { userId, gameName, pointsPerGame, cap, method }) {
+  const toAward = Number(pointsPerGame || 0)
+  const dailyCap = Number(cap || 0)
+  if (!userId || toAward <= 0 || dailyCap <= 0) return 0
+
+  const windowStart = getDailyWindowStart()
+
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`
+
+  const agg = await tx.gamePointLog.aggregate({
+    where: {
+      userId,
+      createdAt: { gte: windowStart },
+      OR: [{ gameName: null }, { gameName: { notIn: COMBAT_POOL_GAME_NAMES } }]
+    },
+    _sum: { points: true }
+  })
+  const used = Number(agg._sum.points || 0)
+  const toGive = Math.max(0, Math.min(toAward, Math.max(0, dailyCap - used)))
+  if (toGive <= 0) return 0
+
+  await tx.gamePointLog.create({ data: { userId, points: toGive, gameName } })
+  const updated = await tx.userPoints.upsert({
+    where: { userId },
+    create: { userId, points: toGive },
+    update: { points: { increment: toGive } }
+  })
+  await tx.pointsLog.create({
+    data: { userId, points: toGive, total: updated.points, method, direction: 'increase' }
+  })
+
+  return toGive
+}

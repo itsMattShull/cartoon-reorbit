@@ -525,6 +525,14 @@ model User {
   guessCtoonScores GuessCtoonScore[]
   guessCtoonPlays  GuessCtoonPlay[]
 
+  // Operation A.S.T.E.R.O.I.D.
+  asteroidScores AsteroidScore[]
+  asteroidPlays  AsteroidPlay[]
+
+  // Flappy Powerpuff
+  flappyPowerpuffScores FlappyPowerpuffScore[]
+  flappyPowerpuffPlays  FlappyPowerpuffPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -1054,6 +1062,69 @@ model GameConfig {
   guessCtoonMaxQuestions        Int @default(25)
   guessCtoonMinStreakForPoints  Int @default(3)
 
+  // — Operation A.S.T.E.R.O.I.D. settings —
+  // `asteroidRankedPlaysPerPeriod` is the number of daily runs that COUNT: plays are unlimited,
+  // but only this many per day write a score row and award points. Everything else is a
+  // difficulty/scoring/power-up knob mirrored in lib/asteroidSim.js DEFAULT_CONFIG, which is
+  // the single source of truth for the defaults and the clamp ranges.
+  asteroidRankedPlaysPerPeriod Int     @default(3)
+  asteroidPointsPerGame        Int     @default(50)
+  asteroidStartingLives        Int     @default(3)
+  asteroidStartAsteroids       Int     @default(4)
+  asteroidAsteroidsPerWave     Int     @default(1)
+  asteroidAsteroidSpeed        Float   @default(1.15)
+  asteroidWaveSpeedGrowth      Float   @default(0.06)
+  asteroidMaxSpeedMultiplier   Float   @default(2.2)
+  asteroidTurnRate             Int     @default(6)
+  asteroidThrustAccel          Float   @default(0.145)
+  asteroidMaxShipSpeed         Float   @default(5.6)
+  asteroidShipDrag             Float   @default(0.992)
+  asteroidFireIntervalTicks    Int     @default(13)
+  asteroidExtraLifeScore       Int     @default(10000)
+  // physics / geometry (world units; durations in 60Hz ticks)
+  asteroidShipRadius           Float   @default(13)
+  asteroidBulletSpeed          Float   @default(6.2)
+  asteroidBulletLifeTicks      Int     @default(66)
+  asteroidRespawnInvulnTicks   Int     @default(96)
+  asteroidPowerupRadius        Float   @default(13)
+  asteroidPowerupLifeTicks     Int     @default(600)
+  asteroidLargeRadius          Float   @default(34)
+  asteroidMediumRadius         Float   @default(20)
+  asteroidSmallRadius          Float   @default(11)
+  asteroidPointsLarge          Int     @default(20)
+  asteroidPointsMedium         Int     @default(50)
+  asteroidPointsSmall          Int     @default(100)
+  asteroidWaveClearBonus       Int     @default(250)
+  asteroidPowerupsEnabled      Boolean @default(true)
+  asteroidPowerupBlueEnabled   Boolean @default(true)
+  asteroidPowerupRedEnabled    Boolean @default(true)
+  asteroidPowerupGreenEnabled  Boolean @default(true)
+  asteroidPowerupIntervalTicks Int     @default(900)
+  asteroidPowerupChancePercent Int     @default(65)
+  asteroidPowerupBlueTicks     Int     @default(600)
+  asteroidPowerupRedTicks      Int     @default(420)
+  asteroidPowerupGreenTicks    Int     @default(720)
+
+  // — Flappy Powerpuff settings —
+  // World units, not pixels: the game runs in a fixed 480x760 world that is letterboxed into
+  // whatever viewport the player has, so these values mean the same thing on every device.
+  // Engine-side hard bounds live in CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js.
+  flappyPlaysPerPeriod     Int     @default(3)
+  flappyPointsPerGame      Int     @default(50)
+  flappyGravity            Float   @default(1500)
+  flappyFlapVelocity       Float   @default(-440) // negative = upward
+  flappyScrollSpeed        Float   @default(200)
+  flappyPipeGap            Float   @default(215)
+  flappyPipeSpacing        Float   @default(330)
+  flappySpeedGrowthPerPipe Float   @default(0.02)
+  flappyMaxSpeedMultiplier Float   @default(2)
+  flappyMaxScore           Int     @default(500)
+  flappyMaxSessionSeconds  Int     @default(900)
+  flappyBlossomImagePath   String?
+  flappyBubblesImagePath   String?
+  flappyButtercupImagePath String?
+  flappyCityImagePath      String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -1105,6 +1176,9 @@ model GlobalGameConfig {
   gameTileTowerImagePath         String?
   gameTileReorbitmemoryImagePath String?
   gameTileGuessctoonImagePath    String?
+  gameTileAsteroidImagePath      String?
+
+  gameTileFlappyImagePath        String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -2120,6 +2194,7 @@ model Achievement {
   tkoWinsGte                  Int?
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
+  flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
@@ -2919,6 +2994,36 @@ model GuessCtoonPlay {
   @@index([userId, counted, createdAt])
 }
 
+// ── Flappy Powerpuff ───────────────────────────────────────────────────────────
+
+model FlappyPowerpuffScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  character String // blossom | bubbles | buttercup — cosmetic only, never affects physics
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt, userId, score]) // covering: leaderboard period filters + the global week high
+}
+
+// Unlike every other game, Flappy allows unlimited play once the daily ranked allotment is
+// spent. Those runs are still recorded with ranked=false so the game stays visible to play
+// analytics and to the activity signals that feed dormancy — only ranked=true rows count
+// against the allotment. Mirrors the TkoRound.counted precedent.
+model FlappyPowerpuffPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  ranked    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, ranked, createdAt])
+}
+
 // ── VPN Detection ─────────────────────────────────────────────────────────────
 
 model VpnLog {
@@ -2939,4 +3044,37 @@ model VpnLog {
   @@index([userId])
   @@index([ip])
   @@index([detectedAt])
+}
+
+// ── Operation A.S.T.E.R.O.I.D. ─────────────────────────────────────────────────
+// Unlike every other game here, plays are UNLIMITED — only the first
+// `asteroidRankedPlaysPerPeriod` runs of each daily window are "ranked". A row is written to
+// AsteroidPlay only when a ranked slot is consumed (at /start, inside the per-user lock), and
+// a row is written to AsteroidScore only when a ranked run ends. Unranked practice runs
+// intentionally leave no trace, which is what keeps unlimited play from growing these tables
+// without bound.
+
+model AsteroidScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  wave      Int      @default(1)
+  ticks     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model AsteroidPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }

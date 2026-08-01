@@ -8,6 +8,57 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
+// ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
+// Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
+// the admin change log can all be driven from one list and cannot drift apart.
+// The ranges mirror normalizeConfig() in lib/asteroidSim.js.
+const ASTEROID_NUMERIC_RANGES = [
+  ['asteroidRankedPlaysPerPeriod', 0, 100],
+  ['asteroidPointsPerGame',        0, 100000],
+  ['asteroidStartingLives',        1, 9],
+  ['asteroidStartAsteroids',       1, 12],
+  ['asteroidAsteroidsPerWave',     0, 4],
+  ['asteroidAsteroidSpeed',        0.2, 4],
+  ['asteroidWaveSpeedGrowth',      0, 0.5],
+  ['asteroidMaxSpeedMultiplier',   1, 5],
+  ['asteroidTurnRate',             1, 24],
+  ['asteroidThrustAccel',          0.02, 1],
+  ['asteroidMaxShipSpeed',         1, 16],
+  ['asteroidShipDrag',             0.9, 1],
+  ['asteroidFireIntervalTicks',    3, 60],
+  ['asteroidExtraLifeScore',       0, 1000000],
+  ['asteroidShipRadius',           4, 40],
+  ['asteroidBulletSpeed',          1, 20],
+  ['asteroidBulletLifeTicks',      10, 300],
+  ['asteroidRespawnInvulnTicks',   0, 600],
+  ['asteroidPowerupRadius',        5, 40],
+  ['asteroidPowerupLifeTicks',     60, 3600],
+  ['asteroidLargeRadius',          10, 80],
+  ['asteroidMediumRadius',         6, 60],
+  ['asteroidSmallRadius',          3, 40],
+  ['asteroidPointsLarge',          0, 10000],
+  ['asteroidPointsMedium',         0, 10000],
+  ['asteroidPointsSmall',          0, 10000],
+  ['asteroidWaveClearBonus',       0, 100000],
+  ['asteroidPowerupIntervalTicks', 60, 36000],
+  ['asteroidPowerupChancePercent', 0, 100],
+  ['asteroidPowerupBlueTicks',     0, 7200],
+  ['asteroidPowerupRedTicks',      0, 7200],
+  ['asteroidPowerupGreenTicks',    0, 7200]
+]
+
+const ASTEROID_BOOLEAN_FIELDS = [
+  'asteroidPowerupsEnabled',
+  'asteroidPowerupBlueEnabled',
+  'asteroidPowerupRedEnabled',
+  'asteroidPowerupGreenEnabled'
+]
+
+const ASTEROID_FIELDS = [
+  ...ASTEROID_NUMERIC_RANGES.map(([k]) => k),
+  ...ASTEROID_BOOLEAN_FIELDS
+]
+
 function validatePayload(payload) {
   if (!payload?.gameName || typeof payload.gameName !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "gameName"' })
@@ -167,6 +218,21 @@ function validatePayload(payload) {
     if (payload.reorbitMemoryCardBackImagePath != null && typeof payload.reorbitMemoryCardBackImagePath !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryCardBackImagePath" must be a string or null' })
     }
+  } else if (payload.gameName === 'OperationAsteroid') {
+    // Ranges here MUST stay in sync with normalizeConfig() in lib/asteroidSim.js, which is
+    // the last line of defence: it re-clamps everything at /start, so a value that slipped past
+    // this check still cannot produce a world the simulation is unstable in.
+    for (const [key, lo, hi] of ASTEROID_NUMERIC_RANGES) {
+      const v = payload[key]
+      if (v == null || typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a number between ${lo} and ${hi}` })
+      }
+    }
+    for (const key of ASTEROID_BOOLEAN_FIELDS) {
+      if (typeof payload[key] !== 'boolean') {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a boolean` })
+      }
+    }
   } else if (payload.gameName === 'GuessCtoon') {
     // Plays are unlimited; this caps how many per day COUNT. 0 is legal — it turns scoring
     // off entirely while leaving the game playable.
@@ -187,6 +253,36 @@ function validatePayload(payload) {
     }
     if (payload.guessCtoonMinStreakForPoints == null || typeof payload.guessCtoonMinStreakForPoints !== 'number' || payload.guessCtoonMinStreakForPoints < 0 || payload.guessCtoonMinStreakForPoints > 100) {
       throw createError({ statusCode: 400, statusMessage: '"guessCtoonMinStreakForPoints" must be between 0 and 100' })
+    }
+  } else if (payload.gameName === 'FlappyPowerpuff') {
+    // Ranges mirror CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js. The engine clamps
+    // again at /start and /end regardless — this endpoint is only one of several write paths
+    // into the row — but rejecting here gives the admin an error instead of silently saving a
+    // value the game will ignore. Note Number.isFinite, not typeof: typeof NaN is 'number'
+    // and NaN passes every comparison, so a bare range check would let it through.
+    const numeric = [
+      ['flappyPlaysPerPeriod', 1, 100],
+      ['flappyPointsPerGame', 0, 100000],
+      ['flappyGravity', 100, 5000],
+      ['flappyFlapVelocity', -1200, -50],
+      ['flappyScrollSpeed', 20, 1000],
+      ['flappyPipeGap', 60, 600],
+      ['flappyPipeSpacing', 120, 2000],
+      ['flappySpeedGrowthPerPipe', 0, 0.5],
+      ['flappyMaxSpeedMultiplier', 1, 5],
+      ['flappyMaxScore', 1, 100000],
+      ['flappyMaxSessionSeconds', 30, 1800]
+    ]
+    for (const [field, min, max] of numeric) {
+      const v = payload[field]
+      if (!Number.isFinite(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a number between ${min} and ${max}` })
+      }
+    }
+    for (const field of ['flappyBlossomImagePath', 'flappyBubblesImagePath', 'flappyButtercupImagePath', 'flappyCityImagePath']) {
+      if (payload[field] != null && typeof payload[field] !== 'string') {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a string or null` })
+      }
     }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
@@ -241,6 +337,22 @@ export default defineEventHandler(async (event) => {
     guessCtoonChoices,
     guessCtoonMaxQuestions,
     guessCtoonMinStreakForPoints,
+    // FlappyPowerpuff fields
+    flappyPlaysPerPeriod,
+    flappyPointsPerGame,
+    flappyGravity,
+    flappyFlapVelocity,
+    flappyScrollSpeed,
+    flappyPipeGap,
+    flappyPipeSpacing,
+    flappySpeedGrowthPerPipe,
+    flappyMaxSpeedMultiplier,
+    flappyMaxScore,
+    flappyMaxSessionSeconds,
+    flappyBlossomImagePath = null,
+    flappyBubblesImagePath = null,
+    flappyButtercupImagePath = null,
+    flappyCityImagePath = null,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -434,6 +546,11 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...towerData }
         updateData = { ...updateData, ...towerData }
+      } else if (gameName === 'OperationAsteroid') {
+        const asteroidData = {}
+        for (const key of ASTEROID_FIELDS) asteroidData[key] = body[key]
+        createData = { ...createData, ...asteroidData }
+        updateData = { ...updateData, ...asteroidData }
       } else if (gameName === 'ReOrbitMemory') {
         const memoryData = {
           reorbitMemoryPlaysPerPeriod,
@@ -456,6 +573,28 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...guessData }
         updateData = { ...updateData, ...guessData }
+      } else if (gameName === 'FlappyPowerpuff') {
+        // Image paths are written by /api/admin/flappy-image, so a settings save must not
+        // clobber them back to null when the form didn't send them.
+        const flappyData = {
+          flappyPlaysPerPeriod,
+          flappyPointsPerGame,
+          flappyGravity,
+          flappyFlapVelocity,
+          flappyScrollSpeed,
+          flappyPipeGap,
+          flappyPipeSpacing,
+          flappySpeedGrowthPerPipe,
+          flappyMaxSpeedMultiplier,
+          flappyMaxScore,
+          flappyMaxSessionSeconds
+        }
+        if (flappyBlossomImagePath != null) flappyData.flappyBlossomImagePath = flappyBlossomImagePath
+        if (flappyBubblesImagePath != null) flappyData.flappyBubblesImagePath = flappyBubblesImagePath
+        if (flappyButtercupImagePath != null) flappyData.flappyButtercupImagePath = flappyButtercupImagePath
+        if (flappyCityImagePath != null) flappyData.flappyCityImagePath = flappyCityImagePath
+        createData = { ...createData, ...flappyData }
+        updateData = { ...updateData, ...flappyData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -641,6 +780,14 @@ export default defineEventHandler(async (event) => {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:TowerStack', key, prevValue: prev, newValue: next })
             }
           }
+        } else if (gameName === 'OperationAsteroid') {
+          for (const key of ASTEROID_FIELDS) {
+            const prev = before?.[key]
+            const next = body[key]
+            if (String(prev) !== String(next)) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:OperationAsteroid', key, prevValue: prev, newValue: next })
+            }
+          }
         } else if (gameName === 'ReOrbitMemory') {
           const changes = [
             ['reorbitMemoryPlaysPerPeriod', before?.reorbitMemoryPlaysPerPeriod, reorbitMemoryPlaysPerPeriod],
@@ -667,6 +814,25 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:GuessCtoon', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'FlappyPowerpuff') {
+          const changes = [
+            ['flappyPlaysPerPeriod', before?.flappyPlaysPerPeriod, flappyPlaysPerPeriod],
+            ['flappyPointsPerGame', before?.flappyPointsPerGame, flappyPointsPerGame],
+            ['flappyGravity', before?.flappyGravity, flappyGravity],
+            ['flappyFlapVelocity', before?.flappyFlapVelocity, flappyFlapVelocity],
+            ['flappyScrollSpeed', before?.flappyScrollSpeed, flappyScrollSpeed],
+            ['flappyPipeGap', before?.flappyPipeGap, flappyPipeGap],
+            ['flappyPipeSpacing', before?.flappyPipeSpacing, flappyPipeSpacing],
+            ['flappySpeedGrowthPerPipe', before?.flappySpeedGrowthPerPipe, flappySpeedGrowthPerPipe],
+            ['flappyMaxSpeedMultiplier', before?.flappyMaxSpeedMultiplier, flappyMaxSpeedMultiplier],
+            ['flappyMaxScore', before?.flappyMaxScore, flappyMaxScore],
+            ['flappyMaxSessionSeconds', before?.flappyMaxSessionSeconds, flappyMaxSessionSeconds]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:FlappyPowerpuff', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {
