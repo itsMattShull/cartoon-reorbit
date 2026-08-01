@@ -92,7 +92,8 @@ const { data: totalData, pending: totalPending } = useFetch('/api/leaderboard/to
 const gameOptions = [
   { key: 'reorbitmatch', label: 'ReOrbit Match', endpoint: '/api/game/reorbitmatch/leaderboard' },
   { key: 'tower',        label: 'Tower Stack',   endpoint: '/api/game/tower/leaderboard' },
-  { key: 'reorbitmemory', label: 'ReOrbit Memory', endpoint: '/api/game/reorbitmemory/leaderboard', lowerIsBetter: true }
+  { key: 'reorbitmemory', label: 'ReOrbit Memory', endpoint: '/api/game/reorbitmemory/leaderboard', lowerIsBetter: true },
+  { key: 'guessctoon',   label: 'Guess cToon',    endpoint: '/api/game/guessctoon/leaderboard' }
 ]
 const selectedGame = ref('reorbitmatch')
 const gameDataCache = ref({})

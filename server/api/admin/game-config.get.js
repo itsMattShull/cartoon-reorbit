@@ -165,6 +165,21 @@ export default defineEventHandler(async (event) => {
             reorbitMemoryCardBackImagePath: null
           }
         })
+      } else if (gameName === 'GuessCtoon') {
+        // No admin tab drives this game, but the row still has to exist for its column
+        // defaults to be reachable (the migration seeds it too; this covers a config
+        // fetched before that migration ran).
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            guessCtoonPlaysPerPeriod: 3,
+            guessCtoonPointsPerGame: 50,
+            guessCtoonSecondsPerQuestion: 12,
+            guessCtoonChoices: 4,
+            guessCtoonMaxQuestions: 25,
+            guessCtoonMinStreakForPoints: 3
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,

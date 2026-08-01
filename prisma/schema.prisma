@@ -298,6 +298,11 @@ model Ctoon {
   saleDailyPurchases     SaleDailyPurchase[]
   priceDaily             CtoonPriceDaily[]
 
+  // Lets an admin pull a cToon out of the "Guess that cToon!" answer pool without a
+  // deploy — for art that doesn't show the character clearly, or a name that makes an
+  // unanswerable question. Excluded cToons can still be used as wrong answers.
+  guessCtoonExcluded Boolean @default(false)
+
   @@index([isSecondEdition])
   @@index([name])
 }
@@ -515,6 +520,10 @@ model User {
   // ReOrbit Memory
   reOrbitMemoryScores ReOrbitMemoryScore[]
   reOrbitMemoryPlays  ReOrbitMemoryPlay[]
+
+  // Guess that cToon!
+  guessCtoonScores GuessCtoonScore[]
+  guessCtoonPlays  GuessCtoonPlay[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -1035,6 +1044,14 @@ model GameConfig {
   reorbitMemoryFlipBackDelayMs   Int     @default(800)
   reorbitMemoryCardBackImagePath String?
 
+  // — Guess that cToon! settings —
+  guessCtoonPlaysPerPeriod      Int @default(3)
+  guessCtoonPointsPerGame       Int @default(50)
+  guessCtoonSecondsPerQuestion  Int @default(12)
+  guessCtoonChoices             Int @default(4)
+  guessCtoonMaxQuestions        Int @default(25)
+  guessCtoonMinStreakForPoints  Int @default(3)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -1085,6 +1102,7 @@ model GlobalGameConfig {
   gameTileReorbitmatchImagePath  String?
   gameTileTowerImagePath         String?
   gameTileReorbitmemoryImagePath String?
+  gameTileGuessctoonImagePath    String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -2834,6 +2852,40 @@ model ReOrbitMemoryScore {
 }
 
 model ReOrbitMemoryPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+// ── Guess that cToon! ──────────────────────────────────────────────────────────
+// `streak` is the number of consecutive correct answers in one run — higher is
+// better. `suspicious` marks runs whose answer cadence is too machine-regular or
+// too fast to be human (see scoreCadence in guessCtoonEngine); those rows are kept
+// for auditing but filtered out of the leaderboard rather than deleted, so a false
+// positive costs a player their leaderboard slot and nothing else.
+
+model GuessCtoonScore {
+  id              String   @id @default(uuid())
+  userId          String
+  streak          Int
+  suspicious      Boolean  @default(false)
+  medianAnswerMs  Int?
+  stdDevAnswerMs  Int?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, streak])
+  // Covering index: the weekly/monthly leaderboards filter on createdAt and then
+  // only need userId + streak, so they run index-only with no heap access.
+  @@index([createdAt, userId, streak])
+}
+
+model GuessCtoonPlay {
   id        String   @id @default(uuid())
   userId    String
   createdAt DateTime @default(now())

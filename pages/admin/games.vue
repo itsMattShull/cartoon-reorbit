@@ -1393,6 +1393,7 @@ async function loadSettings() {
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
   gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
   gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
+  gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1830,11 +1831,12 @@ const gameTileSlots = [
   { slot: 'tko',          label: 'TKO' },
   { slot: 'reorbitmatch', label: 'ReOrbit Match' },
   { slot: 'tower',        label: 'Tower Stack' },
-  { slot: 'reorbitmemory', label: 'ReOrbit Memory' }
+  { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
+  { slot: 'guessctoon',   label: 'Guess that cToon!' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null

@@ -1,11 +1,16 @@
 import { refreshDiscordTokenAndRoles } from '../utils/refreshDiscordTokenAndRoles.js'
 import { prisma } from '@/server/prisma'
+import { isHotPath } from '@/server/utils/hotPaths'
 
 export default defineEventHandler(async (event) => {
   // Only API routes need user context. Without this gate the middleware runs
   // for every static asset too (cToon images, backgrounds, JS chunks), and a
   // cZone full of cToons turns one page load into dozens of DB lookups.
   if (!event.path.startsWith('/api')) return
+
+  // Per-interaction game endpoints: one full-row User lookup per answer/image is pure
+  // overhead for handlers that never read event.context.user.
+  if (isHotPath(event.path)) return
 
   const userId = event.context.userId
   if (!userId) return
