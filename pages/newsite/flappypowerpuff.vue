@@ -406,8 +406,26 @@ function scoreAt(t) {
 }
 
 // ─── Canvas sizing + letterboxing ────────────────────────────────────────────────────────
+// Matches MOBILE_BREAKPOINT in layouts/newsite-template.vue. Below it, .main-content is
+// height:auto and the page itself is the frame, so the viewport is what bounds the game.
+// At or above it, .main-content is a FIXED-size design box (800x669, scaled to fit) with
+// overflow:hidden — measuring the viewport there produced a canvas taller than the box, and
+// the overflow was silently clipped: at 1920x1080 the bottom ~150px of the game was cut off,
+// and at 2560x1440 almost 1000px was.
+const MOBILE_BREAKPOINT = 768
+
+function isMobileLayout() {
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
+
 function measurePlayHeight() {
   if (!wrapper.value) return
+  if (!isMobileLayout()) {
+    // Desktop: the parent box dictates the size. Height comes from CSS (100% of .main-content),
+    // so nothing is computed here and --play-h stays unused.
+    playHeight.value = 0
+    return
+  }
   const top = wrapper.value.getBoundingClientRect().top
   // svh (small viewport height) rather than vh or dvh: vh on iOS is measured with the URL bar
   // hidden so the box extends underneath it, and dvh changes continuously as the bar collapses,
@@ -420,9 +438,17 @@ function measurePlayHeight() {
 function resizeCanvas() {
   if (!canvas.value || !canvasContainer.value) return
   const rect = canvasContainer.value.getBoundingClientRect()
-  const w = Math.round(rect.width)
-  const h = Math.round(rect.height)
-  if (w <= 0 || h <= 0) return
+  const availW = Math.floor(rect.width)
+  const availH = Math.floor(rect.height)
+  if (availW <= 0 || availH <= 0) return
+
+  // The canvas element IS the world box: size it to the largest 480x760 rectangle that fits,
+  // and let the container centre it. Previously the canvas filled the whole container and the
+  // unused area was painted as scrim bars, which on a desktop wasted 56-62% of the width and
+  // made the game look like a narrow strip floating in a large dark panel.
+  const fit = Math.min(availW / WORLD_W, availH / WORLD_H)
+  const w = Math.max(1, Math.round(WORLD_W * fit))
+  const h = Math.max(1, Math.round(WORLD_H * fit))
 
   // Cap DPR at 2, then step down on very large canvases: this is a full-height portrait canvas
   // repainted every frame, so fill rate is the budget that actually binds on a phone.
@@ -439,7 +465,9 @@ function resizeCanvas() {
   cssW = w
   cssH = h
 
-  // Letterbox: identical world for everyone, only the physical size differs.
+  // Identical world for everyone, only the physical size differs. Because the canvas is now
+  // sized to the world's aspect, these offsets round to zero — they stay so a sub-pixel
+  // remainder is still centred rather than biased to one edge.
   scale = Math.min(w / WORLD_W, h / WORLD_H)
   offX = (w - WORLD_W * scale) / 2
   offY = (h - WORLD_H * scale) / 2
@@ -654,7 +682,11 @@ function loop() {
     }
   }
 
-  renderFrame(t)
+  // Hold the opening frame until the first tap. The clock is already running in 'ready' (it is
+  // reset the moment the player flaps), so rendering it live meant the girl fell off the bottom
+  // of the screen while the player was still reading "Tap to start flying" — the pre-start
+  // screen showed an empty city with no character in it.
+  renderFrame(uiState.value === 'ready' ? 0 : t)
   rafId = requestAnimationFrame(loop)
 }
 
@@ -933,6 +965,8 @@ function onVisibility() {
 }
 
 let orientationHandler = null
+let resizeHandler = null
+let resizeRaf = null
 
 onMounted(async () => {
   reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
@@ -958,6 +992,21 @@ onMounted(async () => {
     nextTick(() => resizeCanvas())
   }
   window.addEventListener('orientationchange', orientationHandler)
+
+  // Desktop only. The layout rescales .main-content on every window resize, so the canvas has
+  // to re-fit or it goes stale against its box. Deliberately NOT bound on mobile: there the
+  // collapsing URL bar fires resize on nearly every scroll pixel, and each canvas resize
+  // reallocates and clears the backbuffer mid-run.
+  resizeHandler = () => {
+    if (isMobileLayout()) return
+    if (resizeRaf !== null) return
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = null
+      measurePlayHeight()
+      resizeCanvas()
+    })
+  }
+  window.addEventListener('resize', resizeHandler)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
@@ -977,6 +1026,8 @@ onBeforeUnmount(() => {
   if (rafId !== null) cancelAnimationFrame(rafId)
   unlockPageScroll()
   if (orientationHandler) window.removeEventListener('orientationchange', orientationHandler)
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
@@ -995,7 +1046,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-height: var(--play-h);
+  /* Desktop: .main-content is a fixed-size box with overflow:hidden, so the game fills it
+     exactly. Anything taller is clipped, not scrolled. Mobile overrides this below. */
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   color: #e8f4fb;
   /* pan-y, not none: the start panel can overflow a short phone, and touch-action: none here
@@ -1030,10 +1084,13 @@ onBeforeUnmount(() => {
 
 .center-content {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 12px;
+  /* The start panel can be taller than the fixed desktop box; scroll it rather than clip it. */
+  overflow-y: auto;
 }
 
 .start-panel {
@@ -1162,7 +1219,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: var(--play-h);
+  min-height: 0;
   /* Full gesture capture once a run is on: no pan, no zoom, no double-tap. */
   touch-action: none;
 }
@@ -1203,15 +1260,22 @@ onBeforeUnmount(() => {
 .canvas-container {
   position: relative;
   flex: 1;
-  min-height: 260px;
+  /* min-height:0 so the canvas can shrink inside the fixed desktop box instead of forcing
+     the column taller than its parent. */
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   /* Keep the play surface clear of the iOS home indicator / Android gesture bar. */
   margin-bottom: max(0px, env(safe-area-inset-bottom));
 }
 
 .game-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  /* Explicit px size is set by resizeCanvas() to the world's aspect; these keep it from ever
+     exceeding its box mid-resize. */
+  max-width: 100%;
+  max-height: 100%;
   touch-action: none;
   outline: none;
 }
@@ -1310,6 +1374,17 @@ onBeforeUnmount(() => {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Below the layout's 768px breakpoint .main-content is height:auto, so the parent gives no
+   height to fill and the viewport-measured value takes over. */
+@media (max-width: 767.98px) {
+  .flappy-wrapper {
+    height: auto;
+    min-height: var(--play-h);
+  }
+  .play-area { min-height: var(--play-h); }
+  .canvas-container { min-height: 260px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
