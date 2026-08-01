@@ -1,9 +1,9 @@
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { MAX_TICKS } from '@/server/utils/asteroidEngine'
-import { normalizeConfig } from '@/lib/asteroidSim'
+import { normalizeConfig, SHIP_IDS, DEFAULT_SHIP_ID, getShip } from '@/lib/asteroidSim'
 
 const LOCK_TTL_MS = 10_000
 
@@ -36,6 +36,19 @@ export default defineEventHandler(async (event) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { banned: true } })
   if (user?.banned) throw createError({ statusCode: 403, statusMessage: 'Account suspended' })
 
+  // Which ship is flying. Validated against the known list so a forged id cannot smuggle in a
+  // made-up weapon — anything unrecognised is rejected outright rather than silently defaulted,
+  // so a client bug surfaces instead of quietly giving the player the wrong ship.
+  const body = await readBody(event).catch(() => null)
+  const requestedShip = body?.shipId
+  let shipId = DEFAULT_SHIP_ID
+  if (requestedShip != null) {
+    if (typeof requestedShip !== 'string' || !SHIP_IDS.includes(requestedShip)) {
+      throw createError({ statusCode: 400, statusMessage: 'Unknown ship' })
+    }
+    shipId = requestedShip
+  }
+
   // Per-user lock prevents concurrent /start requests from both reading the same ranked-play
   // count and each claiming the last ranked slot (TOCTOU).
   const lockToken = crypto.randomUUID()
@@ -66,6 +79,23 @@ export default defineEventHandler(async (event) => {
     const gameConfig = await prisma.gameConfig.findUnique({ where: { gameName: 'OperationAsteroid' } })
     const rankedPlaysPerPeriod = gameConfig?.asteroidRankedPlaysPerPeriod ?? 3
 
+    // Per-ship weapon columns, falling back to the ship's built-in profile when no config row
+    // exists yet. normalizeConfig clamps all of it immediately below.
+    const shipDefaults = getShip(shipId).weapon
+    const WEAPON_COLUMNS = {
+      mosquittoh: ['asteroidMosqFireInterval', 'asteroidMosqBulletSpeed', 'asteroidMosqBulletLife', 'asteroidMosqPellets', 'asteroidMosqSpread'],
+      scamper:    ['asteroidScamFireInterval', 'asteroidScamBulletSpeed', 'asteroidScamBulletLife', 'asteroidScamPellets', 'asteroidScamSpread'],
+      casual:     ['asteroidCasFireInterval',  'asteroidCasBulletSpeed',  'asteroidCasBulletLife',  'asteroidCasPellets',  'asteroidCasSpread']
+    }
+    const [colInterval, colSpeed, colLife, colPellets, colSpread] = WEAPON_COLUMNS[shipId]
+    const weapon = {
+      fireIntervalTicks: gameConfig?.[colInterval] ?? shipDefaults.fireIntervalTicks,
+      bulletSpeed:       gameConfig?.[colSpeed]    ?? shipDefaults.bulletSpeed,
+      bulletLifeTicks:   gameConfig?.[colLife]     ?? shipDefaults.bulletLifeTicks,
+      pellets:           gameConfig?.[colPellets]  ?? shipDefaults.pellets,
+      spreadSteps:       gameConfig?.[colSpread]   ?? shipDefaults.spreadSteps
+    }
+
     // Snapshot the tuning into the session so an admin edit mid-run can't desync the replay.
     // normalizeConfig clamps every value into a range the simulation is known to be stable in,
     // and is applied identically on the client, so both sides build the same world.
@@ -80,11 +110,11 @@ export default defineEventHandler(async (event) => {
       thrustAccel:          gameConfig?.asteroidThrustAccel,
       maxShipSpeed:         gameConfig?.asteroidMaxShipSpeed,
       shipDrag:             gameConfig?.asteroidShipDrag,
-      fireIntervalTicks:    gameConfig?.asteroidFireIntervalTicks,
       extraLifeScore:       gameConfig?.asteroidExtraLifeScore,
       shipRadius:           gameConfig?.asteroidShipRadius,
-      bulletSpeed:          gameConfig?.asteroidBulletSpeed,
-      bulletLifeTicks:      gameConfig?.asteroidBulletLifeTicks,
+      // Weapon comes from the CHOSEN ship, not from a global setting. The simulation only ever
+      // sees these five flat fields, so it stays identical no matter which ship is flying.
+      ...weapon,
       respawnInvulnTicks:   gameConfig?.asteroidRespawnInvulnTicks,
       powerupRadius:        gameConfig?.asteroidPowerupRadius,
       powerupLifeTicks:     gameConfig?.asteroidPowerupLifeTicks,
@@ -123,7 +153,8 @@ export default defineEventHandler(async (event) => {
       startTime: Date.now(),
       runSeed,
       cfg,
-      ranked
+      ranked,
+      shipId
     }), 'EX', SESSION_TTL_SECONDS)
 
     // Consume the ranked slot inside the lock.
@@ -135,6 +166,7 @@ export default defineEventHandler(async (event) => {
       config: cfg,
       runSeed,
       ranked,
+      shipId,
       maxTicks: MAX_TICKS,
       rankedPlaysLeft: Math.max(0, rankedPlaysPerPeriod - rankedPlaysToday - (ranked ? 1 : 0)),
       playsResetAt: nextReset.toISOString()

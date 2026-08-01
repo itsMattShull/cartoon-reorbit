@@ -63,7 +63,7 @@ export default defineEventHandler(async (event) => {
     if (!raw) throw createError({ statusCode: 409, statusMessage: 'Game session not found or expired. Start a new game.' })
 
     const session = JSON.parse(raw)
-    const { startTime, runSeed, cfg, ranked } = session
+    const { startTime, runSeed, cfg, ranked, shipId } = session
     const elapsedMs = Date.now() - startTime
 
     // Authoritative replay. The client's own score is never read from the body.
@@ -83,7 +83,7 @@ export default defineEventHandler(async (event) => {
 
     // Practice runs record nothing and pay nothing — that is the whole deal with unlimited plays.
     if (!ranked) {
-      return { score, wave: result.wave, ranked: false, pointsAwarded: 0 }
+      return { score, wave: result.wave, ranked: false, pointsAwarded: 0, shipId }
     }
 
     const gameConfig = await prisma.gameConfig.findUnique({
@@ -144,10 +144,12 @@ export default defineEventHandler(async (event) => {
     }
 
     await prisma.asteroidScore.create({
-      data: { userId, score, wave: result.wave, ticks: result.ticks }
+      // shipId comes from the session, never from the request body — the ship was fixed when
+      // the run started and the replay used its weapon, so the client has no say here.
+      data: { userId, score, wave: result.wave, ticks: result.ticks, shipId: shipId || 'casual' }
     })
 
-    return { score, wave: result.wave, ranked: true, pointsAwarded }
+    return { score, wave: result.wave, ranked: true, pointsAwarded, shipId }
   } finally {
     try { await redis.eval(casRelease, 1, lockKey(userId), lockToken) } catch {}
   }

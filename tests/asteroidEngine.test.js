@@ -8,7 +8,8 @@ import assert from 'node:assert/strict'
 import {
   TRIG_STEPS, COS_TABLE, SIN_TABLE, TICK_HZ,
   IN_LEFT, IN_RIGHT, IN_THRUST,
-  createRng, seedFromHex, normalizeConfig, simulate, createState, step
+  createRng, seedFromHex, normalizeConfig, simulate, createState, step,
+  SHIPS, SHIP_IDS, DEFAULT_SHIP_ID, getShip, MAX_BULLETS, WORLD_W
 } from '../lib/asteroidSim.js'
 
 import {
@@ -210,6 +211,107 @@ test('a maxed-out config still replays within a sane time budget', () => {
   }, humanLog(400), MAX_TICKS)
   const ms = Number(process.hrtime.bigint() - started) / 1e6
   assert.ok(ms < 1500, `worst-case replay took ${ms.toFixed(0)}ms`)
+})
+
+// ─── Ships ──────────────────────────────────────────────────────────────────────
+test('every ship has a complete, in-range weapon profile', () => {
+  assert.equal(SHIPS.length, 3)
+  for (const ship of SHIPS) {
+    assert.ok(ship.id && ship.name && ship.sprite, `${ship.id} is missing metadata`)
+    const w = ship.weapon
+    // Each weapon must survive normalizeConfig unchanged, or the admin defaults and the
+    // intended feel would silently disagree the first time a run starts.
+    const c = normalizeConfig(w)
+    assert.equal(c.fireIntervalTicks, w.fireIntervalTicks, `${ship.id} fire interval got clamped`)
+    assert.equal(c.bulletSpeed, w.bulletSpeed, `${ship.id} bullet speed got clamped`)
+    assert.equal(c.bulletLifeTicks, w.bulletLifeTicks, `${ship.id} bullet life got clamped`)
+    assert.equal(c.pellets, w.pellets, `${ship.id} pellets got clamped`)
+    assert.equal(c.spreadSteps, w.spreadSteps, `${ship.id} spread got clamped`)
+  }
+  assert.ok(SHIP_IDS.includes(DEFAULT_SHIP_ID))
+})
+
+test('the three ships occupy genuinely different range/rate niches', () => {
+  const reach = id => {
+    const w = getShip(id).weapon
+    return w.bulletSpeed * w.bulletLifeTicks
+  }
+  const rate = id => 60 / getShip(id).weapon.fireIntervalTicks
+
+  // This is the product requirement, pinned: shotgun close, sniper far, casual between.
+  assert.ok(reach('scamper') < WORLD_W * 0.3, 'S.C.A.M.P.E.R. must be very short range')
+  assert.ok(reach('mosquittoh') > WORLD_W * 1.5, 'M.O.S.Q.U.I.T.T.O.H. must be very long range')
+  assert.ok(reach('casual') > reach('scamper') && reach('casual') < reach('mosquittoh'),
+    'C.A.S.U.A.L. must sit between the other two on range')
+
+  assert.ok(rate('mosquittoh') < rate('casual'), 'the sniper must be the slower firer')
+  assert.ok(getShip('scamper').weapon.pellets > 1, 'only S.C.A.M.P.E.R. is a shotgun')
+  assert.equal(getShip('mosquittoh').weapon.pellets, 1)
+  assert.equal(getShip('casual').weapon.pellets, 1)
+})
+
+test('getShip falls back to the default for an unknown id', () => {
+  assert.equal(getShip('not-a-ship').id, DEFAULT_SHIP_ID)
+  assert.equal(getShip(undefined).id, DEFAULT_SHIP_ID)
+})
+
+test('a shotgun volley fires every pellet in one tick, fanned around the heading', () => {
+  const st = createState(SEED, { pellets: 5, spreadSteps: 96, fireIntervalTicks: 30, bulletLifeTicks: 200 })
+  st.ship.invulnTicks = 0
+  step(st, 0)
+  assert.equal(st.bullets.length, 5, 'all five pellets should appear on the same tick')
+  // The fan must actually spread: pellet velocities cannot all be identical.
+  const dirs = new Set(st.bullets.map(b => `${b.vx.toFixed(4)},${b.vy.toFixed(4)}`))
+  assert.equal(dirs.size, 5, 'each pellet should travel on its own heading')
+})
+
+test('a single-shot ship fires exactly one projectile per shot', () => {
+  const st = createState(SEED, { pellets: 1, spreadSteps: 0, fireIntervalTicks: 30, bulletLifeTicks: 200 })
+  step(st, 0)
+  assert.equal(st.bullets.length, 1)
+})
+
+test('a volley can never exceed the global bullet cap', () => {
+  // pellets is clamped to 12 against a cap of 40, but the guard has to hold regardless.
+  const st = createState(SEED, { pellets: 12, spreadSteps: 512, fireIntervalTicks: 3, bulletLifeTicks: 300 })
+  for (let i = 0; i < 400; i++) step(st, 0)
+  assert.ok(st.bullets.length <= MAX_BULLETS, `bullets ran to ${st.bullets.length}`)
+})
+
+test('each ship produces a different run from the same seed and inputs', () => {
+  const log = humanLog(90)
+  const results = SHIPS.map(ship => {
+    const st = simulate(SEED, ship.weapon, log, MAX_TICKS)
+    return `${st.score}/${st.tick}`
+  })
+  assert.equal(new Set(results).size, SHIPS.length,
+    `ships did not diverge: ${results.join(' ')}`)
+})
+
+test('every ship replays deterministically', () => {
+  const log = humanLog(110)
+  for (const ship of SHIPS) {
+    const a = simulate(SEED, ship.weapon, log, MAX_TICKS)
+    const b = simulate(SEED, ship.weapon, log, MAX_TICKS)
+    assert.equal(a.score, b.score, `${ship.id} diverged on replay`)
+    assert.equal(a.tick, b.tick, `${ship.id} diverged on replay`)
+  }
+})
+
+test('stepping live matches replay for the shotgun too', () => {
+  // The multi-pellet path is the newest branch in the fire logic; it has to hold the same
+  // client-steps-live vs server-replays-whole-log equivalence as everything else.
+  const cfg = getShip('scamper').weapon
+  const log = humanLog(70)
+  const live = createState(SEED, cfg)
+  let cursor = 0, mask = 0
+  for (let tick = 1; tick <= MAX_TICKS && !live.over; tick++) {
+    while (cursor < log.length && log[cursor].t <= tick) mask = log[cursor++].a
+    step(live, mask)
+  }
+  const replayed = simulate(SEED, cfg, log, MAX_TICKS)
+  assert.equal(replayed.score, live.score)
+  assert.equal(replayed.tick, live.tick)
 })
 
 // ─── Input log validation ───────────────────────────────────────────────────────
