@@ -44,6 +44,10 @@
         <img v-if="tiles.reorbitmemory" :src="tiles.reorbitmemory" alt="ReOrbit Memory" class="tile-img" />
         <span v-else>ReOrbit Memory</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/asteroid" class="quadrant quadrant--asteroid">
+        <img v-if="tiles.asteroid" :src="tiles.asteroid" alt="Operation A.S.T.E.R.O.I.D." class="tile-img" />
+        <span v-else>Operation A.S.T.E.R.O.I.D.</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -79,7 +83,8 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, 1fr);
+  /* 9 tiles in 2 columns needs 5 rows — bump this when a game is added. */
+  grid-template-rows: repeat(5, 1fr);
   width: 100%;
   flex: 1;
   gap: 6px;

@@ -10,7 +10,8 @@ const SLOT_FIELD = {
   tko:          'gameTileTkoImagePath',
   reorbitmatch: 'gameTileReorbitmatchImagePath',
   tower:        'gameTileTowerImagePath',
-  reorbitmemory: 'gameTileReorbitmemoryImagePath'
+  reorbitmemory: 'gameTileReorbitmemoryImagePath',
+  asteroid: 'gameTileAsteroidImagePath'
 }
 
 export default defineEventHandler(async (event) => {

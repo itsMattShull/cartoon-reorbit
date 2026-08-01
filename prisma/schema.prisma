@@ -516,6 +516,10 @@ model User {
   reOrbitMemoryScores ReOrbitMemoryScore[]
   reOrbitMemoryPlays  ReOrbitMemoryPlay[]
 
+  // Operation A.S.T.E.R.O.I.D.
+  asteroidScores AsteroidScore[]
+  asteroidPlays  AsteroidPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -1035,6 +1039,39 @@ model GameConfig {
   reorbitMemoryFlipBackDelayMs   Int     @default(800)
   reorbitMemoryCardBackImagePath String?
 
+  // — Operation A.S.T.E.R.O.I.D. settings —
+  // `asteroidRankedPlaysPerPeriod` is the number of daily runs that COUNT: plays are unlimited,
+  // but only this many per day write a score row and award points. Everything else is a
+  // difficulty/scoring/power-up knob mirrored in lib/asteroidSim.js DEFAULT_CONFIG, which is
+  // the single source of truth for the defaults and the clamp ranges.
+  asteroidRankedPlaysPerPeriod Int     @default(3)
+  asteroidPointsPerGame        Int     @default(50)
+  asteroidStartingLives        Int     @default(3)
+  asteroidStartAsteroids       Int     @default(4)
+  asteroidAsteroidsPerWave     Int     @default(1)
+  asteroidAsteroidSpeed        Float   @default(1.15)
+  asteroidWaveSpeedGrowth      Float   @default(0.06)
+  asteroidMaxSpeedMultiplier   Float   @default(2.2)
+  asteroidTurnRate             Int     @default(6)
+  asteroidThrustAccel          Float   @default(0.145)
+  asteroidMaxShipSpeed         Float   @default(5.6)
+  asteroidShipDrag             Float   @default(0.992)
+  asteroidFireIntervalTicks    Int     @default(13)
+  asteroidExtraLifeScore       Int     @default(10000)
+  asteroidPointsLarge          Int     @default(20)
+  asteroidPointsMedium         Int     @default(50)
+  asteroidPointsSmall          Int     @default(100)
+  asteroidWaveClearBonus       Int     @default(250)
+  asteroidPowerupsEnabled      Boolean @default(true)
+  asteroidPowerupBlueEnabled   Boolean @default(true)
+  asteroidPowerupRedEnabled    Boolean @default(true)
+  asteroidPowerupGreenEnabled  Boolean @default(true)
+  asteroidPowerupIntervalTicks Int     @default(900)
+  asteroidPowerupChancePercent Int     @default(65)
+  asteroidPowerupBlueTicks     Int     @default(600)
+  asteroidPowerupRedTicks      Int     @default(420)
+  asteroidPowerupGreenTicks    Int     @default(720)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -1085,6 +1122,7 @@ model GlobalGameConfig {
   gameTileReorbitmatchImagePath  String?
   gameTileTowerImagePath         String?
   gameTileReorbitmemoryImagePath String?
+  gameTileAsteroidImagePath      String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -2838,4 +2876,37 @@ model VpnLog {
   @@index([userId])
   @@index([ip])
   @@index([detectedAt])
+}
+
+// ── Operation A.S.T.E.R.O.I.D. ─────────────────────────────────────────────────
+// Unlike every other game here, plays are UNLIMITED — only the first
+// `asteroidRankedPlaysPerPeriod` runs of each daily window are "ranked". A row is written to
+// AsteroidPlay only when a ranked slot is consumed (at /start, inside the per-user lock), and
+// a row is written to AsteroidScore only when a ranked run ends. Unranked practice runs
+// intentionally leave no trace, which is what keeps unlimited play from growing these tables
+// without bound.
+
+model AsteroidScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  wave      Int      @default(1)
+  ticks     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model AsteroidPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
