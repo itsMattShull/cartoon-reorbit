@@ -12,7 +12,8 @@ export default defineEventHandler(async () => {
       gameTileTkoImagePath:          true,
       gameTileReorbitmatchImagePath: true,
       gameTileTowerImagePath:        true,
-      gameTileReorbitmemoryImagePath: true
+      gameTileReorbitmemoryImagePath: true,
+      gameTileFlappyImagePath:       true
     }
   })
 
@@ -24,6 +25,7 @@ export default defineEventHandler(async () => {
     tko:          cfg?.gameTileTkoImagePath          ?? null,
     reorbitmatch: cfg?.gameTileReorbitmatchImagePath ?? null,
     tower:        cfg?.gameTileTowerImagePath        ?? null,
-    reorbitmemory: cfg?.gameTileReorbitmemoryImagePath ?? null
+    reorbitmemory: cfg?.gameTileReorbitmemoryImagePath ?? null,
+    flappy:       cfg?.gameTileFlappyImagePath        ?? null
   }
 })

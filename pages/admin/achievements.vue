@@ -102,6 +102,15 @@
                 <input v-model.number="form.criteria.wordleCurrentStreakGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
                 <p class="text-xs text-gray-500 mt-1">Current consecutive-day streak of earning the 👑.</p>
               </div>
+              <div>
+                <label class="block text-sm">Flappy Powerpuff Best Score ≥</label>
+                <input v-model.number="form.criteria.flappyBestScoreGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+                <p class="text-xs text-gray-500 mt-1">
+                  Highest number of buildings passed in a ranked run. Achievement rewards bypass the
+                  daily points cap, so keep thresholds at levels a real player reaches and avoid
+                  attaching high-value cToons here.
+                </p>
+              </div>
               <div class="md:col-span-3">
                 <label class="block text-sm">User created before</label>
                 <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
@@ -307,6 +316,7 @@ const emptyForm = () => ({
     tkoWinsGte: null,
     wordleWinsGte: null,
     wordleCurrentStreakGte: null,
+    flappyBestScoreGte: null,
     setsRequired: [],
     ctoonsRequired: [],
     userCreatedBefore: null
@@ -462,6 +472,7 @@ function startEdit(a) {
       tkoWinsGte: a.tkoWinsGte ?? null,
       wordleWinsGte: a.wordleWinsGte ?? null,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
+      flappyBestScoreGte: a.flappyBestScoreGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null

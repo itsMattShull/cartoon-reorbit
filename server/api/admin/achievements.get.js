@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     tkoWinsGte: a.tkoWinsGte,
     wordleWinsGte: a.wordleWinsGte,
     wordleCurrentStreakGte: a.wordleCurrentStreakGte,
+    flappyBestScoreGte: a.flappyBestScoreGte,
     setsRequired: a.setsRequired || [],
     ctoonsRequired: (a.requiredCtoons || []).map(rc => ({ ctoonId: rc.ctoonId, name: rc.ctoon?.name || '', assetPath: rc.ctoon?.assetPath || null })),
     userCreatedBefore: a.userCreatedBefore,

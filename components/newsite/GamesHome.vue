@@ -44,6 +44,10 @@
         <img v-if="tiles.reorbitmemory" :src="tiles.reorbitmemory" alt="ReOrbit Memory" class="tile-img" />
         <span v-else>ReOrbit Memory</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/flappypowerpuff" class="quadrant quadrant--flappy">
+        <img v-if="tiles.flappy" :src="tiles.flappy" alt="Flappy Powerpuff!" class="tile-img" />
+        <span v-else>Flappy Powerpuff!</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -76,10 +80,15 @@ const tiles = computed(() => tileData.value ?? {})
   text-decoration: none;
 }
 
+/* 3x3 rather than 2 columns: there are 9 tiles, and 9 in a 2-column grid leaves an orphan in
+   an implicit auto-height row. Because .tile-img is absolutely positioned it has no intrinsic
+   height, so that row would collapse to nothing whenever the tile has an image configured.
+   3x3 also fits the 800x669 desktop main-content box far better than 2x5 would. */
 .gameshome {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
   width: 100%;
   flex: 1;
   gap: 6px;
@@ -131,12 +140,24 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--reorbit    { background: #1a6a8a; }
 .quadrant--tower      { background: #5a2a8a; }
 .quadrant--reorbitmemory { background: #2a7a5a; }
+.quadrant--flappy     { background: #2f6f9e; }
+
+/* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
+   scaled and brightened. */
+@media (hover: none) {
+  .quadrant:hover { filter: none; transform: none; }
+}
 
 @media (max-width: 768px) {
+  /* Two columns and auto rows rather than one column at a fixed height: 9 single-column rows
+     need ~690px of minimum content inside a box capped near 576px on a modern phone, which
+     overflows into a nested scroller inside an already-scrolling page. The tiles are images,
+     so 2-up at ~190px is still a comfortable tap target. */
   .gameshome {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(8, minmax(70px, 1fr));
-    height: max(300px, calc(100dvh - 276px));
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: minmax(88px, auto);
+    height: auto;
   }
 }
 </style>
