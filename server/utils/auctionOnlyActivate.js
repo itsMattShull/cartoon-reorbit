@@ -92,7 +92,7 @@ export const AUCTION_ONLY_ROW_INCLUDE = {
     select: {
       id: true,
       mintNumber: true,
-      creatorId: true,
+      userId: true,
       ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
     }
   }
@@ -138,7 +138,7 @@ export async function activateAuctionOnlyRow(row) {
         initialBet,
         duration: durationDays,
         endAt: new Date(fresh.endsAt),
-        creatorId: row.userCtoon?.creatorId,
+        creatorId: row.userCtoon?.userId,
         isFeatured: fresh.isFeatured,
         auctionOnlyId: fresh.id
       },
