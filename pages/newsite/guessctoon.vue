@@ -7,15 +7,6 @@
           <div class="gc-spinner" aria-label="Loading game…"></div>
         </div>
 
-        <!-- No plays left -->
-        <div v-else-if="uiState === 'noplays'" class="gc-center">
-          <div class="gc-card">
-            <h1 class="gc-title">Guess that cToon!</h1>
-            <p class="gc-card-text">No plays left today.</p>
-            <p class="gc-muted">Resets {{ resetLabel }}</p>
-          </div>
-        </div>
-
         <!-- Start -->
         <div v-else-if="uiState === 'start'" class="gc-center">
           <div class="gc-card">
@@ -25,11 +16,24 @@
               streak — one wrong answer ends the run.
             </p>
             <div class="gc-badges">
-              <span class="gc-badge">{{ playsLeft }} play{{ playsLeft !== 1 ? 's' : '' }} left</span>
+              <span v-if="scoredPlaysLeft > 0" class="gc-badge">
+                {{ scoredPlaysLeft }} scoring play{{ scoredPlaysLeft !== 1 ? 's' : '' }} left
+              </span>
+              <span v-else class="gc-badge gc-badge--practice">Practice mode</span>
               <span v-if="allTimeHigh != null" class="gc-badge gc-badge--alt">Best streak: {{ allTimeHigh }}</span>
             </div>
             <p class="gc-muted">
-              {{ config.secondsPerQuestion }}s per cToon · {{ config.maxQuestions }} to go perfect · Resets {{ resetLabel }}
+              <template v-if="scoredPlaysLeft > 0">
+                Play as much as you like — your next {{ scoredPlaysLeft }} run{{ scoredPlaysLeft !== 1 ? 's' : '' }}
+                count for points and the leaderboard.
+              </template>
+              <template v-else>
+                Play as much as you like. Today's scoring runs are used up, so these won't count
+                for points or the leaderboard. Resets {{ resetLabel }}.
+              </template>
+            </p>
+            <p class="gc-muted">
+              {{ config.secondsPerQuestion }}s per cToon · {{ config.maxQuestions }} to go perfect
             </p>
             <button class="gc-btn-start" :disabled="starting" @click="startGame">
               {{ starting ? 'Loading…' : 'Play' }}
@@ -59,8 +63,9 @@
               <span class="gc-hud-value">{{ questionIndex + 1 }}<span class="gc-hud-sub">/{{ totalQuestions }}</span></span>
             </div>
             <div class="gc-hud-item gc-hud-item--right">
-              <span class="gc-hud-label">Best</span>
-              <span class="gc-hud-value">{{ allTimeHigh ?? '—' }}</span>
+              <span class="gc-hud-label">{{ counted ? 'Best' : 'Mode' }}</span>
+              <span v-if="counted" class="gc-hud-value">{{ allTimeHigh ?? '—' }}</span>
+              <span v-else class="gc-hud-value gc-hud-value--practice">Practice</span>
             </div>
           </div>
 
@@ -74,6 +79,7 @@
               decoding="async"
               fetchpriority="high"
               draggable="false"
+              :ref="onImgRef"
               @load="imgReady = true"
               @error="imgReady = true"
             />
@@ -122,7 +128,10 @@
               It was <strong>{{ finalResult.correctName }}</strong>.
             </p>
             <p v-if="isPersonalBest" class="gc-pb">New personal best!</p>
-            <p v-if="finalResult?.pointsAwarded" class="gc-muted">
+            <p v-if="finalResult && !finalResult.counted" class="gc-muted">
+              Practice run — didn't count for points or the leaderboard.
+            </p>
+            <p v-else-if="finalResult?.pointsAwarded" class="gc-muted">
               +{{ finalResult.pointsAwarded }} points
             </p>
             <p
@@ -133,14 +142,20 @@
             </p>
 
             <div class="gc-actions">
-              <button v-if="playsLeft > 0" class="gc-btn-start" :disabled="starting" @click="startGame">
+              <button class="gc-btn-start" :disabled="starting" @click="startGame">
                 {{ starting ? 'Loading…' : 'Play Again' }}
               </button>
-              <span v-else class="gc-muted">No plays left · Resets {{ resetLabel }}</span>
               <NuxtLink to="/newsite/leaderboards" class="gc-btn-secondary">Leaderboard</NuxtLink>
               <NuxtLink to="/newsite/Games" class="gc-btn-secondary">Games Home</NuxtLink>
             </div>
-            <p class="gc-muted">{{ playsLeft }} play{{ playsLeft !== 1 ? 's' : '' }} left today</p>
+            <p class="gc-muted">
+              <template v-if="scoredPlaysLeft > 0">
+                {{ scoredPlaysLeft }} scoring play{{ scoredPlaysLeft !== 1 ? 's' : '' }} left today
+              </template>
+              <template v-else>
+                Unlimited practice runs · Scoring resets {{ resetLabel }}
+              </template>
+            </p>
           </div>
         </div>
       </div>
@@ -155,12 +170,14 @@ definePageMeta({ ssr: false })
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F']
 
-const uiState = ref('loading') // loading | noplays | start | playing | gameover
+const uiState = ref('loading') // loading | start | playing | gameover
 const starting = ref(false)
 const startError = ref('')
 
-const config = ref({ secondsPerQuestion: 12, maxQuestions: 25, minStreakForPoints: 3, playsPerPeriod: 3 })
-const playsLeft = ref(0)
+const config = ref({ secondsPerQuestion: 12, maxQuestions: 25, minStreakForPoints: 3, scoredPlaysPerPeriod: 3 })
+// Plays are unlimited; this is how many more will count toward points and the leaderboard.
+const scoredPlaysLeft = ref(0)
+const counted = ref(true)
 const playsResetAt = ref(null)
 const allTimeHigh = ref(null)
 
@@ -203,6 +220,14 @@ const resetLabel = computed(() => {
 
 function imageUrl (token) {
   return token ? `/api/game/guessctoon/image/${token}` : ''
+}
+
+// The next question's image is prefetched while the current one is on screen, so by the
+// time it becomes current it is usually already in cache and can finish decoding BEFORE
+// the freshly-keyed <img> attaches its load handler. Without this check `load` never
+// fires, imgReady stays false, and the placeholder sits on top of the artwork forever.
+function onImgRef (el) {
+  if (el && el.complete && el.naturalWidth > 0) imgReady.value = true
 }
 
 function answerClass (i) {
@@ -294,7 +319,7 @@ async function loadStatus () {
   try {
     const s = await $fetch('/api/game/guessctoon/status')
     config.value = s.config
-    playsLeft.value = s.playsLeft
+    scoredPlaysLeft.value = s.scoredPlaysLeft
     playsResetAt.value = s.playsResetAt
     allTimeHigh.value = s.allTimeHigh
     return s
@@ -311,23 +336,19 @@ async function startGame () {
     const res = await $fetch('/api/game/guessctoon/start', { method: 'POST' })
     totalQuestions.value = res.totalQuestions
     config.value = { ...config.value, secondsPerQuestion: res.secondsPerQuestion }
+    counted.value = res.counted !== false
+    scoredPlaysLeft.value = res.scoredPlaysLeft ?? scoredPlaysLeft.value
+    playsResetAt.value = res.playsResetAt ?? playsResetAt.value
     streak.value = 0
     reveal.value = null
     finalResult.value = null
     isPersonalBest.value = false
     locked.value = false
-    playsLeft.value = Math.max(0, playsLeft.value - 1)
     uiState.value = 'playing'
     await nextTick()
     setQuestion(res.question, res.secondsPerQuestion * 1000)
   } catch (err) {
-    const status = err?.statusCode || err?.response?.status
-    if (status === 429) {
-      await loadStatus()
-      uiState.value = 'noplays'
-    } else {
-      startError.value = err?.statusMessage || err?.data?.statusMessage || 'Could not start a game. Try again.'
-    }
+    startError.value = err?.statusMessage || err?.data?.statusMessage || 'Could not start a game. Try again.'
   } finally {
     starting.value = false
   }
@@ -357,7 +378,7 @@ async function submitAnswer (choice) {
       return
     }
     await loadStatus()
-    uiState.value = playsLeft.value > 0 ? 'start' : 'noplays'
+    uiState.value = 'start'
     locked.value = false
     return
   }
@@ -381,10 +402,14 @@ async function submitAnswer (choice) {
       streak: res.streak,
       perfect: res.perfect,
       correctName: res.correctName,
+      counted: res.counted !== false,
       pointsAwarded: res.pointsAwarded,
       minStreakForPoints: res.minStreakForPoints
     }
-    isPersonalBest.value = allTimeHigh.value == null || res.streak > allTimeHigh.value
+    if (res.counted !== false) scoredPlaysLeft.value = Math.max(0, scoredPlaysLeft.value - 1)
+    // Practice runs never set a personal best — they aren't on the leaderboard.
+    isPersonalBest.value = res.counted !== false &&
+      (allTimeHigh.value == null || res.streak > allTimeHigh.value)
     if (isPersonalBest.value) allTimeHigh.value = res.streak
     reveal.value = null
     uiState.value = 'gameover'
@@ -411,8 +436,7 @@ function bankOnExit () {
 onMounted(async () => {
   reduceMotion.value = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false
   const s = await loadStatus()
-  if (!s) { uiState.value = 'start'; return }
-  uiState.value = s.playsLeft > 0 ? 'start' : 'noplays'
+  uiState.value = 'start'
 
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('keydown', onKey)
@@ -566,6 +590,8 @@ onBeforeUnmount(() => {
   font-weight: 800;
 }
 .gc-badge--alt { background: #FFCC33; color: #2A1B00; }
+.gc-badge--practice { background: #7C5CBF; color: #fff; }
+.gc-hud-value--practice { font-size: 15px; color: #C9B6F5; }
 
 .gc-btn-start {
   display: inline-block;
@@ -707,16 +733,30 @@ onBeforeUnmount(() => {
 
 /* ── Stage ──────────────────────────────────────────────────── */
 
-/* Fixed height + object-fit: contain. cToon art ranges from 55×50 to 200×117 (a ~9× aspect
-   spread), so an intrinsically-sized image would resize the page every question and push
-   the answer buttons out from under the player's thumb. */
+/* The image area takes whatever vertical space the HUD and answer buttons leave, between a
+   floor and a ceiling — rather than a fixed viewport-derived height, which guesses wrong in
+   both directions. The layout gives this page a fixed 682px box on desktop and an
+   auto-height one on mobile, so `flex: 1` fills the desktop leftover while `min-height`
+   guarantees the floor on mobile, where there is no definite height to distribute.
+   object-fit: contain keeps a stable box regardless of source aspect ratio — cToon art runs
+   from 55x50 to 200x117, a ~9x spread, so an intrinsically-sized image would resize the
+   page every question and shift the answer buttons under the player's thumb. */
 .gc-stage {
   position: relative;
-  flex: 0 0 auto;
-  height: clamp(120px, 26svh, 220px);
+  flex: 1 1 auto;
+  /* The ceiling is viewport-relative as well as absolute so that on a short phone the
+     image yields space rather than pushing the fourth answer button below the fold — on a
+     timed game, an answer you have to scroll to is an answer you lose. */
+  min-height: 110px;
+  max-height: min(320px, 34svh);
   width: 100%;
   display: grid;
-  place-items: center;
+  /* Deliberately `stretch`, not `center`. Centering a grid item stops it from stretching,
+     which leaves height:100% on a replaced element resolving to auto — the intrinsic
+     aspect ratio then wins and the <img> box goes square, overflowing this fixed-height
+     stage and getting clipped to a zoomed crop of the artwork's middle. Stretching makes
+     the box exactly the stage; object-fit: contain does the centring instead. */
+  place-items: stretch;
   padding: 8px;
   box-sizing: border-box;
   overflow: hidden;
@@ -725,7 +765,15 @@ onBeforeUnmount(() => {
 .gc-stage-img {
   width: 100%;
   height: 100%;
+  /* Grid/flex items floor at min-content by default, which a replaced element would use to
+     push the box back out to its intrinsic size. */
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
+  /* Positioned so the image paints ABOVE the absolutely-positioned loading placeholder.
+     Without this, any path that leaves imgReady false hides the artwork completely. */
+  position: relative;
+  z-index: 1;
   /* These are small GIFs shown 3-4× up; nearest-neighbour reads as deliberate retro
      pixel art rather than a blurry upscale. */
   image-rendering: pixelated;
@@ -739,6 +787,7 @@ onBeforeUnmount(() => {
 .gc-stage-skeleton {
   position: absolute;
   inset: 8px;
+  z-index: 0;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
 }
@@ -881,6 +930,18 @@ onBeforeUnmount(() => {
 @media (min-width: 641px) {
   .gc-answers { grid-template-columns: 1fr 1fr; }
   .gc-answer { height: 64px; font-size: 16px; }
+  /* Two rows of answers instead of four frees a lot of height here, so the artwork —
+     the actual thing being guessed — gets to use it. */
+  .gc-stage { max-height: min(420px, 46svh); }
+}
+
+/* On mobile the layout hands this page an auto-height box, so without a definite height
+   here the stage would never grow past its floor and the artwork would sit small at the top
+   of a mostly-empty screen. Giving the wrapper a viewport-derived minimum lets the stage's
+   `flex: 1` claim the leftover. svh, not dvh, so a collapsing URL bar doesn't resize the
+   image mid-question. */
+@media (max-width: 768px) {
+  .gc-wrapper { min-height: calc(100svh - 200px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

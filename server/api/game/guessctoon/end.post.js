@@ -54,11 +54,13 @@ export default defineEventHandler(async (event) => {
     streak: result.streak,
     latencies: result.latencies,
     startedAt: result.startedAt,
+    counted: result.counted !== false,
     config
   })
 
   return {
     streak: banked.streak,
+    counted: banked.counted,
     pointsAwarded: banked.pointsAwarded,
     minStreakForPoints: config.minStreakForPoints,
     alreadyRecorded: false

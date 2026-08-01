@@ -16,11 +16,16 @@ const BANKED_TTL_SECONDS = 120
 export function sessionKey (userId) { return `guessctoon:session:${userId}` }
 export function lockKey (userId) { return `guessctoon:lock:${userId}` }
 
-// GameConfig for this game is one never-changing row read on every /start and /status.
-// Cached in-process with a short TTL, mirroring server/middleware/daily-points.js.
+// GameConfig for this game is one small row read on every /start and /status. Cached
+// in-process to absorb bursts, mirroring server/middleware/daily-points.js.
+//
+// The TTL is deliberately short: the app runs multiple PM2 instances, so an admin saving
+// on the Games page cannot reliably invalidate every instance's copy. Bounding staleness
+// to well under a minute is simpler and more predictable than a cross-process bust, and
+// the read it saves is a single indexed lookup on a tiny table.
 let cachedConfig = null
 let cachedConfigAt = 0
-const CONFIG_TTL_MS = 5 * 60 * 1000
+const CONFIG_TTL_MS = 20 * 1000
 
 export async function getGuessCtoonConfig () {
   const now = Date.now()
@@ -34,7 +39,7 @@ export async function getGuessCtoonConfig () {
   }
 
   const config = {
-    playsPerPeriod: clampInt(row?.guessCtoonPlaysPerPeriod, 1, 50, DEFAULTS.playsPerPeriod),
+    scoredPlaysPerPeriod: clampInt(row?.guessCtoonScoredPlaysPerPeriod, 0, 100, DEFAULTS.scoredPlaysPerPeriod),
     pointsPerGame: clampInt(row?.guessCtoonPointsPerGame, 0, 100000, DEFAULTS.pointsPerGame),
     secondsPerQuestion: clampInt(row?.guessCtoonSecondsPerQuestion, 4, 120, DEFAULTS.secondsPerQuestion),
     choices: clampInt(row?.guessCtoonChoices, CHOICES_MIN, CHOICES_MAX, DEFAULTS.choices),
@@ -82,9 +87,10 @@ export function getWeekBoundary () {
  * failure the ReOrbit Memory handler guards against when it refuses to score an incomplete
  * board. A score row is still written for any streak — it's the *award* that is gated.
  */
-export async function bankRun ({ userId, streak, latencies, startedAt, config }) {
+export async function bankRun ({ userId, streak, latencies, startedAt, config, counted = true }) {
   const finalStreak = Math.max(0, Math.min(Number(streak) || 0, config.maxQuestions))
   const cadence = scoreCadence(latencies)
+  const isCounted = counted !== false
 
   // Wall-clock floor, mirroring the belt-and-suspenders check in reorbitmemory/end: a run
   // cannot have taken less time than its own minimum answer pacing allows.
@@ -98,18 +104,21 @@ export async function bankRun ({ userId, streak, latencies, startedAt, config })
     data: {
       userId,
       streak: finalStreak,
+      counted: isCounted,
       suspicious,
       medianAnswerMs: cadence.median ?? null,
       stdDevAnswerMs: cadence.stdDev ?? null
     }
   })
 
+  // Practice runs (played past the daily scored-play cap) are recorded for the player's own
+  // history but never pay out and never reach the leaderboard.
   let pointsAwarded = 0
-  if (finalStreak >= config.minStreakForPoints && config.pointsPerGame > 0) {
+  if (isCounted && finalStreak >= config.minStreakForPoints && config.pointsPerGame > 0) {
     pointsAwarded = await awardPoints(userId, config.pointsPerGame)
   }
 
-  return { streak: finalStreak, pointsAwarded, suspicious }
+  return { streak: finalStreak, pointsAwarded, suspicious, counted: isCounted }
 }
 
 /**

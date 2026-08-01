@@ -112,6 +112,7 @@ export default defineEventHandler(async (event) => {
   // a user banned mid-run must not keep earning.
   let pointsAwarded = 0
   let finalStreak = result.streak
+  let counted = result.counted !== false
   const denial = await assertPlayable(userId)
   if (!denial) {
     try {
@@ -120,10 +121,12 @@ export default defineEventHandler(async (event) => {
         streak: result.streak,
         latencies: result.latencies,
         startedAt: result.startedAt,
+        counted: result.counted !== false,
         config
       })
       pointsAwarded = banked.pointsAwarded
       finalStreak = banked.streak
+      counted = banked.counted
     } catch {
       // Recording failed — still report the run honestly rather than 500ing the player out
       // of their own game-over screen.
@@ -138,6 +141,7 @@ export default defineEventHandler(async (event) => {
     streak: finalStreak,
     gameOver: true,
     perfect: Boolean(result.perfect),
+    counted,
     pointsAwarded,
     minStreakForPoints: config.minStreakForPoints
   }

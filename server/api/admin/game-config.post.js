@@ -167,6 +167,27 @@ function validatePayload(payload) {
     if (payload.reorbitMemoryCardBackImagePath != null && typeof payload.reorbitMemoryCardBackImagePath !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"reorbitMemoryCardBackImagePath" must be a string or null' })
     }
+  } else if (payload.gameName === 'GuessCtoon') {
+    // Plays are unlimited; this caps how many per day COUNT. 0 is legal — it turns scoring
+    // off entirely while leaving the game playable.
+    if (payload.guessCtoonScoredPlaysPerPeriod == null || typeof payload.guessCtoonScoredPlaysPerPeriod !== 'number' || payload.guessCtoonScoredPlaysPerPeriod < 0 || payload.guessCtoonScoredPlaysPerPeriod > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonScoredPlaysPerPeriod" must be between 0 and 100' })
+    }
+    if (payload.guessCtoonPointsPerGame == null || typeof payload.guessCtoonPointsPerGame !== 'number' || payload.guessCtoonPointsPerGame < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonPointsPerGame" must be a non-negative number' })
+    }
+    if (payload.guessCtoonSecondsPerQuestion == null || typeof payload.guessCtoonSecondsPerQuestion !== 'number' || payload.guessCtoonSecondsPerQuestion < 4 || payload.guessCtoonSecondsPerQuestion > 120) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonSecondsPerQuestion" must be between 4 and 120' })
+    }
+    if (payload.guessCtoonChoices == null || typeof payload.guessCtoonChoices !== 'number' || payload.guessCtoonChoices < 3 || payload.guessCtoonChoices > 6) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonChoices" must be between 3 and 6' })
+    }
+    if (payload.guessCtoonMaxQuestions == null || typeof payload.guessCtoonMaxQuestions !== 'number' || payload.guessCtoonMaxQuestions < 5 || payload.guessCtoonMaxQuestions > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonMaxQuestions" must be between 5 and 100' })
+    }
+    if (payload.guessCtoonMinStreakForPoints == null || typeof payload.guessCtoonMinStreakForPoints !== 'number' || payload.guessCtoonMinStreakForPoints < 0 || payload.guessCtoonMinStreakForPoints > 100) {
+      throw createError({ statusCode: 400, statusMessage: '"guessCtoonMinStreakForPoints" must be between 0 and 100' })
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -213,6 +234,13 @@ export default defineEventHandler(async (event) => {
     reorbitMemoryTimeSeconds = null,
     reorbitMemoryFlipBackDelayMs,
     reorbitMemoryCardBackImagePath = null,
+    // GuessCtoon fields
+    guessCtoonScoredPlaysPerPeriod,
+    guessCtoonPointsPerGame,
+    guessCtoonSecondsPerQuestion,
+    guessCtoonChoices,
+    guessCtoonMaxQuestions,
+    guessCtoonMinStreakForPoints,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -417,6 +445,17 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...memoryData }
         updateData = { ...updateData, ...memoryData }
+      } else if (gameName === 'GuessCtoon') {
+        const guessData = {
+          guessCtoonScoredPlaysPerPeriod,
+          guessCtoonPointsPerGame,
+          guessCtoonSecondsPerQuestion,
+          guessCtoonChoices,
+          guessCtoonMaxQuestions,
+          guessCtoonMinStreakForPoints
+        }
+        createData = { ...createData, ...guessData }
+        updateData = { ...updateData, ...guessData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -614,6 +653,20 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:ReOrbitMemory', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'GuessCtoon') {
+          const changes = [
+            ['guessCtoonScoredPlaysPerPeriod', before?.guessCtoonScoredPlaysPerPeriod, guessCtoonScoredPlaysPerPeriod],
+            ['guessCtoonPointsPerGame', before?.guessCtoonPointsPerGame, guessCtoonPointsPerGame],
+            ['guessCtoonSecondsPerQuestion', before?.guessCtoonSecondsPerQuestion, guessCtoonSecondsPerQuestion],
+            ['guessCtoonChoices', before?.guessCtoonChoices, guessCtoonChoices],
+            ['guessCtoonMaxQuestions', before?.guessCtoonMaxQuestions, guessCtoonMaxQuestions],
+            ['guessCtoonMinStreakForPoints', before?.guessCtoonMinStreakForPoints, guessCtoonMinStreakForPoints]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:GuessCtoon', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

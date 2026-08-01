@@ -1045,7 +1045,9 @@ model GameConfig {
   reorbitMemoryCardBackImagePath String?
 
   // — Guess that cToon! settings —
-  guessCtoonPlaysPerPeriod      Int @default(3)
+  // Plays are unlimited (like Winball); this caps how many per day actually COUNT toward
+  // points and the leaderboard. Runs past the cap are playable but purely for practice.
+  guessCtoonScoredPlaysPerPeriod Int @default(3)
   guessCtoonPointsPerGame       Int @default(50)
   guessCtoonSecondsPerQuestion  Int @default(12)
   guessCtoonChoices             Int @default(4)
@@ -2872,6 +2874,9 @@ model GuessCtoonScore {
   id              String   @id @default(uuid())
   userId          String
   streak          Int
+  // False for runs played past the daily scored-play cap: kept so a player can see their
+  // practice history, but excluded from the leaderboard and never worth points.
+  counted         Boolean  @default(true)
   suspicious      Boolean  @default(false)
   medianAnswerMs  Int?
   stdDevAnswerMs  Int?
@@ -2883,16 +2888,21 @@ model GuessCtoonScore {
   // Covering index: the weekly/monthly leaderboards filter on createdAt and then
   // only need userId + streak, so they run index-only with no heap access.
   @@index([createdAt, userId, streak])
+  @@index([userId, counted, streak])
 }
 
 model GuessCtoonPlay {
   id        String   @id @default(uuid())
   userId    String
+  // Decided at /start under an advisory lock, so the player knows before answering whether
+  // the run will count.
+  counted   Boolean  @default(true)
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+  @@index([userId, counted, createdAt])
 }
 
 // ── VPN Detection ─────────────────────────────────────────────────────────────
