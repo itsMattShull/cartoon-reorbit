@@ -927,6 +927,55 @@
             </div>
           </div>
 
+          <h3 class="text-lg font-semibold mb-2">Physics &amp; Geometry</h3>
+          <p class="text-xs text-gray-500 mb-2">
+            Sizes are in world units on the fixed 640&times;480 playfield. Durations are in ticks
+            (60 per second). Changing these alters how the game feels but never how it is scored.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Ship Collision Radius</label>
+              <p class="text-xs text-gray-400 mb-1">Bigger is easier to hit (4&ndash;40). The Green power-up halves this.</p>
+              <input type="number" v-model.number="asteroidShipRadius" min="4" max="40" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Bullet Speed</label>
+              <p class="text-xs text-gray-400 mb-1">World units per tick, added to the ship's own velocity (1&ndash;20)</p>
+              <input type="number" v-model.number="asteroidBulletSpeed" min="1" max="20" step="0.1" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Bullet Range (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">How long a shot lives before fizzling (10&ndash;300). Longer means the auto-cannon sweeps more of the field.</p>
+              <input type="number" v-model.number="asteroidBulletLifeTicks" min="10" max="300" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Respawn Invulnerability (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">Grace period after losing a life (0&ndash;600). 96 &asymp; 1.6s.</p>
+              <input type="number" v-model.number="asteroidRespawnInvulnTicks" min="0" max="600" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Power-Up Pickup Radius</label>
+              <input type="number" v-model.number="asteroidPowerupRadius" min="5" max="40" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Power-Up Lifetime (ticks)</label>
+              <p class="text-xs text-gray-400 mb-1">How long an uncollected power-up waits (60&ndash;3600). 600 = 10s.</p>
+              <input type="number" v-model.number="asteroidPowerupLifeTicks" min="60" max="3600" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Large Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidLargeRadius" min="10" max="80" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Medium Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidMediumRadius" min="6" max="60" step="0.5" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Small Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidSmallRadius" min="3" max="40" step="0.5" class="input" />
+            </div>
+          </div>
+
           <h3 class="text-lg font-semibold mb-2">Scoring</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div>
@@ -2146,6 +2195,15 @@ const asteroidMaxShipSpeed         = ref(5.6)
 const asteroidShipDrag             = ref(0.992)
 const asteroidFireIntervalTicks    = ref(13)
 const asteroidExtraLifeScore       = ref(10000)
+const asteroidShipRadius           = ref(13)
+const asteroidBulletSpeed          = ref(6.2)
+const asteroidBulletLifeTicks      = ref(66)
+const asteroidRespawnInvulnTicks   = ref(96)
+const asteroidPowerupRadius        = ref(13)
+const asteroidPowerupLifeTicks     = ref(600)
+const asteroidLargeRadius          = ref(34)
+const asteroidMediumRadius         = ref(20)
+const asteroidSmallRadius          = ref(11)
 const asteroidPointsLarge          = ref(20)
 const asteroidPointsMedium         = ref(50)
 const asteroidPointsSmall          = ref(100)
@@ -2166,6 +2224,9 @@ const asteroidCfg = {
   asteroidAsteroidSpeed, asteroidWaveSpeedGrowth, asteroidMaxSpeedMultiplier,
   asteroidTurnRate, asteroidThrustAccel, asteroidMaxShipSpeed, asteroidShipDrag,
   asteroidFireIntervalTicks, asteroidExtraLifeScore,
+  asteroidShipRadius, asteroidBulletSpeed, asteroidBulletLifeTicks,
+  asteroidRespawnInvulnTicks, asteroidPowerupRadius, asteroidPowerupLifeTicks,
+  asteroidLargeRadius, asteroidMediumRadius, asteroidSmallRadius,
   asteroidPointsLarge, asteroidPointsMedium, asteroidPointsSmall, asteroidWaveClearBonus,
   asteroidPowerupsEnabled, asteroidPowerupBlueEnabled, asteroidPowerupRedEnabled,
   asteroidPowerupGreenEnabled, asteroidPowerupIntervalTicks, asteroidPowerupChancePercent,

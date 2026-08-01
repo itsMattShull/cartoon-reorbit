@@ -458,7 +458,6 @@ function draw() {
   // ship
   const s = sim.ship
   if (s.alive) {
-    const half = sim.puTicks[PU_GREEN] > 0
     const invuln = isInvulnerable(sim)
     // Flash while invulnerable, but never flash *out* so long that the player loses the ship.
     const blink = invuln && Math.floor(performance.now() / 90) % 2 === 0
@@ -477,7 +476,9 @@ function draw() {
     }
 
     ctx.globalAlpha = blink ? 0.45 : 1
-    const size = (half ? 34 : 62)
+    // Draw the sprite proportional to the (admin-configurable) collision radius, so a retuned
+    // hitbox and the art can never disagree. shipRadius() already accounts for Green halving it.
+    const size = shipRadius(sim) * 4.8
     if (shipReady) {
       ctx.drawImage(shipImg, -size / 2, -size / 2, size, size)
     } else {
@@ -783,6 +784,14 @@ async function endGame() {
   uiState.value = 'gameover'
 }
 
+// CSS user-select is the main defence, but a few mobile browsers still begin a selection or a
+// drag from a long-press before the style applies. Cancelling the events outright is the
+// belt-and-braces: a selection started mid-run swallows the next touch, which can strand a
+// control in the "held" state because its pointerup never fires.
+function blockSelection(e) {
+  if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
+}
+
 let resizeObserver = null
 let landscapeMql = null
 function onVisibilityChange() { if (document.hidden) pauseGame(); else resumeGame() }
@@ -812,6 +821,8 @@ onMounted(async () => {
   window.addEventListener('blur', onWindowBlur)
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  document.addEventListener('selectstart', blockSelection)
+  document.addEventListener('dragstart', blockSelection)
 })
 
 // Re-observe the container each time the game view mounts (v-if swaps it out between runs).
@@ -829,11 +840,57 @@ onUnmounted(() => {
   window.removeEventListener('blur', onWindowBlur)
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  document.removeEventListener('selectstart', blockSelection)
+  document.removeEventListener('dragstart', blockSelection)
   landscapeMql?.removeEventListener?.('change', onLandscapeChange)
 })
 </script>
 
 <style scoped>
+/* ── Nothing in this game is selectable ────────────────────────────────────────
+   A drag across the canvas or a long-press on a control would otherwise start a text
+   selection, which on mobile pops the copy/paste callout, hijacks the next touch, and can
+   leave a control stuck "held" because its pointerup never arrives. The rules cover the
+   modals too: they are Teleported to <body>, but they still carry this component's scope
+   attribute, so a scoped selector reaches them.
+
+   `*` here is scoped by Vue to this component's elements only, so no other page is affected. */
+.ast-wrapper,
+.ast-wrapper *,
+.modal-backdrop,
+.modal-backdrop * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-touch-callout: none;      /* no iOS long-press callout */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Images and the canvas must not be draggable — dragging the ship sprite out of the page is
+   both possible and disruptive by default on desktop. */
+.ast-wrapper img,
+.ast-wrapper canvas,
+.modal-backdrop img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Buttons: `manipulation` kills the 300ms double-tap-to-zoom gesture without disabling the
+   scrolling that the How to Play modal needs. */
+.ast-wrapper button,
+.modal-backdrop button {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The modal body still has to scroll on a short phone, so it keeps pan gestures. */
+.modal-card {
+  touch-action: pan-y;
+}
+
 /* ── Shell ─────────────────────────────────────────────────────────────────── */
 .ast-wrapper {
   width: 100%;
@@ -1130,7 +1187,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.ctrl {
+/* Two classes deep on purpose: this must outrank the `.ast-wrapper button` rule above, which
+   sets touch-action: manipulation. The controls need `none` — `manipulation` still permits
+   panning, so dragging a control would scroll the page mid-run. */
+.controls .ctrl {
   flex: 1;
   /* Comfortably above the 44px minimum touch target, and short enough to leave the board
      the majority of a phone's vertical space. */
@@ -1150,8 +1210,8 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
   transition: filter 0.1s;
 }
-.ctrl--thrust { flex: 1.5; font-size: 0.82rem; background: linear-gradient(180deg, #ff9d3d, #e8761a); border-bottom-color: #9c4a08; }
-.ctrl--on { filter: brightness(1.3); transform: translateY(2px); border-bottom-width: 2px; }
+.controls .ctrl--thrust { flex: 1.5; font-size: 0.82rem; background: linear-gradient(180deg, #ff9d3d, #e8761a); border-bottom-color: #9c4a08; }
+.controls .ctrl--on { filter: brightness(1.3); transform: translateY(2px); border-bottom-width: 2px; }
 
 .game-hint {
   flex-shrink: 0;
@@ -1326,7 +1386,7 @@ onUnmounted(() => {
 
 /* Give the board more of the screen on very short viewports. */
 @media (max-height: 620px) {
-  .ctrl { min-height: 46px; }
+  .controls .ctrl { min-height: 46px; }
   .game-hint { display: none; }
 }
 </style>
