@@ -12,7 +12,8 @@ const SLOT_FIELD = {
   tower:        'gameTileTowerImagePath',
   reorbitmemory: 'gameTileReorbitmemoryImagePath',
   guessctoon:   'gameTileGuessctoonImagePath',
-  asteroid:     'gameTileAsteroidImagePath'
+  asteroid:     'gameTileAsteroidImagePath',
+  flappy:       'gameTileFlappyImagePath'
 }
 
 export default defineEventHandler(async (event) => {

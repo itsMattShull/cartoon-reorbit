@@ -529,6 +529,10 @@ model User {
   asteroidScores AsteroidScore[]
   asteroidPlays  AsteroidPlay[]
 
+  // Flappy Powerpuff
+  flappyPowerpuffScores FlappyPowerpuffScore[]
+  flappyPowerpuffPlays  FlappyPowerpuffPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -1101,6 +1105,26 @@ model GameConfig {
   asteroidPowerupRedTicks      Int     @default(420)
   asteroidPowerupGreenTicks    Int     @default(720)
 
+  // — Flappy Powerpuff settings —
+  // World units, not pixels: the game runs in a fixed 480x760 world that is letterboxed into
+  // whatever viewport the player has, so these values mean the same thing on every device.
+  // Engine-side hard bounds live in CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js.
+  flappyPlaysPerPeriod     Int     @default(3)
+  flappyPointsPerGame      Int     @default(50)
+  flappyGravity            Float   @default(1500)
+  flappyFlapVelocity       Float   @default(-440) // negative = upward
+  flappyScrollSpeed        Float   @default(200)
+  flappyPipeGap            Float   @default(215)
+  flappyPipeSpacing        Float   @default(330)
+  flappySpeedGrowthPerPipe Float   @default(0.02)
+  flappyMaxSpeedMultiplier Float   @default(2)
+  flappyMaxScore           Int     @default(500)
+  flappyMaxSessionSeconds  Int     @default(900)
+  flappyBlossomImagePath   String?
+  flappyBubblesImagePath   String?
+  flappyButtercupImagePath String?
+  flappyCityImagePath      String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 }
@@ -1153,6 +1177,8 @@ model GlobalGameConfig {
   gameTileReorbitmemoryImagePath String?
   gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
+
+  gameTileFlappyImagePath        String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -2168,6 +2194,7 @@ model Achievement {
   tkoWinsGte                  Int?
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
+  flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
@@ -2965,6 +2992,36 @@ model GuessCtoonPlay {
 
   @@index([userId, createdAt])
   @@index([userId, counted, createdAt])
+}
+
+// ── Flappy Powerpuff ───────────────────────────────────────────────────────────
+
+model FlappyPowerpuffScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  character String // blossom | bubbles | buttercup — cosmetic only, never affects physics
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt, userId, score]) // covering: leaderboard period filters + the global week high
+}
+
+// Unlike every other game, Flappy allows unlimited play once the daily ranked allotment is
+// spent. Those runs are still recorded with ranked=false so the game stays visible to play
+// analytics and to the activity signals that feed dormancy — only ranked=true rows count
+// against the allotment. Mirrors the TkoRound.counted precedent.
+model FlappyPowerpuffPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  ranked    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, ranked, createdAt])
 }
 
 // ── VPN Detection ─────────────────────────────────────────────────────────────

@@ -122,6 +122,16 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     if (streak < ach.wordleCurrentStreakGte) return false
   }
 
+  // Best Flappy Powerpuff score. Only ranked runs ever write a score row, so unlimited
+  // free play cannot farm this.
+  if (ach.flappyBestScoreGte != null) {
+    const best = await db.flappyPowerpuffScore.aggregate({
+      where: { userId },
+      _max: { score: true }
+    })
+    if ((best._max.score ?? 0) < ach.flappyBestScoreGte) return false
+  }
+
   // Cumulative active days based on activity logs
   if (ach.cumulativeActiveDaysGte != null) {
     const ok = await hasCumulativeActivityDays(db, userId, ach.cumulativeActiveDaysGte)

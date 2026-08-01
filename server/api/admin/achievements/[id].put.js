@@ -98,6 +98,7 @@ export default defineEventHandler(async (event) => {
       tkoWinsGte: criteria?.tkoWinsGte ?? null,
       wordleWinsGte: criteria?.wordleWinsGte ?? null,
       wordleCurrentStreakGte: criteria?.wordleCurrentStreakGte ?? null,
+      flappyBestScoreGte: criteria?.flappyBestScoreGte ?? null,
       setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
     }

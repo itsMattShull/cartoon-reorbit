@@ -52,6 +52,10 @@
         <img v-if="tiles.asteroid" :src="tiles.asteroid" alt="Operation A.S.T.E.R.O.I.D." class="tile-img" />
         <span v-else>Operation A.S.T.E.R.O.I.D.</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/flappypowerpuff" class="quadrant quadrant--flappy">
+        <img v-if="tiles.flappy" :src="tiles.flappy" alt="Flappy Powerpuff!" class="tile-img" />
+        <span v-else>Flappy Powerpuff!</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -84,11 +88,19 @@ const tiles = computed(() => tileData.value ?? {})
   text-decoration: none;
 }
 
+/* 3x3 rather than 2 columns: there are 9 tiles, and 9 in a 2-column grid leaves an orphan in
+   an implicit auto-height row. Because .tile-img is absolutely positioned it has no intrinsic
+   height, so that row would collapse to nothing whenever the tile has an image configured.
+   3x3 also fits the 800x669 desktop main-content box far better than 2x5 would. */
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  /* 10 tiles in 2 columns needs 5 rows — bump this when a game is added. */
-  grid-template-rows: repeat(5, 1fr);
+  /* 11 tiles in 2 columns needs 6 rows — bump this when a game is added. */
+  grid-template-rows: repeat(6, 1fr);
+  /* Belt and braces: an 12th tile would otherwise land in an implicit auto-height row and
+     collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
+     height. */
+  grid-auto-rows: 1fr;
   width: 100%;
   flex: 1;
   gap: 6px;
@@ -142,11 +154,22 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--reorbitmemory { background: #2a7a5a; }
 .quadrant--guessctoon    { background: #8a2a5a; }
 .quadrant--asteroid      { background: #2b2062; }
+.quadrant--flappy        { background: #2f6f9e; }
+
+/* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
+   scaled and brightened. */
+@media (hover: none) {
+  .quadrant:hover { filter: none; transform: none; }
+}
 
 @media (max-width: 768px) {
+  /* Two columns and auto rows rather than one column at a fixed height: 9 single-column rows
+     need ~690px of minimum content inside a box capped near 576px on a modern phone, which
+     overflows into a nested scroller inside an already-scrolling page. The tiles are images,
+     so 2-up at ~190px is still a comfortable tap target. */
   .gameshome {
     grid-template-columns: 1fr;
-    /* Ten 70px-minimum rows can't fit in a fixed 100dvh-based height, so the grid used to
+    /* Eleven 70px-minimum rows can't fit in a fixed 100dvh-based height, so the grid used to
        overflow into a nested scroller inside the page's own scroller — on iOS the outer
        page then refuses to scroll until the inner one bottoms out. Let the page scroll
        instead. svh, not dvh, so the URL bar collapsing doesn't resize the tiles. */

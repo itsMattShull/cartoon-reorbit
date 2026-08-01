@@ -254,6 +254,36 @@ function validatePayload(payload) {
     if (payload.guessCtoonMinStreakForPoints == null || typeof payload.guessCtoonMinStreakForPoints !== 'number' || payload.guessCtoonMinStreakForPoints < 0 || payload.guessCtoonMinStreakForPoints > 100) {
       throw createError({ statusCode: 400, statusMessage: '"guessCtoonMinStreakForPoints" must be between 0 and 100' })
     }
+  } else if (payload.gameName === 'FlappyPowerpuff') {
+    // Ranges mirror CFG_BOUNDS in server/utils/flappyPowerpuffEngine.js. The engine clamps
+    // again at /start and /end regardless — this endpoint is only one of several write paths
+    // into the row — but rejecting here gives the admin an error instead of silently saving a
+    // value the game will ignore. Note Number.isFinite, not typeof: typeof NaN is 'number'
+    // and NaN passes every comparison, so a bare range check would let it through.
+    const numeric = [
+      ['flappyPlaysPerPeriod', 1, 100],
+      ['flappyPointsPerGame', 0, 100000],
+      ['flappyGravity', 100, 5000],
+      ['flappyFlapVelocity', -1200, -50],
+      ['flappyScrollSpeed', 20, 1000],
+      ['flappyPipeGap', 60, 600],
+      ['flappyPipeSpacing', 120, 2000],
+      ['flappySpeedGrowthPerPipe', 0, 0.5],
+      ['flappyMaxSpeedMultiplier', 1, 5],
+      ['flappyMaxScore', 1, 100000],
+      ['flappyMaxSessionSeconds', 30, 1800]
+    ]
+    for (const [field, min, max] of numeric) {
+      const v = payload[field]
+      if (!Number.isFinite(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a number between ${min} and ${max}` })
+      }
+    }
+    for (const field of ['flappyBlossomImagePath', 'flappyBubblesImagePath', 'flappyButtercupImagePath', 'flappyCityImagePath']) {
+      if (payload[field] != null && typeof payload[field] !== 'string') {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a string or null` })
+      }
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -307,6 +337,22 @@ export default defineEventHandler(async (event) => {
     guessCtoonChoices,
     guessCtoonMaxQuestions,
     guessCtoonMinStreakForPoints,
+    // FlappyPowerpuff fields
+    flappyPlaysPerPeriod,
+    flappyPointsPerGame,
+    flappyGravity,
+    flappyFlapVelocity,
+    flappyScrollSpeed,
+    flappyPipeGap,
+    flappyPipeSpacing,
+    flappySpeedGrowthPerPipe,
+    flappyMaxSpeedMultiplier,
+    flappyMaxScore,
+    flappyMaxSessionSeconds,
+    flappyBlossomImagePath = null,
+    flappyBubblesImagePath = null,
+    flappyButtercupImagePath = null,
+    flappyCityImagePath = null,
     // Winball fields
     leftCupPoints,
     rightCupPoints,
@@ -527,6 +573,28 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...guessData }
         updateData = { ...updateData, ...guessData }
+      } else if (gameName === 'FlappyPowerpuff') {
+        // Image paths are written by /api/admin/flappy-image, so a settings save must not
+        // clobber them back to null when the form didn't send them.
+        const flappyData = {
+          flappyPlaysPerPeriod,
+          flappyPointsPerGame,
+          flappyGravity,
+          flappyFlapVelocity,
+          flappyScrollSpeed,
+          flappyPipeGap,
+          flappyPipeSpacing,
+          flappySpeedGrowthPerPipe,
+          flappyMaxSpeedMultiplier,
+          flappyMaxScore,
+          flappyMaxSessionSeconds
+        }
+        if (flappyBlossomImagePath != null) flappyData.flappyBlossomImagePath = flappyBlossomImagePath
+        if (flappyBubblesImagePath != null) flappyData.flappyBubblesImagePath = flappyBubblesImagePath
+        if (flappyButtercupImagePath != null) flappyData.flappyButtercupImagePath = flappyButtercupImagePath
+        if (flappyCityImagePath != null) flappyData.flappyCityImagePath = flappyCityImagePath
+        createData = { ...createData, ...flappyData }
+        updateData = { ...updateData, ...flappyData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -746,6 +814,25 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:GuessCtoon', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'FlappyPowerpuff') {
+          const changes = [
+            ['flappyPlaysPerPeriod', before?.flappyPlaysPerPeriod, flappyPlaysPerPeriod],
+            ['flappyPointsPerGame', before?.flappyPointsPerGame, flappyPointsPerGame],
+            ['flappyGravity', before?.flappyGravity, flappyGravity],
+            ['flappyFlapVelocity', before?.flappyFlapVelocity, flappyFlapVelocity],
+            ['flappyScrollSpeed', before?.flappyScrollSpeed, flappyScrollSpeed],
+            ['flappyPipeGap', before?.flappyPipeGap, flappyPipeGap],
+            ['flappyPipeSpacing', before?.flappyPipeSpacing, flappyPipeSpacing],
+            ['flappySpeedGrowthPerPipe', before?.flappySpeedGrowthPerPipe, flappySpeedGrowthPerPipe],
+            ['flappyMaxSpeedMultiplier', before?.flappyMaxSpeedMultiplier, flappyMaxSpeedMultiplier],
+            ['flappyMaxScore', before?.flappyMaxScore, flappyMaxScore],
+            ['flappyMaxSessionSeconds', before?.flappyMaxSessionSeconds, flappyMaxSessionSeconds]
+          ]
+          for (const [key, prev, next] of changes) {
+            if (prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:FlappyPowerpuff', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

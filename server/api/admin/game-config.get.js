@@ -183,6 +183,23 @@ export default defineEventHandler(async (event) => {
             guessCtoonMinStreakForPoints: 3
           }
         })
+      } else if (gameName === 'FlappyPowerpuff') {
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            flappyPlaysPerPeriod: 3,
+            flappyPointsPerGame: 50,
+            flappyGravity: 1500,
+            flappyFlapVelocity: -440,
+            flappyScrollSpeed: 200,
+            flappyPipeGap: 215,
+            flappyPipeSpacing: 330,
+            flappySpeedGrowthPerPipe: 0.02,
+            flappyMaxSpeedMultiplier: 2,
+            flappyMaxScore: 500,
+            flappyMaxSessionSeconds: 900
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,
