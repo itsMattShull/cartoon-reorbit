@@ -298,6 +298,11 @@ model Ctoon {
   saleDailyPurchases     SaleDailyPurchase[]
   priceDaily             CtoonPriceDaily[]
 
+  // Lets an admin pull a cToon out of the "Guess that cToon!" answer pool without a
+  // deploy — for art that doesn't show the character clearly, or a name that makes an
+  // unanswerable question. Excluded cToons can still be used as wrong answers.
+  guessCtoonExcluded Boolean @default(false)
+
   @@index([isSecondEdition])
   @@index([name])
 }
@@ -515,6 +520,10 @@ model User {
   // ReOrbit Memory
   reOrbitMemoryScores ReOrbitMemoryScore[]
   reOrbitMemoryPlays  ReOrbitMemoryPlay[]
+
+  // Guess that cToon!
+  guessCtoonScores GuessCtoonScore[]
+  guessCtoonPlays  GuessCtoonPlay[]
 
   // Operation A.S.T.E.R.O.I.D.
   asteroidScores AsteroidScore[]
@@ -1039,6 +1048,16 @@ model GameConfig {
   reorbitMemoryFlipBackDelayMs   Int     @default(800)
   reorbitMemoryCardBackImagePath String?
 
+  // — Guess that cToon! settings —
+  // Plays are unlimited (like Winball); this caps how many per day actually COUNT toward
+  // points and the leaderboard. Runs past the cap are playable but purely for practice.
+  guessCtoonScoredPlaysPerPeriod Int @default(3)
+  guessCtoonPointsPerGame       Int @default(50)
+  guessCtoonSecondsPerQuestion  Int @default(12)
+  guessCtoonChoices             Int @default(4)
+  guessCtoonMaxQuestions        Int @default(25)
+  guessCtoonMinStreakForPoints  Int @default(3)
+
   // — Operation A.S.T.E.R.O.I.D. settings —
   // `asteroidRankedPlaysPerPeriod` is the number of daily runs that COUNT: plays are unlimited,
   // but only this many per day write a score row and award points. Everything else is a
@@ -1122,6 +1141,7 @@ model GlobalGameConfig {
   gameTileReorbitmatchImagePath  String?
   gameTileTowerImagePath         String?
   gameTileReorbitmemoryImagePath String?
+  gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
@@ -1172,14 +1192,31 @@ model TradeOffer {
   initiatorId   String // who is making the offer
   recipientId   String // who will receive the offer
   pointsOffered Int      @default(0)
-  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN
+  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  /// Set when this offer was created as a counter to another offer. The
+  /// countered offer is closed out as COUNTERED in the same transaction that
+  /// creates this one, so an offer can only ever be countered once — hence
+  /// @unique, which lets the database enforce that rather than the app.
+  counteredOfferId String? @unique
 
   initiator User @relation("OfferInitiator", fields: [initiatorId], references: [id])
   recipient User @relation("OfferRecipient", fields: [recipientId], references: [id])
 
+  /// The earlier offer this one replaced.
+  counteredOffer TradeOffer? @relation("TradeCounter", fields: [counteredOfferId], references: [id], onDelete: SetNull)
+
+  /// The counter that replaced this offer, if any.
+  counteredBy TradeOffer? @relation("TradeCounter")
+
   ctoons TradeOfferCtoon[]
+
+  // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
+  // pending-trade lookups filter on status. Neither column was indexed.
+  @@index([recipientId, status, createdAt])
+  @@index([initiatorId, status, createdAt])
 }
 
 /// Join table tying a specific UserCtoon to a TradeOffer,
@@ -1194,6 +1231,10 @@ model TradeOfferCtoon {
   userCtoon  UserCtoon  @relation(fields: [userCtoonId], references: [id])
 
   @@unique([tradeOfferId, userCtoonId, role])
+  // The "is this cToon already in a pending trade" guards, and every collection
+  // load, filter on userCtoonId alone. The unique above leads with tradeOfferId
+  // so it cannot serve those — they were sequential scans of the whole table.
+  @@index([userCtoonId])
 }
 
 /// Are we offering this cToon, or requesting it?
@@ -1266,6 +1307,10 @@ model Auction {
   winnerAt           DateTime?
   endingSoonNotified Boolean       @default(false)
   isFeatured         Boolean       @default(false)
+  // Back-reference to the AuctionOnly listing that activated into this Auction
+  // (set at activation time in server/cron/sync-guild-members.js). Nullable/not a
+  // FK since the AuctionOnly row can later be deleted while this Auction lives on.
+  auctionOnlyId      String?       @unique
 
   userCtoon     UserCtoon @relation(fields: [userCtoonId], references: [id])
   creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
@@ -1278,6 +1323,10 @@ model Auction {
   @@index([userCtoonId, status])
   @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])
+  // /api/my-auctions filters on creatorId and orders by endAt desc. Postgres
+  // doesn't index foreign keys automatically, so without this the "My Auctions"
+  // tab sequentially scans every auction ever created.
+  @@index([creatorId, endAt])
 }
 
 model Bid {
@@ -1786,6 +1835,16 @@ model AuctionOnly {
 
   @@index([startsAt])
   @@index([endsAt])
+}
+
+model AuctionOnlyErrorLog {
+  id            String   @id @default(uuid())
+  auctionOnlyId String? // best-effort reference; not a FK since the source row may never have been created (schedule errors) or may be long gone
+  context       String // "schedule" | "activation"
+  message       String
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model DissolveAuctionQueue {
@@ -2854,6 +2913,48 @@ model ReOrbitMemoryPlay {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+// ── Guess that cToon! ──────────────────────────────────────────────────────────
+// `streak` is the number of consecutive correct answers in one run — higher is
+// better. `suspicious` marks runs whose answer cadence is too machine-regular or
+// too fast to be human (see scoreCadence in guessCtoonEngine); those rows are kept
+// for auditing but filtered out of the leaderboard rather than deleted, so a false
+// positive costs a player their leaderboard slot and nothing else.
+
+model GuessCtoonScore {
+  id              String   @id @default(uuid())
+  userId          String
+  streak          Int
+  // False for runs played past the daily scored-play cap: kept so a player can see their
+  // practice history, but excluded from the leaderboard and never worth points.
+  counted         Boolean  @default(true)
+  suspicious      Boolean  @default(false)
+  medianAnswerMs  Int?
+  stdDevAnswerMs  Int?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, streak])
+  // Covering index: the weekly/monthly leaderboards filter on createdAt and then
+  // only need userId + streak, so they run index-only with no heap access.
+  @@index([createdAt, userId, streak])
+  @@index([userId, counted, streak])
+}
+
+model GuessCtoonPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  // Decided at /start under an advisory lock, so the player knows before answering whether
+  // the run will count.
+  counted   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([userId, counted, createdAt])
 }
 
 // ── VPN Detection ─────────────────────────────────────────────────────────────

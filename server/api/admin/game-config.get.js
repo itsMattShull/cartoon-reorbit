@@ -169,6 +169,20 @@ export default defineEventHandler(async (event) => {
             reorbitMemoryCardBackImagePath: null
           }
         })
+      } else if (gameName === 'GuessCtoon') {
+        // The migration seeds this row too; this branch covers a config fetched on an
+        // environment where that migration has not run yet.
+        config = await db.gameConfig.create({
+          data: {
+            gameName,
+            guessCtoonScoredPlaysPerPeriod: 3,
+            guessCtoonPointsPerGame: 50,
+            guessCtoonSecondsPerQuestion: 12,
+            guessCtoonChoices: 4,
+            guessCtoonMaxQuestions: 25,
+            guessCtoonMinStreakForPoints: 3
+          }
+        })
       } else {
         throw createError({
           statusCode: 400,

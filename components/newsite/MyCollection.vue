@@ -4,13 +4,14 @@
     <!-- ── Header bar ────────────────────────────────────────────── -->
     <div class="mc-header">My Collection</div>
 
-    <!-- ── Auction modal ──────────────────────────────────────────── -->
-    <AuctionModal
-      v-if="auctionCtoon"
-      :ctoon="auctionCtoon"
-      @close="auctionCtoon = null"
-      @created="onAuctionCreated"
-    />
+    <!-- ── Active "duplicates only" indicator ─────────────────────── -->
+    <div v-if="filter.duplicatesOnly" class="mc-active-filter">
+      <button class="mc-chip" title="Turn off the duplicates filter" @click="filter.duplicatesOnly = false">
+        Duplicates only
+        <span class="mc-chip-count">{{ ctoons.length }}</span>
+        <span class="mc-chip-x" aria-hidden="true">✕</span>
+      </button>
+    </div>
 
     <!-- ── Pagination (top) ─────────────────────────────────────── -->
     <div class="mc-pagination">
@@ -20,9 +21,9 @@
     </div>
 
     <!-- ── Card grid ─────────────────────────────────────────────── -->
-    <div class="mc-grid">
+    <div ref="gridEl" class="mc-grid">
       <div v-if="loading" class="mc-status">Loading…</div>
-      <div v-else-if="!ctoons.length" class="mc-status">No cToons in your collection.</div>
+      <div v-else-if="!ctoons.length" class="mc-status">{{ emptyMessage }}</div>
       <template v-else>
         <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
           <template #header>
@@ -59,6 +60,8 @@
 </template>
 
 <script setup>
+import { duplicateCtoonIds, groupByCtoonId } from '@/utils/duplicateCtoonIds'
+
 const { open: openCtoonModal } = useCtoonModal()
 const { tradeList, loading: tradeListLoading, add: addToTradeList, remove: removeFromTradeList } = useTradeList()
 
@@ -89,12 +92,34 @@ function rarityColor(rarity) {
 const allCtoons   = useState('myCollectionCtoons', () => [])
 const loading     = ref(true)
 const filter      = useNewSiteCtoonFilter()
-const auctionCtoon = ref(null)
+// The modal itself is mounted once in layouts/newsite-template.vue.
+const { open: openAuctionModal, createdSignal, lastCreated } = useAuctionModal()
 
 const PAGE_SIZE   = 30
 const currentPage = ref(1)
+const gridEl      = ref(null)
 
-watch(filter, () => { currentPage.value = 1 }, { deep: true })
+// Duplicate status is derived from the FULL collection, so narrowing by name,
+// rarity, set, etc. never changes what counts as a duplicate — it only decides
+// which duplicates are shown. Depends solely on allCtoons, so toggling any
+// filter key (including duplicatesOnly itself) does not recompute it.
+const duplicateIds = computed(() => duplicateCtoonIds(allCtoons.value))
+
+watch(filter, () => {
+  currentPage.value = 1
+  // A shrinking list otherwise strands the user at a scroll offset that no
+  // longer points at anything.
+  if (gridEl.value) gridEl.value.scrollTop = 0
+}, { deep: true })
+
+// On mobile the sidebar stacks *above* the grid, so ticking the box in an
+// expanded sidebar changes something the user cannot see. Bring the grid into
+// view instead of collapsing the sidebar out from under them.
+watch(() => filter.value.duplicatesOnly, (on) => {
+  if (!on || !process.client) return
+  if (!window.matchMedia('(max-width: 768px)').matches) return
+  nextTick(() => gridEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+})
 
 function hasActiveAuction(c) {
   return (c.auctions && c.auctions.length > 0) || !!c.hasActiveAuction
@@ -102,7 +127,7 @@ function hasActiveAuction(c) {
 
 function openAuction(c) {
   if (hasActiveAuction(c)) return
-  auctionCtoon.value = c
+  openAuctionModal({ ctoon: c })
 }
 
 async function toggleTradeList(c) {
@@ -113,16 +138,18 @@ async function toggleTradeList(c) {
   }
 }
 
-function onAuctionCreated(userCtoonId) {
-  // Mark the ctoon as having an active auction so button could be disabled in future
-  const ctoon = allCtoons.value.find(c => c.id === userCtoonId)
+// Mark the ctoon as having an active auction so its button stays disabled.
+watch(createdSignal, () => {
+  const ctoon = allCtoons.value.find(c => c.id === lastCreated.value)
   if (ctoon) ctoon.hasActiveAuction = true
-  auctionCtoon.value = null
-}
+})
 
 const ctoons = computed(() => {
   const f = filter.value
   let list = allCtoons.value
+
+  if (f.duplicatesOnly)
+    list = list.filter(c => duplicateIds.value.has(c.ctoonId))
 
   if (f.name)
     list = list.filter(c => c.name.toLowerCase().includes(f.name.toLowerCase()))
@@ -178,7 +205,29 @@ const ctoons = computed(() => {
     return f.sortAsc ? cmp : -cmp
   })
 
+  // The whole point of the duplicates view is comparing copies of the same
+  // cToon to decide which to keep, so cluster them. Group order and in-group
+  // order both follow the sort chosen above.
+  if (f.duplicatesOnly) list = groupByCtoonId(list)
+
   return list
+})
+
+const hasNarrowingFilters = computed(() => {
+  const f = filter.value
+  return !!(
+    f.name || f.rarities.length || f.series || f.set ||
+    f.priceMin !== '' || f.priceMax !== '' || f.excludeSecondEditions
+  )
+})
+
+const emptyMessage = computed(() => {
+  if (!allCtoons.value.length) return 'No cToons in your collection.'
+  if (filter.value.duplicatesOnly) {
+    if (!duplicateIds.value.size) return 'You have no duplicate cToons.'
+    if (hasNarrowingFilters.value) return 'All your duplicates are hidden by your other filters.'
+  }
+  return 'No cToons match your filters.'
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(ctoons.value.length / PAGE_SIZE)))
@@ -262,6 +311,40 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
+/* ── Active filter chip ──────────────────────────────────────── */
+.mc-active-filter {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: var(--OrbitDarkBlue);
+}
+
+.mc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--OrbitLightBlue);
+  border-radius: 10px;
+  background: var(--OrbitLightBlue);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: bold;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mc-chip-count {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+
+.mc-chip-x { opacity: 0.75; }
+.mc-chip:hover .mc-chip-x { opacity: 1; }
+
 .mc-grid {
   flex: 1;
   overflow-y: auto;
@@ -292,6 +375,11 @@ onMounted(async () => {
   :deep(.sc-footer-right) {
     justify-content: flex-start;
   }
+
+  .mc-chip {
+    font-size: 0.78rem;
+    padding: 6px 12px;
+  }
 }
 
 /* ── Status ──────────────────────────────────────────────────── */
@@ -301,6 +389,16 @@ onMounted(async () => {
   color: #336699;
   font-size: 2rem;
   padding: 20px;
+}
+
+/* Must stay after the base rule above — equal specificity, so source order
+   decides. 2rem across a 2-column grid wraps the longer empty-state copy into
+   a broken-looking block. */
+@media (max-width: 768px) {
+  .mc-status {
+    font-size: 1.15rem;
+    padding: 16px 12px;
+  }
 }
 
 /* ── Card contents ───────────────────────────────────────────── */

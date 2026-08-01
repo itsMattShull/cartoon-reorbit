@@ -11,6 +11,10 @@ export default defineEventHandler(async (event) => {
   if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
   // query
+  // NOTE: these are the LEGACY duplicate semantics used by pages/collection.vue —
+  // the earliest mint of each group is dropped. The newsite My Collection filter
+  // keeps every copy instead; see utils/duplicateCtoonIds.js. Same word, different
+  // rule, so don't wire this param up to the newsite UI without converting.
   const q = getQuery(event)
   const duplicatesOnly = q.duplicatesOnly === '1' || q.duplicatesOnly === 'true'
 
@@ -51,7 +55,9 @@ export default defineEventHandler(async (event) => {
     : userCtoons
 
   // holiday flag for all involved ctoonIds
-  const ids = filtered.map(uc => uc.ctoonId)
+  // De-duped: collectors holding many copies otherwise send the same ctoonId
+  // into the IN list once per copy.
+  const ids = [...new Set(filtered.map(uc => uc.ctoonId))]
   const holidayRows = ids.length
     ? await prisma.holidayEventItem.findMany({
         where: { ctoonId: { in: ids } },

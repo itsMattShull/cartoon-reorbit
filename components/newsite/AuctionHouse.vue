@@ -88,8 +88,15 @@
             <template v-else>{{ formatDate(item.endAt) }}</template>
           </div>
 
-          <!-- View button -->
-          <button class="ah-view" @click="goToAuction(item.id)">View</button>
+          <!-- Actions -->
+          <div class="ah-actions">
+            <button class="ah-view" @click="goToAuction(item.id)">View</button>
+            <button
+              v-if="item.canRelist"
+              class="ah-relist"
+              @click.stop="openRelist(item)"
+            >Re-list</button>
+          </div>
         </div>
       </template>
     </div>
@@ -153,7 +160,14 @@
             </span>
           </template>
           <template #footer-right>
-            <button class="ah-card-view-btn" @click.stop="goToAuction(item.id)">View</button>
+            <div class="ah-card-actions">
+              <button class="ah-card-view-btn" @click.stop="goToAuction(item.id)">View</button>
+              <button
+                v-if="item.canRelist"
+                class="ah-card-relist-btn"
+                @click.stop="openRelist(item)"
+              >Re-list</button>
+            </div>
           </template>
         </ShortCard>
       </template>
@@ -175,6 +189,7 @@ const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
 const cmartCtoons = useState('cmartCtoons', () => [])
 const { open: openCtoonModal } = useCtoonModal()
+const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
 const router = useRouter()
 
 function goToAuction(id) {
@@ -364,6 +379,11 @@ watch(() => filter.value.sortField, () => {
   if (activeTab.value === 'all')    { allPage.value = 1;     loadAllAuctions()}
 })
 
+// A re-list creates a new auction and retires the old one's re-list button.
+watch(auctionCreatedSignal, () => {
+  if (activeTab.value === 'mine') loadMyAuctions()
+})
+
 watch(myPage,     () => { if (activeTab.value === 'mine')   loadMyAuctions() })
 watch(myBidsPage, () => { if (activeTab.value === 'mybids') loadMyBids()     })
 watch(allPage,    () => { if (activeTab.value === 'all')    loadAllAuctions()})
@@ -538,6 +558,31 @@ function openInfoModal(item) {
     userCtoonId: item.userCtoonId || null,
     assetPath:   item.assetPath  || null,
     name:        item.name       || null,
+  })
+}
+
+// Put an unsold cToon straight back up, starting from the terms it didn't sell
+// under. canRelist is advisory — POST /api/auctions re-checks ownership, burned
+// state, active auctions and pending trades before creating anything.
+function openRelist(item) {
+  if (!item?.canRelist) return
+  const duration = reconstructDurationPrefill(item.createdAt, item.endAt)
+  openAuctionModal({
+    ctoon: {
+      id:         item.userCtoonId,
+      ctoonId:    item.ctoonId,
+      name:       item.name,
+      assetPath:  item.assetPath,
+      rarity:     item.rarity,
+      mintNumber: item.mintNumber,
+      price:      item.price,
+    },
+    prefill: {
+      isRelist:       true,
+      initialBet:     item.initialBid,
+      durationPreset: duration.preset,
+      timeframe:      duration.timeframe,
+    },
   })
 }
 
@@ -761,9 +806,20 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 .ah-time.ended { color: rgba(255,255,255,0.38); font-size: 0.57rem; font-weight: normal; }
 
-/* View button */
-.ah-view {
+/* Action buttons */
+/* Stacked rather than side by side: the row's fixed columns already consume
+   nearly the full width on a phone, so a second column would push View
+   off-screen. Fixed width so rows without a Re-list button don't jump. */
+.ah-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 54px;
   flex-shrink: 0;
+}
+
+.ah-view, .ah-relist {
+  width: 100%;
   padding: 3px 8px;
   background: rgba(0,0,0,0.3);
   border: 1px solid var(--OrbitLightBlue);
@@ -776,6 +832,12 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   transition: background 0.12s;
 }
 .ah-view:hover { background: var(--OrbitLightBlue); }
+
+.ah-relist {
+  border-color: var(--OrbitGreen);
+  color: var(--OrbitGreen);
+}
+.ah-relist:hover { background: rgba(102,204,0,0.25); }
 
 /* ── Card grid ── */
 .ah-card-grid {
@@ -902,6 +964,28 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 .ah-card-view-btn:hover { background: var(--OrbitLightBlue); }
 
+.ah-card-actions {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.ah-card-relist-btn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: rgba(102,204,0,0.15);
+  border: 1px solid var(--OrbitGreen);
+  border-radius: 4px;
+  color: var(--OrbitGreen);
+  font-size: 0.6rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ah-card-relist-btn:hover { background: rgba(102,204,0,0.3); }
+
 /* ── Owned/Unowned image badge ── */
 .ah-img-wrap {
   position: relative;
@@ -992,6 +1076,11 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   .ah-card-grid {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
+    /* Two buttons can't share a 40%-wide footer on a ~110px card, so the
+       footer stacks — same approach as MyCollection's grid. */
+    --footer-height: 48px;
+    --footer-left-width: 100%;
+    --footer-right-width: 100%;
   }
 
   .ah-card-grid :deep(.sc) {
@@ -999,5 +1088,17 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
     height: auto;
     aspect-ratio: 3 / 4;
   }
+
+  .ah-card-grid :deep(.sc-footer) { flex-direction: column; gap: 2px; }
+  .ah-card-grid :deep(.sc-footer-right) { justify-content: flex-start; }
+
+  /* Reclaim width for the name: the row's fixed columns leave the body almost
+     nothing at 360px once a second action button is in play. */
+  .ah-img-wrap, .ah-img-wrap .ah-img { width: 72px; height: 72px; }
+  .ah-bid  { width: 68px; }
+  .ah-time { width: 52px; }
+
+  /* Bare minimum tap targets — these buttons create a real auction. */
+  .ah-view, .ah-relist { min-height: 28px; }
 }
 </style>

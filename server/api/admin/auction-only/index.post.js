@@ -3,9 +3,24 @@ import dotenv from 'dotenv'
 dotenv.config()
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
 const OWNER_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 
 export default defineEventHandler(async (event) => {
+  try {
+    return await handleAuctionOnlyCreate(event)
+  } catch (err) {
+    // Validation errors (createError with 4xx) are expected admin input mistakes —
+    // only log the ones the admin couldn't have foreseen from the form itself.
+    const statusCode = err?.statusCode || 500
+    if (statusCode >= 500) {
+      await logAuctionOnlyError('schedule', err, null)
+    }
+    throw err
+  }
+})
+
+async function handleAuctionOnlyCreate(event) {
   // auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
@@ -198,4 +213,4 @@ export default defineEventHandler(async (event) => {
   }, { timeout: 30000, maxWait: 10000 })
 
   return result
-})
+}
