@@ -75,7 +75,7 @@ async function seedGameConfigs() {
     update: {},
     create: {
       gameName: 'GuessCtoon',
-      guessCtoonPlaysPerPeriod: 3,
+      guessCtoonScoredPlaysPerPeriod: 3,
       guessCtoonPointsPerGame: 50,
       guessCtoonSecondsPerQuestion: 12,
       guessCtoonChoices: 4,

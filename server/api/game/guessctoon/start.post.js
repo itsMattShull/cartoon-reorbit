@@ -46,23 +46,26 @@ export default defineEventHandler(async (event) => {
     const config = await getGuessCtoonConfig()
     const boundary = getDailyBoundary()
 
-    // Count-then-insert is not atomic on its own, and a Redis lock can evaporate on
-    // eviction or failover. The advisory lock makes Postgres the authority on the play
-    // limit. Salted so it can't collide with the points award's lock on the same userId.
+    // Plays are unlimited. What is rationed is how many of them COUNT: the first
+    // `scoredPlaysPerPeriod` runs each day are worth points and eligible for the
+    // leaderboard, and everything after that is a practice run.
+    //
+    // The decision is made here rather than at bank time so the player knows before they
+    // answer anything whether the run counts. Count-then-insert is not atomic on its own,
+    // and a Redis lock can evaporate on eviction or failover, so the advisory lock makes
+    // Postgres the authority. Salted so it can't collide with the points award's lock on
+    // the same userId.
+    let counted = false
+    let scoredPlaysUsed = 0
     try {
       await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:guessctoon`}))`
-        const playsToday = await tx.guessCtoonPlay.count({
-          where: { userId, createdAt: { gte: boundary } }
+        scoredPlaysUsed = await tx.guessCtoonPlay.count({
+          where: { userId, counted: true, createdAt: { gte: boundary } }
         })
-        if (playsToday >= config.playsPerPeriod) {
-          throw createError({
-            statusCode: 429,
-            statusMessage: 'Daily play limit reached',
-            data: { nextReset: getNextResetAt(boundary).toISOString() }
-          })
-        }
-        await tx.guessCtoonPlay.create({ data: { userId } })
+        counted = scoredPlaysUsed < config.scoredPlaysPerPeriod
+        await tx.guessCtoonPlay.create({ data: { userId, counted } })
+        if (counted) scoredPlaysUsed += 1
       })
     } catch (err) {
       if (err?.statusCode) throw err
@@ -106,6 +109,10 @@ export default defineEventHandler(async (event) => {
       i: 0,
       streak: 0,
       state: 'live',
+      // Whether this run counts was settled at start; carrying it in the session means the
+      // bank path cannot re-derive it differently (e.g. if the daily boundary rolls over
+      // mid-run).
+      counted,
       secs: config.secondsPerQuestion,
       startedAt: nowMs,
       // Stamped by Node here for the first question only; every subsequent issuedAt comes
@@ -119,6 +126,10 @@ export default defineEventHandler(async (event) => {
     return {
       totalQuestions: qs.length,
       secondsPerQuestion: config.secondsPerQuestion,
+      counted,
+      scoredPlaysLeft: Math.max(0, config.scoredPlaysPerPeriod - scoredPlaysUsed),
+      scoredPlaysPerPeriod: config.scoredPlaysPerPeriod,
+      playsResetAt: getNextResetAt(boundary).toISOString(),
       question: {
         questionIndex: 0,
         imageToken: qs[0].t,

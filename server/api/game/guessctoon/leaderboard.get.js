@@ -22,6 +22,9 @@ const MAX_RANKED = 5000
 // tie-break (what the other boards use) would leave hundreds of players sorted by username
 // and make the board unwinnable for anyone late in the alphabet.
 //
+// Plays are unlimited, so only runs marked `counted` — the first few each day, per the
+// admin-configured cap — are eligible here. Practice runs are recorded but never ranked.
+//
 // `suspicious` runs are excluded rather than deleted: a run whose answer cadence looks
 // machine-generated keeps its row for auditing but does not occupy a leaderboard slot.
 
@@ -32,6 +35,7 @@ function rankedAllTime () {
              s."userId", s."streak", s."createdAt"
       FROM "GuessCtoonScore" s
       WHERE s."suspicious" = false
+        AND s."counted" = true
       ORDER BY s."userId", s."streak" DESC, s."createdAt" ASC
     )
     SELECT u."id" AS "userId", u."username", u."avatar", b."streak"::int AS "score",
@@ -53,6 +57,7 @@ function rankedSince (days) {
              s."userId", s."streak", s."createdAt"
       FROM "GuessCtoonScore" s
       WHERE s."suspicious" = false
+        AND s."counted" = true
         AND s."createdAt" >= NOW() - (${days} || ' days')::interval
       ORDER BY s."userId", s."streak" DESC, s."createdAt" ASC
     )

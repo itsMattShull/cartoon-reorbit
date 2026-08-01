@@ -27,7 +27,7 @@
 // one-way flip to `banked` that guarantees exactly one caller can ever record a run.
 
 const DEFAULTS = {
-  playsPerPeriod: 3,
+  scoredPlaysPerPeriod: 3,
   pointsPerGame: 50,
   secondsPerQuestion: 12,
   choices: 4,
@@ -642,7 +642,7 @@ if correct then
     return cjson.encode({
       correct=true, correctIndex=q.k, correctName=q.n, assetPath=q.a,
       streak=s.streak, gameOver=true, perfect=true,
-      latencies=s.lat, startedAt=s.startedAt
+      counted=s.counted, latencies=s.lat, startedAt=s.startedAt
     })
   end
 
@@ -671,7 +671,7 @@ redis.call('SET', KEYS[1], cjson.encode(s), 'EX', bankedTtl)
 return cjson.encode({
   correct=false, correctIndex=q.k, correctName=q.n, assetPath=q.a,
   timedOut=timedOut, streak=s.streak, gameOver=true, perfect=false,
-  latencies=s.lat, startedAt=s.startedAt
+  counted=s.counted, latencies=s.lat, startedAt=s.startedAt
 })
 `
 
@@ -692,7 +692,7 @@ s.state = 'banked'
 redis.call('SET', KEYS[1], cjson.encode(s), 'EX', tonumber(ARGV[1]))
 
 return cjson.encode({
-  streak=s.streak, latencies=s.lat, startedAt=s.startedAt, answered=#s.lat
+  streak=s.streak, counted=s.counted, latencies=s.lat, startedAt=s.startedAt, answered=#s.lat
 })
 `
 
