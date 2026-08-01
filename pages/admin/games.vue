@@ -915,6 +915,64 @@
           </button>
         </section>
 
+        <!-- Guess that cToon! -->
+        <section v-if="activeTab === 'GuessCtoon'" role="tabpanel" aria-label="Guess that cToon Settings">
+          <h2 class="text-2xl font-semibold mb-4">Guess that cToon! Settings</h2>
+
+          <p class="text-sm text-gray-500 mb-4">
+            Plays are unlimited. Only the first few runs each day count toward points and the
+            leaderboard — everything after that is playable as practice.
+            Saved changes apply to new games within about a minute, and never disrupt a run
+            already in progress.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Scoring Plays Per Period</label>
+              <p class="text-xs text-gray-400 mb-1">
+                Runs per 24-hour period (resets 8 PM CT) that count for points and the
+                leaderboard. Set to 0 to make every run practice-only.
+              </p>
+              <input type="number" v-model.number="guessCtoonScoredPlaysPerPeriod" min="0" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-400 mb-1">Points awarded toward the shared daily cap when a scoring run ends</p>
+              <input type="number" v-model.number="guessCtoonPointsPerGame" min="0" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Seconds Per cToon</label>
+              <p class="text-xs text-gray-400 mb-1">Countdown per question — running out counts as a wrong answer (4–120)</p>
+              <input type="number" v-model.number="guessCtoonSecondsPerQuestion" min="4" max="120" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Answer Choices</label>
+              <p class="text-xs text-gray-400 mb-1">How many names to pick from, including the correct one</p>
+              <select v-model.number="guessCtoonChoices" class="input">
+                <option :value="3">3 choices</option>
+                <option :value="4">4 choices</option>
+                <option :value="5">5 choices</option>
+                <option :value="6">6 choices</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Questions Per Run</label>
+              <p class="text-xs text-gray-400 mb-1">Longest possible streak — answering them all is a perfect run (5–100)</p>
+              <input type="number" v-model.number="guessCtoonMaxQuestions" min="5" max="100" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Minimum Streak For Points</label>
+              <p class="text-xs text-gray-400 mb-1">Runs shorter than this record a score but earn no points</p>
+              <input type="number" v-model.number="guessCtoonMinStreakForPoints" min="0" max="100" class="input" />
+            </div>
+          </div>
+
+          <button @click="saveGuessCtoonConfig" :disabled="loadingGuessCtoon" class="btn-primary">
+            <span v-if="!loadingGuessCtoon">Save Guess that cToon! Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -1058,7 +1116,8 @@ const tabs = [
   { key: 'TKO',          label: 'TKO' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
-  { key: 'ReOrbitMemory', label: 'ReOrbit Memory' }
+  { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
+  { key: 'GuessCtoon',   label: 'Guess that cToon!' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1393,6 +1452,7 @@ async function loadSettings() {
   gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
   gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
   gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
+  gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -1487,6 +1547,14 @@ async function loadSettings() {
   reorbitMemoryTimeSecondsInput.value  = rm.reorbitMemoryTimeSeconds != null ? String(rm.reorbitMemoryTimeSeconds) : ''
   reorbitMemoryFlipBackDelayMs.value   = rm.reorbitMemoryFlipBackDelayMs ?? 800
   reorbitMemoryCardBackImage.value     = rm.reorbitMemoryCardBackImagePath || ''
+
+  const gc = await $fetch('/api/admin/game-config?gameName=GuessCtoon')
+  guessCtoonScoredPlaysPerPeriod.value = gc.guessCtoonScoredPlaysPerPeriod ?? 3
+  guessCtoonPointsPerGame.value        = gc.guessCtoonPointsPerGame ?? 50
+  guessCtoonSecondsPerQuestion.value   = gc.guessCtoonSecondsPerQuestion ?? 12
+  guessCtoonChoices.value              = gc.guessCtoonChoices ?? 4
+  guessCtoonMaxQuestions.value         = gc.guessCtoonMaxQuestions ?? 25
+  guessCtoonMinStreakForPoints.value   = gc.guessCtoonMinStreakForPoints ?? 3
 }
 
 // Win Wheel state
@@ -1830,11 +1898,12 @@ const gameTileSlots = [
   { slot: 'tko',          label: 'TKO' },
   { slot: 'reorbitmatch', label: 'ReOrbit Match' },
   { slot: 'tower',        label: 'Tower Stack' },
-  { slot: 'reorbitmemory', label: 'ReOrbit Memory' }
+  { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
+  { slot: 'guessctoon',   label: 'Guess that cToon!' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -1952,6 +2021,39 @@ async function saveReorbitMemoryConfig() {
     toastMessage.value = 'Error saving ReOrbit Memory settings'; toastType.value = 'error'
   } finally {
     loadingReorbitMemory.value = false
+  }
+}
+
+// ── Guess that cToon! ──────────────────────────────────────────────────────────
+const guessCtoonScoredPlaysPerPeriod = ref(3)
+const guessCtoonPointsPerGame        = ref(50)
+const guessCtoonSecondsPerQuestion   = ref(12)
+const guessCtoonChoices              = ref(4)
+const guessCtoonMaxQuestions         = ref(25)
+const guessCtoonMinStreakForPoints   = ref(3)
+const loadingGuessCtoon              = ref(false)
+
+async function saveGuessCtoonConfig() {
+  loadingGuessCtoon.value = true
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                       'GuessCtoon',
+        guessCtoonScoredPlaysPerPeriod: guessCtoonScoredPlaysPerPeriod.value,
+        guessCtoonPointsPerGame:        guessCtoonPointsPerGame.value,
+        guessCtoonSecondsPerQuestion:   guessCtoonSecondsPerQuestion.value,
+        guessCtoonChoices:              guessCtoonChoices.value,
+        guessCtoonMaxQuestions:         guessCtoonMaxQuestions.value,
+        guessCtoonMinStreakForPoints:   guessCtoonMinStreakForPoints.value
+      }
+    })
+    toastMessage.value = 'Guess that cToon! settings saved!'; toastType.value = 'success'
+  } catch (err) {
+    console.error(err)
+    toastMessage.value = 'Error saving Guess that cToon! settings'; toastType.value = 'error'
+  } finally {
+    loadingGuessCtoon.value = false
   }
 }
 

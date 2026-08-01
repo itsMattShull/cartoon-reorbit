@@ -1,8 +1,21 @@
 // server/api/admin/auction-only/[id].put.js
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
 
 export default defineEventHandler(async (event) => {
+  try {
+    return await handleAuctionOnlyUpdate(event)
+  } catch (err) {
+    const statusCode = err?.statusCode || 500
+    if (statusCode >= 500) {
+      await logAuctionOnlyError('schedule', err, event.context.params?.id || null)
+    }
+    throw err
+  }
+})
+
+async function handleAuctionOnlyUpdate(event) {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
@@ -55,4 +68,4 @@ export default defineEventHandler(async (event) => {
   })
 
   return { ok: true, id: updated.id }
-})
+}

@@ -67,6 +67,22 @@ async function seedGameConfigs() {
       winWheelImagePath: null
     }
   })
+
+  // Guess that cToon! config. Unlike the other mini-games this one has no admin tab to
+  // lazily create its row, so seeding it is what makes its settings tunable at all.
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'GuessCtoon' },
+    update: {},
+    create: {
+      gameName: 'GuessCtoon',
+      guessCtoonScoredPlaysPerPeriod: 3,
+      guessCtoonPointsPerGame: 50,
+      guessCtoonSecondsPerQuestion: 12,
+      guessCtoonChoices: 4,
+      guessCtoonMaxQuestions: 25,
+      guessCtoonMinStreakForPoints: 3
+    }
+  })
 }
 
 async function seedHomepageConfig() {

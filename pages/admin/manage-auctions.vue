@@ -62,6 +62,38 @@
 
       <p v-else class="text-gray-500 mt-6">No upcoming auctions.</p>
       <p v-if="error" class="text-red-600 mt-4">{{ error }}</p>
+
+      <div class="mt-10">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Error Log</h2>
+          <button
+            v-if="errorLog.length"
+            type="button"
+            class="px-3 py-1 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50"
+            @click="clearErrorLog"
+          >
+            Clear Log
+          </button>
+        </div>
+
+        <div v-if="errorLog.length" class="bg-white rounded-lg shadow divide-y">
+          <div v-for="e in errorLog" :key="e.id" class="p-4">
+            <div class="flex items-center gap-2 text-sm">
+              <span
+                class="px-2 py-0.5 rounded text-xs font-medium"
+                :class="e.context === 'activation' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'"
+              >
+                {{ e.context === 'activation' ? 'Go-live' : 'Scheduling' }}
+              </span>
+              <span class="text-gray-500">{{ fmtCST(e.createdAt) }}</span>
+              <span v-if="e.auctionOnlyId" class="text-gray-400 truncate">• {{ e.auctionOnlyId }}</span>
+            </div>
+            <pre class="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words">{{ e.message }}</pre>
+          </div>
+        </div>
+        <p v-else class="text-gray-500">No errors logged.</p>
+        <p v-if="errorLogError" class="text-red-600 mt-2">{{ errorLogError }}</p>
+      </div>
     </div>
 
     <div v-if="showEdit" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
@@ -136,6 +168,8 @@ const upcomingAuctions = computed(() => {
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
 })
 const error = ref('')
+const errorLog = ref([])
+const errorLogError = ref('')
 const showEdit = ref(false)
 const editing = ref(null)
 const editPrice = ref(0)
@@ -314,5 +348,38 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadErrorLog() {
+  try {
+    const res = await fetch('/api/admin/auction-only/errors', { credentials: 'include' })
+    if (!res.ok) {
+      const t = await res.text()
+      throw new Error(t || 'Failed to load error log')
+    }
+    errorLog.value = await res.json()
+  } catch (e) {
+    errorLogError.value = e.message
+  }
+}
+
+async function clearErrorLog() {
+  if (!confirm('Clear the error log?')) return
+  try {
+    const res = await fetch('/api/admin/auction-only/errors', {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+    if (!res.ok) {
+      const t = await res.text()
+      throw new Error(t || 'Failed to clear error log')
+    }
+    errorLog.value = []
+  } catch (e) {
+    errorLogError.value = e.message
+  }
+}
+
+onMounted(() => {
+  load()
+  loadErrorLog()
+})
 </script>

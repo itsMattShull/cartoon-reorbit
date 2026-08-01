@@ -41,9 +41,16 @@
 
           <!-- Timer / winner -->
           <div v-if="!ended" class="adet-timer">Ends in {{ formatRemaining(auction.endAt) }}</div>
-          <div v-else class="adet-winner">
+          <div v-else-if="displayWinner" class="adet-winner">
             🎉 Winner:
-            <span class="adet-winner-name">{{ displayWinner ?? '—' }}</span>
+            <span class="adet-winner-name">{{ displayWinner }}</span>
+          </div>
+          <div v-else class="adet-unsold">Ended with no bids.</div>
+
+          <!-- Re-list: this cToon never left its owner, so it can go back up -->
+          <div v-if="auction.canRelist" class="adet-relist-wrap">
+            <button class="adet-relist" @click="openRelist">Re-list this cToon</button>
+            <div class="adet-hint">Starts a new auction — you can change the price and duration.</div>
           </div>
 
           <!-- Bid info -->
@@ -143,6 +150,7 @@ const { user, fetchSelf } = useAuth()
 const config  = useRuntimeConfig()
 const scavenger = useScavengerHunt()
 const { open: openCtoonModal } = useCtoonModal()
+const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
 
 const loading  = ref(true)
 const auction  = ref({ ctoon: {}, winnerUsername: null, endAt: null, highestBid: 0, initialBet: 0 })
@@ -255,6 +263,34 @@ function openInfoModal() {
     name:        auction.value.ctoon.name        || null,
   })
 }
+
+function openRelist() {
+  if (!auction.value?.canRelist) return
+  const duration = reconstructDurationPrefill(auction.value.createdAt, auction.value.endAt)
+  openAuctionModal({
+    ctoon: {
+      id:         auction.value.ctoon.userCtoonId,
+      ctoonId:    auction.value.ctoon.id,
+      name:       auction.value.ctoon.name,
+      assetPath:  auction.value.ctoon.assetPath,
+      rarity:     auction.value.ctoon.rarity,
+      mintNumber: auction.value.ctoon.mintNumber,
+    },
+    prefill: {
+      isRelist:       true,
+      initialBet:     auction.value.initialBet,
+      durationPreset: duration.preset,
+      timeframe:      duration.timeframe,
+    },
+  })
+}
+
+// This page still shows the old, closed auction. Once it's been re-listed the
+// cToon has an active auction again, so retire the button rather than leave one
+// that the server would now reject.
+watch(auctionCreatedSignal, () => {
+  if (auction.value) auction.value.canRelist = false
+})
 
 async function placeBid() {
   if (!canBid.value) return
@@ -682,4 +718,33 @@ onUnmounted(() => {
 }
 .adet-toast.success { background: #16a34a; color: #fff; }
 .adet-toast.error   { background: #dc2626; color: #fff; }
+
+/* ── Unsold / re-list ── */
+.adet-unsold { font-size: 0.72rem; font-weight: bold; color: rgba(255,255,255,0.5); }
+
+.adet-relist-wrap { display: flex; flex-direction: column; gap: 3px; }
+
+.adet-relist {
+  align-self: flex-start;
+  padding: 6px 14px;
+  background: rgba(102,204,0,0.15);
+  border: 1px solid var(--OrbitGreen);
+  border-radius: 6px;
+  color: var(--OrbitGreen);
+  font-size: 0.7rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.adet-relist:hover { background: rgba(102,204,0,0.3); }
+
+@media (max-width: 768px) {
+  .adet-bottom { grid-template-columns: 1fr; }
+  /* Full-width and taller: this is the primary action on a finished listing,
+     and the shared button styles here sit well under a comfortable tap size. */
+  .adet-relist { align-self: stretch; width: 100%; min-height: 36px; }
+  .adet-bid-btn { min-height: 36px; }
+  /* Sub-16px inputs make iOS Safari zoom the page on focus. */
+  .adet-autobid-input { font-size: 16px; }
+}
 </style>

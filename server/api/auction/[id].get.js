@@ -58,6 +58,22 @@ export default defineEventHandler(async (event) => {
     blockedByFeaturedLead = !!conflict
   }
 
+  // Closed with nobody bidding: the cToon never left its owner, so whoever holds
+  // it now can put it straight back up. Deliberately keyed on current ownership
+  // rather than auction.creatorId — an unsold cToon becomes tradeable again and
+  // may have changed hands since it closed.
+  let canRelist = false
+  if (auction.status === 'CLOSED' &&
+      auction.winnerId === null &&
+      auction.userCtoon.userId === userId &&
+      !auction.userCtoon.burnedAt) {
+    const blocking = await prisma.auction.findFirst({
+      where: { userCtoonId: auction.userCtoonId, status: 'ACTIVE' },
+      select: { id: true }
+    })
+    canRelist = !blocking
+  }
+
   return {
     id: auction.id,
     isFeatured: auction.isFeatured,
@@ -79,9 +95,13 @@ export default defineEventHandler(async (event) => {
       secondEditionOverlaySize: auction.userCtoon.ctoon.secondEditionOverlaySize
     },
     isHolidayItem, // ← added
+    createdAt:  auction.createdAt.toISOString(),
     endAt:      auction.endAt.toISOString(),
     initialBet: auction.initialBet,
+    duration:   auction.duration,
     status:     auction.status,
+    bidCount:   bids.length,
+    canRelist,
     highestBid: auction.highestBid ?? currentBid,
     highestBidderUsername: auction.highestBidder?.username || null,
     bids: bids.map(b => ({ user: b.user.username, amount: b.amount })),
