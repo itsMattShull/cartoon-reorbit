@@ -5,7 +5,7 @@
 
         <!-- ── Header ── -->
         <div class="am-header">
-          <span class="am-title">Send to Auction</span>
+          <span class="am-title">{{ isRelist ? 'Re-list at Auction' : 'Send to Auction' }}</span>
           <button class="am-close" @click="$emit('close')">✕</button>
         </div>
 
@@ -44,6 +44,27 @@
             />
             <div v-if="initialBet < minInitialBet" class="am-error">
               Must be at least {{ minInitialBet }} pts
+            </div>
+
+            <!-- What this cToon has actually sold for. Sits below the input on
+                 purpose: it's a sale-price history, not a starting-bid target. -->
+            <div class="am-guide">
+              <template v-if="loadingSuggestion">
+                <div class="am-guide-loading">Checking recent sales…</div>
+              </template>
+              <template v-else-if="suggestion && suggestion.basis !== 'none'">
+                <div class="am-guide-top">
+                  <span class="am-guide-label">{{ guideLabel }}</span>
+                  <span class="am-guide-value">{{ guideValue }}</span>
+                </div>
+                <div class="am-guide-note">{{ guideNote }}</div>
+                <div v-if="showsRange" class="am-guide-note">
+                  Starting bids are usually set lower.
+                </div>
+              </template>
+              <template v-else>
+                <div class="am-guide-note">Not enough sales data yet.</div>
+              </template>
             </div>
           </div>
 
@@ -94,7 +115,10 @@
 
 <script setup>
 const props = defineProps({
-  ctoon: { type: Object, required: true },
+  ctoon:   { type: Object, required: true },
+  // Optional starting values, used when re-listing something that didn't sell:
+  // { initialBet, durationPreset, timeframe, isRelist }
+  prefill: { type: Object, default: null },
 })
 const emit = defineEmits(['close', 'created'])
 
@@ -116,18 +140,80 @@ const RARITY_MIN = {
 const instaBidValue = computed(() => RARITY_MIN[(props.ctoon.rarity || '').toLowerCase()] ?? 50)
 const minInitialBet = computed(() => Math.max(1, instaBidValue.value))
 
-const initialBet     = ref(Math.max(props.ctoon.price || 0, instaBidValue.value))
-const durationPreset = ref('days')
-const timeframe      = ref(1)
+// When re-listing, start from the terms that didn't sell last time so the
+// seller only has to change what they want to change.
+const isRelist = computed(() => !!props.prefill?.isRelist)
+
+const initialBet = ref(
+  props.prefill?.initialBet != null
+    ? Math.max(props.prefill.initialBet, instaBidValue.value)
+    : Math.max(props.ctoon.price || 0, instaBidValue.value)
+)
+const durationPreset = ref(props.prefill?.durationPreset || 'days')
+const timeframe      = ref(props.prefill?.timeframe || 1)
 const sending        = ref(false)
 const recentAuctions = ref([])
+const suggestion     = ref(null)
+const loadingSuggestion = ref(true)
 const toast          = reactive({ message: '', type: 'success' })
 
 onMounted(async () => {
   try {
-    const res = await $fetch(`/api/ctoon/${props.ctoon.ctoonId}/getRecentAuctions`)
-    recentAuctions.value = Array.isArray(res) ? res : []
-  } catch { recentAuctions.value = [] }
+    const res = await $fetch(`/api/ctoon/${props.ctoon.ctoonId}/getRecentAuctions`, {
+      query: {
+        suggest: '1',
+        ...(props.ctoon.id ? { userCtoonId: props.ctoon.id } : {})
+      }
+    })
+    recentAuctions.value = Array.isArray(res?.sales) ? res.sales : []
+    suggestion.value     = res?.suggestion ?? null
+  } catch {
+    recentAuctions.value = []
+    suggestion.value     = null
+  } finally {
+    loadingSuggestion.value = false
+  }
+})
+
+// ── Price guide copy ──────────────────────────────────────────────
+// Deliberately worded as "sold for", never "recommended" or "list at": the
+// numbers come from completed sales, while the field above is the starting bid.
+const showsRange = computed(() =>
+  ['recent', 'alltime'].includes(suggestion.value?.basis)
+)
+
+const guideLabel = computed(() => {
+  switch (suggestion.value?.basis) {
+    case 'recent':      return 'Recent sales'
+    case 'alltime':     return 'Past sales'
+    case 'estimate':    return 'cMart price'
+    case 'below_floor': return 'Minimum bid'
+    default:            return ''
+  }
+})
+
+const guideValue = computed(() => {
+  const s = suggestion.value
+  if (!s) return ''
+  if (s.basis === 'below_floor') return `${s.floor} pts`
+  if (s.basis === 'estimate')    return `${s.mid} pts`
+  if (s.low === s.high)          return `${s.low} pts`
+  return `${s.low}–${s.high} pts`
+})
+
+const guideNote = computed(() => {
+  const s = suggestion.value
+  if (!s) return ''
+  const n = s.sampleSize
+  const plural = n === 1 ? 'sale' : 'sales'
+  const mint = s.mintAdjusted ? ', adjusted for mint' : ''
+  switch (s.basis) {
+    case 'recent':      return `From ${n} ${plural} in the last ${s.windowDays} days${mint}.`
+    case 'alltime':     return `No sales in ${s.windowDays} days. From ${n} older ${plural}${mint}.`
+    case 'estimate':    return 'No auction history — this is a list price, not a sale.'
+    case 'below_floor': return `Recent sales averaged ${s.mid} pts, below the minimum.`
+    default:            return ''
+  }
 })
 
 function showToast(message, type = 'error') {
@@ -197,6 +283,8 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 /* ── Modal box ── */
@@ -204,6 +292,10 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   position: relative;
   width: 420px;
   max-width: 95vw;
+  /* Without a height cap the footer ends up under the on-screen keyboard when
+     the bid input is focused, and the overlay is fixed so it can't be scrolled
+     to. Never binds on desktop, where the modal is well under this height. */
+  max-height: calc(100dvh - 24px);
   background: var(--OrbitDarkBlue);
   border: 2px solid var(--OrbitLightBlue);
   border-radius: 10px;
@@ -249,6 +341,11 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   padding: 12px;
   overflow-y: auto;
   scrollbar-width: thin;
+  /* min-height:0 is what actually lets this shrink under the modal's
+     max-height — the default min-height:auto refuses to. */
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 /* ── Preview ── */
@@ -365,9 +462,13 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   border-top: 1px solid rgba(255,255,255,0.1);
   flex-shrink: 0;
   gap: 6px;
+  /* The buttons are nowrap, so without this they get clipped by the modal's
+     overflow:hidden on narrow phones instead of moving to a second line. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
-.am-footer-right { display: flex; gap: 6px; }
+.am-footer-right { display: flex; gap: 6px; margin-left: auto; }
 
 .am-instabid {
   border: 1px solid var(--OrbitGreen);
@@ -427,4 +528,47 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
 }
 .am-toast.success { background: #16a34a; color: #fff; }
 .am-toast.error   { background: #dc2626; color: #fff; }
+
+/* ── Price guide ── */
+.am-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+  /* Reserved so the modal doesn't grow under the user's finger when the
+     suggestion resolves after mount. */
+  min-height: 30px;
+}
+
+.am-guide-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.am-guide-label {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255,255,255,0.4);
+}
+
+.am-guide-value {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--OrbitGreen);
+  white-space: nowrap;
+}
+
+.am-guide-note    { font-size: 0.65rem; color: rgba(255,255,255,0.5); line-height: 1.35; }
+.am-guide-loading { font-size: 0.65rem; color: rgba(255,255,255,0.35); font-style: italic; }
+
+@media (max-width: 768px) {
+  /* Anything under 16px makes iOS Safari zoom the page on focus, which shoves
+     the fixed-position modal half off-screen. */
+  .am-input { font-size: 16px; }
+  .am-preset, .am-instabid, .am-cancel, .am-submit { min-height: 30px; }
+}
 </style>
