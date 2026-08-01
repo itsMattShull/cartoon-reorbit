@@ -3,7 +3,7 @@ import { prisma } from '../prisma.js'
 /**
  * Best-effort error log entry for AuctionOnly scheduling/activation failures,
  * surfaced on the "Manage Auction Only" admin page. Never throws.
- * @param {'schedule'|'activation'} context
+ * @param {'schedule'|'activation'|'removal'} context
  * @param {unknown} err
  * @param {string|null} auctionOnlyId
  */

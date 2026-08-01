@@ -69,6 +69,26 @@ export async function scheduleAuctionClose(auctionId, endAt) {
   await auctionCloseQueue.add('close', { auctionId }, { jobId: auctionId, delay })
 }
 
+/**
+ * Cancel the pending auto-close job for an auction that's about to be deleted.
+ * Returns { active: true } without removing anything if the job is currently
+ * being processed — callers should treat that as "not safe to delete yet"
+ * rather than deleting the Auction row out from under an in-flight close.
+ * @param {string} auctionId
+ */
+export async function cancelAuctionClose(auctionId) {
+  const existing = await auctionCloseQueue.getJob(auctionId)
+  if (!existing) return { active: false, removed: false }
+  const state = await existing.getState()
+  if (state === 'active') return { active: true, removed: false }
+  try {
+    await existing.remove()
+    return { active: false, removed: true }
+  } catch (err) {
+    return { active: false, removed: false, error: err?.message || String(err) }
+  }
+}
+
 // Queue for closing time-based mint windows at their mintEndDate
 export const mintEndQueue = new Queue(
   process.env.MINT_END_QUEUE_KEY || 'mintEndQueue',
