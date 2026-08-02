@@ -122,7 +122,20 @@
 
         <!-- Johnny's line. Absolutely positioned so it can never add layout height. -->
         <transition name="bj-pop">
-          <div v-if="bark" class="bj-bubble">{{ bark }}</div>
+          <div v-if="bark" class="bj-bubble bj-bubble--johnny">{{ bark }}</div>
+        </transition>
+
+        <!-- The rail's line, anchored to whoever said it. On a phone the cast is not on
+             screen, so the speaker is named instead of pointed at. -->
+        <transition name="bj-pop">
+          <div
+            v-if="spectatorBark"
+            class="bj-bubble bj-bubble--spectator"
+            :class="showSpectators ? `bj-bubble--${spectatorBark.who}` : 'bj-bubble--named'"
+          >
+            <span v-if="!showSpectators" class="bj-bubble-who">{{ spectatorBark.name }}:</span>
+            {{ spectatorBark.text }}
+          </div>
         </transition>
 
         <!-- Player. Split hands resolve one at a time, so the active hand is shown full
@@ -183,6 +196,16 @@
             <button class="bj-btn bj-btn--ghost" :disabled="busy || maxBet < rules.minBet"
                     @click="pendingBet = toIncrement(maxBet)">Max</button>
           </div>
+          <div class="bj-actionrow bj-actionrow--secondary">
+            <button class="bj-btn bj-btn--ghost bj-btn--sm" :disabled="busy" @click="leaveTable">
+              Main Menu
+            </button>
+            <button v-if="isGamble" class="bj-btn bj-btn--ghost bj-btn--sm" :disabled="busy || !chips"
+                    @click="showCashOut = true">Cash Out</button>
+            <button v-else class="bj-btn bj-btn--ghost bj-btn--sm" :disabled="busy" @click="resetPractice">
+              Reset Chips
+            </button>
+          </div>
         </div>
 
         <!-- Insurance gets its own moment rather than a sixth button in the action row. -->
@@ -223,7 +246,7 @@
               Reset Chips
             </button>
             <button class="bj-btn bj-btn--ghost bj-btn--sm" :disabled="busy" @click="leaveTable">
-              Leave
+              Main Menu
             </button>
           </div>
         </div>
@@ -344,7 +367,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, h } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, h } from 'vue'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -424,6 +447,10 @@ const ackRisk = ref(false)
 const needsFirstTimeAck = ref(false)
 
 const bark = ref('')
+// One rail line at a time: { who, name, text }. Three characters all talking at once would be
+// noise, and the bubbles would collide.
+const spectatorBark = ref(null)
+let spectatorTimer = null
 const stamp = ref(null)
 const politeMessage = ref('')
 const assertiveMessage = ref('')
@@ -455,8 +482,14 @@ const buyInLeft = computed(() => daily.value.buyInLeft ?? 0)
 
 // Below 700px in either axis the spectators are cut. Width alone isn't enough — a phone in
 // landscape is wide and very short, which is exactly where they'd crowd out the cards.
+// Gated on the felt's own measured size, NOT window.innerHeight. Keying off the window meant
+// a 1366x768 laptop — whose innerHeight lands around 640 once browser chrome is subtracted —
+// fell on the wrong side of the threshold and lost the whole cast, which is most desktops.
+// The scene box is what the characters actually have to fit into, so measure that.
+const sceneWidth = ref(0)
+const sceneHeight = ref(0)
 const showSpectators = computed(() =>
-  viewportWidth.value >= 700 && viewportHeight.value >= 640
+  sceneWidth.value >= 560 && sceneHeight.value >= 240
 )
 
 const phase = computed(() => {
@@ -513,16 +546,102 @@ function can (action) {
 // ── barks ─────────────────────────────────────────────────────────────────────
 // Johnny hits on everything, but never at the player — the vanity points at himself and at the
 // spectators, which is funnier and keeps it safe for a site with kids on it.
+// Johnny talks like Johnny: short, loud, and about himself. He never aims a line at the
+// player — the vanity points at his own hair, his own reflection, and the crowd at the rail,
+// which is both funnier and safe for a site with kids on it. Lines lean on the catchphrases
+// he actually says ("Whoa, mama!", "Hoo-ah!", "Man, I'm pretty!") rather than generic
+// wisecracks, and every one is short enough for a bubble on a phone.
 const BARKS = {
-  blackjack: ['Whoa, mama! Twenty-one!', 'Blackjack! I dealt that, you know.', "Hoo-ah! Nice hand. Mine's prettier."],
-  win: ['Yeah, yeah. You got lucky.', 'Fine. Take the chips. I got the hair.', "Huh. Didn't see that coming."],
-  bust: ['Ooooh. Too many. Hoo-ah!', "That's a lotta card, pal.", 'Yikes. Want a mirror? It helps.'],
-  dealerBust: ["What?! That's not my best angle.", 'I busted. Still gorgeous, though.', 'Aw, man. I blame the lighting.'],
-  push: ['A tie. Nobody looks good in a tie.', "Push. We're both winners. Mostly me.", 'Same total. Spooky.'],
-  lose: ['Read â€™em and weep.', 'The house looks good today.', 'Better luck next deal, pal.'],
-  cashOut: ['Leavin\'? More mirror time for me.', "Cashed out. Tell 'em Johnny sent ya.", 'Later, champ. I\'ll be here. Flexing.'],
-  capped: ["Whoa! You broke the bank!", "That's the house limit, pal. I gotta eat."],
-  idle: ['Bets down. Let\'s do this.', 'Money on the felt, pal.', "Grim, quit lookin' at my cards.", 'Courage, stop shakin\' the table.', 'Nice sword, Jack. Nice hair, me.']
+  blackjack: [
+    'Whoa, mama! Twenty-one!',
+    "Blackjack. I dealt it, so that's basically my win.",
+    'Hoo-ah! Beginner\u2019s luck.'
+  ],
+  win: [
+    'Yeah, yeah. Take it.',
+    'You win. I still got the hair.',
+    "Lucky. That's all that was."
+  ],
+  bust: [
+    'Ooooh! Too many!',
+    "That's a lotta card there, buddy.",
+    "Bust! And I didn't even flex."
+  ],
+  dealerBust: [
+    "Whoa! That's not my best angle.",
+    'I busted. Still pretty, though.',
+    'Aw, man. Do over?'
+  ],
+  push: [
+    'A tie? Nobody looks good in a tie.',
+    'Push. We both win. Mostly me.',
+    'Same total. Spooky.'
+  ],
+  lose: [
+    "Read 'em and weep.",
+    'House wins. House is also pretty.',
+    'Better luck next deal.'
+  ],
+  cashOut: [
+    "Leavin' already? More mirror time for me.",
+    "Cashed out. Tell 'em Johnny sent ya.",
+    "Later, champ. I'll be here. Flexin'."
+  ],
+  capped: [
+    'Whoa! You broke the bank!',
+    "That's the house limit, pal. I gotta eat."
+  ],
+  idle: [
+    "Bets down. Let's do this.",
+    'Money on the felt, pal.',
+    "Man, I'm pretty.",
+    'Hoo-ah!',
+    "Grim, quit lookin' at my cards."
+  ],
+  playerDouble: ['Whoa! Big spender!'],
+  playerSplit: ["Two hands? Show-off. That's my thing."]
+}
+
+// The rail talks too. Each one is written to their own voice rather than being interchangeable
+// wisecracks — Courage panics, Grim is bored and morbid in his Jamaican lilt, and Jack is
+// formal and never uses contractions. Only one of them speaks at a time.
+const SPECTATORS = {
+  courage: {
+    name: 'Courage',
+    blackjack: ['Oh my goodness gracious!', 'We did it! I mean... you did it!'],
+    win: ['Whew! I need to lie down.', 'Oh thank goodness.'],
+    bust: ["Oooooh, I can't look!", 'The things I do for love!', 'I told you! I told you!'],
+    dealerBust: ['He lost! HE LOST!', 'Oh happy day!'],
+    push: ['Nobody lost? Nobody lost!'],
+    lose: ['Oh, the horror...', 'I think I need a nap.'],
+    dealerAce: ["An ace?! That's bad. That's very bad."],
+    bigTotal: ["Don't do it! Don't do it!"],
+    split: ['Two hands?! Twice the worrying!']
+  },
+  grim: {
+    name: 'Grim',
+    blackjack: ['Twenty-one. Beginner\u2019s luck, I say.', 'Now dat is a hand, mon.'],
+    win: ['De house lost one. Good.', 'Enjoy it while it last, mon.'],
+    bust: ["Dat one belongs to me now, mon.", 'Ooooh. Dat had to hurt.'],
+    dealerBust: ['Even de house got to lose sometime.', 'Ha! Serves him right, mon.'],
+    push: ['A tie? How borin\u2019, mon.'],
+    lose: ['Anoder one for de collection.', 'Dat is de way of tings, mon.'],
+    dealerAce: ['An ace showin\u2019. Dis look grim. Like me.'],
+    bigTotal: ['One more card and you is finished, mon.'],
+    split: ['Two hands, two ways to lose. I like it.']
+  },
+  jack: {
+    name: 'Samurai Jack',
+    blackjack: ['A most honorable hand.', 'Perfection. Well struck.'],
+    win: ['Your patience is rewarded.', 'You have chosen well.'],
+    bust: ['You reached too far.', 'Greed is a poor teacher.'],
+    dealerBust: ["The dealer's own greed undid him.", 'He fell by his own hand.'],
+    push: ['Neither wins. Balance is preserved.'],
+    lose: ['Fortune is a fickle ally.', 'There will be another hand.'],
+    dealerAce: ['The dealer is strong. Be careful.'],
+    bigTotal: ['Wisdom is knowing when to stop.'],
+    split: ['Two paths. Choose both well.']
+  }
 }
 
 function say (key) {
@@ -530,7 +649,43 @@ function say (key) {
   if (!lines?.length) return
   bark.value = lines[Math.floor(Math.random() * lines.length)]
   clearTimeout(barkTimer)
-  barkTimer = setTimeout(() => { bark.value = '' }, 2600)
+  barkTimer = setTimeout(() => { bark.value = '' }, BARK_MS)
+}
+
+/**
+ * Puts a line in one spectator's mouth. `who` picks a character; omitting it chooses at random
+ * from whoever actually has something to say about this event, so the rail doesn't fall silent
+ * just because one character has no line for it.
+ */
+function spectatorSay (event, who) {
+  const candidates = who
+    ? [who].filter(k => SPECTATORS[k]?.[event]?.length)
+    : Object.keys(SPECTATORS).filter(k => SPECTATORS[k][event]?.length)
+  if (!candidates.length) return
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)]
+  const lines = SPECTATORS[pick][event]
+  spectatorBark.value = {
+    who: pick,
+    name: SPECTATORS[pick].name,
+    text: lines[Math.floor(Math.random() * lines.length)]
+  }
+  clearTimeout(spectatorTimer)
+  spectatorTimer = setTimeout(() => { spectatorBark.value = null }, 3200)
+}
+
+/**
+ * Lets the dealer land his line first, then the rail answers.
+ *
+ * With the cast on screen the two bubbles sit beside their own speakers and can overlap in
+ * time. Without it there is only one bubble slot — the felt above the player's cards is the
+ * only free space — so the reply waits for the dealer's bubble to clear instead.
+ */
+const BARK_MS = 2600
+function spectatorReply (event, delay = 1100) {
+  clearTimeout(spectatorTimer)
+  const wait = showSpectators.value ? delay : BARK_MS + 150
+  spectatorTimer = setTimeout(() => spectatorSay(event), wait)
 }
 
 function showStamp (text, tone) {
@@ -626,7 +781,8 @@ async function deal () {
   pendingBet.value = 0
   applyView(view)
   politeMessage.value = describeHand()
-  if (view.hand?.phase === 'settled') settleUi(view)
+  if (view.hand?.phase === 'settled') { settleUi(view); return }
+  reactToTable(view)
 }
 
 async function act (action) {
@@ -634,7 +790,28 @@ async function act (action) {
   if (!view) return
   applyView(view)
   politeMessage.value = describeHand()
-  if (view.hand?.phase === 'settled') settleUi(view)
+
+  if (action === 'double') say('playerDouble')
+  if (action === 'split') { say('playerSplit'); spectatorReply('split', 900) }
+
+  if (view.hand?.phase === 'settled') { settleUi(view); return }
+  reactToTable(view)
+}
+
+/**
+ * Occasional colour commentary while the hand is live. Rate-limited and skipped whenever the
+ * dealer is already talking — three characters piling on every card would wear out fast.
+ */
+function reactToTable (view) {
+  if (!view.hand || bark.value || spectatorBark.value) return
+  const you = view.hand.hands[view.hand.active]
+  if (!you) return
+
+  if (you.total >= 15 && you.total <= 16 && Math.random() < 0.5) {
+    spectatorReply('bigTotal', 500)
+  } else if (view.hand.dealer.cards[0]?.rank === 'A' && Math.random() < 0.6) {
+    spectatorReply('dealerAce', 500)
+  }
 }
 
 function describeHand () {
@@ -651,11 +828,15 @@ function settleUi (view) {
   const anyBlackjack = results.some(r => r.outcome === 'blackjack')
   const allBust = results.every(r => r.outcome === 'bust')
 
-  if (anyBlackjack) { showStamp('BLACKJACK!', 'gold'); say('blackjack') }
-  else if (allBust) { showStamp('BUST', 'bad'); say('bust') }
-  else if (net > 0) { showStamp(dealerBusted ? 'DEALER BUSTS' : 'YOU WIN', 'good'); say(dealerBusted ? 'dealerBust' : 'win') }
-  else if (net === 0) { showStamp('PUSH', 'neutral'); say('push') }
-  else { showStamp('DEALER WINS', 'bad'); say('lose') }
+  if (anyBlackjack) { showStamp('BLACKJACK!', 'gold'); say('blackjack'); spectatorReply('blackjack') }
+  else if (allBust) { showStamp('BUST', 'bad'); say('bust'); spectatorReply('bust') }
+  else if (net > 0) {
+    showStamp(dealerBusted ? 'DEALER BUSTS' : 'YOU WIN', 'good')
+    say(dealerBusted ? 'dealerBust' : 'win')
+    spectatorReply(dealerBusted ? 'dealerBust' : 'win')
+  }
+  else if (net === 0) { showStamp('PUSH', 'neutral'); say('push'); spectatorReply('push') }
+  else { showStamp('DEALER WINS', 'bad'); say('lose'); spectatorReply('lose') }
 
   assertiveMessage.value = `${net > 0 ? 'You win' : net < 0 ? 'You lose' : 'Push'}${net !== 0 ? ' ' + Math.abs(net) + ' chips' : ''}. Chips remaining, ${view.chips}.`
 
@@ -674,6 +855,7 @@ function settleUi (view) {
 function nextHand () {
   hand.value = null
   stamp.value = null
+  spectatorBark.value = null
   pendingBet.value = toIncrement(Math.min(lastBet.value || rules.value.minBet, maxBet.value))
   if (Math.random() < 0.25) say('idle')
 }
@@ -698,11 +880,28 @@ async function confirmCashOut () {
   await refresh()
 }
 
-function leaveTable () {
-  if (isGamble.value) { showCashOut.value = true; return }
+/**
+ * Back to the mode-select screen.
+ *
+ * Chips still on a gamble table are real points, so the only way off one is a deliberate
+ * cash-out — the sheet is opened instead of quietly abandoning them. Practice chips are free,
+ * so that session is simply closed, which is what makes the menu stick across a reload rather
+ * than dropping the player straight back onto the table.
+ */
+async function leaveTable () {
+  if (isGamble.value && chips.value > 0) { showCashOut.value = true; return }
+
+  const view = await call('/api/game/blackjack/leave', { mode: mode.value || 'practice' })
+  if (view) applyView(view)
+
   screen.value = 'select'
   mode.value = null
   hand.value = null
+  stamp.value = null
+  bark.value = ''
+  spectatorBark.value = null
+  pendingBet.value = 0
+  await refresh()
 }
 
 // ── sizing ────────────────────────────────────────────────────────────────────
@@ -757,6 +956,20 @@ function measure (pass = 0) {
   }
 }
 
+// The scene resizes for reasons the window never sees (the layout's scale transform, the
+// controls row changing height), so it is observed directly.
+let sceneObserver = null
+function observeScene () {
+  if (sceneObserver || !scene.value || typeof ResizeObserver === 'undefined') return
+  sceneObserver = new ResizeObserver((entries) => {
+    const r = entries[0]?.contentRect
+    if (!r) return
+    sceneWidth.value = Math.round(r.width)
+    sceneHeight.value = Math.round(r.height)
+  })
+  sceneObserver.observe(scene.value)
+}
+
 let resizeTimer = null
 function onResize () {
   clearTimeout(resizeTimer)
@@ -776,12 +989,24 @@ onMounted(async () => {
   loading.value = false
   await nextTick()
   measure(0)
+  observeScene()
 })
 
+// The scene only exists on the table screen, so the observer is attached when it appears
+// rather than once on mount.
+watch(() => screen.value, async (v) => {
+  if (v !== 'table') return
+  await nextTick()
+  observeScene()
+}, { immediate: true })
+
 onBeforeUnmount(() => {
+  sceneObserver?.disconnect()
+  sceneObserver = null
   clearTimeout(resizeTimer)
   clearTimeout(barkTimer)
   clearTimeout(stampTimer)
+  clearTimeout(spectatorTimer)
   window.removeEventListener('resize', onResize)
   window.visualViewport?.removeEventListener('resize', onResize)
   window.removeEventListener('orientationchange', onResize)
@@ -854,6 +1079,8 @@ html:has(body.page-newsite-blackjack) {
 .bj-scene.no-cast .bj-felt { top: 15%; }
 .bj-scene.no-cast .bj-rail { top: 13%; }
 .bj-scene.no-cast .bj-row--dealer { top: 19%; }
+/* The table sits higher without the cast, so the gap between the two hands moves with it. */
+.bj-scene.no-cast .bj-stampword { top: 58%; }
 
 /* Practice runs on blue felt. The largest object on screen changing colour is a far stronger
    signal than any badge that you are or are not wagering real points. */
@@ -1065,7 +1292,7 @@ html:has(body.page-newsite-blackjack) {
     drop-shadow(6px 8px 0 rgba(0, 0, 0, 0.35));
 }
 .bj-char--johnny  { left: 50%; transform: translateX(-50%); bottom: 63%; height: 46%; }
-.bj-char--jack    { left: 3%;  bottom: 60%; height: 34%; }
+.bj-char--jack    { left: 2%;  bottom: 58%; height: 40%; }
 .bj-char--grim    { right: 2%; bottom: 60%; height: 33%; }
 .bj-char--courage { right: 24%; bottom: 61%; height: 15%; }
 
@@ -1184,10 +1411,8 @@ html:has(body.page-newsite-blackjack) {
 /* ── bubble & stamp: absolutely positioned so they never add layout height ───── */
 .bj-bubble {
   position: absolute;
-  top: 3%;
-  right: 3%;
-  max-width: 56%;
   z-index: 8;
+  max-width: 56%;
   background: var(--card-face);
   color: #101010;
   border: var(--ink-w) solid var(--ink);
@@ -1198,9 +1423,23 @@ html:has(body.page-newsite-blackjack) {
   box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.45);
 }
 
+/* Each bubble sits beside the character who owns it. Only one spectator ever speaks at a
+   time, so Courage's and Grim's slots may overlap without ever colliding in practice. */
+.bj-bubble--johnny { top: 2%; right: 3%; }
+.bj-bubble--jack { top: 6%; left: 13%; max-width: 30%; }
+.bj-bubble--courage { top: 30%; right: 20%; max-width: 32%; }
+.bj-bubble--grim { top: 30%; right: 2%; max-width: 32%; }
+
+/* No cast on screen: reuses the dealer's slot (they are sequenced, never simultaneous) with
+   the speaker named so the joke still lands. Anywhere lower would cover the cards. */
+.bj-bubble--named { top: 2%; right: 3%; max-width: 80%; }
+.bj-bubble-who { color: #0A47A1; font-weight: 800; }
+
 .bj-stampword {
   position: absolute;
-  top: 46%;
+  /* Between the two hands, not over them — the dealer's final cards are the whole reason the
+     outcome makes sense, so covering them defeats the point of showing it. */
+  top: 66%;
   left: 50%;
   transform: translate(-50%, -50%) rotate(-6deg);
   z-index: 9;

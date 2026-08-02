@@ -163,10 +163,29 @@ export async function settleStaleSessions (userId) {
 }
 
 function closePracticeSession (sessionId) {
-  return prisma.blackjackSession.updateMany({
-    where: { id: sessionId, status: 'active' },
-    data: { status: 'closed', activeKey: null, chips: 0, wagered: 0 }
+  return closeSession(null, sessionId, 'practice')
+}
+
+/**
+ * Closes a session and frees its activeKey so a new one can be opened.
+ *
+ * The mode is part of the WHERE rather than a check beforehand, so this can never be pointed
+ * at the wrong kind of table. Callers are responsible for making sure a gamble session has
+ * been cashed out first — this zeroes the stack, and for real points that must be a deliberate
+ * cash-out, not a side effect of leaving.
+ */
+export async function closeSession (userId, sessionId, mode) {
+  const closed = await prisma.blackjackSession.updateMany({
+    where: {
+      id: sessionId,
+      status: 'active',
+      mode,
+      ...(userId ? { userId } : {})
+    },
+    data: { status: 'closed', activeKey: null, chips: 0, wagered: 0, handPhase: 'idle' }
   })
+  if (userId) await redis.del(handKey(userId)).catch(() => {})
+  return closed.count > 0
 }
 
 // ── starting a session ────────────────────────────────────────────────────────
