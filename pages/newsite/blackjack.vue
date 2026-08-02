@@ -245,6 +245,12 @@
     </template>
 
     <!-- ── Buy-in sheet ────────────────────────────────────────────────── -->
+    <!-- Teleported to <body>: on a short phone the table box can be only ~300px tall, and a
+         confirmation whose buttons are below the fold is worse than useless. As a fixed
+         full-viewport layer the sheet always has room. Teleport (rather than position:fixed in
+         place) is required because the layout puts a transform on an ancestor on wide screens,
+         which would otherwise become the containing block for a fixed element. -->
+    <Teleport to="body">
     <div v-if="showBuyIn" class="bj-modal" role="dialog" aria-modal="true" aria-label="Buy in">
       <div class="bj-sheet" ref="buyInSheet">
         <h2 class="bj-sheet-title">Buy In</h2>
@@ -284,7 +290,10 @@
       </div>
     </div>
 
+    </Teleport>
+
     <!-- ── Cash-out sheet ──────────────────────────────────────────────── -->
+    <Teleport to="body">
     <div v-if="showCashOut" class="bj-modal" role="dialog" aria-modal="true" aria-label="Cash out">
       <div class="bj-sheet">
         <h2 class="bj-sheet-title">Cash Out</h2>
@@ -301,7 +310,10 @@
       </div>
     </div>
 
+    </Teleport>
+
     <!-- ── Rules ───────────────────────────────────────────────────────── -->
+    <Teleport to="body">
     <div v-if="showRules" class="bj-modal" role="dialog" aria-modal="true" aria-label="How to play">
       <div class="bj-sheet">
         <h2 class="bj-sheet-title">How to Play</h2>
@@ -324,6 +336,8 @@
         </div>
       </div>
     </div>
+
+    </Teleport>
 
     <div v-if="error" class="bj-error" role="alert">{{ error }}</div>
   </div>
@@ -850,10 +864,14 @@ html:has(body.page-newsite-blackjack) {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
+  /* See the note on .bj-modal — centring an overflowing child hides its top irrecoverably. */
+  align-items: flex-start;
   justify-content: center;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
+
+.bj-center > * { margin: auto; }
 
 .bj-spinner {
   width: 42px; height: 42px;
@@ -1127,8 +1145,9 @@ html:has(body.page-newsite-blackjack) {
   /* Overlap so the exposed strip is always a share of the card, never a fixed pixel amount:
      the rank glyph is sized from the card width too, so a fixed strip slices "10" in half as
      soon as the cards shrink. 58% exposed keeps the rank and suit fully readable, and even a
-     six-card hand still fits the narrowest phone. */
-  margin-left: calc(var(--card-w) * -0.42);
+     six-card hand still fits the narrowest phone. 64% rather than a tighter overlap because
+     "10" is two glyphs and needs noticeably more room than a single-character rank. */
+  margin-left: calc(var(--card-w) * -0.36);
   animation: bj-deal 180ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
 .bj-card:first-child { margin-left: 0; }
@@ -1143,7 +1162,7 @@ html:has(body.page-newsite-blackjack) {
   top: 1px;
   left: 3px;
   font-family: "FuturaBdCnBT", "Nunito", sans-serif;
-  font-size: calc(var(--card-w) * 0.44);
+  font-size: calc(var(--card-w) * 0.4);
   line-height: 1;
 }
 .bj-card-suit {
@@ -1274,13 +1293,25 @@ html:has(body.page-newsite-blackjack) {
 
 /* ── modals ─────────────────────────────────────────────────────────────────── */
 .bj-modal {
-  position: absolute;
+  /* Teleported to <body>, so the tokens defined on .bj are out of scope and are restated. */
+  --ink: #000;
+  --ink-w: clamp(2px, 0.9vw, 4px);
+  --go: #66CC00;
+  --gold: #FFCC33;
+  --stop: #E8342A;
+
+  position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 1000;
   display: flex;
-  align-items: center;
+  /* NOT align-items:center. When the sheet is taller than the screen, centring pushes its top
+     out of the scroll range where it can never be reached — margin:auto on the child centres
+     when there is room and simply starts at the top when there is not. */
+  align-items: flex-start;
   justify-content: center;
   padding: 12px;
+  font-family: "Nunito", system-ui, sans-serif;
+  color: #FFF8E7;
   /* A flat scrim, not backdrop-filter: this appears many times a session, and a blur layer
      per appearance is exactly what makes a mid-range Android feel bad. */
   background: rgba(4, 2, 4, 0.82);
@@ -1288,14 +1319,16 @@ html:has(body.page-newsite-blackjack) {
 }
 
 .bj-sheet {
+  margin: auto;
   width: min(100%, 400px);
   background: #14141A;
   border: var(--ink-w) solid var(--ink);
   border-radius: 14px;
   box-shadow: 0 6px 0 var(--ink);
   padding: clamp(12px, 3vh, 20px);
-  max-height: 100%;
+  max-height: calc(100vh - 24px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 .bj-sheet-title {
@@ -1350,6 +1383,17 @@ html:has(body.page-newsite-blackjack) {
 /* Degraded rather than blocked. The other arcade pages refuse to run in landscape because a
    twitch game genuinely breaks; blackjack is turn-based, and refusing to draw would just be
    hostile to anyone with orientation lock on. */
+/* Short screens: the site header can leave the table only a couple of hundred pixels, so the
+   mode-select panel tightens up rather than relying on a scrollbar to reach its own title. */
+@media (max-height: 700px) {
+  .bj-title { font-size: clamp(24px, 6.5vw, 34px); margin-bottom: 6px; }
+  .bj-card-panel { padding: 10px 12px; }
+  .bj-sub { font-size: 12px; margin-bottom: 8px; }
+  .bj-btn-note { font-size: 11px; margin: 4px 0 8px; }
+  .bj-eyebrow { font-size: 11px; }
+  .bj-link { min-height: 36px; padding: 4px; }
+}
+
 @media (max-height: 520px) {
   .bj-btn { min-height: 40px; font-size: 15px; }
   .bj-btn--sm { min-height: 34px; font-size: 13px; }
@@ -1381,7 +1425,37 @@ html:has(body.page-newsite-blackjack) {
     min-height: 0;
   }
   .bj-chiprow { gap: 4px; }
-  .bj-center { grid-area: scene / scene / controls / controls; }
+  .bj-center { grid-area: scene / scene / controls / controls; min-height: 0; }
+
+  /* The mode-select panel goes side-by-side too. Stacked, its title and two full-width buttons
+     need roughly 400px, and a landscape phone leaves under 200 once the site header has taken
+     its share.
+
+     The title is given an explicit multi-row span rather than being left to auto-placement:
+     with one item per row the two columns would still stack sequentially and save nothing.
+     `span 5` (not `1 / -1`) because -1 resolves against the *explicit* grid, which is one row
+     here, so it would span nothing. */
+  .bj-card-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 14px;
+    text-align: left;
+    padding: 8px 12px;
+    width: min(100%, 620px);
+  }
+  .bj-eyebrow, .bj-sub { display: none; }
+  .bj-title {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+    align-self: center;
+    font-size: clamp(20px, 5vw, 32px);
+    margin: 0;
+  }
+  .bj-notice { grid-column: 2; margin: 0 0 4px; font-size: 11px; }
+  .bj-btn--block, .bj-btn-note, .bj-link { grid-column: 2; }
+  .bj-btn--block { min-height: 40px; font-size: 16px; }
+  .bj-btn-note { margin: 0 0 2px; font-size: 10px; }
+  .bj-link { min-height: 30px; padding: 0; justify-self: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
