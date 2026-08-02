@@ -39,8 +39,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // The daily win cap is enforced by sizing the bet, not by checking whether the cap has
-  // already been passed. A player at +2999 of a 3000 cap who is allowed one more max bet can
-  // split it, double both hands and win four times the stake — so the permitted bet is
+  // already been passed. A player one point short of the cap who is allowed one more max bet
+  // can split it, double both hands and win four times the stake — so the permitted bet is
   // headroom / 4, and hitting zero means the session is done for the day.
   let ceiling = rules.maxBet
   if (mode === 'gamble') {

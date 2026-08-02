@@ -5,10 +5,10 @@
 -- 20260801040000_add_flappy_powerpuff.
 
 -- ── GameConfig tuning ────────────────────────────────────────────────────────────
-ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackDailyBuyInLimit"  INTEGER DEFAULT 1000;
-ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackDailyWinLimit"    INTEGER DEFAULT 3000;
+ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackDailyBuyInLimit"  INTEGER DEFAULT 300;
+ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackDailyWinLimit"    INTEGER DEFAULT 900;
 ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackMinBet"           INTEGER DEFAULT 10;
-ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackMaxBet"           INTEGER DEFAULT 500;
+ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackMaxBet"           INTEGER DEFAULT 100;
 ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackPracticeStack"    INTEGER DEFAULT 1000;
 ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackDeckCount"        INTEGER DEFAULT 6;
 ALTER TABLE "GameConfig" ADD COLUMN IF NOT EXISTS "blackjackPayoutNum"        INTEGER DEFAULT 3;

@@ -404,10 +404,10 @@ test('publicView reports only the actions the engine would accept', () => {
 
 test('normalizeBlackjackConfig fills defaults for an empty row', () => {
   const cfg = normalizeBlackjackConfig({})
-  assert.equal(cfg.dailyBuyInLimit, 1000)
-  assert.equal(cfg.dailyWinLimit, 3000)
+  assert.equal(cfg.dailyBuyInLimit, 300)
+  assert.equal(cfg.dailyWinLimit, 900)
   assert.equal(cfg.minBet, 10)
-  assert.equal(cfg.maxBet, 500)
+  assert.equal(cfg.maxBet, 100)
   assert.equal(cfg.deckCount, 6)
   assert.equal(cfg.dealerHitsSoft17, false)
   assert.equal(blackjackPayout(100, cfg), 150, 'defaults to 3:2')
@@ -425,7 +425,7 @@ test('normalizeBlackjackConfig clamps hostile values instead of trusting them', 
   assert.equal(cfg.maxBet, 100_000)
   assert.equal(cfg.deckCount, 8)
   assert.equal(cfg.minBet, BET_INCREMENT)
-  assert.equal(cfg.dailyWinLimit, 3000, 'Infinity falls back to the default')
+  assert.equal(cfg.dailyWinLimit, 900, 'Infinity falls back to the default')
   assert.equal(cfg.payoutNum, 3)
   assert.equal(cfg.payoutDen, 1)
 })
@@ -447,21 +447,21 @@ test('normalizeBlackjackConfig snaps bets to the increment', () => {
 test('maxBetForHeadroom keeps the best possible hand inside the cap', () => {
   const rules = normalizeBlackjackConfig({})
 
-  // Plenty of headroom: capped by maxBet and chips, not the cap.
-  assert.equal(maxBetForHeadroom(10_000, 3000, rules), 500)
-  assert.equal(maxBetForHeadroom(120, 3000, rules), 120)
+  // Plenty of headroom: capped by maxBet, then by chips.
+  assert.equal(maxBetForHeadroom(10_000, 900, rules), 100)
+  assert.equal(maxBetForHeadroom(60, 900, rules), 60)
 
-  // This is the bug the helper exists to prevent: at +2999 of a 3000 cap, a naive
-  // "have we hit it yet?" check would allow a 500 bet, which can win 4 x 500 = 2000.
+  // This is the bug the helper exists to prevent: one point short of the cap, a naive
+  // "have we hit it yet?" check would still allow a full bet, which can win 4x the stake.
   assert.equal(maxBetForHeadroom(10_000, 1, rules), 0, 'no legal bet remains')
 
-  // 400 of headroom permits at most 100, because 100 can win 400.
-  assert.equal(maxBetForHeadroom(10_000, 400, rules), 100)
+  // 200 of headroom permits at most 50, because 50 can win 200.
+  assert.equal(maxBetForHeadroom(10_000, 200, rules), 50)
 })
 
 test('no bet permitted by maxBetForHeadroom can breach the cap', () => {
   const rules = normalizeBlackjackConfig({})
-  for (let headroom = 0; headroom <= 3000; headroom += 10) {
+  for (let headroom = 0; headroom <= 900; headroom += 10) {
     const bet = maxBetForHeadroom(100_000, headroom, rules)
     if (bet === 0) continue
     assert.ok(
@@ -473,7 +473,7 @@ test('no bet permitted by maxBetForHeadroom can breach the cap', () => {
 
 test('a blackjack payout also fits inside the permitted headroom', () => {
   const rules = normalizeBlackjackConfig({})
-  for (let headroom = 0; headroom <= 3000; headroom += 10) {
+  for (let headroom = 0; headroom <= 900; headroom += 10) {
     const bet = maxBetForHeadroom(100_000, headroom, rules)
     if (bet === 0) continue
     assert.ok(blackjackPayout(bet, rules) <= headroom)

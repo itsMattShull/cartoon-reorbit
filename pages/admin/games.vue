@@ -1982,10 +1982,10 @@ async function loadSettings() {
   guessCtoonMinStreakForPoints.value   = gc.guessCtoonMinStreakForPoints ?? 3
 
   const bj = await $fetch('/api/admin/game-config?gameName=Blackjack')
-  blackjackDailyBuyInLimit.value  = bj.blackjackDailyBuyInLimit ?? 1000
-  blackjackDailyWinLimit.value    = bj.blackjackDailyWinLimit ?? 3000
+  blackjackDailyBuyInLimit.value  = bj.blackjackDailyBuyInLimit ?? 300
+  blackjackDailyWinLimit.value    = bj.blackjackDailyWinLimit ?? 900
   blackjackMinBet.value           = bj.blackjackMinBet ?? 10
-  blackjackMaxBet.value           = bj.blackjackMaxBet ?? 500
+  blackjackMaxBet.value           = bj.blackjackMaxBet ?? 100
   blackjackPracticeStack.value    = bj.blackjackPracticeStack ?? 1000
   blackjackDeckCount.value        = bj.blackjackDeckCount ?? 6
   blackjackPayoutNum.value        = bj.blackjackPayoutNum ?? 3
@@ -2543,10 +2543,10 @@ async function saveFlappyConfig() {
 }
 
 // ── ReOrbit Blackjack ─────────────────────────
-const blackjackDailyBuyInLimit  = ref(1000)
-const blackjackDailyWinLimit    = ref(3000)
+const blackjackDailyBuyInLimit  = ref(300)
+const blackjackDailyWinLimit    = ref(900)
 const blackjackMinBet           = ref(10)
-const blackjackMaxBet           = ref(500)
+const blackjackMaxBet           = ref(100)
 const blackjackPracticeStack    = ref(1000)
 const blackjackDeckCount        = ref(6)
 const blackjackPayoutNum        = ref(3)

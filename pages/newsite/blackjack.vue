@@ -391,13 +391,13 @@ const maxBet = ref(0)
 const autoCashedOut = ref(0)
 
 const rules = ref({
-  minBet: 10, maxBet: 500, deckCount: 6, dealerHitsSoft17: false,
+  minBet: 10, maxBet: 100, deckCount: 6, dealerHitsSoft17: false,
   payoutNum: 3, payoutDen: 2, allowDouble: true, allowSplit: true,
   allowInsurance: true, practiceStack: 1000
 })
 const daily = ref({
-  buyInUsed: 0, buyInLimit: 1000, buyInLeft: 1000,
-  netWinnings: 0, winLimit: 3000, resetsAt: null
+  buyInUsed: 0, buyInLimit: 300, buyInLeft: 300,
+  netWinnings: 0, winLimit: 900, resetsAt: null
 })
 
 const pendingBet = ref(0)

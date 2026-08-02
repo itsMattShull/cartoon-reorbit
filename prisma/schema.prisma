@@ -1134,10 +1134,10 @@ model GameConfig {
   // Every value here is clamped again by normalizeBlackjackConfig() in
   // server/utils/blackjackEngine.js, which is the source of truth for the bounds; the
   // validation table in server/api/admin/game-config.post.js mirrors them.
-  blackjackDailyBuyInLimit  Int?     @default(1000) // points a player may convert to chips per day
-  blackjackDailyWinLimit    Int?     @default(3000) // net winnings per day before an auto cash-out
+  blackjackDailyBuyInLimit  Int?     @default(300) // points a player may convert to chips per day
+  blackjackDailyWinLimit    Int?     @default(900) // net winnings per day before an auto cash-out
   blackjackMinBet           Int?     @default(10)
-  blackjackMaxBet           Int?     @default(500)
+  blackjackMaxBet           Int?     @default(100)
   blackjackPracticeStack    Int?     @default(1000) // free chips handed out in practice mode
   blackjackDeckCount        Int?     @default(6)
   // 3:2 as two integers, never a float — `bet * 1.5` on an odd bet mints or destroys half a

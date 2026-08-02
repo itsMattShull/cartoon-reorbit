@@ -28,8 +28,8 @@ export const BET_INCREMENT = 10
 // which is exactly when the main bet loses, so the best insurance can do is break even.
 //
 // This is what the daily win cap has to be sized against. Checking "have we hit the cap yet?"
-// before each bet lets a player sitting at +2999 win 4 × maxBet more, so a 3000 cap really
-// pays out 3000 + 4 × maxBet. `maxBetForHeadroom` below is the fix.
+// before each bet lets a player sitting just under the cap win 4 × maxBet more, so a 900 cap
+// would really pay out 900 + 4 × maxBet. `maxBetForHeadroom` below is the fix.
 export const MAX_HAND_EXPOSURE = 4
 
 // The most cards one hand can consume: two split hands of 11 (eleven aces is the longest
@@ -71,11 +71,11 @@ export function normalizeBlackjackConfig (raw = {}) {
   const toIncrement = (n) => Math.max(BET_INCREMENT, Math.floor(n / BET_INCREMENT) * BET_INCREMENT)
 
   const minBet = toIncrement(int(raw.blackjackMinBet, 10, BET_INCREMENT, 10_000))
-  const maxBet = Math.max(minBet, toIncrement(int(raw.blackjackMaxBet, 500, BET_INCREMENT, 100_000)))
+  const maxBet = Math.max(minBet, toIncrement(int(raw.blackjackMaxBet, 100, BET_INCREMENT, 100_000)))
 
   return {
-    dailyBuyInLimit: int(raw.blackjackDailyBuyInLimit, 1000, 0, 1_000_000),
-    dailyWinLimit:   int(raw.blackjackDailyWinLimit, 3000, 0, 1_000_000),
+    dailyBuyInLimit: int(raw.blackjackDailyBuyInLimit, 300, 0, 1_000_000),
+    dailyWinLimit:   int(raw.blackjackDailyWinLimit, 900, 0, 1_000_000),
     minBet,
     maxBet,
     practiceStack:   int(raw.blackjackPracticeStack, 1000, BET_INCREMENT, 1_000_000),
@@ -463,7 +463,7 @@ export function publicView (state, rules, chipsAvailable) {
 //     of a 312-element shoe rewritten on every action.
 //  2. It makes card counting worthless. The published house edge for these rules is ~0.5%, and
 //     a counter with a wide bet spread can swing that positive — at which point the daily
-//     -1000/+3000 structure stops being a points sink and becomes a faucet. With the count
+//     daily loss/win structure stops being a points sink and becomes a faucet. With the count
 //     identically zero at every decision, the edge cannot be moved.
 //
 // Cards are never derived from Math.random(). Its state is recoverable from a handful of
