@@ -278,7 +278,11 @@ useHead({
   meta: [{
     name: 'viewport',
     content: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
-  }]
+  }],
+  // Tags <html> so the un-scoped block at the bottom of this file can reach the layout chrome,
+  // which lives outside this component and is therefore beyond scoped CSS. Same technique the
+  // newsite admin page uses. The class is removed on unmount, so no other page is affected.
+  htmlAttrs: { class: 'asteroid-game-page' }
 })
 
 import {
@@ -922,8 +926,13 @@ async function endGame() {
 // drag from a long-press before the style applies. Cancelling the events outright is the
 // belt-and-braces: a selection started mid-run swallows the next touch, which can strand a
 // control in the "held" state because its pointerup never fires.
+// Blocks selection across the WHOLE page while the game is mounted, not just inside the board.
+// The narrower version missed the layout chrome: on iPhone, dragging off the right-hand control
+// would latch onto the sidebar's "Daily Points Reset" text just above the game, and the
+// resulting selection swallowed the next touch and left the control stuck on. Nothing on this
+// page is meant to be selected, so the simplest correct rule is "none of it".
 function blockSelection(e) {
-  if (e.target?.closest?.('.ast-wrapper, .modal-backdrop')) e.preventDefault()
+  e.preventDefault()
 }
 
 // ─── Zoom suppression ───────────────────────────────────────────────────────────
@@ -1681,5 +1690,32 @@ onUnmounted(() => {
 @media (max-height: 620px) {
   .controls .ctrl { min-height: 46px; }
   .game-hint { display: none; }
+}
+</style>
+
+<!-- Un-scoped on purpose: these target layout chrome that lives OUTSIDE this component, so a
+     scoped selector cannot reach it. Everything is gated behind html.asteroid-game-page, which
+     useHead adds on mount and removes on unmount, so no other page is affected. -->
+<style>
+@media (max-width: 768px) {
+  /* On a phone the layout stacks the sidebar directly above the game, putting the "Daily Points
+     Reset" counter within a thumb's reach of the right-hand control. Dragging off that control
+     would select the text, which swallows the next touch and leaves the control stuck on — the
+     ship then keeps turning by itself. Hiding it here also hands the board the vertical space
+     back, which a 640x480 playfield on a phone badly needs.
+
+     !important because the layout sets `display` inline on this element. */
+  html.asteroid-game-page .sidebar {
+    display: none !important;
+  }
+}
+
+/* Nothing anywhere on this page is meant to be selectable, including the layout's nav and
+   footer — the same stray-selection problem applies to any text a stray drag can reach. */
+html.asteroid-game-page,
+html.asteroid-game-page body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 </style>
