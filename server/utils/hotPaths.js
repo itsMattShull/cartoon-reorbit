@@ -10,9 +10,15 @@
 // Skipping them is safe for the same reason those middlewares already skip non-/api
 // requests: every page load hits /api/auth/me, so the daily award, guild sync and login log
 // still fire reliably on the surrounding navigation.
+// ReOrbit Blackjack is in the same position: a hand is a bet plus 1–10 actions, and a session
+// is many hands, so these two routes are the highest-frequency authenticated endpoints in the
+// app. They read only the session row and Redis. Handlers that move points call
+// assertPlayable() themselves, since skipping guild-check means event.context.user is unset.
 const HOT_PATHS = [
   '/api/game/guessctoon/answer',
-  '/api/game/guessctoon/image/'
+  '/api/game/guessctoon/image/',
+  '/api/game/blackjack/bet',
+  '/api/game/blackjack/action'
 ]
 
 export function isHotPath (path) {
