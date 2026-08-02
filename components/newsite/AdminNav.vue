@@ -63,6 +63,7 @@ const menus = [
     id: 'logs',
     label: 'Admin Logs',
     items: [
+      { id: 'errorLogs',           label: 'Error Logs',         to: '/newsite/admin/errorLogs' },
       { id: 'vpnQueue',            label: 'VPN Queue',          to: '/newsite/admin/vpn-queue' },
       { id: 'cheatFinder',        label: 'Cheat Finder',       to: '/newsite/admin/cheatFinder' },
       { id: 'deviceFingerprints', label: 'Browser Fingerprints', to: '/newsite/admin/deviceFingerprints' },

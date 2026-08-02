@@ -93,7 +93,10 @@ export default defineEventHandler(async (event) => {
       bulletSpeed:       gameConfig?.[colSpeed]    ?? shipDefaults.bulletSpeed,
       bulletLifeTicks:   gameConfig?.[colLife]     ?? shipDefaults.bulletLifeTicks,
       pellets:           gameConfig?.[colPellets]  ?? shipDefaults.pellets,
-      spreadSteps:       gameConfig?.[colSpread]   ?? shipDefaults.spreadSteps
+      spreadSteps:       gameConfig?.[colSpread]   ?? shipDefaults.spreadSteps,
+      // Not an admin column: where the muzzle sits is a property of the ship's ARTWORK, not a
+      // balance dial, so it comes straight from the ship profile.
+      muzzleRadii:       shipDefaults.muzzleRadii
     }
 
     // Snapshot the tuning into the session so an admin edit mid-run can't desync the replay.
