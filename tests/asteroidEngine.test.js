@@ -250,6 +250,36 @@ test('the three ships occupy genuinely different range/rate niches', () => {
   assert.equal(getShip('casual').weapon.pellets, 1)
 })
 
+test('every ship fires from the nose of its sprite, not its centre', () => {
+  // The art is drawn 4.8x the collision radius across, so its nose sits 2.4 radii out. A muzzle
+  // at the old shipRadius+1 put shots visibly inside the hull.
+  for (const ship of SHIPS) {
+    const w = ship.weapon
+    assert.ok(w.muzzleRadii >= 1.8 && w.muzzleRadii <= 2.4,
+      `${ship.id} muzzle at ${w.muzzleRadii} radii is not at the nose of the sprite`)
+    const st = createState(SEED, { ...w, shipRadius: 13 })
+    st.ship.x = 100; st.ship.y = 100; st.ship.vx = 0; st.ship.vy = 0
+    st.ship.heading = 0            // pointing +x
+    step(st, 0)
+    assert.ok(st.bullets.length > 0, `${ship.id} did not fire`)
+    const dx = st.bullets[0].x - 100
+    assert.ok(dx > 13 * 1.8, `${ship.id} spawned its shot at ${dx.toFixed(1)}, inside the hull`)
+  }
+})
+
+test('the muzzle tracks a retuned ship radius instead of drifting inside the art', () => {
+  // muzzleRadii is a multiple, not an absolute distance, so a bigger ship still fires from its
+  // own nose rather than from a fixed point somewhere in its middle.
+  const mk = r => {
+    const st = createState(SEED, { ...getShip('casual').weapon, shipRadius: r })
+    st.ship.x = 200; st.ship.y = 200; st.ship.vx = 0; st.ship.vy = 0; st.ship.heading = 0
+    step(st, 0)
+    return st.bullets[0].x - 200
+  }
+  const small = mk(10), big = mk(30)
+  assert.ok(big > small * 2.5, `muzzle did not scale with radius: ${small.toFixed(1)} vs ${big.toFixed(1)}`)
+})
+
 test('getShip falls back to the default for an unknown id', () => {
   assert.equal(getShip('not-a-ship').id, DEFAULT_SHIP_ID)
   assert.equal(getShip(undefined).id, DEFAULT_SHIP_ID)
