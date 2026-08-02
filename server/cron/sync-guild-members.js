@@ -14,6 +14,7 @@ import { runEconomyAggregate } from './economy-aggregate.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
+import { logCronError } from '../utils/cronErrorLog.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -37,15 +38,34 @@ const announcementsDir = (process.env.PUBLIC_BASE_URL || process.env.NODE_ENV ==
 // since the crash never touches that code path. Keep the process alive and
 // record it so it's visible in the admin Error Log instead.
 process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason))
   console.error('[guild-checker] Unhandled rejection (process kept alive):', reason)
-  logAuctionOnlyError('process', reason instanceof Error ? reason : new Error(String(reason)), null).catch(() => {})
+  logAuctionOnlyError('process', err, null).catch(() => {})
+  logCronError('process', err).catch(() => {})
 })
 process.on('uncaughtException', (err) => {
   console.error('[guild-checker] Uncaught exception (process kept alive):', err)
   logAuctionOnlyError('process', err, null).catch(() => {})
+  logCronError('process', err).catch(() => {})
 })
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+// Every scheduled job in this file (there are ~20, running back to back at startup and on
+// their own cron schedules) gets routed through this wrapper so that:
+//   1. one job throwing can never take down the others sharing this process, and
+//   2. the failure is recorded to CronErrorLog instead of only living in a log line, so it's
+//      visible on the admin Error Logs page.
+// The process-level handlers above remain as a last-resort net for anything that still
+// manages to escape this (e.g. a rejection from a fire-and-forget promise inside a job).
+async function runJob(name, fn) {
+  try {
+    await fn()
+  } catch (err) {
+    console.error(`[${name}] failed:`, err)
+    await logCronError(name, err)
+  }
+}
 
 // node-fetch has no default timeout, so a stalled Discord API response would
 // otherwise hang the caller forever. This process runs many jobs sequentially
@@ -1084,39 +1104,37 @@ async function runTournamentCron() {
 // member list) would otherwise block this script from ever reaching the
 // `cron.schedule('1 * * * *', startDueAuctions)` line — silently preventing
 // scheduled auctions from ever going live, even though nothing crashed.
-cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
-startDueAuctions().catch(err =>
-  console.error('[startDueAuctions] startup run failed:', err?.message || err)
-)
+cron.schedule('1 * * * *', () => runJob('startDueAuctions', startDueAuctions))  // hourly at minute 1
+runJob('startDueAuctions', startDueAuctions)
 
-await syncGuildMembers()
-cron.schedule('0 0 * * *', syncGuildMembers)  // daily midnight
+await runJob('syncGuildMembers', syncGuildMembers)
+cron.schedule('0 0 * * *', () => runJob('syncGuildMembers', syncGuildMembers))  // daily midnight
 
-await sendDueAnnouncements()
-cron.schedule('*/5 * * * *', sendDueAnnouncements)
+await runJob('sendDueAnnouncements', sendDueAnnouncements)
+cron.schedule('*/5 * * * *', () => runJob('sendDueAnnouncements', sendDueAnnouncements))
 
-await markScheduledPacksInCmart()
-cron.schedule('0 * * * *', markScheduledPacksInCmart)
+await runJob('markScheduledPacksInCmart', markScheduledPacksInCmart)
+cron.schedule('0 * * * *', () => runJob('markScheduledPacksInCmart', markScheduledPacksInCmart))
 
-await recordDailyActivity()
-await syncVerifiedRoles()
-cron.schedule('30 2 * * *', recordDailyActivity, { timezone: 'America/Chicago' }) // 02:30 CST daily
-cron.schedule('35 2 * * *', syncVerifiedRoles, { timezone: 'America/Chicago' }) // 02:35 CST daily
+await runJob('recordDailyActivity', recordDailyActivity)
+await runJob('syncVerifiedRoles', syncVerifiedRoles)
+cron.schedule('30 2 * * *', () => runJob('recordDailyActivity', recordDailyActivity), { timezone: 'America/Chicago' }) // 02:30 CST daily
+cron.schedule('35 2 * * *', () => runJob('syncVerifiedRoles', syncVerifiedRoles), { timezone: 'America/Chicago' }) // 02:35 CST daily
 
-await recomputeLastActivity()
-cron.schedule('0 4 * * *', recomputeLastActivity, { timezone: 'America/Chicago' })  // 04:00 CST daily
+await runJob('recomputeLastActivity', recomputeLastActivity)
+cron.schedule('0 4 * * *', () => runJob('recomputeLastActivity', recomputeLastActivity), { timezone: 'America/Chicago' })  // 04:00 CST daily
 
-await sendInactivityWarnings()
-cron.schedule('0 3 * * *', sendInactivityWarnings)    // 03:00 daily
+await runJob('sendInactivityWarnings', sendInactivityWarnings)
+cron.schedule('0 3 * * *', () => runJob('sendInactivityWarnings', sendInactivityWarnings))    // 03:00 daily
 
-await updateWinballGrandPrizeFromSchedule()
-cron.schedule('0 * * * *', updateWinballGrandPrizeFromSchedule)  // hourly at minute 0
+await runJob('updateWinballGrandPrizeFromSchedule', updateWinballGrandPrizeFromSchedule)
+cron.schedule('0 * * * *', () => runJob('updateWinballGrandPrizeFromSchedule', updateWinballGrandPrizeFromSchedule))  // hourly at minute 0
 
-await enforceDormantAccounts()
-cron.schedule('0 4 * * *', enforceDormantAccounts)    // 04:00 daily
+await runJob('enforceDormantAccounts', enforceDormantAccounts)
+cron.schedule('0 4 * * *', () => runJob('enforceDormantAccounts', enforceDormantAccounts))    // 04:00 daily
 
 // check featured auction schedule every hour
-cron.schedule("0 * * * *", createDailyFeaturedAuction, { timezone: "America/Chicago" })
+cron.schedule("0 * * * *", () => runJob('createDailyFeaturedAuction', createDailyFeaturedAuction), { timezone: "America/Chicago" })
 
 // Sync Wordle daily crown results from Discord
 async function syncWordleResultsDaily() {
@@ -1124,6 +1142,7 @@ async function syncWordleResultsDaily() {
     await syncWordleResults()
   } catch (e) {
     console.error('[wordle-cron] Error during Wordle sync:', e?.message)
+    await logCronError('syncWordleResultsDaily', e)
   }
 }
 
@@ -1135,23 +1154,23 @@ async function enqueueAchievementsDaily() {
       await achievementsQueue.add('processUserAchievements', { userId: u.id })
     }
   } catch (e) {
-    // ignore in cron context
+    await logCronError('enqueueAchievementsDaily', e)
   }
 }
 
 // await enqueueAchievementsDaily()
-cron.schedule('0 3 * * *', enqueueAchievementsDaily, { timezone: 'America/Chicago' })
+cron.schedule('0 3 * * *', () => runJob('enqueueAchievementsDaily', enqueueAchievementsDaily), { timezone: 'America/Chicago' })
 
 // Sync Wordle results at 10:00 CST daily (after the bot's morning post)
-await syncWordleResultsDaily()
-cron.schedule('0 10 * * *', syncWordleResultsDaily, { timezone: 'America/Chicago' })
+await runJob('syncWordleResultsDaily', syncWordleResultsDaily)
+cron.schedule('0 10 * * *', () => runJob('syncWordleResultsDaily', syncWordleResultsDaily), { timezone: 'America/Chicago' })
 
 
-await runTournamentCron()
-cron.schedule('*/15 * * * *', runTournamentCron)
+await runJob('runTournamentCron', runTournamentCron)
+cron.schedule('*/15 * * * *', () => runJob('runTournamentCron', runTournamentCron))
 
 // Weekly cZone contest auto-creation — runs every minute and checks if it's time
-cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'America/Chicago' })
+cron.schedule('* * * * *', () => runJob('checkAndCreateWeeklyCZoneContest', checkAndCreateWeeklyCZoneContest), { timezone: 'America/Chicago' })
 
 // Economy page daily price/volume aggregation — offset from the 3am achievements
 // run to avoid overlapping load on Auction/UserCtoon tables. Also kicked off once
@@ -1163,7 +1182,5 @@ cron.schedule('* * * * *', checkAndCreateWeeklyCZoneContest, { timezone: 'Americ
 // this same aggregation on demand (Redis-gated) from the Economy API routes
 // themselves, so the page stays fresh even if this worker process isn't
 // running. This schedule just keeps data warm proactively when it is.
-runEconomyAggregate().catch(err =>
-  console.error('[economy-aggregate] startup run failed:', err?.message || err)
-)
-cron.schedule('10 4 * * *', runEconomyAggregate, { timezone: 'America/Chicago' })
+runJob('runEconomyAggregate', runEconomyAggregate)
+cron.schedule('10 4 * * *', () => runJob('runEconomyAggregate', runEconomyAggregate), { timezone: 'America/Chicago' })
