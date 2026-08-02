@@ -28,8 +28,8 @@
               <span class="ex-letter">D</span>ebris
             </p>
             <p class="start-sub">
-              Fly the K.N.D. ship through an endless asteroid field. Your cannon fires on its own —
-              you steer. Grab power-ups, don't get squashed.
+              Fly a K.N.D. ship through an endless asteroid field. Your cannon fires on its own —
+              you steer. Each ship shoots differently, so pick your weapon.
             </p>
 
             <div class="plays-info">
@@ -44,6 +44,34 @@
               Play as much as you like — only your first {{ rankedPlaysPerPeriod }} run{{ rankedPlaysPerPeriod !== 1 ? 's' : '' }}
               each day count for the leaderboard and points.
             </p>
+
+            <!-- Ship picker. Radios rather than buttons so arrow keys move between them and a
+                 screen reader announces it as one grouped choice. -->
+            <fieldset class="ship-picker">
+              <legend class="ship-legend">Choose your ship</legend>
+              <div class="ship-grid">
+                <label
+                  v-for="ship in ships"
+                  :key="ship.id"
+                  class="ship-card"
+                  :class="{ 'ship-card--on': selectedShipId === ship.id }"
+                >
+                  <input
+                    class="ship-radio"
+                    type="radio"
+                    name="asteroid-ship"
+                    :value="ship.id"
+                    :checked="selectedShipId === ship.id"
+                    @change="chooseShip(ship.id)"
+                  />
+                  <img class="ship-art" :src="ship.sprite" :alt="ship.name" draggable="false" @error="onShipArtError" />
+                  <span class="ship-name">{{ ship.name }}</span>
+                  <span class="ship-tagline">{{ ship.tagline }}</span>
+                  <span class="ship-weapon">{{ weaponSummary(ship) }}</span>
+                </label>
+              </div>
+              <p class="ship-blurb">{{ activeShip.blurb }}</p>
+            </fieldset>
 
             <button class="btn-start" @click="startGame" :disabled="starting">
               {{ starting ? 'Launching…' : 'Launch' }}
@@ -198,14 +226,21 @@
             </li>
             <li>
               <span class="howto-num">3</span>
-              <span>Big asteroids <strong>split into smaller ones</strong>. The small ones are worth the most.</span>
+              <span>Each ship shoots differently.
+                <strong>M.O.S.Q.U.I.T.T.O.H.</strong> reaches clear across the field but fires slowly,
+                <strong>S.C.A.M.P.E.R.</strong> sprays a wide shotgun blast that dies off almost instantly, and
+                <strong>C.A.S.U.A.L.</strong> sits in the middle. Pick one before you launch.</span>
             </li>
             <li>
               <span class="howto-num">4</span>
-              <span>Fly off one edge and you come back on the other. Clear every asteroid to advance a wave.</span>
+              <span>Big asteroids <strong>split into smaller ones</strong>. The small ones are worth the most.</span>
             </li>
             <li>
               <span class="howto-num">5</span>
+              <span>Fly off one edge and you come back on the other. Clear every asteroid to advance a wave.</span>
+            </li>
+            <li>
+              <span class="howto-num">6</span>
               <span>Grab power-ups — they <strong>stack</strong>:
                 <span class="pu-key pu-key--blue">BLUE</span> doubles your fire rate,
                 <span class="pu-key pu-key--red">RED</span> makes you invincible,
@@ -214,7 +249,7 @@
               </span>
             </li>
             <li>
-              <span class="howto-num">6</span>
+              <span class="howto-num">7</span>
               <span>Plays are <strong>unlimited</strong>, but only your first few runs each day count for the leaderboard and points.</span>
             </li>
           </ol>
@@ -250,7 +285,8 @@ import {
   WORLD_W, WORLD_H, MS_PER_TICK, TRIG_STEPS,
   IN_LEFT, IN_RIGHT, IN_THRUST,
   PU_BLUE, PU_RED, PU_GREEN,
-  createState, step, shipRadius, isInvulnerable, seedFromHex
+  createState, step, shipRadius, isInvulnerable, seedFromHex,
+  SHIPS, DEFAULT_SHIP_ID, getShip
 } from '@/lib/asteroidSim'
 
 // ─── UI state ───────────────────────────────────────────────────────────────────
@@ -281,6 +317,39 @@ const timeUp      = ref(false)
 const canvas = ref(null)
 const canvasContainer = ref(null)
 
+// ─── Ship selection ─────────────────────────────────────────────────────────────
+// The pick is remembered locally so a returning player does not have to re-choose every run.
+// It is only a convenience: the server validates the id at /start and the weapon it resolves
+// is what the replay uses, so a tampered localStorage value cannot grant a better gun.
+const SHIP_STORAGE_KEY = 'asteroid:ship'
+const ships = SHIPS
+const selectedShipId = ref(DEFAULT_SHIP_ID)
+const activeShip = computed(() => getShip(selectedShipId.value))
+
+function chooseShip(id) {
+  selectedShipId.value = id
+  try { localStorage.setItem(SHIP_STORAGE_KEY, id) } catch {}
+}
+
+// A one-line summary of what each weapon actually does, derived from the ship's own numbers so
+// the card can never drift from the behaviour.
+// A ship whose art has not been added yet would otherwise render as a broken-image icon.
+function onShipArtError(e) {
+  e.target.style.visibility = 'hidden'
+}
+
+function weaponSummary(ship) {
+  const w = ship.weapon
+  const shotsPerSec = 60 / w.fireIntervalTicks
+  const reach = w.bulletSpeed * w.bulletLifeTicks
+  const range = reach >= WORLD_W * 1.5 ? 'Very long range'
+              : reach >= WORLD_W * 0.45 ? 'Medium range'
+              : 'Short range'
+  const rate = shotsPerSec >= 4 ? 'fast' : shotsPerSec >= 2.4 ? 'steady' : 'slow'
+  const shot = w.pellets > 1 ? `${w.pellets}-pellet spread` : 'single shot'
+  return `${range} · ${rate} fire · ${shot}`
+}
+
 const hintText = ref('Tap and hold the buttons to steer — your cannon fires on its own')
 
 const PU_META = [
@@ -310,8 +379,12 @@ let tickAccumulator = 0
 let paused = false
 let ending = false
 let reducedMotion = false
-let shipImg = null
-let shipReady = false
+// One sprite per ship, loaded once and reused. A ship whose art has not been added yet simply
+// falls back to its vector silhouette, so the game stays fully playable either way.
+const shipImages = {}
+// The ship this run is being flown with. Set from the SERVER's echo at /start rather than from
+// the picker, so what is drawn always matches the weapon the replay will score.
+let runShip = getShip(DEFAULT_SHIP_ID)
 let stars = []
 let particles = []
 let shakeTicks = 0
@@ -479,7 +552,9 @@ function draw() {
     const blink = invuln && Math.floor(performance.now() / 90) % 2 === 0
     ctx.save()
     ctx.translate(s.x, s.y)
-    ctx.rotate(headingRadians(s.heading) + Math.PI) // sprite art faces left; +PI aligns it to heading
+    // Each ship declares how far its art is rotated from "nose pointing right", so swapping in
+    // new sprite files never means editing the renderer.
+    ctx.rotate(headingRadians(s.heading) + runShip.spriteTurns * Math.PI * 2)
 
     if (sim.puTicks[PU_RED] > 0) {
       ctx.beginPath()
@@ -495,15 +570,13 @@ function draw() {
     // Draw the sprite proportional to the (admin-configurable) collision radius, so a retuned
     // hitbox and the art can never disagree. shipRadius() already accounts for Green halving it.
     const size = shipRadius(sim) * 4.8
-    if (shipReady) {
-      ctx.drawImage(shipImg, -size / 2, -size / 2, size, size)
+    const art = shipImages[runShip.id]
+    if (art?.ready) {
+      ctx.drawImage(art.img, -size / 2, -size / 2, size, size)
     } else {
-      // Vector fallback so the game is playable even if the sprite fails to load.
-      ctx.beginPath()
-      ctx.moveTo(size / 2, 0); ctx.lineTo(-size / 2, -size / 3); ctx.lineTo(-size / 3, 0); ctx.lineTo(-size / 2, size / 3)
-      ctx.closePath()
-      ctx.fillStyle = '#b6a8e0'; ctx.fill()
-      ctx.lineWidth = 2; ctx.strokeStyle = '#2b2450'; ctx.stroke()
+      // Vector fallback, distinct per ship so the three are still tellable apart before their
+      // art is added (and if a sprite ever fails to load).
+      drawShipVector(runShip.id, size)
     }
     ctx.globalAlpha = 1
 
@@ -518,6 +591,46 @@ function draw() {
   }
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+// Render-only silhouettes. Drawn nose-right, then rotated by the ship's spriteTurns like the
+// sprites are, so a fallback sits at exactly the same angle its art would.
+const SHIP_VECTORS = {
+  mosquittoh: { body: '#7f8fd8', trim: '#2b2450' },
+  scamper:    { body: '#3f9d5c', trim: '#12341f' },
+  casual:     { body: '#d8504f', trim: '#4a1414' }
+}
+
+function drawShipVector(id, size) {
+  const c = SHIP_VECTORS[id] || SHIP_VECTORS.casual
+  const h = size / 2
+  ctx.lineWidth = 2
+  ctx.strokeStyle = c.trim
+  ctx.fillStyle = c.body
+
+  if (id === 'scamper') {
+    // Stubby and broad, to read as the shotgun.
+    ctx.beginPath()
+    ctx.moveTo(h, 0); ctx.lineTo(-h * 0.2, -h * 0.62); ctx.lineTo(-h, -h * 0.42)
+    ctx.lineTo(-h * 0.7, 0); ctx.lineTo(-h, h * 0.42); ctx.lineTo(-h * 0.2, h * 0.62)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  } else if (id === 'mosquittoh') {
+    // Long and needle-like, to read as the sniper.
+    ctx.beginPath()
+    ctx.moveTo(h, 0); ctx.lineTo(-h * 0.35, -h * 0.3); ctx.lineTo(-h, -h * 0.42)
+    ctx.lineTo(-h * 0.6, 0); ctx.lineTo(-h, h * 0.42); ctx.lineTo(-h * 0.35, h * 0.3)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  } else {
+    ctx.beginPath()
+    ctx.moveTo(h, 0); ctx.lineTo(-h, -h * 0.55); ctx.lineTo(-h * 0.5, 0); ctx.lineTo(-h, h * 0.55)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
+
+  // Cockpit dot, so the nose direction is unmistakable at small sizes.
+  ctx.beginPath()
+  ctx.arc(h * 0.25, 0, Math.max(1.5, size * 0.07), 0, Math.PI * 2)
+  ctx.fillStyle = '#0d1030'
+  ctx.fill()
 }
 
 function spawnParticles(x, y, n, color, spread) {
@@ -726,7 +839,12 @@ async function startGame() {
   starting.value = true
   submitError.value = ''
   try {
-    const data = await $fetch('/api/game/asteroid/start', { method: 'POST', credentials: 'include' })
+    const data = await $fetch('/api/game/asteroid/start', {
+      method: 'POST',
+      credentials: 'include',
+      body: { shipId: selectedShipId.value }
+    })
+    runShip = getShip(data.shipId)
 
     runSeedInt = seedFromHex(data.runSeed)
     cfg = data.config
@@ -842,10 +960,18 @@ onMounted(async () => {
     hintText.value = 'Arrows or A/D to turn · W / ↑ / Space to thrust · the cannon fires itself'
   }
 
-  shipImg = new Image()
-  shipImg.onload = () => { shipReady = true }
-  shipImg.onerror = () => { shipReady = false }
-  shipImg.src = '/asteroid/knd-ship.png'
+  try {
+    const saved = localStorage.getItem(SHIP_STORAGE_KEY)
+    if (saved && SHIPS.some(sh => sh.id === saved)) selectedShipId.value = saved
+  } catch {}
+
+  for (const ship of SHIPS) {
+    const img = new Image()
+    img.onload = () => { shipImages[ship.id].ready = true }
+    img.onerror = () => { shipImages[ship.id].ready = false }
+    shipImages[ship.id] = { img, ready: false }
+    img.src = ship.sprite
+  }
 
   buildStars()
   await fetchStatus()
@@ -1074,6 +1200,111 @@ onUnmounted(() => {
   font-size: 0.7rem;
   line-height: 1.4;
   margin: 0 0 1.15rem;
+}
+
+/* ── Ship picker ───────────────────────────────────────────────────────────── */
+.ship-picker {
+  border: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  min-width: 0;   /* fieldsets refuse to shrink below their content without this */
+}
+
+.ship-legend {
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  font-weight: 800;
+  padding: 0;
+  margin-bottom: 0.45rem;
+}
+
+.ship-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.ship-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 3px 7px;
+  border: 2px solid rgba(255,255,255,0.14);
+  border-radius: 9px;
+  background: rgba(0,0,0,0.28);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  min-width: 0;
+}
+.ship-card:hover { border-color: rgba(255,210,77,0.5); }
+
+.ship-card--on {
+  border-color: #ffd24d;
+  background: rgba(255,210,77,0.12);
+}
+
+/* Visually hidden but still focusable, so keyboard users get a focus ring on the card. */
+.ship-radio {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.ship-radio:focus-visible + .ship-art { outline: 2px solid #ffd24d; outline-offset: 2px; }
+
+.ship-art {
+  width: 100%;
+  max-width: 62px;
+  height: 34px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.ship-name {
+  font-size: 0.46rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-align: center;
+  line-height: 1.15;
+  word-break: break-word;
+}
+
+.ship-tagline {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #ffd24d;
+}
+
+.ship-weapon {
+  font-size: 0.45rem;
+  color: rgba(255,255,255,0.5);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.ship-blurb {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.6);
+  margin: 0.55rem 0 0;
+  min-height: 2.4em;   /* reserve the space so switching ships doesn't jog the Launch button */
+}
+
+/* Very narrow phones: one column reads better than three squeezed ones. */
+@media (max-width: 340px) {
+  .ship-grid { grid-template-columns: 1fr; }
+  .ship-card { flex-direction: row; gap: 7px; padding: 5px 7px; }
+  .ship-art { width: 42px; height: 26px; }
+  .ship-name, .ship-weapon { text-align: left; }
+  .ship-blurb { min-height: 0; }
 }
 
 .btn-start {

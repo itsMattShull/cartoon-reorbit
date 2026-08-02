@@ -1083,6 +1083,9 @@ model GameConfig {
   asteroidExtraLifeScore       Int     @default(10000)
   // physics / geometry (world units; durations in 60Hz ticks)
   asteroidShipRadius           Float   @default(13)
+  // DEPRECATED: superseded by the per-ship weapon columns below. Firing is now resolved from
+  // the ship the player picked, so these are no longer read. Kept to avoid a destructive
+  // migration; not exposed in the admin panel.
   asteroidBulletSpeed          Float   @default(6.2)
   asteroidBulletLifeTicks      Int     @default(66)
   asteroidRespawnInvulnTicks   Int     @default(96)
@@ -1091,6 +1094,28 @@ model GameConfig {
   asteroidLargeRadius          Float   @default(34)
   asteroidMediumRadius         Float   @default(20)
   asteroidSmallRadius          Float   @default(11)
+
+  // — Per-ship weapons —
+  // Each selectable ship is a weapon profile. Defaults mirror the `weapon` blocks in
+  // lib/asteroidSim.js SHIPS, which stays the source of truth for the intended feel.
+  // M.O.S.Q.U.I.T.T.O.H. — long range, slow rate
+  asteroidMosqFireInterval     Int     @default(26)
+  asteroidMosqBulletSpeed      Float   @default(7.6)
+  asteroidMosqBulletLife       Int     @default(300)
+  asteroidMosqPellets          Int     @default(1)
+  asteroidMosqSpread           Int     @default(0)
+  // S.C.A.M.P.E.R. — shotgun spray, very short range
+  asteroidScamFireInterval     Int     @default(21)
+  asteroidScamBulletSpeed      Float   @default(5.6)
+  asteroidScamBulletLife       Int     @default(15)
+  asteroidScamPellets          Int     @default(5)
+  asteroidScamSpread           Int     @default(96)
+  // C.A.S.U.A.L. — medium range, medium rate
+  asteroidCasFireInterval      Int     @default(13)
+  asteroidCasBulletSpeed       Float   @default(6.2)
+  asteroidCasBulletLife        Int     @default(66)
+  asteroidCasPellets           Int     @default(1)
+  asteroidCasSpread            Int     @default(0)
   asteroidPointsLarge          Int     @default(20)
   asteroidPointsMedium         Int     @default(50)
   asteroidPointsSmall          Int     @default(100)
@@ -3060,6 +3085,8 @@ model AsteroidScore {
   score     Int
   wave      Int      @default(1)
   ticks     Int      @default(0)
+  // Which ship flew this run, for balance analysis across the three weapon profiles.
+  shipId    String   @default("casual")
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
