@@ -386,6 +386,7 @@ let reducedMotion = false
 // One sprite per ship, loaded once and reused. A ship whose art has not been added yet simply
 // falls back to its vector silhouette, so the game stays fully playable either way.
 const shipImages = {}
+let bgOrbit = null
 // The ship this run is being flown with. Set from the SERVER's echo at /start rather than from
 // the picker, so what is drawn always matches the weapon the replay will score.
 let runShip = getShip(DEFAULT_SHIP_ID)
@@ -416,13 +417,113 @@ const ASTEROID_SHAPES = (() => {
   return shapes
 })()
 
+// ─── Wave backdrops ─────────────────────────────────────────────────────────────
+// Three backdrops cycle by wave, so the field visibly changes as the run goes on:
+//
+//   0  deep space   the original navy gradient and speckled starfield
+//   1  orbit        a still of the K.N.D. ship over Earth
+//   2  nebula       a second, deliberately different starfield: warmer, denser, with
+//                   cross-shaped sparkles and a drifting nebula band
+//
+// This is RENDER-ONLY. Nothing here touches the simulation, so it cannot affect the server's
+// replay — the backdrop is chosen from the wave number the sim already computed.
+const BG_DEEP_SPACE = 0
+const BG_ORBIT      = 1
+const BG_NEBULA     = 2
+const BG_COUNT      = 3
+
+// Wave 1 opens on plain deep space, wave 2 reaches orbit, wave 3 the nebula, then it repeats.
+function backdropForWave(wave) { return ((wave - 1) % BG_COUNT + BG_COUNT) % BG_COUNT }
+
+let nebulaStars = []
+
 function buildStars() {
+  // Backdrop 0 — sparse, cool, small white specks.
   stars = []
   let s = 987654321
   const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
   for (let i = 0; i < 70; i++) {
     stars.push({ x: rnd() * WORLD_W, y: rnd() * WORLD_H, r: 0.5 + rnd() * 1.4, a: 0.25 + rnd() * 0.55 })
   }
+
+  // Backdrop 2 — a genuinely different sky rather than a recolour: roughly three times as many
+  // stars, a spread of warm and cool tints, and the brighter ones drawn as four-point sparkles
+  // to echo the hand-drawn look of the show art.
+  nebulaStars = []
+  let t = 24681357
+  const rnd2 = () => { t = (t * 1103515245 + 12345) & 0x7fffffff; return t / 0x7fffffff }
+  const TINTS = ['#ffffff', '#ffe9c4', '#cfe0ff', '#ffd6ec', '#e6ccff']
+  for (let i = 0; i < 210; i++) {
+    const bright = rnd2()
+    nebulaStars.push({
+      x: rnd2() * WORLD_W,
+      y: rnd2() * WORLD_H,
+      r: 0.4 + bright * 1.6,
+      a: 0.2 + rnd2() * 0.7,
+      color: TINTS[(rnd2() * TINTS.length) | 0],
+      sparkle: bright > 0.86
+    })
+  }
+}
+
+function drawBackdrop(wave) {
+  const kind = backdropForWave(wave)
+
+  if (kind === BG_ORBIT && bgOrbit?.ready) {
+    // Cover-fit the still, then knock it back. At full strength the Earth is bright enough to
+    // swallow the asteroids and bullets drawn on top of it.
+    ctx.drawImage(bgOrbit.img, 0, 0, WORLD_W, WORLD_H)
+    ctx.fillStyle = 'rgba(4, 8, 26, 0.55)'
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H)
+    return
+  }
+
+  if (kind === BG_NEBULA) {
+    const g = ctx.createLinearGradient(0, 0, WORLD_W, WORLD_H)
+    g.addColorStop(0, '#1a0f33')
+    g.addColorStop(0.5, '#0d0a24')
+    g.addColorStop(1, '#2a1030')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H)
+
+    // A soft diagonal band, so the sky reads as a nebula rather than just more dots.
+    const band = ctx.createLinearGradient(0, WORLD_H, WORLD_W, 0)
+    band.addColorStop(0.25, 'rgba(120, 60, 180, 0)')
+    band.addColorStop(0.5, 'rgba(150, 80, 200, 0.20)')
+    band.addColorStop(0.75, 'rgba(120, 60, 180, 0)')
+    ctx.fillStyle = band
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H)
+
+    for (let i = 0; i < nebulaStars.length; i++) {
+      const st = nebulaStars[i]
+      ctx.globalAlpha = st.a
+      ctx.fillStyle = st.color
+      if (st.sparkle && !reducedMotion) {
+        const L = st.r * 3
+        ctx.fillRect(st.x - L, st.y - st.r / 2, L * 2, st.r)
+        ctx.fillRect(st.x - st.r / 2, st.y - L, st.r, L * 2)
+      } else {
+        ctx.fillRect(st.x, st.y, st.r, st.r)
+      }
+    }
+    ctx.globalAlpha = 1
+    return
+  }
+
+  // BG_DEEP_SPACE, and the fallback if the orbit still has not loaded yet.
+  const g = ctx.createLinearGradient(0, 0, 0, WORLD_H)
+  g.addColorStop(0, '#0b1c46')
+  g.addColorStop(1, '#050a1e')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, WORLD_W, WORLD_H)
+
+  ctx.fillStyle = '#ffffff'
+  for (let i = 0; i < stars.length; i++) {
+    const st = stars[i]
+    ctx.globalAlpha = st.a
+    ctx.fillRect(st.x, st.y, st.r, st.r)
+  }
+  ctx.globalAlpha = 1
 }
 
 // ─── Canvas sizing ──────────────────────────────────────────────────────────────
@@ -470,20 +571,7 @@ function draw() {
 
   applyWorldTransform()
 
-  // playfield backdrop
-  const g = ctx.createLinearGradient(0, 0, 0, WORLD_H)
-  g.addColorStop(0, '#0b1c46')
-  g.addColorStop(1, '#050a1e')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, WORLD_W, WORLD_H)
-
-  ctx.fillStyle = '#ffffff'
-  for (let i = 0; i < stars.length; i++) {
-    const st = stars[i]
-    ctx.globalAlpha = st.a
-    ctx.fillRect(st.x, st.y, st.r, st.r)
-  }
-  ctx.globalAlpha = 1
+  drawBackdrop(sim.wave)
 
   // asteroids
   ctx.lineJoin = 'round'
@@ -973,6 +1061,14 @@ onMounted(async () => {
     const saved = localStorage.getItem(SHIP_STORAGE_KEY)
     if (saved && SHIPS.some(sh => sh.id === saved)) selectedShipId.value = saved
   } catch {}
+
+  // Backdrop still. If it fails to load the orbit wave simply falls back to deep space, so a
+  // missing asset degrades quietly instead of leaving a blank field.
+  const orbit = new Image()
+  bgOrbit = { img: orbit, ready: false }
+  orbit.onload = () => { bgOrbit.ready = true }
+  orbit.onerror = () => { bgOrbit.ready = false }
+  orbit.src = '/asteroid/bg-orbit.webp'
 
   for (const ship of SHIPS) {
     const img = new Image()
