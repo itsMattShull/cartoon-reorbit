@@ -47,6 +47,20 @@ process.on('uncaughtException', (err) => {
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+// node-fetch has no default timeout, so a stalled Discord API response would
+// otherwise hang the caller forever. This process runs many jobs sequentially
+// at startup (see Kickoffs below), so a single unbounded fetch here could
+// stall unrelated jobs indefinitely.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
   try {
     const botToken = ANNOUNCEMENTS_BOT_TOKEN
@@ -645,7 +659,7 @@ async function syncGuildMembers() {
     const memberList = []
 
     while (true) {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${DISCORD_API}/guilds/${GUILD_ID}/members?limit=1000&after=${after}`,
         { headers: { Authorization: `${BOT_TOKEN}` } }
       )
@@ -1062,12 +1076,21 @@ async function runTournamentCron() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kickoffs
+//
+// AuctionOnly go-live (startDueAuctions) is registered and kicked off first,
+// and deliberately NOT top-level-awaited: every call below it in this file
+// hits Discord's API with no fetch timeout, so a slow/hanging response from
+// any one of them (e.g. syncGuildMembers, which paginates the full guild
+// member list) would otherwise block this script from ever reaching the
+// `cron.schedule('1 * * * *', startDueAuctions)` line — silently preventing
+// scheduled auctions from ever going live, even though nothing crashed.
+cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
+startDueAuctions().catch(err =>
+  console.error('[startDueAuctions] startup run failed:', err?.message || err)
+)
+
 await syncGuildMembers()
 cron.schedule('0 0 * * *', syncGuildMembers)  // daily midnight
-
-await startDueAuctions()
-// start AuctionOnly auctions
-cron.schedule('1 * * * *', startDueAuctions)  // hourly at minute 1
 
 await sendDueAnnouncements()
 cron.schedule('*/5 * * * *', sendDueAnnouncements)

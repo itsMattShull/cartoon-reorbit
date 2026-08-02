@@ -916,11 +916,6 @@
               <input type="number" v-model.number="asteroidShipDrag" min="0.9" max="1" step="0.001" class="input" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">Ticks between auto-fired shots (3–60). Blue power-up halves this.</p>
-              <input type="number" v-model.number="asteroidFireIntervalTicks" min="3" max="60" class="input" />
-            </div>
-            <div>
               <label class="block text-sm font-medium text-gray-700">Extra Life Score</label>
               <p class="text-xs text-gray-400 mb-1">Award a life every this many points. 0 disables.</p>
               <input type="number" v-model.number="asteroidExtraLifeScore" min="0" max="1000000" class="input" />
@@ -937,16 +932,6 @@
               <label class="block text-sm font-medium text-gray-700">Ship Collision Radius</label>
               <p class="text-xs text-gray-400 mb-1">Bigger is easier to hit (4&ndash;40). The Green power-up halves this.</p>
               <input type="number" v-model.number="asteroidShipRadius" min="4" max="40" step="0.5" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Bullet Speed</label>
-              <p class="text-xs text-gray-400 mb-1">World units per tick, added to the ship's own velocity (1&ndash;20)</p>
-              <input type="number" v-model.number="asteroidBulletSpeed" min="1" max="20" step="0.1" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Bullet Range (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">How long a shot lives before fizzling (10&ndash;300). Longer means the auto-cannon sweeps more of the field.</p>
-              <input type="number" v-model.number="asteroidBulletLifeTicks" min="10" max="300" class="input" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Respawn Invulnerability (ticks)</label>
@@ -975,6 +960,101 @@
               <input type="number" v-model.number="asteroidSmallRadius" min="3" max="40" step="0.5" class="input" />
             </div>
           </div>
+
+          <h3 class="text-lg font-semibold mb-2">Ships &amp; Weapons</h3>
+          <p class="text-xs text-gray-500 mb-3">
+            Players pick one of three ships before each run. A ship is purely a weapon profile —
+            everything else about flying is shared. Range is roughly projectile speed &times;
+            range ticks, against a playfield 640 units wide, so a range under ~640 means shots
+            fizzle before crossing the screen.
+          </p>
+            <h4 class="text-sm font-bold text-gray-700 mt-2">M.O.S.Q.U.I.T.T.O.H. <span class="font-normal text-gray-400">— sniper</span></h4>
+            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: one shot at a time, very long reach, slow cadence.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidMosqFireInterval" min="3" max="60" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidMosqBulletSpeed" min="1" max="20" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidMosqBulletLife" min="10" max="300" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidMosqPellets" min="1" max="12" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidMosqSpread" min="0" max="512" class="input" />
+              </div>
+            </div>
+            <h4 class="text-sm font-bold text-gray-700 mt-2">S.C.A.M.P.E.R. <span class="font-normal text-gray-400">— shotgun</span></h4>
+            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: a wide spray of pellets that dies off almost immediately — strong up close, useless at range.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidScamFireInterval" min="3" max="60" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidScamBulletSpeed" min="1" max="20" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidScamBulletLife" min="10" max="300" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidScamPellets" min="1" max="12" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidScamSpread" min="0" max="512" class="input" />
+              </div>
+            </div>
+            <h4 class="text-sm font-bold text-gray-700 mt-2">C.A.S.U.A.L. <span class="font-normal text-gray-400">— all-rounder</span></h4>
+            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: medium range, medium cadence, single shot.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidCasFireInterval" min="3" max="60" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidCasBulletSpeed" min="1" max="20" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidCasBulletLife" min="10" max="300" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidCasPellets" min="1" max="12" class="input" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidCasSpread" min="0" max="512" class="input" />
+              </div>
+            </div>
 
           <h3 class="text-lg font-semibold mb-2">Scoring</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -2318,17 +2398,29 @@ const asteroidTurnRate             = ref(6)
 const asteroidThrustAccel          = ref(0.145)
 const asteroidMaxShipSpeed         = ref(5.6)
 const asteroidShipDrag             = ref(0.992)
-const asteroidFireIntervalTicks    = ref(13)
 const asteroidExtraLifeScore       = ref(10000)
 const asteroidShipRadius           = ref(13)
-const asteroidBulletSpeed          = ref(6.2)
-const asteroidBulletLifeTicks      = ref(66)
 const asteroidRespawnInvulnTicks   = ref(96)
 const asteroidPowerupRadius        = ref(13)
 const asteroidPowerupLifeTicks     = ref(600)
 const asteroidLargeRadius          = ref(34)
 const asteroidMediumRadius         = ref(20)
 const asteroidSmallRadius          = ref(11)
+const asteroidMosqFireInterval     = ref(26)
+const asteroidMosqBulletSpeed      = ref(7.6)
+const asteroidMosqBulletLife       = ref(300)
+const asteroidMosqPellets          = ref(1)
+const asteroidMosqSpread           = ref(0)
+const asteroidScamFireInterval     = ref(21)
+const asteroidScamBulletSpeed      = ref(5.6)
+const asteroidScamBulletLife       = ref(15)
+const asteroidScamPellets          = ref(5)
+const asteroidScamSpread           = ref(96)
+const asteroidCasFireInterval      = ref(13)
+const asteroidCasBulletSpeed       = ref(6.2)
+const asteroidCasBulletLife        = ref(66)
+const asteroidCasPellets           = ref(1)
+const asteroidCasSpread            = ref(0)
 const asteroidPointsLarge          = ref(20)
 const asteroidPointsMedium         = ref(50)
 const asteroidPointsSmall          = ref(100)
@@ -2348,10 +2440,16 @@ const asteroidCfg = {
   asteroidStartingLives, asteroidStartAsteroids, asteroidAsteroidsPerWave,
   asteroidAsteroidSpeed, asteroidWaveSpeedGrowth, asteroidMaxSpeedMultiplier,
   asteroidTurnRate, asteroidThrustAccel, asteroidMaxShipSpeed, asteroidShipDrag,
-  asteroidFireIntervalTicks, asteroidExtraLifeScore,
-  asteroidShipRadius, asteroidBulletSpeed, asteroidBulletLifeTicks,
+  asteroidExtraLifeScore,
+  asteroidShipRadius,
   asteroidRespawnInvulnTicks, asteroidPowerupRadius, asteroidPowerupLifeTicks,
   asteroidLargeRadius, asteroidMediumRadius, asteroidSmallRadius,
+  asteroidMosqFireInterval, asteroidMosqBulletSpeed, asteroidMosqBulletLife,
+  asteroidMosqPellets, asteroidMosqSpread,
+  asteroidScamFireInterval, asteroidScamBulletSpeed, asteroidScamBulletLife,
+  asteroidScamPellets, asteroidScamSpread,
+  asteroidCasFireInterval, asteroidCasBulletSpeed, asteroidCasBulletLife,
+  asteroidCasPellets, asteroidCasSpread,
   asteroidPointsLarge, asteroidPointsMedium, asteroidPointsSmall, asteroidWaveClearBonus,
   asteroidPowerupsEnabled, asteroidPowerupBlueEnabled, asteroidPowerupRedEnabled,
   asteroidPowerupGreenEnabled, asteroidPowerupIntervalTicks, asteroidPowerupChancePercent,
