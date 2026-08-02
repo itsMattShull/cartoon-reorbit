@@ -1908,6 +1908,22 @@ model AuctionOnlyErrorLog {
   @@index([createdAt])
 }
 
+// Generic error log for background cron/worker jobs (server/cron/sync-guild-members.js and
+// similar). Distinct from AuctionOnlyErrorLog, which predates this and stays scoped to the
+// admin "Manage Auction Only" page's own error/history modal.
+model CronErrorLog {
+  id          String    @id @default(uuid())
+  job         String // job name, e.g. "syncGuildMembers", "startDueAuctions", "process"
+  summary     String // concise one-line message, for the collapsed list view
+  message     String // full stack trace, for the expanded detail view
+  dismissed   Boolean   @default(false)
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([dismissed])
+}
+
 model DissolveAuctionQueue {
   id             String    @id @default(uuid())
   userCtoonId    String    @unique
