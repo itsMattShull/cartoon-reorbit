@@ -47,6 +47,34 @@ const ASTEROID_NUMERIC_RANGES = [
   ['asteroidPowerupGreenTicks',    0, 7200]
 ]
 
+// ── ReOrbit Blackjack field tables ───────────────────────────────────────────────────────
+// Same data-driven shape as the asteroid tables above, for the same reason: one list drives
+// validation, the Prisma write and the change log so they cannot drift apart.
+// The ranges mirror normalizeBlackjackConfig() in server/utils/blackjackEngine.js, which
+// clamps again on read — so a row written before these bounds existed still can't break a table.
+const BLACKJACK_NUMERIC_RANGES = [
+  ['blackjackDailyBuyInLimit', 0, 1000000],
+  ['blackjackDailyWinLimit',   0, 1000000],
+  ['blackjackMinBet',          10, 10000],
+  ['blackjackMaxBet',          10, 100000],
+  ['blackjackPracticeStack',   10, 1000000],
+  ['blackjackDeckCount',       1, 8],
+  ['blackjackPayoutNum',       1, 3],
+  ['blackjackPayoutDen',       1, 2]
+]
+
+const BLACKJACK_BOOLEAN_FIELDS = [
+  'blackjackDealerHitsSoft17',
+  'blackjackAllowDouble',
+  'blackjackAllowSplit',
+  'blackjackAllowInsurance'
+]
+
+const BLACKJACK_FIELDS = [
+  ...BLACKJACK_NUMERIC_RANGES.map(([k]) => k),
+  ...BLACKJACK_BOOLEAN_FIELDS
+]
+
 const ASTEROID_BOOLEAN_FIELDS = [
   'asteroidPowerupsEnabled',
   'asteroidPowerupBlueEnabled',
@@ -283,6 +311,33 @@ function validatePayload(payload) {
       if (payload[field] != null && typeof payload[field] !== 'string') {
         throw createError({ statusCode: 400, statusMessage: `"${field}" must be a string or null` })
       }
+    }
+  } else if (payload.gameName === 'Blackjack') {
+    for (const [field, min, max] of BLACKJACK_NUMERIC_RANGES) {
+      const v = payload[field]
+      if (!Number.isInteger(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a whole number between ${min} and ${max}` })
+      }
+    }
+    for (const field of BLACKJACK_BOOLEAN_FIELDS) {
+      if (payload[field] != null && typeof payload[field] !== 'boolean') {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be true or false` })
+      }
+    }
+    // Cross-field rules the per-field ranges cannot express. Without these an admin can set a
+    // minimum above the maximum (no bet is ever legal) or a maximum above the whole daily
+    // budget (one hand can consume it).
+    if (payload.blackjackMaxBet < payload.blackjackMinBet) {
+      throw createError({ statusCode: 400, statusMessage: 'Max bet must be at least the min bet' })
+    }
+    if (payload.blackjackDailyBuyInLimit > 0 && payload.blackjackMaxBet > payload.blackjackDailyBuyInLimit) {
+      throw createError({ statusCode: 400, statusMessage: 'Max bet cannot exceed the daily buy-in limit' })
+    }
+    if (payload.blackjackMinBet % 10 !== 0 || payload.blackjackMaxBet % 10 !== 0) {
+      throw createError({ statusCode: 400, statusMessage: 'Bets must be multiples of 10 so 3:2 and insurance pay whole points' })
+    }
+    if (payload.blackjackPayoutNum < payload.blackjackPayoutDen) {
+      throw createError({ statusCode: 400, statusMessage: 'A blackjack must pay at least even money' })
     }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
@@ -595,6 +650,13 @@ export default defineEventHandler(async (event) => {
         if (flappyCityImagePath != null) flappyData.flappyCityImagePath = flappyCityImagePath
         createData = { ...createData, ...flappyData }
         updateData = { ...updateData, ...flappyData }
+      } else if (gameName === 'Blackjack') {
+        const blackjackData = {}
+        for (const key of BLACKJACK_FIELDS) {
+          if (body[key] != null) blackjackData[key] = body[key]
+        }
+        createData = { ...createData, ...blackjackData }
+        updateData = { ...updateData, ...blackjackData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -833,6 +895,14 @@ export default defineEventHandler(async (event) => {
           for (const [key, prev, next] of changes) {
             if (prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:FlappyPowerpuff', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'Blackjack') {
+          for (const key of BLACKJACK_FIELDS) {
+            const prev = before?.[key]
+            const next = body[key]
+            if (next != null && prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:Blackjack', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

@@ -1279,6 +1279,96 @@
           </button>
         </section>
 
+        <!-- ReOrbit Blackjack -->
+        <section v-if="activeTab === 'Blackjack'" role="tabpanel" aria-label="ReOrbit Blackjack Settings">
+          <h2 class="text-2xl font-semibold mb-4">ReOrbit Blackjack Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Blackjack is the only game that takes points as well as pays them. A player converts
+            points into chips (up to the daily buy-in), plays, and cashes out. Winnings do
+            <strong>not</strong> draw on the global daily point limit &mdash; these two caps are the
+            only limits on the table. The engine clamps every value again on read, so a bad number
+            here cannot break a live table.
+          </p>
+
+          <h3 class="text-lg font-semibold mb-2">Daily Limits</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Daily Buy-In Limit</label>
+              <p class="text-xs text-gray-400 mb-1">Most points a player may turn into chips per day, across all their sessions (resets 8 PM CT). This is their maximum possible daily loss.</p>
+              <input type="number" v-model.number="blackjackDailyBuyInLimit" min="0" max="1000000" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Daily Win Limit</label>
+              <p class="text-xs text-gray-400 mb-1">Net winnings that end the day. Bets are sized so even a split-and-doubled win cannot overshoot it, so this is a hard ceiling, not an approximate one.</p>
+              <input type="number" v-model.number="blackjackDailyWinLimit" min="0" max="1000000" step="10" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Table Limits</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Minimum Bet</label>
+              <p class="text-xs text-gray-400 mb-1">Must be a multiple of 10, which keeps a 3:2 blackjack and a half-stake insurance bet on whole points.</p>
+              <input type="number" v-model.number="blackjackMinBet" min="10" max="10000" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Maximum Bet</label>
+              <p class="text-xs text-gray-400 mb-1">Multiple of 10, at least the min bet, and no more than the daily buy-in.</p>
+              <input type="number" v-model.number="blackjackMaxBet" min="10" max="100000" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Practice Chip Stack</label>
+              <p class="text-xs text-gray-400 mb-1">Free chips handed out in Practice mode, and restored by the Reset button. Never touches real points.</p>
+              <input type="number" v-model.number="blackjackPracticeStack" min="10" max="1000000" step="10" class="input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Decks in the Shoe</label>
+              <p class="text-xs text-gray-400 mb-1">1&ndash;8. The shoe is reshuffled before every hand, so this changes the odds slightly but card counting is not possible either way.</p>
+              <input type="number" v-model.number="blackjackDeckCount" min="1" max="8" class="input" />
+            </div>
+          </div>
+
+          <h3 class="text-lg font-semibold mb-2">Rules</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Blackjack Pays</label>
+              <p class="text-xs text-gray-400 mb-1">As a ratio, e.g. 3 : 2. Stored as two whole numbers so payouts never land on half a point. Lowering it to 6 : 5 raises the house edge noticeably.</p>
+              <div class="flex items-center gap-2">
+                <input type="number" v-model.number="blackjackPayoutNum" min="1" max="3" class="input" />
+                <span class="text-gray-500">:</span>
+                <input type="number" v-model.number="blackjackPayoutDen" min="1" max="2" class="input" />
+              </div>
+            </div>
+            <div class="flex flex-col justify-end gap-2">
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="blackjackDealerHitsSoft17" />
+                Dealer hits soft 17
+              </label>
+              <p class="text-xs text-gray-400">Off = dealer stands on all 17s, which is slightly better for the player.</p>
+            </div>
+            <div class="flex flex-col gap-2">
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="blackjackAllowDouble" />
+                Allow doubling down
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="blackjackAllowSplit" />
+                Allow splitting pairs
+              </label>
+              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input type="checkbox" v-model="blackjackAllowInsurance" />
+                Offer insurance
+              </label>
+              <p class="text-xs text-gray-400">Insurance is the most confusing bet on the table and the worst value; it is safe to leave off.</p>
+            </div>
+          </div>
+
+          <button @click="saveBlackjackConfig" :disabled="loadingBlackjack" class="btn-primary">
+            <span v-if="!loadingBlackjack">Save ReOrbit Blackjack Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -1425,7 +1515,8 @@ const tabs = [
   { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
   { key: 'GuessCtoon',   label: 'Guess that cToon!' },
   { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
-  { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' }
+  { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' },
+  { key: 'Blackjack',    label: 'ReOrbit Blackjack' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1889,6 +1980,20 @@ async function loadSettings() {
   guessCtoonChoices.value              = gc.guessCtoonChoices ?? 4
   guessCtoonMaxQuestions.value         = gc.guessCtoonMaxQuestions ?? 25
   guessCtoonMinStreakForPoints.value   = gc.guessCtoonMinStreakForPoints ?? 3
+
+  const bj = await $fetch('/api/admin/game-config?gameName=Blackjack')
+  blackjackDailyBuyInLimit.value  = bj.blackjackDailyBuyInLimit ?? 1000
+  blackjackDailyWinLimit.value    = bj.blackjackDailyWinLimit ?? 3000
+  blackjackMinBet.value           = bj.blackjackMinBet ?? 10
+  blackjackMaxBet.value           = bj.blackjackMaxBet ?? 500
+  blackjackPracticeStack.value    = bj.blackjackPracticeStack ?? 1000
+  blackjackDeckCount.value        = bj.blackjackDeckCount ?? 6
+  blackjackPayoutNum.value        = bj.blackjackPayoutNum ?? 3
+  blackjackPayoutDen.value        = bj.blackjackPayoutDen ?? 2
+  blackjackDealerHitsSoft17.value = bj.blackjackDealerHitsSoft17 ?? false
+  blackjackAllowDouble.value      = bj.blackjackAllowDouble ?? true
+  blackjackAllowSplit.value       = bj.blackjackAllowSplit ?? true
+  blackjackAllowInsurance.value   = bj.blackjackAllowInsurance ?? true
 }
 
 // Win Wheel state
@@ -2235,11 +2340,12 @@ const gameTileSlots = [
   { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
   { slot: 'guessctoon',   label: 'Guess that cToon!' },
   { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
-  { slot: 'flappy',       label: 'Flappy Powerpuff' }
+  { slot: 'flappy',       label: 'Flappy Powerpuff' },
+  { slot: 'blackjack',    label: 'ReOrbit Blackjack' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -2433,6 +2539,51 @@ async function saveFlappyConfig() {
     toastMessage.value = e?.data?.statusMessage || 'Error saving Flappy Powerpuff settings'; toastType.value = 'error'
   } finally {
     loadingFlappy.value = false
+  }
+}
+
+// ── ReOrbit Blackjack ─────────────────────────
+const blackjackDailyBuyInLimit  = ref(1000)
+const blackjackDailyWinLimit    = ref(3000)
+const blackjackMinBet           = ref(10)
+const blackjackMaxBet           = ref(500)
+const blackjackPracticeStack    = ref(1000)
+const blackjackDeckCount        = ref(6)
+const blackjackPayoutNum        = ref(3)
+const blackjackPayoutDen        = ref(2)
+const blackjackDealerHitsSoft17 = ref(false)
+const blackjackAllowDouble      = ref(true)
+const blackjackAllowSplit       = ref(true)
+const blackjackAllowInsurance   = ref(true)
+const loadingBlackjack          = ref(false)
+
+async function saveBlackjackConfig() {
+  loadingBlackjack.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                  'Blackjack',
+        blackjackDailyBuyInLimit:  blackjackDailyBuyInLimit.value,
+        blackjackDailyWinLimit:    blackjackDailyWinLimit.value,
+        blackjackMinBet:           blackjackMinBet.value,
+        blackjackMaxBet:           blackjackMaxBet.value,
+        blackjackPracticeStack:    blackjackPracticeStack.value,
+        blackjackDeckCount:        blackjackDeckCount.value,
+        blackjackPayoutNum:        blackjackPayoutNum.value,
+        blackjackPayoutDen:        blackjackPayoutDen.value,
+        blackjackDealerHitsSoft17: blackjackDealerHitsSoft17.value,
+        blackjackAllowDouble:      blackjackAllowDouble.value,
+        blackjackAllowSplit:       blackjackAllowSplit.value,
+        blackjackAllowInsurance:   blackjackAllowInsurance.value
+      }
+    })
+    toastMessage.value = 'ReOrbit Blackjack settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error saving ReOrbit Blackjack settings'; toastType.value = 'error'
+  } finally {
+    loadingBlackjack.value = false
   }
 }
 
