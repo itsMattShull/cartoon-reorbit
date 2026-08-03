@@ -60,6 +60,10 @@
         <img v-if="tiles.blackjack" :src="tiles.blackjack" alt="ReOrbit Blackjack" class="tile-img" />
         <span v-else>ReOrbit Blackjack</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/edrps" class="quadrant quadrant--edrps">
+        <img v-if="tiles.edrps" :src="tiles.edrps" alt="Ed, Edd n Eddy RPS" class="tile-img" />
+        <span v-else>Ed, Edd n Eddy RPS</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -99,8 +103,8 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  /* 12 tiles in 2 columns needs 6 rows — bump this when a game is added. */
-  grid-template-rows: repeat(6, 1fr);
+  /* 13 tiles in 2 columns needs 7 rows — bump this when a game is added. */
+  grid-template-rows: repeat(7, 1fr);
   /* Belt and braces: a 13th tile would otherwise land in an implicit auto-height row and
      collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
      height. */
@@ -160,6 +164,7 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--asteroid      { background: #2b2062; }
 .quadrant--flappy        { background: #2f6f9e; }
 .quadrant--blackjack     { background: #17171a; }
+.quadrant--edrps         { background: #b8321f; }
 
 /* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
    scaled and brightened. */

@@ -1,8 +1,8 @@
 // server/utils/gamePoints.js
-// Shared daily-capped point award logic. TKO and gToons Clash wins share a
-// single daily cap ("combat" pool, tracked via GamePointLog.gameName in
-// ['TKO', 'Clash']) while other games (Winball, ReOrbit Match, monster
-// scans) share a separate general pool.
+// Shared daily-capped point award logic. The head-to-head games — TKO, gToons Clash and
+// Ed, Edd n Eddy RPS — share a single daily cap ("combat" pool, tracked via
+// GamePointLog.gameName in COMBAT_POOL_GAME_NAMES) while other games (Winball, ReOrbit
+// Match, monster scans) share a separate general pool.
 import { getDailyWindowStart } from './centralTime.js'
 
 /**
@@ -48,11 +48,18 @@ export async function awardCappedGamePoints(tx, { userId, gameName, poolGameName
   return toGive
 }
 
-// TKO and gToons Clash wins draw from the same daily "combat" pool.
-export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash']
+// The head-to-head games draw from the same daily "combat" pool.
+//
+// This constant has two jobs, and adding a game to it is never optional once that game logs
+// GamePointLog rows. Every combat game passes it as `poolGameNames` above (an INCLUSION), and
+// every general-pool game — plus onboarding's daily quest counters — uses it as a
+// `notIn` EXCLUSION. Award from a combat game without listing it here and the points are
+// charged to BOTH pools: the full combat cap is still available, and the arcade games
+// silently lose that much of their own budget.
+export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash', 'EdRps']
 
 /**
- * Awards points from the GENERAL daily pool — everything that is not TKO or gToons Clash
+ * Awards points from the GENERAL daily pool — everything that is not a combat-pool game
  * (Winball, ReOrbit Match, Tower Stack, ReOrbit Memory, Flappy Powerpuff, monster scans).
  *
  * This is the mirror image of `awardCappedGamePoints`: that one sums `gameName IN (names)`,

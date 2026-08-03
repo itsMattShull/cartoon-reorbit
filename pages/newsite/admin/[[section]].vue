@@ -17,6 +17,7 @@
       <AdminPointLogs v-else-if="section === 'pointLogs'" />
       <AdminAchievementLogs v-else-if="section === 'achievementLogs'" />
       <AdminGtoonsClashLogs v-else-if="section === 'gtoonsClashLogs'" />
+      <AdminEdRpsLogs v-else-if="section === 'edRpsLogs'" />
       <AdminMonsterBattleLogs v-else-if="section === 'monsterBattleLogs'" />
       <AdminLottoLogs v-else-if="section === 'lottoLogs'" />
       <AdminWinWheelLogs v-else-if="section === 'winWheelLogs'" />

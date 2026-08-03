@@ -55,6 +55,17 @@ async function seedGameConfigs() {
     }
   })
 
+  // Ed, Edd n Eddy RPS (points per completed head-to-head win). Every other column carries a
+  // schema default; this exists so pointsPerWin isn't 0 on a fresh database.
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'EdRps' },
+    update: {},
+    create: {
+      gameName: 'EdRps',
+      pointsPerWin: 100
+    }
+  })
+
   // Winwheel config (spin cost, optional image)
   await prisma.gameConfig.upsert({
     where: { gameName: 'Winwheel' },

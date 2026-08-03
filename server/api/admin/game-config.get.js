@@ -204,6 +204,10 @@ export default defineEventHandler(async (event) => {
         // Every blackjack column carries a schema default, so the row only needs its name —
         // the same shape the OperationAsteroid branch above uses.
         config = await db.gameConfig.create({ data: { gameName } })
+      } else if (gameName === 'EdRps') {
+        // Same story: every edRps* column has a schema default, and lib/edRps.js clamps them
+        // again on read.
+        config = await db.gameConfig.create({ data: { gameName } })
       } else {
         throw createError({
           statusCode: 400,

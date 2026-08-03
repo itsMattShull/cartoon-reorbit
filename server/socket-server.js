@@ -22,6 +22,7 @@ import { randomUUID }     from 'crypto'
 import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
+import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -48,7 +49,38 @@ const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
 const PORT = process.env.SOCKET_PORT || 3001
 const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
-const io = new Server(httpServer, { cors: { origin: '*' } })
+
+// Origins allowed to open a socket. This has to be an allow-list rather than '*' because the
+// game clients now connect with `withCredentials: true`, and a browser rejects
+// `Access-Control-Allow-Origin: *` on any credentialed request.
+//
+// This is defence in depth, not the primary control: the session cookie is SameSite=Lax, so a
+// page on another origin cannot make the browser attach it to this handshake no matter what
+// this list says. The real control is that every handler that acts for a user resolves that
+// user from the cookie itself.
+// The fallback covers dev as well as production, so a deploy that hasn't set the variable
+// still works on either host rather than failing to connect at all.
+const ALLOWED_SOCKET_ORIGINS = (
+  process.env.SOCKET_ALLOWED_ORIGINS ||
+  'https://www.cartoonreorbit.com,https://cartoonreorbit.com,https://dev.cartoonreorbit.com'
+).split(',').map(s => s.trim()).filter(Boolean)
+
+const isDevOrigin = (origin) =>
+  process.env.NODE_ENV !== 'production' &&
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+
+const io = new Server(httpServer, {
+  cors: {
+    origin(origin, cb) {
+      // No Origin header means a non-browser client (server-to-server, a CLI). Those can't
+      // carry a session cookie, so every authenticated handler still turns them away.
+      if (!origin) return cb(null, true)
+      if (ALLOWED_SOCKET_ORIGINS.includes(origin) || isDevOrigin(origin)) return cb(null, true)
+      return cb(null, false)
+    },
+    credentials: true
+  }
+})
 attachSocketIoMetrics(io)
 
 // ── Redis adapter (pub/sub between instances) ──────────────────────────────
@@ -1792,10 +1824,48 @@ async function resolveSocketUser(socket) {
   }
 }
 
+/**
+ * Resolves the caller from their session cookie, or tells them to sign in again.
+ *
+ * Every handler that acts on behalf of a user, or hands back anything belonging to one, must
+ * start here and use the returned id — NEVER a userId taken from the event payload. A socket
+ * connection is not authenticated by virtue of existing: anyone can open one and emit
+ * anything, so a payload userId is a claim by an anonymous caller, not an identity.
+ *
+ * Handlers here used to trust that claim, which let an unauthenticated caller create and join
+ * rooms as other people, read their decks, ready them up, and — because starting a PvP match
+ * debits both players' staked points and leaving settles the pot — move points between
+ * accounts it did not own.
+ *
+ * The one thing a handler must never do is copy a payload value into socket.data.userId: the
+ * disconnect cleanup and the in-match card handlers read that field, so poisoning it is as
+ * good as forging every later event on the connection.
+ */
+async function requireSocketUser(socket, errorEvent = 'authError') {
+  const user = await resolveSocketUser(socket)
+  if (!user) {
+    socket.emit(errorEvent, { message: 'Please sign in again to keep playing.' })
+    return null
+  }
+  return user
+}
+
 io.on('connection', socket => {
-  socket.on('battle:create', async ({ player1UserId, player1MonsterId, opponent }) => {
+  // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
+  // on every event rather than trusting a payload userId. It keeps its own socket.data keys
+  // (edRpsUserId / edRpsRoomId) so it never collides with the Clash cleanup below, which
+  // reads the shared socket.data.roomId.
+  registerEdRps(io, socket, resolveSocketUser)
+
+  socket.on('battle:create', async ({ player1MonsterId, opponent }) => {
     try {
-      const uid = player1UserId ? sid(player1UserId) : null
+      // Same rule as the Clash handlers: the battle belongs to whoever the cookie says is
+      // calling, not to whatever id the payload claimed. getUserMonsterBattleData below scopes
+      // the monster lookup to this id, so a forged one could stage a battle with someone
+      // else's monsters.
+      const me = await requireSocketUser(socket, 'battle:error')
+      if (!me) return
+      const uid = sid(me.id)
       console.log('[battle:create] request', { uid, player1MonsterId, opponent })
       if (!uid || !player1MonsterId) {
         socket.emit('battle:error', { battleId: null, message: 'Missing player data.', code: 'BadPayload' })
@@ -1951,8 +2021,10 @@ io.on('connection', socket => {
     }
   })
 
-  socket.on('battle:join', async ({ battleId, userId }) => {
-    console.log('[battle:join] request', battleId, userId)
+  socket.on('battle:join', async ({ battleId }) => {
+    const me = await requireSocketUser(socket, 'battle:error')
+    if (!me) return
+    console.log('[battle:join] request', battleId, me.id)
     const battle = monsterBattles.get(battleId)
     if (!battle) {
       console.log('[battle:join] not found', battleId)
@@ -1960,7 +2032,9 @@ io.on('connection', socket => {
       return
     }
     touchActivity(battle)
-    const uid = userId ? sid(userId) : socket.data.userId
+    // Joining sets socket.data.userId, which battle:chooseAction then trusts to decide whose
+    // turn it is playing — so a forged id here handed over control of the other player's moves.
+    const uid = sid(me.id)
     const playerKey = uid ? monsterPlayerKeyForUser(battle, uid) : null
     if (!playerKey) {
       console.log('[battle:join] not participant', battleId, uid)
@@ -2037,15 +2111,21 @@ io.on('connection', socket => {
     }
   })
 
-  socket.on('leaveClashRoom', async ({ roomId, userId }) => {
+  socket.on('leaveClashRoom', async ({ roomId }) => {
     try {
+      // Authenticated, so this can only ever end the caller's own participation. With a
+      // payload userId it could force any player out of any room, and in an active match that
+      // settles the staked pot to their opponent.
+      const me = await requireSocketUser(socket)
+      if (!me) return
+
       // leave socket.io room
       socket.leave(roomId)
 
       // delegate everything else (lobby or active match) to one place
       await handleClashLeave(io, {
         roomId,
-        userId,
+        userId: me.id,
         leavingSocketId: socket.id
       })
     } catch (e) {
@@ -2074,9 +2154,37 @@ io.on('connection', socket => {
   })
 
   // --- Create a new PvP room ---
-  socket.on('createClashRoom', async ({ roomId, userId, deck, points }) => {
-    // store room
-    const uid = sid(userId)
+  socket.on('createClashRoom', async ({ roomId, deck, points }) => {
+    // The room is always created for the authenticated caller. A userId in the payload is
+    // ignored outright, so a forged one cannot open a room in someone else's name — which
+    // also stopped the Discord announce from being posted as an arbitrary user.
+    const me = await requireSocketUser(socket, 'joinError')
+    if (!me) return
+    const uid = sid(me.id)
+
+    // Room ids come from the client (Date.now()), so they have to be constrained before they
+    // are used as a Map key or a socket.io room name. Digits only: the names of every other
+    // broadcast channel on this server — zone names, `auction_<id>`, 'spin-the-wheel',
+    // 'marbles-race' — contain non-digits, so this shape cannot collide with them. Without
+    // it, a crafted roomId joined the caller to other features' channels.
+    if (typeof roomId !== 'string' || !/^\d{10,20}$/.test(roomId)) {
+      socket.emit('joinError', { message: 'Could not create that room. Please try again.' })
+      return
+    }
+    // Never overwrite a live room. This used to be an unconditional Map.set, so emitting a
+    // room id that already existed replaced the waiting player's lobby entry wholesale.
+    if (pvpRooms.has(roomId) || pvpMatches.has(roomId)) {
+      socket.emit('joinError', { message: 'Could not create that room. Please try again.' })
+      return
+    }
+    // One open room per player, or a loop of this event fills the lobby and the Discord.
+    for (const [existingId, existing] of pvpRooms.entries()) {
+      if (existing.players.includes(uid)) {
+        socket.emit('joinError', { message: 'You already have a room open.' })
+        return
+      }
+      void existingId
+    }
 
     // Validate & clamp stake against creator's balance server-side
     const requested = Math.max(0, Math.floor(Number(points || 0)))
@@ -2098,7 +2206,7 @@ io.on('connection', socket => {
     socket.data.userId = uid
     // notify lobby
     const u = await db.user.findUnique({
-      where: { id: userId },
+      where: { id: uid },
       select: { username: true, discordId: true }
     })
     pvpRooms.get(roomId).usernames[uid] = u?.username || 'Unknown'
@@ -2180,8 +2288,10 @@ io.on('connection', socket => {
   });
 
   // --- Join existing PvP room ---
-  socket.on('joinClashRoom', async ({ roomId, userId, deck }) => {
-    const uid = sid(userId)
+  socket.on('joinClashRoom', async ({ roomId, deck }) => {
+    const me = await requireSocketUser(socket, 'joinError')
+    if (!me) return
+    const uid = sid(me.id)
 
     // If the game has already started (lobby → active match transition), treat this
     // as a reconnect rather than a new join.  Handles both post-reload rejoins and
@@ -2223,7 +2333,7 @@ io.on('connection', socket => {
 
     // A different user is joining: fill second slot
     if (!room.players.includes(uid)) room.players.push(uid)
-    const u2 = await db.user.findUnique({ where: { id: userId }, select: { username: true } })
+    const u2 = await db.user.findUnique({ where: { id: uid }, select: { username: true } })
     room.usernames[uid] = u2?.username || 'Unknown'
 
     // Now this room is no longer "waiting" → remove from lobby lists
@@ -2232,9 +2342,13 @@ io.on('connection', socket => {
     io.to(roomId).emit('pvpLobbyState', lobbySnapshot(room))
   });
 
-  socket.on('listClashDecks', async ({ userId }) => {
+  socket.on('listClashDecks', async () => {
+    // This queried whatever userId the payload named, with no check of any kind, so it
+    // returned any player's decks to any caller.
+    const me = await requireSocketUser(socket, 'deckError')
+    if (!me) return
     const decks = await db.clashDeck.findMany({
-      where: { userId },
+      where: { userId: me.id },
       include: { cards: { include: { ctoon: true } } }
     })
     const payload = decks.map(d => ({
@@ -2250,9 +2364,11 @@ io.on('connection', socket => {
   // Single atomic handler: sets deck + ready flag together so startPvpMatch
   // always sees both in a consistent state (fixes race condition where the old
   // separate setPvpDeck / readyPvp events could be processed out of order).
-  socket.on('readyUpWithDeck', async ({ roomId, userId, deckId }) => {
+  socket.on('readyUpWithDeck', async ({ roomId, deckId }) => {
+    const me = await requireSocketUser(socket, 'deckError')
+    if (!me) return
     const room = pvpRooms.get(roomId)
-    const uid = sid(userId)
+    const uid = sid(me.id)
     if (!room || !room.players.includes(uid)) return
     touchActivity(room)
 
@@ -2260,7 +2376,11 @@ io.on('connection', socket => {
       where: { id: deckId },
       include: { cards: { include: { ctoon: true } } }
     })
-    if (!deck || deck.userId !== userId) {
+    // Compared against the authenticated id. The old check was `deck.userId !== userId` using
+    // the caller's own payload value, which is always true for whatever id they claimed — a
+    // tautology, not an ownership check. Readying up leads straight into startPvpMatch, which
+    // debits both players' staked points.
+    if (!deck || deck.userId !== me.id) {
       socket.emit('deckError', { message: 'Invalid deck' })
       return
     }
@@ -2339,8 +2459,13 @@ io.on('connection', socket => {
   });
 
   /* ──────────   Clash PvE   ────────── */
-  socket.on('joinPvE', async ({ deck, userId }) => {
+  socket.on('joinPvE', async ({ deck }) => {
     try {
+      // The PvE record is written against the authenticated caller, so a forged payload can no
+      // longer file a game (and its outcome) under another account.
+      const me = await requireSocketUser(socket, 'joinError')
+      if (!me) return
+      const userId = me.id
       const normalize = (arr = []) => arr.slice(0, 12).map(d => {
         const c = d?.ctoon ?? d
         return {
@@ -2496,10 +2621,15 @@ io.on('connection', socket => {
   // Emitted by clients on socket reconnect to restore their session.
 
   // PvP lobby: re-join room and receive current lobby snapshot
-  socket.on('pvp:rejoin', ({ roomId, userId }) => {
+  socket.on('pvp:rejoin', async ({ roomId }) => {
+    const me = await requireSocketUser(socket)
+    if (!me) return
     const room = pvpRooms.get(roomId)
     if (!room) return
-    const uid = sid(userId)
+    const uid = sid(me.id)
+    // Membership is now actually checked. This handler had no check at all, so any caller
+    // could join any lobby room and receive its snapshot — which carries the raw player ids.
+    if (!room.players.includes(uid)) return
     socket.join(roomId)
     socket.data.roomId = roomId
     socket.data.userId = uid
@@ -2508,11 +2638,13 @@ io.on('connection', socket => {
   })
 
   // PvE clash match: re-join after socket reconnect / server restart
-  socket.on('pve:rejoin', ({ gameId, userId }) => {
+  socket.on('pve:rejoin', async ({ gameId }) => {
+    const me = await requireSocketUser(socket)
+    if (!me) return
     const match = pveMatches.get(gameId)
     if (!match) return
-    const uid = sid(userId)
-    if (match.playerUserId !== uid) return  // security: only the original player may rejoin
+    const uid = sid(me.id)
+    if (match.playerUserId !== uid) return  // only the original player may rejoin
 
     socket.data.gameId = gameId
     socket.data.userId = uid
@@ -2527,11 +2659,16 @@ io.on('connection', socket => {
 
   // PvP active match: re-join after socket reconnect / server restart.
   // Also reached when joinClashRoom fires for a room that already has an active match.
-  socket.on('pvp:match:rejoin', ({ roomId, userId }) => {
+  socket.on('pvp:match:rejoin', async ({ roomId }) => {
+    const me = await requireSocketUser(socket)
+    if (!me) return
     const match = pvpMatches.get(roomId)
     if (!match) return
-    const uid = sid(userId)
-    if (!match.userSide?.[uid]) return  // security: only a participant may rejoin
+    const uid = sid(me.id)
+    // The participant check was run against the caller's own payload value, so naming a
+    // participant was enough to pass it — and viewForUser below then returned THAT player's
+    // private hand and deck to the caller.
+    if (!match.userSide?.[uid]) return
 
     socket.data.roomId = roomId
     socket.data.userId = uid
@@ -2834,6 +2971,10 @@ setInterval(() => {
     console.error('[socket] stale sweep failed:', err)
   })
 }, SWEEP_INTERVAL_MS).unref()
+
+// RPS rooms churn far faster than Clash's, and its matches need an absolute-age backstop that
+// does not depend on socket presence, so it runs its own sweep on its own interval.
+startEdRpsSweep(io)
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {

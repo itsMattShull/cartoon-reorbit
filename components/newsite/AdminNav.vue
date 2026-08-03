@@ -75,6 +75,7 @@ const menus = [
       { id: 'pointLogs',          label: 'Point Logs',         to: '/newsite/admin/pointLogs' },
       { id: 'achievementLogs',    label: 'Achievement Logs',   to: '/newsite/admin/achievementLogs' },
       { id: 'gtoonsClashLogs',    label: 'gToons Clash Logs',  to: '/newsite/admin/gtoonsClashLogs' },
+      { id: 'edRpsLogs',          label: 'Ed Edd n Eddy RPS Logs', to: '/newsite/admin/edRpsLogs' },
       { id: 'monsterBattleLogs',  label: 'Monster Battle Logs', to: '/newsite/admin/monsterBattleLogs' },
       { id: 'lottoLogs',          label: 'Lotto Logs',         to: '/newsite/admin/lottoLogs' },
       { id: 'winWheelLogs',       label: 'Win Wheel Logs',     to: '/newsite/admin/winWheelLogs' },
