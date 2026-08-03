@@ -222,7 +222,7 @@ const czoneSearchPath = (id) =>
   isNewsite.value ? `/newsite/czonesearch/${id}` : `/czonesearch/${id}`
 
 const czoneContestPath = (id) =>
-  isNewsite.value ? `/newsite/MycWorld?contestId=${id}` : `/czone-contest/${id}`
+  isNewsite.value ? `/newsite/czone-contest/${id}` : `/czone-contest/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)
