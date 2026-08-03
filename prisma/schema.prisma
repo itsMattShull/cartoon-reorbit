@@ -1381,6 +1381,13 @@ model Auction {
   bids     Bid[] // one-to-many on Bid
   autoBids AuctionAutoBid[]
 
+  // NOTE: a partial unique index, "Auction_active_userCtoonId_key" ON
+  // ("userCtoonId") WHERE status = 'ACTIVE', also exists on this table. It stops
+  // the same cToon being auctioned twice at once, which otherwise lets both
+  // auctions close and mint points against a single item. Partial indexes are
+  // not expressible in the Prisma schema language, so it lives only in
+  // migration 20260803000000_unique_active_auction_per_user_ctoon and shows up
+  // as drift in `prisma migrate dev`. Do not drop it.
   @@index([userCtoonId, status])
   @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])

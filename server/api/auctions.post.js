@@ -132,15 +132,31 @@ export default defineEventHandler(async (event) => {
   const endAtUtc = new Date(nowMs + daysMs + minsMs).toISOString()
 
   // 6. Create auction
-  const auction = await prisma.auction.create({
-    data: {
-      userCtoonId: resolvedUserCtoonId,
-      initialBet: Number(initialBet),
-      duration: days,
-      endAt: endAtUtc,
-      ...(userId ? { creatorId: userId } : {})
+  //
+  // The check in step 4 is a courtesy: it gives the common case a clear error
+  // without touching the write path. It is not what makes this safe. Two
+  // requests for the same cToon can both pass it, and until both auctions
+  // closed — crediting the seller twice and handing the cToon to whichever
+  // winner closed last — nothing stopped them. The partial unique index
+  // "Auction_active_userCtoonId_key" (WHERE status = 'ACTIVE') is the real
+  // guard; P2002 here is the loser of that race.
+  let auction
+  try {
+    auction = await prisma.auction.create({
+      data: {
+        userCtoonId: resolvedUserCtoonId,
+        initialBet: Number(initialBet),
+        duration: days,
+        endAt: endAtUtc,
+        ...(userId ? { creatorId: userId } : {})
+      }
+    })
+  } catch (err) {
+    if (err?.code === 'P2002') {
+      throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this cToon" })
     }
-  })
+    throw err
+  }
 
   // 7. Optionally create initial bid — only if amount matches rarity mapping
   if (createInitialBid) {
