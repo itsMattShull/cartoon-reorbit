@@ -10,6 +10,7 @@ import { attachSocketIoMetrics } from './diagnostics/metrics.mjs'
 import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
 import { redisConnection, scheduleAuctionClose, scheduleMintEnd } from './utils/queues.js'
+import { resolveAuctionCloseOutcome, AUCTION_CLOSE_DOUBLE_SALE } from './utils/auctionClose.js'
 import { getRedis } from './utils/redis.js'
 import * as redisState from './utils/redisState.js'
 
@@ -2838,7 +2839,7 @@ setInterval(() => {
 async function performAuctionClose(auctionId) {
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
-    select: { id: true, status: true, endAt: true, creatorId: true, userCtoonId: true }
+    select: { id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, createdAt: true }
   })
 
   // Guard: already closed or cancelled (e.g. duplicate job fire)
@@ -2888,6 +2889,8 @@ async function performAuctionClose(auctionId) {
 
   // Will be set inside the transaction if endAt was extended after our initial read.
   let extendedEndAt = null
+  // Set if this auction turned out to be a duplicate of one that already sold.
+  let settledAsDoubleSale = false
 
   await db.$transaction(async tx => {
     // Re-check inside the transaction to close the TOCTOU gap: a concurrent bid
@@ -2900,6 +2903,42 @@ async function performAuctionClose(auctionId) {
     if (!current || current.status !== 'ACTIVE') return
     if (new Date(current.endAt) > now) {
       extendedEndAt = current.endAt
+      return
+    }
+
+    // Has another auction already sold this same physical cToon while this one
+    // was running? That should be impossible now that a partial unique index
+    // stops two ACTIVE auctions existing for one UserCtoon, but paying out on a
+    // pair that predates it would debit a second winner, credit the seller
+    // twice and move the cToon off the first winner — so it is checked, not
+    // assumed.
+    const otherAuctions = await tx.auction.findMany({
+      where: { userCtoonId, id: { not: id } },
+      select: { id: true, status: true, winnerId: true, winnerAt: true }
+    })
+    const { outcome, conflictingAuctionId } = resolveAuctionCloseOutcome({
+      auction: auc,
+      winningBid,
+      otherAuctions
+    })
+
+    if (outcome === AUCTION_CLOSE_DOUBLE_SALE) {
+      console.error(
+        `[auction] refusing to settle ${id}: cToon ${userCtoonId} was already sold by auction ` +
+        `${conflictingAuctionId} while this listing was live. Closing with no winner; no points ` +
+        `moved and the cToon was left where it is. Needs a manual refund decision.`
+      )
+      settledAsDoubleSale = true
+      await tx.auction.update({
+        where: { id },
+        data: { status: 'CLOSED', winnerAt: now }
+      })
+      // Release every hold so no bidder stays locked out of their points. The
+      // cToon is deliberately untouched: it belongs to the other sale's winner.
+      await tx.lockedPoints.updateMany({
+        where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+        data:  { status: 'RELEASED' }
+      })
       return
     }
 
@@ -2994,8 +3033,8 @@ async function performAuctionClose(auctionId) {
   }
 
   io.to(`auction_${id}`).emit('auction-ended', {
-    winnerId:   winningBid?.userId ?? null,
-    winningBid: winningBid?.amount ?? 0
+    winnerId:   settledAsDoubleSale ? null : (winningBid?.userId ?? null),
+    winningBid: settledAsDoubleSale ? 0    : (winningBid?.amount ?? 0)
   })
 }
 

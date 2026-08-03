@@ -136,7 +136,7 @@
               v-for="item in activeSale.items"
               :key="'sale-' + item.ctoon.id"
               :style="isSaleItemSoldOut(item)
-                ? { '--footer-left-width': '100%', '--footer-right-width': '0%' }
+                ? { '--sc-footer-left-width': '100%', '--sc-footer-right-width': '0%' }
                 : {}"
             >
               <template #header>
@@ -206,7 +206,7 @@
           v-for="c in ctoons"
           :key="c.id"
           :style="isSoldOut(c) && !hasCountdown(c)
-            ? { '--footer-left-width': '100%', '--footer-right-width': '0%' }
+            ? { '--sc-footer-left-width': '100%', '--sc-footer-right-width': '0%' }
             : {}"
         >
           <template #header>
