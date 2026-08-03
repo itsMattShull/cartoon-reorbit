@@ -1042,7 +1042,9 @@ const connectBattleSocket = () => {
     : `http://localhost:${config.public.socketPort}`
 
   battleSocket = io(path, {
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    // Required: the battle handlers authenticate from the session cookie on the handshake.
+    withCredentials: true
   })
 
   battleSocket.on('connect', () => {

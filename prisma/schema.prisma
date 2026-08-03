@@ -435,6 +435,10 @@ model User {
   clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
   clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
   clashGamesAsWinner        ClashGame[]                   @relation("ClashGameWinner")
+  edRpsMatchesAsPlayer1     EdRpsMatch[]                  @relation("EdRpsMatchPlayer1")
+  edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
+  edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
+  edRpsMatchesWhoLeft       EdRpsMatch[]                  @relation("EdRpsMatchWhoLeft")
   gtoonTournamentsWon       GtoonTournament[]             @relation("GtoonTournamentWinner")
   gtoonTournamentOptIns     GtoonTournamentOptIn[]
   gtoonTournamentMatchesAsA GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerA")
@@ -1173,6 +1177,15 @@ model GameConfig {
   blackjackAllowDouble      Boolean? @default(true)
   blackjackAllowSplit       Boolean? @default(true)
   blackjackAllowInsurance   Boolean? @default(true)
+
+  // — Ed, Edd n Eddy RPS —
+  // Bounds live in CONFIG_LIMITS in lib/edRps.js, which clampConfig() applies on every read,
+  // so an out-of-range value saved here can never break a live match. `pointsPerWin` above is
+  // shared with the other games and is what a natural PvP win pays.
+  edRpsRoundSeconds        Int? @default(15) // per-round throw timer
+  edRpsWinsNeeded          Int? @default(4) // round wins to take the match (best of 7)
+  edRpsMaxRounds           Int? @default(7) // hard ceiling; ties replay and don't count
+  edRpsPairDailyAwardLimit Int? @default(2) // point-paying wins one pair of players may trade per day
 }
 
 model GlobalGameConfig {
@@ -1226,6 +1239,7 @@ model GlobalGameConfig {
 
   gameTileFlappyImagePath    String?
   gameTileBlackjackImagePath String?
+  gameTileEdrpsImagePath     String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -1496,6 +1510,75 @@ model ClashGame {
   player1 User  @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
   player2 User? @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+}
+
+// One completed Ed, Edd n Eddy RPS match.
+//
+// Written ONCE, at match end, inside the same transaction that awards the points — there is no
+// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match. CPU
+// practice matches are played entirely in the browser and never reach this table, which is why
+// both player columns are NOT NULL.
+//
+// The IP/fingerprint/timing columns exist for one reason: win-trading between alts is the
+// obvious way to farm a game this fast, and the admin cheat tooling is otherwise blind to game
+// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key.
+model EdRpsMatch {
+  id     String @id @default(uuid())
+  roomId String
+
+  player1UserId    String
+  player2UserId    String
+  player1Character String
+  player2Character String
+  player1Score     Int    @default(0)
+  player2Score     Int    @default(0)
+
+  winnerUserId  String?
+  whoLeftUserId String?
+  // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
+  endReason     String  @default("natural")
+
+  // One entry per resolved round:
+  // { n, p1, p2, p1Auto, p2Auto, p1Ms, p2Ms, w } where p1/p2 are hand indices, *Ms is the
+  // server-measured response time, and w is 0 (tie) | 1 | 2. Kept terse on purpose: this is
+  // read only by the admin log viewer, and a verbose shape costs GBs a year at this table's
+  // write rate.
+  rounds Json?
+
+  // Collusion signals, captured at match start. IPs use the deterministic encryptIp() from
+  // server/utils/ip-encrypt.js so they join directly against UserIP and DeviceFingerprintLog.
+  player1Ip        String?
+  player2Ip        String?
+  player1VisitorId String?
+  player2VisitorId String?
+  sameIp           Boolean @default(false)
+  sameVisitorId    Boolean @default(false)
+
+  // Award accounting. pointsAwardedAt is claimed with a compare-and-set inside the award
+  // transaction, so a forfeit racing a natural end can never pay twice.
+  pointsAwarded   Int       @default(0)
+  pointsAwardedAt DateTime?
+  awardedUserId   String?
+  // null when paid; otherwise why not:
+  // 'forfeit' | 'abandoned' | 'pair_limit' | 'same_device' | 'cap_exhausted' | 'banned'
+  suppressReason  String?
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  player1 User  @relation("EdRpsMatchPlayer1", fields: [player1UserId], references: [id])
+  player2 User  @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
+  winner  User? @relation("EdRpsMatchWinner", fields: [winnerUserId], references: [id])
+  whoLeft User? @relation("EdRpsMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+
+  // ClashGame has no indexes at all and its leaderboard sequentially scans five times over.
+  // This table grows far faster, so it gets real ones. The migration adds partial variants
+  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express.
+  @@index([startedAt])
+  @@index([endedAt])
+  @@index([player1UserId, endedAt])
+  @@index([player2UserId, endedAt])
+  @@index([winnerUserId, endedAt])
 }
 
 model MonsterBattle {

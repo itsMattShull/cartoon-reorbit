@@ -16,7 +16,9 @@ export function useClashSocket() {
       import.meta.env.PROD
         ? undefined
         : `http://localhost:${runtime.public.socketPort}`,
-      { reconnectionDelayMax: 5000 }
+      // withCredentials so the session cookie is sent on the handshake — every clash handler
+      // now authenticates from it rather than from a userId in the payload.
+      { reconnectionDelayMax: 5000, withCredentials: true }
     )
 
     socket.on('connect', () => {

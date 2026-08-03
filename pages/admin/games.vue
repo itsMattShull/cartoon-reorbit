@@ -40,7 +40,7 @@
             <input type="number" v-model.number="globalDailyPointLimit" class="input" />
           </div>
           <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700">Daily TKO Points Cap</label>
+            <label class="block text-sm font-medium text-gray-700">Head-to-Head Daily Points Cap (TKO + gToons Clash + Ed, Edd n Eddy RPS)</label>
             <input type="number" v-model.number="globalTkoDailyPointLimit" class="input" />
           </div>
           <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="btn-primary">
@@ -580,6 +580,71 @@
           </div>
           <button @click="saveClashConfig" :disabled="loadingClash" class="btn-primary">
             <span v-if="!loadingClash">Save Clash Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
+        <!-- Ed, Edd n Eddy RPS -->
+        <section v-if="activeTab === 'EdRps'" role="tabpanel" aria-label="Ed, Edd n Eddy RPS Settings">
+          <h2 class="text-2xl font-semibold mb-4">Ed, Edd n Eddy RPS Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Wins here draw from the same daily pool as TKO and gToons Clash, set on the Global
+            Settings tab. Only matches played to a natural finish pay out — forfeits, quits and
+            practice games against the Eds never do. Every value below is clamped again by the
+            game engine on read, so a bad number here cannot break a live match.
+          </p>
+
+          <div v-if="edRpsConfigError" class="mb-4 p-3 border border-red-300 bg-red-50 rounded">
+            <p class="text-sm font-semibold text-red-800">These settings could not be loaded.</p>
+            <p class="text-xs text-red-700 mt-1">{{ edRpsConfigError }}</p>
+            <p class="text-xs text-red-700 mt-1">
+              The values below are defaults, not what is saved. If this database hasn't had the
+              Ed, Edd n Eddy RPS migration applied yet, run it and reload before saving —
+              saving now would write these defaults.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
+              <input type="number" v-model.number="edRpsPointsPerWin" class="input" />
+              <p class="text-xs text-gray-400 mt-1">Paid to the winner of a completed head-to-head match.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Round Timer (seconds)</label>
+              <input type="number" v-model.number="edRpsRoundSeconds" class="input" min="5" max="60" />
+              <p class="text-xs text-gray-400 mt-1">
+                A player who runs out of time has a hand thrown for them at random. Keep this
+                above 10 — a phone that briefly backgrounds itself would otherwise drop rounds.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Round Wins Needed</label>
+              <input type="number" v-model.number="edRpsWinsNeeded" class="input" min="1" max="10" />
+              <p class="text-xs text-gray-400 mt-1">4 is best-of-seven. Ties replay and don't count toward either player.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Max Rounds</label>
+              <input type="number" v-model.number="edRpsMaxRounds" class="input" min="1" max="21" />
+              <p class="text-xs text-gray-400 mt-1">
+                Must be at least {{ Math.max(1, (edRpsWinsNeeded || 1) * 2 - 1) }} for a
+                first-to-{{ edRpsWinsNeeded || 1 }} match, or a tied match could never finish.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Paid Wins Per Pair Per Day</label>
+              <input type="number" v-model.number="edRpsPairDailyAwardLimit" class="input" min="0" max="50" />
+              <p class="text-xs text-gray-400 mt-1">
+                How many point-paying wins the same two players may trade in one daily window.
+                This is the main brake on win-trading between alts; 0 disables the limit.
+              </p>
+            </div>
+          </div>
+
+          <!-- Disabled while the load is broken: the inputs are showing defaults, so saving
+               would overwrite whatever is actually stored. -->
+          <button @click="saveEdRpsConfig" :disabled="loadingEdRps || !!edRpsConfigError" class="btn-primary">
+            <span v-if="!loadingEdRps">Save Ed, Edd n Eddy RPS Settings</span>
             <span v-else>Saving…</span>
           </button>
         </section>
@@ -1587,9 +1652,13 @@ definePageMeta({
 const tabs = [
   { key: 'Global',       label: 'Global Settings' },
   { key: 'Winball',      label: 'Winball' },
+  // The three head-to-head games sit together, and ahead of the single-player ones. This strip
+  // scrolls horizontally with its scrollbar hidden, so a 13th tab on the end is easy to miss
+  // entirely — and these three share one daily points pool, so they get read together.
   { key: 'Clash',        label: 'gToon Clash' },
-  { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'TKO',          label: 'TKO' },
+  { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' },
+  { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
   { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
@@ -1631,6 +1700,18 @@ const winballBumperFiles    = ref([null, null, null])
 const uploadingBumper       = ref([false, false, false])
 const winballBumperImagePaths = ref(['', '', ''])
 const loadingClash          = ref(false)
+
+// Ed, Edd n Eddy RPS
+const edRpsPointsPerWin          = ref(0)
+const edRpsRoundSeconds          = ref(15)
+const edRpsWinsNeeded            = ref(4)
+const edRpsMaxRounds             = ref(7)
+const edRpsPairDailyAwardLimit   = ref(2)
+const loadingEdRps               = ref(false)
+// Non-empty when the settings could not be read — almost always a database that hasn't had
+// the Ed, Edd n Eddy RPS migration applied yet. Surfaced on the tab so the values shown are
+// never mistaken for the saved ones.
+const edRpsConfigError           = ref('')
 const loadingTkoConfig      = ref(false)
 
 const winballBumperGeometry = ref([
@@ -1934,6 +2015,10 @@ async function loadSettings() {
   gameTileImages.value.flappy       = g.gameTileFlappyImagePath       || ''
   gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
   gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
+  // blackjack was missing here, so its tile always rendered as "not set" in this panel even
+  // when one was uploaded.
+  gameTileImages.value.blackjack    = g.gameTileBlackjackImagePath    || ''
+  gameTileImages.value.edrps        = g.gameTileEdrpsImagePath        || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -2000,6 +2085,24 @@ async function loadSettings() {
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
+
+  // Guarded, unlike the fetches around it. loadSettings() is one unbroken await chain with no
+  // try/catch at the call site, so any single rejection silently abandons every config after
+  // it — those tabs then render defaults, and saving one writes the defaults over real values.
+  // This is the newest game, so it is the one whose columns may not exist yet on an
+  // environment that hasn't run the migration; it must not be able to take the other nine
+  // games' settings down with it.
+  try {
+    const er = await $fetch('/api/admin/game-config?gameName=EdRps')
+    edRpsPointsPerWin.value        = er.pointsPerWin ?? 0
+    edRpsRoundSeconds.value        = er.edRpsRoundSeconds ?? 15
+    edRpsWinsNeeded.value          = er.edRpsWinsNeeded ?? 4
+    edRpsMaxRounds.value           = er.edRpsMaxRounds ?? 7
+    edRpsPairDailyAwardLimit.value = er.edRpsPairDailyAwardLimit ?? 2
+    edRpsConfigError.value = ''
+  } catch (e) {
+    edRpsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
+  }
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
@@ -2389,6 +2492,30 @@ async function saveClashConfig() {
   }
 }
 
+async function saveEdRpsConfig() {
+  loadingEdRps.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                 'EdRps',
+        pointsPerWin:             edRpsPointsPerWin.value,
+        edRpsRoundSeconds:        edRpsRoundSeconds.value,
+        edRpsWinsNeeded:          edRpsWinsNeeded.value,
+        edRpsMaxRounds:           edRpsMaxRounds.value,
+        edRpsPairDailyAwardLimit: edRpsPairDailyAwardLimit.value,
+        dailyPointLimit:          globalDailyPointLimit.value
+      }
+    })
+    toastMessage.value = 'Ed, Edd n Eddy RPS settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    toastMessage.value = e?.data?.statusMessage || 'Error saving Ed, Edd n Eddy RPS settings'
+    toastType.value = 'error'
+  } finally {
+    loadingEdRps.value = false
+  }
+}
+
 async function saveTkoConfig() {
   loadingTkoConfig.value = true; toastMessage.value = ''
   try {
@@ -2421,11 +2548,12 @@ const gameTileSlots = [
   { slot: 'guessctoon',   label: 'Guess that cToon!' },
   { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
   { slot: 'flappy',       label: 'Flappy Powerpuff' },
-  { slot: 'blackjack',    label: 'ReOrbit Blackjack' }
+  { slot: 'blackjack',    label: 'ReOrbit Blackjack' },
+  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
