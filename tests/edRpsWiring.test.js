@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-import { clampConfig, compareHands, CHARACTERS, CHARACTER_IDS, isHand, HANDS } from '../lib/edRps.js'
+import {
+  clampConfig, compareHands, CHARACTERS, CHARACTER_IDS, isHand, HANDS, HAND_ART, ROUND_BREAK_MS
+} from '../lib/edRps.js'
 import { COMBAT_POOL_GAME_NAMES } from '../server/utils/gamePoints.js'
 
 // Adding a game to this codebase means repeating two strings across a handful of files that
@@ -168,6 +170,49 @@ test('config clamping keeps a match finishable no matter what an admin saves', (
   const dflt = clampConfig({})
   assert.equal(dflt.winsNeeded, 4)
   assert.equal(dflt.maxRounds, 7)
+})
+
+test('each hand has art on disk, indexed to match HANDS', () => {
+  assert.equal(HAND_ART.length, HANDS.length, 'HAND_ART and HANDS have drifted out of step')
+  for (const [i, hand] of HAND_ART.entries()) {
+    // The index IS the wire value, so a reordering here silently draws the wrong hand for a
+    // throw rather than failing.
+    assert.ok(hand.art.includes(HANDS[i]), `HAND_ART[${i}] is "${hand.art}" but HANDS[${i}] is "${HANDS[i]}"`)
+    assert.doesNotThrow(
+      () => readFileSync(join(root, 'public', hand.art)),
+      `${HANDS[i]} art missing at public${hand.art}`
+    )
+    assert.ok(hand.width > 0 && hand.height > 0, `${HANDS[i]} art has no intrinsic dimensions`)
+  }
+})
+
+test('the throw UI does not depend on emoji glyphs', () => {
+  // Emoji are a font, not a guarantee. The game shipped with ✊/✋/✌️ and they rendered as
+  // nothing in a real match on a device without the coverage — the throws were invisible.
+  // Everything load-bearing in the match UI is an image or a CSS shape now.
+  const page = read('pages/newsite/edrps.vue')
+  const templateEnd = page.indexOf('</template>')
+  const template = page.slice(0, templateEnd)
+  const emoji = template.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || []
+  assert.deepEqual(
+    emoji, [],
+    `the match template still contains emoji (${emoji.join(' ')}) — use art or a CSS shape`
+  )
+})
+
+test('the round-result beat is shared by both sides', () => {
+  assert.ok(ROUND_BREAK_MS >= 1500, 'the pause is too short to read the round result')
+  // The server owns the pause between rounds; the client holds its match-over panel for the
+  // same span. Hard-coding either separately lets them drift, and the final round's result
+  // then either flashes past or lingers after the next round has already started.
+  assert.ok(
+    read('server/utils/edRpsRuntime.js').includes('ROUND_BREAK_MS'),
+    'the server does not use the shared round-break constant'
+  )
+  assert.ok(
+    read('pages/newsite/edrps.vue').includes('ROUND_BREAK_MS'),
+    'the page does not use the shared round-break constant'
+  )
 })
 
 test('every character has art on disk and a full set of reaction lines', () => {
