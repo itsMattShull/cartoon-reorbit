@@ -141,7 +141,7 @@ export default defineEventHandler(async (event) => {
   if (sets.length) ctoonWhere.set = { in: sets }
   if (gtoonsOnly) ctoonWhere.isGtoon = true
   if (series.length) ctoonWhere.series = { in: series }
-  if (rarities.length) ctoonWhere.rarity = { in: rarities }
+  if (rarities.length) ctoonWhere.rarity = { in: rarities.map(toTitleCase) }
   if (search) {
     const characterValues = buildCharacterMatches(search)
     ctoonWhere.OR = [
