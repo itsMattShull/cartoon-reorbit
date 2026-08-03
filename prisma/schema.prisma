@@ -470,12 +470,12 @@ model User {
 
   // Admin change logs (inverse)
   adminChangeLogs         AdminChangeLog[]
-  targetedAdminChangeLogs AdminChangeLog[] @relation("AdminChangeLogTarget")
+  targetedAdminChangeLogs AdminChangeLog[]    @relation("AdminChangeLogTarget")
   lottoUser               LottoUser?
-  lottoLogs       LottoLog[]
+  lottoLogs               LottoLog[]
   // Achievements back‑relation
-  achievements    AchievementUser[]
-  dailyActivities UserDailyActivity[]
+  achievements            AchievementUser[]
+  dailyActivities         UserDailyActivity[]
 
   ctoonSuggestions CtoonUserSuggestion[]
 
@@ -532,6 +532,9 @@ model User {
   // Flappy Powerpuff
   flappyPowerpuffScores FlappyPowerpuffScore[]
   flappyPowerpuffPlays  FlappyPowerpuffPlay[]
+
+  // ReOrbit Blackjack
+  blackjackSessions BlackjackSession[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
@@ -1056,11 +1059,11 @@ model GameConfig {
   // Plays are unlimited (like Winball); this caps how many per day actually COUNT toward
   // points and the leaderboard. Runs past the cap are playable but purely for practice.
   guessCtoonScoredPlaysPerPeriod Int @default(3)
-  guessCtoonPointsPerGame       Int @default(50)
-  guessCtoonSecondsPerQuestion  Int @default(12)
-  guessCtoonChoices             Int @default(4)
-  guessCtoonMaxQuestions        Int @default(25)
-  guessCtoonMinStreakForPoints  Int @default(3)
+  guessCtoonPointsPerGame        Int @default(50)
+  guessCtoonSecondsPerQuestion   Int @default(12)
+  guessCtoonChoices              Int @default(4)
+  guessCtoonMaxQuestions         Int @default(25)
+  guessCtoonMinStreakForPoints   Int @default(3)
 
   // — Operation A.S.T.E.R.O.I.D. settings —
   // `asteroidRankedPlaysPerPeriod` is the number of daily runs that COUNT: plays are unlimited,
@@ -1150,40 +1153,58 @@ model GameConfig {
   flappyButtercupImagePath String?
   flappyCityImagePath      String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @default(now()) @updatedAt
+  // — ReOrbit Blackjack —
+  // Every value here is clamped again by normalizeBlackjackConfig() in
+  // server/utils/blackjackEngine.js, which is the source of truth for the bounds; the
+  // validation table in server/api/admin/game-config.post.js mirrors them.
+  blackjackDailyBuyInLimit  Int?     @default(300) // points a player may convert to chips per day
+  blackjackDailyWinLimit    Int?     @default(900) // net winnings per day before an auto cash-out
+  blackjackMinBet           Int?     @default(10)
+  blackjackMaxBet           Int?     @default(100)
+  blackjackPracticeStack    Int?     @default(1000) // free chips handed out in practice mode
+  blackjackDeckCount        Int?     @default(6)
+  // 3:2 as two integers, never a float — `bet * 1.5` on an odd bet mints or destroys half a
+  // chip, and every other points value in this app is an Int.
+  blackjackPayoutNum        Int?     @default(3)
+  blackjackPayoutDen        Int?     @default(2)
+  blackjackDealerHitsSoft17 Boolean? @default(false)
+  blackjackAllowDouble      Boolean? @default(true)
+  blackjackAllowSplit       Boolean? @default(true)
+  blackjackAllowInsurance   Boolean? @default(true)
 }
 
 model GlobalGameConfig {
-  id                             String   @id @default(uuid())
-  dailyPointLimit                Int      @default(100)
-  tkoDailyPointLimit             Int      @default(250)
-  dailyLoginPoints               Int      @default(500)
-  dailyNewUserPoints             Int      @default(1000)
-  czoneVisitPoints               Int      @default(20)
-  czoneVisitMaxPerDay            Int      @default(10)
-  czoneCount                     Int      @default(3)
-  phashDuplicateThreshold        Int      @default(14)
-  dhashDuplicateThreshold        Int      @default(16)
+  id                             String  @id @default(uuid())
+  dailyPointLimit                Int     @default(100)
+  tkoDailyPointLimit             Int     @default(250)
+  dailyLoginPoints               Int     @default(500)
+  dailyNewUserPoints             Int     @default(1000)
+  czoneVisitPoints               Int     @default(20)
+  czoneVisitMaxPerDay            Int     @default(10)
+  czoneCount                     Int     @default(3)
+  phashDuplicateThreshold        Int     @default(14)
+  dhashDuplicateThreshold        Int     @default(16)
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   // Scavenger Hunt settings
-  scavengerChancePercent         Int      @default(5) // 0–100; 0 disables
-  scavengerCooldownHours         Int      @default(24) // cooldown between completed hunts per user
+  scavengerChancePercent         Int     @default(5) // 0–100; 0 disables
+  scavengerCooldownHours         Int     @default(24) // cooldown between completed hunts per user
   // cToon release settings
-  initialReleasePercent          Int      @default(75)
-  finalReleaseDelayHours         Int      @default(12)
-  featuredAuctionHours           Json     @default("[]") // int[] of hours 0–23 CST to fire
-  featuredAuctionIntervalDays    Int      @default(1) // fire every N days
-  featuredAuctionsPerSlot        Int      @default(1) // auctions created per slot
+  initialReleasePercent          Int     @default(75)
+  finalReleaseDelayHours         Int     @default(12)
+  featuredAuctionHours           Json    @default("[]") // int[] of hours 0–23 CST to fire
+  featuredAuctionIntervalDays    Int     @default(1) // fire every N days
+  featuredAuctionsPerSlot        Int     @default(1) // auctions created per slot
   featuredAuctionLastFiredSlot   String? // idempotency key e.g. "2026-03-30-08"
-  cmartHalfPriceEnabled          Boolean  @default(false) // halves cToon and pack prices in cMart
+  cmartHalfPriceEnabled          Boolean @default(false) // halves cToon and pack prices in cMart
   // Pack price decay settings
-  packPriceDecayAmount           Int      @default(100) // points to drop per decay period
-  packPriceDecayDays             Int      @default(7) // days between each price drop
-  packPriceFloor                 Int      @default(700) // minimum price after decay
-  packMaxDefaultBuysPerUser      Int      @default(5) // default maxBuysPerUser set on new packs
+  packPriceDecayAmount           Int     @default(100) // points to drop per decay period
+  packPriceDecayDays             Int     @default(7) // days between each price drop
+  packPriceFloor                 Int     @default(700) // minimum price after decay
+  packMaxDefaultBuysPerUser      Int     @default(5) // default maxBuysPerUser set on new packs
   // Per-rarity time-based purchase limits: { "Common": { "count": 5, "windowDays": null }, ... }
   // windowDays null = full release window (releaseDate → mintEndDate)
   timeBasedPurchaseLimits        Json?
@@ -1203,21 +1224,22 @@ model GlobalGameConfig {
   gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
 
-  gameTileFlappyImagePath        String?
+  gameTileFlappyImagePath    String?
+  gameTileBlackjackImagePath String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
   // /admin/dissolve-queue.
-  featuredDissolveRarities       Json     @default("[]")
-  featuredDissolveSeries         Json     @default("[]")
-  featuredDissolveSets           Json     @default("[]")
+  featuredDissolveRarities   Json     @default("[]")
+  featuredDissolveSeries     Json     @default("[]")
+  featuredDissolveSets       Json     @default("[]")
   // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
   // faviconVersion is bumped on every upload and appended as a cache-busting
   // query string to every icon URL rendered in pages/index.vue's useHead.
-  faviconVersion                 BigInt?
-  faviconSourcePath              String? // original master upload, retained for re-generation/audit
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  faviconVersion             BigInt?
+  faviconSourcePath          String? // original master upload, retained for re-generation/audit
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 }
 
 model WishlistItem {
@@ -1420,10 +1442,10 @@ enum EconomySource {
 }
 
 model CtoonPriceDaily {
-  id      String        @id @default(uuid())
-  ctoonId String
-  source  EconomySource
-  date    DateTime // truncated to day (UTC)
+  id       String        @id @default(uuid())
+  ctoonId  String
+  source   EconomySource
+  date     DateTime // truncated to day (UTC)
   // NULL means "this activity happened but couldn't be priced" — a trade where
   // nothing involved had a known reference value. Volume is still recorded so
   // the Economy page's activity rankings aren't biased toward cToons that
@@ -1913,6 +1935,22 @@ model AuctionOnlyErrorLog {
   createdAt     DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Generic error log for background cron/worker jobs (server/cron/sync-guild-members.js and
+// similar). Distinct from AuctionOnlyErrorLog, which predates this and stays scoped to the
+// admin "Manage Auction Only" page's own error/history modal.
+model CronErrorLog {
+  id          String    @id @default(uuid())
+  job         String // job name, e.g. "syncGuildMembers", "startDueAuctions", "process"
+  summary     String // concise one-line message, for the collapsed list view
+  message     String // full stack trace, for the expanded detail view
+  dismissed   Boolean   @default(false)
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([dismissed])
 }
 
 model DissolveAuctionQueue {
@@ -2992,16 +3030,16 @@ model ReOrbitMemoryPlay {
 // positive costs a player their leaderboard slot and nothing else.
 
 model GuessCtoonScore {
-  id              String   @id @default(uuid())
-  userId          String
-  streak          Int
+  id             String   @id @default(uuid())
+  userId         String
+  streak         Int
   // False for runs played past the daily scored-play cap: kept so a player can see their
   // practice history, but excluded from the leaderboard and never worth points.
-  counted         Boolean  @default(true)
-  suspicious      Boolean  @default(false)
-  medianAnswerMs  Int?
-  stdDevAnswerMs  Int?
-  createdAt       DateTime @default(now())
+  counted        Boolean  @default(true)
+  suspicious     Boolean  @default(false)
+  medianAnswerMs Int?
+  stdDevAnswerMs Int?
+  createdAt      DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -3111,4 +3149,78 @@ model AsteroidPlay {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+// ── ReOrbit Blackjack ─────────────────────────────────────────────────────────
+//
+// The only durable table this game needs. It holds MONEY state and nothing else: the live
+// hand — the shuffled cards, the dealer's hole card, whose turn it is — lives in Redis under
+// server/utils/blackjackRuntime.js and is rebuilt from scratch if it is ever lost.
+//
+// That split is deliberate on both axes:
+//
+//  * Nothing secret is stored here, so no careless `findUnique` on this model can leak the
+//    hole card or the undealt cards. There is no column to forget to strip.
+//  * A row is written once per hand and once per money movement, not once per tap. Blackjack
+//    is a per-interaction game like Guess that cToon (see server/utils/hotPaths.js), and a
+//    jsonb shoe rewritten on every hit would re-TOAST several KB per click.
+//
+// There is deliberately NO per-hand table. AsteroidPlay's comment in this file explains the
+// principle — rows that nothing queries must not be allowed to grow without bound — and
+// blackjack is the only game here with no cap on hands played, so a row per hand would make it
+// the largest table in the schema to serve no query. Per-day totals are aggregated from these
+// session rows, and money is audited through PointsLog.
+enum BlackjackMode {
+  practice
+  gamble
+}
+
+model BlackjackSession {
+  id     String        @id @default(uuid())
+  userId String
+  mode   BlackjackMode
+  status String        @default("active") // active | cashed_out | closed
+
+  // Chips NOT at risk. A wager is moved out of `chips` and into `wagered` the moment it is
+  // placed, so the same chip is never simultaneously in the stack and on the felt — which is
+  // what stops a cash-out fired mid-hand from banking money that is already in play.
+  chips   Int @default(0)
+  wagered Int @default(0)
+
+  totalBuyIn Int @default(0) // points converted to chips over this session's life
+  cashedOut  Int @default(0) // chips converted back to points
+
+  // 'live' while a hand is in progress. Cash-out requires 'idle', enforced in the WHERE clause
+  // of the conditional UPDATE rather than by reading and then deciding.
+  handPhase String @default("idle")
+
+  // Optimistic-concurrency counter. Every mutation is an UPDATE ... WHERE version = $expected
+  // whose row count is checked, so a double-submitted action loses instead of applying twice.
+  version Int @default(0)
+
+  // Set to "<userId>:<mode>" while active and NULL once closed. The unique constraint is what
+  // makes "two tabs, two bankrolls" impossible at the database level instead of relying on an
+  // expiring Redis lock. Prisma cannot express a partial unique index, so this sentinel column
+  // is the portable form of `UNIQUE (userId) WHERE status = 'active'`.
+  activeKey String? @unique
+
+  // Config frozen at buy-in, so an admin editing limits mid-session cannot change the terms of
+  // a session already holding a player's points.
+  rules Json
+
+  // The 8pm-CST daily window this session belongs to. A session found with an older window is
+  // settled on the next request — see settleStaleSessions() — which is how abandoned chips get
+  // returned without depending on a cron process being deployed.
+  windowStart DateTime
+
+  lastActionAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  // Daily buy-in and net-winnings totals are aggregated over this index.
+  @@index([userId, createdAt])
+  // Serves the stale-session sweeper, which filters on status alone.
+  @@index([status, windowStart])
 }

@@ -200,6 +200,10 @@ export default defineEventHandler(async (event) => {
             flappyMaxSessionSeconds: 900
           }
         })
+      } else if (gameName === 'Blackjack') {
+        // Every blackjack column carries a schema default, so the row only needs its name —
+        // the same shape the OperationAsteroid branch above uses.
+        config = await db.gameConfig.create({ data: { gameName } })
       } else {
         throw createError({
           statusCode: 400,

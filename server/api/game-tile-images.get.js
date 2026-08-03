@@ -15,7 +15,8 @@ export default defineEventHandler(async () => {
       gameTileReorbitmemoryImagePath: true,
       gameTileGuessctoonImagePath:   true,
       gameTileAsteroidImagePath:     true,
-      gameTileFlappyImagePath:       true
+      gameTileFlappyImagePath:       true,
+      gameTileBlackjackImagePath:    true
     }
   })
 
@@ -30,6 +31,7 @@ export default defineEventHandler(async () => {
     reorbitmemory: cfg?.gameTileReorbitmemoryImagePath ?? null,
     guessctoon:   cfg?.gameTileGuessctoonImagePath    ?? null,
     asteroid:     cfg?.gameTileAsteroidImagePath      ?? null,
-    flappy:       cfg?.gameTileFlappyImagePath        ?? null
+    flappy:       cfg?.gameTileFlappyImagePath        ?? null,
+    blackjack:    cfg?.gameTileBlackjackImagePath     ?? null
   }
 })

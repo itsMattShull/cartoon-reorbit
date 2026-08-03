@@ -13,7 +13,8 @@ const SLOT_FIELD = {
   reorbitmemory: 'gameTileReorbitmemoryImagePath',
   guessctoon:   'gameTileGuessctoonImagePath',
   asteroid:     'gameTileAsteroidImagePath',
-  flappy:       'gameTileFlappyImagePath'
+  flappy:       'gameTileFlappyImagePath',
+  blackjack:    'gameTileBlackjackImagePath'
 }
 
 export default defineEventHandler(async (event) => {

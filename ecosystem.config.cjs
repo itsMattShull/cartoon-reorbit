@@ -16,6 +16,7 @@
  *   worker-dissolve               – BullMQ worker: account dissolution
  *   worker-dissolve-auction-launch – BullMQ worker: dissolve auction launch
  *   worker-achieve                – BullMQ worker: daily achievements
+ *   worker-content-analyzer       – BullMQ worker: survey content analysis
  *   guild-checker                 – Cron: Discord guild member sync
  *
  * Workers run as single fork-mode instances to prevent double-processing of jobs.
@@ -148,6 +149,16 @@ module.exports = {
     {
       name:      'worker-achieve',
       script:    'server/workers/achievements.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
+    // ── BullMQ worker: survey content analysis ─────────────────────────────
+    {
+      name:      'worker-content-analyzer',
+      script:    'server/workers/content-analyzer.worker.js',
       exec_mode: 'fork',
       instances: 1,
       env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },

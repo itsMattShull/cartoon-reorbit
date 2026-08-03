@@ -56,6 +56,10 @@
         <img v-if="tiles.flappy" :src="tiles.flappy" alt="Flappy Powerpuff!" class="tile-img" />
         <span v-else>Flappy Powerpuff!</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/blackjack" class="quadrant quadrant--blackjack">
+        <img v-if="tiles.blackjack" :src="tiles.blackjack" alt="ReOrbit Blackjack" class="tile-img" />
+        <span v-else>ReOrbit Blackjack</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -95,9 +99,9 @@ const tiles = computed(() => tileData.value ?? {})
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  /* 11 tiles in 2 columns needs 6 rows — bump this when a game is added. */
+  /* 12 tiles in 2 columns needs 6 rows — bump this when a game is added. */
   grid-template-rows: repeat(6, 1fr);
-  /* Belt and braces: an 12th tile would otherwise land in an implicit auto-height row and
+  /* Belt and braces: a 13th tile would otherwise land in an implicit auto-height row and
      collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
      height. */
   grid-auto-rows: 1fr;
@@ -155,6 +159,7 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--guessctoon    { background: #8a2a5a; }
 .quadrant--asteroid      { background: #2b2062; }
 .quadrant--flappy        { background: #2f6f9e; }
+.quadrant--blackjack     { background: #17171a; }
 
 /* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
    scaled and brightened. */
