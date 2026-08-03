@@ -105,8 +105,17 @@
       <div class="rps-scene">
         <div class="rps-fighter rps-fighter--me">
           <p v-if="myLine" class="rps-bubble">{{ myLine }}</p>
-          <div class="rps-throw" :class="throwClass(revealed?.you)">
-            {{ revealed ? HAND_EMOJI[revealed.you] : (iThrew ? '🔒' : '❔') }}
+          <div class="rps-throw" :class="{ 'is-shown': revealed }">
+            <img
+              v-if="revealed"
+              :src="HAND_ART[revealed.you].art" :alt="HANDS[revealed.you]"
+              :width="HAND_ART[revealed.you].width" :height="HAND_ART[revealed.you].height"
+              class="rps-throw-art"
+            />
+            <!-- The waiting and committed markers are CSS shapes rather than glyphs, for the
+                 same reason the hands are images now: a font that lacks the character draws
+                 nothing at all, and there is no fallback to notice. -->
+            <span v-else class="rps-pending" :class="{ 'is-locked': iThrew }" aria-hidden="true"></span>
           </div>
           <img
             :src="myChar.art" :alt="myChar.name"
@@ -117,8 +126,14 @@
 
         <div class="rps-fighter rps-fighter--opp">
           <p v-if="oppLine" class="rps-bubble rps-bubble--right">{{ oppLine }}</p>
-          <div class="rps-throw" :class="throwClass(revealed?.opponent)">
-            {{ revealed ? HAND_EMOJI[revealed.opponent] : (oppThrew ? '🔒' : '❔') }}
+          <div class="rps-throw" :class="{ 'is-shown': revealed }">
+            <img
+              v-if="revealed"
+              :src="HAND_ART[revealed.opponent].art" :alt="HANDS[revealed.opponent]"
+              :width="HAND_ART[revealed.opponent].width" :height="HAND_ART[revealed.opponent].height"
+              class="rps-throw-art rps-throw-art--flip"
+            />
+            <span v-else class="rps-pending" :class="{ 'is-locked': oppThrew }" aria-hidden="true"></span>
           </div>
           <img
             :src="oppChar.art" :alt="oppChar.name"
@@ -156,7 +171,7 @@
 
       <div class="rps-controls">
         <button
-          v-for="(emoji, i) in HAND_EMOJI"
+          v-for="(hand, i) in HAND_ART"
           :key="i"
           type="button"
           class="rps-hand"
@@ -164,7 +179,12 @@
           :disabled="!canThrow"
           @click="throwHand(i)"
         >
-          <span class="rps-hand-emoji" aria-hidden="true">{{ emoji }}</span>
+          <!-- pointer-events off so a tap landing on the art still reaches the button. -->
+          <img
+            :src="hand.art" alt=""
+            :width="hand.width" :height="hand.height"
+            class="rps-hand-art" aria-hidden="true"
+          />
           <span class="rps-hand-label">{{ HANDS[i] }}</span>
         </button>
       </div>
@@ -180,7 +200,7 @@
          the fixed positioning isn't captured by .site-container's transform. -->
     <Teleport to="body">
       <div v-if="blockedLandscape" class="rps-rotate">
-        <p class="rps-rotate-icon" aria-hidden="true">📱</p>
+        <span class="rps-rotate-icon" aria-hidden="true"></span>
         <p class="rps-rotate-text">Turn your phone upright to play</p>
       </div>
     </Teleport>
@@ -190,7 +210,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { io as ioClient } from 'socket.io-client'
-import { CHARACTERS, HANDS, characterById, compareHands } from '~/lib/edRps'
+import { CHARACTERS, HANDS, HAND_ART, ROUND_BREAK_MS, characterById, compareHands } from '~/lib/edRps'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -223,7 +243,6 @@ clearSidebarMiddle()
 
 const runtime = useRuntimeConfig()
 
-const HAND_EMOJI = ['✊', '✋', '✌️']
 const SUPPRESS_COPY = {
   cap_exhausted: "You've hit today's PvP points cap. Still counts as a win!",
   pair_limit: "You've already traded points with this player today.",
@@ -274,14 +293,13 @@ const secondsLeft = computed(() => {
 })
 const canThrow = computed(() => !over.value && !iThrew.value && !revealed.value && deadlineAt.value > 0)
 
-function throwClass(hand) {
-  return hand === null || hand === undefined ? '' : 'is-shown'
-}
-
 /* ── Countdown ────────────────────────────────────────────────────────────────────────
  * One interval mutating one ref. The server sends an absolute deadline once per round and
  * never ticks — a per-second server broadcast per match is what makes the Clash timer
  * expensive. */
+// Holds the match-over panel back so the final round's result is readable first.
+let matchEndTimer = null
+
 let tickTimer = null
 function startTick() {
   if (tickTimer) return
@@ -363,13 +381,24 @@ function connectSocket() {
 
   socket.on('edrps:matchEnd', (v) => {
     applyView(v)
-    over.value = true
     won.value = v.won
     endReason.value = v.endReason
     pointsAwarded.value = v.pointsAwarded || 0
     suppressReason.value = v.suppressReason || null
     deadlineAt.value = 0
     stopTick()
+
+    // The server ends a decided match on the same tick it reveals the final round, so the
+    // panel is held back for the same beat the server puts between ordinary rounds — long
+    // enough to read who took the last one. A forfeit or a sweep has no round result behind
+    // it, so those show immediately.
+    const holdForResult = v.endReason === 'natural' && !!revealed.value
+    if (matchEndTimer) clearTimeout(matchEndTimer)
+    if (holdForResult) {
+      matchEndTimer = setTimeout(() => { over.value = true }, ROUND_BREAK_MS)
+    } else {
+      over.value = true
+    }
   })
 
   socket.on('edrps:opponentDropped', () => {
@@ -391,7 +420,12 @@ function showReveal(r) {
   iThrew.value = false
   oppThrew.value = false
   bannerKind.value = r.result
-  banner.value = r.result === 'tie' ? 'Tie — throw again!' : (r.result === 'win' ? 'You win the round!' : 'You lose the round.')
+  // Names the winner rather than saying "you win": with two usernames already on the HUD, the
+  // name is what makes the result scannable at a glance from either side of the match.
+  const roundNo = r.n ?? roundNumber.value
+  banner.value = r.result === 'tie'
+    ? `Round ${roundNo} — tie! Throw again`
+    : `Round ${roundNo} winner ${r.result === 'win' ? me.value.username : opp.value.username}!`
   const mine = myChar.value.lines
   const theirs = oppChar.value.lines
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
@@ -429,6 +463,7 @@ function leaveRoom() {
 }
 
 function resetMatchUi() {
+  if (matchEndTimer) { clearTimeout(matchEndTimer); matchEndTimer = null }
   over.value = false
   won.value = false
   endReason.value = 'natural'
@@ -542,7 +577,7 @@ function cpuResolve(myHand) {
       roundNumber.value += 1
       cpuArmRound()
     }
-  }, 1800)
+  }, ROUND_BREAK_MS)
 }
 
 /* ── Orientation ──────────────────────────────────────────────────────────────────── */
@@ -587,6 +622,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopTick()
   if (cpuTimer) clearTimeout(cpuTimer)
+  if (matchEndTimer) clearTimeout(matchEndTimer)
   if (orientationHandler) {
     window.removeEventListener('orientationchange', orientationHandler)
     window.removeEventListener('resize', orientationHandler)
@@ -925,12 +961,59 @@ html.edrps-page body ::-moz-selection { background: transparent; }
 .rps-art--flip { transform: scaleX(-1); }
 
 .rps-throw {
-  font-size: clamp(28px, 9vw, 52px);
-  line-height: 1;
-  opacity: 0.55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: clamp(34px, 11vw, 62px);
+  opacity: 0.75;
   transition: transform 0.18s ease, opacity 0.18s ease;
 }
-.rps-throw.is-shown { opacity: 1; transform: scale(1.18); }
+.rps-throw.is-shown { opacity: 1; transform: scale(1.1); }
+
+.rps-throw-art {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+/* Mirrored so the two hands face each other across the cul-de-sac. */
+.rps-throw-art--flip { transform: scaleX(-1); }
+
+/* Waiting-to-throw marker. Drawn, not typed: this replaced ❔/🔒, which rendered as nothing
+   on a device whose font lacked them — the same failure that hid the hands themselves. */
+.rps-pending {
+  display: block;
+  width: clamp(20px, 6vw, 30px);
+  height: clamp(20px, 6vw, 30px);
+  border: 3px dashed #10243a;
+  border-radius: 50%;
+  /* Opaque, not tinted: at 45% over the cul-de-sac's pale sky the waiting marker was
+     effectively invisible, so a player could not tell "opponent is thinking" from
+     "nothing is happening". */
+  background: #fffdf2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+/* Committed: solid, with a checkmark built from two borders on a rotated box. */
+.rps-pending.is-locked {
+  border-style: solid;
+  border-color: #10243a;
+  background: #4caf50;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.rps-pending.is-locked::after {
+  content: '';
+  position: absolute;
+  left: 32%;
+  top: 14%;
+  width: 26%;
+  height: 52%;
+  border: solid #fff;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
 
 /* Absolutely positioned so a reaction line can never add layout height — otherwise the throw
    buttons reflow under the player's thumb the instant a round resolves. */
@@ -966,7 +1049,12 @@ html.edrps-page body ::-moz-selection { background: transparent; }
     -2px -2px 0 #000, 0 -2px 0 #000, 2px -2px 0 #000,
     -2px 0 0 #000, 2px 0 0 #000,
     -2px 2px 0 #000, 0 2px 0 #000, 2px 2px 0 #000;
-  white-space: nowrap;
+  /* Wraps rather than nowrap: the banner names the round winner, and a long username on one
+     line would be clipped by the scene's overflow with no way to tell it had been. */
+  max-width: 92%;
+  text-align: center;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 .rps-banner.is-win { color: #7dff6b; }
@@ -1030,7 +1118,14 @@ html.edrps-page body ::-moz-selection { background: transparent; }
 .rps-hand:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #10243a; }
 .rps-hand.is-picked { background: #fff33b; }
 .rps-hand:disabled { opacity: 0.45; cursor: not-allowed; }
-.rps-hand-emoji { font-size: clamp(22px, 7vw, 32px); line-height: 1; pointer-events: none; }
+.rps-hand-art {
+  height: clamp(24px, 7vw, 34px);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  /* Without this a tap that lands on the art is swallowed and the throw never registers. */
+  pointer-events: none;
+}
 .rps-hand-label {
   font-size: 10px;
   font-weight: 900;
@@ -1101,7 +1196,7 @@ html.edrps-page body ::-moz-selection { background: transparent; }
   .rps-banner { display: none; }
   .rps-bubble { font-size: 10px; padding: 3px 6px; }
   .rps-art { height: min(78%, 150px); }
-  .rps-throw { font-size: clamp(20px, 5vw, 30px); }
+  .rps-throw { height: clamp(22px, 6vw, 34px); }
 
   .rps-lobby { padding-top: 4px; }
   .rps-title { font-size: clamp(18px, 4vw, 26px); margin-bottom: 4px; }
@@ -1124,7 +1219,28 @@ html.edrps-page body ::-moz-selection { background: transparent; }
   text-align: center;
   padding: 24px;
 }
-.rps-rotate-icon { font-size: 56px; margin: 0; animation: rps-tilt 1.6s ease-in-out infinite; }
+/* A drawn phone rather than 📱, on the same reasoning as the hands: this screen exists to be
+   understood on an unfamiliar device, which is the worst place to rely on font coverage. */
+.rps-rotate-icon {
+  display: block;
+  width: 44px;
+  height: 74px;
+  border: 4px solid #fff33b;
+  border-radius: 8px;
+  position: relative;
+  animation: rps-tilt 1.6s ease-in-out infinite;
+}
+.rps-rotate-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: #fff33b;
+  transform: translateX(-50%);
+}
 .rps-rotate-text { margin: 0; font-size: 20px; font-weight: 900; font-family: 'Trebuchet MS', sans-serif; }
 @keyframes rps-tilt {
   0%, 100% { transform: rotate(-12deg); }

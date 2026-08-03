@@ -29,7 +29,7 @@ import { getRedis } from './redis.js'
 import { encryptIp } from './ip-encrypt.js'
 import { getDailyWindowStart } from './centralTime.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
-import { compareHands, isHand, isCharacterId, clampConfig, HANDS } from '../../lib/edRps.js'
+import { compareHands, isHand, isCharacterId, clampConfig, HANDS, ROUND_BREAK_MS } from '../../lib/edRps.js'
 
 const GAME_NAME = 'EdRps'
 const POINTS_METHOD = 'Game - Ed, Edd n Eddy RPS'
@@ -352,14 +352,27 @@ async function resolveRound(io, match, roundNumber, fromTimer) {
 
   if (decided || exhausted) {
     const winnerIdx = match.scores[0] > match.scores[1] ? 0 : 1
+    // Ended immediately so the points are awarded and the row written without waiting on a
+    // timer that a disconnect could orphan. The client holds the match-over panel back for
+    // ROUND_BREAK_MS so the final round's result is still readable underneath it.
     await endMatch(io, match, { winnerIdx, endReason: 'natural' })
     return
   }
+
+  // A beat before the next round is armed, so the round result is something you read rather
+  // than something you catch. Without it the next round's timer starts on the same tick as
+  // the reveal, and the result is gone before the losing player has looked up.
+  //
   // A tie at the round ceiling replays rather than ending in a draw: the match has to produce
   // a winner, and best-of-7 can only be level here if ties consumed rounds.
-  match.currentRound = r.number + 1
-  match.round = newRound(match.currentRound)
-  armRound(io, match)
+  match.intermission = true
+  match.timer = setTimeout(() => {
+    if (match.ending) return
+    match.intermission = false
+    match.currentRound = r.number + 1
+    match.round = newRound(match.currentRound)
+    armRound(io, match)
+  }, ROUND_BREAK_MS)
 }
 
 function newRound(n) {
@@ -578,6 +591,8 @@ async function startMatch(io, room, joiner) {
     round: newRound(1),
     history: [],
     ending: false,
+    // True during the pause between a round resolving and the next one being armed.
+    intermission: false,
     timer: null,
     graceTimers: {},
     startedAt: Date.now(),
