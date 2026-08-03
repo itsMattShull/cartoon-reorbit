@@ -74,7 +74,12 @@
             >
               <div v-if="s.isWinner" class="cc-winner-banner">🏆 Winner</div>
               <div class="cc-card-img-wrap">
-                <img :src="s.imageUrl" class="cc-card-img" alt="cZone submission" />
+                <img
+                  :src="s.imageUrl"
+                  class="cc-card-img"
+                  alt="cZone submission"
+                  @click="openLightbox(s.imageUrl)"
+                />
               </div>
               <div class="cc-card-foot">
                 <span v-if="contest.distributedAt" class="cc-card-user">{{ s.username }}</span>
@@ -192,6 +197,13 @@
       </div>
     </Teleport>
 
+    <!-- ── Image lightbox ── -->
+    <Teleport to="body">
+      <div v-if="lightboxImage" class="cc-lightbox" @click.self="closeLightbox">
+        <button class="cc-lightbox-close" @click="closeLightbox" aria-label="Close">✕</button>
+        <img :src="lightboxImage" class="cc-lightbox-img" alt="cZone submission enlarged" @click.stop />
+      </div>
+    </Teleport>
 
   </div>
 </template>
@@ -344,6 +356,11 @@ async function castVote(submission) {
 // ── Prizes modal ──────────────────────────────────────────────
 const showPrizes = ref(false)
 function hasPrize(p) { return p?.points || p?.ctoons?.length || p?.backgrounds?.length }
+
+// ── Image lightbox ────────────────────────────────────────────
+const lightboxImage = ref(null)
+function openLightbox(url) { lightboxImage.value = url }
+function closeLightbox() { lightboxImage.value = null }
 
 // ── Submit modal ──────────────────────────────────────────────
 const submitOpen      = ref(false)
@@ -577,7 +594,7 @@ async function doSubmit() {
 }
 
 .cc-card-img-wrap { aspect-ratio: 800/600; width: 100%; overflow: hidden; position: relative; }
-.cc-card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.cc-card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
 
 .cc-card-foot {
   display: flex;
@@ -668,4 +685,41 @@ async function doSubmit() {
 }
 .cc-select option { background: #1a3a58; }
 .cc-submit-error { font-size: 0.68rem; color: #e07a7a; }
+
+/* Image lightbox */
+.cc-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 1100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.cc-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  cursor: default;
+}
+.cc-lightbox-close {
+  position: fixed;
+  top: 12px; right: 16px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 1.1rem;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.cc-lightbox-close:hover { background: rgba(255,255,255,0.22); }
+@media (max-width: 600px) {
+  .cc-lightbox { padding: 12px; }
+  .cc-lightbox-close { top: 8px; right: 8px; width: 32px; height: 32px; font-size: 1rem; }
+}
 </style>
