@@ -13,10 +13,10 @@ export const AUCTION_CLOSE_DOUBLE_SALE = 'DOUBLE_SALE'
  *
  * Deliberately NOT written as "the current owner is no longer the seller".
  * `creatorId` and the cToon's owner legitimately diverge: when an inactive
- * account is dissolved, sync-guild-members reassigns creatorId on any auction
- * already running to the official account but leaves the cToon with the
- * original user (server/cron/sync-guild-members.js:614-621). Comparing the two
- * would abort those auctions at close.
+ * account is dissolved, server/cron/sync-guild-members.js reassigns creatorId
+ * on any auction already running to the official account but leaves the cToon
+ * with the original user. Comparing the two would abort those auctions at
+ * close.
  */
 export function isConflictingSale(auction, other) {
   if (!other || !auction) return false
