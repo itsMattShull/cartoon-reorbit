@@ -58,9 +58,11 @@ const httpServer = createServer()
 // page on another origin cannot make the browser attach it to this handshake no matter what
 // this list says. The real control is that every handler that acts for a user resolves that
 // user from the cookie itself.
+// The fallback covers dev as well as production, so a deploy that hasn't set the variable
+// still works on either host rather than failing to connect at all.
 const ALLOWED_SOCKET_ORIGINS = (
   process.env.SOCKET_ALLOWED_ORIGINS ||
-  'https://www.cartoonreorbit.com,https://cartoonreorbit.com'
+  'https://www.cartoonreorbit.com,https://cartoonreorbit.com,https://dev.cartoonreorbit.com'
 ).split(',').map(s => s.trim()).filter(Boolean)
 
 const isDevOrigin = (origin) =>

@@ -77,6 +77,41 @@ test('the Games page tile grid has a row for every tile', () => {
   assert.equal(rows, Math.ceil(tiles / 2), `${tiles} tiles need ${Math.ceil(tiles / 2)} grid rows, found ${rows}`)
 })
 
+test('every Manage Games tab has a panel, and EdRps is one of them', () => {
+  const src = read('pages/admin/games.vue')
+
+  const tabsBlock = /const tabs = \[([\s\S]*?)\n\]/.exec(src)?.[1]
+  assert.ok(tabsBlock, 'could not find the tabs array')
+  const keys = [...tabsBlock.matchAll(/key:\s*'([^']+)'/g)].map(m => m[1])
+
+  assert.ok(keys.includes('EdRps'), 'Ed, Edd n Eddy RPS has no tab on the Manage Games page')
+
+  // A tab whose key has no matching panel renders as a blank page rather than an error, so
+  // nothing surfaces the mistake at runtime.
+  for (const key of keys) {
+    assert.ok(
+      src.includes(`activeTab === '${key}'`),
+      `tab "${key}" has no <section v-if="activeTab === '${key}'"> panel`
+    )
+  }
+})
+
+test("the EdRps config load cannot take the other games' settings down with it", () => {
+  const src = read('pages/admin/games.vue')
+  const fetchIdx = src.indexOf("game-config?gameName=EdRps")
+  assert.notEqual(fetchIdx, -1, 'games.vue never loads the EdRps config')
+
+  // loadSettings() is one unbroken await chain with no try/catch at its call site, and this
+  // fetch is not the last link in it. Unguarded, a rejection here — a database that predates
+  // the migration, say — silently abandons every config loaded after it, leaving those tabs
+  // showing defaults that a save would then write over the real values.
+  const before = src.slice(Math.max(0, fetchIdx - 400), fetchIdx)
+  assert.ok(
+    /try\s*\{[^}]*$/.test(before.replace(/\n/g, ' ')) || before.includes('try {'),
+    'the EdRps game-config fetch is not inside a try block'
+  )
+})
+
 test('the leaderboard endpoint the component points at exists', () => {
   const src = read('components/newsite/Leaderboards.vue')
   const match = /key: 'edrps'.*?endpoint: '([^']+)'/.exec(src)

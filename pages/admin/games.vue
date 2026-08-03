@@ -594,6 +594,16 @@
             game engine on read, so a bad number here cannot break a live match.
           </p>
 
+          <div v-if="edRpsConfigError" class="mb-4 p-3 border border-red-300 bg-red-50 rounded">
+            <p class="text-sm font-semibold text-red-800">These settings could not be loaded.</p>
+            <p class="text-xs text-red-700 mt-1">{{ edRpsConfigError }}</p>
+            <p class="text-xs text-red-700 mt-1">
+              The values below are defaults, not what is saved. If this database hasn't had the
+              Ed, Edd n Eddy RPS migration applied yet, run it and reload before saving —
+              saving now would write these defaults.
+            </p>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div>
               <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
@@ -631,7 +641,9 @@
             </div>
           </div>
 
-          <button @click="saveEdRpsConfig" :disabled="loadingEdRps" class="btn-primary">
+          <!-- Disabled while the load is broken: the inputs are showing defaults, so saving
+               would overwrite whatever is actually stored. -->
+          <button @click="saveEdRpsConfig" :disabled="loadingEdRps || !!edRpsConfigError" class="btn-primary">
             <span v-if="!loadingEdRps">Save Ed, Edd n Eddy RPS Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1640,17 +1652,20 @@ definePageMeta({
 const tabs = [
   { key: 'Global',       label: 'Global Settings' },
   { key: 'Winball',      label: 'Winball' },
+  // The three head-to-head games sit together, and ahead of the single-player ones. This strip
+  // scrolls horizontally with its scrollbar hidden, so a 13th tab on the end is easy to miss
+  // entirely — and these three share one daily points pool, so they get read together.
   { key: 'Clash',        label: 'gToon Clash' },
-  { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'TKO',          label: 'TKO' },
+  { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' },
+  { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
   { key: 'ReOrbitMemory', label: 'ReOrbit Memory' },
   { key: 'GuessCtoon',   label: 'Guess that cToon!' },
   { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
   { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' },
-  { key: 'Blackjack',    label: 'ReOrbit Blackjack' },
-  { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' }
+  { key: 'Blackjack',    label: 'ReOrbit Blackjack' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -1693,6 +1708,10 @@ const edRpsWinsNeeded            = ref(4)
 const edRpsMaxRounds             = ref(7)
 const edRpsPairDailyAwardLimit   = ref(2)
 const loadingEdRps               = ref(false)
+// Non-empty when the settings could not be read — almost always a database that hasn't had
+// the Ed, Edd n Eddy RPS migration applied yet. Surfaced on the tab so the values shown are
+// never mistaken for the saved ones.
+const edRpsConfigError           = ref('')
 const loadingTkoConfig      = ref(false)
 
 const winballBumperGeometry = ref([
@@ -2067,12 +2086,23 @@ async function loadSettings() {
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
 
-  const er = await $fetch('/api/admin/game-config?gameName=EdRps')
-  edRpsPointsPerWin.value        = er.pointsPerWin ?? 0
-  edRpsRoundSeconds.value        = er.edRpsRoundSeconds ?? 15
-  edRpsWinsNeeded.value          = er.edRpsWinsNeeded ?? 4
-  edRpsMaxRounds.value           = er.edRpsMaxRounds ?? 7
-  edRpsPairDailyAwardLimit.value = er.edRpsPairDailyAwardLimit ?? 2
+  // Guarded, unlike the fetches around it. loadSettings() is one unbroken await chain with no
+  // try/catch at the call site, so any single rejection silently abandons every config after
+  // it — those tabs then render defaults, and saving one writes the defaults over real values.
+  // This is the newest game, so it is the one whose columns may not exist yet on an
+  // environment that hasn't run the migration; it must not be able to take the other nine
+  // games' settings down with it.
+  try {
+    const er = await $fetch('/api/admin/game-config?gameName=EdRps')
+    edRpsPointsPerWin.value        = er.pointsPerWin ?? 0
+    edRpsRoundSeconds.value        = er.edRpsRoundSeconds ?? 15
+    edRpsWinsNeeded.value          = er.edRpsWinsNeeded ?? 4
+    edRpsMaxRounds.value           = er.edRpsMaxRounds ?? 7
+    edRpsPairDailyAwardLimit.value = er.edRpsPairDailyAwardLimit ?? 2
+    edRpsConfigError.value = ''
+  } catch (e) {
+    edRpsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
+  }
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
