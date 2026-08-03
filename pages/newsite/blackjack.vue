@@ -252,10 +252,19 @@
         </div>
 
         <!-- Out of chips -->
+        <!-- "Below the minimum bet" is not the same as "out of chips": a player sitting on a
+             few chips they cannot bet still has points to collect, and telling them they are
+             out is both wrong and points them away from the one thing left to do. -->
         <div v-if="outOfChips" class="bj-broke">
           <template v-if="isGamble">
-            <span>Out of chips.</span>
-            <button class="bj-link" :disabled="buyInLeft < rules.minBet" @click="openBuyIn">
+            <span v-if="chips > 0">
+              {{ chips.toLocaleString() }} chips left — under the {{ rules.minBet }} minimum bet.
+            </span>
+            <span v-else>Out of chips.</span>
+            <button v-if="chips > 0" class="bj-link" @click="showCashOut = true">
+              Cash out {{ chips.toLocaleString() }}
+            </button>
+            <button v-else class="bj-link" :disabled="buyInLeft < rules.minBet" @click="openBuyIn">
               {{ buyInLeft >= rules.minBet ? `Buy in again (${buyInLeft} left today)` : 'Done for today' }}
             </button>
           </template>
@@ -707,11 +716,11 @@ function applyView (view) {
   if (typeof view.autoCashedOut === 'number') autoCashedOut.value = view.autoCashedOut
 }
 
-async function call (url, body) {
+async function request (url, options) {
   busy.value = true
   error.value = ''
   try {
-    return await $fetch(url, body ? { method: 'POST', body } : {})
+    return await $fetch(url, options)
   } catch (e) {
     error.value = e?.data?.statusMessage || e?.statusMessage || 'Something went wrong. Try again.'
     setTimeout(() => { error.value = '' }, 4000)
@@ -721,8 +730,26 @@ async function call (url, body) {
   }
 }
 
+/**
+ * Calls one of the game's mutating endpoints.
+ *
+ * Always POST, even with nothing to send. Deriving the method from whether a body happened to
+ * be passed meant `call('/cashout')` and `call('/reset')` — which need no arguments — went out
+ * as GETs and never matched their POST-only handlers, so Cash Out and Reset Chips failed for
+ * everyone. A player left holding chips below the minimum bet could then neither cash out nor
+ * leave, because leaving with chips routes through the cash-out sheet.
+ */
+function call (url, body) {
+  return request(url, { method: 'POST', body: body ?? {} })
+}
+
+/** The one read-only endpoint. */
+function fetchStatus () {
+  return request('/api/game/blackjack/status', { method: 'GET' })
+}
+
 async function refresh () {
-  const view = await call('/api/game/blackjack/status')
+  const view = await fetchStatus()
   if (!view) return
   applyView(view)
   // A session left open from a previous visit drops the player straight back at the table.
