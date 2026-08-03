@@ -18,6 +18,15 @@
             Trade List ({{ tradeListCountDisplay }})
           </OrangeButton>
         </template>
+        <!-- One button for both reading the wall and sending — the topbar
+             already wraps to a second row on a phone, and a separate wall button
+             would push the canvas further down. -->
+        <OrangeButton
+          v-if="viewedUsername"
+          v-show="!cz.buildMode"
+          class="cz-wl-btn"
+          @click="openCmailModal"
+        >cMail</OrangeButton>
         <template v-for="(zone, i) in cz.zones" :key="i">
           <button
             v-if="!zoneLoading && (cz.buildMode || zone.toons.length > 0)"
@@ -272,9 +281,18 @@
         </div>
       </transition>
 
+      <!-- ── cMail: send + wall ── -->
+      <CzoneMailModal
+        v-model="cmailModalVisible"
+        :username="viewedUsername || ''"
+        :is-own-zone="isOwnZone"
+        :initial-tab="cmailInitialTab"
+        @toast="(msg, type) => showSearchToast(msg, type)"
+      />
+
       <!-- ── cZone Search: toast ── -->
       <transition name="cz-fade">
-        <div v-if="searchToast.visible" class="cz-search-toast" :class="searchToast.type">
+        <div v-if="searchToast.visible" class="cz-search-toast" :class="searchToast.type" role="status">
           {{ searchToast.message }}
         </div>
       </transition>
@@ -673,6 +691,19 @@ function closeWishlistModal() {
 function openTradeListModal() {
   tradeListModalVisible.value = true
   if (viewedUsername.value && !tradeListItems.value.length) loadTradeListItems(viewedUsername.value)
+}
+
+// ── cMail ─────────────────────────────────────────────────────
+// No data is fetched on page load: the wall and the template list are pulled
+// only when the modal opens. A cZone pageview already fires six requests, and
+// each one pays ~5 middleware queries before its handler runs.
+const cmailModalVisible = ref(false)
+const cmailInitialTab   = ref('messages')
+
+function openCmailModal() {
+  // Visitors land on Send (that's why they clicked); owners have no Send tab.
+  cmailInitialTab.value = isOwnZone.value ? 'messages' : 'send'
+  cmailModalVisible.value = true
 }
 function closeTradeListModal() {
   tradeListModalVisible.value = false
@@ -1730,6 +1761,18 @@ defineExpose({ save, clearZone })
 }
 .cz-search-toast.success { background: #16a34a; }
 .cz-search-toast.error   { background: #dc2626; }
+
+/* The toast is nowrap by default, and the newsite layout sets overflow-x:hidden
+   on html/body — so a long message (e.g. a cMail rate-limit explanation) was
+   clipped at both edges with no way to scroll to the rest. */
+@media (max-width: 768px) {
+  .cz-search-toast {
+    white-space: normal;
+    max-width: min(90vw, 360px);
+    text-align: center;
+    line-height: 1.35;
+  }
+}
 
 /* ── cZone Search: capture modal fade ── */
 .cz-fade-enter-active,

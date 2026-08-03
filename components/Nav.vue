@@ -327,6 +327,7 @@ const adminGroups = [
           { label: 'Manage Codes', to: '/admin/codes' },
           { label: 'Manage Monsters', to: '/admin/manage-monster' },
           { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
+          { label: 'Manage cZone Mail', to: '/admin/manage-czone-mail' },
       { label: 'Manage Lotto', to: '/admin/manage-lotto' },
       { label: 'Manage Games', to: '/admin/games' },
       { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },

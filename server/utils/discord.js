@@ -13,10 +13,18 @@ function getAnnouncementsBotToken() {
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 
-function getBotAuthHeader() {
-  const token = process.env.BOT_TOKEN
+// BOT_TOKEN is documented in .env.template with the "Bot " prefix baked in, but
+// pasting a bare token from the Discord developer portal is the natural thing to
+// do. Normalizing in one place means a bare token doesn't silently 401 on some
+// call sites while working on others.
+export function normalizeBotAuthHeader(rawToken) {
+  const token = (rawToken || '').trim()
   if (!token) return null
   return token.startsWith('Bot ') ? token : `Bot ${token}`
+}
+
+function getBotAuthHeader() {
+  return normalizeBotAuthHeader(process.env.BOT_TOKEN)
 }
 
 function normalizeRoleName(name) {
@@ -105,7 +113,7 @@ async function openDmChannel(discordId) {
     try {
       const res = await fetch(`${DISCORD_API_BASE}/users/@me/channels`, {
         method: 'POST',
-        headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: normalizeBotAuthHeader(BOT_TOKEN), 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient_id: discordId })
       })
       if (res.status === 429) {
@@ -139,7 +147,7 @@ export async function sendDiscordDMByDiscordId(discordId, content) {
     try {
       const res = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
         method: 'POST',
-        headers: { Authorization: `${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: normalizeBotAuthHeader(BOT_TOKEN), 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
       })
       if (res.status === 429) {
@@ -257,7 +265,7 @@ async function fetchGuildChannels() {
   try {
     const channels = await $fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
       method: 'GET',
-      headers: { 'Authorization': BOT_TOKEN }
+      headers: { 'Authorization': normalizeBotAuthHeader(BOT_TOKEN) }
     })
     return Array.isArray(channels) ? channels : []
   } catch {
@@ -283,7 +291,7 @@ export async function sendGuildChannelMessageByName(channelName, content) {
     await $fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': BOT_TOKEN,
+        'Authorization': normalizeBotAuthHeader(BOT_TOKEN),
         'Content-Type': 'application/json'
       },
       body: { content }
@@ -304,9 +312,9 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = []) {
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
-  const authHeader = rawToken.startsWith('Bot ') ? rawToken : `Bot ${rawToken}`
+  const authHeader = normalizeBotAuthHeader(rawToken)
   try {
-    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': authHeader,
@@ -318,8 +326,10 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
       }),
       signal: AbortSignal.timeout(5000)
     })
-    // console.log('sendGuildChannelMessageById succeeded')
-    return true
+    // Previously this returned true unconditionally, so a 403 (missing
+    // permission), 404 (channel deleted) or 429 (rate limited) was reported as a
+    // successful send and callers had no way to fall back or retry.
+    return res.ok
   } catch(e) {
     // console.error('sendGuildChannelMessageById failed:', e)
     return false

@@ -384,6 +384,13 @@ model User {
   roles                             String[]  @default([])
   allowAuctionNotifications         Boolean   @default(true)
   allowWishlistAuctionNotifications Boolean   @default(true)
+  allowCzoneMailNotifications       Boolean   @default(true)
+  /// Whether messages left on this player's cZone are shown publicly to visitors.
+  /// The messages still reach the owner's cMail inbox when this is off.
+  czoneMailWallEnabled              Boolean   @default(true)
+  /// Authoritative expiry of a cMail burst-guard block. Redis holds a hot copy,
+  /// but the punishment must survive a Redis flush or restart.
+  czoneMailBlockedUntil             DateTime?
   isAdmin                           Boolean   @default(false)
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
@@ -494,6 +501,14 @@ model User {
   userBarcodeScans UserBarcodeScan[]
   userMonsterItems UserMonsterItem[]
   scanEvents       UserScan[]
+
+  // cZone Mail relations
+  czoneMailSent      CZoneMail[]        @relation("CZoneMailSender")
+  czoneMailReceived  CZoneMail[]        @relation("CZoneMailRecipient")
+  czoneMailThread    CZoneMailThread?
+  czoneMailSpamLogs  CZoneMailSpamLog[]
+  blocksCreated      UserBlock[]        @relation("UserBlockBlocker")
+  blockedBy          UserBlock[]        @relation("UserBlockBlocked")
 
   // Suspicious Activity Monitor relations
   suspiciousActivityRules      SuspiciousActivityRule[] @relation("RuleCreatedBy")
@@ -1202,6 +1217,23 @@ model GlobalGameConfig {
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
+  // ── cZone Mail ("cMail") settings ──
+  // Edited on Admin > Global Settings > cZone Mail, via its own settings route
+  // rather than global-config.post.js (which requires dailyPointLimit on every
+  // POST and silently drops fields it doesn't destructure).
+  /// Parent channel for per-recipient notification threads. Deliberately has no
+  /// DISCORD_ANNOUNCEMENTS_CHANNEL fallback — unset means "DM only", never
+  /// "post player mail into the announcements channel".
+  czoneMailDiscordChannelId      String?
+  czoneMailCooldownSeconds       Int     @default(30)
+  czoneMailSpamWindowMinutes     Int     @default(6)
+  czoneMailSpamThreshold         Int     @default(10)
+  czoneMailSpamBlockHours        Int     @default(12)
+  czoneMailRetentionDays         Int     @default(90)
+  /// Minimum gap between messages from the same sender to the same recipient.
+  /// The global cooldown alone cannot stop one player targeting one other player
+  /// all day. 0 disables the rule.
+  czoneMailPairCooldownMinutes   Int     @default(60)
   // Scavenger Hunt settings
   scavengerChancePercent         Int     @default(5) // 0–100; 0 disables
   scavengerCooldownHours         Int     @default(24) // cooldown between completed hunts per user
@@ -3306,4 +3338,145 @@ model BlackjackSession {
   @@index([userId, createdAt])
   // Serves the stale-session sweeper, which filters on status alone.
   @@index([status, windowStart])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cZone Mail ("cMail")
+//
+// Players leave pre-made, admin-authored messages on each other's cZones. Free
+// text is deliberately impossible: the send endpoint only accepts a template id
+// and snapshots that template's text server-side.
+
+/// One admin-authored canned sentence, offered in the send dropdown.
+model CZoneMailTemplate {
+  id        String  @id @default(uuid())
+  text      String
+  emoji     String?
+  /// Groups templates into optgroup-style sections in the picker.
+  category  String?
+  sortOrder Int     @default(0)
+  /// Soft-disable. Templates are never hard-deleted from the admin UI so that
+  /// CZoneMail.templateId keeps pointing at something — that link is what makes
+  /// "purge every message sent from this template" possible after a bad template
+  /// ships. See server/api/admin/czone-mail/templates/[id].delete.js.
+  active    Boolean @default(true)
+
+  /// All-time usage. Maintained by the notify worker, never on the send request
+  /// path: the most popular template would otherwise be a single hot row that
+  /// serializes every concurrent send behind a row lock.
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+/// One delivered message. `body`/`emoji` are snapshots taken at send time, so
+/// editing a template never rewrites messages already sitting in inboxes.
+model CZoneMail {
+  id          String @id @default(uuid())
+  senderId    String
+  recipientId String
+
+  /// Intentionally a plain column with no foreign key. The text is already
+  /// denormalized below, so the relation bought nothing — and a SetNull FK makes
+  /// every template delete an unindexed full-table UPDATE of this table.
+  templateId String?
+
+  body  String
+  emoji String?
+
+  readAt DateTime?
+  /// Soft delete. A recipient deleting an upsetting message must not destroy the
+  /// only evidence of it before an admin or parent can look.
+  deletedAt DateTime?
+  /// Set when the recipient hides a message from their public wall but keeps it
+  /// in their inbox.
+  hiddenFromWall DateTime?
+
+  /// Set once the Discord notification covering this message has been sent (or
+  /// deliberately skipped). The notify worker claims rows by this column, which
+  /// is what makes notifications batch per recipient and survive a retry without
+  /// double-pinging.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  sender    User @relation("CZoneMailSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("CZoneMailRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  /// Serves the inbox and the public wall (both filter on recipient, order by
+  /// createdAt desc) and the FK check when a recipient is deleted.
+  @@index([recipientId, createdAt])
+  /// Spam forensics + the suspicious-activity view, and the sender-side FK check.
+  @@index([senderId, createdAt])
+  /// Retention prune scans this directly; `id` is a random UUID so there is no
+  /// time correlation to exploit instead.
+  @@index([createdAt])
+  /// Admin "purge everything sent from this template" and the usage rollup.
+  @@index([templateId])
+  /// The notify worker's claim query: pending rows for one recipient.
+  @@index([recipientId, notifiedAt])
+  // NOTE: a partial index for the unread count —
+  //   CREATE INDEX ... ON "CZoneMail"("recipientId") WHERE "readAt" IS NULL
+  // — is created in the migration. Prisma's schema language cannot express it.
+}
+
+/// A player-level block. Named generically (not CZoneMailBlock) because the same
+/// relation should eventually gate cZone chat and trade offers; today only cMail
+/// enforces it.
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  // The unique already leads with blockerId, so it serves both the send-path
+  // lookup and the "list who I've blocked" query. No extra index needed.
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+/// Cache of the Discord thread used to notify one recipient. Treated as a cache,
+/// not an identity: Discord can delete or archive threads out from under us, so
+/// every row is recreated on error code 10003 (unknown channel).
+model CZoneMailThread {
+  userId    String  @id
+  threadId  String  @unique
+  /// The parent channel the thread was created under. If an admin repoints
+  /// czoneMailDiscordChannelId, rows for the old channel are recreated.
+  channelId String
+  /// Set once the recipient has been added via PUT /thread-members, so the add
+  /// is not repeated on every notification.
+  memberAddedAt DateTime?
+  lastPostedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([channelId])
+}
+
+/// Recorded when a sender trips the burst guard. Surfaced on the admin
+/// "Manage cZone Mail" page.
+model CZoneMailSpamLog {
+  id           String   @id @default(uuid())
+  userId       String
+  /// Sends counted in the window that tripped the guard.
+  count        Int
+  windowMinutes Int
+  blockedUntil DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }

@@ -35,6 +35,10 @@
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Discord' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Discord'">Discord</button>
+          <button
+            class="px-3 py-2 border-b-2"
+            :class="activeTab==='cZone Mail' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='cZone Mail'">cZone Mail</button>
         </nav>
       </div>
 
@@ -471,6 +475,74 @@
         </div>
       </section>
 
+      <!-- cZone Mail tab -->
+      <section v-if="activeTab==='cZone Mail'" class="space-y-6">
+        <p class="text-sm text-gray-600">
+          Limits for the pre-made messages players leave on each other's cZones.
+          Edit the messages themselves under
+          <NuxtLink to="/admin/manage-czone-mail" class="text-indigo-600 underline">Content → Manage cZone Mail</NuxtLink>.
+        </p>
+
+        <div v-if="cmailWarning" class="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-900">
+          <strong>Heads up:</strong> {{ cmailWarning }}
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Cooldown between messages (seconds)</label>
+            <input v-model.number="cmail.cooldownSeconds" type="number" min="0" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Same-player cooldown (minutes)</label>
+            <input v-model.number="cmail.pairCooldownMinutes" type="number" min="0" class="input" />
+            <p class="text-xs text-gray-500 mt-1">
+              0 disables. Limits how often one player can message the same person.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Spam window (minutes)</label>
+            <input v-model.number="cmail.spamWindowMinutes" type="number" min="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Messages in window before block</label>
+            <input v-model.number="cmail.spamThreshold" type="number" min="2" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Block length (hours)</label>
+            <input v-model.number="cmail.spamBlockHours" type="number" min="1" class="input" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Keep messages for (days)</label>
+            <input v-model.number="cmail.retentionDays" type="number" min="1" class="input" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700">cMail Discord Channel ID</label>
+            <input
+              v-model.trim="cmail.discordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="input"
+              placeholder="123456789012345678"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              Must be a standard text channel that is not age-restricted. Each player
+              gets one private thread here, reused for every notification. Leave blank
+              to send direct messages only — this setting has no environment-variable
+              fallback, so player mail can never land in the announcements channel.
+            </p>
+          </div>
+        </div>
+
+        <p v-if="cmailChannelWarning" class="text-sm text-yellow-700">{{ cmailChannelWarning }}</p>
+
+        <div>
+          <button class="btn-primary" :disabled="savingCmail" @click="saveCmail">
+            {{ savingCmail ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -786,6 +858,59 @@ async function saveDiscord() {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || e?.data?.statusMessage || 'Save failed' }
   } finally {
     savingDiscord.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+// cZone Mail settings use their own route rather than /api/admin/global-config:
+// that handler requires dailyPointLimit on every POST and silently ignores any
+// field it doesn't destructure, which is an easy way to lose a setting.
+const cmail = ref({
+  cooldownSeconds: 30,
+  pairCooldownMinutes: 60,
+  spamWindowMinutes: 6,
+  spamThreshold: 10,
+  spamBlockHours: 12,
+  retentionDays: 90,
+  discordChannelId: ''
+})
+const cmailWarning = ref('')
+const cmailChannelWarning = ref('')
+const savingCmail = ref(false)
+
+async function loadCmailSettings() {
+  try {
+    const cfg = await $fetch('/api/admin/czone-mail/settings')
+    cmail.value = {
+      cooldownSeconds: cfg.cooldownSeconds,
+      pairCooldownMinutes: cfg.pairCooldownMinutes,
+      spamWindowMinutes: cfg.spamWindowMinutes,
+      spamThreshold: cfg.spamThreshold,
+      spamBlockHours: cfg.spamBlockHours,
+      retentionDays: cfg.retentionDays,
+      discordChannelId: cfg.discordChannelId || ''
+    }
+    cmailWarning.value = cfg.warning || ''
+  } catch (e) {
+    console.error(e)
+  }
+}
+onMounted(loadCmailSettings)
+
+async function saveCmail() {
+  savingCmail.value = true; toast.value = null; cmailChannelWarning.value = ''
+  try {
+    const res = await $fetch('/api/admin/czone-mail/settings', {
+      method: 'POST',
+      body: cmail.value
+    })
+    cmailWarning.value = res.warning || ''
+    cmailChannelWarning.value = res.channelWarning || ''
+    toast.value = { type: 'ok', msg: 'cZone Mail settings saved.' }
+  } catch (e) {
+    console.error(e)
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    savingCmail.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
 }
 

@@ -569,6 +569,55 @@ async function sendInactivityWarnings() {
 // 3) enforce at 270 days, 02:20
 // Zero points, transfer UserCtoons to the official account and queue them at
 // the front of the dissolve auction queue, disable account.
+// ─────────────────────────────────────────────────────────────────────────────
+// cZone Mail retention
+//
+// Deletes messages past the configured retention window (default 90 days).
+//
+// Deliberately raw SQL in bounded batches: Prisma's deleteMany takes no LIMIT, so
+// a single deleteMany would be one unbounded statement in one transaction. On the
+// first run after the window fills that could be the whole table, holding row
+// locks and spiking WAL on a droplet that gets resized mid-week.
+const CZONE_MAIL_PRUNE_BATCH = 1000
+const CZONE_MAIL_PRUNE_MAX_BATCHES = 500
+
+async function pruneCzoneMail() {
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { czoneMailRetentionDays: true }
+  })
+  const days = Math.max(1, Number(config?.czoneMailRetentionDays ?? 90))
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+  let total = 0
+  for (let i = 0; i < CZONE_MAIL_PRUNE_MAX_BATCHES; i += 1) {
+    // Deleting by ctid rather than id is deliberate and measured: with `id IN
+    // (SELECT id ...)` the planner picks a hash semi join and sequentially scans
+    // the whole table on EVERY batch (~40ms per batch at 200k rows, growing with
+    // the table). Matching on ctid gives a Tid Scan under a nested loop — ~8ms,
+    // and flat as the table grows. ctid is stable within this single statement's
+    // snapshot, which is all this needs.
+    const deleted = await prisma.$executeRaw`
+      DELETE FROM "CZoneMail"
+       WHERE ctid IN (
+         SELECT ctid FROM "CZoneMail"
+          WHERE "createdAt" < ${cutoff}
+          ORDER BY "createdAt"
+          LIMIT ${CZONE_MAIL_PRUNE_BATCH}
+       )
+    `
+    total += deleted
+    if (deleted < CZONE_MAIL_PRUNE_BATCH) break
+    // Give autovacuum and other queries room between batches.
+    await sleep(100)
+  }
+
+  // Spam logs age out on the same schedule so the table stays bounded.
+  await prisma.cZoneMailSpamLog.deleteMany({ where: { createdAt: { lt: cutoff } } })
+
+  if (total > 0) console.log(`[pruneCzoneMail] removed ${total} messages older than ${days} days`)
+}
+
 async function enforceDormantAccounts() {
   const cutoff = daysAgo(270)
 
@@ -1135,6 +1184,10 @@ cron.schedule('0 * * * *', () => runJob('updateWinballGrandPrizeFromSchedule', u
 
 await runJob('enforceDormantAccounts', enforceDormantAccounts)
 cron.schedule('0 4 * * *', () => runJob('enforceDormantAccounts', enforceDormantAccounts))    // 04:00 daily
+
+// cZone Mail retention. 04:20 CST keeps it clear of the 04:00 droplet reboot and
+// of the other 04:00 jobs above.
+cron.schedule('20 4 * * *', () => runJob('pruneCzoneMail', pruneCzoneMail), { timezone: 'America/Chicago' })
 
 // check featured auction schedule every hour
 cron.schedule("0 * * * *", () => runJob('createDailyFeaturedAuction', createDailyFeaturedAuction), { timezone: "America/Chicago" })

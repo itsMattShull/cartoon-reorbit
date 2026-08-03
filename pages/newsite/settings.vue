@@ -34,6 +34,40 @@
               </div>
             </div>
 
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">cMail Notifications</h2>
+                <p class="settings-row-desc">Get a Discord message when another player leaves cMail on your cZone.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <div v-if="loading" class="toggle-skeleton"></div>
+                <label v-else class="toggle-label">
+                  <input type="checkbox" class="sr-only" v-model="allowCmail" @change="onToggleField('allowCzoneMailNotifications', allowCmail)" :disabled="saving || loading" />
+                  <div :class="['toggle-track', allowCmail ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', allowCmail ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">Show cMail On My cZone</h2>
+                <p class="settings-row-desc">Let visitors see the messages players have left on your cZone. Turning this off keeps them private to you &mdash; they still arrive in My cWorld &rarr; cMail.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <div v-if="loading" class="toggle-skeleton"></div>
+                <label v-else class="toggle-label">
+                  <input type="checkbox" class="sr-only" v-model="wallEnabled" @change="onToggleField('czoneMailWallEnabled', wallEnabled)" :disabled="saving || loading" />
+                  <div :class="['toggle-track', wallEnabled ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', wallEnabled ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <p class="settings-status" :class="{ 'settings-status-dim': saving || loading }">
               {{ loading ? 'Loading current setting…' : saving ? 'Saving…' : 'Changes are saved instantly.' }}
             </p>
@@ -120,6 +154,8 @@ import { ref, onMounted } from 'vue'
 const { user, fetchSelf } = useAuth()
 
 const allow   = ref(true)
+const allowCmail  = ref(true)
+const wallEnabled = ref(true)
 const saving  = ref(false)
 const loading = ref(true)
 const error   = ref('')
@@ -194,6 +230,8 @@ async function loadSetting() {
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     allow.value = !!data.allowAuctionNotifications
+    allowCmail.value = !!data.allowCzoneMailNotifications
+    wallEnabled.value = !!data.czoneMailWallEnabled
   } catch (e) {
     console.error(e)
     error.value = 'Failed to load preference.'
@@ -221,6 +259,35 @@ async function onToggle() {
   } catch (err) {
     console.error(err)
     allow.value = prev
+    error.value = 'Could not save. Please try again.'
+  } finally {
+    saving.value = false
+  }
+}
+
+// Generic single-field toggle. The endpoint patches only the fields present in
+// the body, so changing one preference never disturbs the others.
+async function onToggleField(field, next) {
+  if (loading.value) return
+  error.value = ''
+  const prev = !next
+  saving.value = true
+  try {
+    const res = await fetch('/api/user/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ [field]: next })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    allow.value = !!data.allowAuctionNotifications
+    allowCmail.value = !!data.allowCzoneMailNotifications
+    wallEnabled.value = !!data.czoneMailWallEnabled
+  } catch (err) {
+    console.error(err)
+    if (field === 'allowCzoneMailNotifications') allowCmail.value = prev
+    if (field === 'czoneMailWallEnabled') wallEnabled.value = prev
     error.value = 'Could not save. Please try again.'
   } finally {
     saving.value = false

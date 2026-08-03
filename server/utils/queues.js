@@ -180,3 +180,11 @@ export const contentAnalysisQueue = new Queue(
     },
   }
 )
+
+// NOTE: the cZone Mail notification queue is deliberately NOT defined here —
+// see server/utils/czoneMailQueue.js. Importing this file instantiates every
+// queue above (one Redis connection each) and mintQueue throws when
+// MINT_QUEUE_KEY is unset, so the notify worker — which needs the scheduler in
+// order to re-arm itself — must be able to reach it without pulling in the rest.
+// It is not re-exported from here either: Nuxt's auto-import scanner treats the
+// duplicate symbol as an ambiguity and warns on every build.

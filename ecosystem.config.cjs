@@ -165,6 +165,19 @@ module.exports = {
       env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
+    // ── BullMQ worker: cZone Mail Discord notifications ────────────────────
+    // Single instance by design: every recipient's notification thread lives
+    // under one parent channel and therefore shares one Discord rate-limit
+    // bucket, so these calls must be serialized.
+    {
+      name:      'worker-czone-mail-notify',
+      script:    'server/workers/czone-mail-notify.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
     // ── Cron: Discord guild member sync ───────────────────────────────────
     {
       name:      'guild-checker',
