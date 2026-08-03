@@ -338,7 +338,10 @@ async function recomputeLastActivity() {
     COALESCE(u."createdAt", TIMESTAMP 'epoch')
   )
   WHERE TRUE;`
-  try { await prisma.$executeRawUnsafe(sql) } catch {}
+  // No inner try/catch: let a failure here propagate to the runJob() wrapper at the call
+  // site so it lands in CronErrorLog instead of vanishing silently, as it did for a long
+  // time when this only had a bare `catch {}`.
+  await prisma.$executeRawUnsafe(sql)
 }
 
 const MS_PER_DAY = 86_400_000
