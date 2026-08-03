@@ -25,7 +25,7 @@
       <div v-if="loading" class="mc-status">Loading…</div>
       <div v-else-if="!ctoons.length" class="mc-status">{{ emptyMessage }}</div>
       <template v-else>
-        <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--footer-left-width': '50%', '--footer-right-width': '50%' }">
+        <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--sc-footer-left-width': '50%', '--sc-footer-right-width': '50%' }">
           <template #header>
             <div class="card-img-wrap">
               <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
@@ -363,18 +363,27 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .mc-grid {
     grid-template-columns: repeat(2, 1fr);
-    --footer-height: 52px;
-    --footer-left-width: 100%;
-    --footer-right-width: 100%;
+    grid-auto-rows: auto;
   }
 
-  :deep(.sc-footer) {
-    flex-direction: column;
+  /* The `.mc-grid` prefix is load-bearing. A bare `:deep(.sc-footer)` compiles
+     to `[data-v-mc] .sc-footer`, which ties ShortCard's own `.sc-footer[data-v-sc]`
+     at (0,2,0) — so which one wins is decided purely by the order Rollup happens
+     to emit the two chunks' CSS in. Prefixed, it is (0,3,0) and deterministic. */
+  .mc-grid :deep(.sc) {
+    height: auto;
+    aspect-ratio: 3 / 4;
+    --sc-footer-gap: 3px;
   }
 
-  :deep(.sc-footer-right) {
-    justify-content: flex-start;
+  @supports not (aspect-ratio: 3 / 4) {
+    .mc-grid :deep(.sc) { height: var(--shortcard-height, 176px); }
   }
+
+  .mc-grid :deep(.sc-footer) { flex-direction: column; }
+  .mc-grid :deep(.sc-footer-left),
+  .mc-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; }
+  .mc-grid :deep(.sc-footer-right) { justify-content: flex-start; }
 
   .mc-chip {
     font-size: 0.78rem;
@@ -431,14 +440,23 @@ onMounted(async () => {
   filter: brightness(1.12);
 }
 
+/* Explicit min-height rather than `height: 100%`: the footer is content-sized
+   now, so a percentage would resolve to `auto` and collapse the button to an
+   18px line box. */
 .card-btn {
   width: 100%;
-  height: 100%;
+  min-height: 24px;
   padding: 0;
   font-size: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Must stay after the base rule above — equal specificity, so source order
+   decides. Both buttons stack on a phone, so they get a real tap target. */
+@media (max-width: 768px) {
+  .card-btn { min-height: 32px; }
 }
 
 .card-mint {

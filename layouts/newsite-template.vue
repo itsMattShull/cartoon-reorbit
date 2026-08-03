@@ -358,7 +358,12 @@ const computeLayout = () => {
   const effectiveWidth = Math.round(window.innerWidth * zoomFactor)
   const effectiveHeight = Math.round(window.innerHeight * zoomFactor)
 
-  isMobile.value = effectiveWidth < MOBILE_BREAKPOINT
+  // <=, not <: every `@media (max-width: 768px)` in the app matches *at* 768.
+  // With `<` the layout stayed in desktop mode at exactly 768px — 1032px of
+  // grid tracks inside a 768px container, with the right edge of main-content
+  // clipped off-screen by `body { overflow-x: hidden }` and no scrollbar —
+  // while the components inside were already using their mobile rules.
+  isMobile.value = effectiveWidth <= MOBILE_BREAKPOINT
   if (!isMobile.value) {
     const scaleX = (effectiveWidth - SITE_PADDING) / SITE_WIDTH
     const scaleY = (effectiveHeight - SITE_PADDING) / SITE_HEIGHT
