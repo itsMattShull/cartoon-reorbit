@@ -1,6 +1,6 @@
 // server/utils/economyValuation.js
 // Shared valuation helpers for the Economy page (pages/newsite/economy.vue).
-import { prisma } from '@/server/prisma'
+import { prisma } from '../prisma.js'
 import { Prisma } from '@prisma/client'
 
 // Minimum number of distinct transactions required before an aggregate is
