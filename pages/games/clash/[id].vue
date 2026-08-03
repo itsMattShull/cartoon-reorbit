@@ -293,10 +293,14 @@ const allPlayerLanesFull = computed(() =>
   !!game.value?.lanes?.every(l => playerLaneCount(l) >= MAX_PER_LANE)
 )
 
+// withCredentials so the session cookie rides along on the handshake. In production the
+// socket is same-origin and the cookie flows anyway, but in dev this is a cross-origin
+// connection to :3001 — without it every handler sees an unauthenticated socket and refuses.
 const socket = io(
   import.meta.env.PROD
     ? undefined
-    : `http://localhost:${useRuntimeConfig().public.socketPort}`
+    : `http://localhost:${useRuntimeConfig().public.socketPort}`,
+  { withCredentials: true }
 )
 
 // Handle incoming events
