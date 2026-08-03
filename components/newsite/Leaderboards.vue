@@ -95,7 +95,8 @@ const gameOptions = [
   { key: 'reorbitmemory', label: 'ReOrbit Memory', endpoint: '/api/game/reorbitmemory/leaderboard', lowerIsBetter: true },
   { key: 'guessctoon',   label: 'Guess cToon',    endpoint: '/api/game/guessctoon/leaderboard' },
   { key: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.', endpoint: '/api/game/asteroid/leaderboard' },
-  { key: 'flappy',       label: 'Flappy Powerpuff', endpoint: '/api/game/flappypowerpuff/leaderboard' }
+  { key: 'flappy',       label: 'Flappy Powerpuff', endpoint: '/api/game/flappypowerpuff/leaderboard' },
+  { key: 'edrps',        label: 'Ed, Edd n Eddy RPS', endpoint: '/api/game/edrps/leaderboard', unit: 'win' }
 ]
 const selectedGame = ref('reorbitmatch')
 const gameDataCache = ref({})
@@ -154,13 +155,14 @@ const usersBoards = computed(() => [
   },
 ])
 
-// ReOrbit Memory's "score" column holds moves taken (lower is better), so its rows are
-// labeled "moves" instead of formatted like a points total.
+// Not every board's "score" column is a points-style total. ReOrbit Memory's holds moves taken
+// (lower is better) and Ed, Edd n Eddy RPS's holds match wins, so both get a unit rather than
+// a bare number.
 const gameValueLabel = computed(() => {
   const opt = gameOptions.find(g => g.key === selectedGame.value)
-  return opt?.lowerIsBetter
-    ? row => `${Number(row.score).toLocaleString()} move${row.score === 1 ? '' : 's'}`
-    : row => Number(row.score).toLocaleString()
+  const unit = opt?.lowerIsBetter ? 'move' : opt?.unit
+  if (!unit) return row => Number(row.score).toLocaleString()
+  return row => `${Number(row.score).toLocaleString()} ${unit}${row.score === 1 ? '' : 's'}`
 })
 
 const gamesBoards = computed(() => [

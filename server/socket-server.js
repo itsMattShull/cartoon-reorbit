@@ -22,6 +22,7 @@ import { randomUUID }     from 'crypto'
 import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
+import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1793,6 +1794,12 @@ async function resolveSocketUser(socket) {
 }
 
 io.on('connection', socket => {
+  // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
+  // on every event rather than trusting a payload userId. It keeps its own socket.data keys
+  // (edRpsUserId / edRpsRoomId) so it never collides with the Clash cleanup below, which
+  // reads the shared socket.data.roomId.
+  registerEdRps(io, socket, resolveSocketUser)
+
   socket.on('battle:create', async ({ player1UserId, player1MonsterId, opponent }) => {
     try {
       const uid = player1UserId ? sid(player1UserId) : null
@@ -2834,6 +2841,10 @@ setInterval(() => {
     console.error('[socket] stale sweep failed:', err)
   })
 }, SWEEP_INTERVAL_MS).unref()
+
+// RPS rooms churn far faster than Clash's, and its matches need an absolute-age backstop that
+// does not depend on socket presence, so it runs its own sweep on its own interval.
+startEdRpsSweep(io)
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {
