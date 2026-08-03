@@ -12,7 +12,7 @@
         <ShortCard
           v-for="c in filteredItems"
           :key="c.id"
-          :style="{ '--footer-left-width': '100%', '--footer-right-width': '0%' }"
+          :style="{ '--sc-footer-left-width': '100%', '--sc-footer-right-width': '0%' }"
         >
           <template #header>
             <div class="card-header-wrap" @click="openInfo(c)">

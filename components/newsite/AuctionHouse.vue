@@ -118,9 +118,14 @@
 
       <!-- Cards -->
       <template v-else>
+        <!-- Footer split lives in the stylesheet, not an inline :style. The
+             countdown ticks every second, and DYNAMIC_SLOTS force-updates every
+             ShortCard on each tick, so a per-card style object here meant ~200
+             identical setProperty calls a second. It also outranked the grid's
+             own responsive override, which is half of why View went missing. -->
         <ShortCard
           v-for="item in paginatedItems" :key="item.id"
-          :style="{ '--footer-left-width': '60%', '--footer-right-width': '40%' }"
+          :class="{ 'ah-card--has-relist': item.canRelist }"
         >
           <template #header>
             <div class="ah-card-header" @click="openInfoModal(item)">
@@ -840,6 +845,17 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 .ah-relist:hover { background: rgba(102,204,0,0.25); }
 
 /* ── Card grid ── */
+/* The column count follows the *pane*, not the viewport. The newsite layout
+   gives main-content a fixed 800px on desktop and 100vw on mobile, and it
+   decides which via JS (window.innerWidth x devicePixelRatio) while CSS media
+   queries deliberately ignore zoom — so the two disagree under browser zoom and
+   on monitor changes. A container query asks the only question that actually
+   matters here: how wide is the grid? */
+.ah {
+  container-type: inline-size;
+  container-name: ah-pane;
+}
+
 .ah-card-grid {
   flex: 1;
   min-height: 0;
@@ -854,7 +870,30 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   box-sizing: border-box;
 }
 
-.ah-card-grid :deep(.sc) { width: 100%; cursor: pointer; --header-bg: url('/images/newsite/infocardSplash.png') top / 100% 100% no-repeat; }
+.ah-card-grid :deep(.sc) {
+  width: 100%;
+  cursor: pointer;
+  --sc-header-bg: url('/images/newsite/infocardSplash.png') top / 100% 100% no-repeat;
+  --sc-footer-left-width: 60%;
+  --sc-footer-right-width: 40%;
+}
+
+/* Two buttons cannot share 40% of a 151px card and stay readable — both labels
+   ellipsise to "Vi…" / "R…". Give these cards the stacked footer instead: price
+   on top, the two buttons side by side across the full width beneath it. Uses a
+   class rather than a per-card inline style, so it costs a string compare per
+   countdown tick instead of an object allocation. */
+.ah-card-grid :deep(.sc.ah-card--has-relist) .sc-footer {
+  flex-direction: column;
+  gap: 3px;
+}
+.ah-card-grid :deep(.sc.ah-card--has-relist) .sc-footer-left,
+.ah-card-grid :deep(.sc.ah-card--has-relist) .sc-footer-right {
+  width: 100%;
+  flex: 0 0 auto;
+}
+.ah-card-grid :deep(.sc.ah-card--has-relist) .sc-footer-left  { justify-content: center; }
+.ah-card-grid :deep(.sc.ah-card--has-relist) .sc-footer-right { justify-content: flex-start; }
 
 .ah-card-skeleton {
   border-radius: 8px;
@@ -867,10 +906,12 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 
 /* Card internals */
+/* `inset: 0` against .sc-header's `position: relative`, rather than
+   `height: 100%` against a flex-sized `auto` parent, which WebKit resolves to
+   `auto` and shrink-wraps. */
 .ah-card-header {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   cursor: pointer;
 }
 
@@ -938,7 +979,11 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   flex-shrink: 0;
 }
 
+/* flex + min-width:0 so the price ellipsises instead of being clipped
+   mid-glyph: "125000 pts (137 bids)" overruns the bar on a phone. */
 .ah-card-bid-val {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.62rem;
   font-weight: bold;
   color: #fff;
@@ -949,42 +994,54 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   line-height: 1;
 }
 
-.ah-card-view-btn {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid var(--OrbitLightBlue);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.ah-card-view-btn:hover { background: var(--OrbitLightBlue); }
-
+/* The buttons carry their own height rather than inheriting a percentage from
+   the footer. `height: 100%` only ever worked because the footer was pinned to
+   a definite 26px; the moment the halves stack it resolves against an auto
+   parent and collapses to a ~13px line box (0 on WebKit). */
 .ah-card-actions {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
-  height: 100%;
 }
 
+.ah-card-view-btn,
 .ah-card-relist-btn {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  background: rgba(102,204,0,0.15);
-  border: 1px solid var(--OrbitGreen);
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 3px;
   border-radius: 4px;
-  color: var(--OrbitGreen);
   font-size: 0.6rem;
   font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition: background 0.12s;
 }
-.ah-card-relist-btn:hover { background: rgba(102,204,0,0.3); }
+
+/* Contrast: the old rgba(0,0,0,0.3) over --OrbitDarkBlue left the Re-list label
+   at 2.5:1, and both hover states dropped *below* their resting ratio. */
+.ah-card-view-btn {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid #7FC4E8;
+  color: #fff;
+}
+.ah-card-view-btn:hover { background: #1F5C85; }
+
+.ah-card-relist-btn {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid #8FE03A;
+  color: #A8E86B;
+}
+.ah-card-relist-btn:hover { background: #24471B; color: #C6F095; }
+
+/* Three nested `overflow: hidden` ancestors clip an outside focus ring away. */
+.ah-card-view-btn:focus-visible,
+.ah-card-relist-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -3px;
+}
 
 /* ── Owned/Unowned image badge ── */
 .ah-img-wrap {
@@ -1072,25 +1129,70 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   text-align: center;
 }
 
-@media (max-width: 768px) {
+/* ── Narrow pane: stack the footer ──────────────────────────────
+   Two buttons cannot share a 40%-wide bar on a ~110px card, so price and
+   actions become two rows. Three things this has to get right, all of which
+   the previous attempt got wrong:
+
+   - The footer must be allowed to *grow*. It used to be pinned to 26px with
+     `overflow: hidden`, so stacking two 24px halves clipped the second one —
+     the actions row — out of existence. ShortCard now takes a min-height floor.
+   - The width override has to be a concrete `width`, not a variable, so it
+     beats the per-card `--sc-footer-*-width` set on `.sc` itself.
+   - The buttons need their own `min-height`. Percentages resolve to `auto`
+     against a content-sized parent and collapse to a ~13px line box.
+
+   Column ladder: 5 on the 800px desktop pane, 3 once a card would fall under
+   ~140px, 2 on a phone. At 3 columns on a 360px phone a 44px tap target leaves
+   ~40px of art — less than the list view's own 72px thumbnail — which is why
+   phones get 2, matching MyCollection, MyWishlist and AllCtoons. */
+@container ah-pane (max-width: 700px) {
   .ah-card-grid {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: auto;
-    /* Two buttons can't share a 40%-wide footer on a ~110px card, so the
-       footer stacks — same approach as MyCollection's grid. */
-    --footer-height: 48px;
-    --footer-left-width: 100%;
-    --footer-right-width: 100%;
   }
 
   .ah-card-grid :deep(.sc) {
     width: 100%;
     height: auto;
     aspect-ratio: 3 / 4;
+    --sc-footer-gap: 3px;
+    /* The splash frame is square; `100% 100%` stretches it as the footer grows. */
+    --sc-header-bg: url('/images/newsite/infocardSplash.png') top / 100% auto no-repeat;
   }
 
-  .ah-card-grid :deep(.sc-footer) { flex-direction: column; gap: 2px; }
+  /* No aspect-ratio (iOS <= 14): fall back to a fixed card rather than letting
+     it collapse to a sliver. */
+  @supports not (aspect-ratio: 3 / 4) {
+    .ah-card-grid :deep(.sc) { height: var(--shortcard-height, 176px); }
+  }
+
+  .ah-card-grid :deep(.sc-footer) { flex-direction: column; }
+  .ah-card-grid :deep(.sc-footer-left),
+  .ah-card-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; }
+  .ah-card-grid :deep(.sc-footer-left)  { justify-content: center; }
   .ah-card-grid :deep(.sc-footer-right) { justify-content: flex-start; }
+
+  .ah-card-view-btn,
+  .ah-card-relist-btn {
+    min-height: 44px;
+    font-size: 0.72rem;
+  }
+
+  /* Downscaling with nearest-neighbour just drops pixels; most cToon art is
+     50-135px intrinsic and is already being shrunk. */
+  .ah-card-img { transform: none; }
+}
+
+@container ah-pane (max-width: 440px) {
+  .ah-card-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  /* Four tabs plus the view toggle need ~390px of a 352px bar at 360px wide,
+     and nothing here clips, so the labels overlapped their neighbours. */
+  .ah-topbar { flex-wrap: wrap; }
+  .ah-tabs { flex: 1 1 100%; }
 
   /* Reclaim width for the name: the row's fixed columns leave the body almost
      nothing at 360px once a second action button is in play. */
@@ -1099,6 +1201,6 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
   .ah-time { width: 52px; }
 
   /* Bare minimum tap targets — these buttons create a real auction. */
-  .ah-view, .ah-relist { min-height: 28px; }
+  .ah-view, .ah-relist { min-height: 32px; }
 }
 </style>
