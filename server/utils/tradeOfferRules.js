@@ -14,14 +14,15 @@
 //   pendingTradeGuardWhere for why the difference is load-bearing.
 import { createError } from 'h3'
 
-/// Hard ceiling on how many cToons one side of an offer may contain. Without it,
-/// resolveUserCtoonId fans out one query per element, so an unbounded array is a
-/// way to make one request issue unbounded queries.
-export const MAX_CTOONS_PER_SIDE = 50
+// The limits live in their own import-free module so components/newsite/Trade.vue
+// can enforce the same ceiling at selection time without bundling h3.
+//
+// Imported by RELATIVE path, not the `@/` alias: this module is loaded directly
+// by `node --test`, which has no alias resolution — the same reason the header
+// above gives for keeping prisma out of here.
+import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from './tradeOfferLimits.js'
 
-/// How many counters deep one negotiation may go. A counter is cheap to send and
-/// DMs the other party, so an unbounded chain is a notification-spam vector.
-export const MAX_COUNTER_CHAIN_DEPTH = 20
+export { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH }
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 

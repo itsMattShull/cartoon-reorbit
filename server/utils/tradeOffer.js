@@ -7,7 +7,7 @@
 // unit-tested without a database; this module composes it with Prisma.
 import { createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
+import { resolveUserCtoonIds } from '@/server/utils/userCtoonId'
 import {
   normalizeCtoonIdList,
   assertNoCrossSideOverlap,
@@ -18,21 +18,49 @@ import {
 export * from '@/server/utils/tradeOfferRules'
 
 /**
+ * Two references on one side that resolve to the same physical cToon.
+ *
+ * normalizeCtoonIdList dedupes the reference STRINGS, which cannot catch this:
+ * a raw UUID and the synthetic `uc|…` token naming the same UserCtoon are two
+ * different strings that survive the Set and resolve to one id. Left alone they
+ * reach createTradeOfferTx as two rows with the same (tradeOfferId, userCtoonId,
+ * role), which violates the unique constraint and rolls the whole transaction
+ * back with an opaque P2002 — after every insert and lock has been taken.
+ *
+ * Rejected rather than silently collapsed: dropping one quietly would change
+ * what the user is told they offered.
+ */
+function assertNoDuplicateResolution (resolved, label) {
+  if (new Set(resolved).size !== resolved.length) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `${label} names the same cToon more than once`
+    })
+  }
+}
+
+/**
  * Resolves both sides' cToon references (raw UUIDs or synthetic `uc|…` tokens)
  * to real UserCtoon ids. Returns { resolvedOffered, resolvedRequested }.
+ *
+ * One batched query per side rather than one per reference — see
+ * resolveUserCtoonIds. The returned arrays stay positionally aligned with their
+ * inputs, which is what makes the null check below meaningful.
  */
 export async function resolveOfferCtoons ({ ctoonIdsOffered, ctoonIdsRequested }) {
   const offered = normalizeCtoonIdList(ctoonIdsOffered, 'ctoonIdsOffered')
   const requested = normalizeCtoonIdList(ctoonIdsRequested, 'ctoonIdsRequested')
 
   const [resolvedOffered, resolvedRequested] = await Promise.all([
-    Promise.all(offered.map(resolveUserCtoonId)),
-    Promise.all(requested.map(resolveUserCtoonId))
+    resolveUserCtoonIds(offered),
+    resolveUserCtoonIds(requested)
   ])
 
   if (resolvedOffered.some(id => !id) || resolvedRequested.some(id => !id)) {
     throw createError({ statusCode: 400, statusMessage: 'One or more invalid cToon references' })
   }
+  assertNoDuplicateResolution(resolvedOffered, 'ctoonIdsOffered')
+  assertNoDuplicateResolution(resolvedRequested, 'ctoonIdsRequested')
   assertNoCrossSideOverlap(resolvedOffered, resolvedRequested)
   return { resolvedOffered, resolvedRequested }
 }
@@ -172,11 +200,16 @@ export async function createTradeOfferTx (tx, {
       recipientId,
       pointsOffered,
       counteredOfferId,
+      // createMany, not create: a nested `create` array emits one INSERT per
+      // element, so a full-size offer would be 500 statements inside this
+      // transaction instead of one.
       ctoons: {
-        create: [
-          ...resolvedOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
-          ...resolvedRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
-        ]
+        createMany: {
+          data: [
+            ...resolvedOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
+            ...resolvedRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
+          ]
+        }
       }
     },
     select: { id: true, status: true, createdAt: true, counteredOfferId: true }
