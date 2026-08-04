@@ -12,14 +12,12 @@ import {
 } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encryptIp } from '@/server/utils/ip-encrypt'
+import { getTrustedClientIp } from '@/server/utils/requestIp'
 
 function getRequestIP(event) {
-  return (
-    event.node.req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-    event.node.req.connection?.remoteAddress ||
-    event.node.req.socket?.remoteAddress ||
-    ''
-  )
+  // Right-to-left XFF parsing; see server/utils/requestIp.js for why the
+  // leftmost entry must never be trusted.
+  return getTrustedClientIp(event) || ''
 }
 
 // Derive a compact, human-readable device summary from a User-Agent string.

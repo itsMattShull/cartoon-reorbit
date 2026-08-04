@@ -4,6 +4,7 @@ import { prisma } from '@/server/prisma'
 import { isPrivateIp } from '@/server/utils/vpn-check'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 import { enqueueVpnCheck } from '@/server/utils/vpn-queue'
+import { getTrustedClientIp } from '@/server/utils/requestIp'
 import { isHotPath } from '@/server/utils/hotPaths'
 
 export default defineEventHandler(async (event) => {
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context?.userId
   if (!userId) return
 
-  const ip = getRequestIP(event)
+  const ip = getTrustedClientIp(event)
   if (!ip) return
 
   const encryptedLoginIp = encryptIp(ip)
@@ -62,12 +63,3 @@ export default defineEventHandler(async (event) => {
   }
 })
 
-function getRequestIP(event) {
-  const headers = event.node.req.headers
-  const forwarded = headers['x-forwarded-for']
-  if (forwarded) {
-    const firstIp = forwarded.split(',')[0].trim()
-    if (firstIp) return firstIp
-  }
-  return event.node.req.socket?.remoteAddress || null
-}

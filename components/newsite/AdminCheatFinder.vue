@@ -434,6 +434,17 @@
         </template>
       </div>
 
+      <!-- Alt Account Finder tab -->
+      <!--
+        The other two tabs scan the world for groups that share an IP or an ASN.
+        This one works the other way round: it starts from one banned account and
+        expands outward, which is the only shape that works when the suspect is
+        behind a VPN and on a fresh browser and Discord account.
+      -->
+      <div v-else-if="activeTab === 'altFinder'">
+        <AdminAltFinder />
+      </div>
+
       <!-- Placeholder tabs -->
       <div v-else class="text-gray-500 py-8 text-center">
         Placeholder
@@ -464,7 +475,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 const tabs = [
   { id: 'duplicateIps', label: 'Duplicate IPs' },
   { id: 'duplicateVpn', label: 'Duplicate VPN' },
-  { id: 'placeholder-2', label: 'Placeholder' },
+  { id: 'altFinder', label: 'Alt Account Finder' },
   { id: 'placeholder-3', label: 'Placeholder' },
   { id: 'placeholder-4', label: 'Placeholder' },
   { id: 'placeholder-5', label: 'Placeholder' }

@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { prisma } from '@/server/prisma'
+import { encryptIp } from '@/server/utils/ip-encrypt'
+import { getTrustedClientIp } from '@/server/utils/requestIp'
 
 // Utility: parse a Discord “snowflake” ID into its creation Date
 function parseDiscordSnowflake(snowflake) {
@@ -9,12 +11,9 @@ function parseDiscordSnowflake(snowflake) {
 }
 
 function getRequestIP(event) {
-  return (
-    event.node.req.headers['x-forwarded-for']?.split(',')[0] ||
-    event.node.req.connection?.remoteAddress ||
-    event.node.req.socket?.remoteAddress ||
-    null
-  )
+  // Right-to-left XFF parsing; see server/utils/requestIp.js for why the
+  // leftmost entry must never be trusted.
+  return getTrustedClientIp(event)
 }
 
 async function getRoleIdByName(guildId, roleName, botToken) {
@@ -146,13 +145,22 @@ export default defineEventHandler(async (event) => {
   })
 
   // 4.1 Save IP
+  //
+  // MUST be stored encrypted. This previously wrote the raw plaintext IP while
+  // server/middleware/login-log.js wrote ciphertext into the same column, so
+  // the @@unique([userId, ip]) constraint never deduped: one IP existed twice
+  // in two encodings, splitting it across two buckets and halving every
+  // IP-overlap count the anti-cheat tooling produces.
   const ip = getRequestIP(event)
   if (ip) {
-    await prisma.userIP.upsert({
-      where: { userId_ip: { userId: result.user.id, ip } },
-      update: {},
-      create: { userId: result.user.id, ip }
-    })
+    const encryptedIp = encryptIp(ip)
+    if (encryptedIp) {
+      await prisma.userIP.upsert({
+        where: { userId_ip: { userId: result.user.id, ip: encryptedIp } },
+        update: {},
+        create: { userId: result.user.id, ip: encryptedIp }
+      })
+    }
   }
 
   // 5) Session cookie

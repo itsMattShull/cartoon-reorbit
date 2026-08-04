@@ -8,15 +8,26 @@
  */
 import { createCipheriv, createDecipheriv, createHash } from 'crypto'
 
+// Memoized per key value. This runs on a per-request hot path via
+// server/middleware/login-log.js, and the alt-account investigator encrypts a
+// few thousand addresses per run to do subnet matching — re-deriving the buffer
+// and re-running SHA-256 on every call was pure overhead.
+let cachedKeyHex = null
+let cachedKeyAndIV = null
+
 function getKeyAndIV() {
   const keyHex = process.env.IP_ENCRYPTION_KEY
   if (!keyHex || keyHex.length !== 64) {
     throw new Error('IP_ENCRYPTION_KEY env var must be a 64-character hex string (32 bytes)')
   }
+  if (keyHex === cachedKeyHex) return cachedKeyAndIV
+
   const key = Buffer.from(keyHex, 'hex')
   // Derive a fixed 16-byte IV from the key deterministically
   const iv = createHash('sha256').update(key).digest().slice(0, 16)
-  return { key, iv }
+  cachedKeyHex = keyHex
+  cachedKeyAndIV = { key, iv }
+  return cachedKeyAndIV
 }
 
 /**

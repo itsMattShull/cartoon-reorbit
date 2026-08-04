@@ -624,6 +624,9 @@ model UserIP {
 
   @@unique([userId, ip])
   @@index([userId])
+  // Reverse lookup: "who else has ever used this IP". Both existing indexes
+  // lead with userId, so this direction was a sequential scan.
+  @@index([ip])
 }
 
 model Friend {
@@ -726,6 +729,11 @@ model Visit {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  // Previously unindexed entirely, despite server/api/points/visit.post.js
+  // counting by userId on every cZone visit.
+  @@index([userId, createdAt])
+  @@index([zoneOwnerId, createdAt])
 }
 
 model TradeRoom {
@@ -842,6 +850,10 @@ model LoginLog {
 
   @@index([ip])
   @@index([createdAt])
+  // "which IPs did this user log in from" — and the (userId, ip, createdAt)
+  // dedupe in server/middleware/login-log.js, which runs on nearly every
+  // request — previously had no usable index and rode LoginLog_ip_idx.
+  @@index([userId, createdAt])
 }
 
 model DeviceFingerprintLog {
@@ -1442,6 +1454,11 @@ model Bid {
 
   auction Auction @relation(fields: [auctionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+
+  // This table had no indexes at all beyond its primary key, so every
+  // per-user bid history and every bidder/seller overlap query scanned it whole.
+  @@index([userId, createdAt])
+  @@index([auctionId])
 }
 
 // ── Economy page ─────────────────────────────────────────────────
@@ -1921,6 +1938,9 @@ model CtoonOwnerLog {
   @@index([userCtoonId, createdAt])
   @@index([ctoonId, createdAt])
   @@index([userId, createdAt])
+  // Without this, "what flowed to/from this account" only worked in the
+  // owner direction; the counterparty direction was a sequential scan.
+  @@index([counterpartyUserId, createdAt])
 }
 
 // ── Holiday feature ─────────────────────────────────────────────

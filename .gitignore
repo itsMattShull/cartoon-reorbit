@@ -1,5 +1,14 @@
 node_modules
 .env
+# Other env files (.env.local, .env.production) were not covered and are
+# committable as-is; the template is kept deliberately.
+.env.*
+!.env.template
+# Anti-cheat / alt-account investigation output contains player identity
+# evidence (IPs, device fingerprints, emails). Never commit it.
+*.report.json
+*.report.txt
+/reports/
 .nuxt
 .DS_Store
 .output
