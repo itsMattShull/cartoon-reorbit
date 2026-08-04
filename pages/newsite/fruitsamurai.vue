@@ -168,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   WORLD_W,
   WORLD_H,
@@ -303,29 +303,57 @@ const resetLabel = computed(() => {
 let scale = 1
 let dpr = 1
 
+let lastFitW = 0
+let lastFitH = 0
+
 function resizeCanvas () {
   const stage = stageEl.value
   const canvas = canvasEl.value
   if (!stage || !canvas) return
-  const rect = stage.getBoundingClientRect()
-  if (rect.width < 2 || rect.height < 2) return
-  scale = Math.min(rect.width / WORLD_W, rect.height / WORLD_H)
-  // Cap the backing store at 2x. Beyond that the fill-rate cost on a mid-range phone buys
-  // nothing visible for flat vector shapes.
-  dpr = Math.min(window.devicePixelRatio || 1, 2)
+  // LAYOUT pixels, deliberately — not getBoundingClientRect().
+  //
+  // The newsite shell scales the whole UI with a CSS transform, and a transform makes these two
+  // disagree: getBoundingClientRect() reports post-transform (visual) pixels while clientWidth
+  // reports pre-transform (layout) ones. `style.width` is interpreted in layout pixels and then
+  // scaled by that same ancestor transform, so measuring visually and writing layoutwise
+  // applied the factor twice and left the board ~9% smaller than the space it was given.
+  const layoutW = stage.clientWidth
+  const layoutH = stage.clientHeight
+  if (layoutW < 2 || layoutH < 2) return
+  // Nothing moved — bail before touching canvas.width, which is destructive (it clears the
+  // backing store and resets the context state).
+  if (layoutW === lastFitW && layoutH === lastFitH) return
+  lastFitW = layoutW
+  lastFitH = layoutH
+
+  scale = Math.min(layoutW / WORLD_W, layoutH / WORLD_H)
   canvas.style.width = `${Math.round(WORLD_W * scale)}px`
   canvas.style.height = `${Math.round(WORLD_H * scale)}px`
-  canvas.width = Math.round(WORLD_W * scale * dpr)
-  canvas.height = Math.round(WORLD_H * scale * dpr)
+
+  // The backing store, by contrast, must be sized in the pixels the board actually occupies on
+  // screen, so the ancestor transform has to be folded back in here or the canvas renders soft
+  // wherever the shell scales the page up.
+  const rect = stage.getBoundingClientRect()
+  const transform = layoutW > 0 && rect.width > 0 ? rect.width / layoutW : 1
+  // Cap at 2x: beyond that the fill-rate cost on a mid-range phone buys nothing visible for
+  // flat vector shapes.
+  dpr = Math.min((window.devicePixelRatio || 1) * transform, 2)
+  canvas.width = Math.max(1, Math.round(WORLD_W * scale * dpr))
+  canvas.height = Math.max(1, Math.round(WORLD_H * scale * dpr))
 }
 
 function toWorld (ev) {
   const canvas = canvasEl.value
   if (!canvas) return null
+  // Derived from the canvas's own on-screen rectangle rather than from `scale`, because a
+  // pointer event's clientX/clientY are in visual pixels while `scale` is in layout pixels.
+  // Under the shell's CSS transform those differ, and dividing by the wrong one puts every cut
+  // slightly away from where the player actually swiped.
   const rect = canvas.getBoundingClientRect()
+  if (rect.width < 1 || rect.height < 1) return null
   return {
-    x: Math.round((ev.clientX - rect.left) / scale),
-    y: Math.round((ev.clientY - rect.top) / scale)
+    x: Math.round((ev.clientX - rect.left) * WORLD_W / rect.width),
+    y: Math.round((ev.clientY - rect.top) * WORLD_H / rect.height)
   }
 }
 
@@ -406,6 +434,13 @@ function frame (now) {
 
   drainEvents()
   syncHud()
+  // Re-fit every frame. ResizeObserver covers most of it, but the stage can settle to its final
+  // size through changes it does not reliably deliver before the first frames are drawn — the
+  // adbar image loading above the board, a webfont landing, the layout's own min-height giving
+  // way to its real height. Missing one of those leaves the board sized for a box that no
+  // longer exists. resizeCanvas() early-returns unless the measurement actually changed, so the
+  // steady-state cost is one getBoundingClientRect.
+  resizeCanvas()
   render()
 
   if (sim.over) finishRun()
@@ -488,7 +523,10 @@ function render () {
   if (!ctx) return
 
   ctx.save()
-  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0)
+  // Straight from the backing store, so one world unit always maps to the same number of
+  // device pixels no matter how the shell has scaled the page.
+  const k = canvas.width / WORLD_W
+  ctx.setTransform(k, 0, 0, k, 0, 0)
 
   drawBackground(ctx)
   drawJack(ctx)
@@ -941,8 +979,21 @@ onMounted(async () => {
 
   await nextTick()
   resizeObserver = new ResizeObserver(() => resizeCanvas())
-  if (stageEl.value) resizeObserver.observe(stageEl.value)
   window.addEventListener('resize', resizeCanvas)
+  window.addEventListener('orientationchange', resizeCanvas)
+})
+
+// The stage only exists while a run is in progress — it sits inside the `playing` branch, so
+// at mount time the start screen is showing and there is nothing to observe. Observing on mount
+// therefore silently watched nothing, the canvas was measured exactly once in startGame(), and
+// any later layout change never reached it: the adbar finishing loading, a phone rotating, or
+// the mobile URL bar collapsing would all leave the board sized for a viewport that no longer
+// exists. Re-attach whenever the element appears or goes away.
+watch(stageEl, (el) => {
+  resizeObserver?.disconnect()
+  if (!el) return
+  resizeObserver?.observe(el)
+  resizeCanvas()
 })
 
 onBeforeUnmount(() => {
