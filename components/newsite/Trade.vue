@@ -103,6 +103,11 @@
               Their {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts can't be
               requested back — points only travel from the sender of an offer.
             </span>
+            <span v-if="counterTrimmedCount" class="tr-counter-warn">
+              {{ counterTrimmedCount }} cToon{{ counterTrimmedCount === 1 ? '' : 's' }} from the
+              original {{ counterTrimmedCount === 1 ? 'was' : 'were' }} left out — a trade can
+              carry at most {{ MAX_CTOONS_PER_SIDE }} cToons per side.
+            </span>
             <span v-if="counterMissingCount" class="tr-counter-warn">
               {{ counterMissingCount }} cToon{{ counterMissingCount === 1 ? '' : 's' }} from the
               original {{ counterMissingCount === 1 ? 'is' : 'are' }} no longer available and
@@ -246,7 +251,7 @@
           <!-- Selected strip: the only place the full selection is visible at
                once, since the grid paginates at 50 and filters can hide picks. -->
           <div v-if="selectedTargetCtoons.length" class="tr-chips">
-            <span class="tr-chips-label">Requesting {{ selectedTargetCtoons.length }}:</span>
+            <span class="tr-chips-label">Requesting {{ selectedTargetCtoons.length }} / {{ MAX_CTOONS_PER_SIDE }}:</span>
             <button
               v-for="c in selectedTargetCtoons"
               :key="c.id"
@@ -276,7 +281,8 @@
                   <CtoonCard
                     :ctoon="c"
                     :selected="selectedTargetCtoonsMap.has(c.id)"
-                    :disabled="c.inPendingTrade"
+                    :disabled="c.inPendingTrade || (targetAtLimit && !selectedTargetCtoonsMap.has(c.id))"
+                    :disabled-label="c.inPendingTrade ? 'In Trade' : 'Limit'"
                     :badge="selfOwnedIdsCreate.has(c.ctoonId) ? 'Owned' : 'Unowned'"
                     @toggle="toggleTargetCtoon(c)"
                   />
@@ -349,7 +355,7 @@
           </div>
 
           <div v-if="selectedInitiatorCtoons.length" class="tr-chips">
-            <span class="tr-chips-label">Offering {{ selectedInitiatorCtoons.length }}:</span>
+            <span class="tr-chips-label">Offering {{ selectedInitiatorCtoons.length }} / {{ MAX_CTOONS_PER_SIDE }}:</span>
             <button
               v-for="c in selectedInitiatorCtoons"
               :key="c.id"
@@ -383,7 +389,8 @@
                   <CtoonCard
                     :ctoon="c"
                     :selected="selectedInitiatorCtoonsMap.has(c.id)"
-                    :disabled="c.inPendingTrade"
+                    :disabled="c.inPendingTrade || (initiatorAtLimit && !selectedInitiatorCtoonsMap.has(c.id))"
+                    :disabled-label="c.inPendingTrade ? 'In Trade' : 'Limit'"
                     :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
                     badge-class-owned="tc-badge--blue"
                     @toggle="toggleInitiatorCtoon(c)"
@@ -468,7 +475,7 @@
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedTargetCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
-                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" loading="lazy" />
                     <SecondEditionOverlay :ctoon="c" />
                   </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
@@ -483,7 +490,7 @@
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedInitiatorCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
-                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" />
+                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" loading="lazy" />
                     <SecondEditionOverlay :ctoon="c" />
                   </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
@@ -587,7 +594,7 @@
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
                     <div class="tm-card-img-wrap">
-                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
                       <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
                     </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
@@ -612,7 +619,7 @@
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
                     <div class="tm-card-img-wrap">
-                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" @click="openTradeCToon(tc)" />
+                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
                       <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
                     </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
@@ -677,7 +684,11 @@
 
     <!-- Page-level toast -->
     <Teleport to="body">
-      <div v-if="pageToast.show" class="tr-page-toast" :class="pageToast.type">{{ pageToast.message }}</div>
+      <!-- Always mounted, contents toggled: a live region added to the DOM at the
+           same moment its text appears is unreliably announced. -->
+      <div class="tr-page-toast-live" role="status" aria-live="polite" aria-atomic="true">
+        <div v-if="pageToast.show" class="tr-page-toast" :class="pageToast.type">{{ pageToast.message }}</div>
+      </div>
     </Teleport>
 
   </div>
@@ -689,6 +700,7 @@ import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
 import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
+import { MAX_CTOONS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 
 const route = useRoute()
@@ -784,17 +796,40 @@ const isInitiator = computed(() => currentOffer.value?.initiator.id === user.val
 const tradeValuations = ref({})
 const isLoadingValuations = ref(false)
 
+/**
+ * Per-request ceiling of /api/ctoon/valuations (MAX_VALUATION_IDS). An offer can
+ * hold MAX_CTOONS_PER_SIDE on each side, so both sides of a full-size trade fit
+ * in one request and only pathological lists ever split.
+ */
+const VALUATION_BATCH_SIZE = 500
+
+/**
+ * Values an arbitrarily long id list, splitting it across requests when needed.
+ *
+ * The endpoint used to silently truncate at 50 and answer anyway, so any trade
+ * larger than that produced a fairness verdict computed from a partial sum —
+ * stated with the same confidence as a correct one. It now rejects oversized
+ * lists instead, which is only safe because every caller goes through here.
+ */
+async function fetchValuationBatches(ids) {
+  const merged = {}
+  for (let i = 0; i < ids.length; i += VALUATION_BATCH_SIZE) {
+    const batch = ids.slice(i, i + VALUATION_BATCH_SIZE)
+    const result = await $fetch('/api/ctoon/valuations', {
+      method: 'POST',
+      body: { userCtoonIds: batch }
+    })
+    if (result) Object.assign(merged, result)
+  }
+  return merged
+}
+
 async function loadValuations(offer) {
   if (!offer?.ctoons?.length) return
   isLoadingValuations.value = true
   tradeValuations.value = {}
   try {
-    const userCtoonIds = offer.ctoons.map(tc => tc.userCtoon.id)
-    const result = await $fetch('/api/ctoon/valuations', {
-      method: 'POST',
-      body: { userCtoonIds }
-    })
-    tradeValuations.value = result || {}
+    tradeValuations.value = await fetchValuationBatches(offer.ctoons.map(tc => tc.userCtoon.id))
   } catch {
     tradeValuations.value = {}
   } finally {
@@ -932,8 +967,7 @@ async function fetchValuationsForIds(ids) {
   if (!missing.length) return
   isLoadingCreateValuations.value = true
   try {
-    const result = await $fetch('/api/ctoon/valuations', { method: 'POST', body: { userCtoonIds: missing } })
-    if (result) Object.assign(createValuations.value, result)
+    Object.assign(createValuations.value, await fetchValuationBatches(missing))
   } catch {
     // preserve whatever is already in the cache
   } finally {
@@ -1024,14 +1058,27 @@ const createFairnessData = computed(() => {
 const modalToast = reactive({ show: false, message: '', type: 'success' })
 const pageToast = reactive({ show: false, message: '', type: 'success' })
 
+// Each toast owns its timer so a second message restarts the countdown. Without
+// this, two toasts in quick succession leave two timers racing against one
+// shared object and the first to expire hides the message the second just set.
+let modalToastTimer = null
+let pageToastTimer = null
+
 function showModalToast(msg, type = 'success') {
   modalToast.show = true; modalToast.message = msg; modalToast.type = type
-  setTimeout(() => { modalToast.show = false }, 4000)
+  if (modalToastTimer) clearTimeout(modalToastTimer)
+  modalToastTimer = setTimeout(() => { modalToast.show = false; modalToastTimer = null }, 4000)
 }
 function showPageToast(msg, type = 'success') {
   pageToast.show = true; pageToast.message = msg; pageToast.type = type
-  setTimeout(() => { pageToast.show = false }, 4000)
+  if (pageToastTimer) clearTimeout(pageToastTimer)
+  pageToastTimer = setTimeout(() => { pageToast.show = false; pageToastTimer = null }, 4000)
 }
+
+onBeforeUnmount(() => {
+  if (modalToastTimer) clearTimeout(modalToastTimer)
+  if (pageToastTimer) clearTimeout(pageToastTimer)
+})
 
 function viewOffer(offer) {
   currentOffer.value = offer
@@ -1223,6 +1270,7 @@ async function selectTargetUser(u, options = {}) {
       tradeCounterSourceId.value = null
       tradeCounterSummary.value = null
       counterMissingCount.value = 0
+      counterTrimmedCount.value = 0
       selectedTargetCtoons.value = []
       selectedInitiatorCtoons.value = []
     }
@@ -1247,7 +1295,9 @@ async function clearTarget(focusInput = false) {
   // Counter state is reset here because this is the single reset point the
   // wizard already funnels through (sendOffer and "Change" both call it).
   tradeCounterSourceId.value = null; tradeCounterSummary.value = null
-  preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0
+  preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0; counterTrimmedCount.value = 0
+  pinnedTargetIds.value = new Set(); pinnedInitiatorIds.value = new Set()
+  limitNotified.target = false; limitNotified.initiator = false
   selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
   pageOther.value = 1; pageSelf.value = 1
@@ -1333,15 +1383,32 @@ const selectedInitiatorCtoons = ref([])
 const selectedTargetCtoonsMap = computed(() => new Set(selectedTargetCtoons.value.map(c => c.id)))
 const selectedInitiatorCtoonsMap = computed(() => new Set(selectedInitiatorCtoons.value.map(c => c.id)))
 
-// Step 1: fetch valuations as the user selects target cToons
-watch(selectedTargetCtoons, ctoons => {
-  fetchValuationsForIds(ctoons.map(c => c.id))
-}, { deep: true })
+const selectedTargetIds = computed(() => selectedTargetCtoons.value.map(c => c.id))
+const selectedInitiatorIds = computed(() => selectedInitiatorCtoons.value.map(c => c.id))
 
-// Step 2: fetch valuations as the user selects their own cToons
-watch(selectedInitiatorCtoons, ctoons => {
-  fetchValuationsForIds(ctoons.map(c => c.id))
-}, { deep: true })
+/**
+ * Valuation fetches are debounced and keyed off the id lists rather than run
+ * from a deep watcher on the selection arrays.
+ *
+ * Deep-watching walked every field of every selected cToon on each toggle, and
+ * fired one request per tap — so building a large offer by hand meant hundreds
+ * of round trips, each re-running the endpoint's aggregate queries for a single
+ * new id. Coalescing lets a burst of selections resolve as one request.
+ */
+let valuationDebounce = null
+function scheduleValuationFetch(ids) {
+  if (valuationDebounce) clearTimeout(valuationDebounce)
+  valuationDebounce = setTimeout(() => {
+    valuationDebounce = null
+    fetchValuationsForIds(ids)
+  }, 300)
+}
+
+// Step 1 / Step 2: fetch valuations as the user builds each side.
+watch(selectedTargetIds, ids => scheduleValuationFetch([...ids]))
+watch(selectedInitiatorIds, ids => scheduleValuationFetch([...ids]))
+
+onBeforeUnmount(() => { if (valuationDebounce) clearTimeout(valuationDebounce) })
 
 // Step 3: ensure any gaps are filled (covers edge cases like back-navigation)
 watch(tradeCurrentStep, step => {
@@ -1373,12 +1440,18 @@ const preselectSelfKeys = ref([])
 /** How many mirrored cToons could not be found; surfaced in the counter banner. */
 const counterMissingCount = ref(0)
 
+/** How many mirrored cToons were dropped for exceeding the per-side ceiling. */
+const counterTrimmedCount = ref(0)
+
 function applyPreselectedCtoons() {
   // Single-item preselect from the cToon search / czone deep links.
   const preselectId = manualPreselectUserCtoonId.value || (route.query.userCtoonId ? String(route.query.userCtoonId) : null)
-  if (preselectId) {
-    const match = otherCtoons.value.find(c => c.id === preselectId)
-    if (match && !selectedTargetCtoonsMap.value.has(match.id)) selectedTargetCtoons.value.push(match)
+  const deepLinked = preselectId
+    ? otherCtoons.value.find(c => c.id === preselectId)
+    : null
+  if (deepLinked && !selectedTargetCtoonsMap.value.has(deepLinked.id)) {
+    selectedTargetCtoons.value.push(deepLinked)
+    pinnedTargetIds.value = new Set([...pinnedTargetIds.value, deepLinked.id])
   }
 
   if (!preselectTargetKeys.value.length && !preselectSelfKeys.value.length) return
@@ -1404,28 +1477,72 @@ function applyPreselectedCtoons() {
   const target = pick(otherCtoons.value, preselectTargetKeys.value)
   const self = pick(selfCtoons.value, preselectSelfKeys.value)
 
+  // The mirror assigns both arrays wholesale, so it never passes through the
+  // toggle guard. An offer built under a higher ceiling — or a deep-linked cToon
+  // landing on top of a full mirrored side — would otherwise sail through all
+  // three steps and fail with a raw 400 at the very end.
+  const trim = (list) => {
+    if (list.length <= MAX_CTOONS_PER_SIDE) return { kept: list, trimmed: 0 }
+    return { kept: list.slice(0, MAX_CTOONS_PER_SIDE), trimmed: list.length - MAX_CTOONS_PER_SIDE }
+  }
+  // The deep-linked pick above is preserved rather than overwritten by the
+  // mirror, which used to discard it silently.
+  const targetTrim = trim(deepLinked && !target.found.some(c => c.id === deepLinked.id)
+    ? [deepLinked, ...target.found]
+    : target.found)
+  const selfTrim = trim(self.found)
+
   // Replace wholesale rather than pushing in a loop: one synchronous assignment
   // per array means the valuation watchers fire once each instead of per item.
-  selectedTargetCtoons.value = target.found
-  selectedInitiatorCtoons.value = self.found
+  selectedTargetCtoons.value = targetTrim.kept
+  selectedInitiatorCtoons.value = selfTrim.kept
   // A cToon can go missing between the offer being made and the counter being
   // built — traded away, burned, or put up for auction. Silently dropping it
   // would leave the user staring at a shorter list than they expected.
   counterMissingCount.value = target.missing + self.missing
+  counterTrimmedCount.value = targetTrim.trimmed + selfTrim.trimmed
+
+  // Pin what was chosen for the user, so it sorts to the front of the grid once
+  // and then stays where they last saw it.
+  pinnedTargetIds.value = new Set(targetTrim.kept.map(c => c.id))
+  pinnedInitiatorIds.value = new Set(selfTrim.kept.map(c => c.id))
 
   preselectTargetKeys.value = []
   preselectSelfKeys.value = []
 }
 
+// ── Per-side ceiling ──────────────────────────────────────────────
+// MAX_CTOONS_PER_SIDE is imported from the same module the server enforces it
+// with, so the two cannot drift. Enforced here as well as server-side so the
+// limit is visible while selecting rather than as a 400 after all three steps.
+const targetAtLimit = computed(() => selectedTargetCtoons.value.length >= MAX_CTOONS_PER_SIDE)
+const initiatorAtLimit = computed(() => selectedInitiatorCtoons.value.length >= MAX_CTOONS_PER_SIDE)
+
+/**
+ * One message per time the side fills up, not one per refused tap. The refused
+ * cards go disabled at the same moment, which is the durable signal; the toast
+ * only explains why they just changed.
+ */
+const limitNotified = reactive({ target: false, initiator: false })
+function notifyAtLimit(side) {
+  if (limitNotified[side]) return
+  limitNotified[side] = true
+  showPageToast(`You can include at most ${MAX_CTOONS_PER_SIDE} cToons per side of a trade.`, 'error')
+}
+
 function toggleTargetCtoon(c) {
   if (c.inPendingTrade) return
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
-  if (i >= 0) selectedTargetCtoons.value.splice(i, 1); else selectedTargetCtoons.value.push(c)
+  if (i >= 0) { selectedTargetCtoons.value.splice(i, 1); limitNotified.target = false; return }
+  if (targetAtLimit.value) return notifyAtLimit('target')
+  selectedTargetCtoons.value.push(c)
 }
 function toggleInitiatorCtoon(c) {
   if (c.inPendingTrade) return
   const i = selectedInitiatorCtoons.value.findIndex(x => x.id === c.id)
-  if (i >= 0) selectedInitiatorCtoons.value.splice(i, 1); else selectedInitiatorCtoons.value.push(c)
+  if (i >= 0) { selectedInitiatorCtoons.value.splice(i, 1); limitNotified.initiator = false; return }
+  if (initiatorAtLimit.value) return notifyAtLimit('initiator')
+  selectedInitiatorCtoons.value.push(c)
 }
 
 // ── Filtering ─────────────────────────────────────────────────────
@@ -1439,6 +1556,12 @@ function uniqueTruthies(arr) { return [...new Set(arr.map(x => (x ?? '').toStrin
 
 const dupIdsOther = computed(() => duplicateCtoonIds(otherCtoons.value))
 const dupIdsSelf  = computed(() => duplicateCtoonIds(selfCtoons.value))
+
+// Ids the grid sorts to the front. Written only when a selection is made FOR the
+// user — the counter mirror and the deep-link preselect — so the ordering stays
+// put while they browse and tap.
+const pinnedTargetIds = ref(new Set())
+const pinnedInitiatorIds = ref(new Set())
 
 function applyFilters(items, f, ctx) {
   const nameQ = f.nameQuery?.toLowerCase().trim()
@@ -1454,10 +1577,16 @@ function applyFilters(items, f, ctx) {
     if (f.owned === 'unowned' && isOwned) return false
     return true
   }).sort((a, b) => {
-    // Selected items first. Without this a mirrored counter's pre-selections
+    // Pinned items first. Without this a mirrored counter's pre-selections
     // scatter across pages of a 50-per-page grid and the user has no way to see
     // what was picked for them.
-    const aS = ctx.selectedIds.has(a.id); const bS = ctx.selectedIds.has(b.id)
+    //
+    // Pinned, not currently-selected: sorting on the live selection re-sorted
+    // the whole collection on every tap, so the just-tapped card jumped to the
+    // front and every card after it shifted by one — meaning the next card a
+    // user aimed at had moved by the time they tapped it. That is merely odd at
+    // five selections and unusable at the per-side ceiling.
+    const aS = ctx.pinnedIds.has(a.id); const bS = ctx.pinnedIds.has(b.id)
     if (aS !== bS) return aS ? -1 : 1
     const aO = ctx.ownedPredicate(a); const bO = ctx.ownedPredicate(b)
     return aO === bO ? 0 : (aO ? 1 : -1)
@@ -1467,13 +1596,13 @@ function applyFilters(items, f, ctx) {
 const filteredOther = computed(() => applyFilters(otherCtoons.value, tradeFiltersOther.value, {
   ownedPredicate: c => selfOwnedIdsCreate.value.has(c.ctoonId),
   dupIds: dupIdsOther.value, tradeListIds: otherTradeListIds.value,
-  selectedIds: selectedTargetCtoonsMap.value
+  pinnedIds: pinnedTargetIds.value
 }))
 const filteredSelf = computed(() => {
   let list = applyFilters(selfCtoons.value, tradeFiltersSelf.value, {
     ownedPredicate: c => targetOwnedIds.value.has(c.ctoonId),
     dupIds: dupIdsSelf.value, tradeListIds: selfTradeListIds.value,
-    selectedIds: selectedInitiatorCtoonsMap.value
+    pinnedIds: pinnedInitiatorIds.value
   })
   if (tradeFiltersSelf.value.wishlistOnly) list = list.filter(c => targetWishlistIds.value.has(c.ctoonId))
   return list
@@ -1526,6 +1655,13 @@ const isCounterMode = computed(() => !!tradeCounterSourceId.value)
 
 async function sendOffer() {
   if (!tradeTargetUser.value || pointsToOffer.value < 0) return
+  // Last line before the network. The toggles and the counter mirror are both
+  // capped, but this is the only check every path provably passes through.
+  if (selectedTargetCtoons.value.length > MAX_CTOONS_PER_SIDE ||
+      selectedInitiatorCtoons.value.length > MAX_CTOONS_PER_SIDE) {
+    showPageToast(`A trade can include at most ${MAX_CTOONS_PER_SIDE} cToons per side.`, 'error')
+    return
+  }
   const counterId = tradeCounterSourceId.value
   const payload = {
     recipientUsername: tradeTargetUser.value.username,
@@ -1599,6 +1735,7 @@ function cancelCounter() {
   tradeCounterSourceId.value = null
   tradeCounterSummary.value = null
   counterMissingCount.value = 0
+  counterTrimmedCount.value = 0
   showPageToast('Counter cancelled — this will send as a new offer.', 'success')
 }
 
@@ -1844,6 +1981,16 @@ onBeforeUnmount(() => {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
   padding: 6px 8px; margin-bottom: 4px;
   background: rgba(0,0,0,0.25); border-radius: 4px; flex-shrink: 0;
+  /* Bounded, and scrolls past the bound. The strip sits above the card grid and
+     used to grow a row per few selections — on a phone a full side ran to
+     thousands of pixels, and because the document is the scroller there (see the
+     .tr-content note), every selection pushed the grid down under the user's
+     thumb mid-tap. align-content is required: a wrapping flex container with a
+     constrained height stretches its rows apart without it. */
+  max-height: 108px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: flex-start;
 }
 .tr-chips-label {
   font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em;
@@ -2009,7 +2156,13 @@ onBeforeUnmount(() => {
 .tr-confirm-label { font-size: 0.68rem; font-weight: bold; color: rgba(255,255,255,0.8); margin-bottom: 6px; }
 .tr-confirm-points { font-size: 0.65rem; color: var(--OrbitGreen); margin-bottom: 4px; }
 .tr-confirm-empty { margin-top: 4px; }
-.tr-confirm-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.tr-confirm-cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;
+  /* Each side scrolls within a fixed height so the Confirm step stays one
+     screen. Unbounded, a large offer put thousands of pixels between the
+     summary and the Make Offer button, which lives in the header. */
+  max-height: 300px; overflow-y: auto; overscroll-behavior: contain;
+}
 .tr-confirm-card {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: rgba(255,255,255,0.08); border-radius: 4px; padding: 6px 4px; overflow: hidden;
@@ -2341,4 +2494,22 @@ onBeforeUnmount(() => {
 }
 .tm-toast.success { background: #15803d; color: white; }
 .tm-toast.error { background: #b91c1c; color: white; }
+
+/* The live-region wrapper is presentational only — the toast inside it keeps
+   its own fixed positioning. */
+.tr-page-toast-live { display: contents; }
+
+/* The Confirm step and the step header never had a mobile breakpoint: two
+   side-by-side columns each holding a 2-up card grid put four cards across a
+   ~360px screen, which ellipsised nearly every name. Stacking the columns
+   doubles the card width; the max-height on .tr-confirm-cards above is what
+   keeps the taller stacked layout to one screen. */
+@media (max-width: 640px) {
+  .tr-confirm-grid { grid-template-columns: 1fr; }
+  .tr-confirm-cards { grid-template-columns: repeat(3, 1fr); max-height: 240px; }
+  /* .tr has overflow: hidden, so anything too wide for this row is clipped
+     rather than scrolled — including the Confirm/Make Offer button. */
+  .tr-step-header { flex-wrap: wrap; }
+  .tr-step-btns { width: 100%; justify-content: flex-end; }
+}
 </style>

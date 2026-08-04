@@ -17,8 +17,8 @@
       <SecondEditionOverlay :ctoon="ctoon" />
       <!-- Owned / Unowned badge -->
       <span v-if="badge" class="tc-badge" :class="badgeClassComputed">{{ badge }}</span>
-      <!-- In Trade overlay -->
-      <span v-if="disabled" class="tc-in-trade">In Trade</span>
+      <!-- Reason-for-disabled overlay -->
+      <span v-if="disabled" class="tc-in-trade">{{ disabledLabel }}</span>
       <!-- Selected indicator -->
       <span v-if="selected" class="tc-selected-pip">✓</span>
     </div>
@@ -47,6 +47,9 @@ const props = defineProps({
   ctoon: { type: Object, required: true },
   selected: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
+  // Why the card is unselectable. Defaults to the original hardcoded reason, so
+  // callers that only ever disable for a pending trade need not pass it.
+  disabledLabel: { type: String, default: 'In Trade' },
   badge: { type: String, default: '' },
   badgeClassOwned: { type: String, default: 'tc-badge--owned' },
   badgeClassUnowned: { type: String, default: 'tc-badge--unowned' },
