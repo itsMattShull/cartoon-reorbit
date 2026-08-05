@@ -540,6 +540,10 @@ model User {
   // ReOrbit Blackjack
   blackjackSessions BlackjackSession[]
 
+  // Fruit Samurai
+  fruitSamuraiScores FruitSamuraiScore[]
+  fruitSamuraiPlays  FruitSamuraiPlay[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
 }
 
@@ -1157,6 +1161,55 @@ model GameConfig {
   flappyButtercupImagePath String?
   flappyCityImagePath      String?
 
+  // — Fruit Samurai settings —
+  // Every value here is clamped again by normalizeConfig() in lib/fruitSamuraiSim.js, which is
+  // the source of truth for the bounds (CFG_BOUNDS); the validation table in
+  // server/api/admin/game-config.post.js mirrors them. The engine re-clamps on the way OUT of
+  // the Redis session too, because a session blob is no more trustworthy than the row it was
+  // built from.
+  //
+  // Note what is absent: any slow-motion factor for the physics. The hourglass power-up is a
+  // renderer pacing effect and never enters the simulation — see the note at the bottom of
+  // lib/fruitSamuraiSim.js. `fruitSamuraiHourglassScalePercent` is read only by the client.
+  fruitSamuraiRankedPlaysPerPeriod Int?    @default(3)
+  fruitSamuraiPointsPerGame        Int?    @default(50)
+  fruitSamuraiStartingLives        Int?    @default(3)
+  fruitSamuraiGravity              Int?    @default(70)
+  fruitSamuraiLaunchVyMin          Int?    @default(4000)
+  fruitSamuraiLaunchVyMax          Int?    @default(4900)
+  fruitSamuraiLaunchVxMax          Int?    @default(500)
+  fruitSamuraiGraceTicks           Int?    @default(90)
+  fruitSamuraiSpawnIntervalStart   Int?    @default(150)
+  fruitSamuraiSpawnIntervalMin     Int?    @default(60)
+  fruitSamuraiRampTicks            Int?    @default(9000)
+  fruitSamuraiWaveTwoTicks         Int?    @default(2400)
+  fruitSamuraiWaveThreeTicks       Int?    @default(6000)
+  fruitSamuraiEscalationStart      Int?    @default(9000)
+  fruitSamuraiEscalationTicks      Int?    @default(1500)
+  fruitSamuraiSpeedStartPct        Int?    @default(100)
+  fruitSamuraiSpeedMaxPct          Int?    @default(128)
+  fruitSamuraiJitterTicks          Int?    @default(20)
+  fruitSamuraiPowerupInterval      Int?    @default(900)
+  fruitSamuraiPowerupChancePct     Int?    @default(55)
+  fruitSamuraiWeightPiggy          Int?    @default(40)
+  fruitSamuraiWeightHourglass      Int?    @default(35)
+  fruitSamuraiWeightDynamite       Int?    @default(25)
+  fruitSamuraiPowerupRadius        Int?    @default(22)
+  fruitSamuraiPowerupSpeedPct      Int?    @default(85)
+  fruitSamuraiPiggyMultiplier      Int?    @default(2)
+  fruitSamuraiPiggyTicks           Int?    @default(480)
+  fruitSamuraiHourglassScalePct    Int?    @default(45)
+  fruitSamuraiHourglassTicks       Int?    @default(240)
+  fruitSamuraiDynamiteFuseTicks    Int?    @default(36)
+  fruitSamuraiDynamiteMultiplier   Int?    @default(3)
+  fruitSamuraiDynamiteMaxTargets   Int?    @default(24)
+  // Jack's in-character commentary. The line pool lives in the client; these only gate how
+  // often it speaks, so there is no admin-authored text to store or render.
+  fruitSamuraiJackChatterEnabled   Boolean @default(true)
+  fruitSamuraiJackChatterCooldown  Int?    @default(420) // ticks between lines
+  fruitSamuraiJackImagePath        String?
+  fruitSamuraiBackgroundImagePath  String?
+
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @default(now()) @updatedAt
   // — ReOrbit Blackjack —
@@ -1237,9 +1290,10 @@ model GlobalGameConfig {
   gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
 
-  gameTileFlappyImagePath    String?
-  gameTileBlackjackImagePath String?
-  gameTileEdrpsImagePath     String?
+  gameTileFlappyImagePath       String?
+  gameTileBlackjackImagePath    String?
+  gameTileEdrpsImagePath        String?
+  gameTileFruitsamuraiImagePath String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -3167,6 +3221,40 @@ model FlappyPowerpuffScore {
 // analytics and to the activity signals that feed dormancy — only ranked=true rows count
 // against the allotment. Mirrors the TkoRound.counted precedent.
 model FlappyPowerpuffPlay {
+  id        String   @id @default(uuid())
+  userId    String
+  ranked    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, ranked, createdAt])
+}
+
+// ── Fruit Samurai ──────────────────────────────────────────────────────────────
+// Higher `score` is better. Runs past the daily ranked allotment are not stored at all —
+// unlike Flappy, which keeps unranked rows, there is nothing to learn from a practice run
+// here that the play row below doesn't already record.
+
+model FruitSamuraiScore {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Int
+  // Ticks survived. Kept alongside the score because the two together are the honest
+  // anomaly signal — a huge score in very few ticks is the shape worth looking at.
+  ticks     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, score])
+  @@index([createdAt, userId, score]) // covering: leaderboard period filters + the week high
+}
+
+// Mirrors FlappyPowerpuffPlay: unlimited practice once the daily ranked allotment is spent,
+// with unranked runs still recorded so the game stays visible to play analytics and to the
+// activity signals that feed dormancy. Only ranked=true rows count against the allotment.
+model FruitSamuraiPlay {
   id        String   @id @default(uuid())
   userId    String
   ranked    Boolean  @default(true)

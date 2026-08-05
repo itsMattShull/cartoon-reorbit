@@ -96,6 +96,7 @@ const gameOptions = [
   { key: 'guessctoon',   label: 'Guess cToon',    endpoint: '/api/game/guessctoon/leaderboard' },
   { key: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.', endpoint: '/api/game/asteroid/leaderboard' },
   { key: 'flappy',       label: 'Flappy Powerpuff', endpoint: '/api/game/flappypowerpuff/leaderboard' },
+  { key: 'fruitsamurai', label: 'Fruit Samurai', endpoint: '/api/game/fruitsamurai/leaderboard' },
   { key: 'edrps',        label: 'Ed, Edd n Eddy RPS', endpoint: '/api/game/edrps/leaderboard', unit: 'win' }
 ]
 const selectedGame = ref('reorbitmatch')

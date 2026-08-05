@@ -99,6 +99,56 @@ const EDRPS_NUMERIC_RANGES = [
 
 const EDRPS_FIELDS = EDRPS_NUMERIC_RANGES.map(([k]) => k)
 
+// ── Fruit Samurai field table ────────────────────────────────────────────────────────────
+// Ranges mirror CFG_BOUNDS in lib/fruitSamuraiSim.js, which is the source of truth and clamps
+// every one of these again on read — including on the way out of the Redis session. Rejecting
+// here is what gives the admin an error instead of silently saving a value the game ignores.
+//
+// The column names are shortened relative to the sim's config keys (the schema has to stay
+// inside Postgres' identifier limit), so the mapping is explicit rather than derived.
+const FRUITSAMURAI_NUMERIC_RANGES = [
+  ['fruitSamuraiRankedPlaysPerPeriod', 0, 100],
+  ['fruitSamuraiPointsPerGame', 0, 100000],
+  ['fruitSamuraiStartingLives', 1, 5],
+  ['fruitSamuraiGravity', 40, 120],
+  ['fruitSamuraiLaunchVyMin', 3000, 6000],
+  ['fruitSamuraiLaunchVyMax', 3000, 6000],
+  ['fruitSamuraiLaunchVxMax', 0, 1200],
+  ['fruitSamuraiGraceTicks', 0, 600],
+  ['fruitSamuraiSpawnIntervalStart', 30, 600],
+  ['fruitSamuraiSpawnIntervalMin', 20, 600],
+  ['fruitSamuraiRampTicks', 600, 36000],
+  ['fruitSamuraiWaveTwoTicks', 0, 36000],
+  ['fruitSamuraiWaveThreeTicks', 0, 36000],
+  ['fruitSamuraiEscalationStart', 600, 36000],
+  ['fruitSamuraiEscalationTicks', 300, 36000],
+  ['fruitSamuraiSpeedStartPct', 50, 200],
+  ['fruitSamuraiSpeedMaxPct', 50, 300],
+  ['fruitSamuraiJitterTicks', 0, 120],
+  ['fruitSamuraiPowerupInterval', 120, 7200],
+  ['fruitSamuraiPowerupChancePct', 0, 100],
+  ['fruitSamuraiWeightPiggy', 0, 100],
+  ['fruitSamuraiWeightHourglass', 0, 100],
+  ['fruitSamuraiWeightDynamite', 0, 100],
+  ['fruitSamuraiPowerupRadius', 10, 48],
+  ['fruitSamuraiPowerupSpeedPct', 50, 150],
+  ['fruitSamuraiPiggyMultiplier', 1, 4],
+  ['fruitSamuraiPiggyTicks', 60, 3600],
+  ['fruitSamuraiHourglassScalePct', 20, 100],
+  ['fruitSamuraiHourglassTicks', 60, 3600],
+  ['fruitSamuraiDynamiteFuseTicks', 0, 300],
+  ['fruitSamuraiDynamiteMultiplier', 1, 6],
+  ['fruitSamuraiDynamiteMaxTargets', 1, 40],
+  ['fruitSamuraiJackChatterCooldown', 60, 7200]
+]
+
+const FRUITSAMURAI_BOOLEAN_FIELDS = ['fruitSamuraiJackChatterEnabled']
+
+const FRUITSAMURAI_FIELDS = [
+  ...FRUITSAMURAI_NUMERIC_RANGES.map(([k]) => k),
+  ...FRUITSAMURAI_BOOLEAN_FIELDS
+]
+
 const ASTEROID_BOOLEAN_FIELDS = [
   'asteroidPowerupsEnabled',
   'asteroidPowerupBlueEnabled',
@@ -335,6 +385,41 @@ function validatePayload(payload) {
       if (payload[field] != null && typeof payload[field] !== 'string') {
         throw createError({ statusCode: 400, statusMessage: `"${field}" must be a string or null` })
       }
+    }
+  } else if (payload.gameName === 'FruitSamurai') {
+    // Number.isInteger, not typeof: typeof NaN is 'number' and NaN passes every comparison, so
+    // a bare range check would let it through. Every tunable in this game is a whole number —
+    // the simulation is integer-only by design, so a float here is a bug, not a rounding.
+    for (const [field, min, max] of FRUITSAMURAI_NUMERIC_RANGES) {
+      const v = payload[field]
+      if (!Number.isInteger(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a whole number between ${min} and ${max}` })
+      }
+    }
+    for (const field of FRUITSAMURAI_BOOLEAN_FIELDS) {
+      if (payload[field] != null && typeof payload[field] !== 'boolean') {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a boolean` })
+      }
+    }
+    for (const field of ['fruitSamuraiJackImagePath', 'fruitSamuraiBackgroundImagePath']) {
+      if (payload[field] != null && typeof payload[field] !== 'string') {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a string or null` })
+      }
+    }
+    // The sim repairs these on read, but an admin who saves them inverted deserves to be told
+    // rather than to wonder why the game ignored the value.
+    if (payload.fruitSamuraiLaunchVyMin > payload.fruitSamuraiLaunchVyMax) {
+      throw createError({ statusCode: 400, statusMessage: 'Launch velocity minimum cannot exceed the maximum' })
+    }
+    if (payload.fruitSamuraiSpawnIntervalMin > payload.fruitSamuraiSpawnIntervalStart) {
+      throw createError({ statusCode: 400, statusMessage: 'Spawn interval minimum cannot exceed the starting interval' })
+    }
+    if (payload.fruitSamuraiSpeedMaxPct < payload.fruitSamuraiSpeedStartPct) {
+      throw createError({ statusCode: 400, statusMessage: 'Maximum speed cannot be below the starting speed' })
+    }
+    const wTotal = payload.fruitSamuraiWeightPiggy + payload.fruitSamuraiWeightHourglass + payload.fruitSamuraiWeightDynamite
+    if (wTotal <= 0) {
+      throw createError({ statusCode: 400, statusMessage: 'At least one power-up must have a non-zero weight' })
     }
   } else if (payload.gameName === 'Blackjack') {
     for (const [field, min, max] of BLACKJACK_NUMERIC_RANGES) {
@@ -692,6 +777,17 @@ export default defineEventHandler(async (event) => {
         if (flappyCityImagePath != null) flappyData.flappyCityImagePath = flappyCityImagePath
         createData = { ...createData, ...flappyData }
         updateData = { ...updateData, ...flappyData }
+      } else if (gameName === 'FruitSamurai') {
+        const fruitSamuraiData = {}
+        for (const key of FRUITSAMURAI_FIELDS) {
+          if (body[key] != null) fruitSamuraiData[key] = body[key]
+        }
+        // Image paths are written by /api/admin/fruitsamurai-image, so a settings save must not
+        // clobber them back to null when the form didn't send them.
+        if (body.fruitSamuraiJackImagePath != null) fruitSamuraiData.fruitSamuraiJackImagePath = body.fruitSamuraiJackImagePath
+        if (body.fruitSamuraiBackgroundImagePath != null) fruitSamuraiData.fruitSamuraiBackgroundImagePath = body.fruitSamuraiBackgroundImagePath
+        createData = { ...createData, ...fruitSamuraiData }
+        updateData = { ...updateData, ...fruitSamuraiData }
       } else if (gameName === 'Blackjack') {
         const blackjackData = {}
         for (const key of BLACKJACK_FIELDS) {
