@@ -1424,6 +1424,101 @@
           </button>
         </section>
 
+        <!-- Fruit Samurai -->
+        <section v-if="activeTab === 'FruitSamurai'" role="tabpanel" aria-label="Fruit Samurai Settings">
+          <h2 class="text-2xl font-semibold mb-4">Fruit Samurai Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Timings are in <strong>ticks</strong>; the game runs at 60 ticks per second, so 60 ticks
+            is one second. Every value here is a whole number — the simulation is integer-only by
+            design, and it is clamped again on read by <code>normalizeConfig()</code> in
+            <code>lib/fruitSamuraiSim.js</code>, so a bad number here cannot break a live run.
+          </p>
+          <p class="text-xs text-gray-500 mb-4">
+            The difficulty curve is the whole fail state: there are no bombs, so the only way a run
+            ends is by letting fruit fall. What actually defeats a player is <em>simultaneity</em> —
+            several fruit spread across the width arriving together — rather than raw speed, so
+            reach for the wave and spawn-interval settings before the speed ones.
+          </p>
+
+          <div v-for="g in fruitSamuraiFieldGroups" :key="g.title" class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">{{ g.title }}</h3>
+            <p v-if="g.note" class="text-xs text-gray-500 mb-3">{{ g.note }}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div v-for="f in g.items" :key="f.key">
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ f.label }}</label>
+                <p class="text-xs text-gray-400 mb-1">{{ f.help }}</p>
+                <input
+                  type="number"
+                  v-model.number="fruitSamurai[f.key]"
+                  :min="f.min"
+                  :max="f.max"
+                  step="1"
+                  class="input"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Jack&rsquo;s Commentary</h3>
+            <p class="text-xs text-gray-500 mb-3">
+              Jack occasionally speaks in character during a run. The lines themselves live in the
+              client, so there is nothing to edit here — only how often he talks. Reactions to a
+              power-up or a lost life always speak, ignoring the cooldown.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input type="checkbox" v-model="fruitSamurai.fruitSamuraiJackChatterEnabled" />
+                  <span>Jack speaks during a run</span>
+                </label>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cooldown between lines</label>
+                <p class="text-xs text-gray-400 mb-1">Ticks. 420 is seven seconds.</p>
+                <input type="number" v-model.number="fruitSamurai.fruitSamuraiJackChatterCooldown" min="60" max="7200" step="1" class="input" />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-6 border rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-1">Game Artwork</h3>
+            <p class="text-xs text-gray-500 mb-3">
+              The fruit, power-ups, juice and blade are all drawn by the game, so there is nothing to
+              upload for them. Only Jack and the backdrop are images. Uploads are re-encoded to WebP
+              and resized, so large files are fine to drop in. Leave a slot empty to use the default.
+            </p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div v-for="s in fruitSamuraiImageSlots" :key="s.slot">
+                <p class="text-sm font-medium text-gray-700 mb-1">{{ s.label }}</p>
+                <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
+                  <img v-if="fruitSamuraiImages[s.slot]" :src="fruitSamuraiImages[s.slot]" :alt="s.label" class="w-full h-full object-contain" />
+                  <span v-else class="text-gray-400 text-xs px-1 text-center">Default</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,image/webp,.webp"
+                  class="block w-full text-xs mb-1"
+                  @change="onFruitSamuraiImageFile(s.slot, $event)"
+                />
+                <button
+                  class="btn-primary text-xs py-1 px-2"
+                  :disabled="!fruitSamuraiImageFiles[s.slot] || uploadingFruitSamuraiImage[s.slot]"
+                  @click="uploadFruitSamuraiImage(s.slot)"
+                >
+                  <span v-if="!uploadingFruitSamuraiImage[s.slot]">Upload</span>
+                  <span v-else>Uploading&hellip;</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button @click="saveFruitSamuraiConfig" :disabled="loadingFruitSamurai" class="btn-primary">
+            <span v-if="!loadingFruitSamurai">Save Fruit Samurai Settings</span>
+            <span v-else>Saving&hellip;</span>
+          </button>
+        </section>
+
         <!-- ReOrbit Blackjack -->
         <section v-if="activeTab === 'Blackjack'" role="tabpanel" aria-label="ReOrbit Blackjack Settings">
           <h2 class="text-2xl font-semibold mb-4">ReOrbit Blackjack Settings</h2>
@@ -1665,6 +1760,7 @@ const tabs = [
   { key: 'GuessCtoon',   label: 'Guess that cToon!' },
   { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
   { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' },
+  { key: 'FruitSamurai', label: 'Fruit Samurai' },
   { key: 'Blackjack',    label: 'ReOrbit Blackjack' }
 ]
 const activeTab = ref('Global')
@@ -2156,6 +2252,15 @@ async function loadSettings() {
   flappyImages.value.buttercup   = fp.flappyButtercupImagePath || ''
   flappyImages.value.city        = fp.flappyCityImagePath || ''
 
+  const fsCfg = await $fetch('/api/admin/game-config?gameName=FruitSamurai')
+  // Every fruitSamurai* column carries a schema default, so a freshly-created row already holds
+  // the real values — but the row is created lazily, so fall back per-key rather than assuming.
+  for (const key of Object.keys(FRUIT_SAMURAI_DEFAULTS)) {
+    fruitSamurai.value[key] = fsCfg[key] ?? FRUIT_SAMURAI_DEFAULTS[key]
+  }
+  fruitSamuraiImages.value.jack       = fsCfg.fruitSamuraiJackImagePath || ''
+  fruitSamuraiImages.value.background = fsCfg.fruitSamuraiBackgroundImagePath || ''
+
   const gc = await $fetch('/api/admin/game-config?gameName=GuessCtoon')
   guessCtoonScoredPlaysPerPeriod.value = gc.guessCtoonScoredPlaysPerPeriod ?? 3
   guessCtoonPointsPerGame.value        = gc.guessCtoonPointsPerGame ?? 50
@@ -2548,12 +2653,13 @@ const gameTileSlots = [
   { slot: 'guessctoon',   label: 'Guess that cToon!' },
   { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
   { slot: 'flappy',       label: 'Flappy Powerpuff' },
+  { slot: 'fruitsamurai', label: 'Fruit Samurai' },
   { slot: 'blackjack',    label: 'ReOrbit Blackjack' },
   { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null
@@ -2690,6 +2796,167 @@ const asteroidCfg = {
   asteroidPowerupBlueTicks, asteroidPowerupRedTicks, asteroidPowerupGreenTicks
 }
 const ASTEROID_FIELD_KEYS = Object.keys(asteroidCfg)
+
+// ── Fruit Samurai ─────────────────────────────
+// Driven from a field table rather than ~35 hand-written inputs so the labels, ranges and the
+// save payload cannot drift apart. Ranges mirror FRUITSAMURAI_NUMERIC_RANGES in
+// server/api/admin/game-config.post.js, which in turn mirrors CFG_BOUNDS in
+// lib/fruitSamuraiSim.js — that file is the source of truth and clamps everything again on read.
+const fruitSamuraiFieldGroups = [
+  {
+    title: 'Play & Points',
+    note: 'Points are flat per ranked run, exactly like Flappy Powerpuff: a player who scores 30 and one who scores 30,000 earn the same. That is deliberate — it is what keeps a forged score worth nothing but leaderboard pride.',
+    items: [
+      { key: 'fruitSamuraiRankedPlaysPerPeriod', label: 'Ranked runs per day', min: 0, max: 100, help: 'Runs that count for points and the leaderboard. Practice is unlimited after these.' },
+      { key: 'fruitSamuraiPointsPerGame', label: 'Points per ranked run', min: 0, max: 100000, help: 'Capped by the global daily point limit.' },
+      { key: 'fruitSamuraiStartingLives', label: 'Lives', min: 1, max: 5, help: 'Fruit that fall past the player before the run ends.' }
+    ]
+  },
+  {
+    title: 'Difficulty curve',
+    note: 'The primary tuning surface. Wave size keeps growing past the plateau forever, which is what guarantees every run eventually ends rather than running to the engine time limit.',
+    items: [
+      { key: 'fruitSamuraiGraceTicks', label: 'Opening grace', min: 0, max: 600, help: 'Ticks before the first fruit. 90 is 1.5s.' },
+      { key: 'fruitSamuraiSpawnIntervalStart', label: 'Wave interval at start', min: 30, max: 600, help: 'Ticks between waves early on. 150 is 2.5s.' },
+      { key: 'fruitSamuraiSpawnIntervalMin', label: 'Wave interval floor', min: 20, max: 600, help: 'Fastest the waves ever come. Cannot exceed the starting interval.' },
+      { key: 'fruitSamuraiRampTicks', label: 'Ramp length', min: 600, max: 36000, help: 'Ticks over which interval and speed reach their limits. 9000 is 150s.' },
+      { key: 'fruitSamuraiWaveTwoTicks', label: 'Second fruit at', min: 0, max: 36000, help: 'Tick where waves grow to 2 fruit.' },
+      { key: 'fruitSamuraiWaveThreeTicks', label: 'Third fruit at', min: 0, max: 36000, help: 'Tick where waves grow to 3 fruit.' },
+      { key: 'fruitSamuraiEscalationStart', label: 'Escalation begins', min: 600, max: 36000, help: 'After this tick, wave size grows without limit.' },
+      { key: 'fruitSamuraiEscalationTicks', label: 'Escalation step', min: 300, max: 36000, help: 'Ticks per extra fruit once escalation starts. Lower ends runs sooner.' },
+      { key: 'fruitSamuraiJitterTicks', label: 'Wave spread', min: 0, max: 120, help: 'Ticks a wave is spread over. 0 launches them perfectly together, which is harder.' },
+      { key: 'fruitSamuraiSpeedStartPct', label: 'Fruit speed at start', min: 50, max: 200, help: 'Percent. Scales flight time, not apex height.' },
+      { key: 'fruitSamuraiSpeedMaxPct', label: 'Fruit speed at full ramp', min: 50, max: 300, help: 'Percent. Cannot be below the starting speed.' }
+    ]
+  },
+  {
+    title: 'Fruit flight',
+    note: 'Launch velocity and gravity together set how high fruit rise and how long they hang. The sim keeps apex height constant when speed changes, so these decide the shape of every throw.',
+    items: [
+      { key: 'fruitSamuraiGravity', label: 'Gravity', min: 40, max: 120, help: 'In 1/256 world units per tick squared. Higher falls faster.' },
+      { key: 'fruitSamuraiLaunchVyMin', label: 'Launch speed (min)', min: 3000, max: 6000, help: 'In 1/256 units per tick. Lower means a shorter, lazier throw.' },
+      { key: 'fruitSamuraiLaunchVyMax', label: 'Launch speed (max)', min: 3000, max: 6000, help: 'Must not be below the minimum. Higher throws reach nearer the top.' },
+      { key: 'fruitSamuraiLaunchVxMax', label: 'Sideways drift', min: 0, max: 1200, help: 'Always aimed toward the middle, so nothing sails out of the side of the screen.' }
+    ]
+  },
+  {
+    title: 'Power-up spawning',
+    note: 'Power-ups should feel like events. Only one is ever on screen at a time. Missing one costs nothing, so they hang longer than fruit and should stay reliably catchable.',
+    items: [
+      { key: 'fruitSamuraiPowerupInterval', label: 'Attempt every', min: 120, max: 7200, help: 'Ticks between chances at a power-up. 900 is 15s.' },
+      { key: 'fruitSamuraiPowerupChancePct', label: 'Chance per attempt', min: 0, max: 100, help: 'Percent. 55 works out to roughly one every 27s.' },
+      { key: 'fruitSamuraiWeightPiggy', label: 'Piggy bank weight', min: 0, max: 100, help: 'Relative weight. At least one power-up must be above zero.' },
+      { key: 'fruitSamuraiWeightHourglass', label: 'Hourglass weight', min: 0, max: 100, help: 'Relative weight.' },
+      { key: 'fruitSamuraiWeightDynamite', label: 'Dynamite weight', min: 0, max: 100, help: 'Relative weight.' },
+      { key: 'fruitSamuraiPowerupRadius', label: 'Power-up size', min: 10, max: 48, help: 'World units.' },
+      { key: 'fruitSamuraiPowerupSpeedPct', label: 'Power-up speed', min: 50, max: 150, help: 'Percent of fruit speed. Below 100 means they hang longer.' }
+    ]
+  },
+  {
+    title: 'Power-up effects',
+    note: 'Slow motion is a display effect: it changes how fast the game is drawn, never the physics, so it can never affect a score. Dynamite pays a multiplier rather than face value, which is what makes it better than simply cutting the fruit by hand.',
+    items: [
+      { key: 'fruitSamuraiPiggyMultiplier', label: 'Piggy bank multiplier', min: 1, max: 4, help: 'Multiplies every point scored while it lasts.' },
+      { key: 'fruitSamuraiPiggyTicks', label: 'Piggy bank duration', min: 60, max: 3600, help: 'Ticks. 480 is 8s.' },
+      { key: 'fruitSamuraiHourglassScalePct', label: 'Slow motion strength', min: 20, max: 100, help: 'Percent of normal pace. 45 is a little under half speed. Display only.' },
+      { key: 'fruitSamuraiHourglassTicks', label: 'Slow motion duration', min: 60, max: 3600, help: 'Ticks of game time, so it lasts longer in real seconds — 240 ticks at 45% is about 9s.' },
+      { key: 'fruitSamuraiDynamiteFuseTicks', label: 'Dynamite fuse', min: 0, max: 300, help: 'Ticks between cutting it and the blast. The fuse is what makes it a timing decision.' },
+      { key: 'fruitSamuraiDynamiteMultiplier', label: 'Dynamite multiplier', min: 1, max: 6, help: 'Applied to every fruit caught in the blast. Stacks with the piggy bank.' },
+      { key: 'fruitSamuraiDynamiteMaxTargets', label: 'Dynamite max targets', min: 1, max: 40, help: 'Safety rail on one blast.' }
+    ]
+  }
+]
+
+const FRUIT_SAMURAI_DEFAULTS = {
+  fruitSamuraiRankedPlaysPerPeriod: 3,
+  fruitSamuraiPointsPerGame: 50,
+  fruitSamuraiStartingLives: 3,
+  fruitSamuraiGravity: 70,
+  fruitSamuraiLaunchVyMin: 4000,
+  fruitSamuraiLaunchVyMax: 4900,
+  fruitSamuraiLaunchVxMax: 500,
+  fruitSamuraiGraceTicks: 90,
+  fruitSamuraiSpawnIntervalStart: 150,
+  fruitSamuraiSpawnIntervalMin: 60,
+  fruitSamuraiRampTicks: 9000,
+  fruitSamuraiWaveTwoTicks: 2400,
+  fruitSamuraiWaveThreeTicks: 6000,
+  fruitSamuraiEscalationStart: 9000,
+  fruitSamuraiEscalationTicks: 1500,
+  fruitSamuraiSpeedStartPct: 100,
+  fruitSamuraiSpeedMaxPct: 128,
+  fruitSamuraiJitterTicks: 20,
+  fruitSamuraiPowerupInterval: 900,
+  fruitSamuraiPowerupChancePct: 55,
+  fruitSamuraiWeightPiggy: 40,
+  fruitSamuraiWeightHourglass: 35,
+  fruitSamuraiWeightDynamite: 25,
+  fruitSamuraiPowerupRadius: 22,
+  fruitSamuraiPowerupSpeedPct: 85,
+  fruitSamuraiPiggyMultiplier: 2,
+  fruitSamuraiPiggyTicks: 480,
+  fruitSamuraiHourglassScalePct: 45,
+  fruitSamuraiHourglassTicks: 240,
+  fruitSamuraiDynamiteFuseTicks: 36,
+  fruitSamuraiDynamiteMultiplier: 3,
+  fruitSamuraiDynamiteMaxTargets: 24,
+  fruitSamuraiJackChatterEnabled: true,
+  fruitSamuraiJackChatterCooldown: 420
+}
+
+const fruitSamurai = ref({ ...FRUIT_SAMURAI_DEFAULTS })
+const loadingFruitSamurai = ref(false)
+const fruitSamuraiImageSlots = [
+  { slot: 'jack', label: 'Samurai Jack' },
+  { slot: 'background', label: 'Backdrop' }
+]
+const fruitSamuraiImages = ref({ jack: '', background: '' })
+const fruitSamuraiImageFiles = ref({ jack: null, background: null })
+const uploadingFruitSamuraiImage = ref({ jack: false, background: false })
+
+function onFruitSamuraiImageFile(slot, e) {
+  fruitSamuraiImageFiles.value[slot] = e.target.files?.[0] || null
+}
+
+async function uploadFruitSamuraiImage(slot) {
+  const file = fruitSamuraiImageFiles.value[slot]
+  if (!file) return
+  uploadingFruitSamuraiImage.value[slot] = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('slot', slot)
+    fd.append('image', file)
+    const res = await $fetch('/api/admin/fruitsamurai-image', { method: 'POST', body: fd })
+    fruitSamuraiImages.value[slot] = res.assetPath
+    fruitSamuraiImageFiles.value[slot] = null
+    toastMessage.value = 'Image uploaded!'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error uploading image'; toastType.value = 'error'
+  } finally {
+    uploadingFruitSamuraiImage.value[slot] = false
+  }
+}
+
+async function saveFruitSamuraiConfig() {
+  loadingFruitSamurai.value = true; toastMessage.value = ''
+  try {
+    // Image paths are deliberately absent: they are written by /api/admin/fruitsamurai-image,
+    // and sending them here would clobber an upload back to null whenever the form had not
+    // reloaded since.
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: { gameName: 'FruitSamurai', ...fruitSamurai.value }
+    })
+    toastMessage.value = 'Fruit Samurai settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error saving Fruit Samurai settings'; toastType.value = 'error'
+  } finally {
+    loadingFruitSamurai.value = false
+  }
+}
 
 // ── Flappy Powerpuff ──────────────────────────
 const flappyPlaysPerPeriod     = ref(3)

@@ -119,18 +119,37 @@ export default defineEventHandler(async (event) => {
     }
 
     if (offer.pointsOffered > 0) {
-      const initiatorPoints = await tx.userPoints.update({
-        where: { userId: offer.initiatorId },
-        data:  { points: { decrement: offer.pointsOffered } }
-      })
-      await tx.pointsLog.create({
-        data: {
-          userId:    offer.initiatorId,
-          points:    offer.pointsOffered,
-          total:     initiatorPoints.points,
-          method:    'Requested Trade',
-          direction: 'decrease'
-        }
+      // Both UserPoints rows are taken in userId order, not initiator-then-
+      // recipient. Two accepts between the same pair of users in opposite roles
+      // would otherwise grab the same two rows in opposite orders and deadlock —
+      // a narrow window at 50 cToons a side, seconds wide at 250.
+      const [firstId, secondId] = [offer.initiatorId, offer.recipientId].sort()
+      const deltaFor = (userId) => userId === offer.initiatorId
+        ? { points: { decrement: offer.pointsOffered } }
+        : { points: { increment: offer.pointsOffered } }
+
+      const firstRow = await tx.userPoints.update({ where: { userId: firstId }, data: deltaFor(firstId) })
+      const secondRow = await tx.userPoints.update({ where: { userId: secondId }, data: deltaFor(secondId) })
+
+      const totalFor = (userId) => (userId === firstId ? firstRow : secondRow).points
+
+      await tx.pointsLog.createMany({
+        data: [
+          {
+            userId:    offer.initiatorId,
+            points:    offer.pointsOffered,
+            total:     totalFor(offer.initiatorId),
+            method:    'Requested Trade',
+            direction: 'decrease'
+          },
+          {
+            userId:    offer.recipientId,
+            points:    offer.pointsOffered,
+            total:     totalFor(offer.recipientId),
+            method:    'Accepted Trade',
+            direction: 'increase'
+          }
+        ]
       })
 
       // Mark the corresponding trade lock as consumed
@@ -143,70 +162,68 @@ export default defineEventHandler(async (event) => {
         },
         data: { status: 'CONSUMED' }
       })
-
-      const recipientPoints = await tx.userPoints.update({
-        where: { userId: offer.recipientId },
-        data:  { points: { increment: offer.pointsOffered } }
-      })
-      await tx.pointsLog.create({
-        data: {
-          userId:    offer.recipientId,
-          points:    offer.pointsOffered,
-          total:     recipientPoints.points,
-          method:    'Accepted Trade',
-          direction: 'increase'
-        }
-      })
     }
 
-    // transfer each cToon to its new owner and log ownership
-    for (const tc of offer.ctoons) {
-      const newOwner = tc.role === 'OFFERED'
-        ? offer.recipientId
-        : offer.initiatorId
-      const counterpartyUserId = tc.role === 'OFFERED'
-        ? offer.initiatorId
-        : offer.recipientId
-      const counterpartyUsername = tc.role === 'OFFERED'
-        ? initiator.username
-        : me.username
+    // Transfer both sides as two set-based updates rather than one update per
+    // cToon. The per-cToon loop this replaces issued three statements each, so a
+    // full-size offer was ~1500 sequential round trips inside this transaction —
+    // well past Prisma's default 5s timeout, and a P2028 here rolls back the
+    // claim above too, leaving the offer PENDING and permanently unacceptable
+    // because every retry times out identically.
+    //
+    // The guard the loop provided is preserved exactly: each updateMany is still
+    // conditional on the expected current owner, so a cToon already moved by a
+    // concurrently-accepted offer simply isn't matched, and comparing the
+    // aggregate count to the expected length catches that the same way
+    // `moved.count !== 1` did per row.
+    const transfers = [
+      { ids: offeredIds, from: offer.initiatorId, to: offer.recipientId },
+      { ids: requestedIds, from: offer.recipientId, to: offer.initiatorId }
+    ]
 
-      // Conditional on the expected current owner: the ownership checks above
-      // run outside this transaction, so a concurrently-accepted offer holding
-      // the same cToon could otherwise transfer it twice, leaving one
-      // counterparty having paid for nothing.
+    for (const { ids, from, to } of transfers) {
+      if (!ids.length) continue
+
       const moved = await tx.userCtoon.updateMany({
-        where: { id: tc.userCtoonId, userId: counterpartyUserId, burnedAt: null },
-        data:  { userId: newOwner }
+        where: { id: { in: ids }, userId: from, burnedAt: null },
+        data:  { userId: to }
       })
-      if (moved.count !== 1) {
+      if (moved.count !== ids.length) {
         throw createError({
           statusCode: 409,
           statusMessage: 'One or more cToons in this trade are no longer available.'
         })
       }
 
+      // A cToon that changed hands can no longer sit on its old owner's trade
+      // list. Scoped to the new owner so their own listing survives, matching
+      // the per-cToon delete this replaces.
       await tx.userTradeListItem.deleteMany({
-        where: {
-          userCtoonId: tc.userCtoonId,
-          userId: { not: newOwner }
-        }
+        where: { userCtoonId: { in: ids }, userId: { not: to } }
       })
+    }
 
-      await tx.ctoonOwnerLog.create({
-        data: {
-          userId:      newOwner,
+    if (offer.ctoons.length) {
+      await tx.ctoonOwnerLog.createMany({
+        data: offer.ctoons.map(tc => ({
+          userId:      tc.role === 'OFFERED' ? offer.recipientId : offer.initiatorId,
           ctoonId:     tc.userCtoon.ctoonId,
           userCtoonId: tc.userCtoonId,
           mintNumber:  tc.userCtoon.mintNumber,
           method:      'TRADE',
-          counterpartyUserId,
-          counterpartyUsername
-        }
+          counterpartyUserId: tc.role === 'OFFERED' ? offer.initiatorId : offer.recipientId,
+          counterpartyUsername: tc.role === 'OFFERED' ? initiator.username : me.username
+        }))
       })
     }
 
     // Status was already claimed at the top of this transaction.
+  }, {
+    // Explicit rather than Prisma's 5s/2s defaults. The work is bounded now, but
+    // a max-size offer still moves 500 rows, and the precedent for bulk work in
+    // this repo is an explicit budget (see admin/auction-only/index.post.js).
+    timeout: 20000,
+    maxWait: 10000
   })
 
   try {
