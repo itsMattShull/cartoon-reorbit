@@ -12,6 +12,7 @@ import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
+import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
@@ -592,6 +593,7 @@ async function enforceDormantAccounts() {
   })
 
   const featuredConfig = await getFeaturedDissolveConfig()
+  let anyQueued = false
 
   for (const u of batch) {
     // DM best-effort
@@ -665,11 +667,31 @@ async function enforceDormantAccounts() {
           update: { priority: true, fromInactive: true, sourceUsername: u.username },
           create: { userCtoonId: uc.id, category, isFeatured, priority: true, fromInactive: true, sourceUsername: u.username }
         })
+        anyQueued = true
       }
 
       // 3.3 disable account
       await tx.user.update({ where: { id: u.id }, data: { active: false } })
     })
+  }
+
+  // 3.4 auto-schedule the queue so these priority entries actually launch
+  // instead of sitting as "unscheduled" until an admin visits the dissolve
+  // queue page. Recomputes every entry (reschedule: true) so the new
+  // priority ones jump ahead of already-scheduled non-priority entries.
+  if (anyQueued) {
+    try {
+      const { cadenceDays, featuredPerCadence, otherPerCadence } = await getDissolveScheduleConfig()
+      await applyDissolveSchedule({
+        startAtUtc: new Date(),
+        cadenceDays,
+        featuredPerCadence,
+        otherPerCadence,
+        reschedule: true
+      })
+    } catch (err) {
+      console.error('[enforceDormantAccounts] Failed to auto-schedule dissolve queue:', err)
+    }
   }
 }
 

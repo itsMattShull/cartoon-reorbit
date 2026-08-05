@@ -1301,6 +1301,13 @@ model GlobalGameConfig {
   featuredDissolveRarities   Json     @default("[]")
   featuredDissolveSeries     Json     @default("[]")
   featuredDissolveSets       Json     @default("[]")
+  // Default cadence for scheduling DissolveAuctionQueue entries, set via the
+  // "Reschedule All" form on /admin/dissolve-queue and reused automatically by
+  // the 9-month inactivity dissolve cron so newly-queued priority entries get
+  // scheduledFor set without needing an admin to visit the page.
+  dissolveScheduleCadenceDays        Int @default(7)
+  dissolveScheduleFeaturedPerCadence Int @default(2)
+  dissolveScheduleOtherPerCadence    Int @default(10)
   // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
   // faviconVersion is bumped on every upload and appended as a cache-busting
   // query string to every icon URL rendered in pages/index.vue's useHead.
