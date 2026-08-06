@@ -32,6 +32,13 @@
             </div>
           </div>
 
+          <!-- cZone warning -->
+          <div v-if="inCzone" class="am-warning">
+            This cToon is in one of your cZone layouts. If the auction sells, it won't be
+            removed automatically — pull it out of your cZone yourself, or it'll keep
+            showing there even after you no longer own it.
+          </div>
+
           <hr class="am-divider" />
 
           <!-- Initial bid -->
@@ -155,6 +162,7 @@ const sending        = ref(false)
 const recentAuctions = ref([])
 const suggestion     = ref(null)
 const loadingSuggestion = ref(true)
+const inCzone        = ref(false)
 const toast          = reactive({ message: '', type: 'success' })
 
 onMounted(async () => {
@@ -167,6 +175,7 @@ onMounted(async () => {
     })
     recentAuctions.value = Array.isArray(res?.sales) ? res.sales : []
     suggestion.value     = res?.suggestion ?? null
+    inCzone.value        = !!res?.inCzone
   } catch {
     recentAuctions.value = []
     suggestion.value     = null
@@ -429,6 +438,17 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
 .am-input:focus { border-color: var(--OrbitLightBlue); }
 
 .am-error { font-size: 0.62rem; color: #fca5a5; }
+
+/* ── cZone warning ── */
+.am-warning {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #fde68a;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
 
 /* ── Presets ── */
 .am-presets { display: flex; flex-wrap: wrap; gap: 4px; }
