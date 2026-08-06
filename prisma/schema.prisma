@@ -230,6 +230,12 @@ model Ctoon {
   characters      String[]
   totalMinted     Int       @default(0)
 
+  // Number of distinct CZones with this cToon placed anywhere in their layout.
+  // Precomputed daily by server/cron/czone-display-count.js — read directly,
+  // never computed live (scanning every CZone.layoutData blob per modal open
+  // would be too heavy).
+  czoneDisplayCount Int @default(0)
+
   // Mint limit mode: "defined" (fixed quantity) or "timeBased" (unlimited until deadline)
   mintLimitType String    @default("defined")
   mintEndDate   DateTime?
