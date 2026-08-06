@@ -84,7 +84,7 @@ export default defineEventHandler(async (event) => {
   const activeSaleItem = activeSale?.items?.find(item => item.ctoon.id === ctoon.id) || null
   const saleImagePath = activeSaleItem ? (activeSale.imagePath || null) : null
 
-  const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount] = await Promise.all([
+  const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount, totalCzoneCount] = await Promise.all([
     prisma.auction.findFirst({
       where: {
         userCtoon: { ctoonId: ctoon.id },
@@ -122,7 +122,11 @@ export default defineEventHandler(async (event) => {
     `,
     prisma.userCtoon.count({
       where: { userId: me.id, ctoonId: ctoon.id }
-    })
+    }),
+    // Cheap live count (no precompute needed) — the expensive part this
+    // stat depends on is czoneDisplayCount below, which is precomputed
+    // daily by server/cron/czone-display-count.js.
+    prisma.cZone.count()
   ])
 
   const overallRow = overallStats[0] ?? {}
@@ -201,9 +205,11 @@ export default defineEventHandler(async (event) => {
       secondEditionOverlaySize: ctoon.secondEditionOverlaySize,
       relatedFirstEdition: ctoon.relatedFirstEdition ?? null,
       relatedSecondEdition: ctoon.relatedSecondEdition ?? null,
-      saleImagePath
+      saleImagePath,
+      czoneDisplayCount: ctoon.czoneDisplayCount ?? 0
     },
     userCtoon: userStats,
-    ownedCount
+    ownedCount,
+    totalCzoneCount
   }
 })
