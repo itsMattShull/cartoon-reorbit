@@ -28,7 +28,7 @@
       <!-- logo: right on small, centered on md+ -->
       <NuxtLink
         v-if="!hasAdUrl"
-        to="/dashboard"
+        to="/newsite/home"
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 right-auto flex items-center gap-3"
       >
         <img :src="currentAdSrc || '/images/newlogo.gif'" alt="Cartoon ReOrbit logo" class="max-h-20 max-w-[300px] w-auto h-auto object-contain md:h-20 md:max-h-none md:max-w-none" />
@@ -251,8 +251,8 @@ const q = ref('')
 
 /* main links */
 const mainLinks = [
-  { label: 'Showcase', to: '/dashboard' },
-  { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/dashboard' },
+  { label: 'Showcase', to: '/newsite/home' },
+  { label: 'My cZone', to: user.value?.username ? `/czone/${user.value.username}` : '/newsite/home' },
   { label: 'Collection', to: '/collection' },
   { label: 'Achievements', to: '/achievements' },
   { label: 'cMart', to: '/cmart' },
