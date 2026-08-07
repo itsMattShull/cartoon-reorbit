@@ -122,6 +122,10 @@ export default defineEventHandler(async (event) => {
   // encoded id is unsigned and forgeable, so an unverified one would let anyone
   // probe whether a given (user, cToon, mint) exists.
   let mintNumber = null
+  // Whether this exact UserCtoon is currently placed in the caller's cZone
+  // layout — surfaced so the "Send to Auction" modal can warn that selling it
+  // won't pull it out of the layout automatically.
+  let inCzone = false
   const rawUserCtoonId = Array.isArray(query.userCtoonId) ? query.userCtoonId[0] : query.userCtoonId
   if (rawUserCtoonId) {
     const resolvedId = await resolveUserCtoonId(String(rawUserCtoonId))
@@ -132,6 +136,17 @@ export default defineEventHandler(async (event) => {
       })
       if (owned && owned.userId === me.id && owned.ctoonId === id && !owned.burnedAt) {
         mintNumber = owned.mintNumber
+
+        const cZone = await prisma.cZone.findUnique({
+          where: { userId: me.id },
+          select: { layoutData: true }
+        })
+        const zones = cZone?.layoutData && typeof cZone.layoutData === 'object'
+          ? cZone.layoutData.zones
+          : null
+        if (Array.isArray(zones)) {
+          inCzone = zones.some(z => Array.isArray(z?.toons) && z.toons.some(t => t?.id === resolvedId))
+        }
       }
     }
   }
@@ -152,6 +167,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     sales: sales.slice(0, DISPLAY_COUNT).map(toDisplay),
-    suggestion
+    suggestion,
+    inCzone
   }
 })

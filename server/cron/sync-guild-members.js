@@ -11,6 +11,7 @@ import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
+import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
@@ -1209,3 +1210,6 @@ cron.schedule('* * * * *', () => runJob('checkAndCreateWeeklyCZoneContest', chec
 // running. This schedule just keeps data warm proactively when it is.
 runJob('runEconomyAggregate', runEconomyAggregate)
 cron.schedule('10 4 * * *', () => runJob('runEconomyAggregate', runEconomyAggregate), { timezone: 'America/Chicago' })
+
+await runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate)
+cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate), { timezone: 'America/Chicago' })  // 05:00 CST daily

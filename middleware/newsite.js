@@ -1,13 +1,6 @@
 // middleware/newsite.js
-// Gates all /newsite/* pages behind the VIEWNEWDESIGN flag and auth.
+// Gates all /newsite/* pages behind auth.
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { public: { viewNewDesign } } = useRuntimeConfig()
-
-  // If the flag is off, redirect away from newsite pages
-  if (viewNewDesign !== '1') {
-    return navigateTo('/dashboard')
-  }
-
   // Require authentication
   const { user, fetchSelf } = useAuth()
   if (!user.value) {

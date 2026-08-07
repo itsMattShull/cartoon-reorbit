@@ -157,18 +157,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 
 ---
 
-#### 8) Create a Sentry account (optional but recommended)
-- Go to https://sentry.io → Get Started → create an account.
-- Choose Nuxt during setup, then Skip onboarding.
-- In Sentry, go to Settings > Account Details, and in the top right search for “DSN” → Client Keys → copy the DSN.
-- Paste into `.env`:
-  ```env
-  SENTRY_DSN=<your-sentry-dsn>
-  ```
-
----
-
-#### 9) Redis and queue setup
+#### 8) Redis and queue setup
 - Install and run Redis locally.
   - macOS: `brew install redis && brew services start redis`
   - Linux (Debian/Ubuntu): `sudo apt-get install redis-server && sudo service redis-server start`
@@ -187,7 +176,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 
 ---
 
-#### 10) Install dependencies and initialize the database
+#### 9) Install dependencies and initialize the database
 - If using Windows, first open Powershell (run as admin) and type in `Set-ExecutionPolicy RemoteSigned`
 - Now open VS Code, open a terminal in the project root, then run:
   ```bash
@@ -206,7 +195,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
     ```
 ---
 
-#### 11) Run the app
+#### 10) Run the app
 - Start the dev processes:
   ```bash
   npm run dev
@@ -229,14 +218,14 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 
 ---
 
-#### 12) Add the bot to your server
+#### 11) Add the bot to your server
 - In your browser, open the Discord OAuth2 URL you saved earlier.
 - Add to Server → choose your server → Continue → Authorize. This can take a while on first run.
 - Once the bot has beed added to your server, give it the member role from earlier.
 
 ---
 
-#### 13) Create account and admin yourself
+#### 12) Create account and admin yourself
 - Go to http://localhost:3000
 - Sign in with your discord account
 - Give yourself admin role and some points:

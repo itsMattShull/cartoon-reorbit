@@ -118,6 +118,11 @@
                 <div class="ctic-value">{{ formatValue(ctoon.rarity) }}</div>
               </div>
               <div class="ctic-tile">
+                <div class="ctic-label">Displayed in cZones</div>
+                <div class="ctic-value">{{ formatValue(ctoon.czoneDisplayCount) }}</div>
+                <div class="ctic-sub">out of {{ formatValue(totalCzoneCount) }} total cZones</div>
+              </div>
+              <div class="ctic-tile">
                 <div class="ctic-label">Set</div>
                 <NuxtLink
                   v-if="ctoon.set"
@@ -403,6 +408,7 @@ const ctoon = computed(() => data.value?.ctoon || {})
 const ctoonDescription = computed(() => String(ctoon.value?.description || '').trim())
 const userCtoon = computed(() => data.value?.userCtoon || null)
 const ownedCount = computed(() => data.value?.ownedCount ?? 0)
+const totalCzoneCount = computed(() => data.value?.totalCzoneCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
 const totalQuantityLabel = computed(() => formatQuantity(ctoon.value?.quantity))
 
