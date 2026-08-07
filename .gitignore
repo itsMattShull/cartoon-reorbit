@@ -8,5 +8,3 @@ public/images/cToons/*
 public/cToons/*
 public/packs/*
 public/backgrounds/*
-# Sentry Config File
-.env.sentry-build-plugin
