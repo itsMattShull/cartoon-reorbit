@@ -37,7 +37,7 @@
                 {{ img.url }}
               </a>
             </p>
-            <p v-else class="mt-1 text-gray-500"><strong>URL:</strong> /dashboard (default)</p>
+            <p v-else class="mt-1 text-gray-500"><strong>URL:</strong> /newsite/home (default)</p>
           </div>
           <div class="p-3 pt-0 flex justify-end gap-2">
             <button
@@ -80,7 +80,7 @@
                 placeholder="https://example.com"
                 class="w-full border rounded px-3 py-2"
               />
-              <p class="text-xs text-gray-500 mt-1">Leave blank to link to /dashboard</p>
+              <p class="text-xs text-gray-500 mt-1">Leave blank to link to /newsite/home</p>
             </div>
             <div v-if="uploadError" class="text-red-600 text-sm">{{ uploadError }}</div>
           </div>

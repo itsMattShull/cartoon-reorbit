@@ -205,7 +205,7 @@ part3.value = sample(wordLists[2])
 /* ── Lifecycle ──────────────────────────────────────────────────────── */
 onMounted(async () => {
   if (!user.value) return navigateTo('/')
-  if (!user.value.needsSetup) return navigateTo('/dashboard')
+  if (!user.value.needsSetup) return navigateTo('/newsite/home')
 
   if (user.value.username) {
     step.value = 2 // username already set
