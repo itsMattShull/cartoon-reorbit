@@ -34,9 +34,8 @@
 
           <!-- cZone warning -->
           <div v-if="inCzone" class="am-warning">
-            This cToon is in one of your cZone layouts. If the auction sells, it won't be
-            removed automatically — pull it out of your cZone yourself, or it'll keep
-            showing there even after you no longer own it.
+            This cToon is in one of your cZone layouts. If the auction sells, it will be
+            removed automatically.
           </div>
 
           <hr class="am-divider" />
