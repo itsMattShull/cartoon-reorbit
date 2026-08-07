@@ -164,5 +164,6 @@ export default defineEventHandler(async (event) => {
   })
 
   // 6) Redirect: new accounts go to username setup
-  return sendRedirect(event, result.isNew ? '/setup-username' : '/dashboard')
+  if (result.isNew) return sendRedirect(event, '/setup-username')
+  return sendRedirect(event, '/newsite/home')
 })
