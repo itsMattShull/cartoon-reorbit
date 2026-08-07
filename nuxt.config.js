@@ -22,7 +22,7 @@ export default defineNuxtConfig({
   // ───────────────────────────────────────────────
   // 1)  Modules
   // ───────────────────────────────────────────────
-  modules: ['@nuxtjs/tailwindcss', '@sentry/nuxt/module'],
+  modules: ['@nuxtjs/tailwindcss'],
 
   // ───────────────────────────────────────────────
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
@@ -71,16 +71,6 @@ export default defineNuxtConfig({
     '~/server/middleware/guild-check.js',
     '~/server/middleware/daily-points.js'
   ],
-
-  sentry: {
-    client: { enabled: false },
-    server: { enabled: false },
-    enabled: false,
-    sourceMapsUploadOptions: {
-      org: 'matt-shull-m0',
-      project: 'javascript-nuxt'
-    }
-  },
 
   sourcemap: {
     client: 'hidden'

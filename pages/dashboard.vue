@@ -478,7 +478,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { DateTime } from 'luxon'
-import * as Sentry from '@sentry/nuxt'
 
 definePageMeta({ title: 'Showcase', middleware: 'auth', layout: 'default' })
 
@@ -503,12 +502,6 @@ const getDiscordWidget = async () => {
   try {
     guild.value = await $fetch('https://discord.com/api/guilds/1369067208029896794/widget.json')
   } catch (err) {
-    Sentry.withScope(scope => {
-      scope.setTag('page', 'dashboard')
-      scope.setTag('user', user?.username)
-      scope.setExtra('moreInfo', 'Failed while loading discord widget')
-      Sentry.captureException(err)
-    })
     console.error('Failed to load Discord widget JSON', err)
   }
 }
@@ -538,12 +531,6 @@ const fetchCToons = async () => {
   try {
     allCToons.value = await $fetch('/api/ctoons')
   } catch (err) {
-    Sentry.withScope(scope => {
-      scope.setTag('page', 'dashboard')
-      scope.setTag('user', user?.username)
-      scope.setExtra('moreInfo', 'Failed while loading /api/ctoons')
-      Sentry.captureException(err)
-    })
     console.error('Failed to fetch cToons', err)
   }
 }
@@ -641,12 +628,6 @@ onMounted(async () => {
     if (res.ok) leaderboard.value = await res.json()
     else console.error('Failed to load leaderboard:', await res.text())
   } catch (err) {
-    Sentry.withScope(scope => {
-      scope.setTag('page', 'dashboard')
-      scope.setTag('user', user?.username)
-      scope.setExtra('moreInfo', 'Failed while loading /api/points-leaderboard')
-      Sentry.captureException(err)
-    })
     console.error('Leaderboard fetch error:', err)
   }
 

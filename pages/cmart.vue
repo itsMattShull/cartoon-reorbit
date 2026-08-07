@@ -804,7 +804,6 @@ import Toast from '@/components/Toast.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import CtoonAsset from '@/components/CtoonAsset.vue'
 import Nav from '@/components/Nav.vue'
-import * as Sentry from '@sentry/nuxt'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 const showFilters = ref(false)
@@ -1335,7 +1334,6 @@ async function buyCtoon(ctoon) {
     showToast('Purchase successful', 'success')
     // await fetchSelf({ force: true })
   } catch (err) {
-    Sentry.captureException(err)
     const msg =
       err?.data?.message ||
       err?.statusMessage ||
@@ -1411,7 +1409,6 @@ async function buyPack(pack) {
     }, 3700)
 
   } catch (err) {
-    Sentry.captureException(err)
     showToast('Failed to buy pack')
   } finally {
     buyingPacks.value.delete(pack.id)
@@ -1437,7 +1434,6 @@ async function buyCzone() {
     showToast('Additional cZone purchased successfully!', 'success')
     await fetchSelf({ force: true })
   } catch (err) {
-    Sentry.captureException(err)
     const msg = err?.data?.message || err?.statusMessage || err?.message || 'Failed to purchase Additional cZone'
     showToast(msg, 'error')
   } finally {
