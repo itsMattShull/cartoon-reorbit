@@ -3,6 +3,7 @@
 import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 
 function normalizeZones(layoutData, background, targetCount) {
   let zones = []
@@ -36,7 +37,8 @@ export default defineEventHandler(async (event) => {
   const user = await prisma.user.findUnique({
     where: { username },
     include: {
-      cZones: true
+      cZones: true,
+      cMoon: { select: { id: true, name: true, color: true } }
     }
   })
 
@@ -56,6 +58,9 @@ export default defineEventHandler(async (event) => {
   // everyone else from `ctoonId`, `mintNumber`, asset, etc.
   const viewerId = event.context.userId || event.context.user?.id || null
   const viewerIsOwner = !!viewerId && viewerId === user.id
+
+  const cMoonConfig = await getGlobalConfig()
+  const cMoonEnabled = !!cMoonConfig?.cMoonEnabled
 
   const config = await prisma.globalGameConfig.findUnique({
     where: { id: 'singleton' },
@@ -244,6 +249,7 @@ export default defineEventHandler(async (event) => {
     ownerName: user.username,
     isBooster: user.isBooster,
     lastActivity: user.lastActivity ?? null,
+    cMoon: (cMoonEnabled && user.cMoon) || null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

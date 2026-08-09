@@ -18,15 +18,22 @@ export default defineEventHandler(async (event) => {
           ctoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
           backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true } } } }
         }
+      },
+      claimOptions: {
+        orderBy: { sortOrder: 'asc' },
+        include: { ctoon: { select: { id: true, name: true, assetPath: true } } }
       }
     }
   })
 
   const ids = list.map(a => a.id)
   const achievedSet = new Set()
+  const claimedMap = new Map()
   if (userId) {
     const rows = await db.achievementUser.findMany({ where: { userId, achievementId: { in: ids } }, select: { achievementId: true } })
     rows.forEach(r => achievedSet.add(r.achievementId))
+    const claims = await db.achievementClaim.findMany({ where: { userId, achievementId: { in: ids } }, select: { achievementId: true, optionId: true } })
+    claims.forEach(c => claimedMap.set(c.achievementId, c.optionId))
   }
 
   // Counts excluding inactive/banned users
@@ -47,6 +54,18 @@ export default defineEventHandler(async (event) => {
     imagePath: a.imagePath,
     achievers: countMap.get(a.id) || 0,
     achieved: userId ? achievedSet.has(a.id) : false,
+    isClaimable: a.isClaimable,
+    claimedOptionId: userId ? (claimedMap.get(a.id) || null) : null,
+    claimOptions: a.isClaimable
+      ? a.claimOptions.map(o => ({
+          id: o.id,
+          label: o.label,
+          points: o.points || 0,
+          ctoonName: o.ctoon?.name || null,
+          ctoonImagePath: o.ctoon?.assetPath || null,
+          quantity: o.quantity,
+        }))
+      : [],
     rewards: a.rewards?.[0]
       ? {
           points: a.rewards[0].points || 0,

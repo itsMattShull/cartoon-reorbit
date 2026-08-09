@@ -41,11 +41,31 @@ export default defineEventHandler(async (event) => {
     isActive = true,
     notifyDiscord = false,
     discordRoleName = '',
+    isClaimable = false,
     criteria = {},
-    rewards = {}
+    rewards = {},
+    claimOptions = []
   } = payload || {}
 
   if (!String(title).trim()) throw createError({ statusCode: 400, statusMessage: 'Title is required' })
+
+  const claimOptionRows = (Array.isArray(claimOptions) ? claimOptions : [])
+    .slice(0, 4)
+    .filter(o => o && String(o.label || '').trim())
+    .map((o, i) => ({
+      label: String(o.label).trim(),
+      points: Math.max(0, Number(o.points || 0)) || 0,
+      ctoonId: o.ctoonId ? String(o.ctoonId) : null,
+      quantity: Math.max(1, Number(o.quantity || 1)),
+      sortOrder: i,
+    }))
+  const claimCtoonIds = claimOptionRows.map(o => o.ctoonId).filter(Boolean)
+  if (claimCtoonIds.length) {
+    const validCount = await db.ctoon.count({ where: { id: { in: [...new Set(claimCtoonIds)] } } })
+    if (validCount !== new Set(claimCtoonIds).size) {
+      throw createError({ statusCode: 400, statusMessage: 'One or more claim option cToons do not exist' })
+    }
+  }
   let slug = slugify(desiredSlug || title)
 
   // ensure unique slug
@@ -79,6 +99,7 @@ export default defineEventHandler(async (event) => {
       isActive: !!isActive,
       notifyDiscord: !!notifyDiscord,
       discordRoleName: roleName || null,
+      isClaimable: !!isClaimable,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
@@ -112,6 +133,9 @@ export default defineEventHandler(async (event) => {
               .map(r => ({ backgroundId: String(r.backgroundId) }))
           }
         }
+      },
+      claimOptions: {
+        create: claimOptionRows
       }
     }
   })

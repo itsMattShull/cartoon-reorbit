@@ -295,6 +295,10 @@ model Ctoon {
   // Achievements back‑relations
   achievementRewardCtoons    AchievementRewardCtoon[]
   achievementRequiredCtoons  AchievementRequiredCtoon[]
+  achievementClaimOptions    AchievementClaimOption[]
+
+  // cMoon back-relation
+  cMoonPrizeRows CMoonPrizeCtoon[]
 
   cZoneSearchPrizeRows   CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
@@ -407,6 +411,15 @@ model User {
   additionalCzones                  Int       @default(0)
   usernameChangedAt                 DateTime?
   vpnDetected                       Boolean   @default(false)
+
+  // cMoon (faction) membership
+  cMoonId           String?
+  cMoon             CMoon?    @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
+  cMoonSelectedAt   DateTime?
+  cMoonAutoAssigned Boolean   @default(false)
+  // Set once the daily Discord sync grants this user's cMoon role, so the job
+  // only touches never-synced members instead of re-checking everyone daily.
+  cMoonRoleGrantedAt DateTime?
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -550,7 +563,13 @@ model User {
   fruitSamuraiScores FruitSamuraiScore[]
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
+  // cMoon (faction) relations
+  cMoonCaptainOf    CMoonCaptain[]
+  achievementClaims AchievementClaim[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
+  @@index([cMoonId])
+  @@index([cMoonId, cMoonRoleGrantedAt])
 }
 
 model CtoonUserSuggestion {
@@ -1084,33 +1103,33 @@ model GameConfig {
   // but only this many per day write a score row and award points. Everything else is a
   // difficulty/scoring/power-up knob mirrored in lib/asteroidSim.js DEFAULT_CONFIG, which is
   // the single source of truth for the defaults and the clamp ranges.
-  asteroidRankedPlaysPerPeriod Int     @default(3)
-  asteroidPointsPerGame        Int     @default(50)
-  asteroidStartingLives        Int     @default(3)
-  asteroidStartAsteroids       Int     @default(4)
-  asteroidAsteroidsPerWave     Int     @default(1)
-  asteroidAsteroidSpeed        Float   @default(1.15)
-  asteroidWaveSpeedGrowth      Float   @default(0.06)
-  asteroidMaxSpeedMultiplier   Float   @default(2.2)
-  asteroidTurnRate             Int     @default(6)
-  asteroidThrustAccel          Float   @default(0.145)
-  asteroidMaxShipSpeed         Float   @default(5.6)
-  asteroidShipDrag             Float   @default(0.992)
-  asteroidFireIntervalTicks    Int     @default(13)
-  asteroidExtraLifeScore       Int     @default(10000)
+  asteroidRankedPlaysPerPeriod Int   @default(3)
+  asteroidPointsPerGame        Int   @default(50)
+  asteroidStartingLives        Int   @default(3)
+  asteroidStartAsteroids       Int   @default(4)
+  asteroidAsteroidsPerWave     Int   @default(1)
+  asteroidAsteroidSpeed        Float @default(1.15)
+  asteroidWaveSpeedGrowth      Float @default(0.06)
+  asteroidMaxSpeedMultiplier   Float @default(2.2)
+  asteroidTurnRate             Int   @default(6)
+  asteroidThrustAccel          Float @default(0.145)
+  asteroidMaxShipSpeed         Float @default(5.6)
+  asteroidShipDrag             Float @default(0.992)
+  asteroidFireIntervalTicks    Int   @default(13)
+  asteroidExtraLifeScore       Int   @default(10000)
   // physics / geometry (world units; durations in 60Hz ticks)
-  asteroidShipRadius           Float   @default(13)
+  asteroidShipRadius           Float @default(13)
   // DEPRECATED: superseded by the per-ship weapon columns below. Firing is now resolved from
   // the ship the player picked, so these are no longer read. Kept to avoid a destructive
   // migration; not exposed in the admin panel.
-  asteroidBulletSpeed          Float   @default(6.2)
-  asteroidBulletLifeTicks      Int     @default(66)
-  asteroidRespawnInvulnTicks   Int     @default(96)
-  asteroidPowerupRadius        Float   @default(13)
-  asteroidPowerupLifeTicks     Int     @default(600)
-  asteroidLargeRadius          Float   @default(34)
-  asteroidMediumRadius         Float   @default(20)
-  asteroidSmallRadius          Float   @default(11)
+  asteroidBulletSpeed          Float @default(6.2)
+  asteroidBulletLifeTicks      Int   @default(66)
+  asteroidRespawnInvulnTicks   Int   @default(96)
+  asteroidPowerupRadius        Float @default(13)
+  asteroidPowerupLifeTicks     Int   @default(600)
+  asteroidLargeRadius          Float @default(34)
+  asteroidMediumRadius         Float @default(20)
+  asteroidSmallRadius          Float @default(11)
 
   // — Per-ship weapons —
   // Each selectable ship is a weapon profile. Defaults mirror the `weapon` blocks in
@@ -1296,31 +1315,37 @@ model GlobalGameConfig {
   gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
 
-  gameTileFlappyImagePath       String?
-  gameTileBlackjackImagePath    String?
-  gameTileEdrpsImagePath        String?
-  gameTileFruitsamuraiImagePath String?
+  gameTileFlappyImagePath            String?
+  gameTileBlackjackImagePath         String?
+  gameTileEdrpsImagePath             String?
+  gameTileFruitsamuraiImagePath      String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
   // /admin/dissolve-queue.
-  featuredDissolveRarities   Json     @default("[]")
-  featuredDissolveSeries     Json     @default("[]")
-  featuredDissolveSets       Json     @default("[]")
+  featuredDissolveRarities           Json      @default("[]")
+  featuredDissolveSeries             Json      @default("[]")
+  featuredDissolveSets               Json      @default("[]")
   // Default cadence for scheduling DissolveAuctionQueue entries, set via the
   // "Reschedule All" form on /admin/dissolve-queue and reused automatically by
   // the 9-month inactivity dissolve cron so newly-queued priority entries get
   // scheduledFor set without needing an admin to visit the page.
-  dissolveScheduleCadenceDays        Int @default(7)
-  dissolveScheduleFeaturedPerCadence Int @default(2)
-  dissolveScheduleOtherPerCadence    Int @default(10)
+  dissolveScheduleCadenceDays        Int       @default(7)
+  dissolveScheduleFeaturedPerCadence Int       @default(2)
+  dissolveScheduleOtherPerCadence    Int       @default(10)
   // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
   // faviconVersion is bumped on every upload and appended as a cache-busting
   // query string to every icon URL rendered in pages/index.vue's useHead.
-  faviconVersion             BigInt?
-  faviconSourcePath          String? // original master upload, retained for re-generation/audit
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  faviconVersion                     BigInt?
+  faviconSourcePath                  String? // original master upload, retained for re-generation/audit
+  // cMoon (faction) feature — off by default, easy to disable without losing data.
+  // When flipped false -> true, cMoonEnabledAt is set to now and cMoonSelectionDeadlineAt
+  // to now + 3 days (the window existing users get to pick a cMoon before auto-assignment).
+  cMoonEnabled                       Boolean   @default(false)
+  cMoonEnabledAt                     DateTime?
+  cMoonSelectionDeadlineAt           DateTime?
+  createdAt                          DateTime  @default(now())
+  updatedAt                          DateTime  @updatedAt
 }
 
 model WishlistItem {
@@ -2418,12 +2443,49 @@ model Achievement {
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
+  // When true, unlocking this achievement does NOT auto-grant `rewards` —
+  // instead the user picks exactly one of `claimOptions` (up to 4) via the claim UI.
+  isClaimable                 Boolean   @default(false)
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 
   rewards        AchievementReward[]
   users          AchievementUser[]
   requiredCtoons AchievementRequiredCtoon[]
+  claimOptions   AchievementClaimOption[]
+  claims         AchievementClaim[]
+}
+
+model AchievementClaimOption {
+  id            String  @id @default(uuid())
+  achievementId String
+  label         String
+  points        Int     @default(0)
+  ctoonId       String?
+  quantity      Int     @default(1)
+  sortOrder     Int     @default(0)
+
+  achievement Achievement        @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon?             @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  claims      AchievementClaim[]
+
+  @@index([achievementId, sortOrder])
+}
+
+model AchievementClaim {
+  id            String   @id @default(uuid())
+  achievementId String
+  userId        String
+  optionId      String
+  claimedAt     DateTime @default(now())
+
+  achievement Achievement            @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  option      AchievementClaimOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([achievementId, userId])
+  @@index([userId])
+  @@index([optionId])
 }
 
 model AchievementUser {
@@ -2500,6 +2562,49 @@ model AchievementRewardBackground {
 
   @@unique([rewardId, backgroundId])
   @@index([backgroundId])
+}
+
+// cMoon — admin-managed factions. Off by default via GlobalGameConfig.cMoonEnabled.
+model CMoon {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  color         String // "#RRGGBB", validated server-side; used as text color
+  discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
+  memberCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members     User[]
+  captains    CMoonCaptain[]
+  prizeCtoons CMoonPrizeCtoon[]
+
+  @@index([memberCount])
+}
+
+model CMoonCaptain {
+  id      String @id @default(uuid())
+  cMoonId String
+  userId  String
+
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cMoonId, userId])
+  @@index([userId])
+}
+
+model CMoonPrizeCtoon {
+  id       String @id @default(uuid())
+  cMoonId  String
+  ctoonId  String
+  quantity Int    @default(1)
+
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  ctoon Ctoon @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([cMoonId, ctoonId])
+  @@index([ctoonId])
 }
 
 model AchievementRequiredCtoon {

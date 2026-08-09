@@ -274,6 +274,7 @@ html.newsite-active body {
     />
   </div>
   <Onboarding />
+  <CMoonSelectModal />
 </template>
 
 <script setup>
