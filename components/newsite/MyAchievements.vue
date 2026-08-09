@@ -28,6 +28,7 @@
             <div class="ma-card-footer">
               <span class="ma-achievers">{{ a.achievers }} achiever{{ a.achievers !== 1 ? 's' : '' }}</span>
               <span v-if="hasRewards(a)" class="ma-has-reward">★ Reward</span>
+              <span v-else-if="a.isClaimable" class="ma-has-reward">★ Choose reward</span>
             </div>
           </div>
         </div>
@@ -90,6 +91,49 @@
                 </div>
               </div>
             </template>
+
+            <!-- Claimable reward: pick one of up to 4 options -->
+            <template v-else-if="selected.isClaimable">
+              <div class="ma-reward-heading">Choose your reward</div>
+
+              <div v-if="!selected.achieved" class="ma-no-reward">Unlock this achievement to choose a reward.</div>
+
+              <div v-else-if="selected.claimedOptionId" class="ma-claim-done">
+                You claimed: <strong>{{ claimedOptionLabel(selected) }}</strong>
+              </div>
+
+              <div v-else class="ma-claim-options" role="radiogroup" aria-label="Reward options">
+                <button
+                  v-for="opt in selected.claimOptions" :key="opt.id"
+                  type="button"
+                  class="ma-claim-option"
+                  :class="{ 'ma-claim-option-selected': claimChoice === opt.id }"
+                  role="radio"
+                  :aria-checked="claimChoice === opt.id"
+                  @click="claimChoice = opt.id"
+                >
+                  <img v-if="opt.ctoonImagePath" :src="opt.ctoonImagePath" class="ma-claim-option-img" :alt="opt.label" />
+                  <div class="ma-claim-option-body">
+                    <div class="ma-claim-option-label">{{ opt.label }}</div>
+                    <div class="ma-claim-option-detail">
+                      <span v-if="opt.ctoonName">{{ opt.ctoonName }} × {{ opt.quantity }}</span>
+                      <span v-if="opt.points"> {{ opt.ctoonName ? '+ ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
+                    </div>
+                  </div>
+                  <span class="ma-claim-option-check" aria-hidden="true">{{ claimChoice === opt.id ? '●' : '○' }}</span>
+                </button>
+
+                <button
+                  class="ma-claim-confirm-btn"
+                  :disabled="!claimChoice || claiming"
+                  @click="confirmClaim(selected)"
+                >
+                  {{ claiming ? 'Claiming…' : 'Confirm reward' }}
+                </button>
+                <div v-if="claimError" class="ma-claim-error">{{ claimError }}</div>
+              </div>
+            </template>
+
             <div v-else class="ma-no-reward">No rewards for this achievement.</div>
           </div>
 
@@ -108,6 +152,15 @@
 const achievements = ref([])
 const loading      = ref(false)
 const selected     = ref(null)
+const claimChoice  = ref(null)
+const claiming     = ref(false)
+const claimError   = ref('')
+
+watch(selected, () => {
+  claimChoice.value = null
+  claiming.value = false
+  claimError.value = ''
+})
 
 onMounted(loadAchievements)
 
@@ -124,6 +177,28 @@ async function loadAchievements() {
 
 function hasRewards(a) {
   return a.rewards?.points || a.rewards?.ctoons?.length || a.rewards?.backgrounds?.length
+}
+
+function claimedOptionLabel(a) {
+  const opt = a.claimOptions?.find(o => o.id === a.claimedOptionId)
+  return opt?.label || 'a reward'
+}
+
+async function confirmClaim(a) {
+  if (!claimChoice.value || claiming.value) return
+  claiming.value = true
+  claimError.value = ''
+  try {
+    await $fetch(`/api/achievements/${a.id}/claim`, {
+      method: 'POST',
+      body: { optionId: claimChoice.value },
+    })
+    a.claimedOptionId = claimChoice.value
+  } catch (e) {
+    claimError.value = e?.data?.statusMessage || 'Unable to claim reward. Please try again.'
+  } finally {
+    claiming.value = false
+  }
 }
 </script>
 
@@ -281,10 +356,12 @@ function hasRewards(a) {
   width: 100%;
   max-width: 480px;
   max-height: 85vh;
+  max-height: 85dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .ma-modal-header {
@@ -436,6 +513,92 @@ function hasRewards(a) {
   font-size: 0.7rem;
   color: rgba(255,255,255,0.35);
   font-style: italic;
+}
+
+.ma-claim-done {
+  font-size: 0.8rem;
+  color: #7fd3ff;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.ma-claim-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ma-claim-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ma-claim-option-selected {
+  border-color: #ffd75e;
+  background: rgba(255,215,94,0.12);
+}
+
+.ma-claim-option-img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.ma-claim-option-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ma-claim-option-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ma-claim-option-detail {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.6);
+}
+
+.ma-claim-option-check {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  color: #ffd75e;
+}
+
+.ma-claim-confirm-btn {
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2e8b57;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ma-claim-confirm-btn:disabled {
+  background: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.4);
+  cursor: not-allowed;
+}
+
+.ma-claim-error {
+  font-size: 0.7rem;
+  color: #ff8a8a;
 }
 
 .ma-modal-footer {

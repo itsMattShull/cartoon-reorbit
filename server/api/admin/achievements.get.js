@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
           backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true } } } }
         }
       },
-      requiredCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } }
+      requiredCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+      claimOptions: { orderBy: { sortOrder: 'asc' }, include: { ctoon: { select: { id: true, name: true } } } }
     }
   })
 
@@ -45,6 +46,8 @@ export default defineEventHandler(async (event) => {
     ctoonsRequired: (a.requiredCtoons || []).map(rc => ({ ctoonId: rc.ctoonId, name: rc.ctoon?.name || '', assetPath: rc.ctoon?.assetPath || null })),
     userCreatedBefore: a.userCreatedBefore,
     discordRoleName: a.discordRoleName,
+    isClaimable: a.isClaimable,
+    claimOptions: (a.claimOptions || []).map(o => ({ id: o.id, label: o.label, points: o.points, ctoonId: o.ctoonId, ctoonName: o.ctoon?.name || '', quantity: o.quantity })),
     rewards: a.rewards?.[0] ? {
       points: a.rewards[0].points || 0,
       ctoons: (a.rewards[0].ctoons || []).map(rc => ({ ctoonId: rc.ctoonId, quantity: rc.quantity, name: rc.ctoon?.name || '' })),
