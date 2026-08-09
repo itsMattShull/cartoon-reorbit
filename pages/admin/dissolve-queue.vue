@@ -58,11 +58,26 @@
               <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
                 <div class="hidden sm:block text-xs text-gray-600">{{ fmtCST(entry.scheduledFor) }}</div>
                 <button
+                  @click="openReschedule(entry)"
+                  class="text-xs text-blue-600 hover:text-blue-800"
+                >Reschedule</button>
+                <button
                   @click="cancelEntry(entry.id)"
                   class="text-xs text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
               </div>
+            </div>
+            <div v-if="reschedulingId === entry.id" class="mt-3 flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+              <input v-model="rescheduleLocal" type="datetime-local"
+                     class="text-xs border rounded px-2 py-1.5" />
+              <button
+                @click="saveReschedule(entry.id)"
+                :disabled="reschedulingSaving"
+                class="px-3 py-1.5 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+              >{{ reschedulingSaving ? 'Saving…' : 'Save' }}</button>
+              <button @click="cancelReschedule" class="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+              <div v-if="rescheduleError" class="text-xs text-red-600 w-full">{{ rescheduleError }}</div>
             </div>
           </div>
         </div>
@@ -182,13 +197,28 @@
                   {{ entry.scheduledFor ? fmtCST(entry.scheduledFor) : 'Not scheduled' }}
                 </div>
               </div>
-              <div class="shrink-0">
+              <div class="shrink-0 flex flex-col items-end gap-1">
+                <button
+                  @click="openReschedule(entry)"
+                  class="text-xs text-blue-600 hover:text-blue-800"
+                >Reschedule</button>
                 <button
                   @click="cancelEntry(entry.id)"
                   class="text-xs text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : (entry.scheduledFor ? 'Unschedule' : 'Remove') }}</button>
               </div>
+            </div>
+            <div v-if="reschedulingId === entry.id" class="mt-3 flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+              <input v-model="rescheduleLocal" type="datetime-local"
+                     class="text-xs border rounded px-2 py-1.5" />
+              <button
+                @click="saveReschedule(entry.id)"
+                :disabled="reschedulingSaving"
+                class="px-3 py-1.5 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+              >{{ reschedulingSaving ? 'Saving…' : 'Save' }}</button>
+              <button @click="cancelReschedule" class="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+              <div v-if="rescheduleError" class="text-xs text-red-600 w-full">{{ rescheduleError }}</div>
             </div>
           </div>
         </div>
@@ -533,6 +563,62 @@ async function applySchedule() {
     scheduleError.value = e?.data?.statusMessage || 'Failed to apply schedule.'
   } finally {
     scheduling.value = false
+  }
+}
+
+// Per-entry reschedule
+const reschedulingId      = ref(null)
+const rescheduleLocal     = ref('')
+const reschedulingSaving  = ref(false)
+const rescheduleError     = ref('')
+
+function toDatetimeLocal(iso) {
+  const d = iso ? new Date(iso) : new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function openReschedule(entry) {
+  rescheduleError.value = ''
+  reschedulingId.value  = entry.id
+  rescheduleLocal.value = toDatetimeLocal(entry.scheduledFor)
+}
+
+function cancelReschedule() {
+  reschedulingId.value  = null
+  rescheduleLocal.value = ''
+  rescheduleError.value = ''
+}
+
+function updateEntryInLists(id, patch) {
+  const apply = (list) => {
+    const idx = list.findIndex(e => e.id === id)
+    if (idx !== -1) list[idx] = { ...list[idx], ...patch }
+  }
+  apply(upcoming.value)
+  apply(allEntries.value)
+}
+
+async function saveReschedule(id) {
+  rescheduleError.value = ''
+  if (!rescheduleLocal.value) {
+    rescheduleError.value = 'Please choose a date/time.'
+    return
+  }
+  reschedulingSaving.value = true
+  try {
+    const scheduledForUtc = new Date(rescheduleLocal.value).toISOString()
+    await $fetch(`/api/admin/dissolve-queue/${id}`, {
+      method: 'PATCH',
+      body: { scheduledForUtc }
+    })
+    updateEntryInLists(id, { scheduledFor: scheduledForUtc })
+    cancelReschedule()
+    await loadData()
+  } catch (e) {
+    rescheduleError.value = e?.data?.statusMessage || 'Failed to reschedule entry.'
+  } finally {
+    reschedulingSaving.value = false
   }
 }
 
