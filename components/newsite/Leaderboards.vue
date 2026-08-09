@@ -380,7 +380,7 @@ function cMoonForRow(row) {
   margin-top: 1px;
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;

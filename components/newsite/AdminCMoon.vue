@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-cmoon bg-gray-50 p-3 text-sm">
+  <div class="admin-cmoon bg-gray-50 p-3 text-sm text-gray-900">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <h1 class="text-base font-bold">cMoons</h1>
     </div>
@@ -10,42 +10,47 @@
         <input type="checkbox" v-model="flagEnabled" :disabled="flagSaving" @change="toggleFlag" />
         <span class="font-medium">cMoons enabled</span>
       </label>
-      <p class="text-xs text-gray-500 mt-1">
+      <p class="text-xs text-gray-600 mt-1">
         Off by default. Turning this on starts a 3-day window for existing players to pick a
         cMoon before they're auto-assigned to whichever has the fewest members; new players
         always get 3 days from when they join.
       </p>
-      <p v-if="cMoonEnabledAt" class="text-xs text-gray-500 mt-1">
+      <p v-if="cMoonEnabledAt" class="text-xs text-gray-600 mt-1">
         Launched {{ formatDate(cMoonEnabledAt) }} · existing-player deadline {{ formatDate(cMoonSelectionDeadlineAt) }}
       </p>
     </div>
 
-    <div v-if="loading" class="text-gray-500">Loading…</div>
+    <div v-if="loading" class="text-gray-600">Loading…</div>
     <template v-else>
       <!-- Existing cMoons -->
       <div class="space-y-3 mb-4">
         <div v-for="c in cmoons" :key="c.id" class="bg-white rounded border p-3">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="inline-block w-4 h-4 rounded-full border" :style="{ background: c.color }"></span>
-            <span class="font-semibold">{{ c.name }}</span>
-            <span class="text-xs text-gray-500">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
-            <button class="ml-auto text-xs text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
-            <button
-              class="text-xs text-red-600 hover:underline disabled:opacity-40"
-              :disabled="c.memberCount > 0"
-              :title="c.memberCount > 0 ? 'Reassign members before deleting' : ''"
-              @click="remove(c)"
-            >Delete</button>
+          <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2">
+            <span class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
+            <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
+            <span class="text-xs text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
+            <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
+            <div class="ml-auto flex items-center gap-3 flex-shrink-0">
+              <button class="cm-tap text-xs text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
+              <button
+                class="cm-tap text-xs text-red-600 hover:underline disabled:opacity-40"
+                :disabled="c.memberCount > 0"
+                @click="remove(c)"
+              >Delete</button>
+            </div>
           </div>
-          <div class="text-xs text-gray-500">
+          <div class="text-xs text-gray-600 break-words">
             Captains: {{ c.captains.map(cap => cap.username).join(', ') || 'none' }}
           </div>
-          <div class="text-xs text-gray-500">
+          <div class="text-xs text-gray-600 break-words">
             Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
           </div>
-          <div class="text-xs text-gray-500">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+          <div class="text-xs text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+          <p v-if="c.memberCount > 0" class="text-xs text-gray-600 mt-1">
+            Reassign members before this cMoon can be deleted.
+          </p>
         </div>
-        <div v-if="!cmoons.length" class="text-gray-500">No cMoons yet — create one below.</div>
+        <div v-if="!cmoons.length" class="text-gray-600">No cMoons yet — create one below.</div>
       </div>
 
       <!-- Create / edit form -->
@@ -57,16 +62,23 @@
             <input v-model="form.name" class="w-full border rounded px-2 py-1" style="font-size:16px" />
           </div>
           <div>
-            <label class="block text-xs font-medium mb-1">Color (text color)</label>
+            <label class="block text-xs font-medium mb-1">Color (badge background)</label>
             <div class="flex items-center gap-2">
-              <input v-model="form.color" class="w-full border rounded px-2 py-1" style="font-size:16px" placeholder="#3366ff" />
-              <span class="inline-block w-6 h-6 rounded-full border flex-shrink-0" :style="{ background: safeColor(form.color) }"></span>
+              <input v-model="form.color" class="w-full min-w-0 border rounded px-2 py-1" style="font-size:16px" placeholder="#3366ff" autocapitalize="none" autocorrect="off" spellcheck="false" />
+              <!-- Native picker is the one control that is easier on a phone than typing hex. -->
+              <input v-model="colorPicker" type="color" class="cm-color-swatch flex-shrink-0" aria-label="Pick color" />
             </div>
             <p v-if="form.color && !isValidColor(form.color)" class="text-xs text-red-600 mt-1">Must be a hex color like #3366ff</p>
+            <p v-else-if="isValidColor(form.color)" class="text-xs mt-1 flex items-center gap-2 flex-wrap">
+              <span class="cm-preview-pill" :style="cMoonPillStyle(form.color)">{{ form.name || 'Preview' }}</span>
+              <span :class="colorContrast >= 4.5 ? 'text-gray-600' : 'text-red-600'">
+                Badge contrast {{ colorContrast.toFixed(1) }}:1{{ colorContrast >= 4.5 ? '' : ' — below the 4.5:1 minimum, pick a darker or lighter color' }}
+              </span>
+            </p>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
-            <input v-model="form.discordRoleId" class="w-full border rounded px-2 py-1" style="font-size:16px" placeholder="123456789012345678" />
+            <input v-model="form.discordRoleId" class="w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
           </div>
         </div>
 
@@ -76,27 +88,52 @@
             <button
               v-for="a in admins" :key="a.id"
               type="button"
-              class="px-2 py-1 rounded-full border text-xs"
+              class="cm-chip px-3 rounded-full border text-xs"
               :class="form.captainIds.includes(a.id) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700'"
+              :aria-pressed="form.captainIds.includes(a.id)"
               @click="toggleCaptain(a.id)"
-            >{{ a.username || a.id }}</button>
+            >
+              <span aria-hidden="true">{{ form.captainIds.includes(a.id) ? '✓' : '+' }}</span>
+              {{ a.username || a.id }}
+            </button>
           </div>
         </div>
 
         <div class="mt-3">
           <label class="block text-xs font-medium mb-1">Prize cToons (granted when a user joins)</label>
-          <div class="flex gap-2 items-center">
-            <datalist id="cmoon-ctoon-list">
-              <option v-for="c in filteredCtoons(prizeCtoonSearch)" :key="c.id" :value="c.name" />
-            </datalist>
-            <input v-model="prizeCtoonSearch" list="cmoon-ctoon-list" class="border rounded px-2 py-1 flex-1" style="font-size:16px" placeholder="Type 3+ characters" />
-            <input v-model.number="prizeCtoonQty" type="number" min="1" class="w-20 border rounded px-2 py-1" style="font-size:16px" />
-            <button type="button" class="px-3 py-1 border rounded" @click="addPrizeCtoon">Add</button>
+          <!-- Stacks on phones so the search field gets full width and Add stays a big target. -->
+          <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <input
+              v-model="prizeCtoonSearch"
+              class="cm-field w-full sm:flex-1 min-w-0 border rounded px-2 py-1"
+              style="font-size:16px"
+              placeholder="Type 3+ characters"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              role="combobox"
+              :aria-expanded="ctoonSuggestions.length > 0"
+              aria-controls="cmoon-ctoon-suggestions"
+            />
+            <div class="flex gap-2">
+              <input v-model.number="prizeCtoonQty" type="number" min="1" inputmode="numeric" class="cm-field w-20 flex-shrink-0 border rounded px-2 py-1" style="font-size:16px" aria-label="Quantity" />
+              <button type="button" class="cm-tap flex-1 sm:flex-none px-4 border rounded bg-white" @click="addPrizeCtoon">Add</button>
+            </div>
+          </div>
+          <!-- Rendered list rather than <datalist>: datalist is unreliable on iOS and forced an
+               exact string match, which made this picker unusable on a phone. -->
+          <div v-if="ctoonSuggestions.length" id="cmoon-ctoon-suggestions" class="mt-2 border rounded divide-y bg-white max-h-56 overflow-y-auto">
+            <button
+              v-for="c in ctoonSuggestions" :key="c.id"
+              type="button"
+              class="cm-tap w-full text-left px-3 text-xs hover:bg-gray-100"
+              @click="selectCtoon(c)"
+            >{{ c.name }}</button>
           </div>
           <div v-if="form.prizeCtoons.length" class="mt-2 space-y-1">
             <div v-for="(p, i) in form.prizeCtoons" :key="p.ctoonId" class="flex items-center gap-2 text-xs">
-              <span>{{ nameForCtoon(p.ctoonId) }} × {{ p.quantity }}</span>
-              <button type="button" class="text-red-600" @click="form.prizeCtoons.splice(i, 1)">Remove</button>
+              <span class="break-words min-w-0">{{ nameForCtoon(p.ctoonId) }} × {{ p.quantity }}</span>
+              <button type="button" class="cm-tap ml-auto flex-shrink-0 text-red-600" @click="form.prizeCtoons.splice(i, 1)">Remove</button>
             </div>
           </div>
         </div>
@@ -115,6 +152,8 @@
 </template>
 
 <script setup>
+import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
+
 const loading = ref(false)
 const saving = ref(false)
 const formError = ref('')
@@ -132,8 +171,18 @@ const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
 
-function isValidColor(c) { return /^#[0-9a-fA-F]{6}$/.test(c || '') }
+// Share the validation/contrast helpers with the player-facing badges so the admin
+// preview here matches exactly what renders on leaderboards and cZones.
+function isValidColor(c) { return isSafeCMoonColor(c) }
 function safeColor(c) { return isValidColor(c) ? c : '#cccccc' }
+
+const colorContrast = computed(() => cMoonContrastRatio(form.color))
+
+// Two-way bridge to <input type="color">, which only ever holds a valid lowercase hex.
+const colorPicker = computed({
+  get: () => (isValidColor(form.color) ? form.color : '#3366ff'),
+  set: (v) => { form.color = v },
+})
 
 function formatDate(d) {
   if (!d) return ''
@@ -158,15 +207,32 @@ function toggleCaptain(id) {
   else form.captainIds.push(id)
 }
 
-function addPrizeCtoon() {
-  const match = ctoons.value.find(c => c.name === prizeCtoonSearch.value)
+const ctoonSuggestions = computed(() => filteredCtoons(prizeCtoonSearch.value))
+
+function selectCtoon(c) {
+  prizeCtoonSearch.value = c.name
+  addPrizeCtoon(c)
+}
+
+function addPrizeCtoon(preselected) {
+  // Tolerate case and stray whitespace, and accept a lone suggestion — mobile
+  // keyboards autocapitalize, which used to make the exact match impossible to hit.
+  const typed = String(prizeCtoonSearch.value || '').trim().toLowerCase()
+  const match = preselected
+    || ctoons.value.find(c => c.name?.trim().toLowerCase() === typed)
+    || (ctoonSuggestions.value.length === 1 ? ctoonSuggestions.value[0] : null)
   if (!match) {
-    formError.value = 'Select a valid cToon from suggestions.'
+    formError.value = 'Select a valid cToon from the suggestions below.'
+    return
+  }
+  if (form.prizeCtoons.find(p => p.ctoonId === match.id)) {
+    formError.value = `${match.name} is already a prize for this cMoon.`
+    prizeCtoonSearch.value = ''
     return
   }
   formError.value = ''
-  if (form.prizeCtoons.find(p => p.ctoonId === match.id)) return
-  form.prizeCtoons.push({ ctoonId: match.id, quantity: Math.max(1, Number(prizeCtoonQty.value || 1)) })
+  const qty = Math.floor(Number(prizeCtoonQty.value))
+  form.prizeCtoons.push({ ctoonId: match.id, quantity: Math.min(100, Math.max(1, Number.isFinite(qty) ? qty : 1)) })
   prizeCtoonSearch.value = ''
   prizeCtoonQty.value = 1
 }
@@ -264,3 +330,69 @@ async function remove(c) {
 
 onMounted(load)
 </script>
+
+<style scoped>
+/* The newsite layout sets `color: #ffffff` on <body>, which every admin section has
+   to opt out of. Without this the whole panel renders white-on-white. */
+.admin-cmoon {
+  width: 100%;
+  min-height: 100%;
+  color: #111;
+  /* Keeps the UA from painting checkboxes, number spinners and placeholders in
+     dark-mode colors on iOS/macOS, which would reintroduce unreadable controls. */
+  color-scheme: light;
+}
+
+/* Checkboxes and radios are excluded on purpose: painting a background over a
+   native checkbox suppresses its tick on WebKit/Blink. Buttons are excluded so
+   the Tailwind text-* utilities already on them keep winning. */
+.admin-cmoon input:not([type='checkbox']):not([type='radio']):not([type='color']),
+.admin-cmoon select,
+.admin-cmoon textarea {
+  color: #111;
+  background: #fff;
+  -webkit-text-fill-color: #111;
+}
+
+.admin-cmoon input::placeholder {
+  color: #6b7280;
+  -webkit-text-fill-color: #6b7280;
+  opacity: 1;
+}
+
+/* 44px minimum touch target without changing the visual text size. */
+.cm-tap {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cm-chip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cm-field {
+  min-height: 44px;
+}
+
+.cm-color-swatch {
+  width: 44px;
+  height: 44px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.cm-preview-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+</style>
