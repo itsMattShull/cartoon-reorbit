@@ -1332,7 +1332,7 @@ defineExpose({ save, clearZone })
   padding: 0 5px;
   border-radius: 3px;
   font-weight: 600;
-  font-size: 0.56rem;
+  font-size: 0.68rem;
   line-height: 1.4;
 }
 

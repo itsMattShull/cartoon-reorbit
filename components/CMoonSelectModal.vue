@@ -31,7 +31,7 @@
           <div v-if="!cmoons.length" class="cms-empty">No cMoons are available yet.</div>
         </div>
 
-        <div v-if="error" class="cms-error">{{ error }}</div>
+        <div v-if="error" class="cms-error" role="alert">{{ error }}</div>
 
         <div class="cms-footer">
           <button class="cms-confirm-btn" :disabled="!choice || submitting" @click="confirm">
@@ -235,15 +235,22 @@ onBeforeUnmount(() => {
   min-height: 46px;
   border: none;
   border-radius: 8px;
-  background: #2e8b57;
+  /* #2e8b57 gave white text only 4.25:1; this clears the 4.5:1 minimum. */
+  background: #256e45;
   color: #fff;
   font-weight: 700;
   cursor: pointer;
 }
 
 .cms-confirm-btn:disabled {
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.62);
   cursor: not-allowed;
+}
+
+.cms-option:focus-visible,
+.cms-confirm-btn:focus-visible {
+  outline: 3px solid #ffd75e;
+  outline-offset: 2px;
 }
 </style>
