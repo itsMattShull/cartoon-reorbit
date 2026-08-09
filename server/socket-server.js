@@ -2201,8 +2201,17 @@ io.on('connection', socket => {
       stakePoints: stake,
       lastActivity: Date.now()
     })
-    socket.join(roomId);
-    socket.data.roomId = roomId
+    // Deliberately NOT socket.join(roomId) / socket.data.roomId here. This handler runs on
+    // the useClashSocket singleton (composables/useClashSocket.js) — a module-scoped socket
+    // that outlives the ClashRooms.vue lobby list and stays connected for the rest of the
+    // browser session, including after the player navigates to /newsite/gtoons/[id] (which
+    // opens its own separate socket for the actual room page) and later away again.
+    // Joining this socket to the room used to make handleClashLeave's `stillPresent` check
+    // see the room as still occupied forever, since this socket never leaves — so an
+    // abandoned staked room was never cleaned up and stayed open for a stranger to join into
+    // later, silently starting (and debiting) a match the creator was no longer present for.
+    // Lobby broadcasts (roomCreated/roomRemoved) go out via io.emit and don't need this
+    // socket to be a room member.
     socket.data.userId = uid
     // notify lobby
     const u = await db.user.findUnique({
