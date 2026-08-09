@@ -309,6 +309,9 @@ model Ctoon {
   // unanswerable question. Excluded cToons can still be used as wrong answers.
   guessCtoonExcluded Boolean @default(false)
 
+  gameWeeklyPrizeConfigs       GameWeeklyPrizeConfig[]
+  gameWeeklyPrizeDistributions GameWeeklyPrizeDistribution[]
+
   @@index([isSecondEdition])
   @@index([name])
 }
@@ -542,6 +545,9 @@ model User {
   // Flappy Powerpuff
   flappyPowerpuffScores FlappyPowerpuffScore[]
   flappyPowerpuffPlays  FlappyPowerpuffPlay[]
+
+  // Game Weekly Leaderboard Prizes
+  gameWeeklyPrizeWins GameWeeklyPrizeDistribution[]
 
   // ReOrbit Blackjack
   blackjackSessions BlackjackSession[]
@@ -2795,6 +2801,61 @@ model UserScan {
   @@index([mappingId])
   @@index([configId])
   @@index([scannedAt])
+}
+
+// ── Game Weekly Leaderboard Prizes ──────────────────────────────────────────
+// One recurring config per arcade game: the weekly #1 on that game's rolling 7-day
+// leaderboard is awarded `ctoon`, unless they already won *that cToon from this exact
+// config* before (checked via GameWeeklyPrizeDistribution), in which case they get
+// `fallbackPoints` instead. Also used as the fallback if the cToon can no longer be
+// minted (sold out / time-boxed window closed) so a winner is never left empty-handed.
+model GameWeeklyPrizeConfig {
+  id       String @id @default(cuid())
+  game     String @unique // matches a key in server/utils/gameWeeklyLeaderboardGames.js
+  ctoonId  String
+  ctoon    Ctoon  @relation(fields: [ctoonId], references: [id])
+
+  fallbackPoints Int // awarded instead of the cToon on a repeat win or if the cToon is unavailable
+
+  dayOfWeek Int // 0=Sun … 6=Sat (America/Chicago)
+  hour      Int // 0-23 (America/Chicago)
+  minute    Int // 0-59
+
+  isActive Boolean @default(true)
+
+  // CST date "YYYY-MM-DD" of the week we last distributed for (idempotency guard,
+  // same pattern as CZoneContestAutomationConfig.lastCreatedFor).
+  lastDistributedFor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  distributions GameWeeklyPrizeDistribution[]
+}
+
+model GameWeeklyPrizeDistribution {
+  id       String                @id @default(cuid())
+  configId String
+  config   GameWeeklyPrizeConfig @relation(fields: [configId], references: [id])
+  game     String
+
+  weekStart DateTime
+  weekEnd   DateTime
+
+  winnerUserId String
+  winner       User   @relation(fields: [winnerUserId], references: [id])
+  score        Float
+
+  ctoonId         String? // set when a cToon was awarded
+  ctoon           Ctoon?  @relation(fields: [ctoonId], references: [id])
+  pointsAwarded   Int? // set when fallback points were awarded instead
+  wasRepeatWinner Boolean @default(false)
+
+  distributedAt DateTime @default(now())
+
+  @@index([configId, winnerUserId, ctoonId])
+  @@index([configId, distributedAt])
+  @@index([game, weekStart])
 }
 
 // ── cZone Contest ─────────────────────────────────────────────────────────────

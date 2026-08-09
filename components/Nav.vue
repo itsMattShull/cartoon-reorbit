@@ -335,7 +335,8 @@ const adminGroups = [
           { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
           { label: 'Dissolved Queue', to: '/admin/dissolve-queue' },
       { label: 'Manage Achievements', to: '/admin/achievements' },
-      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
+      { label: 'Manage cZone Contests', to: '/admin/czone-contest' },
+      { label: 'Game Weekly Leaderboard Prizes', to: '/admin/game-weekly-leaderboard' }
     ]
   },
   {
