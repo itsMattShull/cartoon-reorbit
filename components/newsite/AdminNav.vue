@@ -32,6 +32,33 @@
           @click="emitOpen(false)"
         >{{ item.label }}</NuxtLink>
       </div>
+
+      <!-- Fallback to the original /admin/* pages while the console is being
+           verified. These leave the console and load under the legacy layout. -->
+      <div v-if="oldAdminGroups.length" class="admin-rail-old">
+        <button
+          type="button"
+          class="admin-rail-old-toggle"
+          :aria-expanded="oldAdminOpen ? 'true' : 'false'"
+          @click="oldAdminOpen = !oldAdminOpen"
+        >
+          <span>Old Admin</span>
+          <span class="admin-rail-old-caret">{{ oldAdminOpen ? '−' : '+' }}</span>
+        </button>
+        <div v-show="oldAdminOpen">
+          <p class="admin-rail-old-note">Original pages, kept as a fallback. Opens outside the console.</p>
+          <div v-for="group in oldAdminGroups" :key="group.id" class="admin-rail-group">
+            <p class="admin-rail-group-label">{{ group.label }}</p>
+            <NuxtLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="admin-rail-item admin-rail-item-old"
+              @click="emitOpen(false)"
+            >{{ item.label }}</NuxtLink>
+          </div>
+        </div>
+      </div>
     </div>
   </nav>
 
@@ -64,6 +91,33 @@
               @click="emitOpen(false)"
             >{{ item.label }}</NuxtLink>
           </div>
+
+      <!-- Fallback to the original /admin/* pages while the console is being
+           verified. These leave the console and load under the legacy layout. -->
+      <div v-if="oldAdminGroups.length" class="admin-rail-old">
+        <button
+          type="button"
+          class="admin-rail-old-toggle"
+          :aria-expanded="oldAdminOpen ? 'true' : 'false'"
+          @click="oldAdminOpen = !oldAdminOpen"
+        >
+          <span>Old Admin</span>
+          <span class="admin-rail-old-caret">{{ oldAdminOpen ? '−' : '+' }}</span>
+        </button>
+        <div v-show="oldAdminOpen">
+          <p class="admin-rail-old-note">Original pages, kept as a fallback. Opens outside the console.</p>
+          <div v-for="group in oldAdminGroups" :key="group.id" class="admin-rail-group">
+            <p class="admin-rail-group-label">{{ group.label }}</p>
+            <NuxtLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              class="admin-rail-item admin-rail-item-old"
+              @click="emitOpen(false)"
+            >{{ item.label }}</NuxtLink>
+          </div>
+        </div>
+      </div>
         </div>
       </nav>
     </div>
@@ -76,11 +130,14 @@ import { computed, ref, watch } from 'vue'
 const props = defineProps({
   sections: { type: Array, default: () => [] },
   activeKey: { type: String, default: null },
-  open: { type: Boolean, default: false }
+  open: { type: Boolean, default: false },
+  oldAdminGroups: { type: Array, default: () => [] }
 })
 const emit = defineEmits(['update:open'])
 
 const filter = ref('')
+// Collapsed by default: it is a fallback, not the primary way in.
+const oldAdminOpen = ref(false)
 
 function emitOpen (value) {
   emit('update:open', value)
@@ -188,6 +245,40 @@ watch(() => props.open, (isOpen) => {
   padding: 8px 6px;
 }
 
+.admin-rail-old {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.admin-rail-old-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.admin-rail-old-caret { color: rgba(255, 255, 255, 0.6); }
+
+.admin-rail-old-note {
+  margin: 0 8px 6px;
+  font-size: 0.62rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.admin-rail-item-old { color: rgba(255, 255, 255, 0.8); }
+
 .admin-drawer-root { position: fixed; inset: 0; z-index: 1000; }
 .admin-drawer-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
 
@@ -255,6 +346,7 @@ watch(() => props.open, (isOpen) => {
   .admin-rail-burger { font-size: 1.1rem; }
 
   .admin-rail-item { padding: 11px 10px; font-size: 0.9rem; }
+  .admin-rail-old-toggle { min-height: 44px; font-size: 0.8rem; }
   .admin-rail-input { font-size: 16px; min-height: 44px; }
 }
 </style>

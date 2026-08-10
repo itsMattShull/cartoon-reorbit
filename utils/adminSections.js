@@ -160,86 +160,79 @@ export function adminNavTree () {
 }
 
 /**
- * Old `/admin/<slug>` paths → new section keys. Explicit map, never derived from
- * the incoming slug: building the target by string-concatenating user input
- * turns `/admin//evil.com` into a protocol-relative off-site redirect.
+ * The original /admin/* pages, kept live as a fallback while the consolidated
+ * console is being verified in production. They are reachable from the console's
+ * "Old Admin" menu and from the legacy nav, and they render the untouched
+ * pre-migration components under layouts/admin.vue.
+ *
+ * This is deliberately duplicated with ADMIN_SECTIONS above: the console renders
+ * codemodded copies under components/newsite/admin/legacy/, while these are the
+ * originals. Once each console section is confirmed working, delete its old page
+ * here and in pages/admin/, and re-add a redirect so old bookmarks still resolve.
  */
-export const LEGACY_ADMIN_REDIRECTS = new Map(Object.entries({
-  '': 'analytics',
-  'index': 'analytics',
-  'analytics': 'analytics',
-  'users': 'manageUsers',
-  'userctoons': 'manageUsers',
-  'auth-logs': 'authLogs',
-  'czone-contest': 'czoneContest',
-  'ctoonOwnerLogs': 'ctoonOwnerLogs',
-  'lotto-logs': 'lottoLogs',
-  'trades': 'tradeLogs',
-  'auctions': 'auctionLogs',
-  'czone-search-logs': 'czoneSearchLogs',
-  'gtoons-logs': 'gtoonsClashLogs',
-  'manage-monster-battles': 'monsterBattleLogs',
-  'scavenger-logs': 'scavengerLogs',
-  'points-log': 'pointLogs',
-  'winwheellogs': 'winWheelLogs',
-  'achievement-logs': 'achievementLogs',
-  'packanalytics': 'packAnalytics',
-  'achievements': 'achievements',
-  'add-auction': 'auctions/new',
-  'addCtoon': 'ctoons/new',
-  'addHolidayEvent': 'holidayEvents/new',
-  'admin-changes': 'adminChanges',
-  'announcements': 'announcements',
-  'backgrounds': 'backgrounds',
-  'bulk-upload-ctoons': 'ctoonsBulkUpload',
-  'cheating-tool': 'cheatingTool',
-  'check-cheating': 'checkCheating',
-  'codes': 'codes',
-  'create-code': 'codes/new',
-  'ctoon-suggestions': 'ctoonSuggestions',
-  'ctoons': 'ctoons',
-  'dissolve-queue': 'dissolveQueue',
-  'edit-code': 'codes/edit',
-  'edit-czone': 'czoneEdit',
-  'edit-holidayevent': 'holidayEvents/edit',
-  'edit-pack': 'packs/edit',
-  'editCtoon': 'ctoons/edit',
-  'games': 'games',
-  'global-settings': 'globalSettings',
-  'gtoons-clash-tournaments': 'clashTournaments',
-  'holidayevents': 'holidayEvents',
-  'initiate-trade': 'initiateTrade',
-  'manage-ads': 'ads',
-  'manage-auctions': 'auctions',
-  'manage-czone-search': 'czoneSearch',
-  'manage-dev': 'production',
-  'manage-homepage': 'homepage',
-  'manage-lotto': 'lotto',
-  'manage-monster': 'monsters',
-  'new-pack': 'packs/new',
-  'packs': 'packs',
-  'scavenger': 'scavenger',
-  'starter-sets': 'starterSets',
-  'submitted-ctoons': 'submittedCtoons',
-  'suspicious-activity': 'suspiciousActivity'
-}))
+export const OLD_ADMIN_GROUPS = [
+  {
+    id: 'old-core',
+    label: 'Old Admin — Core',
+    items: [
+      { label: 'Analytics', to: '/admin' },
+      { label: 'Manage Users', to: '/admin/users' },
+      { label: 'Manage Homepage', to: '/admin/manage-homepage' },
+      { label: 'Global Settings', to: '/admin/global-settings' },
+      { label: 'Manage Ads', to: '/admin/manage-ads' },
+      { label: 'Manage Announcements', to: '/admin/announcements' },
+      { label: 'Admin Changes', to: '/admin/admin-changes' },
+      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
+      { label: 'Manage Production', to: '/admin/manage-dev' },
+      { label: 'Initiate Trade', to: '/admin/initiate-trade' }
+    ]
+  },
+  {
+    id: 'old-content',
+    label: 'Old Admin — Content',
+    items: [
+      { label: 'Manage cToons', to: '/admin/ctoons' },
+      { label: 'Submitted cToons', to: '/admin/submitted-ctoons' },
+      { label: 'Manage Packs', to: '/admin/packs' },
+      { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
+      { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
+      { label: 'Manage Codes', to: '/admin/codes' },
+      { label: 'Manage Monsters', to: '/admin/manage-monster' },
+      { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
+      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
+      { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
+      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
+      { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
+      { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
+      { label: 'Dissolved Queue', to: '/admin/dissolve-queue' },
+      { label: 'Manage Achievements', to: '/admin/achievements' },
+      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
+    ]
+  },
+  {
+    id: 'old-logs',
+    label: 'Old Admin — Logs',
+    items: [
+      { label: 'Suspicious Activity', to: '/admin/suspicious-activity' },
+      { label: 'Check Cheating', to: '/admin/check-cheating' },
+      { label: 'Cheating Tool', to: '/admin/cheating-tool' },
+      { label: 'Auction Logs', to: '/admin/auctions' },
+      { label: 'Trade Logs', to: '/admin/trades' },
+      { label: 'Auth Logs', to: '/admin/auth-logs' },
+      { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
+      { label: 'cZone Search Logs', to: '/admin/czone-search-logs' },
+      { label: 'Point Logs', to: '/admin/points-log' },
+      { label: 'Achievement Logs', to: '/admin/achievement-logs' },
+      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
+      { label: 'Monster Battle Logs', to: '/admin/manage-monster-battles' },
+      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
+      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
+      { label: 'Pack Analytics', to: '/admin/packanalytics' },
+      { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
+    ]
+  }
+]
 
-/**
- * Map a legacy `/admin/...` pathname to its replacement, or null if it isn't a
- * legacy admin path. Trailing segments (a record id) are preserved.
- */
-export function legacyAdminTarget (pathname) {
-  if (typeof pathname !== 'string') return null
-  const [rawPath, query = ''] = pathname.split('?')
-  if (rawPath !== '/admin' && !rawPath.startsWith('/admin/')) return null
-
-  const parts = rawPath.split('/').filter(Boolean).slice(1)
-  const slug = parts[0] || ''
-  const key = LEGACY_ADMIN_REDIRECTS.get(slug)
-  if (!key) return '/newsite/admin'
-
-  // Only pass through a trailing id-ish segment; never arbitrary depth.
-  const tail = parts.slice(1).filter(p => /^[A-Za-z0-9._-]{1,128}$/.test(p)).slice(0, 1)
-  const suffix = tail.length ? '/' + tail.join('/') : ''
-  return `/newsite/admin/${key}${suffix}${query ? '?' + query : ''}`
-}
+/** Flat list of every old-admin path, for tests and tooling. */
+export const OLD_ADMIN_PATHS = OLD_ADMIN_GROUPS.flatMap(g => g.items.map(i => i.to))

@@ -158,16 +158,35 @@
           </div>
         </div>
 
-        <!-- admin: every tool now lives in the consolidated console -->
+        <!-- admin groups -->
         <template v-if="user?.isAdmin">
-          <div class="pt-2 border-t border-[color:var(--reorbit-border)]">
-            <NuxtLink
-              to="/newsite/admin"
-              @click="close"
-              class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)] font-semibold"
+          <div
+            v-for="group in adminGroups"
+            :key="group.key"
+            class="pt-2 border-t border-[color:var(--reorbit-border)]"
+          >
+            <button
+              class="w-full flex items-center justify-between px-5 py-2 text-left text-sm font-semibold"
+              @click="toggle(group.key)"
             >
-              <span class="truncate">Admin</span>
-            </NuxtLink>
+              <span>{{ group.title }}</span>
+              <span class="text-slate-400">{{ open[group.key] || q ? '−' : '+' }}</span>
+            </button>
+
+            <div v-show="open[group.key] || q">
+              <NuxtLink
+                v-for="item in filteredAdmin(group)"
+                :key="item.to"
+                :to="item.to"
+                @click="close"
+                class="block px-5 py-2.5 transition rounded-lg mx-3 my-0.5 hover:bg-[var(--reorbit-tint)]"
+                :class="isActive(item.to)
+                  ? 'bg-[var(--reorbit-cyan-transparent)] text-[var(--reorbit-blue)] font-semibold'
+                  : ''"
+              >
+                <span class="truncate">{{ item.label }}</span>
+              </NuxtLink>
+            </div>
           </div>
         </template>
       </nav>
@@ -278,6 +297,71 @@ const filteredClash = computed(() =>
     : clashLinks.filter(l => l.label.toLowerCase().includes(q.value.toLowerCase()))
 )
 
+/* admin grouped */
+const adminGroups = [
+  {
+    key: 'admin-core',
+    title: 'Admin — Core',
+    items: [
+      { label: '★ New Admin Console', to: '/newsite/admin' },
+      { label: 'Analytics', to: '/admin' },
+      { label: 'Manage Users', to: '/admin/users' },
+      { label: 'Manage Homepage', to: '/admin/manage-homepage' },
+      { label: 'Global Settings', to: '/admin/global-settings' },
+      { label: 'Manage Ads', to: '/admin/manage-ads' },
+      { label: 'Manage Announcements', to: '/admin/announcements' },
+      { label: 'Admin Changes', to: '/admin/admin-changes' },
+      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
+      { label: 'Manage Production', to: '/admin/manage-dev' },
+      { label: 'Initiate Trade', to: '/admin/initiate-trade' },
+    ]
+  },
+      {
+        key: 'content',
+        title: 'Admin — Content',
+        items: [
+          { label: 'Manage cToons', to: '/admin/ctoons' },
+          { label: 'Submitted cToons', to: '/admin/submitted-ctoons' },
+          { label: 'Manage Packs', to: '/admin/packs' },
+          { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
+          { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
+          { label: 'Manage Codes', to: '/admin/codes' },
+          { label: 'Manage Monsters', to: '/admin/manage-monster' },
+          { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
+      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
+      { label: 'Manage Games', to: '/admin/games' },
+      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
+      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
+          { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
+          { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
+          { label: 'Dissolved Queue', to: '/admin/dissolve-queue' },
+      { label: 'Manage Achievements', to: '/admin/achievements' },
+      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
+    ]
+  },
+  {
+    key: 'logs',
+    title: 'Admin — Logs',
+    items: [
+      { label: 'Suspicious Activity', to: '/admin/suspicious-activity' },
+      { label: 'Check Cheating', to: '/admin/check-cheating' },
+      { label: 'Cheating Tool', to: '/admin/cheating-tool' },
+      { label: 'Auction Logs', to: '/admin/auctions' },
+      { label: 'Trade Logs', to: '/admin/trades' },
+      { label: 'Auth Logs', to: '/admin/auth-logs' },
+      { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
+      { label: 'cZone Search Logs', to: '/admin/czone-search-logs' },
+      { label: 'Point Logs', to: '/admin/points-log' },
+      { label: 'Achievement Logs', to: '/admin/achievement-logs' },
+      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
+      { label: 'Monster Battle Logs', to: '/admin/manage-monster-battles' },
+      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
+      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
+      { label: 'Pack Analytics', to: '/admin/packanalytics' },
+      { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
+    ]
+  }
+]
 
 /* accordion state */
 const open = ref({
@@ -290,6 +374,13 @@ const open = ref({
 })
 
 function toggle(key) { open.value[key] = !open.value[key] }
+
+/* filter per group */
+function filteredAdmin(group) {
+  if (!q.value) return group.items
+  const term = q.value.toLowerCase()
+  return group.items.filter(i => i.label.toLowerCase().includes(term))
+}
 
 /* ──────────────────────────────────────────────────────────────
    Ad image rotation for logo

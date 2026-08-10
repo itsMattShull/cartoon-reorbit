@@ -12,7 +12,7 @@ const read = p => readFileSync(join(root, p), 'utf8')
 // blackjackClientRoutes / edRpsWiring: no server, no browser.
 const {
   ADMIN_SECTIONS, ADMIN_GROUPS, adminNavTree, resolveAdminRoute,
-  getAdminSection, legacyAdminTarget, LEGACY_ADMIN_REDIRECTS
+  getAdminSection, OLD_ADMIN_GROUPS, OLD_ADMIN_PATHS
 } = await import(join(root, 'utils/adminSections.js'))
 
 // The registry is the source of truth for the nav AND the router, so these
@@ -90,45 +90,44 @@ test('prototype keys cannot resolve to a section', () => {
   }
 })
 
-test('every legacy /admin link in the redirect map points at a real section', () => {
-  for (const [slug, key] of LEGACY_ADMIN_REDIRECTS) {
-    assert.ok(getAdminSection(key), `legacy /admin/${slug} -> unknown section ${key}`)
+// ── Old admin fallback ────────────────────────────────────────────────────
+// The original /admin/* pages stay live until each console section is
+// confirmed working. These guard the fallback itself: a menu entry pointing at
+// a page that no longer exists is a dead end at exactly the moment someone is
+// reaching for it because the new console misbehaved.
+
+test('every Old Admin menu entry resolves to a real page file', () => {
+  for (const group of OLD_ADMIN_GROUPS) {
+    for (const item of group.items) {
+      const slug = item.to.replace(/^\/admin\/?/, '') || 'index'
+      assert.ok(
+        existsSync(join(root, 'pages/admin', `${slug}.vue`)),
+        `Old Admin entry "${item.label}" -> ${item.to} has no page`
+      )
+    }
   }
 })
 
-test('legacy redirects stay on-site and never build an off-site target', () => {
-  assert.equal(legacyAdminTarget('/admin/users'), '/newsite/admin/manageUsers')
-  assert.equal(legacyAdminTarget('/admin'), '/newsite/admin/analytics')
-  // A protocol-relative target would navigate off-site.
-  for (const path of ['/admin//evil.com', '/admin/\\evil.com', '/admin/../../evil']) {
-    const target = legacyAdminTarget(path)
-    assert.ok(target.startsWith('/newsite/admin'), `${path} produced ${target}`)
-    assert.ok(!target.startsWith('//'), `${path} produced a protocol-relative target`)
-  }
-  // Non-admin paths are left alone.
-  assert.equal(legacyAdminTarget('/newsite/home'), null)
-  assert.equal(legacyAdminTarget('/administrator'), null)
-})
-
-test('legacy redirects preserve a single trailing record id', () => {
-  assert.equal(legacyAdminTarget('/admin/editCtoon/abc-123'), '/newsite/admin/ctoons/edit/abc-123')
-  assert.equal(legacyAdminTarget('/admin/edit-pack/99'), '/newsite/admin/packs/edit/99')
-})
-
-test('no component still references a retired /admin/* route', () => {
-  const files = [
-    'components/Nav.vue',
-    'components/newsite/AdminNav.vue',
-    'pages/newsite/admin/[...path].vue'
-  ]
-  for (const f of files) {
-    const src = read(f)
-    const hits = [...src.matchAll(/["'`]\/admin\//g)]
-    assert.equal(hits.length, 0, `${f} still links into the retired /admin/* routes`)
+test('Old Admin entries all point into /admin and have labels', () => {
+  assert.ok(OLD_ADMIN_PATHS.length > 0)
+  for (const group of OLD_ADMIN_GROUPS) {
+    assert.ok(group.items.length, `empty Old Admin group ${group.id}`)
+    for (const item of group.items) {
+      assert.ok(item.to === '/admin' || item.to.startsWith('/admin/'), `${item.to} is not an old admin path`)
+      assert.ok(item.label && item.label.trim().length, `entry ${item.to} has no label`)
+    }
   }
 })
 
-test('the old admin pages and layout are gone', () => {
-  assert.ok(!existsSync(join(root, 'pages/admin')), 'pages/admin still exists')
-  assert.ok(!existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue still exists')
+test('Old Admin paths are unique', () => {
+  assert.equal(new Set(OLD_ADMIN_PATHS).size, OLD_ADMIN_PATHS.length)
+})
+
+test('the old admin layout still exists for the fallback pages', () => {
+  assert.ok(existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue is required by pages/admin/*')
+  assert.ok(existsSync(join(root, 'pages/admin/index.vue')), 'pages/admin/index.vue missing')
+})
+
+test('the legacy nav offers a way into the new console', () => {
+  assert.match(read('components/Nav.vue'), /\/newsite\/admin/)
 })
