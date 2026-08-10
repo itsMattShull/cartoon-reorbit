@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount} from 'vue'
 import Nav from '@/components/Nav.vue'
 import { Chart, PieController, ArcElement, Tooltip, Legend } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
@@ -180,6 +180,12 @@ onMounted(() => {
     }
   })
   fetchDistribution()
+})
+
+onBeforeUnmount(() => {
+  // Chart.js pins a canvas backing store and a ResizeObserver until destroyed.
+  try { pieChart?.destroy() } catch {}
+  pieChart = null
 })
 </script>
 

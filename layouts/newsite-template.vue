@@ -224,7 +224,7 @@ html.newsite-active body {
 </style>
 
 <template>
-  <div class="site-container" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
+  <div class="site-container" :class="{ 'site-container-fluid': fluidLayout }" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
       <div class="topbar-primary" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
         <div v-if="!isMobile" class="topbar-primary-logo"><ReorbitLogo /></div>
@@ -328,11 +328,23 @@ const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
 
 
-const gridColumns = computed(() =>
-  isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'
-)
+// Pages that opt into `fluidLayout` (currently the admin console) escape the
+// fixed 1040x862 retro chrome entirely. That chrome is a `transform: scale()`
+// container, and a transform — even `scale(1)` — makes the element the
+// containing block for `position: fixed` descendants, so every `fixed inset-0`
+// modal inside it resolves against the 1040px box and is then clipped by
+// `.site-container { overflow: hidden }`. It also decouples viewport media
+// queries from the content width, which makes responsive CSS meaningless.
+// Dense tables and modals need real viewport semantics.
+const fluidLayout = computed(() => route.meta.fluidLayout === true)
+
+const gridColumns = computed(() => {
+  if (fluidLayout.value) return '1fr'
+  return isMobile.value ? '1fr' : 'var(--sidebar-width) var(--main-content-width)'
+})
 
 const gridRows = computed(() => {
+  if (fluidLayout.value) return 'auto minmax(0, 1fr)'
   if (isMobile.value) return 'auto auto auto auto'
   return showFooter.value
     ? 'var(--topbar-height) var(--sidebar-height) var(--footer-height)'
@@ -382,6 +394,7 @@ onUnmounted(() => {
 })
 
 const mainContentMobileStyle = computed(() => {
+  if (fluidLayout.value) return { width: '100%', height: '100%', minHeight: '0' }
   if (!isMobile.value) return {}
   return {
     width: '100%',
@@ -390,6 +403,8 @@ const mainContentMobileStyle = computed(() => {
 })
 
 const scaleStyle = computed(() => {
+  // No transform at all in fluid mode — see `fluidLayout` above.
+  if (fluidLayout.value) return {}
   if (isMobile.value) {
     return {
       width: '100%',
@@ -421,6 +436,43 @@ const scaleStyle = computed(() => {
   row-gap: var(--site-container-row-gap);
   column-gap: var(--site-container-column-gap);
   overflow: hidden;
+}
+
+/* Fluid mode: full-viewport, no fixed track sizes, no clipping. Everything a
+   dense admin table or a `position: fixed` modal needs in order to behave. */
+.site-container-fluid {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.site-container-fluid .topbar,
+.site-container-fluid .topbar-primary,
+.site-container-fluid .topbar-nav,
+.site-container-fluid .topbar-nav-left,
+.site-container-fluid .topbar-nav-right {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.site-container-fluid .topbar {
+  height: auto;
+}
+
+.site-container-fluid .main-content {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
 }
 
 .topbar {

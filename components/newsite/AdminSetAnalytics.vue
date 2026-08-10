@@ -209,15 +209,16 @@ function setLastNDays(n) {
 }
 
 const barCanvas = ref(null)
+const resources = useAdminResources()
 let barChart = null
 
 function initChart() {
-  if (barChart) {
-    barChart.destroy()
-    barChart = null
-  }
+  // Re-init already destroyed the old chart; registering the new one means it
+  // is also destroyed when the section is swapped out, which never happened
+  // before -- the canvas backing store and its ResizeObserver outlived it.
+  if (barChart) barChart = resources.destroyChart(barChart)
   if (!barCanvas.value) return
-  barChart = new Chart(barCanvas.value.getContext('2d'), {
+  barChart = resources.chart(new Chart(barCanvas.value.getContext('2d'), {
     type: 'bar',
     plugins: [ChartDataLabels],
     data: { labels: [], datasets: [] },
@@ -248,7 +249,7 @@ function initChart() {
         }
       }
     }
-  })
+  }))
 }
 
 async function fetchData(refresh = false) {

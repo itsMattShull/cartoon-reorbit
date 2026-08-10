@@ -80,7 +80,7 @@ test('the Games page tile grid has a row for every tile', () => {
 })
 
 test('every Manage Games tab has a panel, and EdRps is one of them', () => {
-  const src = read('pages/admin/games.vue')
+  const src = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
 
   const tabsBlock = /const tabs = \[([\s\S]*?)\n\]/.exec(src)?.[1]
   assert.ok(tabsBlock, 'could not find the tabs array')
@@ -99,7 +99,7 @@ test('every Manage Games tab has a panel, and EdRps is one of them', () => {
 })
 
 test("the EdRps config load cannot take the other games' settings down with it", () => {
-  const src = read('pages/admin/games.vue')
+  const src = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
   const fetchIdx = src.indexOf("game-config?gameName=EdRps")
   assert.notEqual(fetchIdx, -1, 'games.vue never loads the EdRps config')
 

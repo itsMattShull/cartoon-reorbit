@@ -6,6 +6,7 @@ import { prisma } from '@/server/prisma'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { readFile } from 'node:fs/promises'
 import { sendDiscordDMByDiscordId } from '@/server/utils/discord'
+import { sanitizePathSegment, assertInside } from '@/server/utils/imageUploadValidation'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -25,7 +26,8 @@ function getAbsolutePath(assetPath) {
 }
 
 function getNewAssetPath(submission) {
-  const series = submission.series
+  // Never trust a stored value that was not validated when it was written.
+  const series = sanitizePathSegment(submission.series)
   const filename = basename(submission.assetPath)
   if (process.env.NODE_ENV === 'production') {
     return `/images/cToons/${series}/${filename}`
@@ -35,7 +37,8 @@ function getNewAssetPath(submission) {
 }
 
 function getNewAbsolutePath(submission) {
-  const series = submission.series
+  // Never trust a stored value that was not validated when it was written.
+  const series = sanitizePathSegment(submission.series)
   const filename = basename(submission.assetPath)
   if (process.env.NODE_ENV === 'production') {
     return join(baseDir, 'cartoon-reorbit-images', 'cToons', series, filename)

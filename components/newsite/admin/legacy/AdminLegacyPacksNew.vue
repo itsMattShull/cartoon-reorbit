@@ -1,11 +1,10 @@
 <template>
-  <Nav />
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 mt-16 md:mt-20">
+  <div class="p-8 max-w-6xl mx-auto space-y-14 ">
     <!-- 🡐 Back & Title -->
     <div class="flex items-center gap-4">
       <NuxtLink
-        to="/admin/packs"
+        to="/newsite/admin/packs"
         class="text-blue-700 hover:underline focus-visible:outline-blue-700"
       >
         ← Back to Packs
@@ -434,8 +433,8 @@
 </template>
 
 <script setup>
+
 // Meta & imports
-definePageMeta({ title: 'Admin - New Pack', middleware: ['auth','admin'], layout: 'admin' })
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from '#app'
 const uploadResources = useAdminResources()
@@ -493,8 +492,8 @@ function onFile(e) {
     return
   }
   imageFile.value    = file
-  // Each object URL pins its whole Blob until revoked; replacing the
-  // preview without revoking leaks the previous image.
+  // Revoke the previous preview before replacing it: each object URL pins
+  // its whole Blob in memory until revoked or the document unloads.
   if (imagePreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagePreview.value)
   imagePreview.value = uploadResources.objectUrl(file)
 }
@@ -682,7 +681,6 @@ function addSetToSelection() {
   setInput.value?.blur()
 }
 
-
 // Close dropdowns on outside click
 function handleOutsideClick(e) {
   if (!e.target.closest('.cto-autocomplete')) suggestionsOpen.value = false
@@ -771,7 +769,7 @@ async function submit() {
   form.append('image', imageFile.value)
   try {
     await $fetch('/api/admin/packs', { method: 'POST', body: form })
-    router.push('/admin/packs')
+    router.push('/newsite/admin/packs')
   } catch (err) {
     console.error(err)
     alert('Failed to create pack')

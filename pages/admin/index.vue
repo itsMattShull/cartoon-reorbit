@@ -1295,7 +1295,17 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (socketMetricsTimer) clearInterval(socketMetricsTimer)
+  if (socketMetricsTimer) { clearInterval(socketMetricsTimer); socketMetricsTimer = null }
+  // Every chart holds a canvas backing store and a ResizeObserver. Without this
+  // all 14 outlived the page, and each visit to the dashboard leaked another
+  // set. (The consolidated console's AdminAnalytics already does this.)
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, packChart,
+    ptsHistChart, clashChart, tradesChart, netChart, ratioChart, turnoverChart,
+    monsterScansChart, socketMetricsChart
+  ].forEach(ch => { try { ch?.destroy() } catch {} })
+  cumChart = pctChart = uniqueChart = codesChart = ctoonChart = packChart =
+    ptsHistChart = clashChart = tradesChart = netChart = ratioChart =
+    turnoverChart = monsterScansChart = socketMetricsChart = null
 })
 
 // re-fetch on changes

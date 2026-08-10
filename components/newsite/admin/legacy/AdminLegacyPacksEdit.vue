@@ -1,12 +1,11 @@
 <!-- pages/admin/edit-pack/[id].vue -->
 <template>
-  <Nav />
 
-  <div class="p-4 sm:p-8 max-w-6xl mx-auto space-y-10 sm:space-y-14 mt-16 md:mt-20">
+  <div class="p-4 sm:p-8 max-w-6xl mx-auto space-y-10 sm:space-y-14 ">
     <!-- 🡐 Back & title -->
     <div class="flex items-center gap-4">
       <NuxtLink
-        to="/admin/packs"
+        to="/newsite/admin/packs"
         class="text-blue-700 hover:underline focus-visible:outline-blue-700"
       >
         ← Back to Packs
@@ -300,7 +299,6 @@
 </template>
 
 <script setup>
-definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout:'admin' })
 
 /* ---------------- imports ---------------- */
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
@@ -309,7 +307,11 @@ const uploadResources = useAdminResources()
 
 /* ---------------- route & pack fetch ---------------- */
 const route = useRoute()
-const id    = route.params.id
+// Rendered by the admin shell's catch-all route, which passes the
+// trailing URL segments as `subPath`. The route.params fallback keeps
+// this component usable if it is ever mounted from a real dynamic route.
+const props = defineProps({ subPath: { type: Array, default: () => [] } })
+const id = props.subPath[0] ?? route.params.id
 
 const { data: packData, pending, error } = await useFetch(`/api/admin/packs/${id}`, {
   key: `pack-${id}`,
@@ -352,8 +354,8 @@ function onFile (e) {
     return
   }
   newImageFile.value = file
-  // Each object URL pins its whole Blob until revoked; replacing the
-  // preview without revoking leaks the previous image.
+  // Revoke the previous preview before replacing it: each object URL pins
+  // its whole Blob in memory until revoked or the document unloads.
   if (imagePreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagePreview.value)
   imagePreview.value = uploadResources.objectUrl(file)
 }
@@ -439,7 +441,6 @@ const grouped = computed(() => {
   }
   return m
 })
-
 
 /* ------------- weight helpers ------------------ */
 const sumWeights = rarity =>
@@ -607,7 +608,7 @@ async function submit () {
       body: form,
       credentials:'include'
     })
-    router.push('/admin/packs')
+    router.push('/newsite/admin/packs')
   } catch (err) {
     console.error(err)
     alert('Failed to save pack')

@@ -1,4 +1,5 @@
 // server/utils/imageUploadValidation.js
+import { resolve as resolvePath, sep as pathSep } from 'node:path'
 // Shared image-upload validation: size cap, magic-byte content sniffing (the
 // multipart "type" field is client-supplied and spoofable, so declared mime
 // type alone is not trusted), and filename sanitization against path
@@ -27,4 +28,33 @@ export function sniffImageType(buf) {
 
 export function sanitizeFilename(name) {
   return String(name || 'image').replace(/[^A-Za-z0-9._-]/g, '') || 'image'
+}
+
+/**
+ * Sanitize a single path segment used as a directory name (e.g. a cToon
+ * series). `path.join` resolves `..` eagerly, so an unsanitized segment escapes
+ * the upload root entirely: join('/app/public/cToons', '../../../../etc')
+ * is '/etc'. Strips separators and dot-runs, then falls back to a safe literal.
+ */
+export function sanitizePathSegment(name, fallback = 'misc') {
+  const cleaned = String(name || '')
+    .replace(/[\\/]/g, '')
+    .replace(/\.{2,}/g, '')
+    .replace(/[^A-Za-z0-9._ -]/g, '')
+    .trim()
+  return cleaned && cleaned !== '.' ? cleaned : fallback
+}
+
+/**
+ * Final containment check before writing. Belt-and-braces on top of the
+ * sanitizers: if a destination ever resolves outside its intended root, fail
+ * loudly rather than writing.
+ */
+export function assertInside(root, candidate) {
+  const rootResolved = resolvePath(root)
+  const target = resolvePath(candidate)
+  if (target !== rootResolved && !target.startsWith(rootResolved + pathSep)) {
+    throw new Error(`Refusing to write outside upload root: ${target}`)
+  }
+  return target
 }

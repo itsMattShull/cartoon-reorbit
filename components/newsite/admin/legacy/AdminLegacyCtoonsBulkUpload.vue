@@ -1,6 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 p-6">
-    <Nav />
+  <div class="bg-gray-50 p-6">
 
     <!-- Toast notifications -->
     <Toast
@@ -10,7 +9,7 @@
       :type="t.type"
     />
 
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow mt-16 md:mt-20">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow ">
       <h1 class="text-2xl font-semibold mb-4">Bulk Upload cToons</h1>
 
       <!-- STEP 1: Image Upload -->
@@ -501,15 +500,15 @@
 </template>
 
 <script setup>
+
 import { ref, onMounted, computed, watch } from 'vue'
 import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
-import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+// Object URLs for the per-file previews. Each pins its Blob until revoked;
+// a bulk session can hold dozens of full-size images alive otherwise.
 const uploadResources = useAdminResources()
-
-definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 
 const router = useRouter()
 const step = ref(1)
@@ -916,7 +915,7 @@ async function uploadAll() {
   uploading.value = false
   if (allSuccess) {
     showToast('All cToons uploaded successfully!', 'success')
-    setTimeout(() => router.push('/admin/ctoons'), 1000)
+    setTimeout(() => router.push('/newsite/admin/ctoons'), 1000)
   }
 }
 </script>

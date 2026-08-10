@@ -87,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount} from 'vue'
 import Nav from '@/components/Nav.vue'
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js'
 
@@ -207,6 +207,12 @@ onMounted(() => {
   })
 
   fetchData()
+})
+
+onBeforeUnmount(() => {
+  // Chart.js pins a canvas backing store and a ResizeObserver until destroyed.
+  try { barChart?.destroy() } catch {}
+  barChart = null
 })
 </script>
 
