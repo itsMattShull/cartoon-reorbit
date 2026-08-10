@@ -1001,6 +1001,7 @@ onBeforeUnmount(() => {
   if (jackTimer) clearTimeout(jackTimer)
   resizeObserver?.disconnect()
   window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('orientationchange', resizeCanvas)
   document.removeEventListener('selectstart', blockSelection)
   document.removeEventListener('dragstart', blockSelection)
   document.removeEventListener('gesturestart', blockGesture)

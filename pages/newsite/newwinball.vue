@@ -1348,18 +1348,24 @@ fr_max = "45";`
   });
   canvas.addEventListener("pointerup", releaseCharge);
   canvas.addEventListener("pointercancel", releaseCharge);
-  window.addEventListener("keydown", (evt) => {
+  // Named so they can be removed on teardown. Listeners on `canvas` die with
+  // the element, but these are on `window`: as anonymous handlers they kept the
+  // whole game scope (physics world, stage actors, audio graph) reachable for
+  // the life of the document, and a second visit added another pair.
+  const onKeyDown = (evt) => {
     if ((evt.code === "Space" || evt.code === "ArrowDown") && !evt.repeat) {
       evt.preventDefault();
       startCharge();
     }
-  });
-  window.addEventListener("keyup", (evt) => {
+  };
+  const onKeyUp = (evt) => {
     if (evt.code === "Space" || evt.code === "ArrowDown") {
       evt.preventDefault();
       releaseCharge();
     }
-  });
+  };
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
 
   function drawBall(x, y) {
     const size = 24.2 * 0.80133057;
@@ -1572,6 +1578,8 @@ fr_max = "45";`
   window.__newWinballDispose = () => {
     disposed = true;
     if (drawFrameId) cancelAnimationFrame(drawFrameId);
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
     resizeObs.disconnect();
     audioCtx?.close().catch(() => {});
   };

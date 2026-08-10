@@ -433,9 +433,11 @@
 </template>
 
 <script setup>
+
 // Meta & imports
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from '#app'
+const uploadResources = useAdminResources()
 
 // 1️⃣ Basic pack fields
 const name        = ref('')
@@ -490,7 +492,10 @@ function onFile(e) {
     return
   }
   imageFile.value    = file
-  imagePreview.value = URL.createObjectURL(file)
+  // Revoke the previous preview before replacing it: each object URL pins
+  // its whole Blob in memory until revoked or the document unloads.
+  if (imagePreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagePreview.value)
+  imagePreview.value = uploadResources.objectUrl(file)
 }
 
 // 3️⃣ Rarity counts

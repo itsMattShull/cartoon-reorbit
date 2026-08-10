@@ -500,11 +500,15 @@
 </template>
 
 <script setup>
+
 import { ref, onMounted, computed, watch } from 'vue'
 import { zonedTimeToUtc } from 'date-fns-tz'
 import { useRouter } from 'vue-router'
 import Toast from '~/components/Toast.vue'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+// Object URLs for the per-file previews. Each pins its Blob until revoked;
+// a bulk session can hold dozens of full-size images alive otherwise.
+const uploadResources = useAdminResources()
 
 const router = useRouter()
 const step = ref(1)
@@ -731,7 +735,7 @@ function handleFiles(e) {
     const row = {
       id: makeRowId(),
       file,
-      preview: URL.createObjectURL(file),
+      preview: uploadResources.objectUrl(file),
       nameField: cleanedName,      // ← prefilled name
       characters: cleanedName,     // ← prefilled to match name
       rarity: rarity || '',

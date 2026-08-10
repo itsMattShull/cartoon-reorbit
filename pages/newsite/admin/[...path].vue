@@ -103,6 +103,66 @@ html.newsite-admin-page body {
   background: transparent !important;
   min-height: 100vh;
 }
+
+/* ── Admin-wide mobile rules ───────────────────────────────────────────────
+   Applied once here rather than edited into ~60 section components. The admin
+   UI is deliberately dense (text-xs / py-0.5 everywhere), which is right on a
+   desktop and unusable on a touch screen. */
+
+/* iOS Safari zooms the page whenever a focused input's font-size is under 16px,
+   and it does not zoom back out. The admin is wall-to-wall filter inputs, so
+   without this every tap on a filter leaves the page zoomed in. Scoped to
+   coarse pointers so desktop keeps its dense sizing. */
+@media (max-width: 767.98px) and (pointer: coarse) {
+  .newsite-admin input:not([type='checkbox']):not([type='radio']),
+  .newsite-admin select,
+  .newsite-admin textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* 44px minimum touch target. The dense `py-0.5` + `text-xs` controls render at
+   roughly 20px, which is a third of the recommended size. */
+@media (pointer: coarse) {
+  .newsite-admin button,
+  .newsite-admin a[href],
+  .newsite-admin input:not([type='checkbox']):not([type='radio']),
+  .newsite-admin select {
+    min-height: 44px;
+  }
+
+  .newsite-admin input[type='checkbox'],
+  .newsite-admin input[type='radio'] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+}
+
+/* Any table wide enough to overflow its section gets its own horizontal
+   scroller instead of being clipped. Many legacy tools have 9-17 column tables
+   with no `overflow-x-auto` wrapper of their own. */
+.newsite-admin table {
+  max-width: 100%;
+}
+
+.newsite-admin .overflow-x-auto,
+.newsite-admin-body {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Legacy tools were authored as full-page views centred in a browser window.
+   Inside the console panel their centring gutters just waste width. */
+@media (max-width: 767.98px) {
+  .newsite-admin .max-w-2xl,
+  .newsite-admin .max-w-4xl,
+  .newsite-admin .max-w-6xl,
+  .newsite-admin .max-w-7xl {
+    max-width: 100%;
+  }
+
+  .newsite-admin .p-6 { padding: 0.75rem; }
+}
 </style>
 
 <style scoped>

@@ -216,6 +216,7 @@
 </template>
 
 <script setup>
+
 import { ref, computed, watch } from 'vue'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
@@ -380,7 +381,7 @@ function handleFiles(e) {
     const row = {
       id: makeRowId(),
       file,
-      preview: URL.createObjectURL(file),
+      preview: uploadResources.objectUrl(file),
       nameField: name,
       characters: name,
       rarity: rarity || '',
@@ -475,6 +476,10 @@ async function submitAll() {
 
 // Load rarity defaults on mount
 import { onMounted } from 'vue'
+// Object URLs for the per-file previews. Each pins its Blob until revoked;
+// a bulk session can hold dozens of full-size images alive otherwise.
+const uploadResources = useAdminResources()
+
 onMounted(() => {
   loadRarityDefaults()
 })

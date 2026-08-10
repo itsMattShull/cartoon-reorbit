@@ -10,8 +10,16 @@
 
 const S = (key, label, group, load, extra = {}) => ({ key, label, group, load, ...extra })
 
-const legacy = name => () => import(`../components/newsite/admin/legacy/${name}.vue`)
-const nu = name => () => import(`../components/newsite/${name}.vue`)
+// The loader carries its own source path so the contract test can assert the
+// component actually exists on disk rather than trusting the registry.
+const legacy = name => Object.assign(
+  () => import(`../components/newsite/admin/legacy/${name}.vue`),
+  { path: `components/newsite/admin/legacy/${name}.vue` }
+)
+const nu = name => Object.assign(
+  () => import(`../components/newsite/${name}.vue`),
+  { path: `components/newsite/${name}.vue` }
+)
 
 export const ADMIN_GROUPS = [
   { id: 'analytics', label: 'Analytics' },
@@ -44,18 +52,18 @@ export const ADMIN_SECTIONS = [
   // ── Content ─────────────────────────────────────────────────
   S('ctoons', 'Manage cToons', 'content', legacy('AdminLegacyCtoons')),
   S('ctoons/new', 'Add cToon', 'content', legacy('AdminLegacyCtoonsNew'), { hidden: true }),
-  S('ctoons/edit', 'Edit cToon', 'content', legacy('AdminLegacyCtoonsEdit'), { hidden: true }),
+  S('ctoons/edit', 'Edit cToon', 'content', legacy('AdminLegacyCtoonsEdit'), { hidden: true, acceptsSubPath: true }),
   S('ctoonsBulkUpload', 'Bulk Upload cToons', 'content', legacy('AdminLegacyCtoonsBulkUpload'), { dense: true }),
   S('submittedCtoons', 'Submitted cToons', 'content', legacy('AdminLegacySubmittedCtoons')),
   S('ctoonSuggestions', 'cToon Suggestions', 'content', legacy('AdminLegacyCtoonSuggestions')),
   S('starterSets', 'Starter Sets', 'content', legacy('AdminLegacyStarterSets')),
   S('packs', 'Manage Packs', 'content', legacy('AdminLegacyPacks')),
   S('packs/new', 'New Pack', 'content', legacy('AdminLegacyPacksNew'), { hidden: true }),
-  S('packs/edit', 'Edit Pack', 'content', legacy('AdminLegacyPacksEdit'), { hidden: true }),
+  S('packs/edit', 'Edit Pack', 'content', legacy('AdminLegacyPacksEdit'), { hidden: true, acceptsSubPath: true }),
   S('backgrounds', 'Backgrounds', 'content', legacy('AdminLegacyBackgrounds')),
   S('czoneSearch', 'cZone Search', 'content', legacy('AdminLegacyCzoneSearch'), { dense: true }),
   S('czoneContest', 'cZone Contests', 'content', nu('AdminCzoneContest')),
-  S('czoneEdit', 'Edit a cZone', 'content', legacy('AdminLegacyCzoneEdit'), { hidden: true }),
+  S('czoneEdit', 'Edit a cZone', 'content', legacy('AdminLegacyCzoneEdit'), { hidden: true, acceptsSubPath: true }),
   S('homepage', 'Manage Homepage', 'content', legacy('AdminLegacyHomepage')),
   S('announcements', 'Announcements', 'content', legacy('AdminLegacyAnnouncements')),
   S('ads', 'Manage Ads', 'content', legacy('AdminLegacyAds')),
@@ -79,7 +87,7 @@ export const ADMIN_SECTIONS = [
   S('achievements', 'Achievements', 'games', legacy('AdminLegacyAchievements')),
   S('holidayEvents', 'Holiday Events', 'games', legacy('AdminLegacyHolidayEvents')),
   S('holidayEvents/new', 'Add Holiday Event', 'games', legacy('AdminLegacyHolidayEventsNew'), { hidden: true }),
-  S('holidayEvents/edit', 'Edit Holiday Event', 'games', legacy('AdminLegacyHolidayEventsEdit'), { hidden: true }),
+  S('holidayEvents/edit', 'Edit Holiday Event', 'games', legacy('AdminLegacyHolidayEventsEdit'), { hidden: true, acceptsSubPath: true }),
 
   // ── Logs ────────────────────────────────────────────────────
   S('errorLogs', 'Error Logs', 'logs', nu('AdminErrorLogs')),
@@ -130,7 +138,16 @@ export function resolveAdminRoute (segments) {
 
   for (let n = Math.min(parts.length, 3); n > 0; n--) {
     const section = getAdminSection(parts.slice(0, n).join('/'))
-    if (section) return { section, subPath: parts.slice(n) }
+    if (!section) continue
+    const subPath = parts.slice(n)
+    // Only sections that actually take a record id accept trailing segments.
+    // Otherwise `/newsite/admin/ctoons/junk/junk` would quietly render the
+    // cToons list, hiding a broken link instead of surfacing it.
+    if (!subPath.length) return { section, subPath: [] }
+    if (!section.acceptsSubPath) return null
+    if (subPath.length > 1) return null
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(subPath[0])) return null
+    return { section, subPath }
   }
   return null
 }
