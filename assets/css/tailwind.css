@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Readable text in form controls, everywhere.
+   *
+   * Tailwind's preflight sets `color: inherit` on button/input/optgroup/select/
+   * textarea. The newsite layout sets `color: var(--text-color)` (#ffffff) on
+   * html and body. So any field that does not name its own colour inherits
+   * white — and since almost every field sits on a white or near-white
+   * background, the text you type is invisible. Roughly 1,300 of the ~1,335
+   * text fields in this app name no colour of their own, so this belongs in
+   * one base rule rather than in 1,300 templates.
+   *
+   * This lives in `@layer base` deliberately. Tailwind's layer order means any
+   * utility class (`text-white`, `text-gray-700`) and any component's scoped
+   * CSS still wins, so the fields that intentionally render white on a dark
+   * panel — the cToon filter, the cZone editor and sidebar search boxes, the
+   * admin rail filter — keep their explicit `color: #fff` and are unaffected.
+   *
+   * Note this sets `color` only, never `-webkit-text-fill-color`: in WebKit the
+   * fill colour beats `color`, so setting it here would override those same
+   * dark-panel inputs, which set `color` but not the fill property.
+   */
+  input,
+  select,
+  textarea {
+    color: #111827; /* gray-900 */
+  }
+
+  /*
+   * Dropdown items are drawn by the OS using the select's own colours, so a
+   * white-on-dark select renders an unreadable white-on-white popup list on
+   * Windows and Linux. Pin both so the list is legible regardless of how the
+   * select itself is styled.
+   */
+  option,
+  optgroup {
+    color: #111827;
+    background-color: #ffffff;
+  }
+}
