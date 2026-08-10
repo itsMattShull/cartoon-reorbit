@@ -12,6 +12,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { scheduleMintEnd } from '@/server/utils/queues'
 import { parseSecondEditionFields } from '@/server/utils/secondEdition'
+import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -143,18 +144,19 @@ export default defineEventHandler(async (event) => {
   )
 
   /* 4. Save image ------------------------------------------- */
-  const safeSeries = series.trim()
+  const safeSeries = sanitizePathSegment(series)
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
     : join(baseDir, 'public', 'cToons', safeSeries)
 
   await mkdir(uploadDir, { recursive: true })
-  const outPath = join(uploadDir, imagePart.filename)
+  const safeImageName = sanitizeFilename(imagePart.filename)
+  const outPath = assertInside(uploadDir, join(uploadDir, safeImageName))
   await writeFile(outPath, imagePart.data)
 
   const assetPath = process.env.NODE_ENV === 'production'
-    ? `/images/cToons/${safeSeries}/${imagePart.filename}`
-    : `/cToons/${safeSeries}/${imagePart.filename}`
+    ? `/images/cToons/${safeSeries}/${safeImageName}`
+    : `/cToons/${safeSeries}/${safeImageName}`
 
   /* 4a. Save sound (optional) -------------------------------- */
   const ALLOWED_AUDIO = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg'])
@@ -167,10 +169,11 @@ export default defineEventHandler(async (event) => {
       ? join(baseDir, 'cartoon-reorbit-images', 'cToon-sounds', safeSeries)
       : join(baseDir, 'public', 'cToon-sounds', safeSeries)
     await mkdir(soundUploadDir, { recursive: true })
-    await writeFile(join(soundUploadDir, soundPart.filename), soundPart.data)
+    const safeSoundName = sanitizeFilename(soundPart.filename)
+    await writeFile(assertInside(soundUploadDir, join(soundUploadDir, safeSoundName)), soundPart.data)
     soundPath = process.env.NODE_ENV === 'production'
-      ? `/images/cToon-sounds/${safeSeries}/${soundPart.filename}`
-      : `/cToon-sounds/${safeSeries}/${soundPart.filename}`
+      ? `/images/cToon-sounds/${safeSeries}/${safeSoundName}`
+      : `/cToon-sounds/${safeSeries}/${safeSoundName}`
   }
 
   /* 5. Persist to DB ---------------------------------------- */

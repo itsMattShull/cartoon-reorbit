@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
 import sharp from 'sharp'
+import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 
 const RATIO_TOLERANCE = 0.15
 const MAX_CTOONS_SAMPLE = 200
@@ -140,8 +141,21 @@ export default defineEventHandler(async (event) => {
 
   const limitInt = perUserLimit ? parseInt(perUserLimit, 10) : null
 
+  // Trust sniffed content, not the spoofable multipart type, and build the
+  // name server-side so an attacker cannot choose the extension (an .html
+  // dropped in public/ is served same-origin: stored XSS).
+  const sniffed = sniffImageType(imagePart.data)
+  if (!['image/png', 'image/gif'].includes(sniffed)) {
+    throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
+  }
+  if (imagePart.data.length > MAX_IMAGE_BYTES) {
+    throw createError({ statusCode: 413, statusMessage: 'Image must be 5MB or smaller.' })
+  }
+
   // Save image to submitted-ctoons folder (separate from real cToons)
-  const safeSeries = series.trim()
+  // `series` and the upload filename are raw client input. path.join resolves
+  // '..' eagerly, so an unsanitized segment escapes the upload root entirely.
+  const safeSeries = sanitizePathSegment(series)
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'submitted-ctoons', safeSeries)
     : join(baseDir, 'public', 'submitted-ctoons', safeSeries)
@@ -153,8 +167,8 @@ export default defineEventHandler(async (event) => {
 
   // Prefix filename with timestamp to avoid collisions
   const timestamp = Date.now()
-  const safeFilename = `${timestamp}_${imagePart.filename}`
-  await writeFile(join(uploadDir, safeFilename), imageData)
+  const safeFilename = `${timestamp}_${sanitizeFilename(imagePart.filename)}`
+  await writeFile(assertInside(uploadDir, join(uploadDir, safeFilename)), imageData)
 
   const assetPath = process.env.NODE_ENV === 'production'
     ? `/images/submitted-ctoons/${safeSeries}/${safeFilename}`
