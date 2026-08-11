@@ -50,7 +50,7 @@ if (typeof q.priceMax === 'string' && q.priceMax) filter.value.priceMax = q.pric
 if (typeof q.sort     === 'string' && q.sort)     filter.value.sortField = q.sort
 if (q.sortDir === 'asc') filter.value.sortAsc = true
 if (q.available === 'true') filter.value.hideUnavailable = true
-if (q.tab === 'packs') cmartTab.value = 'packs'
+if (['packs', 'upgrades', 'holiday'].includes(q.tab)) cmartTab.value = q.tab
 
 // ── Sync filter + tab → URL ────────────────────────────────────────────────
 function updateUrl() {
