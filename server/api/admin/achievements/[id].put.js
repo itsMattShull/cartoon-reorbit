@@ -52,9 +52,29 @@ export default defineEventHandler(async (event) => {
     isActive = ach.isActive,
     notifyDiscord = ach.notifyDiscord,
     discordRoleName = ach.discordRoleName,
+    isClaimable = ach.isClaimable,
     criteria = {},
-    rewards = {}
+    rewards = {},
+    claimOptions = []
   } = payload || {}
+
+  const claimOptionRows = (Array.isArray(claimOptions) ? claimOptions : [])
+    .slice(0, 4)
+    .filter(o => o && String(o.label || '').trim())
+    .map((o, i) => ({
+      label: String(o.label).trim(),
+      points: Math.max(0, Number(o.points || 0)) || 0,
+      ctoonId: o.ctoonId ? String(o.ctoonId) : null,
+      quantity: Math.max(1, Number(o.quantity || 1)),
+      sortOrder: i,
+    }))
+  const claimCtoonIds = claimOptionRows.map(o => o.ctoonId).filter(Boolean)
+  if (claimCtoonIds.length) {
+    const validCount = await db.ctoon.count({ where: { id: { in: [...new Set(claimCtoonIds)] } } })
+    if (validCount !== new Set(claimCtoonIds).size) {
+      throw createError({ statusCode: 400, statusMessage: 'One or more claim option cToons do not exist' })
+    }
+  }
 
   // Optional image replacement
   let imagePath = ach.imagePath
@@ -87,6 +107,7 @@ export default defineEventHandler(async (event) => {
       isActive: !!isActive,
       notifyDiscord: !!notifyDiscord,
       discordRoleName: roleName || null,
+      isClaimable: !!isClaimable,
       pointsGte:       criteria?.pointsGte       ?? null,
       totalCtoonsGte:  criteria?.totalCtoonsGte  ?? null,
       uniqueCtoonsGte: criteria?.uniqueCtoonsGte ?? null,
@@ -103,6 +124,19 @@ export default defineEventHandler(async (event) => {
       userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
     }
   })
+
+  // Claim options: replace, but never delete an option a user has already
+  // claimed against (AchievementClaim.optionId is onDelete: Restrict) — those
+  // are left as-is so past claims stay auditable; only never-claimed options
+  // are cleared before inserting the new set.
+  const claimedOptionIds = new Set(
+    (await db.achievementClaim.findMany({ where: { achievementId: id }, select: { optionId: true } })).map(c => c.optionId)
+  )
+  const deletableOptionIds = (await db.achievementClaimOption.findMany({ where: { achievementId: id }, select: { id: true } }))
+    .map(o => o.id)
+    .filter(oid => !claimedOptionIds.has(oid))
+  if (deletableOptionIds.length) await db.achievementClaimOption.deleteMany({ where: { id: { in: deletableOptionIds } } })
+  if (claimOptionRows.length) await db.achievementClaimOption.createMany({ data: claimOptionRows.map(o => ({ achievementId: id, ...o })) })
 
   // Required cToons: replace
   await db.achievementRequiredCtoon.deleteMany({ where: { achievementId: id } })

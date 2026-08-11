@@ -305,6 +305,7 @@ definePageMeta({ title: 'Admin - Edit Pack', middleware:['auth','admin'], layout
 /* ---------------- imports ---------------- */
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute, useFetch } from '#app'
+const uploadResources = useAdminResources()
 
 /* ---------------- route & pack fetch ---------------- */
 const route = useRoute()
@@ -351,7 +352,10 @@ function onFile (e) {
     return
   }
   newImageFile.value = file
-  imagePreview.value = URL.createObjectURL(file)
+  // Each object URL pins its whole Blob until revoked; replacing the
+  // preview without revoking leaks the previous image.
+  if (imagePreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagePreview.value)
+  imagePreview.value = uploadResources.objectUrl(file)
 }
 
 const defaultWeightConfigs = {

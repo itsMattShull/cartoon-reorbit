@@ -225,6 +225,47 @@
               </button>
             </div>
           </div>
+
+          <h3 class="text-lg font-semibold mt-6">Claimable Reward (optional)</h3>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.isClaimable" id="isClaimable" />
+            <label for="isClaimable">User picks 1 of up to 4 reward options instead of auto-granting the Rewards above</label>
+          </div>
+          <div v-if="form.isClaimable" class="mt-2 space-y-3">
+            <div v-for="(opt, i) in form.claimOptions" :key="i" class="border rounded p-2 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+              <div>
+                <label class="block text-xs">Label</label>
+                <input v-model="opt.label" class="w-full border rounded px-2 py-1" placeholder="Option name" />
+              </div>
+              <div>
+                <label class="block text-xs">Points</label>
+                <input v-model.number="opt.points" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div>
+                <label class="block text-xs">cToon</label>
+                <datalist :id="`claim-ctoon-list-${i}`">
+                  <option v-for="c in filteredCtoons(opt.ctoonName)" :key="c.id" :value="c.name" />
+                </datalist>
+                <input
+                  v-model="opt.ctoonName"
+                  :list="`claim-ctoon-list-${i}`"
+                  class="w-full border rounded px-2 py-1"
+                  placeholder="Type 3+ chars"
+                  @change="setClaimOptionCtoon(opt, opt.ctoonName)"
+                />
+              </div>
+              <div class="flex items-end gap-2">
+                <div class="flex-1">
+                  <label class="block text-xs">Qty</label>
+                  <input v-model.number="opt.quantity" type="number" min="1" class="w-full border rounded px-2 py-1" />
+                </div>
+                <button type="button" class="text-red-600 px-2 py-1" @click="removeClaimOption(i)">Remove</button>
+              </div>
+            </div>
+            <button v-if="form.claimOptions.length < 4" type="button" class="px-3 py-1 border rounded" @click="addClaimOption">
+              Add option ({{ form.claimOptions.length }}/4)
+            </button>
+          </div>
           </div>
           <div class="px-4 py-3 border-t flex gap-3 justify-end">
             <button type="button" class="px-4 py-2 border rounded" @click="closeForm">Cancel</button>
@@ -321,7 +362,9 @@ const emptyForm = () => ({
     ctoonsRequired: [],
     userCreatedBefore: null
   },
-  rewards: { points: 0, ctoons: [], backgrounds: [] }
+  rewards: { points: 0, ctoons: [], backgrounds: [] },
+  isClaimable: false,
+  claimOptions: []
 })
 const form = reactive(emptyForm())
 const queuing = ref(false)
@@ -445,6 +488,21 @@ function addCtoon() {
   ctoonSelection.value = { name: '', qty: 1 }
 }
 
+const claimOptionCtoonInput = ref('')
+function addClaimOption() {
+  if (form.claimOptions.length >= 4) return
+  form.claimOptions.push({ label: '', points: 0, ctoonId: '', ctoonName: '', quantity: 1 })
+}
+function removeClaimOption(i) {
+  form.claimOptions.splice(i, 1)
+}
+function setClaimOptionCtoon(opt, name) {
+  const match = ctoons.value.find(c => c.name === name)
+  if (!match) return
+  opt.ctoonId = match.id
+  opt.ctoonName = match.name
+}
+
 function toggleBg(id) {
   const i = bgSelection.value.indexOf(id)
   if (i >= 0) bgSelection.value.splice(i, 1)
@@ -481,7 +539,9 @@ function startEdit(a) {
       points: a.rewards?.points || 0,
       ctoons: (a.rewards?.ctoons || []).map(r => ({ ctoonId: r.ctoonId, quantity: r.quantity })),
       backgrounds: (a.rewards?.backgrounds || []).map(r => ({ backgroundId: r.backgroundId }))
-    }
+    },
+    isClaimable: !!a.isClaimable,
+    claimOptions: (a.claimOptions || []).map(o => ({ label: o.label, points: o.points || 0, ctoonId: o.ctoonId || '', ctoonName: o.ctoonName || '', quantity: o.quantity || 1 }))
   })
   bgSelection.value = form.rewards.backgrounds.map(b => b.backgroundId)
   if (imageInput.value) imageInput.value.value = ''

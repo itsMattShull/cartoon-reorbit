@@ -195,6 +195,12 @@ export async function awardAchievementToUser(client, userId, achievement) {
     // console.log('[achievements] award: creating achievementUser', { userId, ach: achievement?.slug || achievement?.id })
     await tx.achievementUser.create({ data: { achievementId: achievement.id, userId } })
 
+    // Claimable achievements don't auto-grant a reward — the user picks one of
+    // up to 4 options via POST /api/achievements/:id/claim instead.
+    if (achievement.isClaimable) {
+      return { points: 0, ctoons: [], backgrounds: 0 }
+    }
+
     // Rewards
     const reward = await tx.achievementReward.findFirst({
       where: { achievementId: achievement.id },
@@ -324,4 +330,63 @@ export async function processAchievementsForUser(userId) {
 
   // console.log('[achievements] process: complete', { userId, awarded })
   return { awarded }
+}
+
+export class AchievementClaimError extends Error {
+  constructor(code) {
+    super(code)
+    this.code = code
+  }
+}
+
+// User picks exactly one of an achievement's claim options. The unique
+// constraint on AchievementClaim(achievementId, userId) is the atomic guard
+// against double-claiming (concurrent double-submit both racing to insert —
+// the second insert throws P2002 and is treated as ALREADY_CLAIMED here).
+export async function claimAchievementReward(userId, achievementId, optionId) {
+  const achieved = await prisma.achievementUser.findUnique({
+    where: { achievementId_userId: { achievementId, userId } },
+  })
+  if (!achieved) throw new AchievementClaimError('NOT_UNLOCKED')
+
+  const ach = await prisma.achievement.findUnique({ where: { id: achievementId }, select: { isClaimable: true } })
+  if (!ach?.isClaimable) throw new AchievementClaimError('NOT_CLAIMABLE')
+
+  const option = await prisma.achievementClaimOption.findUnique({
+    where: { id: optionId },
+    include: { ctoon: { select: { quantity: true, name: true } } },
+  })
+  if (!option || option.achievementId !== achievementId) throw new AchievementClaimError('INVALID_OPTION')
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.achievementClaim.create({ data: { achievementId, userId, optionId } })
+
+      const points = toIntOrNull(option.points)
+      if (points && points > 0) {
+        const up = await getOrCreateUserPoints(tx, userId)
+        const updated = await tx.userPoints.update({ where: { userId }, data: { points: { increment: points } } })
+        await tx.pointsLog.create({
+          data: { userId, points, total: updated.points, method: `achievementClaim:${achievementId}`, direction: 'increase' },
+        })
+      }
+    })
+  } catch (err) {
+    if (err?.code === 'P2002') throw new AchievementClaimError('ALREADY_CLAIMED')
+    throw err
+  }
+
+  // Minting is not transactional (queue add can't roll back), so it runs after
+  // the claim row has safely committed — same pattern as awardAchievementToUser.
+  if (option.ctoonId) {
+    const qty = Math.max(1, Number(option.quantity || 1))
+    const minted = await prisma.userCtoon.count({ where: { ctoonId: option.ctoonId } })
+    const lim = option.ctoon?.quantity
+    const canGive = lim == null ? qty : Math.max(0, Math.min(qty, lim - minted))
+    for (let i = 0; i < canGive; i++) {
+      await mintQueue.add('mintCtoon', { userId, ctoonId: option.ctoonId, isSpecial: true, method: 'ACHIEVEMENT_CLAIM' })
+    }
+  }
+
+  return { label: option.label, points: option.points, ctoonName: option.ctoon?.name || null }
 }

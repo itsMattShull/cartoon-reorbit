@@ -17,6 +17,7 @@ import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/disso
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
+import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -500,6 +501,39 @@ async function syncVerifiedRoles() {
     if (!ok) continue
     try {
       await prisma.user.update({ where: { id: row.id }, data: { isVerified: true } })
+    } catch {}
+  }
+}
+
+// Grants each cMoon's Discord role to members who don't have it yet. Add-only —
+// never removes a role, matching every other role-grant job in this file.
+// Gated by User.cMoonRoleGrantedAt (set once a grant succeeds) instead of a live
+// "does the member already have this role" check, so this only ever touches
+// newly-joined/never-synced members instead of re-scanning the whole roster daily.
+async function syncCMoonDiscordRoles() {
+  let rows = []
+  try {
+    rows = await prisma.$queryRawUnsafe(`
+      SELECT u."id", u."discordId", m."discordRoleId"
+      FROM "User" u
+      JOIN "CMoon" m ON m."id" = u."cMoonId"
+      WHERE u."cMoonId" IS NOT NULL
+        AND u."cMoonRoleGrantedAt" IS NULL
+        AND m."discordRoleId" IS NOT NULL
+        AND u."discordId" IS NOT NULL
+        AND u."inGuild" = true
+        AND u."active" = true
+      LIMIT 300
+    `)
+  } catch {
+    return
+  }
+
+  for (const row of rows) {
+    const ok = await addRoleToMember(row.discordId, row.discordRoleId)
+    if (!ok) continue
+    try {
+      await prisma.user.update({ where: { id: row.id }, data: { cMoonRoleGrantedAt: new Date() } })
     } catch {}
   }
 }
@@ -1146,6 +1180,14 @@ await runJob('recordDailyActivity', recordDailyActivity)
 await runJob('syncVerifiedRoles', syncVerifiedRoles)
 cron.schedule('30 2 * * *', () => runJob('recordDailyActivity', recordDailyActivity), { timezone: 'America/Chicago' }) // 02:30 CST daily
 cron.schedule('35 2 * * *', () => runJob('syncVerifiedRoles', syncVerifiedRoles), { timezone: 'America/Chicago' }) // 02:35 CST daily
+
+// cMoon: auto-assign anyone past their pick-a-cMoon deadline, then grant Discord
+// role flair to newly-assigned/newly-selected members. Off by default via
+// GlobalGameConfig.cMoonEnabled — both jobs no-op immediately when disabled.
+await runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers)
+await runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles)
+cron.schedule('40 2 * * *', () => runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers), { timezone: 'America/Chicago' }) // 02:40 CST daily
+cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles), { timezone: 'America/Chicago' }) // 02:45 CST daily
 
 await runJob('recomputeLastActivity', recomputeLastActivity)
 cron.schedule('0 4 * * *', () => runJob('recomputeLastActivity', recomputeLastActivity), { timezone: 'America/Chicago' })  // 04:00 CST daily

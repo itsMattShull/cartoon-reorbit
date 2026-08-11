@@ -26,7 +26,10 @@
             >
               <span class="lb-rank">{{ row.rank }}</span>
               <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <div class="lb-user-col">
+                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
+              </div>
               <span class="lb-value">{{ board.formatValue(row) }}</span>
             </li>
             <li v-if="!board.rows?.length" class="lb-empty">No data yet</li>
@@ -62,7 +65,10 @@
             >
               <span class="lb-rank">{{ row.rank }}</span>
               <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <div class="lb-user-col">
+                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
+              </div>
               <span class="lb-value">{{ board.formatValue(row) }}</span>
             </li>
             <li v-if="!board.rows?.length" class="lb-empty">No scores yet</li>
@@ -183,6 +189,30 @@ const gamesBoards = computed(() => [
     formatValue: gameValueLabel.value
   },
 ])
+
+// cMoon badges: one batched lookup per visible row set instead of joining
+// cMoon into every one of the ~10 separate leaderboard endpoints above.
+const cMoonBadges = ref({})
+const fetchedUsernames = new Set()
+
+async function loadCMoonBadges(usernames) {
+  const toFetch = usernames.filter(u => u && !fetchedUsernames.has(u))
+  if (!toFetch.length) return
+  toFetch.forEach(u => fetchedUsernames.add(u))
+  try {
+    const map = await $fetch('/api/leaderboard/cmoon-badges', { method: 'POST', body: { usernames: toFetch } })
+    cMoonBadges.value = { ...cMoonBadges.value, ...map }
+  } catch {}
+}
+
+watch([usersBoards, gamesBoards], ([users, games]) => {
+  const names = [...users, ...games].flatMap(b => (b.rows || []).map(r => r.username))
+  if (names.length) loadCMoonBadges(names)
+}, { immediate: true })
+
+function cMoonForRow(row) {
+  return cMoonBadges.value[row.username] || null
+}
 </script>
 
 <style scoped>
@@ -326,9 +356,16 @@ const gamesBoards = computed(() => [
   background: rgba(255, 255, 255, 0.08);
 }
 
-.lb-username {
+.lb-user-col {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
+}
+
+.lb-username {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -337,6 +374,19 @@ const gamesBoards = computed(() => [
   font-weight: 600;
 }
 .lb-username:hover { color: #b3e0ff; text-decoration: underline; }
+
+.lb-cmoon {
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
 
 .lb-value {
   flex-shrink: 0;

@@ -50,7 +50,11 @@
             <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
             <div class="cz-owner-label">
               <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
-              <div v-if="lastOnlineText" class="cz-owner-lastseen">{{ lastOnlineText }}</div>
+              <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
+                <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
+                <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
+                <span v-if="viewedOwner.cMoon" class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
+              </div>
             </div>
           </template>
         </div>
@@ -811,7 +815,7 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null }
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1323,6 +1327,14 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+.cz-owner-cmoon {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {

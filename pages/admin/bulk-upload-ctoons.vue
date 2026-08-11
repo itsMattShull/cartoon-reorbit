@@ -507,6 +507,7 @@ import { useRouter } from 'vue-router'
 import Nav from '~/components/Nav.vue'
 import Toast from '~/components/Toast.vue'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+const uploadResources = useAdminResources()
 
 definePageMeta({ title: 'Admin - Bulk Upload cToons', middleware: ['auth', 'admin'], layout: 'admin' })
 
@@ -735,7 +736,7 @@ function handleFiles(e) {
     const row = {
       id: makeRowId(),
       file,
-      preview: URL.createObjectURL(file),
+      preview: uploadResources.objectUrl(file),
       nameField: cleanedName,      // ← prefilled name
       characters: cleanedName,     // ← prefilled to match name
       rarity: rarity || '',

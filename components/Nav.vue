@@ -303,6 +303,7 @@ const adminGroups = [
     key: 'admin-core',
     title: 'Admin — Core',
     items: [
+      { label: '★ New Admin Console', to: '/newsite/admin' },
       { label: 'Analytics', to: '/admin' },
       { label: 'Manage Users', to: '/admin/users' },
       { label: 'Manage Homepage', to: '/admin/manage-homepage' },

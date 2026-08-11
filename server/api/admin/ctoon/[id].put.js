@@ -14,6 +14,7 @@ import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 
 // paths
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -185,7 +186,7 @@ export default defineEventHandler(async (event) => {
     const { phash, dhash } = await computeMultiHash(imagePart.data)
     imageHashData = { phash, dhash, bucket: bucketFromHash(phash) }
 
-    const safeSeries = series.trim()
+    const safeSeries = sanitizePathSegment(series)
     const uploadDir = process.env.NODE_ENV === 'production'
       ? join(baseDir, 'cartoon-reorbit-images', 'cToons', safeSeries)
       : join(baseDir, 'public', 'cToons', safeSeries)
@@ -214,7 +215,7 @@ export default defineEventHandler(async (event) => {
     if (!ALLOWED_AUDIO.has(soundPart.type)) {
       throw createError({ statusCode: 400, statusMessage: 'Sound must be MP3, WAV, or OGG.' })
     }
-    const safeSeries = series.trim()
+    const safeSeries = sanitizePathSegment(series)
     const soundUploadDir = process.env.NODE_ENV === 'production'
       ? join(baseDir, 'cartoon-reorbit-images', 'cToon-sounds', safeSeries)
       : join(baseDir, 'public', 'cToon-sounds', safeSeries)

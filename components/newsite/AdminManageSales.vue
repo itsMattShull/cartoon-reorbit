@@ -179,7 +179,9 @@
 </template>
 
 <script setup>
+
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+const uploadResources = useAdminResources()
 
 const sales = ref([])
 const loading = ref(true)
@@ -312,7 +314,10 @@ function onFile(e) {
     return
   }
   imageFile.value = file
-  imagePreview.value = URL.createObjectURL(file)
+  // Revoke the previous preview before replacing it: each object URL pins
+  // its whole Blob in memory until revoked or the document unloads.
+  if (imagePreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagePreview.value)
+  imagePreview.value = uploadResources.objectUrl(file)
 }
 
 // ── cToon search/select ──────────────────────────────────────

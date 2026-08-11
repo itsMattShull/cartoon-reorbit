@@ -106,6 +106,12 @@
     <div class="cm-nav">
       <GreenButton :active="cmartTab === 'ctoons'" @click="cmartTab = 'ctoons'">cToons</GreenButton>
       <GreenButton :active="cmartTab === 'packs'" @click="cmartTab = 'packs'">Packs</GreenButton>
+      <GreenButton :active="cmartTab === 'upgrades'" @click="cmartTab = 'upgrades'">Upgrades</GreenButton>
+      <GreenButton
+        v-if="holidayEvent"
+        :active="cmartTab === 'holiday'"
+        @click="cmartTab = 'holiday'"
+      >{{ holidayEvent.name }}</GreenButton>
     </div>
 
     <!-- ── Header bar ────────────────────────────────────────────── -->
@@ -306,6 +312,87 @@
       </template>
     </div>
 
+    <!-- ── Upgrades ──────────────────────────────────────────────── -->
+    <div v-else-if="cmartTab === 'upgrades'" class="upgrade-grid">
+      <div class="upgrade-card">
+        <p class="upgrade-name">Additional cZone</p>
+        <p class="upgrade-desc">
+          Add another cZone to your account so you can build and manage more than one.
+        </p>
+        <p class="upgrade-count">You currently have {{ additionalCzones }} additional cZone{{ additionalCzones === 1 ? '' : 's' }}.</p>
+        <GreenButton
+          class="upgrade-buy-btn"
+          :disabled="buyingCzone"
+          @click="buyCzone"
+        >
+          <template v-if="buyingCzone">Purchasing…</template>
+          <template v-else>Buy for {{ nextCzoneCost.toLocaleString() }} pts</template>
+        </GreenButton>
+      </div>
+    </div>
+
+    <!-- ── Holiday Event cToons ─────────────────────────────────────── -->
+    <div v-else-if="cmartTab === 'holiday'" class="cmart-grid">
+      <div v-if="holidayLoading" class="cmart-cards-grid">
+        <ShortCard v-for="n in 10" :key="'hskel-' + n" class="skel-card">
+          <template #header><div class="skel-img" /></template>
+          <template #middle><div class="skel-line skel-name" /></template>
+          <template #footer-left><div class="skel-line skel-price" /></template>
+          <template #footer-right><div class="skel-line skel-btn" /></template>
+        </ShortCard>
+      </div>
+      <div v-else-if="!holidayEvent || !holidayEvent.shopCtoons.length" class="cmart-status">No holiday cToons available.</div>
+      <div v-else class="cmart-cards-grid">
+        <ShortCard
+          v-for="c in holidayEvent.shopCtoons"
+          :key="c.id"
+          :style="isHolidaySoldOut(c)
+            ? { '--sc-footer-left-width': '100%', '--sc-footer-right-width': '0%' }
+            : {}"
+        >
+          <template #header>
+            <div class="card-header-wrap" @click.stop="openInfo(c)">
+              <img
+                v-if="c.assetPath"
+                :src="c.assetPath"
+                :alt="c.name"
+                class="card-img"
+              />
+              <SecondEditionOverlay :ctoon="c" />
+              <span
+                class="owned-badge"
+                :class="originalOwnedSet.has(c.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
+              >{{ originalOwnedSet.has(c.id) ? 'Owned' : 'Unowned' }}</span>
+            </div>
+          </template>
+          <template #middle>
+            <div class="card-middle-row">
+              <span class="card-name">{{ c.name }}</span>
+              <span
+                class="rarity-badge"
+                :style="{ background: rarityInfo(c.rarity).bg, color: rarityInfo(c.rarity).fg }"
+                :title="c.rarity"
+              >{{ rarityInfo(c.rarity).label }}</span>
+            </div>
+          </template>
+          <template #footer-left>
+            <span v-if="isHolidaySoldOut(c)" class="card-sold-out">Sold Out</span>
+            <span v-else class="card-price" :class="{ 'card-price--sale': cmartHalfPriceEnabled }">{{ displayPrice(c.price).toLocaleString() }} pts</span>
+          </template>
+          <template #footer-right>
+            <GreenButton
+              v-if="!isHolidaySoldOut(c)"
+              class="card-buy"
+              :disabled="buyingIds.includes(c.id)"
+              @click="buy(c)"
+            >
+              {{ buyingIds.includes(c.id) ? '…' : 'Buy' }}
+            </GreenButton>
+          </template>
+        </ShortCard>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -363,6 +450,54 @@ const cmartHalfPriceEnabled = ref(false)
 
 function displayPrice(originalPrice) {
   return cmartHalfPriceEnabled.value ? Math.floor(originalPrice / 2) : originalPrice
+}
+
+// ── Upgrades: additional cZone ──────────────────────────────────
+const firstAdditionalCzoneCost      = ref(25000)
+const subsequentAdditionalCzoneCost = ref(50000)
+const buyingCzone = ref(false)
+
+const additionalCzones = computed(() => user.value?.additionalCzones ?? 0)
+const nextCzoneCost = computed(() =>
+  additionalCzones.value < 1 ? firstAdditionalCzoneCost.value : subsequentAdditionalCzoneCost.value
+)
+
+async function buyCzone() {
+  if (buyingCzone.value) return
+  const cost = nextCzoneCost.value
+  if (user.value && user.value.points < cost) {
+    showToast(`Not enough points — this upgrade costs ${cost.toLocaleString()} pts.`, 'error')
+    return
+  }
+  buyingCzone.value = true
+  try {
+    await $fetch('/api/cmart/czones/buy', { method: 'POST' })
+    showToast('Additional cZone added!', 'success')
+    await fetchSelf({ force: true })
+  } catch (err) {
+    showToast(describePurchaseError(err, 'upgrade'), 'error')
+  } finally {
+    buyingCzone.value = false
+  }
+}
+
+// ── Holiday Event cToons ────────────────────────────────────────
+const holidayEvent   = ref(null)
+const holidayLoading = ref(true)
+
+function isHolidaySoldOut(c) {
+  return c.quantity != null && c.minted >= c.quantity
+}
+
+async function loadHolidayEvent() {
+  try {
+    holidayEvent.value = await $fetch('/api/holiday/active')
+  } catch (err) {
+    console.error('Cmart: failed to load holiday event', err)
+    holidayEvent.value = null
+  } finally {
+    holidayLoading.value = false
+  }
 }
 
 // Packs decay in price over time server-side; use the decayed price
@@ -678,10 +813,13 @@ onMounted(async () => {
     const [ctoonRes, upgradesRes] = await Promise.all([
       $fetch('/api/cmart'),
       $fetch('/api/cmart/upgrades-config').catch(() => ({})),
-      loadActiveSale()
+      loadActiveSale(),
+      loadHolidayEvent()
     ])
     allCtoons.value = ctoonRes
     cmartHalfPriceEnabled.value = upgradesRes?.cmartHalfPriceEnabled === true
+    firstAdditionalCzoneCost.value      = upgradesRes?.firstAdditionalCzoneCost      ?? firstAdditionalCzoneCost.value
+    subsequentAdditionalCzoneCost.value = upgradesRes?.subsequentAdditionalCzoneCost ?? subsequentAdditionalCzoneCost.value
     scheduleNextRefresh()
   } catch (err) {
     console.error('Cmart: failed to load', err)
@@ -696,6 +834,7 @@ onMounted(async () => {
   // up a sale starting/ending mid-session.
   _saleRefreshTimer = setInterval(async () => {
     await loadActiveSale()
+    await loadHolidayEvent()
     try {
       allCtoons.value = await $fetch('/api/cmart')
     } catch {}
@@ -772,7 +911,8 @@ async function buy(ctoon, priceOverride = null) {
       $fetch('/api/cmart'),
       fetchSelf({ force: true }),
       loadOwnedCtoonIds(),
-      loadActiveSale()
+      loadActiveSale(),
+      loadHolidayEvent()
     ])
     allCtoons.value = ctoonRes
     scheduleNextRefresh()
@@ -1088,6 +1228,60 @@ async function closeOverlay() {
 }
 .pack-img--clickable:hover {
   opacity: 0.8;
+}
+
+/* ── Upgrades grid ───────────────────────────────────────────── */
+.upgrade-grid {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--OrbitLightBlue) transparent;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+  align-content: start;
+}
+
+.upgrade-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--OrbitDarkBlue);
+  border-radius: 8px;
+  padding: 14px 10px;
+  box-sizing: border-box;
+  gap: 8px;
+  text-align: center;
+}
+
+.upgrade-name {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #fff;
+  margin: 0;
+}
+
+.upgrade-desc {
+  font-size: 0.7rem;
+  color: #cce0ff;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.upgrade-count {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}
+
+.upgrade-buy-btn {
+  width: 100%;
+  margin-top: auto;
+  font-size: 0.75rem;
+  padding: 6px 8px;
+  white-space: nowrap;
 }
 
 /* ── Pack preview modal ──────────────────────────────────────── */
@@ -1425,6 +1619,10 @@ async function closeOverlay() {
   }
 
   .packs-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .upgrade-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 

@@ -143,9 +143,11 @@ function applyRange() {
   fetchDistribution()
 }
 
+const resources = useAdminResources()
+
 onMounted(() => {
   setLastNDays(30)
-  pieChart = new Chart(pieCanvas.value.getContext('2d'), {
+  pieChart = resources.chart(new Chart(pieCanvas.value.getContext('2d'), {
     type: 'pie',
     data: { labels: [], datasets: [] },
     options: {
@@ -167,7 +169,7 @@ onMounted(() => {
         }
       }
     }
-  })
+  }))
   fetchDistribution()
 })
 </script>
