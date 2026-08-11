@@ -36,9 +36,10 @@
 // roughly 3x rather than leaving it unbounded. It is a rail, not a scoring rule — an honest
 // run cannot reach it, because MAX_TICKS ends the run first at normal pacing.
 import {
-  WORLD_W,
-  WORLD_H,
   TICK_HZ,
+  COORD_MARGIN,
+  clampSampleX,
+  clampSampleY,
   normalizeConfig,
   hashSeed,
   simulate
@@ -58,10 +59,10 @@ export const MAX_STROKES = 3000
 // ceiling for a run that ever lifts a finger, and it bounds the request body.
 export const MAX_SAMPLES = 12000
 
-// Coordinates may legitimately land slightly outside the world — a swipe that starts or ends
-// past the edge is normal play. Anything beyond this margin is rejected rather than clamped:
-// clamping would bend a forged log into a valid one and quietly disagree with the client.
-export const COORD_MARGIN = 64
+// COORD_MARGIN and the clamp helpers now live in lib/fruitSamuraiSim.js, because the client
+// has to apply exactly the same bound as it records. Re-exported so existing importers of this
+// module keep working.
+export { COORD_MARGIN }
 
 // A run claiming N ticks must have taken at least this fraction of N/60 seconds of real time.
 // 0.75 leaves headroom for clock skew, a slow /start round trip, and rAF throttling.
@@ -133,12 +134,21 @@ export function sanitizeStrokes(raw) {
       if (dt < lastDt) throw new Error(`strokes[${i}].p dt must not decrease`)
       if (dt < 0) throw new Error(`strokes[${i}].p dt must not be negative`)
       if (t + dt > MAX_TICKS) throw new Error(`strokes[${i}] runs past the tick limit`)
-      if (x < -COORD_MARGIN || x > WORLD_W + COORD_MARGIN) throw new Error(`strokes[${i}].p x out of range`)
-      if (y < -COORD_MARGIN || y > WORLD_H + COORD_MARGIN) throw new Error(`strokes[${i}].p y out of range`)
       lastDt = dt
       cleanP[j] = dt
-      cleanP[j + 1] = x
-      cleanP[j + 2] = y
+      // Clamped, not rejected.
+      //
+      // This used to throw, and that was a bug with real teeth: following a swipe off the edge
+      // of the board is ordinary play, the captured pointer keeps reporting positions far
+      // outside the world, and one such sample failed the whole submission. The player lost an
+      // entire run — and, because the play is recorded at /start, a ranked attempt with it.
+      //
+      // The client now clamps as it records, so for a current client this is a no-op. For a
+      // client still running the old bundle it reconstructs the sample that a fixed client
+      // would have sent, which is a far better answer than destroying the run. Rejection is
+      // reserved for things no client should ever produce: non-integers, NaN, Infinity.
+      cleanP[j + 1] = clampSampleX(x)
+      cleanP[j + 2] = clampSampleY(y)
     }
 
     prevStrokeEnd = t + lastDt
