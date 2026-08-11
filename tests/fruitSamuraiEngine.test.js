@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  clampSampleX,
+  clampSampleY,
   createState,
   createSegmentFeeder,
   normalizeConfig,
@@ -16,6 +18,7 @@ import {
   K_FRUIT,
   MAX_SAMPLE_GAP_TICKS,
   MIN_SLICE_DIST2,
+  COORD_MARGIN,
   MAX_LIVE_FRUIT
 } from '../lib/fruitSamuraiSim.js'
 
@@ -26,7 +29,6 @@ import {
   MAX_TICKS,
   MAX_STROKES,
   MAX_SAMPLES,
-  COORD_MARGIN,
   MAX_SESSION_SECONDS
 } from '../server/utils/fruitSamuraiEngine.js'
 
@@ -277,6 +279,47 @@ test('sanitizeStrokes accepts a well-formed log and returns fresh objects', () =
   assert.deepEqual(out[0].p, [0, 10, 10, 2, 60, 60])
 })
 
+// This is the regression that shipped: swiping off the edge of the board is ordinary play, the
+// captured pointer keeps reporting far outside the world, and the sanitizer used to throw —
+// costing the player the whole run and the ranked attempt that went with it.
+test('a swipe that leaves the board is clamped, not rejected', () => {
+  const wild = [{ t: 5, p: [0, -4000, 400, 2, 9999, -8000, 4, 240, 380] }]
+  const out = sanitizeStrokes(wild)
+  assert.equal(out[0].p[1], -COORD_MARGIN)
+  assert.equal(out[0].p[2], 400)
+  assert.equal(out[0].p[4], WORLD_W + COORD_MARGIN)
+  assert.equal(out[0].p[5], -COORD_MARGIN)
+  assert.equal(out[0].p[7], 240, 'in-range samples are untouched')
+  assert.equal(out[0].p[8], 380)
+})
+
+test('a full run containing off-board samples still submits', () => {
+  const { st, strokes } = playInteractively('offboard', 12)
+  // Push every stroke well outside the world, the way a followed-through swipe does.
+  for (const s of strokes) {
+    for (let j = 1; j < s.p.length; j += 3) {
+      if (j % 2 === 1) { s.p[j] -= 3000; s.p[j + 1] += 5000 }
+    }
+  }
+  const result = replayFruitSamuraiGame({
+    runSeed: 'offboard',
+    cfg: CFG,
+    strokes,
+    elapsedMs: Math.ceil((st.tick / 60) * 1000)
+  })
+  assert.ok(Number.isInteger(result.score), 'the run is scored rather than thrown out')
+})
+
+test('the client and the server clamp samples identically', () => {
+  // The client clamps as it records and the server clamps as it validates. If those two ever
+  // disagreed, the player would watch one score and be told another.
+  for (const v of [-99999, -65, -64, -1, 0, 240, WORLD_W, WORLD_W + 64, WORLD_W + 65, 99999]) {
+    const viaSanitizer = sanitizeStrokes([{ t: 1, p: [0, v, 10, 1, 10, v] }])[0].p
+    assert.equal(viaSanitizer[1], clampSampleX(v))
+    assert.equal(viaSanitizer[5], clampSampleY(v))
+  }
+})
+
 test('sanitizeStrokes rejects malformed input', () => {
   const cases = {
     'not an array': 'nope',
@@ -293,8 +336,6 @@ test('sanitizeStrokes rejects malformed input', () => {
     'NaN coordinate': [{ t: 1, p: [0, NaN, 1, 1, 2, 2] }],
     'Infinity coordinate': [{ t: 1, p: [0, Infinity, 1, 1, 2, 2] }],
     'non-integer coordinate': [{ t: 1, p: [0, 1.5, 1, 1, 2, 2] }],
-    'coordinate far off world': [{ t: 1, p: [0, WORLD_W + COORD_MARGIN + 1, 1, 1, 2, 2] }],
-    'negative coordinate past margin': [{ t: 1, p: [0, -COORD_MARGIN - 1, 1, 1, 2, 2] }],
     'runs past the tick cap': [{ t: MAX_TICKS - 1, p: [0, 1, 1, 50, 2, 2] }],
     'overlapping strokes': [{ t: 1, p: [0, 1, 1, 5, 2, 2] }, { t: 3, p: [0, 1, 1, 1, 2, 2] }],
     'strokes out of order': [{ t: 10, p: [0, 1, 1, 1, 2, 2] }, { t: 2, p: [0, 1, 1, 1, 2, 2] }]
