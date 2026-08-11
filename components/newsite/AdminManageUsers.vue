@@ -78,6 +78,7 @@
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateCMoon(u); closeMenu()">Update cMoon</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openVpnInfo(u); closeMenu()">VPN Info</button>
                   <button
                     v-if="!u.isAdmin && !u.banned"
@@ -452,6 +453,40 @@
             @click="saveUpdateUsername"
           >
             {{ updateUsernameWorking ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update cMoon modal -->
+    <div v-if="showUpdateCMoonModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="closeUpdateCMoonModal()"></div>
+      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+        <h3 class="text-lg font-semibold">Update cMoon — {{ updateCMoonTarget?.username || updateCMoonTarget?.discordTag || 'user' }}</h3>
+        <p class="mt-2 text-sm text-gray-600">Select which cMoon this user should belong to.</p>
+
+        <div class="mt-4">
+          <div v-if="updateCMoonLoading" class="text-sm text-gray-500 py-3">Loading…</div>
+          <div v-else class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">cMoon</label>
+            <select v-model="updateCMoonValue" class="mt-2 w-full border rounded-md px-3 py-2 text-sm">
+              <option :value="null">— No cMoon —</option>
+              <option v-for="c in cmoonOptions" :key="c.id" :value="c.id">{{ c.name }} ({{ c.memberCount }} members)</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="updateCMoonError" class="mt-2 text-sm text-red-600">{{ updateCMoonError }}</div>
+
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button class="px-3 py-1 text-sm border rounded-md" @click="closeUpdateCMoonModal()" :disabled="updateCMoonWorking">Cancel</button>
+          <button
+            class="px-3 py-1 text-sm rounded-md text-white"
+            :class="updateCMoonCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+            :disabled="!updateCMoonCanSave || updateCMoonWorking"
+            @click="saveUpdateCMoon"
+          >
+            {{ updateCMoonWorking ? 'Saving…' : 'Save' }}
           </button>
         </div>
       </div>
@@ -979,6 +1014,69 @@ async function saveUpdateUsername() {
     updateUsernameError.value = e?.data?.statusMessage || e?.message || 'Failed to update username.'
   } finally {
     updateUsernameWorking.value = false
+  }
+}
+
+// Update cMoon state
+const showUpdateCMoonModal = ref(false)
+const updateCMoonTarget = ref(null)
+const updateCMoonValue = ref(null)
+const updateCMoonError = ref('')
+const updateCMoonWorking = ref(false)
+const updateCMoonLoading = ref(false)
+const cmoonOptions = ref([])
+
+const updateCMoonCanSave = computed(() => !!updateCMoonTarget.value && !updateCMoonLoading.value)
+
+async function openUpdateCMoon(u) {
+  updateCMoonTarget.value = u
+  updateCMoonValue.value = u.cMoonId || null
+  updateCMoonError.value = ''
+  updateCMoonWorking.value = false
+  showUpdateCMoonModal.value = true
+
+  if (!cmoonOptions.value.length) {
+    updateCMoonLoading.value = true
+    try {
+      const res = await $fetch('/api/admin/cmoons')
+      cmoonOptions.value = res?.cmoons || []
+    } catch (e) {
+      updateCMoonError.value = e?.data?.statusMessage || e?.message || 'Failed to load cMoons.'
+    } finally {
+      updateCMoonLoading.value = false
+    }
+  }
+}
+function closeUpdateCMoonModal() {
+  showUpdateCMoonModal.value = false
+  updateCMoonTarget.value = null
+  updateCMoonValue.value = null
+  updateCMoonError.value = ''
+  updateCMoonWorking.value = false
+}
+async function saveUpdateCMoon() {
+  if (!updateCMoonCanSave.value) return
+  updateCMoonWorking.value = true
+  updateCMoonError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${updateCMoonTarget.value.id}/update-cmoon`, {
+      method: 'POST',
+      body: { cMoonId: updateCMoonValue.value }
+    })
+    const idx = users.value.findIndex(x => x.id === updateCMoonTarget.value.id)
+    if (idx !== -1) {
+      users.value[idx] = {
+        ...users.value[idx],
+        cMoonId: res.cMoonId,
+        cMoonName: res.cMoonName,
+        cMoonColor: res.cMoonColor,
+      }
+    }
+    closeUpdateCMoonModal()
+  } catch (e) {
+    updateCMoonError.value = e?.data?.statusMessage || e?.message || 'Failed to update cMoon.'
+  } finally {
+    updateCMoonWorking.value = false
   }
 }
 

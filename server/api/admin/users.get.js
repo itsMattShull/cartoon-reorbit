@@ -37,6 +37,8 @@ export default defineEventHandler(async (event) => {
       warning240: true,
       additionalCzones: true,
       vpnDetected: true,
+      cMoonId: true,
+      cMoon:         { select: { id: true, name: true, color: true } },
       points:        { select: { points: true } },
       surveyAnswers: { select: { userId: true } },
     },
@@ -100,5 +102,8 @@ export default defineEventHandler(async (event) => {
 
     vpnDetected:   u.vpnDetected ?? false,
     surveyComplete: !!u.surveyAnswers,
+    cMoonId:       u.cMoonId,
+    cMoonName:     u.cMoon?.name || null,
+    cMoonColor:    u.cMoon?.color || null,
   }))
 })
