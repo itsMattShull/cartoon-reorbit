@@ -18,7 +18,8 @@ export default defineEventHandler(async () => {
       gameTileFlappyImagePath:       true,
       gameTileBlackjackImagePath:    true,
       gameTileEdrpsImagePath:        true,
-      gameTileFruitsamuraiImagePath: true
+      gameTileFruitsamuraiImagePath: true,
+      gameTileReorbitchessImagePath: true
     }
   })
 
@@ -36,6 +37,7 @@ export default defineEventHandler(async () => {
     flappy:       cfg?.gameTileFlappyImagePath        ?? null,
     blackjack:    cfg?.gameTileBlackjackImagePath     ?? null,
     edrps:        cfg?.gameTileEdrpsImagePath         ?? null,
-    fruitsamurai: cfg?.gameTileFruitsamuraiImagePath  ?? null
+    fruitsamurai: cfg?.gameTileFruitsamuraiImagePath  ?? null,
+    reorbitchess: cfg?.gameTileReorbitchessImagePath  ?? null
   }
 })
