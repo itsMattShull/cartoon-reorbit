@@ -1,6 +1,8 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose } from '../utils/queues.js'
+import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
+import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 
 const QUEUE_NAME = process.env.DISSOLVE_AUCTION_LAUNCH_QUEUE_KEY || 'dissolveAuctionLaunch'
 const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
@@ -9,16 +11,6 @@ const connection = {
   host: process.env.REDIS_HOST,
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD?.trim() || undefined,
-}
-
-function rarityFloor(r) {
-  const s = (r || '').trim().toLowerCase()
-  if (s === 'common')     return 25
-  if (s === 'uncommon')   return 50
-  if (s === 'rare')       return 100
-  if (s === 'very rare')  return 187
-  if (s === 'crazy rare') return 312
-  return 50
 }
 
 new Worker(QUEUE_NAME, async (job) => {
@@ -37,6 +29,28 @@ new Worker(QUEUE_NAME, async (job) => {
     }
   })
   if (!entry) return  // already processed or deleted
+
+  // This launch prices from the rarity floor, so a rarity with no real floor
+  // would go up at the 50 pt fallback. Deliberate-release rarities need an admin
+  // to set a price instead of being launched automatically.
+  //
+  // Clearing scheduledFor (rather than deleting the entry, or leaving it with a
+  // past scheduledFor and no BullMQ job) is what keeps it visible and
+  // recoverable: applyDissolveSchedule picks up entries WHERE scheduledFor IS
+  // NULL, so the next "Reschedule All" re-queues it, and until then it shows as
+  // unscheduled on /admin/dissolve-queue.
+  if (!isAutoAuctionEligibleRarity(entry.userCtoon?.ctoon?.rarity)) {
+    await prisma.dissolveAuctionQueue.update({
+      where: { id: entry.id },
+      data:  { scheduledFor: null }
+    })
+    console.warn(
+      `[dissolve-auction-launch] skipped queue entry ${entry.id}: rarity ` +
+      `"${entry.userCtoon?.ctoon?.rarity ?? 'none'}" is not auto-auctionable. ` +
+      `Left unscheduled for an admin to price and launch manually.`
+    )
+    return
+  }
 
   const endAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 

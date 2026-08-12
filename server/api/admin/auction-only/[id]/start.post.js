@@ -45,6 +45,16 @@ async function handleStart(event) {
     throw createError({ statusCode: 500, statusMessage: `Failed to start auction: ${err?.message || String(err)}` })
   }
 
+  // Refused on purpose: the copy is no longer the official account's to sell, so
+  // starting it would auction someone else's cToon. Not a concurrency error, and
+  // retrying will not help — say so plainly.
+  if (result?.refused) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: `Cannot start this listing: ${result.reason}. Remove the listing, or re-acquire the cToon before starting it.`
+    })
+  }
+
   if (!result) {
     throw createError({
       statusCode: 409,

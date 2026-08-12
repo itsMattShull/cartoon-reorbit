@@ -17,6 +17,8 @@ import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/disso
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
+import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
+import { AUTO_AUCTION_EXCLUDED_RARITIES, isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
@@ -1047,13 +1049,31 @@ async function createDailyFeaturedAuction() {
   })
   if (!officialUser) return
 
+  // This job draws its subject at RANDOM and prices it from the rarity floor, so
+  // it must only ever see copies that are genuinely spare. Two exclusions:
+  //
+  //  1. Deliberate-release rarities (isAutoAuctionEligibleRarity). Previously
+  //     only "Crazy Rare" was excluded, so an "Auction Only" copy could be drawn
+  //     and listed at the 50 pt fallback floor.
+  //  2. Copies already committed to a pending AuctionOnly listing. Those are
+  //     spoken for — an admin has scheduled them to go live at a set time, in
+  //     mint order, at a set price. This is the same exclusion that
+  //     server/api/admin/auction-only/owned.get.js and index.post.js already
+  //     apply when offering copies to an admin; this job was the only one of the
+  //     three that skipped it, and drew a scheduled copy out from under a
+  //     release. Expressed as a relation filter rather than a loaded `notIn` id
+  //     list so it stays bounded as the schedule grows.
+  //
+  // `notIn` on a nullable column excludes NULL rarities in Postgres, matching
+  // both the previous `not:` behaviour and guard 2 in isAutoAuctionEligibleRarity.
   const candidates = await prisma.userCtoon.findMany({
     where: {
       userId: officialUser.id,
       burnedAt: null,
       ctoon: {
-        rarity: { not: "Crazy Rare" }
-      }
+        rarity: { notIn: AUTO_AUCTION_EXCLUDED_RARITIES }
+      },
+      auctionOnlyListings: { none: { isStarted: false } }
     },
     include: {
       ctoon: {
@@ -1064,17 +1084,12 @@ async function createDailyFeaturedAuction() {
 
   if (!candidates.length) return
 
-  const rarityFloor = (r) => {
-    const s = (r || "").trim().toLowerCase()
-    if (s === "common") return 25
-    if (s === "uncommon") return 50
-    if (s === "rare") return 100
-    if (s === "very rare") return 187
-    if (s === "crazy rare") return 312
-    return 50
-  }
+  // Re-assert in JS: the query above matches rarity strings exactly, so a stored
+  // value differing only by case or padding would slip through the DB filter.
+  const eligible = candidates.filter(c => isAutoAuctionEligibleRarity(c.ctoon?.rarity))
+  if (!eligible.length) return
 
-  const shuffled = candidates.slice()
+  const shuffled = eligible.slice()
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]

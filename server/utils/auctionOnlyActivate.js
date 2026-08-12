@@ -7,18 +7,11 @@
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose } from './queues.js'
+import { logAuctionOnlyError } from './auctionOnlyErrorLog.js'
+import { rarityFloor } from './auctionPriceSuggestion.js'
 
 const DISCORD_API = 'https://discord.com/api/v10'
-
-export function auctionOnlyRarityFloor(r) {
-  const s = (r || '').trim().toLowerCase()
-  if (s === 'common') return 25
-  if (s === 'uncommon') return 50
-  if (s === 'rare') return 100
-  if (s === 'very rare') return 187
-  if (s === 'crazy rare') return 312
-  return 50
-}
+const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 
 export async function sendAuctionOnlyDiscordAnnouncement(result, isHolidayItem = false) {
   try {
@@ -102,6 +95,14 @@ export const AUCTION_ONLY_ROW_INCLUDE = {
 // live Auction. Returns the created-auction summary, or null if the row was
 // already started / already has a live Auction by the time the transaction runs.
 export async function activateAuctionOnlyRow(row) {
+  // Resolved once per activation, outside the transaction, so the ownership
+  // check below costs nothing extra inside it.
+  const officialUser = await prisma.user.findUnique({
+    where: { username: OFFICIAL_USERNAME },
+    select: { id: true }
+  })
+  const officialUserId = officialUser?.id || null
+
   const result = await prisma.$transaction(async (tx) => {
     const fresh = await tx.auctionOnly.findUnique({
       where: { id: row.id },
@@ -126,7 +127,45 @@ export async function activateAuctionOnlyRow(row) {
       return null
     }
 
-    const floor = auctionOnlyRarityFloor(row.userCtoon?.ctoon?.rarity)
+    // The copy must still be held by the official account. Every AuctionOnly
+    // listing is created against official-account inventory — index.post.js
+    // rejects anything else with "UserCtoon not owned by official account" — so
+    // if the copy has moved on, this listing no longer has anything to sell.
+    //
+    // This is not a theoretical guard. If something auctions the copy early (a
+    // random featured-auction draw used to be able to) and that auction sells
+    // before the scheduled start time, then by the time startDueAuctions loads
+    // this listing the cToon already belongs to the buyer. Taking creatorId from
+    // the loaded row would then list a player's private property, flip it to
+    // isTradeable: false without their consent, and pay them the proceeds of a
+    // sale they never agreed to.
+    //
+    // Note it is deliberately checked against the official account rather than
+    // against row.userCtoon.userId: the row is re-read on every cron pass, so a
+    // sale that completed between passes would make the stale snapshot and the
+    // current owner agree with each other and slip through.
+    //
+    // Deliberately does NOT set isStarted — the listing stays pending so an
+    // admin can see it unresolved on the Manage Auction Only page and decide.
+    const owner = await tx.userCtoon.findUnique({
+      where: { id: fresh.userCtoonId },
+      select: { userId: true, burnedAt: true }
+    })
+    if (!owner || !officialUserId || owner.userId !== officialUserId || owner.burnedAt) {
+      return {
+        ownershipChanged: true,
+        auctionOnlyId: fresh.id,
+        reason: !owner
+          ? 'the copy no longer exists'
+          : owner.burnedAt
+            ? 'the copy has been burned'
+            : !officialUserId
+              ? `the official account (${OFFICIAL_USERNAME}) could not be resolved`
+              : 'the copy is no longer held by the official account (sold, traded or granted away)'
+      }
+    }
+
+    const floor = rarityFloor(row.userCtoon?.ctoon?.rarity)
     const initialBet = Math.max(Number(fresh.pricePoints || 0), floor)
 
     const ms = new Date(fresh.endsAt).getTime() - new Date(fresh.startsAt).getTime()
@@ -138,7 +177,9 @@ export async function activateAuctionOnlyRow(row) {
         initialBet,
         duration: durationDays,
         endAt: new Date(fresh.endsAt),
-        creatorId: row.userCtoon?.userId,
+        // From the owner re-read above, never the loaded snapshot — that is the
+        // stale value that could name a buyer instead of the seller.
+        creatorId: owner.userId,
         isFeatured: fresh.isFeatured,
         auctionOnlyId: fresh.id
       },
@@ -168,6 +209,25 @@ export async function activateAuctionOnlyRow(row) {
   })
 
   if (!result) return null
+
+  // Refused above because the copy changed hands. Surface it on the admin
+  // "Manage Auction Only" page instead of failing silently, then stop — there is
+  // no auction to close and nothing to announce.
+  if (result.ownershipChanged) {
+    await logAuctionOnlyError(
+      'activation',
+      new Error(
+        `Refused to activate AuctionOnly ${result.auctionOnlyId}: ${result.reason}. ` +
+        `Activating would have auctioned a cToon the official account no longer holds. ` +
+        `Listing left pending for an admin to resolve.`
+      ),
+      result.auctionOnlyId
+    )
+    // Distinguishable from the plain `null` returns above so the manual
+    // "Start Now" endpoint can tell an admin why, rather than reporting the
+    // generic "changed concurrently". Callers must not read auctionId off this.
+    return { refused: true, reason: result.reason }
+  }
 
   await scheduleAuctionClose(result.auctionId, result.endAt)
 

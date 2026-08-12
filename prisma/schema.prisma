@@ -2100,6 +2100,9 @@ model AuctionOnly {
 
   @@index([startsAt])
   @@index([endsAt])
+  // Serves the "is this copy already spoken for by a pending listing?" check run
+  // by createDailyFeaturedAuction, owned.get.js and index.post.js.
+  @@index([userCtoonId, isStarted])
 }
 
 model AuctionOnlyErrorLog {
