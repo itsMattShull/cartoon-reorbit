@@ -189,6 +189,13 @@ html.newsite-admin-page body {
   overflow-y: auto;
   overscroll-behavior: contain;
   background: #f9fafb;
+  /* The panel is light, but the newsite layout sets `color: #ffffff` on body,
+     so anything in a section that does not name its own colour inherits white
+     and disappears. The light-background utilities are handled globally in
+     assets/css/tailwind.css; this covers content that sits straight on the
+     panel with no background class of its own. Inherited, so it reaches into
+     every section component. */
+  color: #111827;
 }
 
 .newsite-admin-loading {
