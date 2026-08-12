@@ -499,7 +499,6 @@ function cancelPromotion () {
 }
 
 function commitMove (from, to, promotion) {
-  const before = chess.value.fen()
   let applied = null
   try {
     applied = chess.value.move({ from, to, promotion: promotion || undefined })
@@ -520,14 +519,12 @@ function commitMove (from, to, promotion) {
     scheduleAiMove()
   } else {
     // The server is the authority. The local board is applied optimistically so the piece
-    // moves under the finger that moved it; a rejected move comes back as a sync.
+    // moves under the finger that moved it rather than after a round trip; if the server
+    // disagrees it sends a sync, which replaces the board wholesale. That sync is the only
+    // rollback needed — trying to also unwind locally would fight it.
     socket?.emit('reorbitchess:move', { ply: ply.value - 1, from, to, promotion: promotion || undefined })
-    // Roll the optimistic move back if the server never confirms it.
-    pendingLocal = { before, ply: ply.value }
   }
 }
-
-let pendingLocal = null
 
 /* ── Dialogue ────────────────────────────────────────────────────────────────────── */
 let bubbleTimer = null
@@ -575,6 +572,8 @@ function scheduleAiMove () {
 }
 
 let pendingThinkStart = 0
+// The AI's evaluation at its previous turn, used to notice when the PLAYER blunders.
+let lastAiScore = null
 
 function applyAiMove (move) {
   const persona = characterById(character.value)
@@ -607,13 +606,21 @@ function applyAiMove (move) {
 
     if (checkAiGameOver()) return
 
+    const meta = move && move.meta
+    // The AI's own evaluation, tracked across its turns, is what detects a PLAYER blunder:
+    // if its position improved sharply since its last move, the swing came from the move the
+    // player just made. `bestScore` rather than `score` so a persona's own deliberate
+    // blunder on the previous turn doesn't read as the player having done something good.
+    const jumped = meta && lastAiScore !== null && (meta.bestScore - lastAiScore) > 200
+    if (meta) lastAiScore = meta.bestScore
+
     if (applied.promotion) say('aiPromote')
     else if (chess.value.inCheck()) say('check')
+    else if (jumped) say('playerBlunder')
     else if (applied.captured) say('capture')
     else {
       // The AI's own telemetry drives self-aware lines: a persona that just threw a piece
       // away on purpose says so, which is most of what makes Ed feel like a person.
-      const meta = move && move.meta
       if (meta && meta.deliberateBlunder) say('losing')
       else say(evalMood(meta))
     }
@@ -693,6 +700,7 @@ function resetGameState () {
   drawOfferFrom.value = null
   thinking.value = false
   aiHistory.length = 0
+  lastAiScore = null
   clearSelection()
 }
 
@@ -720,7 +728,7 @@ function applyServerView (v) {
     // instant the server will flag on.
     skew: v.serverNow - Date.now()
   }
-  pendingLocal = null
+  // A fresh position from the server supersedes anything applied optimistically.
   clearSelection()
 }
 

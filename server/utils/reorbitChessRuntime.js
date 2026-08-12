@@ -37,7 +37,7 @@ import { encryptIp } from './ip-encrypt.js'
 import { getDailyWindowStart } from './centralTime.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import {
-  clampConfig, isSquare, isPromotionPiece,
+  clampConfig, isSquare, isPromotionPiece, liveClocks, chargeClock,
   MATCH_MAX_AGE_MS, ROOM_IDLE_MS, DRAW_OFFER_TTL_MS
 } from '../../lib/reorbitChess.js'
 
@@ -188,28 +188,29 @@ function elapsedMsFor (match) {
 }
 
 /** Remaining ms for each side right now, without mutating the match. */
-function liveClocks (match) {
-  const idx = match.chess.turn() === 'w' ? 0 : 1
-  const clocks = [match.clocks[0], match.clocks[1]]
-  clocks[idx] = Math.max(0, clocks[idx] - elapsedMsFor(match))
-  return clocks
+function matchClocks (match) {
+  return liveClocks({
+    clocks: match.clocks,
+    turnIdx: match.chess.turn() === 'w' ? 0 : 1,
+    turnStartedAt: match.turnStartedAt
+  })
 }
 
 /**
- * Charges the mover for the time they took and adds their increment.
- * Returns false if they flagged, in which case the clock is left at 0 and no increment is
- * given — the caller ends the game.
+ * Charges the mover and writes the result back onto the match. Returns false if they flagged.
+ *
+ * The mover's index is passed in rather than read from chess.turn(): this is called AFTER the
+ * move has been applied (so an illegal move is never charged), by which point turn() has
+ * already flipped to the opponent, and inferring it here would bill the wrong player.
  */
-function chargeClock (match) {
-  const idx = match.chess.turn() === 'w' ? 0 : 1
-  const spent = elapsedMsFor(match)
-  const left = match.clocks[idx] - spent
-  if (left <= 0) {
-    match.clocks[idx] = 0
-    return false
-  }
-  match.clocks[idx] = left + match.config.incrementSeconds * 1000
-  return true
+function chargeMatchClock (match, idx) {
+  const { ms, flagged } = chargeClock({
+    clockMs: match.clocks[idx],
+    turnStartedAt: match.turnStartedAt,
+    incrementSeconds: match.config.incrementSeconds
+  })
+  match.clocks[idx] = ms
+  return !flagged
 }
 
 /**
@@ -226,7 +227,7 @@ function armFlag (io, match) {
     // A timer that fired late (event loop lag, a long GC pause) must not flag a player who
     // still has time on a freshly-armed clock.
     if (match.ending) return
-    const clocks = liveClocks(match)
+    const clocks = matchClocks(match)
     const side = match.chess.turn() === 'w' ? 0 : 1
     if (clocks[side] > 0) { armFlag(io, match); return }
     match.clocks[side] = 0
@@ -245,7 +246,7 @@ function armFlag (io, match) {
 function publicMatchView (match, uid) {
   const meIdx = match.players.indexOf(uid)
   const oppIdx = meIdx === 0 ? 1 : 0
-  const clocks = liveClocks(match)
+  const clocks = matchClocks(match)
   return {
     roomId: match.roomId,
     // 0 = white, 1 = black.
@@ -358,7 +359,7 @@ async function endMatch (io, match, { winnerIdx, endReason, whoLeftUserId = null
 async function persistAndAward (match, { winnerUserId, endReason, whoLeftUserId }) {
   const cfg = match.config
   const [p1, p2] = match.players
-  const clocks = liveClocks(match)
+  const clocks = matchClocks(match)
 
   const result = winnerUserId === null
     ? '1/2-1/2'
@@ -795,14 +796,13 @@ export function registerReOrbitChess (io, socket, resolveSocketUser) {
     // than a second move.
     if (Number(ply) !== match.ply) return
 
-    // The clock is charged BEFORE the move is applied: if they have already flagged, the move
-    // never happens, whatever it was.
-    if (!chargeClock(match)) {
-      match.clocks[idx] = 0
-      await endMatch(io, match, { winnerIdx: idx === 0 ? 1 : 0, endReason: 'flag' })
-      return
-    }
-
+    // Legality is decided BEFORE the clock is touched, and this order is not cosmetic.
+    //
+    // Charging first means an ILLEGAL move also collects the increment: each rejected move
+    // would add `incrementSeconds` to the sender's clock while leaving turnStartedAt where it
+    // was, so a client spamming nonsense moves gains time without end. The per-socket rate
+    // limit bounds the rate, not the exploit — 40 rejected moves per 10s at a 3s increment is
+    // still two free minutes. So: apply, and only charge a move that actually happened.
     const spent = elapsedMsFor(match)
     let applied = null
     try {
@@ -811,10 +811,18 @@ export function registerReOrbitChess (io, socket, resolveSocketUser) {
       applied = null
     }
     if (!applied) {
-      // An illegal move costs the time it took to send but nothing else. Re-arm and resync
-      // the client, which is probably out of step with the server rather than cheating.
-      armFlag(io, match)
+      // An illegal move costs nothing at all. Resync the client, which is far more likely to
+      // be out of step with the server than cheating.
       socket.emit('reorbitchess:sync', publicMatchView(match, user.id))
+      return
+    }
+
+    // Now charge for the time the move took. If it was already gone, the move is taken back:
+    // a player who has flagged cannot also have moved.
+    if (!chargeMatchClock(match, idx)) {
+      match.chess.undo()
+      match.clocks[idx] = 0
+      await endMatch(io, match, { winnerIdx: idx === 0 ? 1 : 0, endReason: 'flag' })
       return
     }
 
@@ -939,5 +947,7 @@ export function startReOrbitChessSweep (io) {
   sweepTimer.unref?.()
 }
 
-// Exposed for tests.
-export const __testing = { rooms, matches, publicMatchView, liveClocks, chargeClock, naturalResult }
+// Exposed for tests. Deliberately NOT named `__testing`: Nuxt auto-imports everything under
+// server/utils, so a second export of that name silently shadows the RPS runtime's in the
+// auto-import registry and the build warns about it.
+export const __chessTesting = { rooms, matches, publicMatchView, matchClocks, naturalResult }
