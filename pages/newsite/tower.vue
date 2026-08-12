@@ -158,7 +158,8 @@
 </template>
 
 <script setup>
-definePageMeta({ ssr: false })
+// fitHeight keeps the whole tower on screen; see the flag's note in the layout.
+definePageMeta({ ssr: false, fitHeight: true })
 
 // ─── Shared world/physics constants — MUST stay in sync with server/utils/towerStackEngine.js ──
 const BASE_WIDTH = 100

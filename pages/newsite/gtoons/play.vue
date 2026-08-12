@@ -116,8 +116,14 @@
             @close="infoCard = null"
           />
 
-          <!-- Game-over modal -->
-          <transition name="fade">
+          <!-- Game-over modal. Teleported to body: .site-container carries a
+               `transform`, making it the containing block for `position: fixed`
+               descendants, which are then clipped by its `overflow: hidden`. Without
+               this the overlay is pinned to the chrome's box rather than the viewport
+               and renders offset once the page is scrolled. Teleport wraps the
+               transition because Transition needs a single resolvable element child. -->
+          <Teleport to="body">
+            <transition name="fade">
             <div
               v-if="summary"
               class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
@@ -159,7 +165,8 @@
                 </NuxtLink>
               </div>
             </div>
-          </transition>
+            </transition>
+          </Teleport>
         </div>
       </div>
 </template>

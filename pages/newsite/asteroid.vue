@@ -263,7 +263,9 @@
 </template>
 
 <script setup>
-definePageMeta({ ssr: false })
+// fitHeight keeps the whole playfield on screen: a timed game that can scroll
+// out from under the player is worse than one rendered a little smaller.
+definePageMeta({ ssr: false, fitHeight: true })
 
 // Zoom is disabled for this page only. nuxt.config.js sets the app-wide viewport, and
 // overriding it there would kill pinch-zoom on every page of the site — an accessibility

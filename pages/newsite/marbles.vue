@@ -77,7 +77,8 @@ import { io as ioClient } from 'socket.io-client'
 import * as THREE from 'three'
 import { useRuntimeConfig } from '#imports'
 
-definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true })
+// fitHeight keeps the whole board on screen; see the flag's note in the layout.
+definePageMeta({ layout: false, middleware: 'newsite', showAdbar: true, showNav: true, fitHeight: true })
 
 // This page opts out of the newsite layout, so it sets its own SEO tags.
 useSeoMeta({

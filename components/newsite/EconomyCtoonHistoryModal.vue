@@ -2,27 +2,34 @@
   <!-- Custom overlay (not the shared Modal.vue) with a z-index above it, since
        this can be opened from inside EconomyTopValuableModal and must render
        on top of it rather than behind/under it. -->
-  <div class="hist-overlay" @click.self="$emit('close')">
-    <div class="hist-card">
-      <div class="hist-header">
-        <img v-if="info?.assetPath" class="hist-thumb" :src="info.assetPath" :alt="info?.name" />
-        <div class="hist-heading">
-          <h3 class="hist-name">{{ info?.name || 'Loading…' }}</h3>
-          <p v-if="info?.releaseDate" class="hist-sub">Released {{ formatDate(info.releaseDate) }}</p>
+  <!-- Teleported to body: .site-container carries a `transform`, which makes it the
+       containing block for `position: fixed` descendants and then clips them with
+       `overflow: hidden`. Without this the overlay is pinned to the chrome's box
+       rather than the viewport, so on a page scrolled down it renders offset and
+       partly unreachable. Same approach as AuctionModal / CtoonInfoCard / Trade. -->
+  <Teleport to="body">
+    <div class="hist-overlay" @click.self="$emit('close')">
+      <div class="hist-card">
+        <div class="hist-header">
+          <img v-if="info?.assetPath" class="hist-thumb" :src="info.assetPath" :alt="info?.name" />
+          <div class="hist-heading">
+            <h3 class="hist-name">{{ info?.name || 'Loading…' }}</h3>
+            <p v-if="info?.releaseDate" class="hist-sub">Released {{ formatDate(info.releaseDate) }}</p>
+          </div>
+          <button type="button" class="hist-close" @click="$emit('close')" aria-label="Close">✕</button>
         </div>
-        <button type="button" class="hist-close" @click="$emit('close')" aria-label="Close">✕</button>
-      </div>
 
-      <p v-if="pending" class="hist-empty">Loading price history…</p>
-      <p v-else-if="!hasAnyData" class="hist-empty">Not enough auction or trade activity yet to chart a price history for this cToon.</p>
-      <template v-else>
-        <div class="chart-container">
-          <canvas ref="canvasEl"></canvas>
-        </div>
-        <p class="hist-note">Tap a legend item to toggle a series. Gaps mean too few transactions that period to show a reliable average.</p>
-      </template>
+        <p v-if="pending" class="hist-empty">Loading price history…</p>
+        <p v-else-if="!hasAnyData" class="hist-empty">Not enough auction or trade activity yet to chart a price history for this cToon.</p>
+        <template v-else>
+          <div class="chart-container">
+            <canvas ref="canvasEl"></canvas>
+          </div>
+          <p class="hist-note">Tap a legend item to toggle a series. Gaps mean too few transactions that period to show a reliable average.</p>
+        </template>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
