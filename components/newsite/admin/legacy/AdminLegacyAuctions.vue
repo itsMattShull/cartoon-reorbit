@@ -1,27 +1,27 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-5xl mx-auto mt-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h1 class="text-2xl font-semibold">Manage Auctions (AuctionOnly)</h1>
+    <div class="px-2 py-2">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h1 class="text-base font-semibold">Manage Auctions (AuctionOnly)</h1>
         <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="px-3 py-2 text-sm rounded border border-gray-400 text-gray-700 hover:bg-gray-100"
+            class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
             @click="openHistory"
           >
             History
           </button>
           <button
             type="button"
-            class="px-3 py-2 text-sm rounded border border-gray-400 text-gray-700 hover:bg-gray-100"
+            class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
             @click="openErrorLog"
           >
             Error Log
           </button>
           <NuxtLink
             to="/newsite/admin/auctions/new"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Add Auction
           </NuxtLink>
@@ -31,51 +31,52 @@
       <div v-if="upcomingAuctions.length" class="flex justify-end mb-2">
         <button
           type="button"
-          class="px-3 py-1.5 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50"
+          class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50"
           @click="activeModal = 'removeAll'"
         >
           Remove All ({{ upcomingAuctions.length }})
         </button>
       </div>
 
-      <div v-if="upcomingAuctions.length" class="bg-white rounded-lg shadow divide-y">
+      <div v-if="upcomingAuctions.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         <div
           v-for="a in upcomingAuctions"
           :key="a.id"
-          class="p-4 flex items-center gap-4"
+          class="bg-white border rounded-lg shadow p-2 flex flex-col gap-2"
         >
-          <img
-            :src="a.ctoon.assetPath"
-            class="w-14 h-14 rounded object-cover border"
-            alt="cToon"
-          />
-          <div class="min-w-0 flex-1">
-            <div class="font-medium truncate">{{ a.ctoon.name }}</div>
-            <div class="text-xs text-gray-500 truncate">
-              {{ a.ctoon.rarity }}
-              <span v-if="a.mintNumber !== null && a.mintNumber !== undefined"> • Mint #{{ a.mintNumber }}</span>
-            </div>
-            <div class="text-sm text-gray-600 mt-1">
-              <span class="font-medium">Starts:</span> {{ fmtCST(a.startsAt) }}
-              <span class="mx-2">•</span>
-              <span class="font-medium">Ends:</span> {{ fmtCST(a.endsAt) }}
+          <div class="flex items-start gap-2">
+            <img
+              :src="a.ctoon.assetPath"
+              class="w-12 h-12 rounded object-cover border flex-shrink-0"
+              alt="cToon"
+            />
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-xs truncate">{{ a.ctoon.name }}</div>
+              <div class="text-[10px] text-gray-500 truncate">
+                {{ a.ctoon.rarity }}
+                <span v-if="a.mintNumber !== null && a.mintNumber !== undefined"> • Mint #{{ a.mintNumber }}</span>
+              </div>
             </div>
           </div>
-          <div class="text-right">
-            <div class="text-lg font-semibold">
+          <div class="text-[10px] text-gray-600 space-y-0.5">
+            <div><span class="text-gray-500">Starts:</span> {{ fmtCST(a.startsAt) }}</div>
+            <div><span class="text-gray-500">Ends:</span> {{ fmtCST(a.endsAt) }}</div>
+          </div>
+          <div class="flex items-center justify-between gap-2 mt-auto pt-1">
+            <div class="text-sm font-semibold">
               {{ formatPts(a.pricePoints) }}
             </div>
-            <div class="mt-2 flex items-center justify-end gap-2">
+            <div class="flex items-center gap-1.5">
               <button
                 type="button"
-                class="px-3 py-1 text-sm rounded border border-blue-600 text-blue-700 hover:bg-blue-50"
+                class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                 @click="openEdit(a)"
               >
                 Edit
               </button>
               <button
                 type="button"
-                class="px-3 py-1 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50"
+                class="px-2 py-1 text-[11px] border rounded-md text-red-700 border-red-200 hover:bg-red-50"
                 @click="deleteAuction(a)"
               >
                 Delete
@@ -85,48 +86,48 @@
         </div>
       </div>
 
-      <p v-else class="text-gray-500 mt-6">No upcoming auctions.</p>
-      <p v-if="error" class="text-red-600 mt-4">{{ error }}</p>
+      <p v-else class="text-gray-500 py-6 text-center">No upcoming auctions.</p>
+      <p v-if="error" class="text-red-600 mt-2 text-xs">{{ error }}</p>
     </div>
 
     <!-- Edit modal -->
-    <div v-if="activeModal === 'edit'" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-semibold">Edit Auction</h2>
-          <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeModal">X</button>
+    <div v-if="activeModal === 'edit'" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50">
+      <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h2 class="text-sm font-semibold">Edit Auction</h2>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeModal">✕</button>
         </div>
 
-        <form @submit.prevent="saveEdit" class="space-y-4">
-          <div>
-            <label class="block font-medium mb-1">Price (points)</label>
-            <input v-model.number="editPrice" type="number" min="0" class="w-full border rounded p-2" />
+        <form @submit.prevent="saveEdit" class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Price (points)</label>
+            <input v-model.number="editPrice" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
           </div>
 
-          <div>
-            <label class="block font-medium mb-1">Go-live (CST/CDT)</label>
-            <div class="grid grid-cols-2 gap-3">
-              <input v-model="editStartDate" type="date" class="w-full border rounded p-2" required />
-              <select v-model="editStartHour" class="w-full border rounded p-2" required>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Go-live (CST/CDT)</label>
+            <div class="grid grid-cols-2 gap-2">
+              <input v-model="editStartDate" type="date" class="border rounded-md px-2 py-1.5 text-sm" required />
+              <select v-model="editStartHour" class="border rounded-md px-2 py-1.5 text-sm" required>
                 <option disabled value="">Select hour</option>
                 <option v-for="h in hourOptions" :key="h" :value="h">{{ h }}</option>
               </select>
             </div>
           </div>
 
-          <div>
-            <label class="block font-medium mb-1">Duration</label>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Duration</label>
             <div class="flex items-center gap-3">
               <input v-model.number="editDurationDays" type="range" min="1" max="5" class="w-full" />
-              <span class="w-10 text-center">{{ editDurationDays }}d</span>
+              <span class="w-10 text-center text-xs">{{ editDurationDays }}d</span>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
             <input id="editIsFeatured" v-model="editIsFeatured" type="checkbox" class="h-4 w-4 border-gray-300 rounded" />
-            <label for="editIsFeatured" class="text-sm font-medium text-gray-700">Is Featured</label>
+            <label for="editIsFeatured" class="text-xs font-medium text-gray-700">Is Featured</label>
           </div>
-          <p class="text-xs text-gray-500">
+          <p class="text-[10px] text-gray-500">
             Marks the auction as featured on the auctions page. Users cannot bid if they
             currently own 2+ of this cToon or have received 2+ in the last 30 days.
           </p>
@@ -135,36 +136,36 @@
             <button
               type="submit"
               :disabled="editSaving"
-              class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Save Changes
             </button>
-            <button type="button" class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
-            <span v-if="editError" class="text-red-600 text-sm">{{ editError }}</span>
+            <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeModal">Cancel</button>
+            <span v-if="editError" class="text-red-600 text-[11px]">{{ editError }}</span>
           </div>
         </form>
       </div>
     </div>
 
     <!-- Remove All confirmation modal -->
-    <div v-if="activeModal === 'removeAll'" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <h2 class="text-xl font-semibold mb-3">Remove All Upcoming Auctions?</h2>
-        <p class="text-sm text-gray-600">
+    <div v-if="activeModal === 'removeAll'" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50">
+      <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg p-5">
+        <h2 class="text-sm font-semibold mb-2">Remove All Upcoming Auctions?</h2>
+        <p class="text-xs text-gray-600">
           This permanently deletes all {{ upcomingAuctions.length }} upcoming AuctionOnly
           listing(s) shown on this page (none of them have gone live yet). This cannot be undone.
         </p>
-        <p v-if="removeAllError" class="text-red-600 text-sm mt-3 whitespace-pre-wrap break-words">{{ removeAllError }}</p>
-        <div class="pt-4 mt-2 border-t flex flex-wrap items-center gap-2">
+        <p v-if="removeAllError" class="text-red-600 text-[11px] mt-2 whitespace-pre-wrap break-words">{{ removeAllError }}</p>
+        <div class="pt-3 mt-2 border-t flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 min-h-[40px]"
+            class="px-3 py-1 text-xs rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300"
             :disabled="removeAllBusy"
             @click="removeAllUpcoming"
           >
             {{ removeAllBusy ? 'Removing…' : 'Yes, Remove All' }}
           </button>
-          <button type="button" class="px-4 py-2 rounded border min-h-[40px]" :disabled="removeAllBusy" @click="closeModal">
+          <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" :disabled="removeAllBusy" @click="closeModal">
             Cancel
           </button>
         </div>
@@ -172,161 +173,165 @@
     </div>
 
     <!-- Error Log modal -->
-    <div v-if="activeModal === 'errorLog'" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-2xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <div class="flex items-center justify-between mb-4 gap-2">
-          <h2 class="text-xl font-semibold">Error Log</h2>
+    <div v-if="activeModal === 'errorLog'" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50">
+      <div class="relative bg-white w-full max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0 gap-2">
+          <h2 class="text-sm font-semibold">Error Log</h2>
           <div class="flex items-center gap-2">
             <button
               v-if="errorLog.length"
               type="button"
-              class="px-3 py-1.5 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50"
+              class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50"
               @click="clearErrorLog"
             >
               Clear Log
             </button>
-            <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeModal">X</button>
+            <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeModal">✕</button>
           </div>
         </div>
 
-        <div v-if="errorLogLoading" class="text-gray-500 py-6 text-center">Loading…</div>
-        <template v-else>
-          <div v-if="errorLog.length" class="bg-gray-50 rounded-lg border divide-y">
-            <div v-for="e in errorLog" :key="e.id" class="p-3 sm:p-4">
-              <div class="flex flex-wrap items-center gap-2 text-sm">
-                <span
-                  class="px-2 py-0.5 rounded text-xs font-medium"
-                  :class="errorContextBadgeClass(e.context)"
-                >
-                  {{ errorContextLabel(e.context) }}
-                </span>
-                <span class="text-gray-500">{{ fmtCST(e.createdAt) }}</span>
-                <span v-if="e.auctionOnlyId" class="text-gray-400 truncate max-w-full">• {{ e.auctionOnlyId }}</span>
+        <div class="overflow-y-auto flex-1 px-4 py-3">
+          <div v-if="errorLogLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <template v-else>
+            <div v-if="errorLog.length" class="bg-gray-50 rounded-lg border divide-y">
+              <div v-for="e in errorLog" :key="e.id" class="p-2">
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  <span
+                    class="px-1.5 py-0 rounded text-[10px] font-medium"
+                    :class="errorContextBadgeClass(e.context)"
+                  >
+                    {{ errorContextLabel(e.context) }}
+                  </span>
+                  <span class="text-gray-500">{{ fmtCST(e.createdAt) }}</span>
+                  <span v-if="e.auctionOnlyId" class="text-gray-400 truncate max-w-full">• {{ e.auctionOnlyId }}</span>
+                </div>
+                <pre class="text-[11px] text-red-700 mt-1.5 whitespace-pre-wrap break-words">{{ e.message }}</pre>
               </div>
-              <pre class="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words">{{ e.message }}</pre>
             </div>
-          </div>
-          <p v-else class="text-gray-500">No errors logged.</p>
-        </template>
-        <p v-if="errorLogError" class="text-red-600 mt-2 text-sm">{{ errorLogError }}</p>
+            <p v-else class="text-gray-500 py-6 text-center">No errors logged.</p>
+          </template>
+          <p v-if="errorLogError" class="text-red-600 mt-2 text-xs">{{ errorLogError }}</p>
+        </div>
       </div>
     </div>
 
     <!-- History modal -->
-    <div v-if="activeModal === 'history'" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <div class="flex items-center justify-between mb-4 gap-2">
-          <h2 class="text-xl font-semibold">History (last 7 days)</h2>
-          <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeModal">X</button>
+    <div v-if="activeModal === 'history'" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50">
+      <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0 gap-2">
+          <h2 class="text-sm font-semibold">History (last 7 days)</h2>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeModal">✕</button>
         </div>
 
-        <div v-if="historyLoading" class="text-gray-500 py-6 text-center">Loading…</div>
-        <template v-else>
-          <div v-if="history.length" class="bg-gray-50 rounded-lg border divide-y">
-            <div v-for="h in history" :key="h.id" class="p-3 sm:p-4">
-              <div class="flex flex-col gap-3">
-                <div class="flex items-start gap-3 min-w-0 flex-wrap">
-                  <img
-                    v-if="h.ctoon?.assetPath"
-                    :src="h.ctoon.assetPath"
-                    class="w-12 h-12 rounded object-cover border shrink-0"
-                    alt="cToon"
-                  />
-                  <div class="min-w-0 flex-1 basis-40">
-                    <div class="font-medium truncate">{{ h.ctoon?.name || 'Unknown cToon' }}</div>
-                    <div class="text-xs text-gray-500 break-words">
-                      <span v-if="h.mintNumber !== null && h.mintNumber !== undefined">Mint #{{ h.mintNumber }} • </span>
-                      <span v-if="h.ownerUsername">{{ h.ownerUsername }} • </span>
-                      {{ fmtCST(h.startsAt) }}
+        <div class="overflow-y-auto flex-1 px-4 py-3">
+          <div v-if="historyLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <template v-else>
+            <div v-if="history.length" class="bg-gray-50 rounded-lg border divide-y">
+              <div v-for="h in history" :key="h.id" class="p-2">
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-start gap-2 min-w-0 flex-wrap">
+                    <img
+                      v-if="h.ctoon?.assetPath"
+                      :src="h.ctoon.assetPath"
+                      class="w-10 h-10 rounded object-cover border shrink-0"
+                      alt="cToon"
+                    />
+                    <div class="min-w-0 flex-1 basis-40">
+                      <div class="font-medium text-xs truncate">{{ h.ctoon?.name || 'Unknown cToon' }}</div>
+                      <div class="text-[10px] text-gray-500 break-words">
+                        <span v-if="h.mintNumber !== null && h.mintNumber !== undefined">Mint #{{ h.mintNumber }} • </span>
+                        <span v-if="h.ownerUsername">{{ h.ownerUsername }} • </span>
+                        {{ fmtCST(h.startsAt) }}
+                      </div>
                     </div>
+                    <span
+                      class="px-1.5 py-0 rounded text-[10px] font-medium border-l-4 shrink-0 whitespace-nowrap"
+                      :class="historyStatusBadgeClass(h.status)"
+                    >
+                      {{ historyStatusLabel(h.status) }}
+                    </span>
                   </div>
-                  <span
-                    class="px-2 py-1 rounded text-xs font-medium border-l-4 shrink-0 whitespace-nowrap"
-                    :class="historyStatusBadgeClass(h.status)"
-                  >
-                    {{ historyStatusLabel(h.status) }}
-                  </span>
+
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <button
+                      v-if="h.status === 'stuck' && confirmingStartId !== h.id"
+                      type="button"
+                      class="px-2 py-1 text-[11px] border rounded-md text-green-700 border-green-200 hover:bg-green-50"
+                      :disabled="startingId === h.id"
+                      @click="confirmingStartId = h.id"
+                    >
+                      Start Now
+                    </button>
+
+                    <template v-else-if="confirmingStartId === h.id">
+                      <button
+                        type="button"
+                        class="px-2 py-1 text-[11px] rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                        :disabled="startingId === h.id"
+                        @click="startHistoryItem(h)"
+                      >
+                        {{ startingId === h.id ? 'Starting…' : 'Confirm Start' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
+                        :disabled="startingId === h.id"
+                        @click="confirmingStartId = null"
+                      >
+                        Cancel
+                      </button>
+                    </template>
+
+                    <button
+                      v-if="h.removable && confirmingId !== h.id"
+                      type="button"
+                      class="px-2 py-1 text-[11px] border rounded-md text-red-700 border-red-200 hover:bg-red-50"
+                      :disabled="removingId === h.id"
+                      @click="confirmingId = h.id"
+                    >
+                      Remove
+                    </button>
+
+                    <template v-else-if="confirmingId === h.id">
+                      <button
+                        type="button"
+                        class="px-2 py-1 text-[11px] rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                        :disabled="removingId === h.id"
+                        @click="removeHistoryItem(h)"
+                      >
+                        {{ removingId === h.id ? 'Removing…' : 'Confirm Remove' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
+                        :disabled="removingId === h.id"
+                        @click="confirmingId = null"
+                      >
+                        Cancel
+                      </button>
+                    </template>
+
+                    <span
+                      v-if="h.status !== 'stuck' && !h.removable && confirmingId !== h.id"
+                      class="text-[10px] text-gray-400 italic"
+                    >
+                      Not removable
+                    </span>
+                  </div>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2">
-                  <button
-                    v-if="h.status === 'stuck' && confirmingStartId !== h.id"
-                    type="button"
-                    class="px-3 py-1.5 text-sm rounded border border-green-600 text-green-700 hover:bg-green-50 min-h-[40px]"
-                    :disabled="startingId === h.id"
-                    @click="confirmingStartId = h.id"
-                  >
-                    Start Now
-                  </button>
-
-                  <template v-else-if="confirmingStartId === h.id">
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 text-sm rounded bg-green-600 text-white hover:bg-green-700 min-h-[40px] disabled:opacity-50"
-                      :disabled="startingId === h.id"
-                      @click="startHistoryItem(h)"
-                    >
-                      {{ startingId === h.id ? 'Starting…' : 'Confirm Start' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 text-sm rounded border min-h-[40px]"
-                      :disabled="startingId === h.id"
-                      @click="confirmingStartId = null"
-                    >
-                      Cancel
-                    </button>
-                  </template>
-
-                  <button
-                    v-if="h.removable && confirmingId !== h.id"
-                    type="button"
-                    class="px-3 py-1.5 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50 min-h-[40px]"
-                    :disabled="removingId === h.id"
-                    @click="confirmingId = h.id"
-                  >
-                    Remove
-                  </button>
-
-                  <template v-else-if="confirmingId === h.id">
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700 min-h-[40px] disabled:opacity-50"
-                      :disabled="removingId === h.id"
-                      @click="removeHistoryItem(h)"
-                    >
-                      {{ removingId === h.id ? 'Removing…' : 'Confirm Remove' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="px-3 py-1.5 text-sm rounded border min-h-[40px]"
-                      :disabled="removingId === h.id"
-                      @click="confirmingId = null"
-                    >
-                      Cancel
-                    </button>
-                  </template>
-
-                  <span
-                    v-if="h.status !== 'stuck' && !h.removable && confirmingId !== h.id"
-                    class="text-xs text-gray-400 italic"
-                  >
-                    Not removable
-                  </span>
-                </div>
+                <p v-if="h.blockedReason && confirmingId !== h.id" class="text-[10px] text-gray-500 mt-1.5">
+                  {{ h.blockedReason }}
+                </p>
+                <p v-if="historyErrors[h.id]" class="text-[11px] text-red-700 mt-1.5 whitespace-pre-wrap break-words">
+                  {{ historyErrors[h.id] }}
+                </p>
               </div>
-
-              <p v-if="h.blockedReason && confirmingId !== h.id" class="text-xs text-gray-500 mt-2">
-                {{ h.blockedReason }}
-              </p>
-              <p v-if="historyErrors[h.id]" class="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words">
-                {{ historyErrors[h.id] }}
-              </p>
             </div>
-          </div>
-          <p v-else class="text-gray-500">No auctions were scheduled to go live in the last 7 days.</p>
-        </template>
-        <p v-if="historyError" class="text-red-600 mt-2 text-sm">{{ historyError }}</p>
+            <p v-else class="text-gray-500 py-6 text-center">No auctions were scheduled to go live in the last 7 days.</p>
+          </template>
+          <p v-if="historyError" class="text-red-600 mt-2 text-xs">{{ historyError }}</p>
+        </div>
       </div>
     </div>
   </div>

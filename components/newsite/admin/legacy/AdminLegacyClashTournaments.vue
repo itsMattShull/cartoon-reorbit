@@ -1,28 +1,29 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="admin-legacy-clash-tournaments bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-6xl mx-auto mt-6 space-y-6">
-      <div class="bg-white rounded-lg shadow p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h1 class="text-2xl font-semibold">Manage gToons Clash Tournaments</h1>
+    <div class="max-w-6xl mx-auto space-y-3">
+      <div class="bg-white rounded border shadow p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h1 class="text-base font-semibold">Manage gToons Clash Tournaments</h1>
           <div class="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              class="px-3 py-2 rounded border text-sm hover:bg-gray-50"
+              class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
               @click="loadTournaments"
             >
               Refresh
             </button>
             <button
               type="button"
-              class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
               @click="openCreateModal"
             >
               Create Tournament
             </button>
             <button
               type="button"
-              class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-600 text-white hover:bg-amber-700"
               @click="openResolveModal"
             >
               Resolve Match
@@ -31,43 +32,43 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow">
-        <div class="px-5 py-3 border-b flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Existing Tournaments</h2>
-          <span class="text-xs text-gray-500">Total: {{ tournaments.length }}</span>
+      <div class="bg-white rounded border shadow">
+        <div class="px-3 py-2 border-b flex items-center justify-between">
+          <h2 class="text-xs font-semibold">Existing Tournaments</h2>
+          <span class="text-[10px] text-gray-500">Total: {{ tournaments.length }}</span>
         </div>
 
-        <div v-if="loading" class="p-5 text-gray-500">Loading tournaments...</div>
-        <div v-else-if="!tournaments.length" class="p-5 text-gray-500">No tournaments yet.</div>
+        <div v-if="loading" class="p-3 text-gray-500">Loading tournaments...</div>
+        <div v-else-if="!tournaments.length" class="p-3 text-gray-500">No tournaments yet.</div>
         <div v-else class="divide-y">
-          <div v-for="t in tournaments" :key="t.id" class="p-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div v-for="t in tournaments" :key="t.id" class="p-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-semibold text-lg">{{ t.name }}</span>
-                <span class="text-xs px-2 py-1 rounded-full" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
+                <span class="font-semibold text-xs">{{ t.name }}</span>
+                <span class="px-1.5 py-0 rounded text-[10px] font-medium border" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
               </div>
-              <div class="text-sm text-gray-600 mt-1">Opt-in (CST): {{ formatDate(t.optInStartAt) }} → {{ formatDate(t.optInEndAt) }}</div>
-              <div class="text-sm text-gray-600 mt-1">Opt-ins: <span class="font-semibold">{{ t.optInCount }}</span></div>
-              <div v-if="t.format" class="text-sm text-gray-600 mt-1">Format: {{ formatLabel(t.format) }}</div>
+              <div class="text-[11px] text-gray-600 mt-1">Opt-in (CST): {{ formatDate(t.optInStartAt) }} → {{ formatDate(t.optInEndAt) }}</div>
+              <div class="text-[11px] text-gray-600 mt-1">Opt-ins: <span class="font-semibold">{{ t.optInCount }}</span></div>
+              <div v-if="t.format" class="text-[11px] text-gray-600 mt-1">Format: {{ formatLabel(t.format) }}</div>
             </div>
 
             <div class="flex flex-wrap gap-2">
               <NuxtLink
                 :to="`/games/clash/tournaments/${t.id}`"
-                class="px-3 py-2 rounded border text-sm hover:bg-gray-50"
+                class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
               >
                 View
               </NuxtLink>
               <button
                 type="button"
-                class="px-3 py-2 rounded border text-sm hover:bg-gray-50"
+                class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
                 @click="openEditModal(t)"
               >
                 Edit
               </button>
               <button
                 type="button"
-                class="px-3 py-2 rounded border text-sm hover:bg-gray-50"
+                class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
                 @click="recompute(t.id)"
                 :disabled="actionLoading"
               >
@@ -75,7 +76,7 @@
               </button>
               <button
                 type="button"
-                class="px-3 py-2 rounded border border-red-500 text-red-600 text-sm hover:bg-red-50"
+                class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50"
                 @click="cancelTournament(t.id)"
                 :disabled="actionLoading"
                 v-if="t.status !== 'CANCELLED'"
@@ -88,39 +89,40 @@
       </div>
 
     </div>
+    </div>
   </div>
 
-  <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40" @click="closeCreateModal"></div>
-    <div class="relative w-full max-w-lg bg-white rounded-lg shadow-lg flex flex-col max-h-[90vh]">
-      <div class="px-6 py-4 border-b flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Create Tournament</h2>
-        <button class="text-gray-500 hover:text-gray-700" @click="closeCreateModal">✕</button>
+  <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+    <div class="absolute inset-0 bg-black/50" @click="closeCreateModal"></div>
+    <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+        <h2 class="text-sm font-semibold">Create Tournament</h2>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeCreateModal">✕</button>
       </div>
 
-      <div class="px-6 py-4 overflow-y-auto">
-        <form @submit.prevent="createTournament" class="grid grid-cols-1 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Name</label>
-            <input v-model="form.name" type="text" class="w-full border rounded p-2" required />
+      <div class="overflow-y-auto flex-1 px-4 py-3">
+        <form @submit.prevent="createTournament" class="grid grid-cols-1 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Name</label>
+            <input v-model="form.name" type="text" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Opt-in start</label>
-            <input v-model="form.optInStartAt" type="datetime-local" class="w-full border rounded p-2" required />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Opt-in start</label>
+            <input v-model="form.optInStartAt" type="datetime-local" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Opt-in end</label>
-            <input v-model="form.optInEndAt" type="datetime-local" class="w-full border rounded p-2" required />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Opt-in end</label>
+            <input v-model="form.optInEndAt" type="datetime-local" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <span v-if="saveError" class="text-red-600 text-sm">{{ saveError }}</span>
+          <span v-if="saveError" class="text-red-600 text-xs">{{ saveError }}</span>
         </form>
       </div>
 
-      <div class="px-6 py-4 border-t flex items-center justify-end gap-2">
-        <button type="button" class="px-4 py-2 rounded border" @click="closeCreateModal">Cancel</button>
+      <div class="px-4 py-3 border-t flex-shrink-0 flex items-center justify-end gap-2">
+        <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeCreateModal">Cancel</button>
         <button
           type="button"
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           :disabled="saving"
           @click="createTournament"
         >
@@ -130,37 +132,37 @@
     </div>
   </div>
 
-  <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40" @click="closeEditModal"></div>
-    <div class="relative w-full max-w-lg bg-white rounded-lg shadow-lg flex flex-col max-h-[90vh]">
-      <div class="px-6 py-4 border-b flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Edit Tournament</h2>
-        <button class="text-gray-500 hover:text-gray-700" @click="closeEditModal">✕</button>
+  <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+    <div class="absolute inset-0 bg-black/50" @click="closeEditModal"></div>
+    <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+        <h2 class="text-sm font-semibold">Edit Tournament</h2>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEditModal">✕</button>
       </div>
 
-      <div class="px-6 py-4 overflow-y-auto">
-        <form @submit.prevent="saveEdit" class="grid grid-cols-1 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Name</label>
-            <input v-model="editForm.name" type="text" class="w-full border rounded p-2" required />
+      <div class="overflow-y-auto flex-1 px-4 py-3">
+        <form @submit.prevent="saveEdit" class="grid grid-cols-1 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Name</label>
+            <input v-model="editForm.name" type="text" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Opt-in start</label>
-            <input v-model="editForm.optInStartAt" type="datetime-local" class="w-full border rounded p-2" required />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Opt-in start</label>
+            <input v-model="editForm.optInStartAt" type="datetime-local" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Opt-in end</label>
-            <input v-model="editForm.optInEndAt" type="datetime-local" class="w-full border rounded p-2" required />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Opt-in end</label>
+            <input v-model="editForm.optInEndAt" type="datetime-local" class="border rounded-md px-2 py-1.5 text-sm" required />
           </div>
-          <span v-if="editError" class="text-red-600 text-sm">{{ editError }}</span>
+          <span v-if="editError" class="text-red-600 text-xs">{{ editError }}</span>
         </form>
       </div>
 
-      <div class="px-6 py-4 border-t flex items-center justify-end gap-2">
-        <button type="button" class="px-4 py-2 rounded border" @click="closeEditModal">Cancel</button>
+      <div class="px-4 py-3 border-t flex-shrink-0 flex items-center justify-end gap-2">
+        <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeEditModal">Cancel</button>
         <button
           type="button"
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           :disabled="editSaving"
           @click="saveEdit"
         >
@@ -170,20 +172,20 @@
     </div>
   </div>
 
-  <div v-if="showResolveModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40" @click="closeResolveModal"></div>
-    <div class="relative w-full max-w-lg bg-white rounded-lg shadow-lg flex flex-col max-h-[90vh]">
-      <div class="px-6 py-4 border-b flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Resolve Match (Admin Select)</h2>
-        <button class="text-gray-500 hover:text-gray-700" @click="closeResolveModal">✕</button>
+  <div v-if="showResolveModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+    <div class="absolute inset-0 bg-black/50" @click="closeResolveModal"></div>
+    <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+        <h2 class="text-sm font-semibold">Resolve Match (Admin Select)</h2>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeResolveModal">✕</button>
       </div>
 
-      <div class="px-6 py-4 overflow-y-auto">
-        <form @submit.prevent="resolveMatch" class="grid grid-cols-1 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Select Tournament</label>
+      <div class="overflow-y-auto flex-1 px-4 py-3">
+        <form @submit.prevent="resolveMatch" class="grid grid-cols-1 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Select Tournament</label>
             <select
-              class="w-full border rounded p-2"
+              class="border rounded-md px-2 py-1.5 text-sm"
               :value="selectedTournamentId"
               @change="selectResolveTournament($event.target.value)"
             >
@@ -191,10 +193,10 @@
               <option v-for="t in tournaments" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Select Match</label>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Select Match</label>
             <select
-              class="w-full border rounded p-2"
+              class="border rounded-md px-2 py-1.5 text-sm"
               :value="selectedMatchId"
               @change="selectResolveMatch($event.target.value)"
               :disabled="!resolveMatches.length"
@@ -205,10 +207,10 @@
               </option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Select User To Make Winner</label>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Select User To Make Winner</label>
             <select
-              class="w-full border rounded p-2"
+              class="border rounded-md px-2 py-1.5 text-sm"
               :value="selectedWinnerId"
               @change="selectResolveWinner($event.target.value)"
               :disabled="!selectedMatch"
@@ -225,19 +227,19 @@
               </option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Notes (optional)</label>
-            <input v-model="resolveForm.notes" type="text" class="w-full border rounded p-2" />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Notes (optional)</label>
+            <input v-model="resolveForm.notes" type="text" class="border rounded-md px-2 py-1.5 text-sm" />
           </div>
-          <span v-if="resolveError" class="text-red-600 text-sm">{{ resolveError }}</span>
+          <span v-if="resolveError" class="text-red-600 text-xs">{{ resolveError }}</span>
         </form>
       </div>
 
-      <div class="px-6 py-4 border-t flex items-center justify-end gap-2">
-        <button type="button" class="px-4 py-2 rounded border" @click="closeResolveModal">Cancel</button>
+      <div class="px-4 py-3 border-t flex-shrink-0 flex items-center justify-end gap-2">
+        <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeResolveModal">Cancel</button>
         <button
           type="button"
-          class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 disabled:opacity-50"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
           :disabled="actionLoading"
           @click="resolveMatch"
         >

@@ -1,39 +1,40 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="admin-legacy-czone-search bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 mt-6">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <div class="max-w-6xl mx-auto bg-white rounded border shadow p-3">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
         <div>
-          <h1 class="text-2xl font-semibold">Manage cZone Search</h1>
-          <p class="text-sm text-gray-500">Times display in Central Time (CST/CDT).</p>
+          <h1 class="text-base font-semibold">Manage cZone Search</h1>
+          <p class="text-xs text-gray-500">Times display in Central Time (CST/CDT).</p>
         </div>
         <button
-          class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          class="w-full sm:w-auto px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           @click="openCreate"
         >
           Create Search
         </button>
       </div>
 
-      <div class="flex items-center gap-2 mb-4">
+      <div class="flex items-center gap-2 mb-3">
         <input id="show-all" type="checkbox" v-model="showAll" class="h-4 w-4" />
-        <label for="show-all" class="text-sm text-gray-700">Show All Searches</label>
+        <label for="show-all" class="text-xs text-gray-700">Show All Searches</label>
       </div>
 
-      <div v-if="error" class="text-red-600 mb-4">
+      <div v-if="error" class="text-red-600 text-xs mb-3">
         {{ error.message || 'Failed to load cZone Searches' }}
       </div>
-      <div v-if="pending" class="text-gray-500">Loading...</div>
+      <div v-if="pending" class="text-xs text-gray-500">Loading...</div>
 
       <div v-if="searches.length">
         <!-- Mobile cards -->
-        <div class="space-y-4 sm:hidden">
-          <div v-for="row in searches" :key="row.id" class="border rounded-lg p-4 bg-white">
-            <div class="text-sm font-semibold text-gray-900">{{ displayName(row.name) }}</div>
+        <div class="space-y-2 sm:hidden">
+          <div v-for="row in searches" :key="row.id" class="bg-white border rounded-lg shadow p-2">
+            <div class="font-semibold text-xs text-gray-900">{{ displayName(row.name) }}</div>
             <div class="text-xs text-gray-500">Start (CST)</div>
-            <div class="font-medium text-gray-900">{{ formatCentral(row.startAt) }}</div>
+            <div class="font-medium text-xs text-gray-900">{{ formatCentral(row.startAt) }}</div>
             <div class="mt-2 text-xs text-gray-500">End (CST)</div>
-            <div class="font-medium text-gray-900">{{ formatCentral(row.endAt) }}</div>
+            <div class="font-medium text-xs text-gray-900">{{ formatCentral(row.endAt) }}</div>
             <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
               <div><span class="font-semibold">Appearance:</span> {{ row.appearanceRatePercent }}%</div>
               <div><span class="font-semibold">Reset:</span> {{ resetLabel(row) }}</div>
@@ -45,97 +46,97 @@
               <div class="col-span-2"><span class="font-semibold">Prize Pool:</span> {{ row.prizePool.length }} cToons</div>
             </div>
             <div class="mt-3 flex gap-3">
-              <NuxtLink class="text-blue-600 hover:text-blue-800" :to="`/czonesearch/${row.id}`">View</NuxtLink>
-              <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
-              <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
+              <NuxtLink class="text-blue-600 hover:text-blue-800 text-xs" :to="`/czonesearch/${row.id}`">View</NuxtLink>
+              <button class="text-blue-600 hover:text-blue-800 text-xs" @click="openEdit(row)">Edit</button>
+              <button class="text-red-600 hover:text-red-800 text-xs" @click="remove(row)">Delete</button>
             </div>
           </div>
         </div>
 
         <!-- Desktop table -->
         <div class="hidden sm:block overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="w-full text-xs">
             <thead>
               <tr class="text-left border-b">
-                <th class="py-2 pr-4">Name</th>
-                <th class="py-2 pr-4">Start (CST)</th>
-                <th class="py-2 pr-4">End (CST)</th>
-                <th class="py-2 pr-4">Appearance %</th>
-                <th class="py-2 pr-4">Reset</th>
-                <th class="py-2 pr-4">Collection</th>
-                <th class="py-2 pr-4">Prize Pool</th>
-                <th class="py-2 pr-4">Actions</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Name</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Start (CST)</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">End (CST)</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Appearance %</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Reset</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Collection</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Prize Pool</th>
+                <th class="px-2 py-1.5 pr-4 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in searches" :key="row.id" class="border-b last:border-b-0">
-                <td class="py-3 pr-4 font-medium">{{ displayName(row.name) }}</td>
-                <td class="py-3 pr-4 whitespace-nowrap">{{ formatCentral(row.startAt) }}</td>
-                <td class="py-3 pr-4 whitespace-nowrap">{{ formatCentral(row.endAt) }}</td>
-                <td class="py-3 pr-4">{{ row.appearanceRatePercent }}%</td>
-                <td class="py-3 pr-4">
+                <td class="px-2 py-1.5 pr-4 font-medium">{{ displayName(row.name) }}</td>
+                <td class="px-2 py-1.5 pr-4 whitespace-nowrap">{{ formatCentral(row.startAt) }}</td>
+                <td class="px-2 py-1.5 pr-4 whitespace-nowrap">{{ formatCentral(row.endAt) }}</td>
+                <td class="px-2 py-1.5 pr-4">{{ row.appearanceRatePercent }}%</td>
+                <td class="px-2 py-1.5 pr-4">
                   <div>{{ resetLabel(row) }}</div>
                   <div v-if="isDailyReset(row)" class="text-xs text-gray-500">
                     Able To Collect Daily: {{ dailyLimitLabel(row) }}
                   </div>
                   <div v-else class="text-xs text-gray-500">{{ row.cooldownHours }}h</div>
                 </td>
-                <td class="py-3 pr-4">{{ collectionLabel(row.collectionType) }}</td>
-                <td class="py-3 pr-4">{{ row.prizePool.length }} cToons</td>
-                <td class="py-3 pr-4 whitespace-nowrap">
-                  <NuxtLink class="text-blue-600 hover:text-blue-800 mr-3" :to="`/czonesearch/${row.id}`">View</NuxtLink>
-                  <button class="text-blue-600 hover:text-blue-800 mr-3" @click="openEdit(row)">Edit</button>
-                  <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
+                <td class="px-2 py-1.5 pr-4">{{ collectionLabel(row.collectionType) }}</td>
+                <td class="px-2 py-1.5 pr-4">{{ row.prizePool.length }} cToons</td>
+                <td class="px-2 py-1.5 pr-4 whitespace-nowrap">
+                  <NuxtLink class="text-blue-600 hover:text-blue-800 mr-3 text-xs" :to="`/czonesearch/${row.id}`">View</NuxtLink>
+                  <button class="text-blue-600 hover:text-blue-800 mr-3 text-xs" @click="openEdit(row)">Edit</button>
+                  <button class="text-red-600 hover:text-red-800 text-xs" @click="remove(row)">Delete</button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-      <div v-else-if="!pending" class="text-gray-500">No cZone Searches found.</div>
+      <div v-else-if="!pending" class="text-xs text-gray-500">No cZone Searches found.</div>
     </div>
 
     <!-- Create/Edit Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div class="absolute inset-0 bg-black/50" @click="closeModal"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
-          <h2 class="text-lg font-semibold">{{ modalTitle }}</h2>
-          <button class="text-gray-600 hover:text-gray-800" @click="closeModal">Close</button>
+      <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+          <h2 class="text-sm font-semibold">{{ modalTitle }}</h2>
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeModal">Close</button>
         </div>
 
-        <div class="p-4 overflow-y-auto flex-1">
-          <div class="space-y-4">
+        <div class="px-4 py-3 overflow-y-auto flex-1">
+          <div class="space-y-3">
             <div>
-              <label class="block mb-1 font-medium">Search Name</label>
-              <input v-model="form.name" type="text" class="w-full border rounded px-3 py-2" placeholder="e.g. Fall Gold Hunt" />
+              <label class="block text-xs font-medium mb-1">Search Name</label>
+              <input v-model="form.name" type="text" class="w-full border rounded-md px-2 py-1.5 text-sm" placeholder="e.g. Fall Gold Hunt" />
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label class="block mb-1 font-medium">Start (CST)</label>
-                <input v-model="form.startAt" type="datetime-local" class="w-full border rounded px-3 py-2" />
+                <label class="block text-xs font-medium mb-1">Start (CST)</label>
+                <input v-model="form.startAt" type="datetime-local" class="w-full border rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block mb-1 font-medium">End (CST)</label>
-                <input v-model="form.endAt" type="datetime-local" class="w-full border rounded px-3 py-2" />
+                <label class="block text-xs font-medium mb-1">End (CST)</label>
+                <input v-model="form.endAt" type="datetime-local" class="w-full border rounded-md px-2 py-1.5 text-sm" />
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label class="block mb-1 font-medium">Appearance Rate %</label>
-                <input v-model.number="form.appearanceRatePercent" type="number" min="0" max="100" step="0.01" class="w-full border rounded px-3 py-2" />
+                <label class="block text-xs font-medium mb-1">Appearance Rate %</label>
+                <input v-model.number="form.appearanceRatePercent" type="number" min="0" max="100" step="0.01" class="w-full border rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div>
-                <label class="block mb-1 font-medium">Reset Type</label>
-                <select v-model="form.resetType" class="w-full border rounded px-3 py-2">
+                <label class="block text-xs font-medium mb-1">Reset Type</label>
+                <select v-model="form.resetType" class="w-full border rounded-md px-2 py-1.5 text-sm">
                   <option value="COOLDOWN_HOURS">Cooldown in Hours</option>
                   <option value="DAILY_AT_RESET">Daily at 8pm CT</option>
                 </select>
               </div>
               <div>
-                <label class="block mb-1 font-medium">Collection Type</label>
-                <select v-model="form.collectionType" class="w-full border rounded px-3 py-2">
+                <label class="block text-xs font-medium mb-1">Collection Type</label>
+                <select v-model="form.collectionType" class="w-full border rounded-md px-2 py-1.5 text-sm">
                   <option value="ONCE">Collect Each cToon Once</option>
                   <option value="MULTIPLE">Collect Each cToon Multiple Times</option>
                   <option value="CUSTOM_PER_CTOON">Custom Per cToon</option>
@@ -145,44 +146,44 @@
 
             <div class="flex items-center gap-2">
               <input id="link-in-onboarding" v-model="form.linkInOnboarding" type="checkbox" class="h-4 w-4" />
-              <label for="link-in-onboarding" class="text-sm text-gray-700">Link in Onboarding</label>
+              <label for="link-in-onboarding" class="text-xs text-gray-700">Link in Onboarding</label>
             </div>
 
-            <div v-if="form.resetType === 'COOLDOWN_HOURS'" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div v-if="form.resetType === 'COOLDOWN_HOURS'" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label class="block mb-1 font-medium">Cooldown (Hours)</label>
-                <input v-model.number="form.cooldownHours" type="number" min="0" step="1" class="w-full border rounded px-3 py-2" />
+                <label class="block text-xs font-medium mb-1">Cooldown (Hours)</label>
+                <input v-model.number="form.cooldownHours" type="number" min="0" step="1" class="w-full border rounded-md px-2 py-1.5 text-sm" />
               </div>
             </div>
-            <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label class="block mb-1 font-medium">Able To Collect Daily</label>
-                <input v-model="form.dailyCollectLimit" type="number" min="1" step="1" class="w-full border rounded px-3 py-2" />
+                <label class="block text-xs font-medium mb-1">Able To Collect Daily</label>
+                <input v-model="form.dailyCollectLimit" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1.5 text-sm" />
                 <p class="text-xs text-gray-500 mt-1">Leave blank for unlimited.</p>
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="sm:col-span-2">
-                <label class="block mb-1 font-medium">Mass Update Set Names</label>
+                <label class="block text-xs font-medium mb-1">Mass Update Set Names</label>
                 <div class="flex gap-2">
                   <div class="relative flex-1">
                     <input
                       v-model="massUpdateSetTerm"
                       type="text"
                       placeholder="Type 3+ characters to search set names"
-                      class="w-full border rounded px-3 py-2"
+                      class="w-full border rounded-md px-2 py-1.5 text-sm"
                       @focus="massUpdateSetFocused = true"
                       @blur="massUpdateSetFocused = false"
                       @input="searchMassUpdateSets"
                     />
                     <ul v-if="massUpdateSetTerm.length >= 3 && massUpdateSetFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                      <li v-if="massUpdateSetSearching" class="px-3 py-2 text-gray-500">Searching...</li>
-                      <li v-else-if="!massUpdateSetResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                      <li v-if="massUpdateSetSearching" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                      <li v-else-if="!massUpdateSetResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                       <li
                         v-for="setName in massUpdateSetResults"
                         :key="setName"
-                        class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer"
                         @mousedown.prevent="selectMassUpdateSet(setName)"
                       >
                         {{ setName }}
@@ -191,7 +192,7 @@
                   </div>
                   <button
                     type="button"
-                    class="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
                     :disabled="!massUpdateSetSelected"
                     @click="applyMassUpdateSetName"
                   >
@@ -203,7 +204,7 @@
             </div>
 
             <div>
-              <label class="block mb-1 font-medium">Prize Pool</label>
+              <label class="block text-xs font-medium mb-1">Prize Pool</label>
               <p v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="text-xs text-gray-500 mb-2">
                 Max Captures: leave blank for unlimited.
               </p>
@@ -212,17 +213,17 @@
                   v-model="ctoonSearchTerm"
                   type="text"
                   placeholder="Type 3+ characters to search cToons"
-                  class="w-full border rounded px-3 py-2"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                   @focus="searchFocused = true"
                   @blur="searchFocused = false"
                 />
                 <ul v-if="ctoonSearchTerm.length >= 3 && searchFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                  <li v-if="searchingCtoons" class="px-3 py-2 text-gray-500">Searching...</li>
-                  <li v-else-if="!ctoonSearchResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                  <li v-if="searchingCtoons" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                  <li v-else-if="!ctoonSearchResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                   <li
                     v-for="ctoon in ctoonSearchResults"
                     :key="ctoon.id"
-                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                    class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer flex items-center gap-3"
                     @mousedown.prevent="addCtoonToPool(ctoon)"
                   >
                     <img :src="ctoon.assetPath" class="h-10 w-auto rounded" />
@@ -239,12 +240,12 @@
                 </ul>
               </div>
 
-              <div v-if="!form.prizePool.length" class="text-sm text-gray-500 mt-2">Add at least one cToon to the prize pool.</div>
+              <div v-if="!form.prizePool.length" class="text-xs text-gray-500 mt-2">Add at least one cToon to the prize pool.</div>
               <div class="mt-3 space-y-2">
                 <div
                   v-for="(row, idx) in form.prizePool"
                   :key="row.ctoonId"
-                  class="bg-gray-50 rounded p-2 space-y-3"
+                  class="bg-gray-50 rounded-md p-2 space-y-2"
                 >
                   <div class="flex flex-col sm:flex-row sm:items-center gap-3">
                     <button type="button" class="flex items-center gap-3 flex-1 text-left" @click="togglePrizeRow(row)">
@@ -259,29 +260,29 @@
                     </button>
                     <div class="flex items-center gap-2">
                       <label class="text-xs text-gray-500">Chance %</label>
-                      <input v-model.number="row.chancePercent" type="number" min="0" max="100" step="0.01" class="w-28 border rounded px-2 py-1" />
+                      <input v-model.number="row.chancePercent" type="number" min="0" max="100" step="0.01" class="w-24 border rounded-md px-2 py-1 text-xs" />
                     </div>
                     <div v-if="form.collectionType === 'CUSTOM_PER_CTOON'" class="flex items-center gap-2">
                       <label class="text-xs text-gray-500">Max Captures</label>
-                      <input v-model="row.maxCaptures" type="number" min="1" step="1" placeholder="Unlimited" class="w-28 border rounded px-2 py-1" />
+                      <input v-model="row.maxCaptures" type="number" min="1" step="1" placeholder="Unlimited" class="w-24 border rounded-md px-2 py-1 text-xs" />
                     </div>
-                    <button class="text-red-600 hover:text-red-800 text-sm" @click="removeCtoon(idx)">Remove</button>
+                    <button class="text-red-600 hover:text-red-800 text-xs" @click="removeCtoon(idx)">Remove</button>
                   </div>
 
-                  <div v-if="expandedPrizeId === row.ctoonId" class="border-t pt-3 space-y-4">
+                  <div v-if="expandedPrizeId === row.ctoonId" class="border-t pt-2 space-y-3">
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionDateEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'date')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">Date</div>
+                        <div class="text-xs font-medium">Date</div>
                         <p class="text-xs text-gray-500">Must be within the search start/end date.</p>
                         <div v-if="row.conditionDateEnabled" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                           <div>
                             <label class="text-xs text-gray-500">Start Date</label>
-                            <input v-model="row.conditionDateStart" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded px-2 py-1" />
+                            <input v-model="row.conditionDateStart" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded-md px-2 py-1 text-xs" />
                           </div>
                           <div>
                             <label class="text-xs text-gray-500">End Date</label>
-                            <input v-model="row.conditionDateEnd" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded px-2 py-1" />
+                            <input v-model="row.conditionDateEnd" type="date" :min="searchDateBounds.start" :max="searchDateBounds.end" class="w-full border rounded-md px-2 py-1 text-xs" />
                           </div>
                         </div>
                       </div>
@@ -290,10 +291,10 @@
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionTimeEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'time')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">Time of Day</div>
+                        <div class="text-xs font-medium">Time of Day</div>
                         <p class="text-xs text-gray-500">Based on the viewer's local timezone.</p>
                         <div v-if="row.conditionTimeEnabled" class="mt-2">
-                          <select v-model="row.conditionTimeOfDay" class="w-full border rounded px-2 py-1">
+                          <select v-model="row.conditionTimeOfDay" class="w-full border rounded-md px-2 py-1 text-xs">
                             <option value="">Select a time of day</option>
                             <option value="MORNING">Morning (6am–11:59am)</option>
                             <option value="AFTERNOON">Afternoon (12pm–4:59pm)</option>
@@ -307,7 +308,7 @@
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionBackgroundEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'background')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">cZone Background</div>
+                        <div class="text-xs font-medium">cZone Background</div>
                         <p class="text-xs text-gray-500">Select one or more backgrounds.</p>
                         <div v-if="row.conditionBackgroundEnabled" class="mt-2">
                           <div v-if="backgroundsLoading" class="text-xs text-gray-500">Loading backgrounds...</div>
@@ -332,7 +333,7 @@
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionCtoonInZoneEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'ctoonInZone')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">cToon in cZone</div>
+                        <div class="text-xs font-medium">cToon in cZone</div>
                         <p class="text-xs text-gray-500">Select one cToon that must appear in the viewed cZone.</p>
                         <div v-if="row.conditionCtoonInZoneEnabled" class="mt-2">
                           <div class="relative">
@@ -340,18 +341,18 @@
                               v-model="row.conditionCtoonInZoneTerm"
                               type="text"
                               placeholder="Type 3+ characters to search cToons"
-                              class="w-full border rounded px-2 py-1"
+                              class="w-full border rounded-md px-2 py-1 text-xs"
                               @focus="row.conditionCtoonInZoneFocused = true"
                               @blur="row.conditionCtoonInZoneFocused = false"
                               @input="searchConditionCtoons(row, 'zone')"
                             />
                             <ul v-if="row.conditionCtoonInZoneTerm.length >= 3 && row.conditionCtoonInZoneFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                              <li v-if="row.conditionCtoonInZoneSearching" class="px-3 py-2 text-gray-500">Searching...</li>
-                              <li v-else-if="!row.conditionCtoonInZoneResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                              <li v-if="row.conditionCtoonInZoneSearching" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                              <li v-else-if="!row.conditionCtoonInZoneResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                               <li
                                 v-for="ctoon in row.conditionCtoonInZoneResults"
                                 :key="ctoon.id"
-                                class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                                class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer flex items-center gap-3"
                                 @mousedown.prevent="selectConditionCtoonInZone(row, ctoon)"
                               >
                                 <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
@@ -382,7 +383,7 @@
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionUserOwnsEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userOwns')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">User Owns cToon</div>
+                        <div class="text-xs font-medium">User Owns cToon</div>
                         <p class="text-xs text-gray-500">All selected cToons and counts must be met.</p>
                         <div v-if="row.conditionUserOwnsEnabled" class="mt-2 space-y-2">
                           <div class="relative">
@@ -390,18 +391,18 @@
                               v-model="row.conditionUserOwnsTerm"
                               type="text"
                               placeholder="Type 3+ characters to search cToons"
-                              class="w-full border rounded px-2 py-1"
+                              class="w-full border rounded-md px-2 py-1 text-xs"
                               @focus="row.conditionUserOwnsFocused = true"
                               @blur="row.conditionUserOwnsFocused = false"
                               @input="searchConditionCtoons(row, 'owns')"
                             />
                             <ul v-if="row.conditionUserOwnsTerm.length >= 3 && row.conditionUserOwnsFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                              <li v-if="row.conditionUserOwnsSearching" class="px-3 py-2 text-gray-500">Searching...</li>
-                              <li v-else-if="!row.conditionUserOwnsResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                              <li v-if="row.conditionUserOwnsSearching" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                              <li v-else-if="!row.conditionUserOwnsResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                               <li
                                 v-for="ctoon in row.conditionUserOwnsResults"
                                 :key="ctoon.id"
-                                class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                                class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer flex items-center gap-3"
                                 @mousedown.prevent="addConditionUserOwns(row, ctoon)"
                               >
                                 <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
@@ -426,7 +427,7 @@
                               </div>
                               <div class="flex items-center gap-2">
                                 <label class="text-xs text-gray-500"># Owned</label>
-                                <input v-model.number="entry.count" type="number" min="1" step="1" class="w-20 border rounded px-2 py-1" />
+                                <input v-model.number="entry.count" type="number" min="1" step="1" class="w-20 border rounded-md px-2 py-1 text-xs" />
                               </div>
                               <button type="button" class="text-xs text-red-600" @click="removeConditionUserOwns(row, entry.ctoonId)">Remove</button>
                             </div>
@@ -435,13 +436,13 @@
                       </div>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionUserPointsEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userPoints')" />
                         <div class="flex-1">
-                          <div class="text-sm font-medium">User Points</div>
+                          <div class="text-xs font-medium">User Points</div>
                           <div v-if="row.conditionUserPointsEnabled" class="mt-1">
-                            <input v-model.number="row.conditionUserPointsMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <input v-model.number="row.conditionUserPointsMin" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1 text-xs" />
                           </div>
                         </div>
                       </div>
@@ -449,9 +450,9 @@
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionUserTotalCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userTotal')" />
                         <div class="flex-1">
-                          <div class="text-sm font-medium">User Total cToon Count</div>
+                          <div class="text-xs font-medium">User Total cToon Count</div>
                           <div v-if="row.conditionUserTotalCountEnabled" class="mt-1">
-                            <input v-model.number="row.conditionUserTotalCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <input v-model.number="row.conditionUserTotalCountMin" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1 text-xs" />
                           </div>
                         </div>
                       </div>
@@ -459,9 +460,9 @@
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionUserUniqueCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'userUnique')" />
                         <div class="flex-1">
-                          <div class="text-sm font-medium">User Unique cToon Count</div>
+                          <div class="text-xs font-medium">User Unique cToon Count</div>
                           <div v-if="row.conditionUserUniqueCountEnabled" class="mt-1">
-                            <input v-model.number="row.conditionUserUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <input v-model.number="row.conditionUserUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1 text-xs" />
                           </div>
                         </div>
                       </div>
@@ -469,26 +470,26 @@
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionSetUniqueCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'setUnique')" />
                         <div class="flex-1">
-                          <div class="text-sm font-medium"># of unique cToons from set</div>
+                          <div class="text-xs font-medium"># of unique cToons from set</div>
                           <div v-if="row.conditionSetUniqueCountEnabled" class="mt-1 space-y-1">
-                            <input v-model.number="row.conditionSetUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <input v-model.number="row.conditionSetUniqueCountMin" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1 text-xs" />
                             <div class="relative">
                               <input
                                 v-model="row.conditionSetUniqueCountSet"
                                 type="text"
                                 placeholder="Type 3+ characters for set"
-                                class="w-full border rounded px-2 py-1"
+                                class="w-full border rounded-md px-2 py-1 text-xs"
                                 @focus="row.conditionSetUniqueCountFocused = true"
                                 @blur="row.conditionSetUniqueCountFocused = false"
                                 @input="searchConditionSets(row, 'unique')"
                               />
                               <ul v-if="row.conditionSetUniqueCountSet.length >= 3 && row.conditionSetUniqueCountFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                                <li v-if="row.conditionSetUniqueCountSearching" class="px-3 py-2 text-gray-500">Searching...</li>
-                                <li v-else-if="!row.conditionSetUniqueCountResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                                <li v-if="row.conditionSetUniqueCountSearching" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                                <li v-else-if="!row.conditionSetUniqueCountResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                                 <li
                                   v-for="setName in row.conditionSetUniqueCountResults"
                                   :key="setName"
-                                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer"
                                   @mousedown.prevent="selectConditionSet(row, 'unique', setName)"
                                 >
                                   {{ setName }}
@@ -502,26 +503,26 @@
                       <div class="flex items-start gap-3">
                         <input v-model="row.conditionSetTotalCountEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'setTotal')" />
                         <div class="flex-1">
-                          <div class="text-sm font-medium"># of total cToons from set</div>
+                          <div class="text-xs font-medium"># of total cToons from set</div>
                           <div v-if="row.conditionSetTotalCountEnabled" class="mt-1 space-y-1">
-                            <input v-model.number="row.conditionSetTotalCountMin" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+                            <input v-model.number="row.conditionSetTotalCountMin" type="number" min="1" step="1" class="w-full border rounded-md px-2 py-1 text-xs" />
                             <div class="relative">
                               <input
                                 v-model="row.conditionSetTotalCountSet"
                                 type="text"
                                 placeholder="Type 3+ characters for set"
-                                class="w-full border rounded px-2 py-1"
+                                class="w-full border rounded-md px-2 py-1 text-xs"
                                 @focus="row.conditionSetTotalCountFocused = true"
                                 @blur="row.conditionSetTotalCountFocused = false"
                                 @input="searchConditionSets(row, 'total')"
                               />
                               <ul v-if="row.conditionSetTotalCountSet.length >= 3 && row.conditionSetTotalCountFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-                                <li v-if="row.conditionSetTotalCountSearching" class="px-3 py-2 text-gray-500">Searching...</li>
-                                <li v-else-if="!row.conditionSetTotalCountResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+                                <li v-if="row.conditionSetTotalCountSearching" class="px-2 py-1.5 text-xs text-gray-500">Searching...</li>
+                                <li v-else-if="!row.conditionSetTotalCountResults.length" class="px-2 py-1.5 text-xs text-gray-500">No results found.</li>
                                 <li
                                   v-for="setName in row.conditionSetTotalCountResults"
                                   :key="setName"
-                                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  class="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer"
                                   @mousedown.prevent="selectConditionSet(row, 'total', setName)"
                                 >
                                   {{ setName }}
@@ -536,10 +537,10 @@
                     <div class="flex items-start gap-3">
                       <input v-model="row.conditionOwnsLessThanEnabled" type="checkbox" class="mt-1" @change="onConditionToggle(row, 'ownsLessThan')" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium">User Owns This cToon Less Than X</div>
+                        <div class="text-xs font-medium">User Owns This cToon Less Than X</div>
                         <p class="text-xs text-gray-500">This cToon is eligible only if the user owns fewer than X copies (ignoring burned).</p>
                         <div v-if="row.conditionOwnsLessThanEnabled" class="mt-1">
-                          <input v-model.number="row.conditionOwnsLessThanCount" type="number" min="1" step="1" placeholder="X (e.g. 1)" class="w-full border rounded px-2 py-1" />
+                          <input v-model.number="row.conditionOwnsLessThanCount" type="number" min="1" step="1" placeholder="X (e.g. 1)" class="w-full border rounded-md px-2 py-1 text-xs" />
                         </div>
                       </div>
                     </div>
@@ -547,9 +548,9 @@
                     <div class="flex items-start gap-3 border-t pt-3 mt-1">
                       <input v-model="row.glitchEffect" type="checkbox" class="mt-1" id="glitch-effect" />
                       <div class="flex-1">
-                        <div class="text-sm font-medium flex items-center gap-2">
+                        <div class="text-xs font-medium flex items-center gap-2">
                           <span>⚡ Glitch Effect</span>
-                          <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">Matrix</span>
+                          <span class="px-1.5 py-0 rounded text-[10px] font-medium border bg-green-100 text-green-800 border-green-200">Matrix</span>
                         </div>
                         <p class="text-xs text-gray-500 mt-0.5">When selected in cZone Search, triggers a full-page TV glitch → static snow → Matrix green code effect before the cToon appears for capture.</p>
                       </div>
@@ -562,12 +563,12 @@
           </div>
         </div>
 
-        <div class="p-4 border-t flex items-center justify-between gap-2 flex-shrink-0">
-          <div class="text-red-600 text-sm flex-1 mr-4">{{ formError }}</div>
+        <div class="px-4 py-3 border-t flex items-center justify-between gap-2 flex-shrink-0">
+          <div class="text-red-600 text-xs flex-1 mr-4">{{ formError }}</div>
           <div class="flex gap-2 flex-shrink-0">
-            <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
+            <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeModal">Cancel</button>
             <button
-              class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               :disabled="saving"
               @click="saveSearch"
             >
@@ -577,6 +578,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

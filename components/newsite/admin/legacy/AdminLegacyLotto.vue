@@ -1,47 +1,48 @@
 <template>
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Manage Lotto</h1>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <h1 class="text-base font-semibold mb-3">Admin: Manage Lotto</h1>
 
-    <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto">
-      <p class="text-sm text-gray-600 mb-4">View and update Lotto configuration values.</p>
+    <div class="bg-white rounded border p-3 max-w-2xl">
+      <p class="text-xs text-gray-600 mb-3">View and update Lotto configuration values.</p>
 
-      <div class="grid grid-cols-1 gap-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Base Odds</label>
-            <input type="number" step="0.01" class="input" v-model.number="baseOdds" />
-            <p class="text-xs text-gray-500 mt-1">Default: 1.00</p>
+      <div class="grid grid-cols-1 gap-3">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Base Odds</label>
+            <input type="number" step="0.01" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="baseOdds" />
+            <p class="text-[10px] text-gray-500">Default: 1.00</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Increment Rate</label>
-            <input type="number" step="0.001" class="input" v-model.number="incrementRate" />
-            <p class="text-xs text-gray-500 mt-1">Default: 0.02</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Increment Rate</label>
+            <input type="number" step="0.001" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="incrementRate" />
+            <p class="text-[10px] text-gray-500">Default: 0.02</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Count Per Day</label>
-            <input type="number" class="input" v-model.number="countPerDay" />
-            <p class="text-xs text-gray-500 mt-1">Default: 5</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Count Per Day</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="countPerDay" />
+            <p class="text-[10px] text-gray-500">Default: 5</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Cost</label>
-            <input type="number" class="input" v-model.number="cost" />
-            <p class="text-xs text-gray-500 mt-1">Default: 50</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Cost</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="cost" />
+            <p class="text-[10px] text-gray-500">Default: 50</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Points Awarded on Win</label>
-            <input type="number" class="input" v-model.number="lottoPointsWinnings" />
-            <p class="text-xs text-gray-500 mt-1">Default: 5000</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Points Awarded on Win</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="lottoPointsWinnings" />
+            <p class="text-[10px] text-gray-500">Default: 5000</p>
           </div>
         </div>
 
         <!-- cToon Prize Pool -->
-        <div class="col-span-2 mt-6">
-          <h2 class="text-xl font-semibold mb-2">cToon Prize Pool</h2>
-          <p class="text-sm text-gray-600 mb-4">Search for cToons to add to the lottery prize pool. When a user wins, they will receive points AND one cToon randomly selected from this pool.</p>
+        <div class="mt-2">
+          <h2 class="text-xs font-semibold mb-1">cToon Prize Pool</h2>
+          <p class="text-[11px] text-gray-600 mb-2">Search for cToons to add to the lottery prize pool. When a user wins, they will receive points AND one cToon randomly selected from this pool.</p>
 
           <!-- Search Input -->
           <div class="relative">
@@ -49,24 +50,24 @@
               type="text"
               v-model="ctoonSearchTerm"
               placeholder="Search by name, rarity, or set..."
-              class="input w-full"
+              class="w-full border rounded-md px-2 py-1.5 text-sm"
               @focus="searchFocused = true"
               @blur="searchFocused = false"
             />
             <!-- Search Results Dropdown -->
             <ul v-if="ctoonSearchTerm && searchFocused" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg">
-              <li v-if="searchingCtoons" class="px-3 py-2 text-gray-500">Searching...</li>
-              <li v-else-if="!ctoonSearchResults.length" class="px-3 py-2 text-gray-500">No results found.</li>
+              <li v-if="searchingCtoons" class="px-2 py-1.5 text-gray-500 text-[11px]">Searching...</li>
+              <li v-else-if="!ctoonSearchResults.length" class="px-2 py-1.5 text-gray-500 text-[11px]">No results found.</li>
               <li
                 v-for="ctoon in ctoonSearchResults"
                 :key="ctoon.id"
-                class="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+                class="px-2 py-1.5 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
                 @mousedown.prevent="addCtoonToPool(ctoon)"
               >
-                <img :src="ctoon.assetPath" class="h-10 w-auto rounded" />
+                <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
                 <div>
-                  <p class="font-medium">{{ ctoon.name }}</p>
-                  <p class="text-xs text-gray-500">{{ ctoon.rarity }} • {{ ctoon.set }}</p>
+                  <p class="font-medium text-xs">{{ ctoon.name }}</p>
+                  <p class="text-[10px] text-gray-500">{{ ctoon.rarity }} • {{ ctoon.set }}</p>
                 </div>
               </li>
             </ul>
@@ -74,30 +75,31 @@
         </div>
 
         <!-- Selected Pool -->
-        <div class="col-span-2 mt-2 space-y-2">
-          <div v-for="ctoon in ctoonPool" :key="ctoon.id" class="flex items-center justify-between bg-gray-50 p-2 rounded">
-            <div class="flex items-center gap-3">
-              <img :src="ctoon.assetPath" class="h-10 w-auto rounded" />
+        <div class="mt-1 space-y-1">
+          <div v-for="ctoon in ctoonPool" :key="ctoon.id" class="flex items-center justify-between bg-white border rounded-md p-2">
+            <div class="flex items-center gap-2">
+              <img :src="ctoon.assetPath" class="h-8 w-auto rounded" />
               <div>
-                <p class="font-medium">{{ ctoon.name }}</p>
-                <p class="text-xs" :class="ctoon.inCmart ? 'text-green-600' : 'text-blue-600'">
+                <p class="font-medium text-xs">{{ ctoon.name }}</p>
+                <p class="text-[10px]" :class="ctoon.inCmart ? 'text-green-600' : 'text-blue-600'">
                   <span v-if="ctoon.inCmart">In cMart</span>
                   <span v-else>Not in cMart</span>
                   <span v-if="ctoon.quantity !== null"> • {{ ctoon.quantity === TIME_BASED_CAP ? '???' : ctoon.quantity - ctoon.totalMinted }} remaining</span>
                 </p>
               </div>
             </div>
-            <button @click="removeCtoonFromPool(ctoon.id)" class="text-red-500 hover:text-red-700 text-sm">Remove</button>
+            <button @click="removeCtoonFromPool(ctoon.id)" class="text-red-700 hover:underline text-[11px]">Remove</button>
           </div>
         </div>
-        <div class="pt-2">
-          <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? 'Saving…' : 'Apply' }}</button>
+        <div class="pt-1">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="save">{{ saving ? 'Saving…' : 'Apply' }}</button>
         </div>
 
-        <div v-if="toast" :class="['rounded px-3 py-2', toast.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
+        <div v-if="toast" :class="['rounded-md px-2 py-1.5 text-xs', toast.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700']">
           {{ toast.msg }}
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

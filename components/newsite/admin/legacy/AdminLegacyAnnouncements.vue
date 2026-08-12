@@ -1,71 +1,71 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-5xl mx-auto bg-white rounded-lg shadow p-6">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h1 class="text-2xl font-semibold">Manage Announcements</h1>
+    <div class="px-2 py-2 bg-white rounded-lg shadow p-3">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h1 class="text-base font-semibold">Manage Announcements</h1>
         <button
-          class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           @click="openCreate"
         >
           Add Announcement
         </button>
       </div>
 
-      <div v-if="error" class="text-red-600 mb-4">
+      <div v-if="error" class="text-red-600 mb-3">
         {{ error.message || 'Failed to load announcements' }}
       </div>
-      <div v-if="pending" class="text-gray-500">Loading...</div>
+      <div v-if="pending" class="text-gray-500 py-6 text-center">Loading...</div>
 
       <div v-if="announcements?.length">
-        <div class="space-y-4 sm:hidden">
-          <div v-for="row in announcements" :key="row.id" class="border rounded-lg p-4 bg-white">
-            <div class="text-sm text-gray-500">Go Live (CST)</div>
-            <div class="font-medium text-gray-900">{{ formatCentral(row.scheduledAt) }}</div>
-            <div class="mt-3 text-sm text-gray-500">Preview</div>
-            <div class="text-gray-900">{{ previewMessage(row.message) }}</div>
-            <div class="text-xs text-gray-500 mt-2 flex flex-wrap gap-2">
+        <div class="space-y-2 sm:hidden">
+          <div v-for="row in announcements" :key="row.id" class="bg-white border rounded-lg shadow p-2">
+            <div class="text-[10px] text-gray-500">Go Live (CST)</div>
+            <div class="font-medium text-xs text-gray-900">{{ formatCentral(row.scheduledAt) }}</div>
+            <div class="mt-2 text-[10px] text-gray-500">Preview</div>
+            <div class="text-xs text-gray-900">{{ previewMessage(row.message) }}</div>
+            <div class="text-[10px] text-gray-500 mt-1.5 flex flex-wrap gap-2">
               <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
               <span v-if="imageCount(row)">Images: {{ imageCount(row) }}</span>
             </div>
-            <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
+            <div v-if="row.sendError" class="text-[10px] text-red-600 mt-1.5">
               Last error: {{ row.sendError }}
             </div>
-            <div class="mt-3 flex gap-3">
-              <button class="text-blue-600 hover:text-blue-800" @click="openEdit(row)">Edit</button>
-              <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
+            <div class="mt-2 flex gap-2">
+              <button class="flex-1 px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50" @click="openEdit(row)">Edit</button>
+              <button class="flex-1 px-2 py-1 text-[11px] border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="remove(row)">Delete</button>
             </div>
           </div>
         </div>
 
         <div class="hidden sm:block overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="w-full text-xs">
           <thead>
-            <tr class="text-left border-b">
-              <th class="py-2 pr-4">Preview</th>
-              <th class="py-2 pr-4 whitespace-nowrap">Go Live (CST)</th>
-              <th class="py-2 pr-4">Actions</th>
+            <tr>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Preview</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100 whitespace-nowrap">Go Live (CST)</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in announcements" :key="row.id" class="border-b last:border-b-0">
-              <td class="py-3 pr-4 align-top">
+              <td class="px-2 py-1.5 align-top">
                 <div class="text-gray-900">
                   {{ previewMessage(row.message) }}
                 </div>
-                <div class="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
+                <div class="text-[10px] text-gray-500 mt-1 flex flex-wrap gap-2">
                   <span v-if="row.pingOption">Ping: {{ row.pingOption }}</span>
                   <span v-if="imageCount(row)">Images: {{ imageCount(row) }}</span>
                 </div>
-                <div v-if="row.sendError" class="text-xs text-red-600 mt-2">
+                <div v-if="row.sendError" class="text-[10px] text-red-600 mt-1.5">
                   Last error: {{ row.sendError }}
                 </div>
               </td>
-              <td class="py-3 pr-4 align-top whitespace-nowrap">
+              <td class="px-2 py-1.5 align-top whitespace-nowrap">
                 {{ formatCentral(row.scheduledAt) }}
               </td>
-              <td class="py-3 pr-4 align-top whitespace-nowrap">
-                <button class="text-blue-600 hover:text-blue-800 mr-3" @click="openEdit(row)">Edit</button>
+              <td class="px-2 py-1.5 align-top whitespace-nowrap">
+                <button class="text-blue-600 hover:text-blue-800 mr-2" @click="openEdit(row)">Edit</button>
                 <button class="text-red-600 hover:text-red-800" @click="remove(row)">Delete</button>
               </td>
             </tr>
@@ -73,111 +73,111 @@
           </table>
         </div>
       </div>
-      <div v-else-if="!pending" class="text-gray-500">No upcoming announcements.</div>
+      <div v-else-if="!pending" class="text-gray-500 py-6 text-center">No upcoming announcements.</div>
     </div>
 
     <!-- Add/Edit Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div class="absolute inset-0 bg-black/50" @click="closeModal"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
-          <h2 class="text-lg font-semibold">{{ modalTitle }}</h2>
-          <button class="text-gray-600 hover:text-gray-800" @click="closeModal">Close</button>
+      <div class="relative bg-white w-full max-w-xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h3 class="text-sm font-semibold">{{ modalTitle }}</h3>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeModal">✕</button>
         </div>
 
-        <div class="p-4 overflow-y-auto flex-1">
-          <div class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block mb-1 font-medium">Date (CST)</label>
-                <input v-model="form.date" type="date" class="w-full border rounded px-3 py-2" />
+        <div class="overflow-y-auto flex-1 px-4 py-3">
+          <div class="space-y-3">
+            <div class="grid sm:grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Date (CST)</label>
+                <input v-model="form.date" type="date" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block mb-1 font-medium">Time (CST)</label>
-                <input v-model="form.time" type="time" class="w-full border rounded px-3 py-2" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Time (CST)</label>
+                <input v-model="form.time" type="time" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
             </div>
 
-            <div>
-              <label class="block mb-1 font-medium">Ping Option</label>
-              <select v-model="form.pingOption" class="w-full border rounded px-3 py-2">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Ping Option</label>
+              <select v-model="form.pingOption" class="border rounded-md px-2 py-1.5 text-sm">
                 <option value="">None</option>
                 <option value="@everyone">@everyone</option>
                 <option value="@here">@here</option>
               </select>
             </div>
 
-            <div>
-              <label class="block mb-1 font-medium">Message</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Message</label>
               <textarea
                 ref="messageInput"
                 v-model="form.message"
                 maxlength="1000"
                 rows="5"
-                class="w-full border rounded px-3 py-2"
+                class="border rounded-md px-2 py-1.5 text-sm"
                 @input="onMessageInput"
                 @click="onMessageInput"
                 @keydown="onMessageKeydown"
               ></textarea>
-              <div class="text-xs text-gray-500 mt-1">
+              <div class="text-[10px] text-gray-500">
                 {{ messageCount }}/1000 characters
               </div>
-              <div v-if="showMentionSuggestions" class="mt-2 border rounded bg-white shadow-sm max-h-48 overflow-y-auto">
-                <div v-if="mentionLoading" class="px-3 py-2 text-xs text-gray-500">Searching...</div>
+              <div v-if="showMentionSuggestions" class="mt-1 border rounded-md bg-white shadow-sm max-h-48 overflow-y-auto">
+                <div v-if="mentionLoading" class="px-2 py-1.5 text-[10px] text-gray-500">Searching...</div>
                 <button
                   v-for="user in mentionSuggestions"
                   :key="user.id || user.username"
-                  class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-white"
+                  class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:bg-white"
                   :disabled="!user.discordId"
                   @mousedown.prevent="applyMention(user)"
                 >
                   <span>@{{ user.username }}</span>
-                  <span v-if="!user.discordId" class="ml-2 text-xs text-gray-400">(no Discord ID)</span>
+                  <span v-if="!user.discordId" class="ml-2 text-[10px] text-gray-400">(no Discord ID)</span>
                 </button>
-                <div v-if="!mentionLoading && !mentionSuggestions.length" class="px-3 py-2 text-xs text-gray-500">
+                <div v-if="!mentionLoading && !mentionSuggestions.length" class="px-2 py-1.5 text-[10px] text-gray-500">
                   No matching users with Discord IDs
                 </div>
               </div>
             </div>
 
-            <div>
-              <label class="block mb-1 font-medium">Images (optional, up to 3)</label>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Images (optional, up to 3)</label>
+              <div class="grid sm:grid-cols-3 gap-2">
                 <div>
-                  <label class="block text-xs text-gray-600 mb-1">Image 1</label>
-                  <input ref="fileInput1" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image1')" />
-                  <div v-if="form.imagePath" class="text-xs text-gray-500 mt-2">
+                  <label class="block text-[10px] text-gray-600 mb-1">Image 1</label>
+                  <input ref="fileInput1" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" class="text-xs" @change="onFileChange($event, 'image1')" />
+                  <div v-if="form.imagePath" class="text-[10px] text-gray-500 mt-1.5">
                     Current: {{ form.imagePath }}
                   </div>
-                  <div v-if="imageFile1" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile1.name }}</div>
+                  <div v-if="imageFile1" class="text-[10px] text-gray-500 mt-1">Selected: {{ imageFile1.name }}</div>
                 </div>
                 <div>
-                  <label class="block text-xs text-gray-600 mb-1">Image 2</label>
-                  <input ref="fileInput2" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image2')" />
-                  <div v-if="form.imagePath2" class="text-xs text-gray-500 mt-2">
+                  <label class="block text-[10px] text-gray-600 mb-1">Image 2</label>
+                  <input ref="fileInput2" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" class="text-xs" @change="onFileChange($event, 'image2')" />
+                  <div v-if="form.imagePath2" class="text-[10px] text-gray-500 mt-1.5">
                     Current: {{ form.imagePath2 }}
                   </div>
-                  <div v-if="imageFile2" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile2.name }}</div>
+                  <div v-if="imageFile2" class="text-[10px] text-gray-500 mt-1">Selected: {{ imageFile2.name }}</div>
                 </div>
                 <div>
-                  <label class="block text-xs text-gray-600 mb-1">Image 3</label>
-                  <input ref="fileInput3" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'image3')" />
-                  <div v-if="form.imagePath3" class="text-xs text-gray-500 mt-2">
+                  <label class="block text-[10px] text-gray-600 mb-1">Image 3</label>
+                  <input ref="fileInput3" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" class="text-xs" @change="onFileChange($event, 'image3')" />
+                  <div v-if="form.imagePath3" class="text-[10px] text-gray-500 mt-1.5">
                     Current: {{ form.imagePath3 }}
                   </div>
-                  <div v-if="imageFile3" class="text-xs text-gray-500 mt-1">Selected: {{ imageFile3.name }}</div>
+                  <div v-if="imageFile3" class="text-[10px] text-gray-500 mt-1">Selected: {{ imageFile3.name }}</div>
                 </div>
               </div>
             </div>
 
-            <div v-if="formError" class="text-red-600 text-sm">{{ formError }}</div>
+            <div v-if="formError" class="text-red-600 text-xs">{{ formError }}</div>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
-          <button class="px-4 py-2 rounded border" @click="closeModal">Cancel</button>
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+          <button class="px-3 py-1 text-sm border rounded-md" @click="closeModal">Cancel</button>
           <button
-            class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            class="px-3 py-1 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
             :disabled="saving"
             @click="saveAnnouncement"
           >

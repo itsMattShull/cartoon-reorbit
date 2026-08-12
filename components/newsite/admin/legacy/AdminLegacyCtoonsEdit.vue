@@ -1,285 +1,313 @@
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow relative">
-      <h1 class="text-2xl font-semibold mb-4">Edit cToon</h1>
+      <div class="max-w-2xl mx-auto bg-white rounded-lg shadow p-3 relative">
+        <h1 class="text-base font-semibold mb-3">Edit cToon</h1>
 
-      <form @submit.prevent="submitForm" class="space-y-4">
-        <!-- Image Display -->
-        <div>
-          <label class="block mb-1 font-medium">Current Image</label>
-          <img :src="assetPath" alt="cToon" class="h-32" />
-        </div>
+        <form @submit.prevent="submitForm" class="space-y-3">
 
-        <!-- Upload New Image -->
-        <div>
-          <label class="block mb-1 font-medium">Upload New Image (PNG or GIF)</label>
-          <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="w-full" />
-          <p class="text-sm text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
-          <p v-if="err.image" class="text-red-600 text-sm mt-1">{{ err.image }}</p>
-          <div v-if="newImagePreview" class="mt-2">
-            <label class="block mb-1 font-medium">Preview</label>
-            <img :src="newImagePreview" class="h-32" />
-          </div>
-        </div>
-
-        <!-- Sound Upload -->
-        <div>
-          <label class="block mb-1 font-medium">cToon Sound (optional)</label>
-          <div v-if="currentSoundPath && !clearSound" class="flex items-center gap-3 mb-2">
-            <audio :src="currentSoundPath" controls class="h-8"></audio>
-            <button type="button" @click="clearSound = true" class="text-sm text-red-600 hover:underline">Remove sound</button>
-          </div>
-          <p v-else-if="clearSound" class="text-sm text-amber-600 mb-2">Sound will be removed on save. <button type="button" @click="clearSound = false" class="underline">Undo</button></p>
-          <input type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg" @change="handleSoundFile" class="w-full" />
-          <p class="text-sm text-gray-500">MP3, WAV, or OGG. Leave blank to keep existing. Uploading a new file replaces the current sound.</p>
-          <p v-if="err.sound" class="text-red-600 text-sm mt-1">{{ err.sound }}</p>
-          <p v-if="newSoundFile" class="text-sm text-green-600 mt-1">Selected: {{ newSoundFile.name }}</p>
-        </div>
-
-        <!-- Type (read-only) -->
-        <div>
-          <label class="block mb-1 font-medium">Type</label>
-          <input v-model="type" disabled class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-
-        <!-- Name -->
-        <div>
-          <label class="block mb-1 font-medium">Name</label>
-          <input v-model="name" required class="w-full border rounded p-2" />
-        </div>
-
-        <!-- Series -->
-        <div>
-          <label class="block mb-1 font-medium">Series</label>
-          <input v-model="series" list="series-list" required class="w-full border rounded p-2" />
-          <datalist id="series-list">
-            <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
-          </datalist>
-        </div>
-
-        <!-- Rarity -->
-        <div>
-          <label class="block mb-1 font-medium">Rarity</label>
-          <select v-model="rarity" required class="w-full border rounded p-2">
-            <option disabled value="">Select rarity</option>
-            <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
-        </div>
-
-        <!-- Price -->
-        <div>
-          <label class="block mb-1 font-medium">Price</label>
-          <input type="number" min="0" v-model.number="price" class="w-full border rounded p-2" />
-          <p class="text-sm text-gray-500">Defaults based on rarity, but you can adjust it here.</p>
-        </div>
-
-        <!-- Release Date (CDT) -->
-        <div>
-          <label class="block mb-1 font-medium">Release Date &amp; Time (CDT)</label>
-          <input type="datetime-local" v-model="releaseDate" required class="w-full border rounded p-2" />
-        </div>
-
-        <!-- Mint Limit Type -->
-        <div>
-          <label class="block mb-1 font-medium">Mint Limit</label>
-          <select v-model="mintLimitType" class="w-full border rounded p-2 bg-white">
-            <option value="defined">Defined Number Limit</option>
-            <option value="timeBased">Time Based Limit</option>
-          </select>
-          <p class="text-sm text-gray-500">
-            <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
-            <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
-          </p>
-        </div>
-
-        <!-- Mint End Date (only for Time Based Limit) -->
-        <div v-if="mintLimitType === 'timeBased'">
-          <label class="block mb-1 font-medium">Mint End Date/Time (CST)</label>
-          <input v-model="mintEndDate" type="datetime-local" required class="w-full border rounded p-2" />
-          <p class="text-sm text-gray-500">Minting will be open until this date/time, then the quantity will be capped.</p>
-          <p v-if="mintEndDateLocal" class="text-sm text-blue-600 mt-1">
-            (Your time: {{ mintEndDateLocal }})
-          </p>
-        </div>
-
-        <!-- Time-Based Purchase Limit Override (only for Time Based Limit) -->
-        <div v-if="mintLimitType === 'timeBased'" class="border rounded bg-indigo-50 p-4 space-y-3">
-          <div>
-            <h3 class="font-medium text-sm text-gray-800">Purchase Limit Override
-              <span class="text-xs font-normal text-gray-500 ml-1">— optional, overrides the rarity default from Global Settings</span>
-            </h3>
-            <p class="text-xs text-gray-500 mt-1">Leave either field blank to use the rarity default. Window blank = full release window.</p>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
+          <!-- ── Media ─────────────────────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
             <div>
-              <label class="block mb-1 text-sm font-medium">Limit Count</label>
-              <input
-                type="number"
-                min="1"
-                :value="timeBasedLimitCountStr"
-                @input="timeBasedLimitCountStr = $event.target.value"
-                placeholder="Use rarity default"
-                class="w-full border rounded p-2"
-              />
-              <p class="text-xs text-gray-500 mt-1">Max purchases per user.</p>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Media</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">The image and (optional) sound that represent this cToon in the c-mart and inventory.</p>
             </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Current Image</label>
+              <img :src="assetPath" alt="cToon" class="h-32" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Upload New Image (PNG or GIF)</label>
+              <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="text-xs" />
+              <p class="text-[11px] text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
+              <p v-if="err.image" class="text-red-600 text-[11px] mt-1">{{ err.image }}</p>
+              <div v-if="newImagePreview" class="mt-1">
+                <label class="text-xs font-medium">Preview</label>
+                <img :src="newImagePreview" class="h-32 mt-1" />
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">cToon Sound (optional)</label>
+              <div v-if="currentSoundPath && !clearSound" class="flex items-center gap-3">
+                <audio :src="currentSoundPath" controls class="h-8"></audio>
+                <button type="button" @click="clearSound = true" class="text-[11px] text-red-600 hover:underline">Remove sound</button>
+              </div>
+              <p v-else-if="clearSound" class="text-[11px] text-amber-600">Sound will be removed on save. <button type="button" @click="clearSound = false" class="underline">Undo</button></p>
+              <input type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg" @change="handleSoundFile" class="text-xs" />
+              <p class="text-[11px] text-gray-500">MP3, WAV, or OGG. Leave blank to keep existing. Uploading a new file replaces the current sound.</p>
+              <p v-if="err.sound" class="text-red-600 text-[11px] mt-1">{{ err.sound }}</p>
+              <p v-if="newSoundFile" class="text-[11px] text-green-600 mt-1">Selected: {{ newSoundFile.name }}</p>
+            </div>
+          </section>
+
+          <!-- ── Identity & Classification ────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
             <div>
-              <label class="block mb-1 text-sm font-medium">Window (days)</label>
-              <input
-                type="number"
-                min="1"
-                :value="timeBasedLimitWindowDaysStr"
-                @input="timeBasedLimitWindowDaysStr = $event.target.value"
-                placeholder="Full duration"
-                class="w-full border rounded p-2"
-              />
-              <p class="text-xs text-gray-500 mt-1">Rolling window. Blank = full release window.</p>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Identity &amp; Classification</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">What this cToon is called and how it's grouped/priced by rarity.</p>
             </div>
-          </div>
-        </div>
 
-        <!-- Per-User Limit / Quantities -->
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block mb-1 font-medium">Per-User Limit</label>
-            <input v-model.number="perUserLimit" type="number" min="0" class="w-full border rounded p-2" />
-          </div>
-          <div v-if="mintLimitType === 'defined'">
-            <label class="block mb-1 font-medium">Total Quantity</label>
-            <input v-model.number="quantity" type="number" min="0" class="w-full border rounded p-2" />
-          </div>
-          <div v-if="mintLimitType === 'defined'">
-            <label class="block mb-1 font-medium">Initial Quantity</label>
-            <input v-model.number="initialQuantity" type="number" min="0" class="w-full border rounded p-2" />
-          </div>
-        </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Type</label>
+              <input v-model="type" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+              <p class="text-[11px] text-gray-500">Set automatically from the image file — read only.</p>
+            </div>
 
-        <!-- Release schedule (computed, read-only) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
-          <div>
-            <label class="block mb-1 font-medium">Initial Release %</label>
-            <input
-              v-model.number="releasePercent"
-              type="number"
-              min="1"
-              max="100"
-              @input="clampReleasePercent"
-              class="w-full border rounded p-2"
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Name</label>
+              <input v-model="name" required class="border rounded-md px-2 py-1.5 text-sm" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Series</label>
+              <input v-model="series" list="series-list" required class="border rounded-md px-2 py-1.5 text-sm" />
+              <datalist id="series-list">
+                <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+              </datalist>
+              <p class="text-[11px] text-gray-500">Used to group similar cToons.</p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Set</label>
+              <input v-model="setField" required class="border rounded-md px-2 py-1.5 text-sm" />
+              <p class="text-[11px] text-gray-500">Which collectible set this cToon belongs to.</p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Rarity</label>
+              <select v-model="rarity" required class="border rounded-md px-2 py-1.5 text-sm">
+                <option disabled value="">Select rarity</option>
+                <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+              <p class="text-[11px] text-gray-500">Drives the default price, quantity, and c-mart placement below.</p>
+            </div>
+          </section>
+
+          <!-- ── Pricing ───────────────────────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Pricing</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">Point cost to mint/purchase this cToon.</p>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Price</label>
+              <input type="number" min="0" v-model.number="price" class="border rounded-md px-2 py-1.5 text-sm" />
+              <p class="text-[11px] text-gray-500">Defaults based on rarity, but you can adjust it here.</p>
+            </div>
+          </section>
+
+          <!-- ── Availability & Mint Limits ───────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Availability &amp; Mint Limits</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">When this cToon goes live, how many can be minted, and where it can be obtained.</p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Release Date &amp; Time (CDT)</label>
+              <input type="datetime-local" v-model="releaseDate" required class="border rounded-md px-2 py-1.5 text-sm" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Mint Limit</label>
+              <select v-model="mintLimitType" class="border rounded-md px-2 py-1.5 text-sm bg-white">
+                <option value="defined">Defined Number Limit</option>
+                <option value="timeBased">Time Based Limit</option>
+              </select>
+              <p class="text-[11px] text-gray-500">
+                <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
+                <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
+              </p>
+            </div>
+
+            <div v-if="mintLimitType === 'timeBased'" class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Mint End Date/Time (CST)</label>
+              <input v-model="mintEndDate" type="datetime-local" required class="border rounded-md px-2 py-1.5 text-sm" />
+              <p class="text-[11px] text-gray-500">Minting will be open until this date/time, then the quantity will be capped.</p>
+              <p v-if="mintEndDateLocal" class="text-[11px] text-blue-600 mt-1">
+                (Your time: {{ mintEndDateLocal }})
+              </p>
+            </div>
+
+            <div v-if="mintLimitType === 'timeBased'" class="border rounded-md bg-indigo-50 p-3 space-y-2">
+              <div>
+                <h3 class="text-xs font-semibold text-gray-800">Purchase Limit Override
+                  <span class="text-[11px] font-normal text-gray-500 ml-1">— optional, overrides the rarity default from Global Settings</span>
+                </h3>
+                <p class="text-[11px] text-gray-500 mt-1">Leave either field blank to use the rarity default. Window blank = full release window.</p>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Limit Count</label>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="timeBasedLimitCountStr"
+                    @input="timeBasedLimitCountStr = $event.target.value"
+                    placeholder="Use rarity default"
+                    class="border rounded-md px-2 py-1.5 text-sm"
+                  />
+                  <p class="text-[11px] text-gray-500">Max purchases per user.</p>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Window (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="timeBasedLimitWindowDaysStr"
+                    @input="timeBasedLimitWindowDaysStr = $event.target.value"
+                    placeholder="Full duration"
+                    class="border rounded-md px-2 py-1.5 text-sm"
+                  />
+                  <p class="text-[11px] text-gray-500">Rolling window. Blank = full release window.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Per-User Limit</label>
+                <input v-model.number="perUserLimit" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+              </div>
+              <div v-if="mintLimitType === 'defined'" class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total Quantity</label>
+                <input v-model.number="quantity" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+              </div>
+              <div v-if="mintLimitType === 'defined'" class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Quantity</label>
+                <input v-model.number="initialQuantity" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Release %</label>
+                <input
+                  v-model.number="releasePercent"
+                  type="number"
+                  min="1"
+                  max="100"
+                  @input="clampReleasePercent"
+                  class="border rounded-md px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Release Qty</label>
+                <input :value="schedule.initialQty" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Final Release At (CST/CDT)</label>
+                <input :value="schedule.finalAtDisplay" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Final Release Qty</label>
+                <input :value="schedule.finalQty" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2">
+              <input v-model="inCmart" type="checkbox"
+                     :disabled="rarity === 'Prize Only' || rarity === 'Auction Only' || (rarity === 'Code Only' && !inCmart)" />
+              <span class="text-xs font-medium">In C-mart</span>
+            </label>
+            <p class="text-[11px] text-gray-500">Whether this cToon is purchasable in the c-mart shop. Disabled automatically for Prize/Auction Only rarities.</p>
+          </section>
+
+          <!-- ── Description & Characters ─────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Description &amp; Characters</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">Flavor text and character tags shown to players.</p>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Description</label>
+              <textarea v-model="description" rows="3" class="border rounded-md px-2 py-1.5 text-sm" placeholder="Optional description"></textarea>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Characters (comma-separated)</label>
+              <textarea v-model="characters" rows="2" class="border rounded-md px-2 py-1.5 text-sm"></textarea>
+            </div>
+          </section>
+
+          <!-- ── G-toon Gameplay ───────────────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">G-toon Gameplay</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">Only needed if this cToon is playable as a card in Clash.</p>
+            </div>
+
+            <label class="flex items-center gap-2">
+              <input type="checkbox" v-model="isGtoon" />
+              <span class="text-xs font-medium">Is this a G-toon?</span>
+            </label>
+
+            <div v-if="isGtoon" class="border rounded-md bg-indigo-50 p-3 space-y-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Type (gToon)</label>
+                <input v-model="gtoonType" type="text" class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g. Beast, Robot, Support" />
+                <p class="text-[11px] text-gray-500">Optional. Leave blank if none.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Cost <span class="text-[11px] font-normal">(0–6)</span></label>
+                <input v-model.number="cost" type="number" min="0" max="6" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p v-if="err.cost" class="text-red-600 text-[11px]">{{ err.cost }}</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Power <span class="text-[11px] font-normal">(0–12)</span></label>
+                <input v-model.number="power" type="number" min="0" max="12" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p v-if="err.power" class="text-red-600 text-[11px]">{{ err.power }}</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Ability</label>
+                <select v-model="abilityKey" class="border rounded-md px-2 py-1.5 text-sm bg-white">
+                  <option value="">None</option>
+                  <option v-for="a in abilityKeyOptions" :key="a.key" :value="a.key">{{ a.label }}</option>
+                </select>
+              </div>
+              <div v-if="selectedAbility && selectedAbility.params?.length" class="flex flex-col gap-1">
+                <label class="text-xs font-medium">{{ selectedAbility.paramLabel }}</label>
+                <select v-model="abilityParam" class="border rounded-md px-2 py-1.5 text-sm bg-white">
+                  <option disabled :value="null">Select value</option>
+                  <option v-for="p in selectedAbility.params" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+              <div class="text-[11px] text-gray-600">
+                <p class="font-semibold">Ability cheat-sheet:</p>
+                <ul class="list-disc list-inside">
+                  <li><strong>Flame Bug</strong> – Deals X damage to a random enemy on play.</li>
+                  <li><strong>Heal Ally</strong> – Heals all friendlies in lane by X.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- ── Second Edition ────────────────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Second Edition</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">Mark this cToon as a reprint of an existing one, with an overlay badge.</p>
+            </div>
+            <SecondEditionFields
+              v-model="secondEdition"
+              :ctoon-image-src="newImagePreview || assetPath"
+              :exclude-ctoon-id="id"
             />
+          </section>
+
+          <!-- Submit -->
+          <div class="text-right">
+            <button class="px-4 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700">
+              Update cToon
+            </button>
           </div>
-          <div>
-            <label class="block mb-1 font-medium">Initial Release Qty</label>
-            <input :value="schedule.initialQty" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
-            <input :value="schedule.finalAtDisplay" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Final Release Qty</label>
-            <input :value="schedule.finalQty" disabled class="w-full border rounded p-2 bg-gray-100" />
-          </div>
-        </div>
+        </form>
 
-        <!-- In C-mart -->
-        <div class="flex items-center">
-          <input v-model="inCmart" type="checkbox" class="mr-2"
-                 :disabled="rarity === 'Prize Only' || rarity === 'Auction Only' || (rarity === 'Code Only' && !inCmart)" />
-          <span>In C-mart</span>
-        </div>
-
-        <!-- Set -->
-        <div>
-          <label class="block mb-1 font-medium">Set</label>
-          <input v-model="setField" required class="w-full border rounded p-2" />
-        </div>
-
-        <!-- Description -->
-        <div>
-          <label class="block mb-1 font-medium">Description</label>
-          <textarea v-model="description" rows="3" class="w-full border rounded p-2" placeholder="Optional description"></textarea>
-        </div>
-
-        <!-- Characters -->
-        <div>
-          <label class="block mb-1 font-medium">Characters (comma-separated)</label>
-          <textarea v-model="characters" rows="2" class="w-full border rounded p-2"></textarea>
-        </div>
-
-        <!-- ── G-toon section ───────────────────────────────────── -->
-        <div class="flex items-center space-x-4">
-          <label class="flex items-center font-medium">
-            <input type="checkbox" v-model="isGtoon" class="mr-2" />
-            Is this a <strong>G-toon</strong>?
-          </label>
-        </div>
-
-        <div v-if="isGtoon" class="border p-4 rounded bg-indigo-50 space-y-4">
-          <!-- G-toon Type (free text, optional) -->
-          <div>
-            <label class="block mb-1 font-medium">Type (gToon)</label>
-            <input v-model="gtoonType" type="text" class="w-full border rounded p-2" placeholder="e.g. Beast, Robot, Support" />
-            <p class="text-sm text-gray-500">Optional. Leave blank if none.</p>
-          </div>
-          <!-- Cost -->
-          <div>
-            <label class="block mb-1 font-medium">Cost <span class="text-xs">(0–6)</span></label>
-            <input v-model.number="cost" type="number" min="0" max="6" class="w-full border rounded p-2" />
-            <p v-if="err.cost" class="text-red-600 text-sm">{{ err.cost }}</p>
-          </div>
-
-          <!-- Power -->
-          <div>
-            <label class="block mb-1 font-medium">Power <span class="text-xs">(0–12)</span></label>
-            <input v-model.number="power" type="number" min="0" max="12" class="w-full border rounded p-2" />
-            <p v-if="err.power" class="text-red-600 text-sm">{{ err.power }}</p>
-          </div>
-
-          <!-- Ability Key -->
-          <div>
-            <label class="block mb-1 font-medium">Ability</label>
-            <select v-model="abilityKey" class="w-full border rounded p-2 bg-white">
-              <option value="">None</option>
-              <option v-for="a in abilityKeyOptions" :key="a.key" :value="a.key">{{ a.label }}</option>
-            </select>
-          </div>
-
-          <!-- Ability Param -->
-          <div v-if="selectedAbility && selectedAbility.params?.length">
-            <label class="block mb-1 font-medium">{{ selectedAbility.paramLabel }}</label>
-            <select v-model="abilityParam" class="w-full border rounded p-2 bg-white">
-              <option disabled :value="null">Select value</option>
-              <option v-for="p in selectedAbility.params" :key="p" :value="p">{{ p }}</option>
-            </select>
-          </div>
-
-          <!-- Cheat-sheet -->
-          <div class="text-xs text-gray-600">
-            <p class="font-semibold">Ability cheat-sheet:</p>
-            <ul class="list-disc list-inside">
-              <li><strong>Flame Bug</strong> – Deals X damage to a random enemy on play.</li>
-              <li><strong>Heal Ally</strong> – Heals all friendlies in lane by X.</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Second Edition -->
-        <SecondEditionFields
-          v-model="secondEdition"
-          :ctoon-image-src="newImagePreview || assetPath"
-          :exclude-ctoon-id="id"
-        />
-
-        <!-- Submit -->
-        <div class="text-right">
-          <button class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-            Update cToon
-          </button>
-        </div>
-      </form>
-
-      <Toast v-if="showToast" :message="toastMessage" :type="toastType" />
+        <Toast v-if="showToast" :message="toastMessage" :type="toastType" />
+      </div>
     </div>
   </div>
 </template>

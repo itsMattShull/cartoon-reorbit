@@ -1,21 +1,22 @@
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 ">
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+    <div class="px-2 py-2">
+    <div class="bg-white rounded-lg shadow p-3">
+      <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
         <div>
-          <h1 class="text-2xl font-semibold">cToon Suggestions</h1>
-          <p class="text-sm text-gray-500">{{ headerDescription }}</p>
-          <div class="mt-3 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <h1 class="text-base font-semibold">cToon Suggestions</h1>
+          <p class="text-xs text-gray-500">{{ headerDescription }}</p>
+          <div class="mt-2 inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5">
             <button
-              class="px-3 py-1.5 text-sm rounded-md transition"
+              class="px-2 py-1 text-xs rounded-md transition"
               :class="activeTab === 'IN_REVIEW' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'"
               @click="setTab('IN_REVIEW')"
             >
               In Review
             </button>
             <button
-              class="px-3 py-1.5 text-sm rounded-md transition"
+              class="px-2 py-1 text-xs rounded-md transition"
               :class="activeTab === 'HISTORY' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'"
               @click="setTab('HISTORY')"
             >
@@ -24,7 +25,7 @@
           </div>
         </div>
         <button
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           :disabled="loading"
           @click="fetchSuggestions"
         >
@@ -32,17 +33,17 @@
         </button>
       </div>
 
-      <div v-if="loading" class="text-gray-500">Loading suggestions...</div>
-      <div v-else-if="error" class="text-red-600">{{ error }}</div>
-      <div v-else-if="!suggestions.length" class="text-gray-500">
+      <div v-if="loading" class="text-gray-500 py-6 text-center">Loading suggestions...</div>
+      <div v-else-if="error" class="text-red-600 py-6 text-center">{{ error }}</div>
+      <div v-else-if="!suggestions.length" class="text-gray-500 py-6 text-center">
         {{ activeTab === 'HISTORY' ? 'No accepted or rejected suggestions yet.' : 'No suggestions currently in review.' }}
       </div>
 
       <div v-else>
         <!-- Mobile cards -->
-        <div class="space-y-3 md:hidden">
-          <div v-for="s in suggestions" :key="s.id" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <div class="flex items-start gap-3">
+        <div class="space-y-2 md:hidden">
+          <div v-for="s in suggestions" :key="s.id" class="bg-white border rounded-lg shadow p-2">
+            <div class="flex items-start gap-2">
               <input
                 v-if="activeTab === 'IN_REVIEW'"
                 type="checkbox"
@@ -57,21 +58,21 @@
                 class="w-14 h-14 object-contain rounded bg-gray-100 p-1"
               />
               <div class="flex-1">
-                <div class="font-semibold text-gray-900">{{ s.ctoon?.name || 'Unknown cToon' }}</div>
-                <div class="text-xs text-gray-500">{{ s.ctoon?.series || 'No series' }} · {{ s.ctoon?.set || 'No set' }}</div>
-                <div class="mt-2 text-sm text-gray-700">
+                <div class="font-semibold text-xs text-gray-900">{{ s.ctoon?.name || 'Unknown cToon' }}</div>
+                <div class="text-[10px] text-gray-500">{{ s.ctoon?.series || 'No series' }} · {{ s.ctoon?.set || 'No set' }}</div>
+                <div class="mt-1 text-xs text-gray-700">
                   Suggested by <span class="font-medium">{{ s.user?.username || 'Unknown' }}</span>
                 </div>
-                <div class="text-xs text-gray-500">{{ s.user?.discordTag || 'No tag' }}</div>
-                <div class="mt-2 text-xs text-gray-500">Submitted {{ formatDateTime(s.createdAt) }}</div>
-                <div v-if="activeTab === 'HISTORY'" class="mt-1 text-xs text-gray-600">
+                <div class="text-[10px] text-gray-500">{{ s.user?.discordTag || 'No tag' }}</div>
+                <div class="mt-1 text-[10px] text-gray-500">Submitted {{ formatDateTime(s.createdAt) }}</div>
+                <div v-if="activeTab === 'HISTORY'" class="mt-0.5 text-[10px] text-gray-600">
                   Status: <span class="font-semibold">{{ formatStatus(s.status) }}</span>
                 </div>
               </div>
             </div>
-            <div class="mt-4 flex justify-end">
+            <div class="mt-2 flex justify-end">
               <button
-                class="text-blue-600 hover:text-blue-800 font-medium"
+                class="text-xs text-blue-600 hover:text-blue-800 font-medium"
                 @click="openReview(s)"
               >
                 {{ activeTab === 'HISTORY' ? 'View' : 'Review' }}
@@ -82,10 +83,10 @@
 
         <!-- Desktop table -->
         <div class="hidden md:block overflow-x-auto">
-          <table class="min-w-full table-auto border-collapse">
+          <table class="min-w-full table-auto border-collapse text-xs">
             <thead>
-              <tr class="bg-gray-100">
-                <th v-if="activeTab === 'IN_REVIEW'" class="px-4 py-2 w-10">
+              <tr>
+                <th v-if="activeTab === 'IN_REVIEW'" class="px-2 py-1.5 w-10 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">
                   <input
                     ref="selectAllCheckboxRef"
                     type="checkbox"
@@ -94,16 +95,16 @@
                     @change="toggleAll"
                   />
                 </th>
-                <th class="px-4 py-2 text-left">cToon</th>
-                <th class="px-4 py-2 text-left">Suggested By</th>
-                <th class="px-4 py-2 text-left">Submitted</th>
-                <th v-if="activeTab === 'HISTORY'" class="px-4 py-2 text-left">Status</th>
-                <th class="px-4 py-2 text-right">Action</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">cToon</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Suggested By</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Submitted</th>
+                <th v-if="activeTab === 'HISTORY'" class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Status</th>
+                <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Action</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in suggestions" :key="s.id" class="border-b">
-                <td v-if="activeTab === 'IN_REVIEW'" class="px-4 py-2 w-10">
+                <td v-if="activeTab === 'IN_REVIEW'" class="px-2 py-1.5 w-10">
                   <input
                     type="checkbox"
                     class="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
@@ -111,29 +112,29 @@
                     @change="toggleSelection(s.id)"
                   />
                 </td>
-                <td class="px-4 py-2">
-                  <div class="flex items-center gap-3">
+                <td class="px-2 py-1.5">
+                  <div class="flex items-center gap-2">
                     <img
                       v-if="s.ctoon?.assetPath"
                       :src="s.ctoon.assetPath"
                       :alt="s.ctoon?.name || 'cToon'"
-                      class="w-12 h-12 object-contain rounded bg-gray-100 p-1"
+                      class="w-10 h-10 object-contain rounded bg-gray-100 p-1"
                     />
                     <div>
                       <div class="font-medium">{{ s.ctoon?.name || 'Unknown cToon' }}</div>
-                      <div class="text-xs text-gray-500">{{ s.ctoon?.series || 'No series' }} · {{ s.ctoon?.set || 'No set' }}</div>
+                      <div class="text-[10px] text-gray-500">{{ s.ctoon?.series || 'No series' }} · {{ s.ctoon?.set || 'No set' }}</div>
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-2">
+                <td class="px-2 py-1.5">
                   <div class="font-medium">{{ s.user?.username || 'Unknown' }}</div>
-                  <div class="text-xs text-gray-500">{{ s.user?.discordTag || 'No tag' }}</div>
+                  <div class="text-[10px] text-gray-500">{{ s.user?.discordTag || 'No tag' }}</div>
                 </td>
-                <td class="px-4 py-2 text-sm text-gray-600">{{ formatDateTime(s.createdAt) }}</td>
-                <td v-if="activeTab === 'HISTORY'" class="px-4 py-2 text-sm text-gray-600">
+                <td class="px-2 py-1.5 text-gray-600">{{ formatDateTime(s.createdAt) }}</td>
+                <td v-if="activeTab === 'HISTORY'" class="px-2 py-1.5 text-gray-600">
                   {{ formatStatus(s.status) }}
                 </td>
-                <td class="px-4 py-2 text-right">
+                <td class="px-2 py-1.5 text-right">
                   <button
                     class="text-blue-600 hover:text-blue-800 font-medium"
                     @click="openReview(s)"
@@ -146,18 +147,18 @@
           </table>
         </div>
 
-        <div v-if="total > 0" class="mt-4 flex flex-col gap-2 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
+        <div v-if="total > 0" class="mt-3 flex flex-col gap-2 text-xs text-gray-600 md:flex-row md:items-center md:justify-between">
           <div>{{ showingRange }}</div>
           <div class="space-x-2">
             <button
-              class="px-3 py-1 text-sm border rounded-md disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md disabled:opacity-50"
               :disabled="page <= 1 || loading"
               @click="prevPage"
             >
               Prev
             </button>
             <button
-              class="px-3 py-1 text-sm border rounded-md disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md disabled:opacity-50"
               :disabled="page >= totalPages || loading"
               @click="nextPage"
             >
@@ -167,6 +168,7 @@
         </div>
       </div>
     </div>
+    </div>
 
     <!-- Individual review modal -->
     <Modal
@@ -175,26 +177,26 @@
       :close-on-backdrop="true"
       @close="closeReview"
     >
-      <div class="text-white flex flex-col max-h-[80vh]">
-        <div class="flex items-start gap-4 pb-4 border-b border-white/10 shrink-0">
+      <div class="text-white text-xs flex flex-col max-h-[80vh]">
+        <div class="flex items-start gap-3 pb-3 border-b border-white/10 shrink-0">
           <img
             v-if="selectedSuggestion.ctoon?.assetPath"
             :src="selectedSuggestion.ctoon.assetPath"
             :alt="selectedSuggestion.ctoon?.name || 'cToon'"
-            class="w-20 h-20 object-contain rounded bg-gray-900/40 p-2"
+            class="w-16 h-16 object-contain rounded bg-gray-900/40 p-2"
           />
           <div>
-            <h3 class="text-xl font-semibold">Review Suggestion</h3>
-            <p class="text-sm text-gray-300">{{ selectedSuggestion.ctoon?.name || 'cToon' }}</p>
-            <p class="text-xs text-gray-400">Submitted by {{ selectedSuggestion.user?.username || 'Unknown' }}</p>
+            <h3 class="text-sm font-semibold">Review Suggestion</h3>
+            <p class="text-xs text-gray-300">{{ selectedSuggestion.ctoon?.name || 'cToon' }}</p>
+            <p class="text-[10px] text-gray-400">Submitted by {{ selectedSuggestion.user?.username || 'Unknown' }}</p>
           </div>
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto py-4 space-y-4">
-          <div class="grid grid-cols-1 gap-4">
-            <div class="rounded bg-gray-700/60 p-3">
-              <div class="text-xs uppercase text-gray-300 mb-2">Current Values</div>
-              <div class="text-sm text-gray-100 space-y-1">
+        <div class="flex-1 min-h-0 overflow-y-auto py-3 space-y-3">
+          <div class="grid grid-cols-1 gap-3">
+            <div class="rounded bg-gray-700/60 p-2">
+              <div class="text-[10px] uppercase text-gray-300 mb-1.5">Current Values</div>
+              <div class="text-xs text-gray-100 space-y-1">
                 <div><strong>Name:</strong> {{ formatValue(selectedSuggestion.ctoon?.name) }}</div>
                 <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.ctoon?.series) }}</div>
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.ctoon?.set) }}</div>
@@ -203,9 +205,9 @@
               </div>
             </div>
 
-            <div class="rounded bg-gray-700/60 p-3">
-              <div class="text-xs uppercase text-gray-300 mb-2">Suggested Values</div>
-              <div class="text-sm text-gray-100 space-y-1">
+            <div class="rounded bg-gray-700/60 p-2">
+              <div class="text-[10px] uppercase text-gray-300 mb-1.5">Suggested Values</div>
+              <div class="text-xs text-gray-100 space-y-1">
                 <div><strong>Name:</strong> {{ formatValue(selectedSuggestion.newValues?.name) }}</div>
                 <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.newValues?.series) }}</div>
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.newValues?.set) }}</div>
@@ -215,45 +217,45 @@
             </div>
           </div>
 
-          <div class="text-xs text-gray-400">
+          <div class="text-[10px] text-gray-400">
             Submitted {{ formatDateTime(selectedSuggestion.createdAt) }}
           </div>
 
-          <div class="text-xs text-gray-300">
+          <div class="text-[10px] text-gray-300">
             Status: <span class="font-semibold">{{ formatStatus(selectedSuggestion.status) }}</span>
           </div>
 
-          <div v-if="canReview" class="rounded bg-gray-700/60 p-3">
-            <label class="block text-xs uppercase text-gray-300 mb-2" for="reject-reason">
+          <div v-if="canReview" class="rounded bg-gray-700/60 p-2">
+            <label class="block text-[10px] uppercase text-gray-300 mb-1.5" for="reject-reason">
               Rejection reason (sent via Discord)
             </label>
             <textarea
               id="reject-reason"
               v-model="rejectReason"
-              class="w-full rounded bg-gray-900/70 text-gray-100 p-2 text-sm border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+              class="w-full rounded-md bg-gray-900/70 text-gray-100 px-2 py-1.5 text-xs border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400/60"
               rows="3"
               placeholder="Share the key reason for rejection..."
               :disabled="actionLoading"
             />
-            <div class="text-xs text-gray-400 mt-2">Required if you reject this suggestion.</div>
+            <div class="text-[10px] text-gray-400 mt-1.5">Required if you reject this suggestion.</div>
           </div>
 
           <div
             v-if="selectedSuggestion.status === 'REJECTED' && selectedSuggestion.rejectionReason"
-            class="rounded bg-gray-700/60 p-3"
+            class="rounded bg-gray-700/60 p-2"
           >
-            <div class="text-xs uppercase text-gray-300 mb-2">Saved rejection reason</div>
-            <div class="text-sm text-gray-100 whitespace-pre-line">{{ selectedSuggestion.rejectionReason }}</div>
+            <div class="text-[10px] uppercase text-gray-300 mb-1.5">Saved rejection reason</div>
+            <div class="text-xs text-gray-100 whitespace-pre-line">{{ selectedSuggestion.rejectionReason }}</div>
           </div>
 
-          <div v-if="actionError" class="text-sm text-red-300">
+          <div v-if="actionError" class="text-xs text-red-300">
             {{ actionError }}
           </div>
         </div>
 
-        <div class="pt-4 border-t border-white/10 flex items-center justify-end gap-3 shrink-0">
+        <div class="pt-3 border-t border-white/10 flex items-center justify-end gap-2 shrink-0">
           <button
-            class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm"
+            class="px-3 py-1 text-xs border border-gray-600 rounded-md hover:bg-gray-700"
             :disabled="actionLoading"
             @click="closeReview"
           >
@@ -261,14 +263,14 @@
           </button>
           <template v-if="canReview">
             <button
-              class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+              class="px-3 py-1 text-xs rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               :disabled="actionLoading"
               @click="rejectSuggestion"
             >
               {{ actionLoading ? 'Working...' : 'Reject' }}
             </button>
             <button
-              class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+              class="px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
               :disabled="actionLoading"
               @click="acceptSuggestion"
             >
@@ -286,37 +288,37 @@
       :close-on-backdrop="!bulkActionLoading"
       @close="closeBulkRejectModal"
     >
-      <div class="text-white flex flex-col">
-        <div class="pb-4 border-b border-white/10">
-          <h3 class="text-xl font-semibold">
+      <div class="text-white text-xs flex flex-col">
+        <div class="pb-3 border-b border-white/10">
+          <h3 class="text-sm font-semibold">
             Bulk Reject {{ selectedIds.size }} Suggestion{{ selectedIds.size !== 1 ? 's' : '' }}
           </h3>
-          <p class="text-sm text-gray-300 mt-1">This rejection reason will be sent to each user via Discord.</p>
+          <p class="text-xs text-gray-300 mt-1">This rejection reason will be sent to each user via Discord.</p>
         </div>
-        <div class="py-4">
-          <label class="block text-xs uppercase text-gray-300 mb-2" for="bulk-reject-reason">
+        <div class="py-3">
+          <label class="block text-[10px] uppercase text-gray-300 mb-1.5" for="bulk-reject-reason">
             Rejection reason (required)
           </label>
           <textarea
             id="bulk-reject-reason"
             v-model="bulkRejectReason"
-            class="w-full rounded bg-gray-900/70 text-gray-100 p-2 text-sm border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400/60"
+            class="w-full rounded-md bg-gray-900/70 text-gray-100 px-2 py-1.5 text-xs border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-400/60"
             rows="4"
             placeholder="Share the key reason for rejection..."
             :disabled="bulkActionLoading"
           />
-          <div v-if="bulkActionError" class="text-sm text-red-300 mt-2">{{ bulkActionError }}</div>
+          <div v-if="bulkActionError" class="text-xs text-red-300 mt-2">{{ bulkActionError }}</div>
         </div>
-        <div class="pt-4 border-t border-white/10 flex items-center justify-end gap-3">
+        <div class="pt-3 border-t border-white/10 flex items-center justify-end gap-2">
           <button
-            class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+            class="px-3 py-1 text-xs border border-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50"
             :disabled="bulkActionLoading"
             @click="closeBulkRejectModal"
           >
             Cancel
           </button>
           <button
-            class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+            class="px-3 py-1 text-xs rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
             :disabled="bulkActionLoading"
             @click="confirmBulkReject"
           >
@@ -330,9 +332,9 @@
     <Transition name="slide-up">
       <div
         v-if="activeTab === 'IN_REVIEW' && selectedIds.size > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl bg-gray-900 px-5 py-3 shadow-2xl border border-gray-700"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 shadow-2xl border border-gray-700"
       >
-        <span class="text-sm text-white font-medium whitespace-nowrap">
+        <span class="text-xs text-white font-medium whitespace-nowrap">
           {{ selectedIds.size }} selected
         </span>
         <button
@@ -343,14 +345,14 @@
         </button>
         <div class="w-px h-5 bg-gray-600" />
         <button
-          class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-md text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
           :disabled="bulkActionLoading"
           @click="bulkAccept"
         >
           {{ bulkActionLoading ? 'Working...' : 'Approve' }}
         </button>
         <button
-          class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded-md text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
           :disabled="bulkActionLoading"
           @click="openBulkRejectModal"
         >

@@ -1,50 +1,53 @@
 <template>
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Scavenger Hunt</h1>
+  <div class="admin-legacy-scavenger bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h1 class="text-base font-semibold">Admin: Scavenger Hunt</h1>
+    </div>
 
-    <div class="bg-white rounded-lg shadow-md max-w-5xl mx-auto p-6 space-y-10">
+    <div class="bg-white rounded border shadow max-w-5xl mx-auto p-3 space-y-6">
       <!-- Global Settings -->
       <section>
-        <h2 class="text-2xl font-semibold mb-4">Global Settings</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Chance Percent (0–100)</label>
-            <input type="number" v-model.number="chance" class="input" min="0" max="100" />
+        <h2 class="text-xs font-semibold mb-2">Global Settings</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Chance Percent (0–100)</label>
+            <input type="number" v-model.number="chance" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Cooldown (hours)</label>
-            <input type="number" v-model.number="cooldown" class="input" min="0" />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Cooldown (hours)</label>
+            <input type="number" v-model.number="cooldown" class="border rounded-md px-2 py-1.5 text-sm" min="0" />
           </div>
         </div>
-        <div class="mt-4">
-          <button class="btn-primary" @click="saveConfig" :disabled="savingCfg">{{ savingCfg ? 'Saving…' : 'Save Settings' }}</button>
+        <div class="mt-3">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="saveConfig" :disabled="savingCfg">{{ savingCfg ? 'Saving…' : 'Save Settings' }}</button>
         </div>
       </section>
 
       <!-- Exclusive cToon Pool -->
       <section>
-        <h2 class="text-2xl font-semibold mb-4">Exclusive cToon Pool</h2>
+        <h2 class="text-xs font-semibold mb-2">Exclusive cToon Pool</h2>
         <div class="mb-3 relative max-w-xl">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Add cToon</label>
+          <label class="block text-xs font-medium mb-1">Add cToon</label>
           <input
             type="text"
             v-model="search"
             @focus="showDropdown = true"
             @input="onSearchInput"
             placeholder="Type to search…"
-            class="input"
+            class="border rounded-md px-2 py-1.5 text-sm w-full"
           />
           <ul v-if="showDropdown && matches.length" class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
             <li
               v-for="c in matches"
               :key="c.id"
               @mousedown.prevent="addPool(c)"
-              class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+              class="flex items-center px-2 py-1.5 cursor-pointer hover:bg-indigo-50"
             >
-              <img :src="c.assetPath" alt="" class="w-6 h-6 rounded mr-2 object-cover border" />
-              <div>
-                <p class="text-sm">{{ c.name }}</p>
-                <p class="text-xs text-gray-500">{{ c.rarity }}</p>
+              <img :src="c.assetPath" alt="" class="w-6 h-6 rounded mr-2 object-cover border flex-shrink-0" />
+              <div class="min-w-0">
+                <p class="text-xs truncate">{{ c.name }}</p>
+                <p class="text-[10px] text-gray-500">{{ c.rarity }}</p>
               </div>
             </li>
           </ul>
@@ -54,7 +57,7 @@
           <span
             v-for="row in pool"
             :key="row.id"
-            class="inline-flex items-center bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm"
+            class="inline-flex items-center bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs"
           >
             <img :src="row.ctoon.assetPath" alt="" class="w-5 h-5 rounded mr-2 object-cover border" />
             {{ row.ctoon.name }}
@@ -65,115 +68,116 @@
 
       <!-- Stories (basic create + list) -->
       <section>
-        <h2 class="text-2xl font-semibold mb-4">Stories</h2>
+        <h2 class="text-xs font-semibold mb-2">Stories</h2>
 
-        <details class="mb-4">
-          <summary class="cursor-pointer font-semibold">Add Story</summary>
-          <div class="mt-3 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Title</label>
-                <input v-model="form.title" class="input" />
+        <details class="mb-3">
+          <summary class="cursor-pointer text-xs font-semibold">Add Story</summary>
+          <div class="mt-3 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Title</label>
+                <input v-model="form.title" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
               <div class="flex items-end">
-                <label class="inline-flex items-center gap-2 text-sm ml-1">
+                <label class="inline-flex items-center gap-2 text-xs ml-1">
                   <input type="checkbox" v-model="form.isActive" /> Active
                 </label>
               </div>
             </div>
 
             <!-- Fixed branching: '', A, B, AA, AB, BA, BB -->
-            <div class="p-3 border rounded">
-              <h3 class="font-semibold mb-3">Steps</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div v-for="p in requiredPaths" :key="p" class="border rounded p-3">
-                  <div class="text-sm font-semibold mb-1">Path: <span class="font-mono">{{ p || '(root)' }}</span></div>
-                  <div v-if="trailFor(p).length" class="mb-2 text-xs text-gray-600 flex flex-wrap gap-1">
+            <div class="p-2 border rounded-md">
+              <h3 class="text-xs font-semibold mb-2">Steps</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div v-for="p in requiredPaths" :key="p" class="border rounded-md p-2">
+                  <div class="text-xs font-semibold mb-1">Path: <span class="font-mono">{{ p || '(root)' }}</span></div>
+                  <div v-if="trailFor(p).length" class="mb-2 text-[10px] text-gray-600 flex flex-wrap gap-1">
                     <span v-for="(t,i) in trailFor(p)" :key="i" class="inline-flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
                       <span class="font-mono">{{ t.choice }}</span>
                       <span>— {{ t.label || '(label?)' }}</span>
                     </span>
                   </div>
-                  <label class="block text-sm">Description</label>
-                  <textarea v-model="formSteps[p].description" class="input" rows="2"></textarea>
+                  <label class="block text-xs font-medium">Description</label>
+                  <textarea v-model="formSteps[p].description" class="border rounded-md px-2 py-1.5 text-sm w-full" rows="2"></textarea>
                   <!-- Step image above options -->
                   <div class="mt-2">
-                    <label class="block text-sm">Step Image</label>
+                    <label class="block text-xs font-medium">Step Image</label>
                     <div class="mt-1 flex items-center gap-2">
                       <input type="file" accept="image/*" @change="e => onFormFileChange(p, e)" class="text-xs" />
-                      <button class="px-2 py-1 text-xs rounded border" @click="uploadFormStepImage(p)" :disabled="!formFiles[p] || uploading[p]">{{ uploading[p] ? 'Uploading…' : 'Upload' }}</button>
+                      <button class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50" @click="uploadFormStepImage(p)" :disabled="!formFiles[p] || uploading[p]">{{ uploading[p] ? 'Uploading…' : 'Upload' }}</button>
                     </div>
                     <div v-if="formSteps[p].imagePath" class="mt-2 flex items-center gap-3">
                       <img :src="formSteps[p].imagePath" alt="" class="w-24 h-24 object-cover rounded border" />
-                      <button class="px-2 py-1 text-xs rounded border" @click="removeFormStepImage(p)">Remove</button>
+                      <button class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50" @click="removeFormStepImage(p)">Remove</button>
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <label class="block text-sm">Option A</label>
-                      <input v-model="formSteps[p].optionA" class="input" />
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                    <div class="flex flex-col gap-1">
+                      <label class="text-xs font-medium">Option A</label>
+                      <input v-model="formSteps[p].optionA" class="border rounded-md px-2 py-1.5 text-sm" />
                     </div>
-                    <div>
-                      <label class="block text-sm">Option B</label>
-                      <input v-model="formSteps[p].optionB" class="input" />
+                    <div class="flex flex-col gap-1">
+                      <label class="text-xs font-medium">Option B</label>
+                      <input v-model="formSteps[p].optionB" class="border rounded-md px-2 py-1.5 text-sm" />
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="p-3 border rounded">
-              <h3 class="font-semibold mb-2">Outcomes</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div v-for="p in terminalPaths" :key="p" class="border rounded p-3 space-y-2">
+            <div class="p-2 border rounded-md">
+              <h3 class="text-xs font-semibold mb-2">Outcomes</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div v-for="p in terminalPaths" :key="p" class="border rounded-md p-2 space-y-2">
                   <!-- breadcrumb of choices leading to this outcome -->
-                  <div class="text-xs text-gray-600 flex flex-wrap gap-1">
+                  <div class="text-[10px] text-gray-600 flex flex-wrap gap-1">
                     <span v-for="(t,i) in outcomeTrailFor(p)" :key="i" class="inline-flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
                       <span class="font-mono">{{ t.choice }}</span>
                       <span>— {{ t.label || '(label?)' }}</span>
                     </span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="w-14 font-mono">{{ p }}</span>
-                    <select v-model="formOutcome[p].type" class="border rounded px-2 py-1">
+                    <span class="w-14 font-mono text-xs">{{ p }}</span>
+                    <select v-model="formOutcome[p].type" class="border rounded-md px-2 py-1 text-xs">
                       <option value="NOTHING">Nothing</option>
                       <option value="POINTS">Points</option>
                       <option value="EXCLUSIVE_CTOON">Exclusive cToon</option>
                     </select>
-                    <input v-if="formOutcome[p].type==='POINTS'" type="number" class="border rounded px-2 py-1 w-24" v-model.number="formOutcome[p].points" placeholder="pts" />
+                    <input v-if="formOutcome[p].type==='POINTS'" type="number" class="border rounded-md px-2 py-1 text-xs w-24" v-model.number="formOutcome[p].points" placeholder="pts" />
                   </div>
-                  <div>
-                    <label class="block text-xs text-gray-600">Outcome text (optional)</label>
-                    <input class="input" v-model="formOutcome[p].text" placeholder="Shown with the final result" />
+                  <div class="flex flex-col gap-1">
+                    <label class="text-[10px] text-gray-600">Outcome text (optional)</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="formOutcome[p].text" placeholder="Shown with the final result" />
                   </div>
                 </div>
               </div>
             </div>
 
             <div>
-              <button class="btn-primary" @click="createStory" :disabled="savingStory">{{ savingStory ? 'Saving…' : 'Create Story' }}</button>
+              <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="createStory" :disabled="savingStory">{{ savingStory ? 'Saving…' : 'Create Story' }}</button>
             </div>
           </div>
         </details>
 
         <div>
-          <h3 class="text-lg font-semibold mb-2">Existing Stories</h3>
-          <div v-if="!stories.length" class="text-sm text-gray-500">No stories yet.</div>
-          <ul v-else class="divide-y border rounded">
-            <li v-for="s in stories" :key="s.id" class="p-3 flex items-center justify-between">
+          <h3 class="text-xs font-semibold mb-2">Existing Stories</h3>
+          <div v-if="!stories.length" class="text-xs text-gray-500">No stories yet.</div>
+          <ul v-else class="divide-y border rounded-md">
+            <li v-for="s in stories" :key="s.id" class="p-2 flex items-center justify-between">
               <div>
-                <div class="font-medium">{{ s.title }}</div>
-                <div class="text-xs text-gray-500">{{ s.isActive ? 'Active' : 'Inactive' }}</div>
+                <div class="font-medium text-xs">{{ s.title }}</div>
+                <div class="text-[10px] text-gray-500">{{ s.isActive ? 'Active' : 'Inactive' }}</div>
               </div>
               <div class="flex items-center gap-2">
-                <button class="px-3 py-1 rounded border" @click="openEdit(s)">Edit</button>
-                <button class="px-3 py-1 rounded border" @click="removeStory(s)">Delete</button>
+                <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="openEdit(s)">Edit</button>
+                <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeStory(s)">Delete</button>
               </div>
             </li>
           </ul>
         </div>
       </section>
+    </div>
     </div>
 
     <!-- Toast -->
@@ -185,95 +189,98 @@
     </div>
 
     <!-- Edit Story Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" @click.self="closeEdit">
-      <div class="bg-white rounded-lg shadow-lg w-full max-w-5xl p-5 overflow-y-auto max-h-[90svh]">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-xl font-semibold">Edit Story</h3>
-          <button class="text-gray-600 hover:text-gray-900" @click="closeEdit">✕</button>
+    <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+      <div class="absolute inset-0 bg-black/50" @click="closeEdit"></div>
+      <div class="relative bg-white w-full max-w-5xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h3 class="text-sm font-semibold">Edit Story</h3>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEdit">✕</button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Title</label>
-            <input v-model="editForm.title" class="input" />
+        <div class="overflow-y-auto flex-1 px-4 py-3 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Title</label>
+            <input v-model="editForm.title" class="border rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div class="flex items-end">
-            <label class="inline-flex items-center gap-2 text-sm ml-1">
+            <label class="inline-flex items-center gap-2 text-xs ml-1">
               <input type="checkbox" v-model="editForm.isActive" /> Active
             </label>
           </div>
         </div>
 
-        <div class="p-3 border rounded mb-4">
-          <h4 class="font-semibold mb-3">Steps</h4>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div v-for="p in requiredPaths" :key="p" class="border rounded p-3">
-              <div class="text-sm font-semibold mb-1">Path: <span class="font-mono">{{ p || '(root)' }}</span></div>
-              <div v-if="editTrailFor(p).length" class="mb-2 text-xs text-gray-600 flex flex-wrap gap-1">
+        <div class="p-2 border rounded-md">
+          <h4 class="text-xs font-semibold mb-2">Steps</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-for="p in requiredPaths" :key="p" class="border rounded-md p-2">
+              <div class="text-xs font-semibold mb-1">Path: <span class="font-mono">{{ p || '(root)' }}</span></div>
+              <div v-if="editTrailFor(p).length" class="mb-2 text-[10px] text-gray-600 flex flex-wrap gap-1">
                 <span v-for="(t,i) in editTrailFor(p)" :key="i" class="inline-flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
                   <span class="font-mono">{{ t.choice }}</span>
                   <span>— {{ t.label || '(label?)' }}</span>
                 </span>
               </div>
-              <label class="block text-sm">Description</label>
-              <textarea v-model="editSteps[p].description" class="input" rows="2"></textarea>
+              <label class="block text-xs font-medium">Description</label>
+              <textarea v-model="editSteps[p].description" class="border rounded-md px-2 py-1.5 text-sm w-full" rows="2"></textarea>
               <!-- Step image above options (edit) -->
               <div class="mt-2">
-                <label class="block text-sm">Step Image</label>
+                <label class="block text-xs font-medium">Step Image</label>
                 <div class="mt-1 flex items-center gap-2">
                   <input type="file" accept="image/*" @change="e => onEditFileChange(p, e)" class="text-xs" />
-                  <button class="px-2 py-1 text-xs rounded border" @click="uploadEditStepImage(p)" :disabled="!editFiles[p] || uploading[p]">{{ uploading[p] ? 'Uploading…' : 'Upload' }}</button>
+                  <button class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50" @click="uploadEditStepImage(p)" :disabled="!editFiles[p] || uploading[p]">{{ uploading[p] ? 'Uploading…' : 'Upload' }}</button>
                 </div>
                 <div v-if="editSteps[p].imagePath" class="mt-2 flex items-center gap-3">
                   <img :src="editSteps[p].imagePath" alt="" class="w-24 h-24 object-cover rounded border" />
-                  <button class="px-2 py-1 text-xs rounded border" @click="removeEditStepImage(p)" :disabled="uploading[p]">Remove</button>
+                  <button class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50" @click="removeEditStepImage(p)" :disabled="uploading[p]">Remove</button>
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <div>
-                  <label class="block text-sm">Option A</label>
-                  <input v-model="editSteps[p].optionA" class="input" />
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Option A</label>
+                  <input v-model="editSteps[p].optionA" class="border rounded-md px-2 py-1.5 text-sm" />
                 </div>
-                <div>
-                  <label class="block text-sm">Option B</label>
-                  <input v-model="editSteps[p].optionB" class="input" />
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Option B</label>
+                  <input v-model="editSteps[p].optionB" class="border rounded-md px-2 py-1.5 text-sm" />
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="p-3 border rounded mb-4">
-          <h4 class="font-semibold mb-2">Outcomes</h4>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="p in terminalPaths" :key="p" class="border rounded p-3 space-y-2">
-              <div class="text-xs text-gray-600 flex flex-wrap gap-1">
+        <div class="p-2 border rounded-md">
+          <h4 class="text-xs font-semibold mb-2">Outcomes</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div v-for="p in terminalPaths" :key="p" class="border rounded-md p-2 space-y-2">
+              <div class="text-[10px] text-gray-600 flex flex-wrap gap-1">
                 <span v-for="(t,i) in editOutcomeTrailFor(p)" :key="i" class="inline-flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
                   <span class="font-mono">{{ t.choice }}</span>
                   <span>— {{ t.label || '(label?)' }}</span>
                 </span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="w-14 font-mono">{{ p }}</span>
-                <select v-model="editOutcome[p].type" class="border rounded px-2 py-1">
+                <span class="w-14 font-mono text-xs">{{ p }}</span>
+                <select v-model="editOutcome[p].type" class="border rounded-md px-2 py-1 text-xs">
                   <option value="NOTHING">Nothing</option>
                   <option value="POINTS">Points</option>
                   <option value="EXCLUSIVE_CTOON">Exclusive cToon</option>
                 </select>
-                <input v-if="editOutcome[p].type==='POINTS'" type="number" class="border rounded px-2 py-1 w-24" v-model.number="editOutcome[p].points" placeholder="pts" />
+                <input v-if="editOutcome[p].type==='POINTS'" type="number" class="border rounded-md px-2 py-1 text-xs w-24" v-model.number="editOutcome[p].points" placeholder="pts" />
               </div>
-              <div>
-                <label class="block text-xs text-gray-600">Outcome text (optional)</label>
-                <input class="input" v-model="editOutcome[p].text" placeholder="Shown with the final result" />
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] text-gray-600">Outcome text (optional)</label>
+                <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editOutcome[p].text" placeholder="Shown with the final result" />
               </div>
             </div>
           </div>
         </div>
+        </div>
 
-        <div class="flex justify-end gap-2">
-          <button class="px-3 py-2 rounded border" @click="closeEdit">Cancel</button>
-          <button class="btn-primary" :disabled="savingEdit" @click="saveEdit">{{ savingEdit ? 'Saving…' : 'Save Changes' }}</button>
+        <div class="flex justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeEdit">Cancel</button>
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" :disabled="savingEdit" @click="saveEdit">{{ savingEdit ? 'Saving…' : 'Save Changes' }}</button>
         </div>
       </div>
     </div>

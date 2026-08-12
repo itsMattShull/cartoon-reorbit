@@ -1,17 +1,18 @@
 <!-- /pages/admin/addHolidayEvent.vue -->
 <template>
 
-  <div class="p-8 max-w-6xl mx-auto space-y-14 ">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
     <!-- Back & Title -->
-    <div class="flex items-center gap-4">
-      <NuxtLink to="/newsite/admin/holidayEvents" class="text-blue-700 hover:underline focus-visible:outline-blue-700">
+    <div class="flex items-center gap-2 mb-3">
+      <NuxtLink to="/newsite/admin/holidayEvents" class="text-xs text-blue-700 hover:underline focus-visible:outline-blue-700">
         ← Back to Holiday Events
       </NuxtLink>
-      <h1 class="text-3xl font-semibold tracking-tight">Create Holiday Event</h1>
+      <h1 class="text-base font-semibold">Create Holiday Event</h1>
     </div>
 
     <!-- Intro -->
-    <section class="prose prose-sm max-w-none text-gray-700">
+    <section class="text-xs text-gray-700 mb-3">
       <p>
         Define the event window, pick the cToons that act as <strong>Holiday Items</strong>, then build the
         <strong>Holiday Pool</strong> with per-cToon redemption chances that total <strong>100&nbsp;%</strong>.
@@ -20,40 +21,40 @@
     </section>
 
     <!-- FORM -->
-    <form @submit.prevent="submit" class="space-y-12 bg-white shadow-lg rounded-xl p-8 border border-gray-200">
+    <form @submit.prevent="submit" class="space-y-4 bg-white rounded border p-3">
       <!-- 1) BASIC INFO -->
-      <section class="grid lg:grid-cols-2 gap-6">
-        <div class="flex flex-col gap-1 lg:col-span-2">
-          <label for="ev-name" class="text-sm font-medium">Event name <span class="text-red-500">*</span></label>
+      <section class="grid sm:grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1 sm:col-span-2">
+          <label for="ev-name" class="text-xs font-medium">Event name <span class="text-red-500">*</span></label>
           <input id="ev-name" v-model.trim="name" type="text" placeholder="e.g. Winter Fest 2025"
-                 class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600" required />
+                 class="border rounded-md px-2 py-1.5 text-sm" required />
         </div>
 
         <div class="flex flex-col gap-1">
-          <label for="ev-start" class="text-sm font-medium">Starts (CST date/time) <span class="text-red-500">*</span></label>
+          <label for="ev-start" class="text-xs font-medium">Starts (CST date/time) <span class="text-red-500">*</span></label>
           <input id="ev-start" v-model="startsAt" type="datetime-local"
-                 class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600" required />
+                 class="border rounded-md px-2 py-1.5 text-sm" required />
         </div>
 
         <div class="flex flex-col gap-1">
-          <label for="ev-end" class="text-sm font-medium">Ends (CST date/time) <span class="text-red-500">*</span></label>
+          <label for="ev-end" class="text-xs font-medium">Ends (CST date/time) <span class="text-red-500">*</span></label>
           <input id="ev-end" v-model="endsAt" type="datetime-local"
-                 class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600" required />
+                 class="border rounded-md px-2 py-1.5 text-sm" required />
         </div>
 
-        <div class="flex flex-col gap-1 lg:col-span-2">
-          <label for="ev-minreveal" class="text-sm font-medium">Minimum Reveal Date (optional)</label>
+        <div class="flex flex-col gap-1 sm:col-span-2">
+          <label for="ev-minreveal" class="text-xs font-medium">Minimum Reveal Date (optional)</label>
           <input id="ev-minreveal" v-model="minRevealAt" type="datetime-local"
-                 class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600" />
-          <p class="text-xs text-gray-500 ml-1">Holiday Items cannot reveal into pool results before this time. CST date/time.</p>
+                 class="border rounded-md px-2 py-1.5 text-sm" />
+          <p class="text-[10px] text-gray-500">Holiday Items cannot reveal into pool results before this time. CST date/time.</p>
         </div>
       </section>
 
       <!-- 2) HOLIDAY ITEMS -->
-      <section class="space-y-4">
+      <section class="space-y-2">
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold">Holiday Items</h2>
-          <span class="text-sm text-gray-600">Selected: {{ itemIds.length }}</span>
+          <h2 class="text-xs font-semibold">Holiday Items</h2>
+          <span class="text-[11px] text-gray-600">Selected: {{ itemIds.length }}</span>
         </div>
 
         <!-- Search + dropdown -->
@@ -63,7 +64,7 @@
             v-model="itemSearch"
             type="text"
             placeholder="Search cToons to use as Holiday Items…"
-            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            class="w-full border rounded-md px-2 py-1.5 text-sm"
             @focus="itemsOpen = true"
             @keydown.down.prevent="itemsHighlightNext"
             @keydown.up.prevent="itemsHighlightPrev"
@@ -77,48 +78,48 @@
               v-for="(s, idx) in itemSuggestions"
               :key="s.id"
               @mousedown.prevent="toggleItem(s)"
-              :class="['flex items-center gap-3 px-3 py-2 cursor-pointer', idx === itemsHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
+              :class="['flex items-center gap-2 px-2 py-1.5 cursor-pointer', idx === itemsHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
             >
-              <img v-if="s.assetPath" :src="s.assetPath" class="w-8 h-8 object-cover rounded border border-gray-300" />
-              <div class="flex-1 truncate">
-                <p class="truncate font-medium flex items-center gap-2">
+              <img v-if="s.assetPath" :src="s.assetPath" class="w-7 h-7 object-cover rounded border flex-shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium flex items-center gap-1">
                   <span class="truncate">{{ s.name }}</span>
                   <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
                     {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
                   </span>
                 </p>
-                <p class="text-xs text-gray-500">{{ s.rarity }}</p>
+                <p class="text-[10px] text-gray-500">{{ s.rarity }}</p>
               </div>
             </li>
           </ul>
         </div>
 
         <!-- Selected list -->
-        <div v-if="itemIds.length" class="rounded-md border border-gray-200 divide-y">
-          <div v-for="id in itemIds" :key="id" class="flex items-center gap-3 px-4 py-2">
-            <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-10 h-10 object-cover rounded border border-gray-300" />
-            <div class="flex-1 truncate">
-              <p class="truncate font-medium flex items-center gap-2">
+        <div v-if="itemIds.length" class="rounded-md border divide-y">
+          <div v-for="id in itemIds" :key="id" class="flex items-center gap-2 px-2 py-1.5">
+            <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-8 h-8 object-cover rounded border flex-shrink-0" />
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-medium flex items-center gap-1">
                 <span class="truncate">{{ lookup[id]?.name }}</span>
                 <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
               </p>
-              <p class="text-xs text-gray-500">{{ lookup[id]?.rarity }}</p>
+              <p class="text-[10px] text-gray-500">{{ lookup[id]?.rarity }}</p>
             </div>
-            <button type="button" @click="toggleItem(lookup[id])" class="text-red-700 hover:underline text-sm focus-visible:outline-red-700">
+            <button type="button" @click="toggleItem(lookup[id])" class="text-red-700 hover:underline text-[11px] focus-visible:outline-red-700">
               Remove
             </button>
           </div>
         </div>
-        <p v-else class="text-sm text-gray-500">No Holiday Items yet.</p>
+        <p v-else class="text-[11px] text-gray-500">No Holiday Items yet.</p>
       </section>
 
       <!-- 3) HOLIDAY POOL -->
-      <section class="space-y-4">
+      <section class="space-y-2">
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold">Holiday Pool</h2>
-          <div class="flex items-center gap-3">
-            <span class="text-sm">Total: <strong :class="poolTotal === 100 ? 'text-green-700' : 'text-red-700'">{{ poolTotal }}</strong>%</span>
-            <button type="button" class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          <h2 class="text-xs font-semibold">Holiday Pool</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px]">Total: <strong :class="poolTotal === 100 ? 'text-green-700' : 'text-red-700'">{{ poolTotal }}</strong>%</span>
+            <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
                     @click="splitEvenly" :disabled="!poolIds.length">
               Split evenly
             </button>
@@ -126,14 +127,14 @@
         </div>
 
         <!-- Set-to-pool controls -->
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
           <div class="relative w-full sm:max-w-xs cto-autocomplete">
             <input
               ref="setSearchInput"
               v-model="setSearch"
               type="text"
               placeholder="Type Set name…"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+              class="w-full border rounded-md px-2 py-1.5 text-sm"
               @focus="setsOpen = true"
               @keydown.down.prevent="setsHighlightNext"
               @keydown.up.prevent="setsHighlightPrev"
@@ -147,7 +148,7 @@
                 v-for="(s, idx) in setSuggestions"
                 :key="s"
                 @mousedown.prevent="chooseSet(s)"
-                :class="['px-3 py-2 cursor-pointer truncate', idx === setsHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
+                :class="['px-2 py-1.5 cursor-pointer truncate', idx === setsHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
               >
                 {{ s }}
               </li>
@@ -155,14 +156,14 @@
           </div>
           <button
             type="button"
-            class="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
             @click="addSetToPool"
             :disabled="!canAddSet"
             :title="!canAddSet ? 'Pick a Set (3+ chars)' : 'Add all cToons from Set to Holiday Pool'"
           >
             Add Set to Pool
           </button>
-          <p class="text-xs text-gray-500 sm:ml-1">Adds only cToons with remaining supply.</p>
+          <p class="text-[10px] text-gray-500">Adds only cToons with remaining supply.</p>
         </div>
 
         <!-- Search + dropdown -->
@@ -172,7 +173,7 @@
             v-model="poolSearch"
             type="text"
             placeholder="Search cToons to add to the Holiday Pool…"
-            class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+            class="w-full border rounded-md px-2 py-1.5 text-sm"
             @focus="poolOpen = true"
             @keydown.down.prevent="poolHighlightNext"
             @keydown.up.prevent="poolHighlightPrev"
@@ -186,44 +187,44 @@
               v-for="(s, idx) in poolSuggestions"
               :key="s.id"
               @mousedown.prevent="togglePool(s)"
-              :class="['flex items-center gap-3 px-3 py-2 cursor-pointer', idx === poolHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
+              :class="['flex items-center gap-2 px-2 py-1.5 cursor-pointer', idx === poolHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50']"
             >
-              <img v-if="s.assetPath" :src="s.assetPath" class="w-8 h-8 object-cover rounded border border-gray-300" />
-              <div class="flex-1 truncate">
-                <p class="truncate font-medium flex items-center gap-2">
+              <img v-if="s.assetPath" :src="s.assetPath" class="w-7 h-7 object-cover rounded border flex-shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium flex items-center gap-1">
                   <span class="truncate">{{ s.name }}</span>
                   <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
                     {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
                   </span>
                 </p>
-                <p class="text-xs text-gray-500">{{ s.rarity }}</p>
+                <p class="text-[10px] text-gray-500">{{ s.rarity }}</p>
               </div>
             </li>
           </ul>
         </div>
 
         <!-- Selected pool with weights -->
-        <div v-if="poolIds.length" class="rounded-md border border-gray-200 divide-y">
-          <div v-for="id in poolIds" :key="id" class="flex items-center gap-3 px-4 py-2">
-            <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-10 h-10 object-cover rounded border border-gray-300" />
-            <div class="flex-1 truncate">
-              <p class="truncate font-medium flex items-center gap-2">
+        <div v-if="poolIds.length" class="rounded-md border divide-y">
+          <div v-for="id in poolIds" :key="id" class="flex items-center gap-2 px-2 py-1.5">
+            <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath" class="w-8 h-8 object-cover rounded border flex-shrink-0" />
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-medium flex items-center gap-1">
                 <span class="truncate">{{ lookup[id]?.name }}</span>
                 <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
               </p>
             </div>
             <div class="flex items-center gap-1">
               <input v-model.number="poolWeights[id]" type="number" min="0" max="100"
-                     class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                     class="w-16 border rounded px-1 py-0.5 text-xs"
                      :title="'Chance for ' + (lookup[id]?.name || '') + ' (%)'" />
-              <span class="text-xs text-gray-500">%</span>
+              <span class="text-[10px] text-gray-500">%</span>
             </div>
-            <button type="button" @click="togglePool(lookup[id])" class="text-red-700 hover:underline text-sm focus-visible:outline-red-700">
+            <button type="button" @click="togglePool(lookup[id])" class="text-red-700 hover:underline text-[11px] focus-visible:outline-red-700">
               Remove
             </button>
           </div>
         </div>
-        <p v-else class="text-sm text-gray-500">No pool entries yet.</p>
+        <p v-else class="text-[11px] text-gray-500">No pool entries yet.</p>
       </section>
 
       <!-- 4) SUBMIT -->
@@ -232,14 +233,13 @@
           type="submit"
           :disabled="!formValid"
           :title="!formValid ? invalidTooltip : ''"
-          class="inline-flex items-center gap-2 rounded-md px-6 py-2.5 font-semibold transition
-                 text-white disabled:cursor-not-allowed disabled:bg-gray-400
-                 bg-blue-700 hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-blue-700"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md text-white disabled:cursor-not-allowed disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700"
         >
           Create Holiday Event
         </button>
       </div>
     </form>
+    </div>
   </div>
 </template>
 

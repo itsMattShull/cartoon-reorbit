@@ -1,24 +1,25 @@
 <template>
 
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Game Configuration</h1>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <h1 class="text-base font-semibold mb-3">Admin: Game Configuration</h1>
 
-    <div class="bg-white rounded-lg shadow-md max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow border">
       <!-- Tabs -->
       <div
         ref="tabsScrollEl"
-        class="border-b px-4 pt-4 overflow-x-auto no-scrollbar"
+        class="border-b px-2 pt-2 overflow-x-auto no-scrollbar"
         role="tablist"
         aria-label="Game configuration sections"
         @wheel="onTabsWheel"
       >
-        <div class="flex gap-2 sm:gap-4 min-w-max">
+        <div class="flex gap-1 min-w-max">
           <button
             v-for="t in tabs"
             :key="t.key"
-            class="px-3 sm:px-4 py-2 text-sm font-medium rounded-t-md border-b-2"
+            class="px-2 py-1.5 text-xs font-medium rounded-t-md border-b-2"
             :class="activeTab === t.key
-              ? 'border-indigo-600 text-indigo-700'
+              ? 'border-blue-600 text-blue-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'"
             role="tab"
             :aria-selected="activeTab === t.key"
@@ -30,30 +31,30 @@
       </div>
 
       <!-- Panels -->
-      <div class="p-6 space-y-8">
+      <div class="p-3 space-y-6">
         <!-- Global -->
         <section v-if="activeTab === 'Global'" role="tabpanel" aria-label="Global Settings">
-          <h2 class="text-2xl font-semibold mb-4">Global Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Global Settings</h2>
           <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700">Daily Point Cap</label>
-            <input type="number" v-model.number="globalDailyPointLimit" class="input" />
+            <label class="block text-xs font-medium text-gray-700">Daily Point Cap</label>
+            <input type="number" v-model.number="globalDailyPointLimit" class="border rounded-md px-2 py-1.5 text-sm w-full" />
           </div>
           <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700">Head-to-Head Daily Points Cap (TKO + gToons Clash + Ed, Edd n Eddy RPS)</label>
-            <input type="number" v-model.number="globalTkoDailyPointLimit" class="input" />
+            <label class="block text-xs font-medium text-gray-700">Head-to-Head Daily Points Cap (TKO + gToons Clash + Ed, Edd n Eddy RPS)</label>
+            <input type="number" v-model.number="globalTkoDailyPointLimit" class="border rounded-md px-2 py-1.5 text-sm w-full" />
           </div>
-          <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="btn-primary">
+          <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingGlobal">Save Global Settings</span>
             <span v-else>Saving…</span>
           </button>
 
           <!-- Game Tile Images -->
-          <div class="mt-8 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Game Tile Images</h3>
+          <div class="mt-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Game Tile Images</h3>
             <p class="text-xs text-gray-500 mb-4">Upload an image for each game tile on the Games page. Images replace the colored background.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div v-for="tile in gameTileSlots" :key="tile.slot" class="border rounded p-3 space-y-2">
-                <h4 class="text-sm font-semibold text-gray-700">{{ tile.label }}</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div v-for="tile in gameTileSlots" :key="tile.slot" class="bg-white border rounded-md p-2 space-y-2">
+                <h4 class="text-xs font-semibold text-gray-700">{{ tile.label }}</h4>
                 <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center">
                   <img
                     v-if="gameTileImages[tile.slot]"
@@ -61,7 +62,7 @@
                     :alt="tile.label"
                     class="w-full h-full object-cover"
                   />
-                  <span v-else class="text-gray-400 text-xs">No image</span>
+                  <span v-else class="text-gray-500 text-xs">No image</span>
                 </div>
                 <input
                   type="file"
@@ -71,7 +72,7 @@
                 />
                 <div class="flex items-center gap-2">
                   <button
-                    class="btn-primary text-sm py-1 px-3"
+                    class="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                     @click="uploadGameTile(tile.slot)"
                     :disabled="!gameTileFiles[tile.slot] || uploadingGameTile[tile.slot]"
                   >
@@ -81,7 +82,7 @@
                   <button
                     v-if="gameTileImages[tile.slot]"
                     type="button"
-                    class="px-3 py-1 text-sm rounded border"
+                    class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
                     @click="removeGameTile(tile.slot)"
                   >Remove</button>
                 </div>
@@ -92,126 +93,126 @@
 
         <!-- Winball -->
         <section v-if="activeTab === 'Winball'" role="tabpanel" aria-label="Winball Settings">
-          <h2 class="text-2xl font-semibold mb-4">Winball Settings</h2>
-          <div class="mb-6 rounded border border-indigo-100 bg-indigo-50 p-4">
-            <p class="text-sm text-indigo-900 mb-3">
+          <h2 class="text-sm font-semibold mb-3">Winball Settings</h2>
+          <div class="mb-4 rounded border border-blue-100 bg-blue-50 p-3">
+            <p class="text-xs text-blue-900 mb-3">
               These settings are shared by the current Winball page and the new Winball page.
             </p>
             <NuxtLink
               to="/newsite/newwinball"
-              class="inline-flex items-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              class="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
             >
               Open New Winball
             </NuxtLink>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Scoring</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Scoring</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Left Cup Points</label>
-              <input type="number" v-model.number="leftCupPoints" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Left Cup Points</label>
+              <input type="number" v-model.number="leftCupPoints" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Right Cup Points</label>
-              <input type="number" v-model.number="rightCupPoints" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Right Cup Points</label>
+              <input type="number" v-model.number="rightCupPoints" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Gold Cup Points</label>
-              <input type="number" v-model.number="goldCupPoints" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Gold Cup Points</label>
+              <input type="number" v-model.number="goldCupPoints" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4 bg-gray-50">
-            <h3 class="text-lg font-semibold mb-1">Playfield Layers</h3>
+          <div class="mb-4 border rounded-lg p-3 bg-gray-50">
+            <h3 class="text-xs font-semibold mb-1">Playfield Layers</h3>
             <p class="text-xs text-gray-500 mb-4">Layer order: base color → board image → color transform with intensity → overlay color with alpha.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Base Board Color</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Base Board Color</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballColorBackboard" class="h-7 w-10 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballColorBackboard" class="border rounded-md px-2 py-1.5 text-sm flex-1" maxlength="7" />
                 </div>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Color Transform</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Color Transform</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballColorTransform" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballColorTransform" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballColorTransform" class="h-7 w-10 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballColorTransform" class="border rounded-md px-2 py-1.5 text-sm flex-1" maxlength="7" />
                 </div>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Transform Intensity</label>
-                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballColorTransformIntensity" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Transform Intensity</label>
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballColorTransformIntensity" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Color</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Overlay Color</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballBoardLayer.winballOverlayColor" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballBoardLayer.winballOverlayColor" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballBoardLayer.winballOverlayColor" class="h-7 w-10 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballBoardLayer.winballOverlayColor" class="border rounded-md px-2 py-1.5 text-sm flex-1" maxlength="7" />
                 </div>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Overlay Alpha</label>
-                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballOverlayAlpha" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Overlay Alpha</label>
+                <input type="number" min="0" max="1" step="0.01" v-model.number="winballBoardLayer.winballOverlayAlpha" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Image Width (%)</label>
-                <input type="number" min="1" max="300" step="1" v-model.number="winballBoardLayer.winballImageWidthPercent" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Image Width (%)</label>
+                <input type="number" min="1" max="300" step="1" v-model.number="winballBoardLayer.winballImageWidthPercent" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Image Horizontal Offset (%)</label>
-                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetXPercent" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Image Horizontal Offset (%)</label>
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetXPercent" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Image Vertical Offset (%)</label>
-                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetYPercent" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Image Vertical Offset (%)</label>
+                <input type="number" step="0.5" v-model.number="winballBoardLayer.winballImageOffsetYPercent" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
           </div>
 
           <!-- Physics -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Physics</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Physics</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div v-for="p in winballPhysicsFields" :key="p.key">
-                <label class="block text-sm font-medium text-gray-700 mb-1">{{ p.label }}</label>
-                <p class="text-xs text-gray-400 mb-1">{{ p.hint }}</p>
-                <input type="number" v-model.number="winballPhysics[p.key]" :step="p.step" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">{{ p.label }}</label>
+                <p class="text-xs text-gray-500 mb-1">{{ p.hint }}</p>
+                <input type="number" v-model.number="winballPhysics[p.key]" :step="p.step" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
           </div>
 
           <!-- Colors -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Component Colors</h3>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Component Colors</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div v-for="c in winballColorFields" :key="c.key">
-                <label class="block text-sm font-medium text-gray-700 mb-1">{{ c.label }}</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">{{ c.label }}</label>
                 <div class="flex items-center gap-2">
-                  <input type="color" v-model="winballColors[c.key]" class="h-9 w-14 rounded border cursor-pointer p-0.5" />
-                  <input type="text" v-model="winballColors[c.key]" class="input flex-1" maxlength="7" />
+                  <input type="color" v-model="winballColors[c.key]" class="h-7 w-10 rounded border cursor-pointer p-0.5" />
+                  <input type="text" v-model="winballColors[c.key]" class="border rounded-md px-2 py-1.5 text-sm flex-1" maxlength="7" />
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Backboard image upload -->
-          <div class="space-y-3 mb-6 border rounded-lg p-4">
-            <label class="block text-sm font-medium text-gray-700">
+          <div class="space-y-2 mb-4 bg-white border rounded-lg p-3">
+            <label class="block text-xs font-medium text-gray-700">
               Backboard Image (SVG/PNG/JPEG)
             </label>
-            <p class="text-xs text-gray-400">Best size: 360 × 500 px (portrait, matches board proportions)</p>
+            <p class="text-xs text-gray-500">Best size: 360 × 500 px (portrait, matches board proportions)</p>
             <input
               type="file"
               accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png"
               @change="onWinballBackboardFileChange"
-              class="block w-full text-sm"
+              class="block w-full text-xs"
             />
             <div class="flex items-center gap-3">
               <button
-                class="btn-primary"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                 @click="uploadWinballBackboardImage"
                 :disabled="!winballBackboardFile || uploadingBackboard"
               >
@@ -221,34 +222,34 @@
               <button
                 v-if="winballBackboardImagePath"
                 type="button"
-                class="px-3 py-2 text-sm rounded border"
+                class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
                 @click="removeWinballBackboardImage"
               >Remove Image</button>
             </div>
             <div v-if="winballBackboardImagePath" class="mt-2">
               <p class="text-xs text-gray-600 break-all">Saved path: {{ winballBackboardImagePath }}</p>
-              <div class="mt-2 border rounded p-2 bg-gray-50">
+              <div class="mt-2 border rounded-md p-2 bg-gray-50">
                 <img :src="winballBackboardImagePath" alt="Backboard image preview" class="max-h-40 mx-auto" />
               </div>
             </div>
           </div>
 
           <!-- Bumper image uploads -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Bumper Images</h3>
-            <p class="text-xs text-gray-400 mb-3">Best size: 256 × 256 px (square). Image is displayed on the face of each bumper.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Bumper Images</h3>
+            <p class="text-xs text-gray-500 mb-3">Best size: 256 × 256 px (square). Image is displayed on the face of each bumper.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div v-for="(_, i) in [0, 1, 2]" :key="i" class="space-y-2">
-                <label class="block text-sm font-medium text-gray-700">Bumper {{ i + 1 }} (SVG/PNG/JPEG)</label>
+                <label class="block text-xs font-medium text-gray-700">Bumper {{ i + 1 }} (SVG/PNG/JPEG)</label>
                 <input
                   type="file"
                   accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png"
                   @change="onWinballBumperFileChange(i, $event)"
-                  class="block w-full text-sm"
+                  class="block w-full text-xs"
                 />
                 <div class="flex items-center gap-2">
                   <button
-                    class="btn-primary"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                     @click="uploadWinballBumperImage(i)"
                     :disabled="!winballBumperFiles[i] || uploadingBumper[i]"
                   >
@@ -258,7 +259,7 @@
                   <button
                     v-if="winballBumperImagePaths[i]"
                     type="button"
-                    class="px-3 py-2 text-sm rounded border"
+                    class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
                     @click="removeWinballBumperImage(i)"
                   >Remove</button>
                 </div>
@@ -271,28 +272,28 @@
           </div>
 
           <!-- Bumper Geometry -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Bumper Geometry</h3>
-            <p class="text-xs text-gray-400 mb-3">Set radius to 0 to remove a bumper. Z is the depth position on the board.</p>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Bumper Geometry</h3>
+            <p class="text-xs text-gray-500 mb-3">Set radius to 0 to remove a bumper. Z is the depth position on the board.</p>
             <div class="space-y-4">
-              <div v-for="(_, i) in [0, 1, 2]" :key="i" class="border rounded p-3">
-                <h4 class="text-sm font-semibold mb-2">Bumper {{ i + 1 }}</h4>
+              <div v-for="(_, i) in [0, 1, 2]" :key="i" class="bg-white border rounded-md p-2">
+                <h4 class="text-xs font-semibold mb-1.5">Bumper {{ i + 1 }}</h4>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].radius" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].height" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].height" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].x" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballBumperGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballBumperGeometry[i].z" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                 </div>
               </div>
@@ -300,28 +301,28 @@
           </div>
 
           <!-- Triangle Geometry -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Triangle Geometry</h3>
-            <p class="text-xs text-gray-400 mb-3">Set radius to 0 to remove a triangle. Depth controls how far the triangle protrudes from the wall.</p>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Triangle Geometry</h3>
+            <p class="text-xs text-gray-500 mb-3">Set radius to 0 to remove a triangle. Depth controls how far the triangle protrudes from the wall.</p>
             <div class="space-y-4">
-              <div v-for="(_, i) in [0, 1]" :key="i" class="border rounded p-3">
-                <h4 class="text-sm font-semibold mb-2">Triangle {{ i + 1 }}</h4>
+              <div v-for="(_, i) in [0, 1]" :key="i" class="bg-white border rounded-md p-2">
+                <h4 class="text-xs font-semibold mb-1.5">Triangle {{ i + 1 }}</h4>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].radius" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Depth</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].depth" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].depth" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].x" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballTriangleGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballTriangleGeometry[i].z" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                 </div>
               </div>
@@ -329,28 +330,28 @@
           </div>
 
           <!-- Peg Geometry -->
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Peg Geometry</h3>
-            <p class="text-xs text-gray-400 mb-3">12 small round pegs that dampen the ball on contact. Set radius to 0 to remove a peg.</p>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Peg Geometry</h3>
+            <p class="text-xs text-gray-500 mb-3">12 small round pegs that dampen the ball on contact. Set radius to 0 to remove a peg.</p>
             <div class="space-y-4">
-              <div v-for="(_, i) in Array(12).fill(0)" :key="i" class="border rounded p-3">
-                <h4 class="text-sm font-semibold mb-2">Peg {{ i + 1 }}</h4>
+              <div v-for="(_, i) in Array(12).fill(0)" :key="i" class="bg-white border rounded-md p-2">
+                <h4 class="text-xs font-semibold mb-1.5">Peg {{ i + 1 }}</h4>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Radius</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].radius" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Height</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].height" step="0.5" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">X Position</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].x" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Z Position (Depth)</label>
-                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="input" />
+                    <input type="number" v-model.number="winballPegGeometry[i].z" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                   </div>
                 </div>
               </div>
@@ -358,17 +359,17 @@
           </div>
 
           <!-- Grand Prize selection + preview (moved above schedule) -->
-          <div class="mb-8 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Grand Prize</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Grand Prize</h3>
             <div class="mb-3 relative">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+              <label class="block text-xs font-medium text-gray-700 mb-1">Grand Prize cToon</label>
               <input
                 type="text"
                 v-model="searchTerm"
                 @focus="showDropdown = true"
                 @input="onSearchInput"
                 :placeholder="grandPrizeCtoon ? grandPrizeCtoon.name : 'Type a cToon name…'"
-                class="input"
+                class="border rounded-md px-2 py-1.5 text-sm w-full"
               />
               <ul
                 v-if="showDropdown && filteredMatches.length"
@@ -378,7 +379,7 @@
                   v-for="c in filteredMatches"
                   :key="c.id"
                   @mousedown.prevent="selectCtoon(c)"
-                  class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                  class="flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50"
                 >
                   <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
                   <div>
@@ -404,29 +405,29 @@
           </div>
 
           <!-- Schedule UI -->
-          <div class="mb-6 border rounded-lg p-4">
-          <h3 class="text-lg font-semibold mb-3">Grand Prize Schedule</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+          <h3 class="text-xs font-semibold mb-2">Grand Prize Schedule</h3>
           <p class="text-sm text-gray-600 mb-2">
             All dates and times are interpreted as <strong>Central Time (US)</strong>. Default time is 8:00 PM (8:00 AM on Thursdays).
           </p>
 
           <div class="mb-4">
-            <button @click="openAddModal" class="px-3 py-2 rounded bg-indigo-600 text-white">Add schedule</button>
+            <button @click="openAddModal" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700">Add schedule</button>
           </div>
 
-          <div class="border rounded mb-6">
-            <table class="w-full text-sm">
-              <thead class="bg-gray-50">
+          <div class="border rounded-md mb-4 overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100">
                 <tr>
-                  <th class="text-left p-2">Start (Central)</th>
-                  <th class="text-left p-2">cToon</th>
-                  <th class="p-2">Actions</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Start (Central)</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">cToon</th>
+                  <th class="px-2 py-1.5">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="row in schedules" :key="row.id" class="border-t">
-                  <td class="p-2 whitespace-nowrap">{{ row.startsAtLocal }}</td>
-                  <td class="p-2">
+                  <td class="px-2 py-1.5 whitespace-nowrap">{{ row.startsAtLocal }}</td>
+                  <td class="px-2 py-1.5">
                     <div class="flex items-center gap-2">
                       <img :src="row.ctoon.assetPath" class="w-8 h-8 rounded border object-cover" alt="" />
                       <div>
@@ -435,34 +436,34 @@
                       </div>
                     </div>
                   </td>
-                  <td class="p-2">
+                  <td class="px-2 py-1.5">
                     <div class="flex justify-end gap-2">
-                      <button @click="openEditModal(row)" class="px-2 py-1 rounded border">Edit</button>
-                      <button @click="removeSchedule(row)" class="px-2 py-1 rounded border">Remove</button>
+                      <button @click="openEditModal(row)" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50">Edit</button>
+                      <button @click="removeSchedule(row)" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50">Remove</button>
                     </div>
                   </td>
                 </tr>
                 <tr v-if="!schedules.length">
-                  <td colspan="3" class="p-3 text-gray-500">No scheduled grand prizes.</td>
+                  <td colspan="3" class="px-2 py-3 text-gray-500">No scheduled grand prizes.</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <!-- Add modal -->
-          <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div class="bg-white rounded-lg w-full max-w-md p-4">
-              <h3 class="text-lg font-semibold mb-3">Schedule Grand Prize</h3>
+          <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
+            <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg p-4">
+              <h3 class="text-xs font-semibold mb-2">Schedule Grand Prize</h3>
               <!-- selector -->
               <div class="mb-4 relative">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Grand Prize cToon</label>
                 <input
                   type="text"
                   v-model="modalSearch"
                   @focus="modalShowDropdown = true"
                   @input="onModalSearchInput"
                   :placeholder="modalSelectedCtoon ? modalSelectedCtoon.name : 'Type a cToon name…'"
-                  class="input"
+                  class="border rounded-md px-2 py-1.5 text-sm w-full"
                 />
                 <ul
                   v-if="modalShowDropdown && modalFiltered.length"
@@ -472,7 +473,7 @@
                     v-for="c in modalFiltered"
                     :key="c.id"
                     @mousedown.prevent="selectModalCtoon(c)"
-                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50"
                   >
                     <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
                     <div>
@@ -485,17 +486,17 @@
               <!-- date/time -->
               <div class="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700">Date (Central)</label>
-                  <input type="date" v-model="modalDate" class="input" @change="setModalTimeFromDate" />
+                  <label class="block text-xs font-medium text-gray-700">Date (Central)</label>
+                  <input type="date" v-model="modalDate" class="border rounded-md px-2 py-1.5 text-sm w-full" @change="setModalTimeFromDate" />
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700">Time (Central)</label>
-                  <input type="time" v-model="modalTime" class="input" />
+                  <label class="block text-xs font-medium text-gray-700">Time (Central)</label>
+                  <input type="time" v-model="modalTime" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                 </div>
               </div>
               <div class="flex justify-end gap-2">
-                <button @click="closeAddModal" class="px-3 py-2 rounded border">Cancel</button>
-                <button @click="createSchedule" :disabled="savingSchedule || !modalSelectedCtoon || !modalDate || !modalTime" class="px-3 py-2 rounded bg-indigo-600 text-white">
+                <button @click="closeAddModal" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50">Cancel</button>
+                <button @click="createSchedule" :disabled="savingSchedule || !modalSelectedCtoon || !modalDate || !modalTime" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700">
                   {{ savingSchedule ? 'Saving…' : 'Add' }}
                 </button>
               </div>
@@ -503,19 +504,19 @@
           </div>
 
           <!-- Edit modal -->
-          <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div class="bg-white rounded-lg w-full max-w-md p-4">
-              <h3 class="text-lg font-semibold mb-3">Edit Grand Prize Schedule</h3>
+          <div v-if="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
+            <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg p-4">
+              <h3 class="text-xs font-semibold mb-2">Edit Grand Prize Schedule</h3>
               <!-- selector -->
               <div class="mb-4 relative">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Grand Prize cToon</label>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Grand Prize cToon</label>
                 <input
                   type="text"
                   v-model="editSearch"
                   @focus="editShowDropdown = true"
                   @input="onEditSearchInput"
                   :placeholder="editSelectedCtoon ? editSelectedCtoon.name : 'Type a cToon name…'"
-                  class="input"
+                  class="border rounded-md px-2 py-1.5 text-sm w-full"
                 />
                 <ul
                   v-if="editShowDropdown && editFiltered.length"
@@ -525,7 +526,7 @@
                     v-for="c in editFiltered"
                     :key="c.id"
                     @mousedown.prevent="selectEditCtoon(c)"
-                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                    class="flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50"
                   >
                     <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
                     <div>
@@ -538,20 +539,20 @@
               <!-- date/time -->
               <div class="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700">Date (Central)</label>
-                  <input type="date" v-model="editDate" class="input" @change="setEditTimeFromDate" />
+                  <label class="block text-xs font-medium text-gray-700">Date (Central)</label>
+                  <input type="date" v-model="editDate" class="border rounded-md px-2 py-1.5 text-sm w-full" @change="setEditTimeFromDate" />
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700">Time (Central)</label>
-                  <input type="time" v-model="editTime" class="input" />
+                  <label class="block text-xs font-medium text-gray-700">Time (Central)</label>
+                  <input type="time" v-model="editTime" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                 </div>
               </div>
               <div class="flex justify-end gap-2">
-                <button @click="closeEditModal" class="px-3 py-2 rounded border">Cancel</button>
+                <button @click="closeEditModal" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50">Cancel</button>
                 <button
                   @click="updateSchedule"
                   :disabled="savingEditSchedule || !editSelectedCtoon || !editDate || !editTime"
-                  class="px-3 py-2 rounded bg-indigo-600 text-white"
+                  class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
                 >
                   {{ savingEditSchedule ? 'Saving…' : 'Save' }}
                 </button>
@@ -561,7 +562,7 @@
 
           </div>
 
-          <button @click="saveWinballConfig" :disabled="loadingWinball" class="btn-primary">
+          <button @click="saveWinballConfig" :disabled="loadingWinball" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingWinball">Save Winball Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -569,14 +570,14 @@
 
         <!-- gToon Clash -->
         <section v-if="activeTab === 'Clash'" role="tabpanel" aria-label="gToon Clash Settings">
-          <h2 class="text-2xl font-semibold mb-4">gToon Clash Settings</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h2 class="text-sm font-semibold mb-3">gToon Clash Settings</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
-              <input type="number" v-model.number="clashPointsPerWin" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Win</label>
+              <input type="number" v-model.number="clashPointsPerWin" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
-          <button @click="saveClashConfig" :disabled="loadingClash" class="btn-primary">
+          <button @click="saveClashConfig" :disabled="loadingClash" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingClash">Save Clash Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -584,7 +585,7 @@
 
         <!-- Ed, Edd n Eddy RPS -->
         <section v-if="activeTab === 'EdRps'" role="tabpanel" aria-label="Ed, Edd n Eddy RPS Settings">
-          <h2 class="text-2xl font-semibold mb-4">Ed, Edd n Eddy RPS Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Ed, Edd n Eddy RPS Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Wins here draw from the same daily pool as TKO and gToons Clash, set on the Global
             Settings tab. Only matches played to a natural finish pay out — forfeits, quits and
@@ -592,8 +593,8 @@
             game engine on read, so a bad number here cannot break a live match.
           </p>
 
-          <div v-if="edRpsConfigError" class="mb-4 p-3 border border-red-300 bg-red-50 rounded">
-            <p class="text-sm font-semibold text-red-800">These settings could not be loaded.</p>
+          <div v-if="edRpsConfigError" class="mb-3 p-2 border border-red-200 bg-red-50 rounded-md">
+            <p class="text-xs font-semibold text-red-800">These settings could not be loaded.</p>
             <p class="text-xs text-red-700 mt-1">{{ edRpsConfigError }}</p>
             <p class="text-xs text-red-700 mt-1">
               The values below are defaults, not what is saved. If this database hasn't had the
@@ -602,37 +603,37 @@
             </p>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
-              <input type="number" v-model.number="edRpsPointsPerWin" class="input" />
-              <p class="text-xs text-gray-400 mt-1">Paid to the winner of a completed head-to-head match.</p>
+              <label class="block text-xs font-medium text-gray-700">Points Per Win</label>
+              <input type="number" v-model.number="edRpsPointsPerWin" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              <p class="text-xs text-gray-500 mt-1">Paid to the winner of a completed head-to-head match.</p>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Round Timer (seconds)</label>
-              <input type="number" v-model.number="edRpsRoundSeconds" class="input" min="5" max="60" />
-              <p class="text-xs text-gray-400 mt-1">
+              <label class="block text-xs font-medium text-gray-700">Round Timer (seconds)</label>
+              <input type="number" v-model.number="edRpsRoundSeconds" class="border rounded-md px-2 py-1.5 text-sm w-full" min="5" max="60" />
+              <p class="text-xs text-gray-500 mt-1">
                 A player who runs out of time has a hand thrown for them at random. Keep this
                 above 10 — a phone that briefly backgrounds itself would otherwise drop rounds.
               </p>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Round Wins Needed</label>
-              <input type="number" v-model.number="edRpsWinsNeeded" class="input" min="1" max="10" />
-              <p class="text-xs text-gray-400 mt-1">4 is best-of-seven. Ties replay and don't count toward either player.</p>
+              <label class="block text-xs font-medium text-gray-700">Round Wins Needed</label>
+              <input type="number" v-model.number="edRpsWinsNeeded" class="border rounded-md px-2 py-1.5 text-sm w-full" min="1" max="10" />
+              <p class="text-xs text-gray-500 mt-1">4 is best-of-seven. Ties replay and don't count toward either player.</p>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Rounds</label>
-              <input type="number" v-model.number="edRpsMaxRounds" class="input" min="1" max="21" />
-              <p class="text-xs text-gray-400 mt-1">
+              <label class="block text-xs font-medium text-gray-700">Max Rounds</label>
+              <input type="number" v-model.number="edRpsMaxRounds" class="border rounded-md px-2 py-1.5 text-sm w-full" min="1" max="21" />
+              <p class="text-xs text-gray-500 mt-1">
                 Must be at least {{ Math.max(1, (edRpsWinsNeeded || 1) * 2 - 1) }} for a
                 first-to-{{ edRpsWinsNeeded || 1 }} match, or a tied match could never finish.
               </p>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Paid Wins Per Pair Per Day</label>
-              <input type="number" v-model.number="edRpsPairDailyAwardLimit" class="input" min="0" max="50" />
-              <p class="text-xs text-gray-400 mt-1">
+              <label class="block text-xs font-medium text-gray-700">Paid Wins Per Pair Per Day</label>
+              <input type="number" v-model.number="edRpsPairDailyAwardLimit" class="border rounded-md px-2 py-1.5 text-sm w-full" min="0" max="50" />
+              <p class="text-xs text-gray-500 mt-1">
                 How many point-paying wins the same two players may trade in one daily window.
                 This is the main brake on win-trading between alts; 0 disables the limit.
               </p>
@@ -641,7 +642,7 @@
 
           <!-- Disabled while the load is broken: the inputs are showing defaults, so saving
                would overwrite whatever is actually stored. -->
-          <button @click="saveEdRpsConfig" :disabled="loadingEdRps || !!edRpsConfigError" class="btn-primary">
+          <button @click="saveEdRpsConfig" :disabled="loadingEdRps || !!edRpsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingEdRps">Save Ed, Edd n Eddy RPS Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -649,37 +650,37 @@
 
         <!-- Win Wheel -->
         <section v-if="activeTab === 'Winwheel'" role="tabpanel" aria-label="Win Wheel Settings">
-          <h2 class="text-2xl font-semibold mb-4">Win Wheel Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Win Wheel Settings</h2>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Spin Cost (pts)</label>
-              <input type="number" v-model.number="spinCostWW" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Spin Cost (pts)</label>
+              <input type="number" v-model.number="spinCostWW" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Won</label>
-              <input type="number" v-model.number="pointsWonWW" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Won</label>
+              <input type="number" v-model.number="pointsWonWW" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Daily Spins</label>
-              <input type="number" v-model.number="maxDailySpinsWW" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Daily Spins</label>
+              <input type="number" v-model.number="maxDailySpinsWW" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
           <!-- Image upload for Win Wheel -->
           <div class="space-y-3 mb-6">
-            <label class="block text-sm font-medium text-gray-700">
+            <label class="block text-xs font-medium text-gray-700">
               Wheel Image (SVG/PNG/JPEG)
             </label>
             <input
               type="file"
               accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png"
               @change="onWinWheelFileChange"
-              class="block w-full text-sm"
+              class="block w-full text-xs"
             />
             <div class="flex items-center gap-3">
               <button
-                class="btn-primary"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                 @click="uploadWinWheelImage"
                 :disabled="!winWheelFile || uploadingImage"
               >
@@ -689,14 +690,14 @@
               <button
                 v-if="winWheelImagePath"
                 type="button"
-                class="px-3 py-2 text-sm rounded border"
+                class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
                 @click="removeWinWheelImage"
               >Remove Image</button>
             </div>
 
             <div v-if="winWheelImagePath" class="mt-2">
               <p class="text-xs text-gray-600 break-all">Saved path: {{ winWheelImagePath }}</p>
-              <div class="mt-2 border rounded p-2 bg-gray-50">
+              <div class="mt-2 border rounded-md p-2 bg-gray-50">
                 <!-- preview with fallback -->
                 <img :src="previewSrc" alt="Win Wheel image preview" class="max-h-40 mx-auto" />
               </div>
@@ -706,24 +707,24 @@
           <!-- Sound upload for Win Wheel -->
           <div class="space-y-3 mb-6">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Spin Sound Behavior</label>
-              <select v-model="winWheelSoundMode" class="input">
+              <label class="block text-xs font-medium text-gray-700">Spin Sound Behavior</label>
+              <select v-model="winWheelSoundMode" class="border rounded-md px-2 py-1.5 text-sm w-full">
                 <option value="repeat">Repeat Sound</option>
                 <option value="once">Play Once</option>
               </select>
             </div>
-            <label class="block text-sm font-medium text-gray-700">
+            <label class="block text-xs font-medium text-gray-700">
               Wheel Sound (MP3/WAV/OGG)
             </label>
             <input
               type="file"
               accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,.mp3,.wav,.ogg"
               @change="onWinWheelSoundChange"
-              class="block w-full text-sm"
+              class="block w-full text-xs"
             />
             <div class="flex items-center gap-3">
               <button
-                class="btn-primary"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                 @click="uploadWinWheelSound"
                 :disabled="!winWheelSoundFile || uploadingSound"
               >
@@ -733,7 +734,7 @@
               <button
                 v-if="winWheelSoundPath"
                 type="button"
-                class="px-3 py-2 text-sm rounded border"
+                class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
                 @click="removeWinWheelSound"
               >Remove Sound</button>
             </div>
@@ -745,14 +746,14 @@
           </div>
 
           <div class="mb-6 relative">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Exclusive cToon Pool</label>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Exclusive cToon Pool</label>
             <input
               type="text"
               v-model="searchTermWW"
               @focus="showDropdownWW = true"
               @input="onSearchInputWW"
               placeholder="Type to search…"
-              class="input"
+              class="border rounded-md px-2 py-1.5 text-sm w-full"
             />
             <ul
               v-if="showDropdownWW && filteredMatchesWW.length"
@@ -762,7 +763,7 @@
                 v-for="c in filteredMatchesWW"
                 :key="c.id"
                 @mousedown.prevent="selectPoolCtoon(c)"
-                class="flex items-center px-3 py-2 cursor-pointer hover:bg-indigo-50"
+                class="flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50"
               >
                 <img :src="c.assetPath" alt="" class="w-6 h-6 rounded mr-2 object-cover border" />
                 <div>
@@ -777,14 +778,14 @@
             <span
               v-for="c in poolCtoons"
               :key="c.id"
-              class="flex items-center bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm"
+              class="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs"
             >
               {{ c.name }}
               <button class="ml-1" @click="removePoolCtoon(c)">✕</button>
             </span>
           </div>
 
-          <button @click="saveWinWheelConfig" :disabled="loadingWinWheel" class="btn-primary">
+          <button @click="saveWinWheelConfig" :disabled="loadingWinWheel" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingWinWheel">Save Win Wheel Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -792,51 +793,51 @@
 
         <!-- ReOrbit Match -->
         <section v-if="activeTab === 'ReOrbitMatch'" role="tabpanel" aria-label="ReOrbit Match Settings">
-          <h2 class="text-2xl font-semibold mb-4">ReOrbit Match Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">ReOrbit Match Settings</h2>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
-              <input type="number" v-model.number="reorbitPlaysPerPeriod" min="1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="reorbitPlaysPerPeriod" min="1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
-              <input type="number" v-model.number="reorbitPointsPerGame" min="0" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="reorbitPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Time Per Game (seconds)</label>
-              <p class="text-xs text-gray-400 mb-1">Leave empty for unlimited time</p>
-              <input type="number" v-model="reorbitTimeSecondsInput" min="30" placeholder="Unlimited" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Time Per Game (seconds)</label>
+              <p class="text-xs text-gray-500 mb-1">Leave empty for unlimited time</p>
+              <input type="number" v-model="reorbitTimeSecondsInput" min="30" placeholder="Unlimited" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Grid Size (N×N)</label>
-              <p class="text-xs text-gray-400 mb-1">Board dimensions (4–10)</p>
-              <input type="number" v-model.number="reorbitGridSize" min="4" max="10" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Grid Size (N×N)</label>
+              <p class="text-xs text-gray-500 mb-1">Board dimensions (4–10)</p>
+              <input type="number" v-model.number="reorbitGridSize" min="4" max="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Combo Cooldown (ms)</label>
-              <p class="text-xs text-gray-400 mb-1">Time allowed between matches to keep the combo growing (1000–15000). Higher = combos are easier to hold.</p>
-              <input type="number" v-model.number="reorbitComboMs" min="1000" max="15000" step="500" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Combo Cooldown (ms)</label>
+              <p class="text-xs text-gray-500 mb-1">Time allowed between matches to keep the combo growing (1000–15000). Higher = combos are easier to hold.</p>
+              <input type="number" v-model.number="reorbitComboMs" min="1000" max="15000" step="500" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Emojis</h3>
-            <p class="text-xs text-gray-400 mb-3">Min 4, max min(gridSize, 10). Leave empty to use defaults: ⭐ 🌙 🚀 🌍 ⚡ 💫 🪐 🎯</p>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Emojis</h3>
+            <p class="text-xs text-gray-500 mb-3">Min 4, max min(gridSize, 10). Leave empty to use defaults: ⭐ 🌙 🚀 🌍 ⚡ 💫 🪐 🎯</p>
             <div class="flex gap-2 mb-3">
               <input
                 type="text"
                 v-model="reorbitEmojiInput"
                 placeholder="Paste an emoji…"
-                class="input flex-1"
+                class="border rounded-md px-2 py-1.5 text-sm flex-1"
                 @keydown.enter.prevent="addReorbitEmoji"
               />
               <button
                 type="button"
                 @click="addReorbitEmoji"
-                class="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
                 :disabled="reorbitEmojis.length >= Math.min(reorbitGridSize, 10)"
               >Add</button>
             </div>
@@ -844,16 +845,16 @@
               <span
                 v-for="(e, i) in reorbitEmojis"
                 :key="i"
-                class="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-lg"
+                class="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
               >
                 {{ e }}
                 <button type="button" class="ml-1 text-sm leading-none" @click="removeReorbitEmoji(i)">✕</button>
               </span>
-              <span v-if="!reorbitEmojis.length" class="text-sm text-gray-400">Using defaults</span>
+              <span v-if="!reorbitEmojis.length" class="text-xs text-gray-500">Using defaults</span>
             </div>
           </div>
 
-          <button @click="saveReorbitConfig" :disabled="loadingReorbit" class="btn-primary">
+          <button @click="saveReorbitConfig" :disabled="loadingReorbit" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingReorbit">Save ReOrbit Match Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -861,47 +862,47 @@
 
         <!-- Tower Stack -->
         <section v-if="activeTab === 'TowerStack'" role="tabpanel" aria-label="Tower Stack Settings">
-          <h2 class="text-2xl font-semibold mb-4">Tower Stack Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Tower Stack Settings</h2>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
-              <input type="number" v-model.number="towerPlaysPerPeriod" min="1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="towerPlaysPerPeriod" min="1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
-              <input type="number" v-model.number="towerPointsPerGame" min="0" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="towerPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Base Speed</label>
-              <p class="text-xs text-gray-400 mb-1">Starting speed of the sliding block (world units/sec)</p>
-              <input type="number" v-model.number="towerBaseSpeed" min="1" step="1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Base Speed</label>
+              <p class="text-xs text-gray-500 mb-1">Starting speed of the sliding block (world units/sec)</p>
+              <input type="number" v-model.number="towerBaseSpeed" min="1" step="1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Speed Growth Per Layer</label>
-              <p class="text-xs text-gray-400 mb-1">How much faster each layer gets (0.03 = +3% per layer)</p>
-              <input type="number" v-model.number="towerSpeedGrowthPerLayer" min="0" step="0.005" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Speed Growth Per Layer</label>
+              <p class="text-xs text-gray-500 mb-1">How much faster each layer gets (0.03 = +3% per layer)</p>
+              <input type="number" v-model.number="towerSpeedGrowthPerLayer" min="0" step="0.005" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier</label>
-              <p class="text-xs text-gray-400 mb-1">Speed growth caps at this multiple of the base speed</p>
-              <input type="number" v-model.number="towerMaxSpeedMultiplier" min="1" step="0.1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Speed Multiplier</label>
+              <p class="text-xs text-gray-500 mb-1">Speed growth caps at this multiple of the base speed</p>
+              <input type="number" v-model.number="towerMaxSpeedMultiplier" min="1" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Perfect Alignment Tolerance</label>
-              <p class="text-xs text-gray-400 mb-1">Taps within this distance of dead-center don't trim the tower's width</p>
-              <input type="number" v-model.number="towerPerfectEpsilon" min="0" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Perfect Alignment Tolerance</label>
+              <p class="text-xs text-gray-500 mb-1">Taps within this distance of dead-center don't trim the tower's width</p>
+              <input type="number" v-model.number="towerPerfectEpsilon" min="0" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Layers</label>
-              <p class="text-xs text-gray-400 mb-1">Run ends automatically past this height (10–2000)</p>
-              <input type="number" v-model.number="towerMaxLayers" min="10" max="2000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Layers</label>
+              <p class="text-xs text-gray-500 mb-1">Run ends automatically past this height (10–2000)</p>
+              <input type="number" v-model.number="towerMaxLayers" min="10" max="2000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <button @click="saveTowerConfig" :disabled="loadingTower" class="btn-primary">
+          <button @click="saveTowerConfig" :disabled="loadingTower" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingTower">Save Tower Stack Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -909,280 +910,280 @@
 
         <!-- Operation A.S.T.E.R.O.I.D. -->
         <section v-if="activeTab === 'OperationAsteroid'" role="tabpanel" aria-label="Operation A.S.T.E.R.O.I.D. Settings">
-          <h2 class="text-2xl font-semibold mb-4">Operation A.S.T.E.R.O.I.D. Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Operation A.S.T.E.R.O.I.D. Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Plays are unlimited. Only the first few runs each day are ranked — those are the ones
             that record a score and award points. Timing values are in ticks; the game runs at 60
             ticks per second.
           </p>
 
-          <h3 class="text-lg font-semibold mb-2">Plays &amp; Points</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h3 class="text-xs font-semibold mb-1.5">Plays &amp; Points</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Ranked Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">Runs per 24-hour period that count for the leaderboard (resets 8 PM CT). Set 0 to make every run practice.</p>
-              <input type="number" v-model.number="asteroidRankedPlaysPerPeriod" min="0" max="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Ranked Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">Runs per 24-hour period that count for the leaderboard (resets 8 PM CT). Set 0 to make every run practice.</p>
+              <input type="number" v-model.number="asteroidRankedPlaysPerPeriod" min="0" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Points awarded toward the daily cap when a ranked run ends</p>
-              <input type="number" v-model.number="asteroidPointsPerGame" min="0" class="input" />
-            </div>
-          </div>
-
-          <h3 class="text-lg font-semibold mb-2">Difficulty</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Starting Lives</label>
-              <input type="number" v-model.number="asteroidStartingLives" min="1" max="9" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Starting Asteroids</label>
-              <p class="text-xs text-gray-400 mb-1">Large asteroids in wave 1 (1–12)</p>
-              <input type="number" v-model.number="asteroidStartAsteroids" min="1" max="12" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Asteroids Added Per Wave</label>
-              <input type="number" v-model.number="asteroidAsteroidsPerWave" min="0" max="4" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Asteroid Speed</label>
-              <p class="text-xs text-gray-400 mb-1">World units per tick for a large asteroid (0.2–4)</p>
-              <input type="number" v-model.number="asteroidAsteroidSpeed" min="0.2" max="4" step="0.05" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Wave Speed Growth</label>
-              <p class="text-xs text-gray-400 mb-1">0.06 = asteroids get 6% faster each wave</p>
-              <input type="number" v-model.number="asteroidWaveSpeedGrowth" min="0" max="0.5" step="0.01" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier</label>
-              <p class="text-xs text-gray-400 mb-1">Wave speed growth caps here (1–5)</p>
-              <input type="number" v-model.number="asteroidMaxSpeedMultiplier" min="1" max="5" step="0.1" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Turn Rate</label>
-              <p class="text-xs text-gray-400 mb-1">Heading steps per tick out of 1024 (1–24). 6 ≈ a full turn in 1.7s.</p>
-              <input type="number" v-model.number="asteroidTurnRate" min="1" max="24" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Thrust Acceleration</label>
-              <input type="number" v-model.number="asteroidThrustAccel" min="0.02" max="1" step="0.005" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Max Ship Speed</label>
-              <input type="number" v-model.number="asteroidMaxShipSpeed" min="1" max="16" step="0.1" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Ship Drag</label>
-              <p class="text-xs text-gray-400 mb-1">Velocity kept each tick (0.9–1). 1 = no drag, pure inertia.</p>
-              <input type="number" v-model.number="asteroidShipDrag" min="0.9" max="1" step="0.001" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Extra Life Score</label>
-              <p class="text-xs text-gray-400 mb-1">Award a life every this many points. 0 disables.</p>
-              <input type="number" v-model.number="asteroidExtraLifeScore" min="0" max="1000000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Points awarded toward the daily cap when a ranked run ends</p>
+              <input type="number" v-model.number="asteroidPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold mb-2">Physics &amp; Geometry</h3>
+          <h3 class="text-xs font-semibold mb-1.5">Difficulty</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Starting Lives</label>
+              <input type="number" v-model.number="asteroidStartingLives" min="1" max="9" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Starting Asteroids</label>
+              <p class="text-xs text-gray-500 mb-1">Large asteroids in wave 1 (1–12)</p>
+              <input type="number" v-model.number="asteroidStartAsteroids" min="1" max="12" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Asteroids Added Per Wave</label>
+              <input type="number" v-model.number="asteroidAsteroidsPerWave" min="0" max="4" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Asteroid Speed</label>
+              <p class="text-xs text-gray-500 mb-1">World units per tick for a large asteroid (0.2–4)</p>
+              <input type="number" v-model.number="asteroidAsteroidSpeed" min="0.2" max="4" step="0.05" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Wave Speed Growth</label>
+              <p class="text-xs text-gray-500 mb-1">0.06 = asteroids get 6% faster each wave</p>
+              <input type="number" v-model.number="asteroidWaveSpeedGrowth" min="0" max="0.5" step="0.01" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Max Speed Multiplier</label>
+              <p class="text-xs text-gray-500 mb-1">Wave speed growth caps here (1–5)</p>
+              <input type="number" v-model.number="asteroidMaxSpeedMultiplier" min="1" max="5" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Turn Rate</label>
+              <p class="text-xs text-gray-500 mb-1">Heading steps per tick out of 1024 (1–24). 6 ≈ a full turn in 1.7s.</p>
+              <input type="number" v-model.number="asteroidTurnRate" min="1" max="24" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Thrust Acceleration</label>
+              <input type="number" v-model.number="asteroidThrustAccel" min="0.02" max="1" step="0.005" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Max Ship Speed</label>
+              <input type="number" v-model.number="asteroidMaxShipSpeed" min="1" max="16" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Ship Drag</label>
+              <p class="text-xs text-gray-500 mb-1">Velocity kept each tick (0.9–1). 1 = no drag, pure inertia.</p>
+              <input type="number" v-model.number="asteroidShipDrag" min="0.9" max="1" step="0.001" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Extra Life Score</label>
+              <p class="text-xs text-gray-500 mb-1">Award a life every this many points. 0 disables.</p>
+              <input type="number" v-model.number="asteroidExtraLifeScore" min="0" max="1000000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+          </div>
+
+          <h3 class="text-xs font-semibold mb-1.5">Physics &amp; Geometry</h3>
           <p class="text-xs text-gray-500 mb-2">
             Sizes are in world units on the fixed 640&times;480 playfield. Durations are in ticks
             (60 per second). Changing these alters how the game feels but never how it is scored.
           </p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Ship Collision Radius</label>
-              <p class="text-xs text-gray-400 mb-1">Bigger is easier to hit (4&ndash;40). The Green power-up halves this.</p>
-              <input type="number" v-model.number="asteroidShipRadius" min="4" max="40" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Ship Collision Radius</label>
+              <p class="text-xs text-gray-500 mb-1">Bigger is easier to hit (4&ndash;40). The Green power-up halves this.</p>
+              <input type="number" v-model.number="asteroidShipRadius" min="4" max="40" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Respawn Invulnerability (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">Grace period after losing a life (0&ndash;600). 96 &asymp; 1.6s.</p>
-              <input type="number" v-model.number="asteroidRespawnInvulnTicks" min="0" max="600" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Respawn Invulnerability (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">Grace period after losing a life (0&ndash;600). 96 &asymp; 1.6s.</p>
+              <input type="number" v-model.number="asteroidRespawnInvulnTicks" min="0" max="600" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Power-Up Pickup Radius</label>
-              <input type="number" v-model.number="asteroidPowerupRadius" min="5" max="40" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Power-Up Pickup Radius</label>
+              <input type="number" v-model.number="asteroidPowerupRadius" min="5" max="40" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Power-Up Lifetime (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">How long an uncollected power-up waits (60&ndash;3600). 600 = 10s.</p>
-              <input type="number" v-model.number="asteroidPowerupLifeTicks" min="60" max="3600" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Power-Up Lifetime (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">How long an uncollected power-up waits (60&ndash;3600). 600 = 10s.</p>
+              <input type="number" v-model.number="asteroidPowerupLifeTicks" min="60" max="3600" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Large Asteroid Radius</label>
-              <input type="number" v-model.number="asteroidLargeRadius" min="10" max="80" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Large Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidLargeRadius" min="10" max="80" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Medium Asteroid Radius</label>
-              <input type="number" v-model.number="asteroidMediumRadius" min="6" max="60" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Medium Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidMediumRadius" min="6" max="60" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Small Asteroid Radius</label>
-              <input type="number" v-model.number="asteroidSmallRadius" min="3" max="40" step="0.5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Small Asteroid Radius</label>
+              <input type="number" v-model.number="asteroidSmallRadius" min="3" max="40" step="0.5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold mb-2">Ships &amp; Weapons</h3>
+          <h3 class="text-xs font-semibold mb-1.5">Ships &amp; Weapons</h3>
           <p class="text-xs text-gray-500 mb-3">
             Players pick one of three ships before each run. A ship is purely a weapon profile —
             everything else about flying is shared. Range is roughly projectile speed &times;
             range ticks, against a playfield 640 units wide, so a range under ~640 means shots
             fizzle before crossing the screen.
           </p>
-            <h4 class="text-sm font-bold text-gray-700 mt-2">M.O.S.Q.U.I.T.T.O.H. <span class="font-normal text-gray-400">— sniper</span></h4>
-            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: one shot at a time, very long reach, slow cadence.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+            <h4 class="text-sm font-bold text-gray-700 mt-2">M.O.S.Q.U.I.T.T.O.H. <span class="font-normal text-gray-500">— sniper</span></h4>
+            <p class="text-xs text-gray-500 mb-2 sm:col-span-2">Intended feel: one shot at a time, very long reach, slow cadence.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
-                <input type="number" v-model.number="asteroidMosqFireInterval" min="3" max="60" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidMosqFireInterval" min="3" max="60" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
-                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
-                <input type="number" v-model.number="asteroidMosqBulletSpeed" min="1" max="20" step="0.1" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-500 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidMosqBulletSpeed" min="1" max="20" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
-                <input type="number" v-model.number="asteroidMosqBulletLife" min="10" max="300" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidMosqBulletLife" min="10" max="300" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
-                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
-                <input type="number" v-model.number="asteroidMosqPellets" min="1" max="12" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-500 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidMosqPellets" min="1" max="12" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Spread</label>
-                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
-                <input type="number" v-model.number="asteroidMosqSpread" min="0" max="512" class="input" />
-              </div>
-            </div>
-            <h4 class="text-sm font-bold text-gray-700 mt-2">S.C.A.M.P.E.R. <span class="font-normal text-gray-400">— shotgun</span></h4>
-            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: a wide spray of pellets that dies off almost immediately — strong up close, useless at range.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
-                <input type="number" v-model.number="asteroidScamFireInterval" min="3" max="60" class="input" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
-                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
-                <input type="number" v-model.number="asteroidScamBulletSpeed" min="1" max="20" step="0.1" class="input" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
-                <input type="number" v-model.number="asteroidScamBulletLife" min="10" max="300" class="input" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
-                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
-                <input type="number" v-model.number="asteroidScamPellets" min="1" max="12" class="input" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Spread</label>
-                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
-                <input type="number" v-model.number="asteroidScamSpread" min="0" max="512" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-500 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidMosqSpread" min="0" max="512" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
-            <h4 class="text-sm font-bold text-gray-700 mt-2">C.A.S.U.A.L. <span class="font-normal text-gray-400">— all-rounder</span></h4>
-            <p class="text-xs text-gray-400 mb-2 sm:col-span-2">Intended feel: medium range, medium cadence, single shot.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+            <h4 class="text-sm font-bold text-gray-700 mt-2">S.C.A.M.P.E.R. <span class="font-normal text-gray-500">— shotgun</span></h4>
+            <p class="text-xs text-gray-500 mb-2 sm:col-span-2">Intended feel: a wide spray of pellets that dies off almost immediately — strong up close, useless at range.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700">Fire Interval (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
-                <input type="number" v-model.number="asteroidCasFireInterval" min="3" max="60" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidScamFireInterval" min="3" max="60" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Projectile Speed</label>
-                <p class="text-xs text-gray-400 mb-1">World units per tick (1&ndash;20)</p>
-                <input type="number" v-model.number="asteroidCasBulletSpeed" min="1" max="20" step="0.1" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-500 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidScamBulletSpeed" min="1" max="20" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Range (ticks)</label>
-                <p class="text-xs text-gray-400 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
-                <input type="number" v-model.number="asteroidCasBulletLife" min="10" max="300" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidScamBulletLife" min="10" max="300" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Projectiles Per Shot</label>
-                <p class="text-xs text-gray-400 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
-                <input type="number" v-model.number="asteroidCasPellets" min="1" max="12" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-500 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidScamPellets" min="1" max="12" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700">Spread</label>
-                <p class="text-xs text-gray-400 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
-                <input type="number" v-model.number="asteroidCasSpread" min="0" max="512" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-500 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidScamSpread" min="0" max="512" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              </div>
+            </div>
+            <h4 class="text-sm font-bold text-gray-700 mt-2">C.A.S.U.A.L. <span class="font-normal text-gray-500">— all-rounder</span></h4>
+            <p class="text-xs text-gray-500 mb-2 sm:col-span-2">Intended feel: medium range, medium cadence, single shot.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700">Fire Interval (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">Ticks between shots (3&ndash;60). Lower is faster; the Blue power-up halves it.</p>
+                <input type="number" v-model.number="asteroidCasFireInterval" min="3" max="60" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700">Projectile Speed</label>
+                <p class="text-xs text-gray-500 mb-1">World units per tick (1&ndash;20)</p>
+                <input type="number" v-model.number="asteroidCasBulletSpeed" min="1" max="20" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700">Range (ticks)</label>
+                <p class="text-xs text-gray-500 mb-1">How long a shot lives (10&ndash;300). Range &asymp; speed &times; this; the field is 640 units wide.</p>
+                <input type="number" v-model.number="asteroidCasBulletLife" min="10" max="300" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700">Projectiles Per Shot</label>
+                <p class="text-xs text-gray-500 mb-1">1&ndash;12. Above 1 gives a shotgun fan.</p>
+                <input type="number" v-model.number="asteroidCasPellets" min="1" max="12" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700">Spread</label>
+                <p class="text-xs text-gray-500 mb-1">Fan width, 0&ndash;512 (1024 = a full circle, so 96 &asymp; 34&deg;). Ignored with 1 projectile.</p>
+                <input type="number" v-model.number="asteroidCasSpread" min="0" max="512" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
 
-          <h3 class="text-lg font-semibold mb-2">Scoring</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h3 class="text-xs font-semibold mb-1.5">Scoring</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Large Asteroid</label>
-              <input type="number" v-model.number="asteroidPointsLarge" min="0" max="10000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Large Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsLarge" min="0" max="10000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Medium Asteroid</label>
-              <input type="number" v-model.number="asteroidPointsMedium" min="0" max="10000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Medium Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsMedium" min="0" max="10000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Small Asteroid</label>
-              <input type="number" v-model.number="asteroidPointsSmall" min="0" max="10000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Small Asteroid</label>
+              <input type="number" v-model.number="asteroidPointsSmall" min="0" max="10000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Wave Clear Bonus</label>
-              <input type="number" v-model.number="asteroidWaveClearBonus" min="0" max="100000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Wave Clear Bonus</label>
+              <input type="number" v-model.number="asteroidWaveClearBonus" min="0" max="100000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold mb-2">Power-Ups</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h3 class="text-xs font-semibold mb-1.5">Power-Ups</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div class="sm:col-span-2 flex flex-wrap gap-4">
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="asteroidPowerupsEnabled" /> Power-ups enabled
               </label>
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="asteroidPowerupBlueEnabled" /> Blue (2x fire rate)
               </label>
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="asteroidPowerupRedEnabled" /> Red (invincibility)
               </label>
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="asteroidPowerupGreenEnabled" /> Green (half size)
               </label>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Spawn Interval (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">Ticks between spawn attempts (60–36000). 900 = every 15s.</p>
-              <input type="number" v-model.number="asteroidPowerupIntervalTicks" min="60" max="36000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Spawn Interval (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">Ticks between spawn attempts (60–36000). 900 = every 15s.</p>
+              <input type="number" v-model.number="asteroidPowerupIntervalTicks" min="60" max="36000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Spawn Chance (%)</label>
-              <p class="text-xs text-gray-400 mb-1">Chance each attempt actually drops a power-up</p>
-              <input type="number" v-model.number="asteroidPowerupChancePercent" min="0" max="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Spawn Chance (%)</label>
+              <p class="text-xs text-gray-500 mb-1">Chance each attempt actually drops a power-up</p>
+              <input type="number" v-model.number="asteroidPowerupChancePercent" min="0" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Blue Duration (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">600 = 10s</p>
-              <input type="number" v-model.number="asteroidPowerupBlueTicks" min="0" max="7200" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Blue Duration (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">600 = 10s</p>
+              <input type="number" v-model.number="asteroidPowerupBlueTicks" min="0" max="7200" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Red Duration (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">420 = 7s</p>
-              <input type="number" v-model.number="asteroidPowerupRedTicks" min="0" max="7200" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Red Duration (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">420 = 7s</p>
+              <input type="number" v-model.number="asteroidPowerupRedTicks" min="0" max="7200" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Green Duration (ticks)</label>
-              <p class="text-xs text-gray-400 mb-1">720 = 12s</p>
-              <input type="number" v-model.number="asteroidPowerupGreenTicks" min="0" max="7200" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Green Duration (ticks)</label>
+              <p class="text-xs text-gray-500 mb-1">720 = 12s</p>
+              <input type="number" v-model.number="asteroidPowerupGreenTicks" min="0" max="7200" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <button @click="saveAsteroidConfig" :disabled="loadingAsteroid" class="btn-primary">
+          <button @click="saveAsteroidConfig" :disabled="loadingAsteroid" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingAsteroid">Save Operation A.S.T.E.R.O.I.D. Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1190,23 +1191,23 @@
 
         <!-- ReOrbit Memory -->
         <section v-if="activeTab === 'ReOrbitMemory'" role="tabpanel" aria-label="ReOrbit Memory Settings">
-          <h2 class="text-2xl font-semibold mb-4">ReOrbit Memory Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">ReOrbit Memory Settings</h2>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
-              <input type="number" v-model.number="reorbitMemoryPlaysPerPeriod" min="1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">Number of games per 24-hour period (resets 8 PM CT)</p>
+              <input type="number" v-model.number="reorbitMemoryPlaysPerPeriod" min="1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Points awarded toward daily cap on game completion</p>
-              <input type="number" v-model.number="reorbitMemoryPointsPerGame" min="0" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Points awarded toward daily cap on game completion</p>
+              <input type="number" v-model.number="reorbitMemoryPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Number of Pairs</label>
-              <p class="text-xs text-gray-400 mb-1">Board size — kept small enough to stay tappable on phones</p>
-              <select v-model.number="reorbitMemoryPairs" class="input">
+              <label class="block text-xs font-medium text-gray-700">Number of Pairs</label>
+              <p class="text-xs text-gray-500 mb-1">Board size — kept small enough to stay tappable on phones</p>
+              <select v-model.number="reorbitMemoryPairs" class="border rounded-md px-2 py-1.5 text-sm w-full">
                 <option :value="6">6 pairs (3×4 — 12 cards)</option>
                 <option :value="8">8 pairs (4×4 — 16 cards)</option>
                 <option :value="10">10 pairs (4×5 — 20 cards)</option>
@@ -1214,19 +1215,19 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Time Per Game (seconds)</label>
-              <p class="text-xs text-gray-400 mb-1">Leave empty for unlimited time</p>
-              <input type="number" v-model="reorbitMemoryTimeSecondsInput" min="30" placeholder="Unlimited" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Time Per Game (seconds)</label>
+              <p class="text-xs text-gray-500 mb-1">Leave empty for unlimited time</p>
+              <input type="number" v-model="reorbitMemoryTimeSecondsInput" min="30" placeholder="Unlimited" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Flip-back Delay (ms)</label>
-              <p class="text-xs text-gray-400 mb-1">How long a mismatched pair stays face up before flipping back (300–3000)</p>
-              <input type="number" v-model.number="reorbitMemoryFlipBackDelayMs" min="300" max="3000" step="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Flip-back Delay (ms)</label>
+              <p class="text-xs text-gray-500 mb-1">How long a mismatched pair stays face up before flipping back (300–3000)</p>
+              <input type="number" v-model.number="reorbitMemoryFlipBackDelayMs" min="300" max="3000" step="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Card Back Image</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Card Back Image</h3>
             <p class="text-xs text-gray-500 mb-3">Shown on the back of every face-down card. Card fronts are random cToon images, chosen automatically each game.</p>
             <div class="w-24 h-32 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
               <img
@@ -1235,7 +1236,7 @@
                 alt="Card back"
                 class="w-full h-full object-cover"
               />
-              <span v-else class="text-gray-400 text-xs px-1 text-center">No image</span>
+              <span v-else class="text-gray-500 text-xs px-1 text-center">No image</span>
             </div>
             <input
               type="file"
@@ -1244,7 +1245,7 @@
               class="block w-full text-xs mb-2"
             />
             <button
-              class="btn-primary text-sm py-1 px-3"
+              class="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               @click="uploadReorbitMemoryCardBack"
               :disabled="!reorbitMemoryCardBackFile || uploadingReorbitMemoryCardBack"
             >
@@ -1253,7 +1254,7 @@
             </button>
           </div>
 
-          <button @click="saveReorbitMemoryConfig" :disabled="loadingReorbitMemory" class="btn-primary">
+          <button @click="saveReorbitMemoryConfig" :disabled="loadingReorbitMemory" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingReorbitMemory">Save ReOrbit Memory Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1261,7 +1262,7 @@
 
         <!-- Guess that cToon! -->
         <section v-if="activeTab === 'GuessCtoon'" role="tabpanel" aria-label="Guess that cToon Settings">
-          <h2 class="text-2xl font-semibold mb-4">Guess that cToon! Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Guess that cToon! Settings</h2>
 
           <p class="text-sm text-gray-500 mb-4">
             Plays are unlimited. Only the first few runs each day count toward points and the
@@ -1270,29 +1271,29 @@
             already in progress.
           </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Scoring Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">
+              <label class="block text-xs font-medium text-gray-700">Scoring Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">
                 Runs per 24-hour period (resets 8 PM CT) that count for points and the
                 leaderboard. Set to 0 to make every run practice-only.
               </p>
-              <input type="number" v-model.number="guessCtoonScoredPlaysPerPeriod" min="0" max="100" class="input" />
+              <input type="number" v-model.number="guessCtoonScoredPlaysPerPeriod" min="0" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Points awarded toward the shared daily cap when a scoring run ends</p>
-              <input type="number" v-model.number="guessCtoonPointsPerGame" min="0" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Points awarded toward the shared daily cap when a scoring run ends</p>
+              <input type="number" v-model.number="guessCtoonPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Seconds Per cToon</label>
-              <p class="text-xs text-gray-400 mb-1">Countdown per question — running out counts as a wrong answer (4–120)</p>
-              <input type="number" v-model.number="guessCtoonSecondsPerQuestion" min="4" max="120" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Seconds Per cToon</label>
+              <p class="text-xs text-gray-500 mb-1">Countdown per question — running out counts as a wrong answer (4–120)</p>
+              <input type="number" v-model.number="guessCtoonSecondsPerQuestion" min="4" max="120" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Answer Choices</label>
-              <p class="text-xs text-gray-400 mb-1">How many names to pick from, including the correct one</p>
-              <select v-model.number="guessCtoonChoices" class="input">
+              <label class="block text-xs font-medium text-gray-700">Answer Choices</label>
+              <p class="text-xs text-gray-500 mb-1">How many names to pick from, including the correct one</p>
+              <select v-model.number="guessCtoonChoices" class="border rounded-md px-2 py-1.5 text-sm w-full">
                 <option :value="3">3 choices</option>
                 <option :value="4">4 choices</option>
                 <option :value="5">5 choices</option>
@@ -1300,18 +1301,18 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Questions Per Run</label>
-              <p class="text-xs text-gray-400 mb-1">Longest possible streak — answering them all is a perfect run (5–100)</p>
-              <input type="number" v-model.number="guessCtoonMaxQuestions" min="5" max="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Questions Per Run</label>
+              <p class="text-xs text-gray-500 mb-1">Longest possible streak — answering them all is a perfect run (5–100)</p>
+              <input type="number" v-model.number="guessCtoonMaxQuestions" min="5" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Minimum Streak For Points</label>
-              <p class="text-xs text-gray-400 mb-1">Runs shorter than this record a score but earn no points</p>
-              <input type="number" v-model.number="guessCtoonMinStreakForPoints" min="0" max="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Minimum Streak For Points</label>
+              <p class="text-xs text-gray-500 mb-1">Runs shorter than this record a score but earn no points</p>
+              <input type="number" v-model.number="guessCtoonMinStreakForPoints" min="0" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <button @click="saveGuessCtoonConfig" :disabled="loadingGuessCtoon" class="btn-primary">
+          <button @click="saveGuessCtoonConfig" :disabled="loadingGuessCtoon" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingGuessCtoon">Save Guess that cToon! Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1319,7 +1320,7 @@
 
         <!-- Flappy Powerpuff -->
         <section v-if="activeTab === 'FlappyPowerpuff'" role="tabpanel" aria-label="Flappy Powerpuff Settings">
-          <h2 class="text-2xl font-semibold mb-4">Flappy Powerpuff Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Flappy Powerpuff Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Distances and speeds are in <strong>world units</strong>, not pixels. The game runs in a
             fixed 480&times;760 world that is letterboxed into whatever screen the player has, so
@@ -1327,76 +1328,76 @@
             rejected, and the game engine clamps again on its own.
           </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Ranked Plays Per Period</label>
-              <p class="text-xs text-gray-400 mb-1">Runs per 24 hours that earn points and count for the leaderboard (resets 8 PM CT). Players can keep playing unranked after this.</p>
-              <input type="number" v-model.number="flappyPlaysPerPeriod" min="1" max="100" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Ranked Plays Per Period</label>
+              <p class="text-xs text-gray-500 mb-1">Runs per 24 hours that earn points and count for the leaderboard (resets 8 PM CT). Players can keep playing unranked after this.</p>
+              <input type="number" v-model.number="flappyPlaysPerPeriod" min="1" max="100" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Points Per Game</label>
-              <p class="text-xs text-gray-400 mb-1">Flat points for finishing a ranked run, capped by the global daily limit</p>
-              <input type="number" v-model.number="flappyPointsPerGame" min="0" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Points Per Game</label>
+              <p class="text-xs text-gray-500 mb-1">Flat points for finishing a ranked run, capped by the global daily limit</p>
+              <input type="number" v-model.number="flappyPointsPerGame" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Gravity (100–5000)</label>
-              <p class="text-xs text-gray-400 mb-1">How fast she accelerates downward. Higher = twitchier.</p>
-              <input type="number" v-model.number="flappyGravity" min="100" max="5000" step="50" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Gravity (100–5000)</label>
+              <p class="text-xs text-gray-500 mb-1">How fast she accelerates downward. Higher = twitchier.</p>
+              <input type="number" v-model.number="flappyGravity" min="100" max="5000" step="50" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Flap Strength (−1200 to −50)</label>
-              <p class="text-xs text-gray-400 mb-1">Upward speed set by each tap. Negative is up. Should be roughly gravity ÷ 3.4 for a comfortable rhythm.</p>
-              <input type="number" v-model.number="flappyFlapVelocity" min="-1200" max="-50" step="10" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Flap Strength (−1200 to −50)</label>
+              <p class="text-xs text-gray-500 mb-1">Upward speed set by each tap. Negative is up. Should be roughly gravity ÷ 3.4 for a comfortable rhythm.</p>
+              <input type="number" v-model.number="flappyFlapVelocity" min="-1200" max="-50" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Scroll Speed (20–1000)</label>
-              <p class="text-xs text-gray-400 mb-1">How fast the city moves past at the start of a run</p>
-              <input type="number" v-model.number="flappyScrollSpeed" min="20" max="1000" step="5" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Scroll Speed (20–1000)</label>
+              <p class="text-xs text-gray-500 mb-1">How fast the city moves past at the start of a run</p>
+              <input type="number" v-model.number="flappyScrollSpeed" min="20" max="1000" step="5" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Gap Height (60–600)</label>
-              <p class="text-xs text-gray-400 mb-1">Opening between the top and bottom skyscraper. She is 38 units tall.</p>
-              <input type="number" v-model.number="flappyPipeGap" min="60" max="600" step="10" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Gap Height (60–600)</label>
+              <p class="text-xs text-gray-500 mb-1">Opening between the top and bottom skyscraper. She is 38 units tall.</p>
+              <input type="number" v-model.number="flappyPipeGap" min="60" max="600" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Building Spacing (120–2000)</label>
-              <p class="text-xs text-gray-400 mb-1">Distance between consecutive skyscrapers</p>
-              <input type="number" v-model.number="flappyPipeSpacing" min="120" max="2000" step="10" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Building Spacing (120–2000)</label>
+              <p class="text-xs text-gray-500 mb-1">Distance between consecutive skyscrapers</p>
+              <input type="number" v-model.number="flappyPipeSpacing" min="120" max="2000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Speed Growth Per Building (0–0.5)</label>
-              <p class="text-xs text-gray-400 mb-1">Fraction added to the scroll speed for each building passed</p>
-              <input type="number" v-model.number="flappySpeedGrowthPerPipe" min="0" max="0.5" step="0.005" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Speed Growth Per Building (0–0.5)</label>
+              <p class="text-xs text-gray-500 mb-1">Fraction added to the scroll speed for each building passed</p>
+              <input type="number" v-model.number="flappySpeedGrowthPerPipe" min="0" max="0.5" step="0.005" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Speed Multiplier (1–5)</label>
-              <p class="text-xs text-gray-400 mb-1">Ceiling the speed growth plateaus at</p>
-              <input type="number" v-model.number="flappyMaxSpeedMultiplier" min="1" max="5" step="0.1" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Speed Multiplier (1–5)</label>
+              <p class="text-xs text-gray-500 mb-1">Ceiling the speed growth plateaus at</p>
+              <input type="number" v-model.number="flappyMaxSpeedMultiplier" min="1" max="5" step="0.1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Score (1–100000)</label>
-              <p class="text-xs text-gray-400 mb-1">Safety cap — scores are clamped here. Bounds how much work one submission can ask of the server.</p>
-              <input type="number" v-model.number="flappyMaxScore" min="1" max="100000" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Score (1–100000)</label>
+              <p class="text-xs text-gray-500 mb-1">Safety cap — scores are clamped here. Bounds how much work one submission can ask of the server.</p>
+              <input type="number" v-model.number="flappyMaxScore" min="1" max="100000" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Max Session Length (30–1800s)</label>
-              <p class="text-xs text-gray-400 mb-1">How long a started game stays valid before it must be submitted</p>
-              <input type="number" v-model.number="flappyMaxSessionSeconds" min="30" max="1800" step="30" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Max Session Length (30–1800s)</label>
+              <p class="text-xs text-gray-500 mb-1">How long a started game stays valid before it must be submitted</p>
+              <input type="number" v-model.number="flappyMaxSessionSeconds" min="30" max="1800" step="30" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Game Artwork</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Game Artwork</h3>
             <p class="text-xs text-gray-500 mb-3">
               Overrides the built-in artwork. Uploads are re-encoded to WebP and resized, so large
               files are fine to drop in. Leave a slot empty to use the default.
             </p>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div v-for="s in flappyImageSlots" :key="s.slot">
-                <p class="text-sm font-medium text-gray-700 mb-1">{{ s.label }}</p>
+                <p class="text-xs font-medium text-gray-700 mb-1">{{ s.label }}</p>
                 <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
                   <img v-if="flappyImages[s.slot]" :src="flappyImages[s.slot]" :alt="s.label" class="w-full h-full object-contain" />
-                  <span v-else class="text-gray-400 text-xs px-1 text-center">Default</span>
+                  <span v-else class="text-gray-500 text-xs px-1 text-center">Default</span>
                 </div>
                 <input
                   type="file"
@@ -1405,7 +1406,7 @@
                   @change="onFlappyImageFile(s.slot, $event)"
                 />
                 <button
-                  class="btn-primary text-xs py-1 px-2"
+                  class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                   :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
                   @click="uploadFlappyImage(s.slot)"
                 >
@@ -1416,7 +1417,7 @@
             </div>
           </div>
 
-          <button @click="saveFlappyConfig" :disabled="loadingFlappy" class="btn-primary">
+          <button @click="saveFlappyConfig" :disabled="loadingFlappy" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingFlappy">Save Flappy Powerpuff Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1424,7 +1425,7 @@
 
         <!-- Fruit Samurai -->
         <section v-if="activeTab === 'FruitSamurai'" role="tabpanel" aria-label="Fruit Samurai Settings">
-          <h2 class="text-2xl font-semibold mb-4">Fruit Samurai Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">Fruit Samurai Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Timings are in <strong>ticks</strong>; the game runs at 60 ticks per second, so 60 ticks
             is one second. Every value here is a whole number — the simulation is integer-only by
@@ -1438,60 +1439,60 @@
             reach for the wave and spawn-interval settings before the speed ones.
           </p>
 
-          <div v-for="g in fruitSamuraiFieldGroups" :key="g.title" class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">{{ g.title }}</h3>
+          <div v-for="g in fruitSamuraiFieldGroups" :key="g.title" class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">{{ g.title }}</h3>
             <p v-if="g.note" class="text-xs text-gray-500 mb-3">{{ g.note }}</p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div v-for="f in g.items" :key="f.key">
-                <label class="block text-sm font-medium text-gray-700 mb-1">{{ f.label }}</label>
-                <p class="text-xs text-gray-400 mb-1">{{ f.help }}</p>
+                <label class="block text-xs font-medium text-gray-700 mb-1">{{ f.label }}</label>
+                <p class="text-xs text-gray-500 mb-1">{{ f.help }}</p>
                 <input
                   type="number"
                   v-model.number="fruitSamurai[f.key]"
                   :min="f.min"
                   :max="f.max"
                   step="1"
-                  class="input"
+                  class="border rounded-md px-2 py-1.5 text-sm w-full"
                 />
               </div>
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Jack&rsquo;s Commentary</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Jack&rsquo;s Commentary</h3>
             <p class="text-xs text-gray-500 mb-3">
               Jack occasionally speaks in character during a run. The lines themselves live in the
               client, so there is nothing to edit here — only how often he talks. Reactions to a
               power-up or a lost life always speak, ignoring the cooldown.
             </p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                   <input type="checkbox" v-model="fruitSamurai.fruitSamuraiJackChatterEnabled" />
                   <span>Jack speaks during a run</span>
                 </label>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Cooldown between lines</label>
-                <p class="text-xs text-gray-400 mb-1">Ticks. 420 is seven seconds.</p>
-                <input type="number" v-model.number="fruitSamurai.fruitSamuraiJackChatterCooldown" min="60" max="7200" step="1" class="input" />
+                <label class="block text-xs font-medium text-gray-700 mb-1">Cooldown between lines</label>
+                <p class="text-xs text-gray-500 mb-1">Ticks. 420 is seven seconds.</p>
+                <input type="number" v-model.number="fruitSamurai.fruitSamuraiJackChatterCooldown" min="60" max="7200" step="1" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
           </div>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-1">Game Artwork</h3>
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-1">Game Artwork</h3>
             <p class="text-xs text-gray-500 mb-3">
               The fruit, power-ups, juice and blade are all drawn by the game, so there is nothing to
               upload for them. Only Jack and the backdrop are images. Uploads are re-encoded to WebP
               and resized, so large files are fine to drop in. Leave a slot empty to use the default.
             </p>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div v-for="s in fruitSamuraiImageSlots" :key="s.slot">
-                <p class="text-sm font-medium text-gray-700 mb-1">{{ s.label }}</p>
+                <p class="text-xs font-medium text-gray-700 mb-1">{{ s.label }}</p>
                 <div class="w-full h-24 bg-gray-100 border rounded overflow-hidden flex items-center justify-center mb-2">
                   <img v-if="fruitSamuraiImages[s.slot]" :src="fruitSamuraiImages[s.slot]" :alt="s.label" class="w-full h-full object-contain" />
-                  <span v-else class="text-gray-400 text-xs px-1 text-center">Default</span>
+                  <span v-else class="text-gray-500 text-xs px-1 text-center">Default</span>
                 </div>
                 <input
                   type="file"
@@ -1500,7 +1501,7 @@
                   @change="onFruitSamuraiImageFile(s.slot, $event)"
                 />
                 <button
-                  class="btn-primary text-xs py-1 px-2"
+                  class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                   :disabled="!fruitSamuraiImageFiles[s.slot] || uploadingFruitSamuraiImage[s.slot]"
                   @click="uploadFruitSamuraiImage(s.slot)"
                 >
@@ -1511,7 +1512,7 @@
             </div>
           </div>
 
-          <button @click="saveFruitSamuraiConfig" :disabled="loadingFruitSamurai" class="btn-primary">
+          <button @click="saveFruitSamuraiConfig" :disabled="loadingFruitSamurai" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingFruitSamurai">Save Fruit Samurai Settings</span>
             <span v-else>Saving&hellip;</span>
           </button>
@@ -1519,7 +1520,7 @@
 
         <!-- ReOrbit Blackjack -->
         <section v-if="activeTab === 'Blackjack'" role="tabpanel" aria-label="ReOrbit Blackjack Settings">
-          <h2 class="text-2xl font-semibold mb-4">ReOrbit Blackjack Settings</h2>
+          <h2 class="text-sm font-semibold mb-3">ReOrbit Blackjack Settings</h2>
           <p class="text-xs text-gray-500 mb-4">
             Blackjack is the only game that takes points as well as pays them. A player converts
             points into chips (up to the daily buy-in), plays, and cashes out. Winnings do
@@ -1528,80 +1529,80 @@
             here cannot break a live table.
           </p>
 
-          <h3 class="text-lg font-semibold mb-2">Daily Limits</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h3 class="text-xs font-semibold mb-1.5">Daily Limits</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Daily Buy-In Limit</label>
-              <p class="text-xs text-gray-400 mb-1">Most points a player may turn into chips per day, across all their sessions (resets 8 PM CT). This is their maximum possible daily loss.</p>
-              <input type="number" v-model.number="blackjackDailyBuyInLimit" min="0" max="1000000" step="10" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Daily Buy-In Limit</label>
+              <p class="text-xs text-gray-500 mb-1">Most points a player may turn into chips per day, across all their sessions (resets 8 PM CT). This is their maximum possible daily loss.</p>
+              <input type="number" v-model.number="blackjackDailyBuyInLimit" min="0" max="1000000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Daily Win Limit</label>
-              <p class="text-xs text-gray-400 mb-1">Net winnings that end the day. Bets are sized so even a split-and-doubled win cannot overshoot it, so this is a hard ceiling, not an approximate one.</p>
-              <input type="number" v-model.number="blackjackDailyWinLimit" min="0" max="1000000" step="10" class="input" />
-            </div>
-          </div>
-
-          <h3 class="text-lg font-semibold mb-2">Table Limits</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Minimum Bet</label>
-              <p class="text-xs text-gray-400 mb-1">Must be a multiple of 10, which keeps a 3:2 blackjack and a half-stake insurance bet on whole points.</p>
-              <input type="number" v-model.number="blackjackMinBet" min="10" max="10000" step="10" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Maximum Bet</label>
-              <p class="text-xs text-gray-400 mb-1">Multiple of 10, at least the min bet, and no more than the daily buy-in.</p>
-              <input type="number" v-model.number="blackjackMaxBet" min="10" max="100000" step="10" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Practice Chip Stack</label>
-              <p class="text-xs text-gray-400 mb-1">Free chips handed out in Practice mode, and restored by the Reset button. Never touches real points.</p>
-              <input type="number" v-model.number="blackjackPracticeStack" min="10" max="1000000" step="10" class="input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Decks in the Shoe</label>
-              <p class="text-xs text-gray-400 mb-1">1&ndash;8. The shoe is reshuffled before every hand, so this changes the odds slightly but card counting is not possible either way.</p>
-              <input type="number" v-model.number="blackjackDeckCount" min="1" max="8" class="input" />
+              <label class="block text-xs font-medium text-gray-700">Daily Win Limit</label>
+              <p class="text-xs text-gray-500 mb-1">Net winnings that end the day. Bets are sized so even a split-and-doubled win cannot overshoot it, so this is a hard ceiling, not an approximate one.</p>
+              <input type="number" v-model.number="blackjackDailyWinLimit" min="0" max="1000000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold mb-2">Rules</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <h3 class="text-xs font-semibold mb-1.5">Table Limits</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Blackjack Pays</label>
-              <p class="text-xs text-gray-400 mb-1">As a ratio, e.g. 3 : 2. Stored as two whole numbers so payouts never land on half a point. Lowering it to 6 : 5 raises the house edge noticeably.</p>
+              <label class="block text-xs font-medium text-gray-700">Minimum Bet</label>
+              <p class="text-xs text-gray-500 mb-1">Must be a multiple of 10, which keeps a 3:2 blackjack and a half-stake insurance bet on whole points.</p>
+              <input type="number" v-model.number="blackjackMinBet" min="10" max="10000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Maximum Bet</label>
+              <p class="text-xs text-gray-500 mb-1">Multiple of 10, at least the min bet, and no more than the daily buy-in.</p>
+              <input type="number" v-model.number="blackjackMaxBet" min="10" max="100000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Practice Chip Stack</label>
+              <p class="text-xs text-gray-500 mb-1">Free chips handed out in Practice mode, and restored by the Reset button. Never touches real points.</p>
+              <input type="number" v-model.number="blackjackPracticeStack" min="10" max="1000000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Decks in the Shoe</label>
+              <p class="text-xs text-gray-500 mb-1">1&ndash;8. The shoe is reshuffled before every hand, so this changes the odds slightly but card counting is not possible either way.</p>
+              <input type="number" v-model.number="blackjackDeckCount" min="1" max="8" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            </div>
+          </div>
+
+          <h3 class="text-xs font-semibold mb-1.5">Rules</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Blackjack Pays</label>
+              <p class="text-xs text-gray-500 mb-1">As a ratio, e.g. 3 : 2. Stored as two whole numbers so payouts never land on half a point. Lowering it to 6 : 5 raises the house edge noticeably.</p>
               <div class="flex items-center gap-2">
-                <input type="number" v-model.number="blackjackPayoutNum" min="1" max="3" class="input" />
+                <input type="number" v-model.number="blackjackPayoutNum" min="1" max="3" class="border rounded-md px-2 py-1.5 text-sm w-full" />
                 <span class="text-gray-500">:</span>
-                <input type="number" v-model.number="blackjackPayoutDen" min="1" max="2" class="input" />
+                <input type="number" v-model.number="blackjackPayoutDen" min="1" max="2" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
             <div class="flex flex-col justify-end gap-2">
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="blackjackDealerHitsSoft17" />
                 Dealer hits soft 17
               </label>
-              <p class="text-xs text-gray-400">Off = dealer stands on all 17s, which is slightly better for the player.</p>
+              <p class="text-xs text-gray-500">Off = dealer stands on all 17s, which is slightly better for the player.</p>
             </div>
             <div class="flex flex-col gap-2">
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="blackjackAllowDouble" />
                 Allow doubling down
               </label>
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="blackjackAllowSplit" />
                 Allow splitting pairs
               </label>
-              <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label class="flex items-center gap-2 text-xs font-medium text-gray-700">
                 <input type="checkbox" v-model="blackjackAllowInsurance" />
                 Offer insurance
               </label>
-              <p class="text-xs text-gray-400">Insurance is the most confusing bet on the table and the worst value; it is safe to leave off.</p>
+              <p class="text-xs text-gray-500">Insurance is the most confusing bet on the table and the worst value; it is safe to leave off.</p>
             </div>
           </div>
 
-          <button @click="saveBlackjackConfig" :disabled="loadingBlackjack" class="btn-primary">
+          <button @click="saveBlackjackConfig" :disabled="loadingBlackjack" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingBlackjack">Save ReOrbit Blackjack Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -1609,17 +1610,17 @@
 
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
-          <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
+          <h2 class="text-sm font-semibold mb-3">TKO Events</h2>
 
-          <div class="mb-6 border rounded-lg p-4">
-            <h3 class="text-lg font-semibold mb-3">Settings</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div class="mb-4 bg-white border rounded-lg p-3">
+            <h3 class="text-xs font-semibold mb-2">Settings</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <div>
-                <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
-                <input type="number" v-model.number="tkoPointsPerWin" min="0" class="input" />
+                <label class="block text-xs font-medium text-gray-700">Points Per Win</label>
+                <input type="number" v-model.number="tkoPointsPerWin" min="0" class="border rounded-md px-2 py-1.5 text-sm w-full" />
               </div>
             </div>
-            <button @click="saveTkoConfig" :disabled="loadingTkoConfig" class="btn-primary">
+            <button @click="saveTkoConfig" :disabled="loadingTkoConfig" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               <span v-if="!loadingTkoConfig">Save TKO Settings</span>
               <span v-else>Saving…</span>
             </button>
@@ -1629,56 +1630,56 @@
 
           <template v-else>
             <!-- Stats -->
-            <div class="grid grid-cols-2 gap-4 mb-6">
-              <div class="border rounded-lg p-4 text-center">
-                <p class="text-3xl font-bold text-indigo-600">{{ tkoTotalEvents.toLocaleString() }}</p>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div class="border rounded-lg p-3 text-center">
+                <p class="text-2xl font-bold text-blue-600">{{ tkoTotalEvents.toLocaleString() }}</p>
                 <p class="text-sm text-gray-500 mt-1">Total Events</p>
               </div>
-              <div class="border rounded-lg p-4 text-center">
-                <p class="text-3xl font-bold text-indigo-600">{{ tkoUniqueUsers.toLocaleString() }}</p>
+              <div class="border rounded-lg p-3 text-center">
+                <p class="text-2xl font-bold text-blue-600">{{ tkoUniqueUsers.toLocaleString() }}</p>
                 <p class="text-sm text-gray-500 mt-1">Unique Reorbit Users</p>
               </div>
             </div>
 
-            <h3 class="text-lg font-semibold mb-3">Most Recent 20 Events</h3>
+            <h3 class="text-xs font-semibold mb-2">Most Recent 20 Events</h3>
 
             <div v-if="!tkoEvents.length" class="text-gray-500">No events recorded yet.</div>
 
             <!-- Desktop table -->
             <div v-else class="hidden md:block border rounded-lg overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 text-left">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100 text-left">
                   <tr>
-                    <th class="px-3 py-2 font-medium text-gray-600">Date</th>
-                    <th class="px-3 py-2 font-medium text-gray-600">Match / Round</th>
-                    <th class="px-3 py-2 font-medium text-gray-600">Winner</th>
-                    <th class="px-3 py-2 font-medium text-gray-600">Loser</th>
-                    <th class="px-3 py-2 font-medium text-gray-600">Win Type</th>
-                    <th class="px-3 py-2 font-medium text-gray-600">Counted</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Date</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Match / Round</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Winner</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Loser</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Win Type</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Counted</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="e in tkoEvents" :key="e.id" class="hover:bg-gray-50">
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ fmtDate(e.endedAt) }}</td>
-                    <td class="px-3 py-2">
+                    <td class="px-2 py-1.5 whitespace-nowrap text-gray-700">{{ fmtDate(e.endedAt) }}</td>
+                    <td class="px-2 py-1.5">
                       <div class="font-mono text-xs text-gray-500 truncate max-w-[140px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
-                      <div class="text-xs text-gray-400">Round {{ e.roundNumber }} of {{ e.bestOf }} · {{ e.match.mode }}</div>
+                      <div class="text-xs text-gray-500">Round {{ e.roundNumber }} of {{ e.bestOf }} · {{ e.match.mode }}</div>
                     </td>
-                    <td class="px-3 py-2">
+                    <td class="px-2 py-1.5">
                       <div class="font-medium">{{ e.winnerUsername }}</div>
-                      <div class="text-xs text-gray-400">{{ e.winnerCharacterName }}</div>
+                      <div class="text-xs text-gray-500">{{ e.winnerCharacterName }}</div>
                       <div v-if="!e.winnerUserId" class="text-xs text-amber-500">no account</div>
                     </td>
-                    <td class="px-3 py-2">
+                    <td class="px-2 py-1.5">
                       <div class="font-medium">{{ e.loserUsername }}</div>
-                      <div class="text-xs text-gray-400">{{ e.loserCharacterName }}</div>
+                      <div class="text-xs text-gray-500">{{ e.loserCharacterName }}</div>
                       <div v-if="!e.loserUserId" class="text-xs text-amber-500">no account</div>
                     </td>
-                    <td class="px-3 py-2 capitalize">{{ e.winType }}</td>
-                    <td class="px-3 py-2">
+                    <td class="px-2 py-1.5 capitalize">{{ e.winType }}</td>
+                    <td class="px-2 py-1.5">
                       <span
-                        class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
-                        :class="e.counted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+                        class="px-1.5 py-0 rounded text-[10px] font-medium border"
+                        :class="e.counted ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-300'"
                       >{{ e.counted ? 'Yes' : 'No' }}</span>
                     </td>
                   </tr>
@@ -1688,15 +1689,15 @@
 
             <!-- Mobile cards -->
             <div class="md:hidden space-y-3">
-              <div v-for="e in tkoEvents" :key="e.id" class="border rounded-lg p-4 bg-white space-y-2">
+              <div v-for="e in tkoEvents" :key="e.id" class="border rounded-lg p-2 bg-white space-y-2">
                 <div class="flex items-start justify-between gap-2">
                   <div>
-                    <div class="text-xs text-gray-400 font-mono truncate max-w-[200px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
-                    <div class="text-xs text-gray-400">Round {{ e.roundNumber }}/{{ e.bestOf }} · {{ e.match.mode }}</div>
+                    <div class="text-xs text-gray-500 font-mono truncate max-w-[200px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
+                    <div class="text-xs text-gray-500">Round {{ e.roundNumber }}/{{ e.bestOf }} · {{ e.match.mode }}</div>
                   </div>
                   <span
-                    class="shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium"
-                    :class="e.counted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+                    class="shrink-0 px-1.5 py-0 rounded text-[10px] font-medium border"
+                    :class="e.counted ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-300'"
                   >{{ e.counted ? 'Counted' : 'Not counted' }}</span>
                 </div>
                 <div class="text-xs text-gray-500">{{ fmtDate(e.endedAt) }}</div>
@@ -1704,17 +1705,17 @@
                   <div>
                     <div class="text-xs font-semibold text-green-600 mb-0.5">Winner</div>
                     <div class="font-medium text-sm">{{ e.winnerUsername }}</div>
-                    <div class="text-xs text-gray-400">{{ e.winnerCharacterName }}</div>
+                    <div class="text-xs text-gray-500">{{ e.winnerCharacterName }}</div>
                     <div v-if="!e.winnerUserId" class="text-xs text-amber-500">no account</div>
                   </div>
                   <div>
                     <div class="text-xs font-semibold text-red-500 mb-0.5">Loser</div>
                     <div class="font-medium text-sm">{{ e.loserUsername }}</div>
-                    <div class="text-xs text-gray-400">{{ e.loserCharacterName }}</div>
+                    <div class="text-xs text-gray-500">{{ e.loserCharacterName }}</div>
                     <div v-if="!e.loserUserId" class="text-xs text-amber-500">no account</div>
                   </div>
                 </div>
-                <div class="text-xs text-gray-500 pt-1 border-t capitalize">Win type: <span class="font-medium text-gray-700">{{ e.winType }}</span></div>
+                <div class="text-xs text-gray-500 pt-1 border-t capitalize">Win type: <span class="font-medium text-xs text-gray-700">{{ e.winType }}</span></div>
               </div>
             </div>
           </template>
@@ -1728,6 +1729,7 @@
           {{ toastMessage }}
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>
@@ -3279,27 +3281,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.input {
-  margin-top: .25rem;
-  width: 100%;
-  border: 1px solid #D1D5DB;
-  border-radius: .375rem;
-  padding: .5rem;
-  outline: none;
-}
-.input:focus {
-  border-color: #6366F1;
-  box-shadow: 0 0 0 1px #6366F1;
-}
-.btn-primary {
-  margin-top: .25rem;
-  background-color: #6366F1;
-  color: white;
-  padding: .5rem 1.25rem;
-  border-radius: .375rem;
-}
-.btn-primary:disabled { opacity: .5; }
-
 /* hide horizontal scrollbar on mobile tab strip */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

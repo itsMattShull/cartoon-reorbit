@@ -1,22 +1,22 @@
 <template>
-  <div class="bg-gray-50 p-3 sm:p-6 ">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-5xl mx-auto mt-6 space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold">Dissolve Queue</h1>
-        <div class="flex items-center gap-4">
-          <button @click="openFeaturedModal" class="text-sm text-blue-600 underline">Edit Featured</button>
-          <button @click="loadData" class="text-sm text-blue-600 underline">Refresh</button>
+    <div class="px-2 py-2 max-w-5xl mx-auto space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h1 class="text-base font-semibold">Dissolve Queue</h1>
+        <div class="flex items-center gap-3">
+          <button @click="openFeaturedModal" class="text-xs text-blue-600 hover:underline">Edit Featured</button>
+          <button @click="loadData" class="text-xs text-blue-600 hover:underline">Refresh</button>
         </div>
       </div>
 
       <!-- Summary cards -->
-      <div v-if="stats" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div v-if="stats" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div v-for="cat in categories" :key="cat.key"
-             class="bg-white rounded-lg shadow p-4">
-          <div class="text-sm font-semibold text-gray-500 mb-1">{{ cat.label }}</div>
-          <div class="text-2xl font-bold">{{ stats.byCategory[cat.key]?.total ?? 0 }}</div>
-          <div class="text-xs text-gray-500 mt-1">
+             class="bg-white border rounded-lg shadow p-2">
+          <div class="text-xs font-semibold text-gray-500 mb-1">{{ cat.label }}</div>
+          <div class="text-lg font-bold">{{ stats.byCategory[cat.key]?.total ?? 0 }}</div>
+          <div class="text-[10px] text-gray-500 mt-1">
             <span class="text-emerald-600">{{ stats.byCategory[cat.key]?.scheduled ?? 0 }} scheduled</span>
             <span class="mx-1">·</span>
             <span class="text-orange-500">{{ stats.byCategory[cat.key]?.unscheduled ?? 0 }} unscheduled</span>
@@ -25,69 +25,69 @@
       </div>
 
       <!-- Upcoming scheduled auctions -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="p-4 border-b">
-          <h2 class="font-semibold">Upcoming Scheduled Auctions</h2>
-          <p class="text-xs text-gray-500 mt-0.5">Next 20 entries, times in CST</p>
+      <div class="bg-white rounded-lg shadow border">
+        <div class="px-3 py-2 border-b">
+          <h2 class="text-sm font-semibold">Upcoming Scheduled Auctions</h2>
+          <p class="text-[10px] text-gray-500 mt-0.5">Next 20 entries, times in CST</p>
         </div>
         <div v-if="upcoming.length" class="divide-y">
           <div v-for="entry in upcoming" :key="entry.id"
-               class="px-4 py-3 text-sm">
-            <div class="flex items-start gap-3">
-              <div class="shrink-0 w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+               class="px-3 py-2 text-xs">
+            <div class="flex items-start gap-2">
+              <div class="shrink-0 w-9 h-9 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                 <img v-if="entry.ctoonImage" :src="entry.ctoonImage" :alt="entry.ctoonName"
                      class="w-full h-full object-contain" loading="lazy" />
-                <span v-else class="text-gray-300 text-lg">?</span>
+                <span v-else class="text-gray-300 text-base">?</span>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
-                <div class="text-xs text-gray-500 mt-0.5">
+                <div class="text-[10px] text-gray-500 mt-0.5">
                   {{ entry.rarity }}
                   <span v-if="entry.series"> · {{ entry.series }}</span>
                   <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
-                  <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                  <span class="ml-2 px-1.5 py-0 rounded text-[10px] font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
-                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
-                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                 </div>
-                <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
-                <div class="text-xs text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
+                <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
+                <div class="text-[10px] text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
               </div>
               <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-                <div class="hidden sm:block text-xs text-gray-600">{{ fmtCST(entry.scheduledFor) }}</div>
+                <div class="hidden sm:block text-[10px] text-gray-600">{{ fmtCST(entry.scheduledFor) }}</div>
                 <button
                   @click="openReschedule(entry)"
-                  class="text-xs text-blue-600 hover:text-blue-800"
+                  class="text-[11px] text-blue-600 hover:text-blue-800"
                 >Reschedule</button>
                 <button
                   @click="cancelEntry(entry.id)"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="text-[11px] text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
               </div>
             </div>
-            <div v-if="reschedulingId === entry.id" class="mt-3 flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+            <div v-if="reschedulingId === entry.id" class="mt-2 flex flex-wrap items-center gap-2 pl-0 sm:pl-[44px]">
               <input v-model="rescheduleLocal" type="datetime-local"
-                     class="text-xs border rounded px-2 py-1.5" />
+                     class="text-xs border rounded-md px-2 py-1.5" />
               <button
                 @click="saveReschedule(entry.id)"
                 :disabled="reschedulingSaving"
-                class="px-3 py-1.5 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+                class="px-3 py-1 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
               >{{ reschedulingSaving ? 'Saving…' : 'Save' }}</button>
-              <button @click="cancelReschedule" class="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
-              <div v-if="rescheduleError" class="text-xs text-red-600 w-full">{{ rescheduleError }}</div>
+              <button @click="cancelReschedule" class="px-3 py-1 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+              <div v-if="rescheduleError" class="text-[11px] text-red-600 w-full">{{ rescheduleError }}</div>
             </div>
           </div>
         </div>
-        <div v-else class="p-6 text-center text-sm text-gray-400">No upcoming scheduled auctions</div>
+        <div v-else class="p-6 text-center text-gray-400">No upcoming scheduled auctions</div>
       </div>
 
       <!-- All Queue Entries (search + pagination) -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="p-4 border-b">
-          <h2 class="font-semibold">All Queue Entries</h2>
-          <p class="text-xs text-gray-500 mt-0.5">
+      <div class="bg-white rounded-lg shadow border">
+        <div class="px-3 py-2 border-b">
+          <h2 class="text-sm font-semibold">All Queue Entries</h2>
+          <p class="text-[10px] text-gray-500 mt-0.5">
             <template v-if="hasActiveFilters">
               {{ filteredEntries.length }} of {{ allEntries.length }} entries match
             </template>
@@ -98,11 +98,11 @@
         </div>
 
         <!-- Filters: category + search -->
-        <div class="p-4 border-b" ref="searchContainer">
-          <div class="flex flex-wrap items-center gap-3 mb-3">
+        <div class="px-3 py-2 border-b" ref="searchContainer">
+          <div class="flex flex-wrap items-center gap-2 mb-2">
             <select
               v-model="categoryFilter"
-              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="text-xs border rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value="ALL">All Categories</option>
               <option value="FEATURED">Featured</option>
@@ -110,21 +110,21 @@
             </select>
             <select
               v-model="rarityFilter"
-              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="text-xs border rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value="ALL">All Rarities</option>
               <option v-for="r in rarityOptions" :key="r" :value="r">{{ r }}</option>
             </select>
             <select
               v-model="seriesFilter"
-              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="text-xs border rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value="ALL">All Series</option>
               <option v-for="s in seriesOptions" :key="s" :value="s">{{ s }}</option>
             </select>
             <select
               v-model="setFilter"
-              class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="text-xs border rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
             >
               <option value="ALL">All Sets</option>
               <option v-for="s in setOptions" :key="s" :value="s">{{ s }}</option>
@@ -135,7 +135,7 @@
               v-model="searchQuery"
               type="text"
               placeholder="Search by cToon name…"
-              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="w-full text-xs border rounded-md px-2 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-300"
               @focus="showSuggestions = searchQuery.trim().length >= 3"
               @keydown.escape="showSuggestions = false"
             />
@@ -148,22 +148,22 @@
             <!-- Autocomplete dropdown -->
             <div
               v-if="showSuggestions && searchSuggestions.length"
-              class="absolute z-20 top-full mt-1 left-0 w-full sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto"
+              class="absolute z-20 top-full mt-1 left-0 w-full sm:w-96 bg-white border rounded-md shadow-lg max-h-72 overflow-y-auto"
             >
               <button
                 v-for="suggestion in searchSuggestions"
                 :key="suggestion.id"
                 @mousedown.prevent="selectSuggestion(suggestion)"
-                class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-left"
+                class="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 text-left"
               >
-                <div class="shrink-0 w-9 h-9 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                <div class="shrink-0 w-8 h-8 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                   <img v-if="suggestion.ctoonImage" :src="suggestion.ctoonImage" :alt="suggestion.ctoonName"
                        class="w-full h-full object-contain" loading="lazy" />
-                  <span v-else class="text-gray-300 text-sm">?</span>
+                  <span v-else class="text-gray-300 text-xs">?</span>
                 </div>
                 <div class="min-w-0 flex-1">
-                  <div class="text-sm font-medium truncate">{{ suggestion.ctoonName || '—' }}</div>
-                  <div class="text-xs text-gray-500">Mint #{{ suggestion.mintNumber ?? '?' }}</div>
+                  <div class="text-xs font-medium truncate">{{ suggestion.ctoonName || '—' }}</div>
+                  <div class="text-[10px] text-gray-500">Mint #{{ suggestion.mintNumber ?? '?' }}</div>
                 </div>
               </button>
             </div>
@@ -172,105 +172,105 @@
 
         <!-- Entries list -->
         <div v-if="paginatedEntries.length" class="divide-y">
-          <div v-for="entry in paginatedEntries" :key="entry.id" class="px-4 py-3 text-sm">
-            <div class="flex items-start gap-3">
-              <div class="shrink-0 w-10 h-10 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+          <div v-for="entry in paginatedEntries" :key="entry.id" class="px-3 py-2 text-xs">
+            <div class="flex items-start gap-2">
+              <div class="shrink-0 w-9 h-9 rounded bg-gray-100 flex items-center justify-center overflow-hidden">
                 <img v-if="entry.ctoonImage" :src="entry.ctoonImage" :alt="entry.ctoonName"
                      class="w-full h-full object-contain" loading="lazy" />
-                <span v-else class="text-gray-300 text-lg">?</span>
+                <span v-else class="text-gray-300 text-base">?</span>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-medium truncate" :title="entry.ctoonName">{{ entry.ctoonName || '—' }}</div>
-                <div class="text-xs text-gray-500 mt-0.5">
+                <div class="text-[10px] text-gray-500 mt-0.5">
                   {{ entry.rarity }}
                   <span v-if="entry.series"> · {{ entry.series }}</span>
                   <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
-                  <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                  <span class="ml-2 px-1.5 py-0 rounded text-[10px] font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
-                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
-                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                 </div>
-                <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
-                <div class="text-xs text-gray-500 mt-1">
+                <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
+                <div class="text-[10px] text-gray-500 mt-1">
                   {{ entry.scheduledFor ? fmtCST(entry.scheduledFor) : 'Not scheduled' }}
                 </div>
               </div>
               <div class="shrink-0 flex flex-col items-end gap-1">
                 <button
                   @click="openReschedule(entry)"
-                  class="text-xs text-blue-600 hover:text-blue-800"
+                  class="text-[11px] text-blue-600 hover:text-blue-800"
                 >Reschedule</button>
                 <button
                   @click="cancelEntry(entry.id)"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="text-[11px] text-red-500 hover:text-red-700"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : (entry.scheduledFor ? 'Unschedule' : 'Remove') }}</button>
               </div>
             </div>
-            <div v-if="reschedulingId === entry.id" class="mt-3 flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
+            <div v-if="reschedulingId === entry.id" class="mt-2 flex flex-wrap items-center gap-2 pl-0 sm:pl-[44px]">
               <input v-model="rescheduleLocal" type="datetime-local"
-                     class="text-xs border rounded px-2 py-1.5" />
+                     class="text-xs border rounded-md px-2 py-1.5" />
               <button
                 @click="saveReschedule(entry.id)"
                 :disabled="reschedulingSaving"
-                class="px-3 py-1.5 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+                class="px-3 py-1 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
               >{{ reschedulingSaving ? 'Saving…' : 'Save' }}</button>
-              <button @click="cancelReschedule" class="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
-              <div v-if="rescheduleError" class="text-xs text-red-600 w-full">{{ rescheduleError }}</div>
+              <button @click="cancelReschedule" class="px-3 py-1 text-xs rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+              <div v-if="rescheduleError" class="text-[11px] text-red-600 w-full">{{ rescheduleError }}</div>
             </div>
           </div>
         </div>
-        <div v-else class="p-6 text-center text-sm text-gray-400">
+        <div v-else class="p-6 text-center text-gray-400">
           {{ hasActiveFilters ? 'No entries match your filters' : 'No entries in the dissolve queue' }}
         </div>
 
         <!-- Pagination -->
-        <div v-if="totalPages > 1" class="p-4 border-t flex items-center justify-between">
-          <div class="text-xs text-gray-500">
+        <div v-if="totalPages > 1" class="px-3 py-2 border-t flex items-center justify-between">
+          <div class="text-[10px] text-gray-500">
             Showing {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredEntries.length) }} of {{ filteredEntries.length }}
           </div>
           <div class="flex items-center gap-1">
             <button @click="goToPage(1)" :disabled="currentPage === 1"
-                    class="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 disabled:cursor-not-allowed">«</button>
+                    class="px-2 py-1 text-xs rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">«</button>
             <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1"
-                    class="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 disabled:cursor-not-allowed">‹</button>
-            <span class="px-3 text-xs text-gray-600">{{ currentPage }} / {{ totalPages }}</span>
+                    class="px-2 py-1 text-xs rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">‹</button>
+            <span class="px-2 text-xs text-gray-600">{{ currentPage }} / {{ totalPages }}</span>
             <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages"
-                    class="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 disabled:cursor-not-allowed">›</button>
+                    class="px-2 py-1 text-xs rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">›</button>
             <button @click="goToPage(totalPages)" :disabled="currentPage === totalPages"
-                    class="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50 disabled:cursor-not-allowed">»</button>
+                    class="px-2 py-1 text-xs rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">»</button>
           </div>
         </div>
       </div>
 
       <!-- Reschedule All form -->
-      <div class="bg-white rounded-lg shadow p-4 sm:p-5">
-        <h2 class="font-semibold mb-1">Reschedule All</h2>
-        <p class="text-xs text-gray-500 mb-4">
+      <div class="bg-white rounded border p-3">
+        <h2 class="text-sm font-semibold mb-1">Reschedule All</h2>
+        <p class="text-[11px] text-gray-500 mb-3">
           Set a new schedule for all unscheduled entries. Toggle "Reschedule all" to also reset existing scheduled entries.
         </p>
 
-        <div class="space-y-3">
+        <div class="space-y-2">
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Start date (local)</label>
             <input v-model="form.startAtLocal" type="datetime-local"
-                   class="w-full sm:flex-1 text-xs border rounded px-2 py-1.5" />
+                   class="w-full sm:flex-1 border rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Cadence (days)</label>
             <input v-model.number="form.cadenceDays" type="number" min="1"
-                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
+                   class="w-full sm:w-24 border rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Featured / cadence</label>
             <input v-model.number="form.featuredPerCadence" type="number" min="1"
-                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
+                   class="w-full sm:w-24 border rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <label class="sm:w-40 text-xs text-gray-600 sm:shrink-0">Other / cadence</label>
             <input v-model.number="form.otherPerCadence" type="number" min="1"
-                   class="w-full sm:w-24 text-xs border rounded px-2 py-1.5" />
+                   class="w-full sm:w-24 border rounded-md px-2 py-1.5 text-sm" />
           </div>
           <div class="flex items-center gap-2">
             <input v-model="form.reschedule" type="checkbox" id="reschedule-all"
@@ -281,28 +281,28 @@
           </div>
         </div>
 
-        <div v-if="scheduleError" class="mt-3 text-xs text-red-600">{{ scheduleError }}</div>
-        <div v-if="scheduleSuccess" class="mt-3 text-xs text-emerald-600">{{ scheduleSuccess }}</div>
+        <div v-if="scheduleError" class="mt-2 text-xs text-red-600">{{ scheduleError }}</div>
+        <div v-if="scheduleSuccess" class="mt-2 text-xs text-emerald-600">{{ scheduleSuccess }}</div>
 
-        <div class="mt-4">
+        <div class="mt-3">
           <button
             @click="applySchedule"
             :disabled="scheduling"
-            class="w-full sm:w-auto px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+            class="w-full sm:w-auto px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
           >{{ scheduling ? 'Scheduling…' : 'Apply Schedule' }}</button>
         </div>
       </div>
     </div>
 
     <!-- Edit Featured modal -->
-    <div v-if="showFeaturedModal" class="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-black/40" @click.self="closeFeaturedModal">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div class="p-4 sm:p-5 border-b">
+    <div v-if="showFeaturedModal" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50" @click.self="closeFeaturedModal">
+      <div class="relative bg-white w-full max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="px-4 py-3 border-b flex-shrink-0">
           <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-lg">Edit Featured</h2>
-            <button @click="closeFeaturedModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <h2 class="text-sm font-semibold">Edit Featured</h2>
+            <button @click="closeFeaturedModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
-          <p class="text-xs text-gray-600 mt-2 leading-relaxed">
+          <p class="text-[11px] text-gray-600 mt-1.5 leading-relaxed">
             When an account is dissolved, its cToons are transferred to the official account and queued
             for auction. Any cToon that matches a checked rarity, series, or set below is marked as a
             <span class="font-medium">featured</span> auction when it's queued. Checking a box here does
@@ -311,13 +311,13 @@
           </p>
         </div>
 
-        <div class="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+        <div class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
           <!-- Rarities -->
           <div>
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">Rarities</h3>
-            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+            <h3 class="text-xs font-semibold text-gray-700 mb-1.5">Rarities</h3>
+            <div class="border rounded-md divide-y max-h-40 overflow-y-auto">
               <label v-for="r in orderedRarityOptions" :key="r"
-                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                     class="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" :value="r" v-model="featuredForm.rarities" class="rounded border-gray-300" />
                 {{ r }}
               </label>
@@ -326,52 +326,52 @@
 
           <!-- Series -->
           <div>
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">Series</h3>
+            <h3 class="text-xs font-semibold text-gray-700 mb-1.5">Series</h3>
             <input
               v-model="seriesSearch"
               type="text"
               placeholder="Filter series… (3+ characters)"
-              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="w-full border rounded-md px-2 py-1.5 text-sm mb-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
-            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+            <div class="border rounded-md divide-y max-h-40 overflow-y-auto">
               <label v-for="s in orderedSeriesOptions" :key="s"
-                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                     class="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" :value="s" v-model="featuredForm.series" class="rounded border-gray-300" />
                 {{ s }}
               </label>
-              <div v-if="!orderedSeriesOptions.length" class="px-3 py-2 text-sm text-gray-400">No matches</div>
+              <div v-if="!orderedSeriesOptions.length" class="px-2 py-1.5 text-xs text-gray-400">No matches</div>
             </div>
           </div>
 
           <!-- Sets -->
           <div>
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">Sets</h3>
+            <h3 class="text-xs font-semibold text-gray-700 mb-1.5">Sets</h3>
             <input
               v-model="setSearch"
               type="text"
               placeholder="Filter sets… (3+ characters)"
-              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              class="w-full border rounded-md px-2 py-1.5 text-sm mb-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
-            <div class="border rounded-lg divide-y max-h-40 overflow-y-auto">
+            <div class="border rounded-md divide-y max-h-40 overflow-y-auto">
               <label v-for="s in orderedSetOptions" :key="s"
-                     class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                     class="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" :value="s" v-model="featuredForm.sets" class="rounded border-gray-300" />
                 {{ s }}
               </label>
-              <div v-if="!orderedSetOptions.length" class="px-3 py-2 text-sm text-gray-400">No matches</div>
+              <div v-if="!orderedSetOptions.length" class="px-2 py-1.5 text-xs text-gray-400">No matches</div>
             </div>
           </div>
         </div>
 
-        <div class="p-4 sm:p-5 border-t">
-          <div v-if="featuredError" class="mb-3 text-xs text-red-600">{{ featuredError }}</div>
-          <div v-if="featuredSuccess" class="mb-3 text-xs text-emerald-600">{{ featuredSuccess }}</div>
-          <div class="flex items-center justify-end gap-3">
-            <button @click="closeFeaturedModal" class="px-4 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50">Cancel</button>
+        <div class="px-4 py-3 border-t flex-shrink-0">
+          <div v-if="featuredError" class="mb-2 text-xs text-red-600">{{ featuredError }}</div>
+          <div v-if="featuredSuccess" class="mb-2 text-xs text-emerald-600">{{ featuredSuccess }}</div>
+          <div class="flex items-center justify-end gap-2">
+            <button @click="closeFeaturedModal" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50">Cancel</button>
             <button
               @click="saveFeaturedConfig"
               :disabled="savingFeatured"
-              class="px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
             >{{ savingFeatured ? 'Saving…' : 'Save' }}</button>
           </div>
         </div>

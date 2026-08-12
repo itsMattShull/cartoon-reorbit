@@ -1,132 +1,133 @@
 <template>
-  <div class="max-w-5xl mx-auto p-4 mt-12">
-    <div class="mt-12 mb-6 flex flex-col gap-3 items-start lg:flex-row lg:items-center lg:justify-between">
-      <h1 class="text-3xl font-bold">Admin: Achievements</h1>
-      <div class="flex flex-col items-start gap-3 lg:flex-row lg:items-center">
-        <button class="px-3 py-2 bg-blue-600 text-white rounded" @click="openCreate">Create Achievement</button>
-        <button class="px-3 py-2 border rounded" @click="queueAll" :disabled="queuing">
+  <div class="admin-legacy-achievements bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <div class="flex flex-col gap-2 items-start mb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-2">
+      <h1 class="text-base font-semibold">Admin: Achievements</h1>
+      <div class="flex flex-col items-start gap-2 lg:flex-row lg:items-center">
+        <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="openCreate">Create Achievement</button>
+        <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="queueAll" :disabled="queuing">
           {{ queuing ? 'Queuing…' : 'Queue Achievements Now' }}
         </button>
-        <button class="px-3 py-2 border rounded" @click="openSettings">Settings</button>
+        <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="openSettings">Settings</button>
       </div>
     </div>
 
     <!-- Modal -->
-    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div class="absolute inset-0 bg-black/50" @click="closeForm"></div>
-      <div class="relative bg-white rounded shadow max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col overflow-hidden">
-        <div class="px-4 pt-4 pb-2">
-          <h2 class="text-xl font-semibold">{{ editId ? 'Edit Achievement' : 'Create Achievement' }}</h2>
+      <div class="relative bg-white w-full max-w-4xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="px-4 py-3 border-b flex-shrink-0">
+          <h2 class="text-sm font-semibold">{{ editId ? 'Edit Achievement' : 'Create Achievement' }}</h2>
         </div>
         <form @submit.prevent="save" class="flex flex-col flex-1 min-h-0">
-          <div class="px-4 pb-4 overflow-y-auto">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium">Title</label>
-                <input v-model="form.title" class="w-full border rounded px-2 py-1" required />
+          <div class="px-4 py-3 overflow-y-auto flex-1 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Title</label>
+                <input v-model="form.title" class="border rounded-md px-2 py-1.5 text-sm" required />
               </div>
-              <div>
-                <label class="block text-sm font-medium">Slug (optional)</label>
-                <input v-model="form.slug" class="w-full border rounded px-2 py-1" placeholder="auto from title" :disabled="!!editId" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Slug (optional)</label>
+                <input v-model="form.slug" class="border rounded-md px-2 py-1.5 text-sm" placeholder="auto from title" :disabled="!!editId" />
               </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium">Description</label>
-              <textarea v-model="form.description" class="w-full border rounded px-2 py-1" rows="2" />
+            <div class="md:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Description</label>
+              <textarea v-model="form.description" class="border rounded-md px-2 py-1.5 text-sm" rows="2" />
             </div>
-              <div>
-                <label class="block text-sm font-medium">Image (png/jpg/gif)</label>
-                <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/gif" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Image (png/jpg/gif)</label>
+                <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/gif" class="text-xs" />
               </div>
               <div class="flex items-center gap-2">
                 <input type="checkbox" v-model="form.isActive" id="isActive" />
-                <label for="isActive">Active</label>
+                <label for="isActive" class="text-xs">Active</label>
               </div>
               <div v-if="editId" class="flex items-center gap-2">
                 <input type="checkbox" v-model="form.notifyDiscord" id="notifyDiscord" />
-                <label for="notifyDiscord">Announce in Discord</label>
+                <label for="notifyDiscord" class="text-xs">Announce in Discord</label>
               </div>
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium">Discord Role Name (optional)</label>
-                <input v-model="form.discordRoleName" class="w-full border rounded px-2 py-1" placeholder="Role name to grant on achievement" />
+              <div class="md:col-span-2 flex flex-col gap-1">
+                <label class="text-xs font-medium">Discord Role Name (optional)</label>
+                <input v-model="form.discordRoleName" class="border rounded-md px-2 py-1.5 text-sm" placeholder="Role name to grant on achievement" />
               </div>
             </div>
 
-            <h3 class="text-lg font-semibold mt-6">Criteria</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm">Total Points ≥</label>
-                <input v-model.number="form.criteria.pointsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+            <h3 class="text-xs font-semibold">Criteria</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total Points ≥</label>
+                <input v-model.number="form.criteria.pointsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Total cToons ≥</label>
-                <input v-model.number="form.criteria.totalCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total cToons ≥</label>
+                <input v-model.number="form.criteria.totalCtoonsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Unique cToons ≥</label>
-                <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Unique cToons ≥</label>
+                <input v-model.number="form.criteria.uniqueCtoonsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Auctions Won ≥</label>
-                <input v-model.number="form.criteria.auctionsWonGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Auctions Won ≥</label>
+                <input v-model.number="form.criteria.auctionsWonGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Auctions Created (Completed) ≥</label>
-                <input v-model.number="form.criteria.auctionsCreatedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Auctions Created (Completed) ≥</label>
+                <input v-model.number="form.criteria.auctionsCreatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Accepted Trades ≥</label>
-                <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Accepted Trades ≥</label>
+                <input v-model.number="form.criteria.tradesAcceptedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Accepted cToon Suggestions ≥</label>
-                <input v-model.number="form.criteria.ctoonSuggestionsAcceptedGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Accepted cToon Suggestions ≥</label>
+                <input v-model.number="form.criteria.ctoonSuggestionsAcceptedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-sm">Cumulative Active Days ≥</label>
-                <input v-model.number="form.criteria.cumulativeActiveDaysGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
-                <p class="text-xs text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Cumulative Active Days ≥</label>
+                <input v-model.number="form.criteria.cumulativeActiveDaysGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Counts days with any site activity, not just logins.</p>
               </div>
-              <div>
-                <label class="block text-sm">TKO Wins ≥</label>
-                <input v-model.number="form.criteria.tkoWinsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
-                <p class="text-xs text-gray-500 mt-1">Counted round wins in the TKO game.</p>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">TKO Wins ≥</label>
+                <input v-model.number="form.criteria.tkoWinsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Counted round wins in the TKO game.</p>
               </div>
-              <div>
-                <label class="block text-sm">Wordle Crown Wins ≥</label>
-                <input v-model.number="form.criteria.wordleWinsGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
-                <p class="text-xs text-gray-500 mt-1">Total times the user earned the 👑 (best score of the day).</p>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Wordle Crown Wins ≥</label>
+                <input v-model.number="form.criteria.wordleWinsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Total times the user earned the 👑 (best score of the day).</p>
               </div>
-              <div>
-                <label class="block text-sm">Wordle Crown Streak ≥</label>
-                <input v-model.number="form.criteria.wordleCurrentStreakGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
-                <p class="text-xs text-gray-500 mt-1">Current consecutive-day streak of earning the 👑.</p>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Wordle Crown Streak ≥</label>
+                <input v-model.number="form.criteria.wordleCurrentStreakGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Current consecutive-day streak of earning the 👑.</p>
               </div>
-              <div>
-                <label class="block text-sm">Flappy Powerpuff Best Score ≥</label>
-                <input v-model.number="form.criteria.flappyBestScoreGte" type="number" min="0" class="w-full border rounded px-2 py-1" />
-                <p class="text-xs text-gray-500 mt-1">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Flappy Powerpuff Best Score ≥</label>
+                <input v-model.number="form.criteria.flappyBestScoreGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">
                   Highest number of buildings passed in a ranked run. Achievement rewards bypass the
                   daily points cap, so keep thresholds at levels a real player reaches and avoid
                   attaching high-value cToons here.
                 </p>
               </div>
-              <div class="md:col-span-3">
-                <label class="block text-sm">User created before</label>
-                <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
-                <p class="text-xs text-gray-500 mt-1">Users with an account created strictly earlier than this date qualify.</p>
+              <div class="md:col-span-3 flex flex-col gap-1">
+                <label class="text-xs font-medium">User created before</label>
+                <input v-model="form.criteria.userCreatedBefore" type="date" class="border rounded-md px-2 py-1.5 text-sm max-w-xs" />
+                <p class="text-[10px] text-gray-500 mt-1">Users with an account created strictly earlier than this date qualify.</p>
               </div>
             </div>
           <div class="mt-3">
-            <label class="block text-sm">Set completion (AND):</label>
-            <div class="flex gap-2 items-center mb-2">
+            <label class="block text-xs font-medium">Set completion (AND):</label>
+            <div class="flex gap-2 items-center mb-2 mt-1">
               <datalist id="ach-sets-list">
                 <option v-for="opt in filteredSetOptions(setInput)" :key="opt" :value="opt" />
               </datalist>
-              <input v-model="setInput" list="ach-sets-list" class="border rounded px-2 py-1 flex-1" placeholder="Type 3+ characters to search" />
-              <button type="button" class="px-3 py-1 border rounded" @click="addSet">Add</button>
+              <input v-model="setInput" list="ach-sets-list" class="border rounded-md px-2 py-1.5 text-sm flex-1" placeholder="Type 3+ characters to search" />
+              <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="addSet">Add</button>
             </div>
             <div class="flex flex-wrap gap-2">
-              <span v-for="s in form.criteria.setsRequired" :key="s" class="px-2 py-1 bg-gray-100 rounded">
+              <span v-for="s in form.criteria.setsRequired" :key="s" class="px-2 py-1 text-xs bg-gray-100 rounded">
                 {{ s }}
                 <button type="button" class="ml-1 text-red-600" @click="removeSet(s)">×</button>
               </span>
@@ -134,11 +135,11 @@
           </div>
 
           <div class="mt-3">
-            <label class="block text-sm">cToons Required (must own all):</label>
-            <div class="relative">
+            <label class="block text-xs font-medium">cToons Required (must own all):</label>
+            <div class="relative mt-1">
               <input
                 v-model="ctoonsRequiredInput"
-                class="w-full border rounded px-2 py-1"
+                class="border rounded-md px-2 py-1.5 text-sm w-full"
                 placeholder="Type 3+ characters to search"
                 autocomplete="off"
                 @focus="showCtoonsRequiredDropdown = true"
@@ -146,17 +147,17 @@
               />
               <div
                 v-if="showCtoonsRequiredDropdown && filteredCtoonsRequired.length"
-                class="absolute z-10 bg-white border rounded shadow-lg w-full max-h-52 overflow-y-auto"
+                class="absolute z-10 bg-white border rounded-md shadow-lg w-full max-h-52 overflow-y-auto"
               >
                 <button
                   v-for="c in filteredCtoonsRequired"
                   :key="c.id"
                   type="button"
-                  class="flex items-center gap-2 w-full px-2 py-1 hover:bg-gray-100 text-left"
+                  class="flex items-center gap-2 w-full px-2 py-1.5 hover:bg-gray-100 text-left"
                   @mousedown.prevent="addRequiredCtoon(c)"
                 >
                   <img :src="c.assetPath" class="w-8 h-8 object-contain flex-shrink-0" alt="" />
-                  <span class="text-sm truncate">{{ c.name }}</span>
+                  <span class="text-xs truncate">{{ c.name }}</span>
                 </button>
               </div>
             </div>
@@ -164,23 +165,23 @@
               <div
                 v-for="(r, i) in form.criteria.ctoonsRequired"
                 :key="r.ctoonId"
-                class="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded"
+                class="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 rounded"
               >
                 <img v-if="r.assetPath" :src="r.assetPath" class="w-6 h-6 object-contain flex-shrink-0" alt="" />
-                <span class="text-sm">{{ r.name }}</span>
+                <span class="text-xs">{{ r.name }}</span>
                 <button type="button" class="ml-1 text-red-600" @click="form.criteria.ctoonsRequired.splice(i, 1)">×</button>
               </div>
             </div>
           </div>
 
-            <h3 class="text-lg font-semibold mt-6">Rewards</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm">Points</label>
-                <input v-model.number="form.rewards.points" type="number" min="0" class="w-full border rounded px-2 py-1" />
+            <h3 class="text-xs font-semibold mt-4">Rewards</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Points</label>
+                <input v-model.number="form.rewards.points" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm">Add cToon reward</label>
+            <div class="md:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Add cToon reward</label>
               <div class="flex gap-2 items-center">
                 <datalist id="ach-ctoon-list">
                   <option v-for="c in filteredCtoons(ctoonSelection.name)" :key="c.id" :value="c.name" />
@@ -188,13 +189,13 @@
                 <input
                   v-model="ctoonSelection.name"
                   list="ach-ctoon-list"
-                  class="border rounded px-2 py-1 w-full"
+                  class="border rounded-md px-2 py-1.5 text-sm w-full"
                   placeholder="Type 3+ characters to search"
                 />
-                <input v-model.number="ctoonSelection.qty" type="number" min="1" class="w-24 border rounded px-2 py-1" />
-                <button type="button" class="px-3 py-1 border rounded" @click="addCtoon">Add</button>
+                <input v-model.number="ctoonSelection.qty" type="number" min="1" class="w-24 border rounded-md px-2 py-1.5 text-sm" />
+                <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="addCtoon">Add</button>
               </div>
-              <div class="text-sm mt-1" v-if="form.rewards.ctoons.length">
+              <div class="text-xs mt-1" v-if="form.rewards.ctoons.length">
                 <div v-for="(r, i) in form.rewards.ctoons" :key="r.ctoonId" class="flex items-center gap-2">
                   <span>{{ nameForCtoon(r.ctoonId) }} × {{ r.quantity }}</span>
                   <button type="button" class="text-red-600" @click="form.rewards.ctoons.splice(i,1)">Remove</button>
@@ -204,8 +205,8 @@
             </div>
 
           <div class="mt-3">
-            <label class="block text-sm">Backgrounds</label>
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-48 overflow-auto border p-2 rounded">
+            <label class="block text-xs font-medium">Backgrounds</label>
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-48 overflow-auto border p-2 rounded-md mt-1">
               <button
                 v-for="b in backgrounds"
                 :key="b.id"
@@ -225,77 +226,77 @@
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold mt-6">Claimable Reward (optional)</h3>
+          <h3 class="text-xs font-semibold mt-4">Claimable Reward (optional)</h3>
           <div class="flex items-center gap-2">
             <input type="checkbox" v-model="form.isClaimable" id="isClaimable" />
-            <label for="isClaimable">User picks 1 of up to 4 reward options instead of auto-granting the Rewards above</label>
+            <label for="isClaimable" class="text-xs">User picks 1 of up to 4 reward options instead of auto-granting the Rewards above</label>
           </div>
-          <div v-if="form.isClaimable" class="mt-2 space-y-3">
-            <div v-for="(opt, i) in form.claimOptions" :key="i" class="border rounded p-2 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-              <div>
-                <label class="block text-xs">Label</label>
-                <input v-model="opt.label" class="w-full border rounded px-2 py-1" placeholder="Option name" />
+          <div v-if="form.isClaimable" class="mt-2 space-y-2">
+            <div v-for="(opt, i) in form.claimOptions" :key="i" class="border rounded-md p-2 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium">Label</label>
+                <input v-model="opt.label" class="border rounded-md px-2 py-1.5 text-sm" placeholder="Option name" />
               </div>
-              <div>
-                <label class="block text-xs">Points</label>
-                <input v-model.number="opt.points" type="number" min="0" class="w-full border rounded px-2 py-1" />
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium">Points</label>
+                <input v-model.number="opt.points" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div>
-                <label class="block text-xs">cToon</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium">cToon</label>
                 <datalist :id="`claim-ctoon-list-${i}`">
                   <option v-for="c in filteredCtoons(opt.ctoonName)" :key="c.id" :value="c.name" />
                 </datalist>
                 <input
                   v-model="opt.ctoonName"
                   :list="`claim-ctoon-list-${i}`"
-                  class="w-full border rounded px-2 py-1"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Type 3+ chars"
                   @change="setClaimOptionCtoon(opt, opt.ctoonName)"
                 />
               </div>
               <div class="flex items-end gap-2">
-                <div class="flex-1">
-                  <label class="block text-xs">Qty</label>
-                  <input v-model.number="opt.quantity" type="number" min="1" class="w-full border rounded px-2 py-1" />
+                <div class="flex-1 flex flex-col gap-1">
+                  <label class="text-[10px] font-medium">Qty</label>
+                  <input v-model.number="opt.quantity" type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" />
                 </div>
-                <button type="button" class="text-red-600 px-2 py-1" @click="removeClaimOption(i)">Remove</button>
+                <button type="button" class="text-red-600 px-2 py-1 text-xs" @click="removeClaimOption(i)">Remove</button>
               </div>
             </div>
-            <button v-if="form.claimOptions.length < 4" type="button" class="px-3 py-1 border rounded" @click="addClaimOption">
+            <button v-if="form.claimOptions.length < 4" type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="addClaimOption">
               Add option ({{ form.claimOptions.length }}/4)
             </button>
           </div>
           </div>
-          <div class="px-4 py-3 border-t flex gap-3 justify-end">
-            <button type="button" class="px-4 py-2 border rounded" @click="closeForm">Cancel</button>
-            <button class="px-4 py-2 bg-blue-600 text-white rounded" type="submit">{{ editId ? 'Save Changes' : 'Create Achievement' }}</button>
+          <div class="px-4 py-3 border-t flex gap-2 justify-end flex-shrink-0">
+            <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeForm">Cancel</button>
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" type="submit">{{ editId ? 'Save Changes' : 'Create Achievement' }}</button>
           </div>
         </form>
       </div>
     </div>
 
     <!-- Settings Modal -->
-    <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div class="absolute inset-0 bg-black/50" @click="closeSettings"></div>
-      <div class="relative bg-white rounded shadow max-w-lg w-full mx-4 flex flex-col overflow-hidden">
-        <div class="px-4 pt-4 pb-2">
-          <h2 class="text-xl font-semibold">Achievement Settings</h2>
+      <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col">
+        <div class="px-4 py-3 border-b flex-shrink-0">
+          <h2 class="text-sm font-semibold">Achievement Settings</h2>
         </div>
-        <div class="px-4 pb-4">
-          <label class="block text-sm font-medium">Discord Channel ID (Announcements)</label>
+        <div class="px-4 py-3">
+          <label class="block text-xs font-medium">Discord Channel ID (Announcements)</label>
           <input
             v-model="settingsForm.achievementDiscordChannelId"
-            class="w-full border rounded px-2 py-1"
+            class="border rounded-md px-2 py-1.5 text-sm w-full mt-1"
             placeholder="123456789012345678"
             :disabled="settingsLoading || settingsSaving"
           />
-          <p class="text-xs text-gray-500 mt-1">
+          <p class="text-[10px] text-gray-500 mt-1">
             Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
           </p>
         </div>
-        <div class="px-4 py-3 border-t flex gap-3 justify-end">
-          <button type="button" class="px-4 py-2 border rounded" @click="closeSettings">Cancel</button>
-          <button class="px-4 py-2 bg-blue-600 text-white rounded" type="button" @click="saveSettings" :disabled="settingsSaving">
+        <div class="px-4 py-3 border-t flex gap-2 justify-end flex-shrink-0">
+          <button type="button" class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeSettings">Cancel</button>
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" type="button" @click="saveSettings" :disabled="settingsSaving">
             {{ settingsSaving ? 'Saving…' : 'Save Settings' }}
           </button>
         </div>
@@ -303,19 +304,20 @@
     </div>
 
     <div>
-      <h2 class="text-xl font-semibold mb-3">Existing Achievements</h2>
-      <div v-if="pending">Loading…</div>
-      <div v-else class="divide-y border rounded">
-        <div v-for="a in achievements" :key="a.id" class="p-3 flex items-center gap-4">
+      <h2 class="text-xs font-semibold mb-2">Existing Achievements</h2>
+      <div v-if="pending" class="text-gray-500 py-6 text-center">Loading…</div>
+      <div v-else class="divide-y border rounded-md">
+        <div v-for="a in achievements" :key="a.id" class="p-2 flex items-center gap-3">
           <img v-if="a.imagePath" :src="a.imagePath" class="w-12 h-12 object-cover rounded" alt="" />
-          <div class="flex-1">
-            <div class="font-medium">{{ a.title }}</div>
-            <div class="text-xs text-gray-500">Slug: {{ a.slug }} • Active: {{ a.isActive ? 'yes' : 'no' }}</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-xs">{{ a.title }}</div>
+            <div class="text-[10px] text-gray-500">Slug: {{ a.slug }} • Active: {{ a.isActive ? 'yes' : 'no' }}</div>
           </div>
-          <button class="px-3 py-1 border rounded" @click="startEdit(a)">Edit</button>
-          <button class="px-3 py-1 border rounded text-red-600" @click="remove(a)">Delete</button>
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEdit(a)">Edit</button>
+          <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="remove(a)">Delete</button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>
