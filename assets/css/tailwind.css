@@ -41,4 +41,69 @@
     color: #111827;
     background-color: #ffffff;
   }
+
+  /*
+   * Readable text on light surfaces, everywhere.
+   *
+   * Same root cause as the form-control rule above: nothing sets a colour, so
+   * text inherits #ffffff from the newsite layout. A `bg-white` card or a
+   * `bg-gray-50` panel then renders white-on-white. This bit the admin console
+   * hardest — the legacy tools were written as light full-page views and used
+   * to render under layouts/admin.vue, which has no white base colour — but it
+   * also affects shared surfaces that appear on ordinary pages, such as the
+   * bulk-edit and second-edition modals.
+   *
+   * Pairing the background with a foreground is the fix: if an element declares
+   * a light background, its text defaults to dark. There is no case where white
+   * text on `bg-white` was intended, so this cannot take away a deliberate
+   * choice.
+   *
+   * In @layer base for the same reason as above: Tailwind's layer order means a
+   * `text-white` utility or a component's scoped CSS still wins, so anything
+   * that genuinely wants light text on these backgrounds keeps it.
+   */
+  /*
+   * Attribute selectors, not `.bg-white`. Writing these as class selectors makes
+   * Tailwind treat them as utility definitions and variant-expand them, which
+   * emitted extra `.hover\:bg-gray-100:hover{color:…}` rules into the utilities
+   * layer at (0,2,0) — enough to beat a `text-white` utility and flip an
+   * element's text on hover. `[class~="…"]` matches the same single class,
+   * stays at (0,1,0), and is invisible to Tailwind's variant machinery, so the
+   * rule does exactly what it says and nothing else.
+   */
+  [class~="bg-white"],
+  [class~="bg-gray-50"], [class~="bg-gray-100"], [class~="bg-gray-200"],
+  [class~="bg-slate-50"], [class~="bg-slate-100"], [class~="bg-slate-200"],
+  [class~="bg-zinc-50"], [class~="bg-zinc-100"], [class~="bg-zinc-200"],
+  [class~="bg-neutral-50"], [class~="bg-neutral-100"], [class~="bg-neutral-200"],
+  [class~="bg-stone-50"], [class~="bg-stone-100"], [class~="bg-stone-200"] {
+    color: #111827; /* gray-900 */
+  }
+
+  /*
+   * The same pairing for tinted light surfaces — the 50/100 shades used for
+   * alert, info and highlight boxes. These are near-white (bg-yellow-50 is
+   * #fefce8), so inherited white text is just as invisible on them as on
+   * bg-white. Stops at 100: darker shades start being used as solid accents
+   * where a light foreground can be a deliberate choice.
+   */
+  [class~="bg-red-50"], [class~="bg-red-100"],
+  [class~="bg-orange-50"], [class~="bg-orange-100"],
+  [class~="bg-amber-50"], [class~="bg-amber-100"],
+  [class~="bg-yellow-50"], [class~="bg-yellow-100"],
+  [class~="bg-lime-50"], [class~="bg-lime-100"],
+  [class~="bg-green-50"], [class~="bg-green-100"],
+  [class~="bg-emerald-50"], [class~="bg-emerald-100"],
+  [class~="bg-teal-50"], [class~="bg-teal-100"],
+  [class~="bg-cyan-50"], [class~="bg-cyan-100"],
+  [class~="bg-sky-50"], [class~="bg-sky-100"],
+  [class~="bg-blue-50"], [class~="bg-blue-100"],
+  [class~="bg-indigo-50"], [class~="bg-indigo-100"],
+  [class~="bg-violet-50"], [class~="bg-violet-100"],
+  [class~="bg-purple-50"], [class~="bg-purple-100"],
+  [class~="bg-fuchsia-50"], [class~="bg-fuchsia-100"],
+  [class~="bg-pink-50"], [class~="bg-pink-100"],
+  [class~="bg-rose-50"], [class~="bg-rose-100"] {
+    color: #111827; /* gray-900 */
+  }
 }
