@@ -23,6 +23,7 @@ import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
 import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
+import { registerReOrbitChess, startReOrbitChessSweep } from './utils/reorbitChessRuntime.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1857,6 +1858,11 @@ io.on('connection', socket => {
   // reads the shared socket.data.roomId.
   registerEdRps(io, socket, resolveSocketUser)
 
+  // ReOrbit Chess follows the same rules, with its own reorbitChessUserId / reorbitChessRoomId
+  // keys. Its games run for minutes rather than seconds, so its sweep and grace constants are
+  // its own — see lib/reorbitChess.js.
+  registerReOrbitChess(io, socket, resolveSocketUser)
+
   socket.on('battle:create', async ({ player1MonsterId, opponent }) => {
     try {
       // Same rule as the Clash handlers: the battle belongs to whoever the cookie says is
@@ -2984,6 +2990,11 @@ setInterval(() => {
 // RPS rooms churn far faster than Clash's, and its matches need an absolute-age backstop that
 // does not depend on socket presence, so it runs its own sweep on its own interval.
 startEdRpsSweep(io)
+
+// Chess games are bounded by their own clocks, so this sweep only catches a game whose flag
+// timer was orphaned — but without it such a game would pin two players in matchByUser
+// forever and neither could start another.
+startReOrbitChessSweep(io)
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {
