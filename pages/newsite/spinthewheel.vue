@@ -78,6 +78,8 @@ definePageMeta({
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
+  // fitHeight keeps the whole playfield on screen; see the flag's note in the layout.
+  fitHeight: true,
   title: 'Spin the Wheel',
   description: 'Spin the wheel on Cartoon ReOrbit for a chance to win points and prizes.'
 })

@@ -31,6 +31,8 @@ definePageMeta({
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
+  // fitHeight keeps the whole playfield on screen; see the flag's note in the layout.
+  fitHeight: true,
   title: 'Winball',
   description: 'Play Winball, the pinball-style game on Cartoon ReOrbit, for a chance to win points and exclusive cToons.'
 })

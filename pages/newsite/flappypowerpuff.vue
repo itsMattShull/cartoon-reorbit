@@ -147,6 +147,10 @@ definePageMeta({
   // fastest way to make a tap-timed game feel broken on a phone.
   showSidebar: false,
   showFooter: false,
+  // Required, not cosmetic: startGame pins `body` to defeat pull-to-refresh, which
+  // freezes page scrolling for the whole run. If the page were tall enough to scroll,
+  // the bottom of the playfield would be stranded off-screen until the run ended.
+  fitHeight: true,
   ssr: false,
   title: 'Flappy Powerpuff!',
   description: 'Fly through the Townsville skyline as Blossom, Bubbles or Buttercup in Flappy Powerpuff, a Cartoon ReOrbit arcade game.'

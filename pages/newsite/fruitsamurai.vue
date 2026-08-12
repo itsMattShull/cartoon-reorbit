@@ -190,7 +190,8 @@ import {
 
 // ssr: false to match the other canvas game — the whole page is a render loop against a
 // canvas sized from the real viewport, so there is nothing worth rendering on the server.
-definePageMeta({ middleware: 'newsite', ssr: false })
+// fitHeight keeps the whole playfield on screen; see the flag's note in the layout.
+definePageMeta({ middleware: 'newsite', ssr: false, fitHeight: true })
 
 const MS_PER_TICK = 1000 / TICK_HZ
 
