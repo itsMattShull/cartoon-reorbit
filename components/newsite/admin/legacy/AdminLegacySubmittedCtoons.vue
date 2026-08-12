@@ -1,18 +1,18 @@
 <template>
-  <div class="bg-gray-50 p-4 md:p-6">
+  <div class="bg-gray-50 text-xs">
 
     <!-- Toast notifications -->
     <Toast v-for="t in toasts" :key="t.id" :message="t.message" :type="t.type" />
 
-    <div class="max-w-7xl mx-auto md:mt-24">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 class="text-2xl font-semibold">Review Submitted cToons</h1>
+    <div class="px-2 py-2">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h1 class="text-base font-semibold">Review Submitted cToons</h1>
         <div class="flex gap-2">
           <button
             v-if="selectedIds.size > 0"
             @click="approveSelected"
             :disabled="processing"
-            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 text-sm"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
           >
             ✓ Approve ({{ selectedIds.size }})
           </button>
@@ -20,7 +20,7 @@
             v-if="selectedIds.size > 0"
             @click="declineSelected"
             :disabled="processing"
-            class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 text-sm"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
           >
             ✕ Decline ({{ selectedIds.size }})
           </button>
@@ -28,24 +28,24 @@
       </div>
 
       <!-- Loading -->
-      <div v-if="loading" class="text-center py-12 text-gray-500">Loading submissions…</div>
+      <div v-if="loading" class="text-gray-500 py-6 text-center">Loading submissions…</div>
 
       <!-- Empty -->
-      <div v-else-if="!submissions.length" class="text-center py-12 text-gray-400">
-        <div class="text-4xl mb-3">🎉</div>
+      <div v-else-if="!submissions.length" class="text-gray-400 py-6 text-center">
+        <div class="text-2xl mb-2">🎉</div>
         <p class="font-medium">No pending submissions!</p>
       </div>
 
       <!-- Cards Grid -->
-      <div v-else class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         <div
           v-for="sub in submissions"
           :key="sub.id"
-          class="bg-white rounded-lg shadow border"
+          class="bg-white border rounded-lg shadow"
           :class="selectedIds.has(sub.id) ? 'ring-2 ring-blue-500' : ''"
         >
           <!-- Card header with checkbox and meta -->
-          <div class="flex items-start gap-3 p-4 border-b">
+          <div class="flex items-start gap-2 p-2 border-b">
             <input
               type="checkbox"
               :checked="selectedIds.has(sub.id)"
@@ -53,14 +53,14 @@
               class="mt-1 h-4 w-4 shrink-0"
             />
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-semibold truncate">{{ sub.name }}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-semibold text-xs truncate">{{ sub.name }}</span>
                 <span
-                  class="text-xs px-2 py-0.5 rounded-full"
+                  class="text-[10px] px-1.5 py-0 rounded font-medium"
                   :class="rarityClass(sub.rarity)"
                 >{{ sub.rarity }}</span>
               </div>
-              <div class="text-xs text-gray-500 mt-0.5">
+              <div class="text-[10px] text-gray-500 mt-0.5">
                 Submitted by
                 <span class="font-medium text-gray-700">{{ sub.user?.username || sub.user?.discordTag || 'Unknown' }}</span>
                 · {{ formatDate(sub.submittedAt) }}
@@ -69,7 +69,7 @@
           </div>
 
           <!-- Image + duplicate check -->
-          <div class="p-4 flex gap-4">
+          <div class="p-2 flex gap-2">
             <div class="shrink-0">
               <img
                 :src="sub.assetPath"
@@ -79,69 +79,69 @@
               <div class="mt-2 text-center">
                 <button
                   @click="checkDuplicateForSub(sub)"
-                  class="text-xs text-blue-600 hover:underline"
+                  class="text-[11px] text-blue-600 hover:underline"
                 >Check dupe</button>
-                <div v-if="sub._dupStatus === 'checking'" class="text-xs text-gray-500">Checking…</div>
-                <div v-else-if="sub._dupMatch" class="text-xs mt-1">
+                <div v-if="sub._dupStatus === 'checking'" class="text-[10px] text-gray-500">Checking…</div>
+                <div v-else-if="sub._dupMatch" class="text-[10px] mt-1">
                   <div class="text-amber-700 font-medium">Possible dup!</div>
                   <img v-if="sub._dupMatch.ctoon?.assetPath" :src="sub._dupMatch.ctoon.assetPath" class="w-10 h-10 object-contain border rounded mx-auto my-1" />
                   <div class="text-[10px] text-gray-600">{{ sub._dupMatch.ctoon?.name }}</div>
                   <div class="text-[10px] text-gray-500">p:{{ sub._dupMatch.phashDist }} d:{{ sub._dupMatch.dhashDist }}</div>
                 </div>
-                <div v-else-if="sub._dupStatus === 'done'" class="text-xs text-green-600 mt-1">✓ No dupe</div>
+                <div v-else-if="sub._dupStatus === 'done'" class="text-[10px] text-green-600 mt-1">✓ No dupe</div>
               </div>
             </div>
             <!-- Editable fields -->
-            <div class="flex-1 space-y-2 min-w-0">
+            <div class="flex-1 space-y-1.5 min-w-0">
               <!-- Name -->
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Name</label>
-                <input v-model="sub.name" @blur="saveField(sub, 'name', sub.name)" class="w-full border rounded p-1 text-sm" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Name</label>
+                <input v-model="sub.name" @blur="saveField(sub, 'name', sub.name)" class="w-full border rounded-md px-2 py-1.5 text-sm" />
               </div>
               <!-- Rarity -->
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Rarity</label>
-                <select v-model="sub.rarity" @change="saveField(sub, 'rarity', sub.rarity)" class="w-full border rounded p-1 text-sm bg-white">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Rarity</label>
+                <select v-model="sub.rarity" @change="saveField(sub, 'rarity', sub.rarity)" class="w-full border rounded-md px-2 py-1.5 text-sm bg-white">
                   <option v-for="opt in rarityOptions" :key="opt" :value="opt">{{ opt }}</option>
                 </select>
               </div>
               <!-- Characters -->
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Characters</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Characters</label>
                 <input
                   :value="sub.characters.join(', ')"
                   @blur="e => saveChars(sub, e.target.value)"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
               </div>
             </div>
           </div>
 
           <!-- More fields -->
-          <div class="px-4 pb-4 space-y-2">
+          <div class="px-2 pb-2 space-y-1.5">
             <!-- Series -->
             <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Series</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Series</label>
                 <input
                   v-model="sub.series"
                   :list="`series-list-${sub.id}`"
                   @input="onSeriesInput(sub)"
                   @blur="saveField(sub, 'series', sub.series)"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
                 <datalist v-if="sub.series.length >= 3" :id="`series-list-${sub.id}`">
                   <option v-for="opt in seriesCacheAdmin" :key="opt" :value="opt" />
                 </datalist>
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Set</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Set</label>
                 <input
                   v-model="sub.set"
                   :list="`set-list-${sub.id}`"
                   @input="onSetInput(sub)"
                   @blur="saveField(sub, 'set', sub.set)"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
                 <datalist v-if="sub.set.length >= 3" :id="`set-list-${sub.id}`">
                   <option v-for="opt in setsCacheAdmin" :key="opt" :value="opt" />
@@ -150,69 +150,69 @@
             </div>
 
             <!-- Description -->
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-0.5">Description</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Description</label>
               <textarea
                 v-model="sub.description"
                 @blur="saveField(sub, 'description', sub.description)"
                 rows="2"
-                class="w-full border rounded p-1 text-sm resize-none"
+                class="w-full border rounded-md px-2 py-1.5 text-sm resize-none"
                 placeholder="No description provided."
               />
             </div>
 
             <!-- Release Date + Quantities row -->
             <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Release Date</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Release Date</label>
                 <input
                   type="datetime-local"
                   :value="toLocalDatetime(sub.releaseDate)"
                   @blur="e => saveField(sub, 'releaseDate', new Date(e.target.value).toISOString())"
-                  class="w-full border rounded p-1 text-xs"
+                  class="w-full border rounded-md px-2 py-1.5 text-xs"
                 />
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Per-User Limit</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Per-User Limit</label>
                 <input
                   type="number"
                   v-model.number="sub.perUserLimit"
                   @blur="saveField(sub, 'perUserLimit', sub.perUserLimit)"
                   min="0"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
               </div>
             </div>
 
             <div class="grid grid-cols-3 gap-2">
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Total Qty</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total Qty</label>
                 <input
                   type="number"
                   v-model.number="sub.totalQuantity"
                   @blur="saveField(sub, 'totalQuantity', sub.totalQuantity)"
                   min="1"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Initial Qty</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Qty</label>
                 <input
                   type="number"
                   v-model.number="sub.initialQuantity"
                   @blur="saveField(sub, 'initialQuantity', sub.initialQuantity)"
                   min="0"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-0.5">Price</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Price</label>
                 <input
                   type="number"
                   v-model.number="sub.price"
                   @blur="saveField(sub, 'price', sub.price)"
                   min="0"
-                  class="w-full border rounded p-1 text-sm"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
                 />
               </div>
             </div>
@@ -226,7 +226,7 @@
                 @change="saveField(sub, 'inCmart', sub.inCmart)"
                 class="h-4 w-4"
               />
-              <label :for="`cmart-${sub.id}`" class="text-sm">In cMart</label>
+              <label :for="`cmart-${sub.id}`" class="text-xs">In cMart</label>
             </div>
 
             <!-- Per-card actions -->
@@ -234,18 +234,18 @@
               <button
                 @click="approveSingle(sub)"
                 :disabled="processing"
-                class="flex-1 bg-green-600 text-white py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                class="flex-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
               >✓ Approve</button>
               <button
                 @click="declineSingle(sub)"
                 :disabled="processing"
-                class="flex-1 bg-red-600 text-white py-1.5 rounded text-sm hover:bg-red-700 disabled:opacity-50"
+                class="flex-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >✕ Decline</button>
             </div>
 
             <!-- Save indicator -->
-            <div v-if="sub._saving" class="text-xs text-blue-500 text-right">Saving…</div>
-            <div v-if="sub._saveError" class="text-xs text-red-500 text-right">{{ sub._saveError }}</div>
+            <div v-if="sub._saving" class="text-[10px] text-blue-500 text-right">Saving…</div>
+            <div v-if="sub._saveError" class="text-[10px] text-red-500 text-right">{{ sub._saveError }}</div>
           </div>
         </div>
       </div>

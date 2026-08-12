@@ -2,82 +2,84 @@
    pages/admin/starter-sets.vue (JS)
    ======================================= */
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-6xl mx-auto bg-white p-6 rounded-lg shadow ">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
-        <h1 class="text-2xl font-semibold">Starter Sets</h1>
+    <div class="bg-white rounded border p-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
+        <h1 class="text-base font-semibold">Starter Sets</h1>
         <!-- Create new set -->
-        <form class="flex gap-2" @submit.prevent="createSet">
+        <form class="flex flex-wrap gap-2" @submit.prevent="createSet">
           <input v-model="createForm.name" type="text" required placeholder="New set name"
-                 class="border rounded p-2 w-56" />
+                 class="border rounded-md px-2 py-1.5 text-sm w-48" />
           <input v-model="createForm.key" type="text" placeholder="Key / slug (optional)"
-                 class="border rounded p-2 w-56" />
-          <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Create</button>
+                 class="border rounded-md px-2 py-1.5 text-sm w-48" />
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700">Create</button>
         </form>
       </div>
 
-      <div class="grid md:grid-cols-3 gap-6">
-        <section v-for="set in sets" :key="set.id" class="border rounded-lg p-4">
-          <header class="flex items-center gap-2 mb-3">
+      <div class="grid md:grid-cols-3 gap-2">
+        <section v-for="set in sets" :key="set.id" class="bg-white border rounded-lg shadow p-2">
+          <header class="flex items-center gap-2 mb-2">
             <input v-model="set.name" @change="saveSetBasics(set)"
-                   class="font-medium text-lg border rounded px-2 py-1 flex-1" />
-            <label class="text-sm flex items-center gap-2">
+                   class="font-medium border rounded-md px-2 py-1 text-sm flex-1" />
+            <label class="text-[11px] flex items-center gap-1">
               <input type="checkbox" v-model="set.isActive" @change="saveSetBasics(set)" /> Active
             </label>
           </header>
 
-          <div class="flex items-center gap-3 text-sm mb-3">
-            <span class="text-gray-600">Order</span>
+          <div class="flex items-center gap-2 text-[11px] mb-2">
+            <span class="text-gray-500">Order</span>
             <input type="number" v-model.number="set.sortOrder" @change="saveSetBasics(set)"
-                   class="w-20 border rounded px-2 py-1" />
+                   class="w-16 border rounded px-1 py-0.5 text-xs" />
           </div>
 
           <textarea v-model="set.description" @change="saveSetBasics(set)" rows="2"
-                    class="w-full border rounded px-2 py-1 mb-3" placeholder="Optional description"></textarea>
+                    class="w-full border rounded-md px-2 py-1.5 text-sm mb-2" placeholder="Optional description"></textarea>
 
           <!-- Items -->
-          <ul class="border rounded divide-y mb-3">
-            <li v-for="(it, idx) in set.itemsSorted" :key="it.id" class="flex items-center gap-3 p-2">
-              <img v-if="it.ctoon.assetPath" :src="it.ctoon.assetPath" class="w-10 h-10 object-contain" />
+          <ul class="border rounded-md divide-y mb-2">
+            <li v-for="(it, idx) in set.itemsSorted" :key="it.id" class="flex items-center gap-2 px-2 py-1.5">
+              <img v-if="it.ctoon.assetPath" :src="it.ctoon.assetPath" class="w-8 h-8 object-contain flex-shrink-0" />
               <div class="min-w-0">
-                <div class="truncate font-medium">{{ it.ctoon.name }}</div>
-                <div class="text-xs text-gray-500">Rarity: {{ it.ctoon.rarity }}</div>
+                <div class="truncate font-medium text-xs">{{ it.ctoon.name }}</div>
+                <div class="text-[10px] text-gray-500">Rarity: {{ it.ctoon.rarity }}</div>
               </div>
-              <div class="ml-auto flex items-center gap-2">
-                <button class="px-2 py-1 border rounded" :disabled="idx===0" @click="moveItem(set, it, idx-1)">↑</button>
-                <button class="px-2 py-1 border rounded" :disabled="idx===set.itemsSorted.length-1" @click="moveItem(set, it, idx+1)">↓</button>
-                <button class="px-2 py-1 border rounded text-red-600" @click="removeItem(set, it)">Remove</button>
+              <div class="ml-auto flex items-center gap-1">
+                <button class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50" :disabled="idx===0" @click="moveItem(set, it, idx-1)">↑</button>
+                <button class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50" :disabled="idx===set.itemsSorted.length-1" @click="moveItem(set, it, idx+1)">↓</button>
+                <button class="px-2 py-1 text-[11px] border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeItem(set, it)">Remove</button>
               </div>
             </li>
-            <li v-if="!set.itemsSorted.length" class="p-3 text-sm text-gray-500">No items yet.</li>
+            <li v-if="!set.itemsSorted.length" class="p-2 text-[11px] text-gray-500">No items yet.</li>
           </ul>
 
           <!-- Add item -->
           <div>
-            <label class="block mb-1 font-medium">Add cToons to this set</label>
+            <label class="text-xs font-medium block mb-1">Add cToons to this set</label>
             <input v-model="set.search" @input="onSearch(set)" type="text"
                    placeholder="Type 3+ characters to search by name"
-                   class="w-full border rounded px-3 py-2" />
-            <div v-if="set.searching" class="text-xs text-gray-500 mt-1">Searching…</div>
-            <ul v-if="set.results.length" class="mt-2 border rounded divide-y max-h-48 overflow-auto">
+                   class="w-full border rounded-md px-2 py-1.5 text-sm" />
+            <div v-if="set.searching" class="text-[10px] text-gray-500 mt-1">Searching…</div>
+            <ul v-if="set.results.length" class="mt-2 border rounded-md divide-y max-h-48 overflow-auto">
               <li v-for="r in set.results" :key="r.id" class="p-2 flex items-center gap-2 hover:bg-gray-50">
-                <img v-if="r.assetPath" :src="r.assetPath" class="w-8 h-8 object-contain" />
+                <img v-if="r.assetPath" :src="r.assetPath" class="w-7 h-7 object-contain flex-shrink-0" />
                 <div class="min-w-0">
-                  <div class="text-sm font-medium truncate">{{ r.name }}</div>
-                  <div class="text-xs text-gray-500">{{ r.rarity }}</div>
+                  <div class="text-xs font-medium truncate">{{ r.name }}</div>
+                  <div class="text-[10px] text-gray-500">{{ r.rarity }}</div>
                 </div>
-                <button class="ml-auto px-2 py-1 bg-indigo-600 text-white rounded" @click="addItem(set, r)">Add</button>
+                <button class="ml-auto px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="addItem(set, r)">Add</button>
               </li>
             </ul>
           </div>
 
-          <footer class="mt-4 flex items-center justify-between text-sm">
+          <footer class="mt-2 flex items-center justify-between text-[11px]">
             <span class="text-gray-500">{{ set.itemsSorted.length }} cToons</span>
-            <button class="text-red-600" @click="deleteSet(set)">Delete Set</button>
+            <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="deleteSet(set)">Delete Set</button>
           </footer>
         </section>
       </div>
+    </div>
     </div>
   </div>
 </template>

@@ -1,210 +1,211 @@
 <template>
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Global Settings</h1>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <h1 class="text-base font-semibold mb-3">Admin: Global Settings</h1>
 
-    <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-3">
       <!-- Tabs -->
-      <div class="border-b mb-6">
-        <nav class="flex gap-4 overflow-x-auto whitespace-nowrap -mb-px hide-scrollbar">
+      <div class="border-b mb-3">
+        <nav class="flex gap-2 overflow-x-auto whitespace-nowrap -mb-px hide-scrollbar">
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Global Points' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Global Points'">Global Points</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Rarity Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Rarity Settings'">Rarity Settings</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Image Duplicates' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Image Duplicates'">Image Duplicates</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Auctions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Auctions'">Auctions</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='cMart' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='cMart'">cMart</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Second Editions' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Second Editions'">Second Editions</button>
           <button
-            class="px-3 py-2 border-b-2"
+            class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Discord' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Discord'">Discord</button>
         </nav>
       </div>
 
       <!-- Global Points tab -->
-      <section v-if="activeTab==='Global Points'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Global Points'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure global point awards. These values control daily login bonus, cZone visit points, and game cap.
         </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Daily Login Points</label>
-            <input type="number" class="input" v-model.number="dailyLoginPoints" />
-            <p class="text-xs text-gray-500 mt-1">Awarded once per 24h window (8pm CST reset).</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Daily Login Points</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="dailyLoginPoints" />
+            <p class="text-[10px] text-gray-500">Awarded once per 24h window (8pm CST reset).</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Daily Login Points (New Users)</label>
-            <input type="number" class="input" v-model.number="dailyNewUserPoints" />
-            <p class="text-xs text-gray-500 mt-1">For accounts created within the last 7 days.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Daily Login Points (New Users)</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="dailyNewUserPoints" />
+            <p class="text-[10px] text-gray-500">For accounts created within the last 7 days.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">cZone Visit Points</label>
-            <input type="number" class="input" v-model.number="czoneVisitPoints" />
-            <p class="text-xs text-gray-500 mt-1">Awarded per unique zone owner within the daily window.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">cZone Visit Points</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="czoneVisitPoints" />
+            <p class="text-[10px] text-gray-500">Awarded per unique zone owner within the daily window.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Daily Game Point Cap</label>
-            <input type="number" class="input" v-model.number="dailyPointLimit" />
-            <p class="text-xs text-gray-500 mt-1">Max points from Winball, ReOrbit Match, and Monster scans per 24h window (excludes the head-to-head games: TKO, gToons Clash and Ed, Edd n Eddy RPS).</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Daily Game Point Cap</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="dailyPointLimit" />
+            <p class="text-[10px] text-gray-500">Max points from Winball, ReOrbit Match, and Monster scans per 24h window (excludes the head-to-head games: TKO, gToons Clash and Ed, Edd n Eddy RPS).</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Head-to-Head Daily Points Cap</label>
-            <input type="number" class="input" v-model.number="tkoDailyPointLimit" />
-            <p class="text-xs text-gray-500 mt-1">Combined max points from TKO, gToons Clash and Ed, Edd n Eddy RPS wins per 24h window (shared pool, same 8pm CST reset).</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Head-to-Head Daily Points Cap</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="tkoDailyPointLimit" />
+            <p class="text-[10px] text-gray-500">Combined max points from TKO, gToons Clash and Ed, Edd n Eddy RPS wins per 24h window (shared pool, same 8pm CST reset).</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">TKO Points Per Win</label>
-            <input type="number" min="0" class="input" v-model.number="tkoPointsPerWin" />
-            <p class="text-xs text-gray-500 mt-1">Points awarded to the winner of each TKO round.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">TKO Points Per Win</label>
+            <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="tkoPointsPerWin" />
+            <p class="text-[10px] text-gray-500">Points awarded to the winner of each TKO round.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Max cZone Visits Per Day</label>
-            <input type="number" class="input" v-model.number="czoneVisitMaxPerDay" />
-            <p class="text-xs text-gray-500 mt-1">Maximum unique cZones that award visit points per day.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Max cZone Visits Per Day</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="czoneVisitMaxPerDay" />
+            <p class="text-[10px] text-gray-500">Maximum unique cZones that award visit points per day.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Global cZone Count</label>
-            <input type="number" min="1" class="input" v-model.number="czoneCount" />
-            <p class="text-xs text-gray-500 mt-1">Base number of zones each user can have (before per-user additions).</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Global cZone Count</label>
+            <input type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="czoneCount" />
+            <p class="text-[10px] text-gray-500">Base number of zones each user can have (before per-user additions).</p>
           </div>
         </div>
         <div>
-          <button class="btn-primary" :disabled="savingGlobal" @click="saveGlobal">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingGlobal" @click="saveGlobal">
             <span v-if="!savingGlobal">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Rarity Settings tab -->
-      <section v-if="activeTab==='Rarity Settings'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Rarity Settings'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure default values per rarity tier. These defaults prefill Add cToon and Bulk Upload forms.
         </p>
         <!-- Desktop table -->
         <div class="overflow-x-auto hidden sm:block">
-          <table class="min-w-full border-separate border-spacing-y-1">
+          <table class="min-w-full text-xs">
             <thead>
-              <tr class="text-left text-sm text-gray-600">
-                <th class="px-3 py-2">Rarity</th>
-                <th class="px-3 py-2">Total Qty</th>
-                <th class="px-3 py-2">Initial Qty</th>
-                <th class="px-3 py-2">Per-User Limit</th>
-                <th class="px-3 py-2">In cMart</th>
-                <th class="px-3 py-2">Price</th>
+              <tr>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Total Qty</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Initial Qty</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Per-User Limit</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">In cMart</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Price</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in rarityOrder" :key="r" class="bg-gray-50">
-                <td class="px-3 py-2 font-medium">{{ r }}</td>
-                <td class="px-3 py-2"><input type="number" class="input" v-model.number="rarityDefaults[r].totalQuantity" /></td>
-                <td class="px-3 py-2"><input type="number" class="input" v-model.number="rarityDefaults[r].initialQuantity" /></td>
-                <td class="px-3 py-2"><input type="number" class="input" v-model.number="rarityDefaults[r].perUserLimit" /></td>
-                <td class="px-3 py-2 text-center"><input type="checkbox" v-model="rarityDefaults[r].inCmart" /></td>
-                <td class="px-3 py-2"><input type="number" class="input" v-model.number="rarityDefaults[r].price" /></td>
+              <tr v-for="r in rarityOrder" :key="r" class="border-b">
+                <td class="px-2 py-1.5 font-medium">{{ r }}</td>
+                <td class="px-2 py-1.5"><input type="number" class="border rounded-md px-2 py-1 text-xs w-20" v-model.number="rarityDefaults[r].totalQuantity" /></td>
+                <td class="px-2 py-1.5"><input type="number" class="border rounded-md px-2 py-1 text-xs w-20" v-model.number="rarityDefaults[r].initialQuantity" /></td>
+                <td class="px-2 py-1.5"><input type="number" class="border rounded-md px-2 py-1 text-xs w-20" v-model.number="rarityDefaults[r].perUserLimit" /></td>
+                <td class="px-2 py-1.5 text-center"><input type="checkbox" v-model="rarityDefaults[r].inCmart" /></td>
+                <td class="px-2 py-1.5"><input type="number" class="border rounded-md px-2 py-1 text-xs w-20" v-model.number="rarityDefaults[r].price" /></td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <!-- Mobile cards -->
-        <div class="space-y-3 sm:hidden">
+        <div class="space-y-2 sm:hidden">
           <div
             v-for="r in rarityOrder"
             :key="r"
-            class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+            class="bg-white border rounded-lg shadow p-2"
           >
-            <div class="font-semibold text-gray-800 mb-2">{{ r }}</div>
-            <div class="grid grid-cols-1 gap-3">
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Total Qty</label>
-                <input type="number" class="input" v-model.number="rarityDefaults[r].totalQuantity" />
+            <div class="font-semibold text-xs text-gray-800 mb-1.5">{{ r }}</div>
+            <div class="grid grid-cols-1 gap-2">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total Qty</label>
+                <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="rarityDefaults[r].totalQuantity" />
               </div>
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Initial Qty</label>
-                <input type="number" class="input" v-model.number="rarityDefaults[r].initialQuantity" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Qty</label>
+                <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="rarityDefaults[r].initialQuantity" />
               </div>
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Per-User Limit</label>
-                <input type="number" class="input" v-model.number="rarityDefaults[r].perUserLimit" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Per-User Limit</label>
+                <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="rarityDefaults[r].perUserLimit" />
               </div>
               <div class="flex items-center gap-2">
                 <input type="checkbox" v-model="rarityDefaults[r].inCmart" :id="`inCmart-${r}`" />
-                <label class="text-sm text-gray-700" :for="`inCmart-${r}`">In cMart</label>
+                <label class="text-xs text-gray-700" :for="`inCmart-${r}`">In cMart</label>
               </div>
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Price</label>
-                <input type="number" class="input" v-model.number="rarityDefaults[r].price" />
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Price</label>
+                <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="rarityDefaults[r].price" />
               </div>
             </div>
           </div>
         </div>
         <div>
-          <button class="btn-primary" :disabled="savingRarity" @click="saveRarity">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingRarity" @click="saveRarity">
             <span v-if="!savingRarity">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Image Duplicates tab -->
-      <section v-if="activeTab==='Image Duplicates'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Image Duplicates'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Tune how sensitive duplicate detection should be. Higher numbers flag more possible duplicates.
           Detection uses Hamming distance on 64-bit hashes and flags a match when
           <strong>pHash ≤ threshold</strong> or <strong>dHash ≤ threshold</strong>.
         </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">pHash Threshold</label>
-            <input type="number" min="0" max="64" class="input" v-model.number="phashDuplicateThreshold" />
-            <p class="text-xs text-gray-500 mt-1">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">pHash Threshold</label>
+            <input type="number" min="0" max="64" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="phashDuplicateThreshold" />
+            <p class="text-[10px] text-gray-500">
               Lower = stricter (fewer matches), higher = more possible duplicates. Typical range: 10–20.
             </p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">dHash Threshold</label>
-            <input type="number" min="0" max="64" class="input" v-model.number="dhashDuplicateThreshold" />
-            <p class="text-xs text-gray-500 mt-1">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">dHash Threshold</label>
+            <input type="number" min="0" max="64" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="dhashDuplicateThreshold" />
+            <p class="text-[10px] text-gray-500">
               Lower = stricter (fewer matches), higher = more possible duplicates. Typical range: 12–22.
             </p>
           </div>
         </div>
         <div>
-          <button class="btn-primary" :disabled="savingDuplicates" @click="saveDuplicateSettings">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingDuplicates" @click="saveDuplicateSettings">
             <span v-if="!savingDuplicates">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Auctions tab -->
-      <section v-if="activeTab==='Auctions'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Auctions'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure the featured auction schedule. All times are in CST.
         </p>
 
         <!-- 24-hour grid -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Featured Auction Hours (CST)</label>
+          <label class="block text-xs font-medium mb-1.5">Featured Auction Hours (CST)</label>
           <div class="grid grid-cols-6 gap-1">
             <label
               v-for="h in 24"
               :key="h - 1"
-              class="flex flex-col items-center gap-1 p-2 rounded border cursor-pointer select-none"
+              class="flex flex-col items-center gap-1 p-1.5 rounded-md border cursor-pointer select-none"
               :class="featuredAuctionHours.includes(h - 1)
                 ? 'bg-indigo-50 border-indigo-400 text-indigo-700'
                 : 'bg-gray-50 border-gray-200 text-gray-600'"
@@ -216,144 +217,144 @@
                 :checked="featuredAuctionHours.includes(h - 1)"
                 @change="toggleHour(h - 1)"
               />
-              <span class="text-sm font-mono font-semibold">{{ formatHour(h - 1) }}</span>
+              <span class="text-[11px] font-mono font-semibold">{{ formatHour(h - 1) }}</span>
             </label>
           </div>
-          <p class="text-xs text-gray-500 mt-2">
+          <p class="text-[10px] text-gray-500 mt-1.5">
             {{ featuredAuctionHours.length === 0
               ? 'No hours selected — featured auctions are disabled.'
               : `${featuredAuctionHours.length} hour(s) selected: ${featuredAuctionHours.slice().sort((a, b) => a - b).map(formatHour).join(', ')}` }}
           </p>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Interval (every N days)</label>
-            <input type="number" min="1" class="input" v-model.number="featuredAuctionIntervalDays" />
-            <p class="text-xs text-gray-500 mt-1">1 = fire every day, 2 = every other day, etc.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Interval (every N days)</label>
+            <input type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="featuredAuctionIntervalDays" />
+            <p class="text-[10px] text-gray-500">1 = fire every day, 2 = every other day, etc.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Auctions Per Slot</label>
-            <input type="number" min="0" class="input" v-model.number="featuredAuctionsPerSlot" />
-            <p class="text-xs text-gray-500 mt-1">How many featured auctions to create each time a scheduled hour fires. Set to 0 to disable.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Auctions Per Slot</label>
+            <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="featuredAuctionsPerSlot" />
+            <p class="text-[10px] text-gray-500">How many featured auctions to create each time a scheduled hour fires. Set to 0 to disable.</p>
           </div>
         </div>
 
         <div>
-          <button class="btn-primary" :disabled="savingAuctions" @click="saveAuctions">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingAuctions" @click="saveAuctions">
             <span v-if="!savingAuctions">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- cMart tab -->
-      <section v-if="activeTab==='cMart'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='cMart'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure cMart upgrade pricing.
         </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">First additional cZone cost</label>
-            <input type="number" min="0" class="input" v-model.number="firstAdditionalCzoneCost" />
-            <p class="text-xs text-gray-500 mt-1">Cost when a user has 0 additional cZones.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">First additional cZone cost</label>
+            <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="firstAdditionalCzoneCost" />
+            <p class="text-[10px] text-gray-500">Cost when a user has 0 additional cZones.</p>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Subsequent additional cZone cost</label>
-            <input type="number" min="0" class="input" v-model.number="subsequentAdditionalCzoneCost" />
-            <p class="text-xs text-gray-500 mt-1">Cost when a user already has 1 or more additional cZones.</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Subsequent additional cZone cost</label>
+            <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="subsequentAdditionalCzoneCost" />
+            <p class="text-[10px] text-gray-500">Cost when a user already has 1 or more additional cZones.</p>
           </div>
         </div>
 
         <!-- Global Price Changes -->
-        <div class="border-t pt-5">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">Global Price Changes</h2>
-          <p class="text-sm text-gray-500 mb-4">
+        <div class="border-t pt-3">
+          <h2 class="text-xs font-semibold text-gray-800 mb-1">Global Price Changes</h2>
+          <p class="text-[10px] text-gray-500 mb-2">
             When enabled, all cToon and pack prices in cMart will be cut in half at purchase time.
             Prices shown to users will reflect the discount.
           </p>
-          <label class="flex items-center gap-3 cursor-pointer select-none">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
               v-model="cmartHalfPriceEnabled"
               class="h-4 w-4 text-indigo-600 border-gray-300 rounded"
             />
-            <span class="text-sm font-medium text-gray-700">
+            <span class="text-xs font-medium text-gray-700">
               Enable 50% off all cToons &amp; packs
             </span>
           </label>
-          <p v-if="cmartHalfPriceEnabled" class="mt-2 text-xs text-indigo-600 font-medium">
+          <p v-if="cmartHalfPriceEnabled" class="mt-1.5 text-[10px] text-indigo-600 font-medium">
             Half-price mode is currently ON. Users will be charged half the listed price.
           </p>
         </div>
 
         <!-- Pack Pricing Decay -->
-        <div class="border-t pt-5">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">Pack Pricing Decay</h2>
-          <p class="text-sm text-gray-500 mb-4">
+        <div class="border-t pt-3">
+          <h2 class="text-xs font-semibold text-gray-800 mb-1">Pack Pricing Decay</h2>
+          <p class="text-[10px] text-gray-500 mb-2">
             Pack prices automatically decrease over time after they go live in cMart.
             The price drops by the decay amount every N days until it hits the floor.
           </p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Decay Amount (pts)</label>
-              <input type="number" min="0" class="input" v-model.number="packPriceDecayAmount" />
-              <p class="text-xs text-gray-500 mt-1">Points to drop per period (e.g. 100).</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Decay Amount (pts)</label>
+              <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="packPriceDecayAmount" />
+              <p class="text-[10px] text-gray-500">Points to drop per period (e.g. 100).</p>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Decay Period (days)</label>
-              <input type="number" min="1" class="input" v-model.number="packPriceDecayDays" />
-              <p class="text-xs text-gray-500 mt-1">How many days between each price drop (e.g. 7).</p>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Decay Period (days)</label>
+              <input type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="packPriceDecayDays" />
+              <p class="text-[10px] text-gray-500">How many days between each price drop (e.g. 7).</p>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Price Floor (pts)</label>
-              <input type="number" min="0" class="input" v-model.number="packPriceFloor" />
-              <p class="text-xs text-gray-500 mt-1">Minimum price a pack can decay to (e.g. 700).</p>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Price Floor (pts)</label>
+              <input type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="packPriceFloor" />
+              <p class="text-[10px] text-gray-500">Minimum price a pack can decay to (e.g. 700).</p>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Max Default Pack Buys Per User</label>
-              <input type="number" min="1" class="input" v-model.number="packMaxDefaultBuysPerUser" />
-              <p class="text-xs text-gray-500 mt-1">Total times a user can buy a new pack (applied when pack is created).</p>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Max Default Pack Buys Per User</label>
+              <input type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="packMaxDefaultBuysPerUser" />
+              <p class="text-[10px] text-gray-500">Total times a user can buy a new pack (applied when pack is created).</p>
             </div>
           </div>
         </div>
 
         <!-- Time-Based Release Purchase Limits -->
-        <div class="border-t pt-5">
-          <h2 class="text-base font-semibold text-gray-800 mb-1">Time-Based Release Purchase Limits</h2>
-          <p class="text-sm text-gray-500 mb-4">
+        <div class="border-t pt-3">
+          <h2 class="text-xs font-semibold text-gray-800 mb-1">Time-Based Release Purchase Limits</h2>
+          <p class="text-[10px] text-gray-500 mb-2">
             Default per-user purchase limits for time-based releases, applied by rarity tier.
             These are overridden per-cToon when a cToon has its own limit set.
             Leave <strong>Window (days)</strong> blank to use the full release window (release date → mint end date).
           </p>
 
           <!-- Desktop table -->
-          <div class="overflow-x-auto hidden sm:block mb-4">
-            <table class="min-w-full border-separate border-spacing-y-1">
+          <div class="overflow-x-auto hidden sm:block mb-3">
+            <table class="min-w-full text-xs">
               <thead>
-                <tr class="text-left text-sm text-gray-600">
-                  <th class="px-3 py-2">Rarity</th>
-                  <th class="px-3 py-2">Purchase Limit</th>
-                  <th class="px-3 py-2">Window (days)</th>
+                <tr>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Purchase Limit</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Window (days)</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="r in timeBasedRarities" :key="r" class="bg-gray-50">
-                  <td class="px-3 py-2 font-medium">{{ r }}</td>
-                  <td class="px-3 py-2">
+                <tr v-for="r in timeBasedRarities" :key="r" class="border-b">
+                  <td class="px-2 py-1.5 font-medium">{{ r }}</td>
+                  <td class="px-2 py-1.5">
                     <input
                       type="number"
                       min="1"
-                      class="input"
+                      class="border rounded-md px-2 py-1 text-xs w-24"
                       :value="timeBasedLimits[r].countStr"
                       @input="timeBasedLimits[r].countStr = $event.target.value"
                       placeholder="No limit"
                     />
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-2 py-1.5">
                     <input
                       type="number"
                       min="1"
-                      class="input"
+                      class="border rounded-md px-2 py-1 text-xs w-24"
                       :value="timeBasedLimits[r].windowDaysStr"
                       @input="timeBasedLimits[r].windowDaysStr = $event.target.value"
                       placeholder="Full duration"
@@ -365,31 +366,31 @@
           </div>
 
           <!-- Mobile cards -->
-          <div class="space-y-3 sm:hidden mb-4">
+          <div class="space-y-2 sm:hidden mb-3">
             <div
               v-for="r in timeBasedRarities"
               :key="r"
-              class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+              class="bg-white border rounded-lg shadow p-2"
             >
-              <div class="font-semibold text-gray-800 mb-2">{{ r }}</div>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs text-gray-600 mb-1">Purchase Limit</label>
+              <div class="font-semibold text-xs text-gray-800 mb-1.5">{{ r }}</div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Purchase Limit</label>
                   <input
                     type="number"
                     min="1"
-                    class="input"
+                    class="border rounded-md px-2 py-1.5 text-sm"
                     :value="timeBasedLimits[r].countStr"
                     @input="timeBasedLimits[r].countStr = $event.target.value"
                     placeholder="No limit"
                   />
                 </div>
-                <div>
-                  <label class="block text-xs text-gray-600 mb-1">Window (days)</label>
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Window (days)</label>
                   <input
                     type="number"
                     min="1"
-                    class="input"
+                    class="border rounded-md px-2 py-1.5 text-sm"
                     :value="timeBasedLimits[r].windowDaysStr"
                     @input="timeBasedLimits[r].windowDaysStr = $event.target.value"
                     placeholder="Full duration"
@@ -401,35 +402,35 @@
         </div>
 
         <div>
-          <button class="btn-primary" :disabled="savingCmart" @click="saveCmart">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingCmart" @click="saveCmart">
             <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Second Editions tab -->
-      <section v-if="activeTab==='Second Editions'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Second Editions'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Upload the icon overlaid on the bottom-right corner of every Second Edition cToon's image
           sitewide. Admins can adjust position and size per cToon on the Add/Edit cToon pages.
         </p>
-        <div class="flex items-start gap-6 flex-wrap">
+        <div class="flex items-start gap-3 flex-wrap">
           <div>
             <div class="w-32 h-32 border rounded bg-gray-50 flex items-center justify-center overflow-hidden">
               <img v-if="secondEditionOverlayPath" :src="secondEditionOverlayPath" alt="Second Edition overlay" class="max-w-full max-h-full object-contain" />
               <span v-else class="text-xs text-gray-400">No image set</span>
             </div>
-            <p v-if="secondEditionOverlayWidth" class="text-xs text-gray-500 mt-1 text-center">
+            <p v-if="secondEditionOverlayWidth" class="text-[10px] text-gray-500 mt-1 text-center">
               {{ secondEditionOverlayWidth }}×{{ secondEditionOverlayHeight }}px
             </p>
           </div>
           <div class="flex-1 min-w-[220px]">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Upload Overlay Icon (PNG or GIF)</label>
-            <input type="file" accept="image/png,image/gif" class="w-full" @change="handleOverlayFile" />
-            <p class="text-xs text-gray-500 mt-1">Max 3MB. Use a transparent PNG for best results.</p>
-            <p v-if="overlayUploadError" class="text-xs text-red-600 mt-1">{{ overlayUploadError }}</p>
+            <label class="block text-xs font-medium mb-1">Upload Overlay Icon (PNG or GIF)</label>
+            <input type="file" accept="image/png,image/gif" class="w-full text-xs" @change="handleOverlayFile" />
+            <p class="text-[10px] text-gray-500 mt-1">Max 3MB. Use a transparent PNG for best results.</p>
+            <p v-if="overlayUploadError" class="text-[10px] text-red-600 mt-1">{{ overlayUploadError }}</p>
             <button
-              class="btn-primary mt-3"
+              class="mt-2 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               :disabled="!overlayFile || savingOverlay"
               @click="uploadOverlay"
             >
@@ -440,13 +441,13 @@
       </section>
 
       <!-- Discord tab -->
-      <section v-if="activeTab==='Discord'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Discord'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure where Discord announcements for site events are posted. More announcement
           types may be added here over time.
         </p>
-        <div class="max-w-md">
-          <label for="czoneContestDiscordChannelId" class="block text-sm font-medium text-gray-700">
+        <div class="max-w-md flex flex-col gap-1">
+          <label for="czoneContestDiscordChannelId" class="text-xs font-medium">
             cZone Contest Winner Channel ID
           </label>
           <input
@@ -455,25 +456,26 @@
             type="text"
             inputmode="numeric"
             pattern="[0-9]*"
-            class="input"
+            class="border rounded-md px-2 py-1.5 text-sm"
             placeholder="123456789012345678"
           />
-          <p class="text-xs text-gray-500 mt-1">
+          <p class="text-[10px] text-gray-500">
             When an admin distributes cZone Contest prizes, an announcement is posted here.
             Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
           </p>
         </div>
         <div>
-          <button class="btn-primary" :disabled="savingDiscord" @click="saveDiscord">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingDiscord" @click="saveDiscord">
             {{ savingDiscord ? 'Saving…' : 'Save' }}
           </button>
         </div>
       </section>
 
-      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
+      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 text-xs rounded-md',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
       </div>
+    </div>
     </div>
   </div>
 </template>

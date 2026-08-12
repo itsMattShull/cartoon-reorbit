@@ -1,5 +1,6 @@
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
     <!-- Toast notifications -->
     <Toast
@@ -9,24 +10,26 @@
       :type="t.type"
     />
 
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow ">
-      <h1 class="text-2xl font-semibold mb-4">Bulk Upload cToons</h1>
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-3">
+      <h1 class="text-base font-semibold mb-3">Bulk Upload cToons</h1>
 
       <!-- STEP 1: Image Upload -->
-      <div v-if="step === 1" class="space-y-4">
-        <label class="block font-medium">Select Images</label>
-        <input
-          type="file"
-          accept="image/png,image/gif"
-          multiple
-          @change="handleFiles"
-          class="w-full"
-        />
-        <div class="flex flex-wrap gap-4">
+      <div v-if="step === 1" class="space-y-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs font-medium">Select Images</label>
+          <input
+            type="file"
+            accept="image/png,image/gif"
+            multiple
+            @change="handleFiles"
+            class="text-xs"
+          />
+        </div>
+        <div class="flex flex-wrap gap-2">
           <div
             v-for="(file, i) in imageFiles"
             :key="i"
-            class="w-24 h-24 border rounded overflow-hidden"
+            class="w-20 h-20 border rounded overflow-hidden"
           >
             <img
               :src="file.preview"
@@ -39,7 +42,7 @@
           <button
             @click="step = 2"
             :disabled="!imageFiles.length"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Next: Details
           </button>
@@ -47,174 +50,193 @@
       </div>
 
       <!-- STEP 2: Metadata & Table -->
-      <div v-else class="space-y-6">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label class="block mb-1 font-medium">Set</label>
-            <input
-              v-model="bulkSet"
-              list="sets-list"
-              required
-              class="w-full border rounded p-2"
-            />
-            <datalist v-if="bulkSet.length >= 2" id="sets-list">
-              <option
-                v-for="opt in filteredBulkSetsOptions"
-                :key="opt"
-                :value="opt"
-              />
-            </datalist>
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Series</label>
-            <input
-              v-model="bulkSeries"
-              list="bulk-series-list"
-              required
-              class="w-full border rounded p-2"
-            />
-            <datalist v-if="bulkSeries.length >= 2" id="bulk-series-list">
-              <option
-                v-for="opt in filteredBulkSeriesOptions"
-                :key="opt"
-                :value="opt"
-              />
-            </datalist>
-          </div>
-          <div>
-            <label class="block mb-1 font-medium">Release Date</label>
-            <input
-              v-model="bulkReleaseDate"
-              type="datetime-local"
-              required
-              class="w-full border rounded p-2"
-            />
-          </div>
-        </div>
+      <div v-else class="space-y-3">
 
-        <!-- Mint Limit Type -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- ── Batch Identity ────────────────────────────────────── -->
+        <section class="border rounded-lg p-3 space-y-3">
           <div>
-            <label class="block mb-1 font-medium">Mint Limit</label>
-            <select v-model="bulkMintLimitType" class="w-full border rounded p-2 bg-white">
-              <option value="defined">Defined Number Limit</option>
-              <option value="timeBased">Time Based Limit</option>
-            </select>
-            <p class="text-sm text-gray-500">
-              <template v-if="bulkMintLimitType === 'defined'">Fixed quantity per cToon.</template>
-              <template v-else>Unlimited minting until Mint End Date.</template>
-            </p>
+            <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Batch Identity</h2>
+            <p class="text-[11px] text-gray-500 mt-0.5">Set, series, and release date applied to every cToon in this batch.</p>
           </div>
-          <div v-if="bulkMintLimitType === 'timeBased'">
-            <label class="block mb-1 font-medium">Mint End Date/Time (CST)</label>
-            <input
-              v-model="bulkMintEndDate"
-              type="datetime-local"
-              required
-              class="w-full border rounded p-2"
-            />
-            <p class="text-sm text-gray-500">Minting open until this date/time.</p>
-            <p v-if="bulkMintEndDateLocal" class="text-sm text-blue-600 mt-1">
-              (Your time: {{ bulkMintEndDateLocal }})
-            </p>
-          </div>
-        </div>
-
-        <!-- Time-Based Purchase Limit Override (bulk, only for timeBased) -->
-        <div v-if="bulkMintLimitType === 'timeBased'" class="border rounded bg-indigo-50 p-4 space-y-3">
-          <div>
-            <h3 class="font-medium text-sm text-gray-800">Purchase Limit Override
-              <span class="text-xs font-normal text-gray-500 ml-1">— applied to all cToons in this batch; leave blank to use each rarity's default</span>
-            </h3>
-            <p class="text-xs text-gray-500 mt-1">Window blank = full release window (release date → mint end date).</p>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block mb-1 text-sm font-medium">Limit Count</label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Set</label>
               <input
-                type="number"
-                min="1"
-                :value="bulkTimeBasedLimitCountStr"
-                @input="bulkTimeBasedLimitCountStr = $event.target.value"
-                placeholder="Use rarity default"
-                class="w-full border rounded p-2"
+                v-model="bulkSet"
+                list="sets-list"
+                required
+                class="border rounded-md px-2 py-1.5 text-sm"
               />
-              <p class="text-xs text-gray-500 mt-1">Max purchases per user for each cToon.</p>
+              <datalist v-if="bulkSet.length >= 2" id="sets-list">
+                <option
+                  v-for="opt in filteredBulkSetsOptions"
+                  :key="opt"
+                  :value="opt"
+                />
+              </datalist>
             </div>
-            <div>
-              <label class="block mb-1 text-sm font-medium">Window (days)</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Series</label>
               <input
-                type="number"
-                min="1"
-                :value="bulkTimeBasedLimitWindowDaysStr"
-                @input="bulkTimeBasedLimitWindowDaysStr = $event.target.value"
-                placeholder="Full duration"
-                class="w-full border rounded p-2"
+                v-model="bulkSeries"
+                list="bulk-series-list"
+                required
+                class="border rounded-md px-2 py-1.5 text-sm"
               />
-              <p class="text-xs text-gray-500 mt-1">Rolling window. Blank = full release window.</p>
+              <datalist v-if="bulkSeries.length >= 2" id="bulk-series-list">
+                <option
+                  v-for="opt in filteredBulkSeriesOptions"
+                  :key="opt"
+                  :value="opt"
+                />
+              </datalist>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Release Date</label>
+              <input
+                v-model="bulkReleaseDate"
+                type="datetime-local"
+                required
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Release schedule preview (applies to each row based on its Total Qty) -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" v-if="bulkReleaseDate">
+        <!-- ── Mint Limit & Purchase Limits ─────────────────────── -->
+        <section class="border rounded-lg p-3 space-y-3">
           <div>
-            <label class="block mb-1 font-medium">Initial Release %</label>
-            <input
-              v-model.number="releasePercent"
-              type="number"
-              min="1"
-              max="100"
-              @input="clampReleasePercent"
-              class="w-full border rounded p-2"
-            />
+            <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Mint Limit &amp; Purchase Limits</h2>
+            <p class="text-[11px] text-gray-500 mt-0.5">How many total mints happen, and any per-user purchase override, for every cToon in this batch.</p>
           </div>
+
+          <!-- Mint Limit Type -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Mint Limit</label>
+              <select v-model="bulkMintLimitType" class="border rounded-md px-2 py-1.5 text-sm bg-white">
+                <option value="defined">Defined Number Limit</option>
+                <option value="timeBased">Time Based Limit</option>
+              </select>
+              <p class="text-[11px] text-gray-500">
+                <template v-if="bulkMintLimitType === 'defined'">Fixed quantity per cToon.</template>
+                <template v-else>Unlimited minting until Mint End Date.</template>
+              </p>
+            </div>
+            <div v-if="bulkMintLimitType === 'timeBased'" class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Mint End Date/Time (CST)</label>
+              <input
+                v-model="bulkMintEndDate"
+                type="datetime-local"
+                required
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+              <p class="text-[11px] text-gray-500">Minting open until this date/time.</p>
+              <p v-if="bulkMintEndDateLocal" class="text-[11px] text-blue-600 mt-1">
+                (Your time: {{ bulkMintEndDateLocal }})
+              </p>
+            </div>
+          </div>
+
+          <!-- Time-Based Purchase Limit Override (bulk, only for timeBased) -->
+          <div v-if="bulkMintLimitType === 'timeBased'" class="border rounded-md bg-indigo-50 p-3 space-y-2">
+            <div>
+              <h3 class="text-xs font-semibold text-gray-800">Purchase Limit Override
+                <span class="text-[11px] font-normal text-gray-500 ml-1">— applied to all cToons in this batch; leave blank to use each rarity's default</span>
+              </h3>
+              <p class="text-[11px] text-gray-500 mt-1">Window blank = full release window (release date → mint end date).</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Limit Count</label>
+                <input
+                  type="number"
+                  min="1"
+                  :value="bulkTimeBasedLimitCountStr"
+                  @input="bulkTimeBasedLimitCountStr = $event.target.value"
+                  placeholder="Use rarity default"
+                  class="border rounded-md px-2 py-1.5 text-sm"
+                />
+                <p class="text-[11px] text-gray-500">Max purchases per user for each cToon.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Window (days)</label>
+                <input
+                  type="number"
+                  min="1"
+                  :value="bulkTimeBasedLimitWindowDaysStr"
+                  @input="bulkTimeBasedLimitWindowDaysStr = $event.target.value"
+                  placeholder="Full duration"
+                  class="border rounded-md px-2 py-1.5 text-sm"
+                />
+                <p class="text-[11px] text-gray-500">Rolling window. Blank = full release window.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── Release Schedule (applies to each row based on its Total Qty) ─ -->
+        <section v-if="bulkReleaseDate" class="border rounded-lg p-3 space-y-3">
           <div>
-            <label class="block mb-1 font-medium">Final Release At (CST/CDT)</label>
-            <input :value="new Date(new Date(bulkReleaseDate).getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="w-full border rounded p-2 bg-gray-100" />
+            <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Release Schedule</h2>
+            <p class="text-[11px] text-gray-500 mt-0.5">Initial/Final quantities are computed per row from each Total Qty.</p>
           </div>
-          <div>
-            <p class="text-xs text-gray-500 mt-8">Initial/Final quantities are computed per row from each Total Qty.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Initial Release %</label>
+              <input
+                v-model.number="releasePercent"
+                type="number"
+                min="1"
+                max="100"
+                @input="clampReleasePercent"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Final Release At (CST/CDT)</label>
+              <input :value="new Date(new Date(bulkReleaseDate).getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+            </div>
           </div>
-        </div>
+        </section>
 
         <!-- Desktop Table -->
         <div class="overflow-x-auto hidden sm:block">
-          <table class="min-w-max table-auto border-separate border-spacing-0">
+          <table class="min-w-max table-auto border-separate border-spacing-0 text-xs">
             <thead>
               <tr class="bg-gray-100">
-                <th class="px-4 py-2">Preview</th>
-                <th class="px-4 py-2">Duplicate</th>
-                <th class="px-4 py-2">2nd Ed.</th>
-                <th class="px-4 py-2">Name</th>
-                <th class="px-4 py-2">Series</th>
-                <th class="px-4 py-2">Rarity</th>
-                <th class="px-4 py-2">Characters</th>
-                <th v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">Total Qty</th>
-                <th v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">Initial Qty</th>
-                <th class="px-4 py-2">Per-User Limit</th>
-                <th class="px-4 py-2">In cMart</th>
-                <th class="px-4 py-2">Price</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Preview</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Duplicate</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">2nd Ed.</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Name</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Series</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Rarity</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Characters</th>
+                <th v-if="bulkMintLimitType === 'defined'" class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Total Qty</th>
+                <th v-if="bulkMintLimitType === 'defined'" class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Initial Qty</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Per-User Limit</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">In cMart</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Price</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(f, i) in imageFiles" :key="f.id" class="border-b">
-                <td class="px-4 py-2">
-                  <img :src="f.preview" alt class="h-12 w-auto rounded" />
+                <td class="px-2 py-1.5">
+                  <img :src="f.preview" alt class="h-10 w-auto rounded" />
                 </td>
-                <td class="px-4 py-2">
-                  <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking...</div>
-                  <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+                <td class="px-2 py-1.5">
+                  <div v-if="f.duplicateStatus === 'checking'" class="text-[11px] text-gray-500">Checking...</div>
+                  <div v-else-if="f.duplicateStatus === 'error'" class="text-[11px] text-red-600">
                     {{ f.duplicateError || 'Duplicate check failed.' }}
                   </div>
-                  <div v-else-if="f.duplicateMatch" class="text-xs">
+                  <div v-else-if="f.duplicateMatch" class="text-[11px]">
                     <div class="text-amber-700 font-medium">Possible duplicate</div>
                     <div class="flex items-center gap-2 mt-1">
                       <img
                         v-if="f.duplicateMatch.ctoon?.assetPath"
                         :src="f.duplicateMatch.ctoon.assetPath"
                         alt="Possible duplicate"
-                        class="w-10 h-10 object-contain border rounded bg-white"
+                        class="w-9 h-9 object-contain border rounded bg-white"
                       />
                       <div class="text-[11px] leading-tight">
                         <div class="font-medium truncate max-w-[140px]">
@@ -226,9 +248,9 @@
                       </div>
                     </div>
                   </div>
-                  <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates</div>
+                  <div v-else-if="f.duplicateStatus === 'done'" class="text-[11px] text-green-600">No duplicates</div>
                 </td>
-                <td class="px-4 py-2" style="min-width:180px;">
+                <td class="px-2 py-1.5" style="min-width:180px;">
                   <SecondEditionFields
                     :model-value="rowSecondEdition(f)"
                     :exclude-ctoon-id="''"
@@ -236,14 +258,14 @@
                     @update:model-value="val => applyRowSecondEdition(f, val)"
                   />
                 </td>
-                <td class="px-4 py-2">
-                  <input v-model="f.nameField" class="w-full border rounded p-1" />
+                <td class="px-2 py-1.5">
+                  <input v-model="f.nameField" class="border rounded px-1.5 py-1 text-xs w-full" />
                 </td>
-                <td class="px-4 py-2">
+                <td class="px-2 py-1.5">
                   <input
                     v-model="f.series"
                     :list="`row-series-list-desktop-${f.id}`"
-                    class="w-full border rounded p-1"
+                    class="border rounded px-1.5 py-1 text-xs w-full"
                     @input="lockRowSeries(f)"
                   />
                   <datalist
@@ -257,30 +279,30 @@
                     />
                   </datalist>
                 </td>
-                <td class="px-4 py-2">
-                  <select v-model="f.rarity" class="w-full border rounded p-1" @change="updateDefaults(f)">
+                <td class="px-2 py-1.5">
+                  <select v-model="f.rarity" class="border rounded px-1.5 py-1 text-xs w-full bg-white" @change="updateDefaults(f)">
                     <option v-for="opt in rarityOptions" :key="opt" :value="opt">
                       {{ opt }}
                     </option>
                   </select>
                 </td>
-                <td class="px-4 py-2">
-                  <input v-model="f.characters" class="w-full border rounded p-1" placeholder="e.g. Amy,Bob"/>
+                <td class="px-2 py-1.5">
+                  <input v-model="f.characters" class="border rounded px-1.5 py-1 text-xs w-full" placeholder="e.g. Amy,Bob"/>
                 </td>
-                <td v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">
-                  <input v-model.number="f.totalQuantity" type="number" min="1" class="w-full border rounded p-1" />
+                <td v-if="bulkMintLimitType === 'defined'" class="px-2 py-1.5">
+                  <input v-model.number="f.totalQuantity" type="number" min="1" class="border rounded px-1.5 py-1 text-xs w-full" />
                 </td>
-                <td v-if="bulkMintLimitType === 'defined'" class="px-4 py-2">
-                  <input v-model.number="f.initialQuantity" type="number" min="0" class="w-full border rounded p-1" />
+                <td v-if="bulkMintLimitType === 'defined'" class="px-2 py-1.5">
+                  <input v-model.number="f.initialQuantity" type="number" min="0" class="border rounded px-1.5 py-1 text-xs w-full" />
                 </td>
-                <td class="px-4 py-2">
-                  <input v-model.number="f.perUserLimit" type="number" min="0" class="w-full border rounded p-1" />
+                <td class="px-2 py-1.5">
+                  <input v-model.number="f.perUserLimit" type="number" min="0" class="border rounded px-1.5 py-1 text-xs w-full" />
                 </td>
-                <td class="px-4 py-2 text-center">
+                <td class="px-2 py-1.5 text-center">
                   <input type="checkbox" v-model="f.inCmart" />
                 </td>
-                <td class="px-4 py-2">
-                  <input v-model.number="f.price" type="number" class="w-full border rounded p-1" />
+                <td class="px-2 py-1.5">
+                  <input v-model.number="f.price" type="number" class="border rounded px-1.5 py-1 text-xs w-full" />
                 </td>
               </tr>
             </tbody>
@@ -288,31 +310,31 @@
         </div>
 
         <!-- Mobile Cards -->
-        <div class="space-y-4 block sm:hidden">
+        <div class="space-y-3 block sm:hidden">
           <div
             v-for="(f, i) in imageFiles"
             :key="f.id"
-            class="bg-gray-100 rounded-lg p-4"
+            class="bg-gray-100 rounded-lg p-3"
           >
             <!-- Image on top -->
             <img
               :src="f.preview"
               :alt="f.nameField"
-              class="w-full h-40 object-cover rounded mb-4"
+              class="w-full h-32 object-cover rounded mb-3"
             />
-            <div class="mb-4">
-              <div v-if="f.duplicateStatus === 'checking'" class="text-xs text-gray-500">Checking for duplicates...</div>
-              <div v-else-if="f.duplicateStatus === 'error'" class="text-xs text-red-600">
+            <div class="mb-3">
+              <div v-if="f.duplicateStatus === 'checking'" class="text-[11px] text-gray-500">Checking for duplicates...</div>
+              <div v-else-if="f.duplicateStatus === 'error'" class="text-[11px] text-red-600">
                 {{ f.duplicateError || 'Duplicate check failed.' }}
               </div>
-              <div v-else-if="f.duplicateMatch" class="text-xs bg-amber-50 border rounded p-2">
+              <div v-else-if="f.duplicateMatch" class="text-[11px] bg-amber-50 border rounded p-2">
                 <div class="text-amber-700 font-medium">Possible duplicate found</div>
                 <div class="flex items-center gap-2 mt-2">
                   <img
                     v-if="f.duplicateMatch.ctoon?.assetPath"
                     :src="f.duplicateMatch.ctoon.assetPath"
                     alt="Possible duplicate"
-                    class="w-12 h-12 object-contain border rounded bg-white"
+                    class="w-10 h-10 object-contain border rounded bg-white"
                   />
                   <div class="text-[11px] leading-tight">
                     <div class="font-medium">
@@ -324,7 +346,7 @@
                   </div>
                 </div>
               </div>
-              <div v-else-if="f.duplicateStatus === 'done'" class="text-xs text-green-600">No duplicates found.</div>
+              <div v-else-if="f.duplicateStatus === 'done'" class="text-[11px] text-green-600">No duplicates found.</div>
             </div>
 
             <SecondEditionFields
@@ -335,27 +357,27 @@
             />
 
             <!-- Fields underneath -->
-            <div class="space-y-4">
+            <div class="space-y-3">
               <!-- Name -->
-              <div>
-                <label class="block mb-1 font-medium">Name</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Name</label>
                 <input
                   v-model="f.nameField"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Enter cToon name"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   The display name for this cToon.
                 </p>
               </div>
 
               <!-- Series -->
-              <div>
-                <label class="block mb-1 font-medium">Series</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Series</label>
                 <input
                   v-model="f.series"
                   :list="`row-series-list-mobile-${f.id}`"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Enter series"
                   @input="lockRowSeries(f)"
                 />
@@ -369,18 +391,18 @@
                     :value="opt"
                   />
                 </datalist>
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Defaults to the bulk series unless overridden.
                 </p>
               </div>
 
               <!-- Rarity -->
-              <div>
-                <label class="block mb-1 font-medium">Rarity</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Rarity</label>
                 <select
                   v-model="f.rarity"
                   @change="updateDefaults(f)"
-                  class="w-full border rounded p-2 bg-white"
+                  class="border rounded-md px-2 py-1.5 text-sm bg-white"
                 >
                   <option disabled value="">Select rarity</option>
                   <option
@@ -389,94 +411,93 @@
                     :value="opt"
                   >{{ opt }}</option>
                 </select>
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Choose the rarity tier for this cToon.
                 </p>
               </div>
 
               <!-- Characters -->
-              <div>
-                <label class="block mb-1 font-medium">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">
                   Characters (comma-separated)
                 </label>
                 <input
                   v-model="f.characters"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="e.g. Amy,Bob"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   List all characters featured in this cToon.
                 </p>
               </div>
 
               <!-- Total Quantity (only for Defined Number Limit) -->
-              <div v-if="bulkMintLimitType === 'defined'">
-                <label class="block mb-1 font-medium">Total Quantity</label>
+              <div v-if="bulkMintLimitType === 'defined'" class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Total Quantity</label>
                 <input
                   v-model.number="f.totalQuantity"
                   type="number"
                   min="1"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Leave blank for unlimited"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Maximum number that can be minted. Leave blank for unlimited.
                 </p>
               </div>
 
               <!-- Initial Quantity (only for Defined Number Limit) -->
-              <div v-if="bulkMintLimitType === 'defined'">
-                <label class="block mb-1 font-medium">Initial Quantity</label>
+              <div v-if="bulkMintLimitType === 'defined'" class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Initial Quantity</label>
                 <input
                   v-model.number="f.initialQuantity"
                   type="number"
                   min="0"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Number of first editions"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Number of first editions available. Must be ≤ total quantity.
                 </p>
               </div>
 
               <!-- Per-User Limit -->
-              <div>
-                <label class="block mb-1 font-medium">Per-User Limit</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Per-User Limit</label>
                 <input
                   v-model.number="f.perUserLimit"
                   type="number"
                   min="0"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Limit per user"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Limit on how many each user can mint within the first 48 hours of
                   release. Leave blank for no limit.
                 </p>
               </div>
 
               <!-- In cMart -->
-              <div class="flex items-center space-x-2">
+              <label class="flex items-center gap-2">
                 <input
                   type="checkbox"
                   v-model="f.inCmart"
-                  class="mr-2"
                 />
-                <label class="font-medium">In cMart</label>
-              </div>
-              <p class="text-sm text-gray-500">
+                <span class="text-xs font-medium">In cMart</span>
+              </label>
+              <p class="text-[11px] text-gray-500">
                 Check to list this cToon in the shop.
               </p>
 
               <!-- Price -->
-              <div>
-                <label class="block mb-1 font-medium">Price</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Price</label>
                 <input
                   v-model.number="f.price"
                   type="number"
-                  class="w-full border rounded p-2"
+                  class="border rounded-md px-2 py-1.5 text-sm"
                 />
-                <p class="text-sm text-gray-500">
+                <p class="text-[11px] text-gray-500">
                   Defaults based on rarity, but you can adjust it here.
                 </p>
               </div>
@@ -489,12 +510,13 @@
           <button
             @click="uploadAll"
             :disabled="uploading || !canUpload"
-            class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {{ uploading ? 'Uploading cToons...' : 'Upload cToons' }}
           </button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

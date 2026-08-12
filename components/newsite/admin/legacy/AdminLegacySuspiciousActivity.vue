@@ -1,32 +1,32 @@
 <template>
-  <div class="p-6 space-y-6 ">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-6xl mx-auto" style="margin-top: 50px;">
-      <div class="flex items-start justify-between mb-6">
+    <div class="px-2 py-2 max-w-6xl mx-auto">
+      <div class="flex items-start justify-between flex-wrap gap-2 mb-3">
         <div>
-          <h1 class="text-2xl font-bold">Suspicious Activity Monitor</h1>
-          <p class="text-sm text-gray-500 mt-1">Define rules to flag users exhibiting suspicious patterns. Run analysis on demand to see current results.</p>
+          <h1 class="text-base font-semibold">Suspicious Activity Monitor</h1>
+          <p class="text-[11px] text-gray-500 mt-0.5">Define rules to flag users exhibiting suspicious patterns. Run analysis on demand to see current results.</p>
         </div>
       </div>
 
       <!-- ── Rules section ────────────────────────────────────────────────── -->
-      <section class="bg-white border rounded p-4 mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-lg">Rules</h2>
+      <section class="bg-white rounded border p-3 mb-3">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-semibold">Rules</h2>
           <button
-            class="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded hover:bg-indigo-700"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
             @click="openCreateRuleModal"
           >+ New Rule</button>
         </div>
 
-        <div v-if="rulesLoading" class="text-sm text-gray-500 py-4 text-center">Loading rules…</div>
+        <div v-if="rulesLoading" class="text-gray-500 py-4 text-center">Loading rules…</div>
 
-        <div v-else-if="rules.length === 0" class="text-sm text-gray-400 py-4 text-center">
+        <div v-else-if="rules.length === 0" class="text-gray-400 py-4 text-center">
           No rules yet. Create one to start monitoring.
         </div>
 
         <div v-else class="divide-y">
-          <div v-for="rule in rules" :key="rule.id" class="py-3 flex items-start gap-3">
+          <div v-for="rule in rules" :key="rule.id" class="py-2 flex items-start gap-2">
             <!-- Active indicator -->
             <button
               :title="rule.isActive ? 'Click to deactivate' : 'Click to activate'"
@@ -40,12 +40,12 @@
             </button>
 
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
+              <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="font-medium">{{ rule.name }}</span>
-                <span v-if="!rule.isActive" class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">inactive</span>
+                <span v-if="!rule.isActive" class="px-1.5 py-0 rounded text-[10px] font-medium border bg-gray-100 text-gray-600 border-gray-300">inactive</span>
               </div>
-              <p v-if="rule.description" class="text-sm text-gray-500 mt-0.5">{{ rule.description }}</p>
-              <div class="text-xs text-gray-400 mt-1 space-x-2">
+              <p v-if="rule.description" class="text-[11px] text-gray-500 mt-0.5">{{ rule.description }}</p>
+              <div class="text-[10px] text-gray-400 mt-1 space-x-2">
                 <span>{{ rule.timeWindowDays ? `Last ${rule.timeWindowDays} days` : 'All time' }}</span>
                 <span>·</span>
                 <span>{{ rule.conditionLogic }} logic</span>
@@ -57,7 +57,7 @@
                 <span
                   v-for="c in rule.conditions"
                   :key="c.id"
-                  class="inline-block text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5"
+                  class="inline-block text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0"
                 >
                   {{ metricLabel(c.metric) }} {{ operatorLabel(c.operator) }} {{ c.threshold }}
                 </span>
@@ -66,11 +66,11 @@
 
             <div class="flex gap-2 flex-shrink-0">
               <button
-                class="text-sm text-blue-600 hover:underline"
+                class="text-blue-600 hover:underline"
                 @click="openEditRuleModal(rule)"
               >Edit</button>
               <button
-                class="text-sm text-red-600 hover:underline"
+                class="text-red-600 hover:underline"
                 @click="deleteRule(rule)"
               >Delete</button>
             </div>
@@ -79,10 +79,10 @@
       </section>
 
       <!-- ── Analysis section ─────────────────────────────────────────────── -->
-      <section class="bg-white border rounded p-4">
-        <div class="flex items-center gap-4 flex-wrap mb-4">
+      <section class="bg-white rounded border p-3">
+        <div class="flex items-center gap-3 flex-wrap mb-3">
           <button
-            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 font-medium"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
             :disabled="analyzing || rules.filter(r => r.isActive).length === 0"
             @click="runAnalysis"
           >
@@ -90,62 +90,62 @@
             <span v-else>▶ Run Analysis</span>
           </button>
 
-          <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
             <input v-model="showMuted" type="checkbox" class="rounded" />
             Show muted users
           </label>
 
-          <span v-if="analysisResult" class="text-sm text-gray-400 ml-auto">
+          <span v-if="analysisResult" class="text-gray-400 ml-auto">
             {{ rulesEvaluatedLabel }} · {{ analysisResult.flaggedUsers.length }} flagged ·
             Last run {{ lastRunLabel }}
           </span>
         </div>
 
-        <div v-if="analyzeError" class="text-sm text-red-600 mb-3 bg-red-50 border border-red-200 rounded p-2">
+        <div v-if="analyzeError" class="text-red-600 mb-2 bg-red-50 border border-red-200 rounded-md p-2">
           {{ analyzeError }}
         </div>
 
-        <div v-if="!analysisResult && !analyzing" class="text-sm text-gray-400 text-center py-8">
+        <div v-if="!analysisResult && !analyzing" class="text-gray-400 text-center py-8">
           Click "Run Analysis" to evaluate all active rules against current user data.
         </div>
 
-        <div v-else-if="displayedUsers.length === 0 && analysisResult" class="text-sm text-gray-400 text-center py-8">
+        <div v-else-if="displayedUsers.length === 0 && analysisResult" class="text-gray-400 text-center py-8">
           <span v-if="analysisResult.flaggedUsers.length === 0">No users flagged by the current active rules.</span>
           <span v-else>All flagged users are muted. Enable "Show muted users" to see them.</span>
         </div>
 
         <!-- Flagged user cards -->
-        <div v-else class="space-y-3">
+        <div v-else class="space-y-2">
           <div
             v-for="user in displayedUsers"
             :key="user.userId"
-            class="border rounded"
+            class="border rounded-lg"
             :class="user.isMuted ? 'border-gray-200 opacity-60' : 'border-red-200'"
           >
             <!-- User header row -->
-            <div class="flex items-start gap-3 p-3">
+            <div class="flex items-start gap-2 p-2">
               <!-- Avatar -->
               <img
                 v-if="user.avatar"
                 :src="user.avatar"
-                class="w-10 h-10 rounded-full flex-shrink-0 object-cover"
+                class="w-8 h-8 rounded-full flex-shrink-0 object-cover"
                 alt=""
               />
-              <div v-else class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 text-sm font-bold">
+              <div v-else class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 text-xs font-bold">
                 {{ (user.username || '?')[0].toUpperCase() }}
               </div>
 
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 flex-wrap">
                   <a
                     :href="`/newsite/admin/manageUsers?q=${user.username}`"
                     target="_blank"
                     class="font-semibold text-indigo-700 hover:underline"
                   >{{ user.username || '(no username)' }}</a>
-                  <span v-if="user.discordTag" class="text-xs text-gray-400">{{ user.discordTag }}</span>
+                  <span v-if="user.discordTag" class="text-[10px] text-gray-400">{{ user.discordTag }}</span>
                   <span
                     v-if="user.isMuted"
-                    class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border"
+                    class="px-1.5 py-0 rounded text-[10px] font-medium border bg-gray-100 text-gray-600 border-gray-300"
                     :title="user.muteInfo?.reason ? `Reason: ${user.muteInfo.reason}` : 'No reason given'"
                   >muted{{ user.muteInfo?.mutedBy ? ` by ${user.muteInfo.mutedBy}` : '' }}</span>
                 </div>
@@ -155,12 +155,12 @@
                   <span
                     v-for="rule in user.triggeredRules"
                     :key="rule.ruleId"
-                    class="inline-block text-xs bg-red-50 text-red-700 border border-red-200 rounded px-1.5 py-0.5"
+                    class="inline-block text-[10px] bg-red-50 text-red-700 border border-red-200 rounded px-1.5 py-0"
                   >{{ rule.ruleName }}</span>
                 </div>
 
                 <!-- Quick metric summary -->
-                <div class="text-xs text-gray-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                <div class="text-[10px] text-gray-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
                   <span v-if="user.metrics.tradeOfferCount != null">
                     {{ user.metrics.tradeOfferCount }} trade{{ user.metrics.tradeOfferCount !== 1 ? 's' : '' }}
                   </span>
@@ -198,38 +198,38 @@
               </div>
 
               <!-- Action buttons -->
-              <div class="flex gap-2 flex-shrink-0">
+              <div class="flex gap-1.5 flex-shrink-0">
                 <button
-                  class="text-xs border rounded px-2 py-1 hover:bg-gray-50"
+                  class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                   @click="toggleExpand(user.userId)"
                 >{{ expandedUsers.has(user.userId) ? '▲ Hide' : '▼ Details' }}</button>
                 <button
                   v-if="!user.isMuted"
-                  class="text-xs bg-orange-100 text-orange-700 border border-orange-200 rounded px-2 py-1 hover:bg-orange-200"
+                  class="px-2 py-1 text-[11px] bg-orange-100 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-200"
                   @click="openMuteModal(user)"
                 >Mute</button>
                 <button
                   v-else
-                  class="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-1 hover:bg-blue-100"
+                  class="px-2 py-1 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100"
                   @click="unmuteUser(user)"
                 >Unmute</button>
               </div>
             </div>
 
             <!-- Expanded detail panel -->
-            <div v-if="expandedUsers.has(user.userId)" class="border-t bg-gray-50 p-3 space-y-4">
+            <div v-if="expandedUsers.has(user.userId)" class="border-t bg-gray-50 p-2 space-y-3">
 
               <!-- Matched conditions detail -->
               <div>
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Why flagged</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Why flagged</h4>
                 <div class="space-y-1">
                   <div v-for="rule in user.triggeredRules" :key="rule.ruleId">
-                    <div class="text-xs font-medium text-gray-700">{{ rule.ruleName }}</div>
+                    <div class="text-[11px] font-medium text-gray-700">{{ rule.ruleName }}</div>
                     <ul class="mt-0.5 space-y-0.5">
                       <li
                         v-for="(cond, i) in rule.matchedConditions"
                         :key="i"
-                        class="text-xs text-gray-600 pl-3 before:content-['•'] before:mr-1"
+                        class="text-[10px] text-gray-600 pl-3 before:content-['•'] before:mr-1"
                       >{{ cond }}</li>
                     </ul>
                   </div>
@@ -238,12 +238,12 @@
 
               <!-- All computed metrics -->
               <div>
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">All metrics computed</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">All metrics computed</h4>
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                   <div
                     v-for="[key, val] in Object.entries(user.metrics)"
                     :key="key"
-                    class="bg-white border rounded px-2 py-1.5 text-xs"
+                    class="bg-white border rounded-md px-2 py-1.5 text-[11px]"
                   >
                     <div class="text-gray-500">{{ metricLabel(key) }}</div>
                     <div class="font-semibold text-gray-800">{{ val }}{{ metricUnit(key) }}</div>
@@ -253,14 +253,14 @@
 
               <!-- Trade partners -->
               <div v-if="user.context.topTradePartners.length > 0">
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Top trade partners</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Top trade partners</h4>
                 <div class="flex flex-wrap gap-2">
                   <a
                     v-for="p in user.context.topTradePartners"
                     :key="p.userId"
                     :href="`/newsite/admin/manageUsers?q=${p.username}`"
                     target="_blank"
-                    class="inline-flex items-center gap-1 text-xs bg-white border rounded px-2 py-1 hover:bg-indigo-50 text-indigo-700"
+                    class="inline-flex items-center gap-1 text-[11px] bg-white border rounded-md px-2 py-1 hover:bg-indigo-50 text-indigo-700"
                   >
                     {{ p.username || '(unknown)' }}
                     <span class="text-gray-400 font-normal">× {{ p.tradeCount }}</span>
@@ -270,14 +270,14 @@
 
               <!-- Auction sellers -->
               <div v-if="user.context.topAuctionSellers.length > 0">
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Auction wins by seller</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Auction wins by seller</h4>
                 <div class="flex flex-wrap gap-2">
                   <a
                     v-for="s in user.context.topAuctionSellers"
                     :key="s.userId"
                     :href="`/newsite/admin/manageUsers?q=${s.username}`"
                     target="_blank"
-                    class="inline-flex items-center gap-1 text-xs bg-white border rounded px-2 py-1 hover:bg-indigo-50 text-indigo-700"
+                    class="inline-flex items-center gap-1 text-[11px] bg-white border rounded-md px-2 py-1 hover:bg-indigo-50 text-indigo-700"
                   >
                     {{ s.username || '(unknown)' }}
                     <span class="text-gray-400 font-normal">{{ s.wins }} win{{ s.wins !== 1 ? 's' : '' }}</span>
@@ -287,12 +287,12 @@
 
               <!-- Shared IP users -->
               <div v-if="user.context.sharedIPUsers.length > 0">
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Accounts sharing an IP</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Accounts sharing an IP</h4>
                 <div class="space-y-1">
                   <div
                     v-for="s in user.context.sharedIPUsers"
                     :key="s.userId"
-                    class="flex items-center gap-2 text-xs"
+                    class="flex items-center gap-2 text-[11px]"
                   >
                     <a
                       :href="`/newsite/admin/manageUsers?q=${s.username}`"
@@ -306,12 +306,12 @@
 
               <!-- cMart top cToons -->
               <div v-if="user.context.cmartTopCtoons && user.context.cmartTopCtoons.length > 0">
-                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">cMart purchases by cToon</h4>
+                <h4 class="text-[10px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">cMart purchases by cToon</h4>
                 <div class="flex flex-wrap gap-2">
                   <span
                     v-for="c in user.context.cmartTopCtoons"
                     :key="c.ctoonName"
-                    class="inline-flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 text-orange-800"
+                    class="inline-flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 rounded-md px-2 py-1 text-orange-800"
                   >
                     {{ c.ctoonName }}
                     <span class="text-gray-400 font-normal">× {{ c.purchaseCount }}</span>
@@ -321,7 +321,7 @@
 
               <div
                 v-if="user.context.topTradePartners.length === 0 && user.context.topAuctionSellers.length === 0 && user.context.sharedIPUsers.length === 0 && (!user.context.cmartTopCtoons || user.context.cmartTopCtoons.length === 0)"
-                class="text-xs text-gray-400"
+                class="text-[11px] text-gray-400"
               >No contextual data available for this user.</div>
             </div>
           </div>
@@ -330,31 +330,31 @@
     </div>
 
     <!-- ── Rule Create / Edit Modal ─────────────────────────────────────── -->
-    <div v-if="ruleModal.open" class="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8">
-        <div class="flex items-center justify-between p-4 border-b">
-          <h2 class="font-semibold text-lg">{{ ruleModal.mode === 'create' ? 'New Rule' : 'Edit Rule' }}</h2>
+    <div v-if="ruleModal.open" class="fixed inset-0 z-50 flex items-start justify-center p-2 overflow-y-auto bg-black/50">
+      <div class="relative bg-white w-full max-w-2xl rounded-lg shadow-lg my-8">
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+          <h2 class="text-sm font-semibold">{{ ruleModal.mode === 'create' ? 'New Rule' : 'Edit Rule' }}</h2>
           <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeRuleModal">×</button>
         </div>
 
-        <div class="p-4 space-y-4">
+        <div class="px-4 py-3 space-y-3">
           <!-- Name -->
-          <div>
-            <label class="block text-sm font-medium mb-1">Rule name <span class="text-red-500">*</span></label>
-            <input v-model.trim="ruleForm.name" class="w-full border rounded px-3 py-2" placeholder="e.g. Alt Account Trade Funnel" />
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Rule name <span class="text-red-500">*</span></label>
+            <input v-model.trim="ruleForm.name" class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g. Alt Account Trade Funnel" />
           </div>
 
           <!-- Description -->
-          <div>
-            <label class="block text-sm font-medium mb-1">Description</label>
-            <textarea v-model.trim="ruleForm.description" class="w-full border rounded px-3 py-2 text-sm" rows="2" placeholder="Explain what this rule is looking for…"></textarea>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Description</label>
+            <textarea v-model.trim="ruleForm.description" class="border rounded-md px-2 py-1.5 text-sm" rows="2" placeholder="Explain what this rule is looking for…"></textarea>
           </div>
 
           <!-- Row: time window + condition logic + active toggle -->
-          <div class="grid grid-cols-3 gap-3">
-            <div>
-              <label class="block text-sm font-medium mb-1">Time window</label>
-              <select v-model="ruleForm.timeWindowDays" class="w-full border rounded px-3 py-2 text-sm">
+          <div class="grid grid-cols-3 gap-2">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Time window</label>
+              <select v-model="ruleForm.timeWindowDays" class="border rounded-md px-2 py-1.5 text-sm">
                 <option :value="null">All time</option>
                 <option :value="7">Last 7 days</option>
                 <option :value="14">Last 14 days</option>
@@ -365,18 +365,18 @@
                 <option :value="365">Last 365 days</option>
               </select>
             </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Condition logic</label>
-              <select v-model="ruleForm.conditionLogic" class="w-full border rounded px-3 py-2 text-sm">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Condition logic</label>
+              <select v-model="ruleForm.conditionLogic" class="border rounded-md px-2 py-1.5 text-sm">
                 <option value="AND">AND — all conditions must match</option>
                 <option value="OR">OR — any condition matches</option>
               </select>
             </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Active</label>
-              <label class="flex items-center gap-2 mt-2.5 cursor-pointer">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Active</label>
+              <label class="flex items-center gap-2 mt-1.5 cursor-pointer">
                 <input v-model="ruleForm.isActive" type="checkbox" class="rounded" />
-                <span class="text-sm">{{ ruleForm.isActive ? 'Yes — included in analysis' : 'No — skipped' }}</span>
+                <span class="text-xs">{{ ruleForm.isActive ? 'Yes — included in analysis' : 'No — skipped' }}</span>
               </label>
             </div>
           </div>
@@ -384,7 +384,7 @@
           <!-- Conditions -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium">Conditions <span class="text-red-500">*</span></label>
+              <label class="text-xs font-medium">Conditions <span class="text-red-500">*</span></label>
               <button
                 type="button"
                 class="text-xs text-indigo-600 hover:underline"
@@ -392,7 +392,7 @@
               >+ Add condition</button>
             </div>
 
-            <div v-if="ruleForm.conditions.length === 0" class="text-sm text-gray-400 border border-dashed rounded p-3 text-center">
+            <div v-if="ruleForm.conditions.length === 0" class="text-xs text-gray-400 border border-dashed rounded-md p-2 text-center">
               No conditions yet. Add at least one.
             </div>
 
@@ -400,11 +400,11 @@
               <div
                 v-for="(cond, i) in ruleForm.conditions"
                 :key="i"
-                class="flex items-center gap-2 flex-wrap bg-gray-50 border rounded p-2"
+                class="flex items-center gap-2 flex-wrap bg-gray-50 border rounded-md p-2"
               >
                 <!-- Metric selector -->
                 <div class="flex-1 min-w-[180px]">
-                  <select v-model="cond.metric" class="w-full border rounded px-2 py-1.5 text-sm">
+                  <select v-model="cond.metric" class="w-full border rounded-md px-2 py-1.5 text-sm">
                     <option value="" disabled>Select metric…</option>
                     <optgroup v-for="cat in metricCategories" :key="cat.name" :label="cat.name">
                       <option v-for="m in cat.metrics" :key="m.key" :value="m.key">{{ m.label }}</option>
@@ -414,7 +414,7 @@
 
                 <!-- Operator selector -->
                 <div>
-                  <select v-model="cond.operator" class="border rounded px-2 py-1.5 text-sm">
+                  <select v-model="cond.operator" class="border rounded-md px-2 py-1.5 text-sm">
                     <option value="gt">is greater than</option>
                     <option value="gte">is ≥</option>
                     <option value="lt">is less than</option>
@@ -430,13 +430,13 @@
                     type="number"
                     min="0"
                     step="any"
-                    class="w-full border rounded px-2 py-1.5 text-sm"
+                    class="w-full border rounded-md px-2 py-1.5 text-sm"
                     placeholder="0"
                   />
                 </div>
 
                 <!-- Unit hint -->
-                <span v-if="cond.metric" class="text-xs text-gray-400">{{ metricUnit(cond.metric) }}</span>
+                <span v-if="cond.metric" class="text-[10px] text-gray-400">{{ metricUnit(cond.metric) }}</span>
 
                 <button
                   type="button"
@@ -447,7 +447,7 @@
             </div>
 
             <!-- Human readable preview -->
-            <div v-if="ruleForm.conditions.filter(c => c.metric).length > 0" class="mt-2 text-xs text-gray-500 bg-indigo-50 border border-indigo-100 rounded p-2">
+            <div v-if="ruleForm.conditions.filter(c => c.metric).length > 0" class="mt-2 text-[11px] text-gray-500 bg-indigo-50 border border-indigo-100 rounded-md p-2">
               <span class="font-medium text-indigo-700">Preview: </span>
               Flag user if
               <span
@@ -458,7 +458,7 @@
           </div>
 
           <!-- Metric reference -->
-          <details class="text-xs">
+          <details class="text-[11px]">
             <summary class="cursor-pointer text-gray-500 hover:text-gray-700">Metric reference ▾</summary>
             <div class="mt-2 space-y-1">
               <div v-for="[key, def] in Object.entries(METRIC_DEFINITIONS)" :key="key" class="flex gap-2">
@@ -468,13 +468,13 @@
             </div>
           </details>
 
-          <p v-if="ruleFormError" class="text-sm text-red-600">{{ ruleFormError }}</p>
+          <p v-if="ruleFormError" class="text-xs text-red-600">{{ ruleFormError }}</p>
         </div>
 
-        <div class="flex justify-end gap-2 p-4 border-t">
-          <button class="border rounded px-4 py-2 text-sm hover:bg-gray-50" @click="closeRuleModal">Cancel</button>
+        <div class="flex justify-end gap-2 px-4 py-3 border-t">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeRuleModal">Cancel</button>
           <button
-            class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
             :disabled="ruleSaving"
             @click="saveRule"
           >{{ ruleSaving ? 'Saving…' : ruleModal.mode === 'create' ? 'Create Rule' : 'Save Changes' }}</button>
@@ -483,32 +483,32 @@
     </div>
 
     <!-- ── Mute Modal ──────────────────────────────────────────────────────── -->
-    <div v-if="muteModal.open" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div class="p-4 border-b flex items-center justify-between">
-          <h2 class="font-semibold">Mute user from monitor</h2>
+    <div v-if="muteModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50">
+      <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg">
+        <div class="px-4 py-3 border-b flex items-center justify-between">
+          <h2 class="text-sm font-semibold">Mute user from monitor</h2>
           <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="muteModal.open = false">×</button>
         </div>
-        <div class="p-4 space-y-3">
-          <p class="text-sm">
+        <div class="px-4 py-3 space-y-2">
+          <p class="text-xs">
             Muting <strong>{{ muteModal.user?.username }}</strong> will hide them from the suspicious activity list
             (unless "Show muted users" is toggled on). They will still appear in all other admin tools.
           </p>
-          <div>
-            <label class="block text-sm font-medium mb-1">Reason (optional)</label>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Reason (optional)</label>
             <textarea
               v-model.trim="muteReason"
-              class="w-full border rounded px-3 py-2 text-sm"
+              class="border rounded-md px-2 py-1.5 text-sm"
               rows="2"
               placeholder="e.g. Investigated and confirmed legitimate activity"
             ></textarea>
           </div>
-          <p v-if="muteError" class="text-sm text-red-600">{{ muteError }}</p>
+          <p v-if="muteError" class="text-xs text-red-600">{{ muteError }}</p>
         </div>
-        <div class="flex justify-end gap-2 p-4 border-t">
-          <button class="border rounded px-4 py-2 text-sm hover:bg-gray-50" @click="muteModal.open = false">Cancel</button>
+        <div class="flex justify-end gap-2 px-4 py-3 border-t">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="muteModal.open = false">Cancel</button>
           <button
-            class="bg-orange-600 text-white px-4 py-2 rounded text-sm hover:bg-orange-700 disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
             :disabled="muteSaving"
             @click="confirmMute"
           >{{ muteSaving ? 'Muting…' : 'Mute User' }}</button>

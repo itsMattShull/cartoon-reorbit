@@ -1,300 +1,302 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2 max-w-2xl mx-auto">
 
-    <div class="max-w-2xl mx-auto bg-white rounded-lg shadow p-6 mt-6">
-      <h1 class="text-2xl font-semibold mb-4">Edit Claim Code</h1>
+      <div class="bg-white rounded border p-3">
+        <h1 class="text-base font-semibold mb-3">Edit Claim Code</h1>
 
-      <div v-if="pending" class="text-gray-500">Loading…</div>
-      <div v-else-if="fetchError" class="text-red-600">{{ fetchError.message }}</div>
-      <div v-else>
-        <form @submit.prevent="submitForm" class="space-y-4">
-          <!-- Code (read-only) -->
-          <div>
-            <label class="block font-medium mb-1">Code</label>
-            <input
-              v-model="code"
-              type="text"
-              disabled
-              class="w-full bg-gray-100 border rounded p-2"
-            />
-          </div>
+        <div v-if="pending" class="text-gray-500 py-6 text-center">Loading…</div>
+        <div v-else-if="fetchError" class="text-red-600 text-[11px]">{{ fetchError.message }}</div>
+        <div v-else>
+          <form @submit.prevent="submitForm" class="space-y-3">
+            <!-- Code (read-only) -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Code</label>
+              <input
+                v-model="code"
+                type="text"
+                disabled
+                class="bg-gray-100 border rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
 
-          <!-- Max Claims -->
-          <div>
-            <label class="block font-medium mb-1">Max Claims</label>
-            <input
-              v-model.number="maxClaims"
-              type="number"
-              min="1"
-              required
-              class="w-full border rounded p-2"
-            />
-          </div>
+            <!-- Max Claims -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Max Claims</label>
+              <input
+                v-model.number="maxClaims"
+                type="number"
+                min="1"
+                required
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
 
-          <!-- Available At -->
-          <div>
-            <label class="block font-medium mb-1">Available At (CST)</label>
-            <input
-              v-model="startsAt"
-              type="datetime-local"
-              class="w-full border rounded p-2"
-            />
-            <p class="text-sm text-gray-500">Leave blank or set to any date/time (including past) — users can only redeem on or after this time.</p>
-          </div>
+            <!-- Available At -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Available At (CST)</label>
+              <input
+                v-model="startsAt"
+                type="datetime-local"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+              <p class="text-[10px] text-gray-500">Leave blank or set to any date/time (including past) — users can only redeem on or after this time.</p>
+            </div>
 
-          <!-- Expires At -->
-          <div>
-            <label class="block font-medium mb-1">Expires At (CST)</label>
-            <input
-              v-model="expiresAt"
-              type="datetime-local"
-              class="w-full border rounded p-2"
-            />
-            <p class="text-sm text-gray-500">Leave blank for no expiration</p>
-          </div>
+            <!-- Expires At -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Expires At (CST)</label>
+              <input
+                v-model="expiresAt"
+                type="datetime-local"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+              <p class="text-[10px] text-gray-500">Leave blank for no expiration</p>
+            </div>
 
-          <!-- Points Reward -->
-          <div>
-            <label class="block font-medium mb-1">Points Reward</label>
-            <input
-              v-model.number="points"
-              type="number"
-              min="0"
-              class="w-full border rounded p-2"
-            />
-          </div>
+            <!-- Points Reward -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Points Reward</label>
+              <input
+                v-model.number="points"
+                type="number"
+                min="0"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
 
-          <!-- Pooled cToon Rewards -->
-          <div class="space-y-2">
-            <label class="inline-flex items-center gap-2">
-              <input type="checkbox" v-model="pooledEnabled" />
-              <span class="font-medium">Use pooled cToon rewards</span>
-            </label>
+            <!-- Pooled cToon Rewards -->
+            <div class="space-y-1">
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="pooledEnabled" />
+                <span class="text-xs font-medium">Use pooled cToon rewards</span>
+              </label>
 
-            <div v-if="pooledEnabled" class="rounded border p-3 space-y-3">
-              <div>
-                <label class="block font-medium mb-1">Number to give out (unique)</label>
-                <input v-model.number="poolUniqueCount" type="number" min="1" class="w-32 border rounded p-2" />
-              </div>
-
-              <div>
-                <label class="block font-medium mb-1">Pool cToons</label>
-                <div v-for="(row, idx) in poolItems" :key="'pool-'+idx" class="flex items-center gap-2 mb-2">
-                  <datalist :id="`pool-ctoons-${idx}`">
-                    <option v-for="ct in filteredCtoons(row.ctoonName)" :key="ct.id" :value="ct.name" />
-                  </datalist>
-
-                  <input v-model="row.ctoonName" :list="`pool-ctoons-${idx}`" class="flex-1 border rounded p-2" placeholder="Type 3+ characters" />
-
-                  <!-- NEW: preview -->
-                  <img
-                    v-if="findCtoon(row.ctoonName)?.assetPath"
-                    :src="findCtoon(row.ctoonName).assetPath"
-                    class="w-8 h-8 object-cover rounded"
-                    alt="cToon preview"
-                  />
-
-                  <input v-model.number="row.weight" type="number" min="1" class="w-20 border rounded p-2" title="Weight" />
-                  <button type="button" @click="removePoolItem(idx)" class="text-red-600 hover:underline">Remove</button>
+              <div v-if="pooledEnabled" class="bg-white rounded border p-2 space-y-2">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Number to give out (unique)</label>
+                  <input v-model.number="poolUniqueCount" type="number" min="1" class="w-28 border rounded-md px-2 py-1 text-sm" />
                 </div>
-                <button type="button" @click="addPoolItem" class="text-blue-600 hover:underline text-sm">+ Add pool cToon</button>
-                <p class="text-sm text-gray-500">Users receive <strong>unique</strong> picks from this pool.</p>
+
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Pool cToons</label>
+                  <div v-for="(row, idx) in poolItems" :key="'pool-'+idx" class="flex items-center gap-2">
+                    <datalist :id="`pool-ctoons-${idx}`">
+                      <option v-for="ct in filteredCtoons(row.ctoonName)" :key="ct.id" :value="ct.name" />
+                    </datalist>
+
+                    <input v-model="row.ctoonName" :list="`pool-ctoons-${idx}`" class="flex-1 border rounded-md px-2 py-1.5 text-sm" placeholder="Type 3+ characters" />
+
+                    <!-- NEW: preview -->
+                    <img
+                      v-if="findCtoon(row.ctoonName)?.assetPath"
+                      :src="findCtoon(row.ctoonName).assetPath"
+                      class="w-7 h-7 object-cover rounded border"
+                      alt="cToon preview"
+                    />
+
+                    <input v-model.number="row.weight" type="number" min="1" class="w-16 border rounded px-1 py-0.5 text-xs" title="Weight" />
+                    <button type="button" @click="removePoolItem(idx)" class="text-red-700 hover:underline text-[11px]">Remove</button>
+                  </div>
+                  <button type="button" @click="addPoolItem" class="text-blue-600 hover:underline text-xs text-left">+ Add pool cToon</button>
+                  <p class="text-[10px] text-gray-500">Users receive <strong>unique</strong> picks from this pool.</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- cToon Rewards -->
-          <div>
-            <label class="block font-medium mb-1">cToon Rewards</label>
-            <p class="text-sm text-gray-500 mb-2">
-              Optionally set an End Bonus Date/Time (CST) per cToon below — if set, that cToon is only
-              given out when redeemed between the code's Available At time and that cToon's End Bonus
-              Date/Time. Leave blank to give it out normally whenever the code is redeemed.
-            </p>
+            <!-- cToon Rewards -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">cToon Rewards</label>
+              <p class="text-[10px] text-gray-500">
+                Optionally set an End Bonus Date/Time (CST) per cToon below — if set, that cToon is only
+                given out when redeemed between the code's Available At time and that cToon's End Bonus
+                Date/Time. Leave blank to give it out normally whenever the code is redeemed.
+              </p>
 
-            <div
-              v-for="(rc, idx) in ctoonRewards"
-              :key="idx"
-              class="border rounded p-3 mb-2 grid grid-cols-2 sm:grid-cols-[1fr_auto_5rem_auto] gap-2 sm:items-center"
-            >
-              <!-- per-row datalist, filtered by current input -->
-              <datalist :id="`reward-ctoon-list-${idx}`">
-                <option
-                  v-for="ct in filteredCtoons(rc.ctoonName)"
-                  :key="ct.id"
-                  :value="ct.name"
+              <div
+                v-for="(rc, idx) in ctoonRewards"
+                :key="idx"
+                class="border rounded-md p-2 grid grid-cols-2 sm:grid-cols-[1fr_auto_5rem_auto] gap-2 sm:items-center"
+              >
+                <!-- per-row datalist, filtered by current input -->
+                <datalist :id="`reward-ctoon-list-${idx}`">
+                  <option
+                    v-for="ct in filteredCtoons(rc.ctoonName)"
+                    :key="ct.id"
+                    :value="ct.name"
+                  />
+                </datalist>
+
+                <div class="col-span-2 sm:col-span-1">
+                  <label class="text-[10px] text-gray-500 sm:hidden">cToon</label>
+                  <input
+                    v-model="rc.ctoonName"
+                    :list="`reward-ctoon-list-${idx}`"
+                    type="text"
+                    required
+                    class="w-full border rounded-md px-2 py-1.5 text-sm"
+                    placeholder="Type 3+ characters to search"
+                  />
+                </div>
+
+                <img
+                  v-if="findCtoon(rc.ctoonName)?.assetPath"
+                  :src="findCtoon(rc.ctoonName).assetPath"
+                  class="w-7 h-7 object-cover rounded border justify-self-center"
+                  alt="cToon preview"
                 />
-              </datalist>
 
-              <div class="col-span-2 sm:col-span-1">
-                <label class="text-xs text-gray-500 sm:hidden">cToon</label>
+                <div>
+                  <label class="text-[10px] text-gray-500 sm:hidden">Qty</label>
+                  <input
+                    v-model.number="rc.quantity"
+                    type="number"
+                    min="1"
+                    class="w-full sm:w-16 border rounded px-1 py-1 text-sm"
+                    placeholder="Qty"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  @click="removeCtoonReward(idx)"
+                  class="text-red-700 hover:underline text-[11px] justify-self-end sm:justify-self-auto"
+                >
+                  Remove
+                </button>
+
+                <div class="col-span-2 flex flex-col gap-1">
+                  <label class="text-[10px] text-gray-500">End Bonus Date/Time (CST) &middot; optional</label>
+                  <input
+                    v-model="rc.endBonusAt"
+                    type="datetime-local"
+                    class="w-full border rounded-md px-2 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                @click="addCtoonReward"
+                class="text-blue-600 hover:underline text-xs text-left"
+              >
+                + Add another cToon
+              </button>
+            </div>
+
+            <!-- Prerequisite cToons -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Prerequisite cToons</label>
+
+              <div
+                v-for="(pc, idx) in prereqCtoons"
+                :key="idx"
+                class="flex items-center gap-2"
+              >
+                <!-- per-row datalist, filtered by current input -->
+                <datalist :id="`prereq-ctoon-list-${idx}`">
+                  <option
+                    v-for="ct in filteredCtoons(pc.ctoonName)"
+                    :key="ct.id"
+                    :value="ct.name"
+                  />
+                </datalist>
+
                 <input
-                  v-model="rc.ctoonName"
-                  :list="`reward-ctoon-list-${idx}`"
+                  v-model="pc.ctoonName"
+                  :list="`prereq-ctoon-list-${idx}`"
                   type="text"
-                  required
-                  class="w-full border rounded p-2 text-base"
+                  class="flex-1 border rounded-md px-2 py-1.5 text-sm"
                   placeholder="Type 3+ characters to search"
                 />
-              </div>
 
-              <img
-                v-if="findCtoon(rc.ctoonName)?.assetPath"
-                :src="findCtoon(rc.ctoonName).assetPath"
-                class="w-8 h-8 object-cover rounded justify-self-center"
-                alt="cToon preview"
-              />
-
-              <div>
-                <label class="text-xs text-gray-500 sm:hidden">Qty</label>
-                <input
-                  v-model.number="rc.quantity"
-                  type="number"
-                  min="1"
-                  class="w-full sm:w-20 border rounded p-2 text-base"
-                  placeholder="Qty"
+                <img
+                  v-if="findCtoon(pc.ctoonName)?.assetPath"
+                  :src="findCtoon(pc.ctoonName).assetPath"
+                  class="w-7 h-7 object-cover rounded border"
+                  alt="cToon preview"
                 />
+                <button
+                  type="button"
+                  @click="removePrereqCtoon(idx)"
+                  class="text-red-700 hover:underline text-[11px]"
+                >
+                  Remove
+                </button>
               </div>
 
               <button
                 type="button"
-                @click="removeCtoonReward(idx)"
-                class="text-red-600 hover:underline justify-self-end sm:justify-self-auto p-2 -m-2"
+                @click="addPrereqCtoon"
+                class="text-blue-600 hover:underline text-xs text-left"
               >
-                Remove
+                + Add prerequisite cToon
               </button>
+              <p class="text-[10px] text-gray-500">Leave empty for no prerequisites.</p>
 
-              <div class="col-span-2">
-                <label class="text-xs text-gray-500">End Bonus Date/Time (CST) &middot; optional</label>
-                <input
-                  v-model="rc.endBonusAt"
-                  type="datetime-local"
-                  class="w-full border rounded p-2 text-base"
-                />
+              <div class="mt-1 space-y-1">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" v-model="prereqPoolEnabled" />
+                  <span class="text-xs font-medium">Only require owning some cToons from this pool</span>
+                </label>
+                <div v-if="prereqPoolEnabled" class="flex items-center gap-2">
+                  <span class="text-xs">Must own at least</span>
+                  <input
+                    v-model.number="prereqMinOwned"
+                    type="number"
+                    min="1"
+                    class="w-20 border rounded-md px-2 py-1 text-sm"
+                  />
+                  <span class="text-xs">of the selected cToons</span>
+                </div>
+                <p v-if="prereqPoolEnabled" class="text-[10px] text-gray-500">
+                  Unchecked, users must own ALL prerequisite cToons. Checked, owning any {{ prereqMinOwned || 'X' }} from the pool is enough.
+                </p>
+                <div v-if="prereqPoolEnabled" class="flex flex-col gap-1">
+                  <label class="text-xs font-medium">Add Set</label>
+                  <datalist id="prereq-set-list">
+                    <option v-for="s in filteredSets(setSearch)" :key="s" :value="s" />
+                  </datalist>
+                  <input
+                    v-model="setSearch"
+                    list="prereq-set-list"
+                    type="text"
+                    class="border rounded-md px-2 py-1.5 text-sm"
+                    placeholder="Type 3+ characters to search sets"
+                    @change="onSetSelected"
+                  />
+                  <p class="text-[10px] text-gray-500">Selecting a set adds all of its cToons to the prerequisite list above.</p>
+                </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              @click="addCtoonReward"
-              class="text-blue-600 hover:underline text-sm"
-            >
-              + Add another cToon
-            </button>
-          </div>
-
-          <!-- Prerequisite cToons -->
-          <div>
-            <label class="block font-medium mb-1">Prerequisite cToons</label>
-
-            <div
-              v-for="(pc, idx) in prereqCtoons"
-              :key="idx"
-              class="flex items-center space-x-2 mb-2"
-            >
-              <!-- per-row datalist, filtered by current input -->
-              <datalist :id="`prereq-ctoon-list-${idx}`">
-                <option
-                  v-for="ct in filteredCtoons(pc.ctoonName)"
-                  :key="ct.id"
-                  :value="ct.name"
-                />
+            <!-- Background Rewards -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Background Rewards (CODE_ONLY)</label>
+              <datalist id="bg-list">
+                <option v-for="b in bgOptions" :key="b.id" :value="b.label || b.id" />
               </datalist>
+              <div v-for="(rb, idx) in bgRewards" :key="idx" class="flex items-center gap-2">
+                <input v-model="rb.bgLabel" list="bg-list" class="flex-1 border rounded-md px-2 py-1.5 text-sm" placeholder="Type or select background label" />
+                <img v-if="findBg(rb.bgLabel)?.imagePath" :src="findBg(rb.bgLabel).imagePath" class="w-10 h-7 object-cover rounded border" />
+                <button type="button" @click="removeBgReward(idx)" class="text-red-700 hover:underline text-[11px]">Remove</button>
+              </div>
+              <button type="button" @click="addBgReward" class="text-blue-600 hover:underline text-xs text-left">+ Add background</button>
+            </div>
 
-              <input
-                v-model="pc.ctoonName"
-                :list="`prereq-ctoon-list-${idx}`"
-                type="text"
-                class="flex-1 border rounded p-2"
-                placeholder="Type 3+ characters to search"
-              />
-
-              <img
-                v-if="findCtoon(pc.ctoonName)?.assetPath"
-                :src="findCtoon(pc.ctoonName).assetPath"
-                class="w-8 h-8 object-cover rounded"
-                alt="cToon preview"
-              />
+            <!-- Submit & Errors -->
+            <div class="pt-3 border-t flex items-center justify-between flex-wrap gap-2">
               <button
-                type="button"
-                @click="removePrereqCtoon(idx)"
-                class="text-red-600 hover:underline"
+                type="submit"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700"
               >
-                Remove
+                Save Changes
               </button>
+              <p v-if="error" class="text-[11px] text-red-600">{{ error }}</p>
+              <p v-if="!error && warning" class="text-[11px] text-amber-600">{{ warning }}</p>
             </div>
-
-            <button
-              type="button"
-              @click="addPrereqCtoon"
-              class="text-blue-600 hover:underline text-sm"
-            >
-              + Add prerequisite cToon
-            </button>
-            <p class="text-sm text-gray-500">Leave empty for no prerequisites.</p>
-
-            <div class="mt-3 space-y-2">
-              <label class="inline-flex items-center gap-2">
-                <input type="checkbox" v-model="prereqPoolEnabled" />
-                <span class="font-medium">Only require owning some cToons from this pool</span>
-              </label>
-              <div v-if="prereqPoolEnabled" class="flex items-center gap-2">
-                <span class="text-sm">Must own at least</span>
-                <input
-                  v-model.number="prereqMinOwned"
-                  type="number"
-                  min="1"
-                  class="w-24 border rounded p-2"
-                />
-                <span class="text-sm">of the selected cToons</span>
-              </div>
-              <p v-if="prereqPoolEnabled" class="text-sm text-gray-500">
-                Unchecked, users must own ALL prerequisite cToons. Checked, owning any {{ prereqMinOwned || 'X' }} from the pool is enough.
-              </p>
-              <div v-if="prereqPoolEnabled">
-                <label class="block font-medium mb-1">Add Set</label>
-                <datalist id="prereq-set-list">
-                  <option v-for="s in filteredSets(setSearch)" :key="s" :value="s" />
-                </datalist>
-                <input
-                  v-model="setSearch"
-                  list="prereq-set-list"
-                  type="text"
-                  class="w-full border rounded p-2"
-                  placeholder="Type 3+ characters to search sets"
-                  @change="onSetSelected"
-                />
-                <p class="text-sm text-gray-500">Selecting a set adds all of its cToons to the prerequisite list above.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Background Rewards -->
-          <div>
-            <label class="block font-medium mb-1">Background Rewards (CODE_ONLY)</label>
-            <datalist id="bg-list">
-              <option v-for="b in bgOptions" :key="b.id" :value="b.label || b.id" />
-            </datalist>
-            <div v-for="(rb, idx) in bgRewards" :key="idx" class="flex items-center gap-2 mb-2">
-              <input v-model="rb.bgLabel" list="bg-list" class="flex-1 border rounded p-2" placeholder="Type or select background label" />
-              <img v-if="findBg(rb.bgLabel)?.imagePath" :src="findBg(rb.bgLabel).imagePath" class="w-12 h-8 object-cover rounded border" />
-              <button type="button" @click="removeBgReward(idx)" class="text-red-600 hover:underline">Remove</button>
-            </div>
-            <button type="button" @click="addBgReward" class="text-blue-600 hover:underline text-sm">+ Add background</button>
-          </div>
-
-          <!-- Submit & Errors -->
-          <div class="pt-4 border-t flex items-center justify-between">
-            <button
-              type="submit"
-              class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              Save Changes
-            </button>
-            <p v-if="error" class="text-red-600">{{ error }}</p>
-            <p v-if="!error && warning" class="text-amber-600">{{ warning }}</p>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   </div>

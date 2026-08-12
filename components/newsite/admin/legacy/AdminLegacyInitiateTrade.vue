@@ -1,21 +1,22 @@
 <template>
-  <div class="px-4 max-w-7xl mx-auto ">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2 max-w-7xl mx-auto">
     <!-- Title -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <div>
-        <h1 class="text-2xl font-bold">Initiate Trade</h1>
-        <p v-if="officialUser" class="text-sm text-gray-600">Initiating as {{ officialUser.username }}</p>
+        <h1 class="text-base font-semibold">Initiate Trade</h1>
+        <p v-if="officialUser" class="text-[11px] text-gray-600">Initiating as {{ officialUser.username }}</p>
       </div>
-      <div v-if="officialUser" class="text-sm bg-indigo-100 text-indigo-800 font-semibold px-3 py-1 rounded">
+      <div v-if="officialUser" class="px-1.5 py-0 rounded text-[10px] font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">
         Official Account: {{ officialUser.username }}
       </div>
     </div>
 
-    <p v-if="officialError" class="mb-4 text-sm text-red-600">{{ officialError }}</p>
+    <p v-if="officialError" class="mb-2 text-xs text-red-600">{{ officialError }}</p>
 
     <!-- Step 0: Pick a user -->
-    <section class="bg-white rounded-xl shadow-md p-4 mb-6">
-      <label class="block text-sm font-medium mb-2">Find a user to trade with</label>
+    <section class="bg-white rounded-lg shadow p-2 mb-3">
+      <label class="block text-xs font-medium mb-1.5">Find a user to trade with</label>
       <div class="relative">
         <input
           ref="userInputRef"
@@ -29,24 +30,24 @@
           aria-expanded="showUserSuggest"
           aria-controls="user-suggest-listbox"
           aria-autocomplete="list"
-          class="w-full border rounded px-3 py-2"
+          class="w-full border rounded-md px-2 py-1.5 text-sm"
         />
         <!-- suggestions -->
         <div
           v-if="showUserSuggest"
           ref="userSuggestRef"
           id="user-suggest-listbox"
-          class="absolute z-20 bg-white border rounded w-full mt-1 max-h-64 overflow-auto"
+          class="absolute z-20 bg-white border rounded-md w-full mt-1 max-h-64 overflow-y-auto"
           role="listbox"
         >
-          <div v-if="isSearching" class="px-3 py-2 text-sm text-gray-600">Searching...</div>
+          <div v-if="isSearching" class="px-2 py-1.5 text-gray-600">Searching...</div>
 
           <template v-else-if="userResults.length">
             <button
               v-for="(u, idx) in userResults"
               :key="u.username"
               :class="[
-                'w-full text-left px-3 py-2 flex items-center gap-2',
+                'w-full text-left px-2 py-1.5 flex items-center gap-2',
                 highlightedIndex === idx ? 'bg-indigo-50' : 'hover:bg-indigo-50'
               ]"
               role="option"
@@ -54,36 +55,36 @@
               @mouseenter="highlightedIndex = idx"
               @click="selectTargetUser(u)"
             >
-              <img :src="`/avatars/${u.avatar || 'default.png'}`" class="w-6 h-6 rounded-full border" />
+              <img :src="`/avatars/${u.avatar || 'default.png'}`" class="w-6 h-6 rounded-full border flex-shrink-0" />
               <span class="font-medium">{{ u.username }}</span>
-              <span v-if="u.isBooster" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Booster</span>
+              <span v-if="u.isBooster" class="ml-auto px-1.5 py-0 rounded text-[10px] font-medium border bg-yellow-100 text-yellow-800 border-yellow-200">Booster</span>
             </button>
           </template>
 
-          <div v-else class="px-3 py-2 text-sm text-gray-600">No matches</div>
+          <div v-else class="px-2 py-1.5 text-gray-600">No matches</div>
         </div>
       </div>
-      <p v-if="targetError" class="mt-2 text-sm text-red-600">{{ targetError }}</p>
+      <p v-if="targetError" class="mt-1.5 text-xs text-red-600">{{ targetError }}</p>
 
-      <div v-if="targetUser" class="mt-4 flex items-center gap-3">
-        <img :src="`/avatars/${targetUser.avatar || 'default.png'}`" class="w-10 h-10 rounded-full border" />
+      <div v-if="targetUser" class="mt-3 flex items-center gap-2">
+        <img :src="`/avatars/${targetUser.avatar || 'default.png'}`" class="w-8 h-8 rounded-full border flex-shrink-0" />
         <div class="flex items-center gap-2">
-          <p class="font-semibold">Trading with {{ targetUser.username }}</p>
-          <button class="text-xs px-2 py-1 border rounded hover:bg-gray-50" @click="clearTarget(true)">Change</button>
+          <p class="font-semibold text-xs">Trading with {{ targetUser.username }}</p>
+          <button class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50" @click="clearTarget(true)">Change</button>
         </div>
       </div>
     </section>
 
     <!-- STEP 1: Other user's collection -->
-    <section v-if="targetUser && currentStep === 1" class="mb-6">
-      <div class="bg-white rounded-xl shadow-md p-4">
-        <div class="flex items-center justify-between mb-3">
+    <section v-if="targetUser && currentStep === 1" class="mb-3">
+      <div class="bg-white rounded-lg shadow p-2">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <div>
-            <h2 class="text-lg font-semibold">1) {{ targetUser.username }}'s Collection</h2>
-            <span class="text-xs text-gray-500">Select one or more</span>
+            <h2 class="text-sm font-semibold">1) {{ targetUser.username }}'s Collection</h2>
+            <span class="text-[10px] text-gray-500">Select one or more</span>
           </div>
           <button
-            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
             @click="currentStep = 2"
           >
             Next
@@ -114,7 +115,7 @@
         <div v-if="loading.target" class="py-16 text-center text-gray-500">Loading...</div>
         <div v-else>
           <EmptyState v-if="!targetItems.length" label="No cToons match your filters" />
-          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
             <CtoonCard
               v-for="c in targetItems"
               :key="c.id"
@@ -128,20 +129,20 @@
           </div>
 
           <!-- Pagination -->
-          <div v-if="targetTotalPages > 1" class="mt-4 flex items-center justify-center gap-3">
+          <div v-if="targetTotalPages > 1" class="mt-3 flex items-center justify-center gap-2">
             <button
-              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
               :disabled="targetPage === 1"
               @click="fetchTargetPage(targetPage - 1)"
             >
               Previous
             </button>
-            <span class="text-sm text-gray-600">
+            <span class="text-xs text-gray-600">
               Page {{ targetPage }} of {{ targetTotalPages }}
               <span class="text-gray-400">({{ targetTotal }} total)</span>
             </span>
             <button
-              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
               :disabled="targetPage >= targetTotalPages"
               @click="fetchTargetPage(targetPage + 1)"
             >
@@ -150,9 +151,9 @@
           </div>
         </div>
 
-        <div class="mt-4 flex justify-end">
+        <div class="mt-3 flex justify-end">
           <button
-            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
             @click="currentStep = 2"
           >
             Next
@@ -162,13 +163,13 @@
     </section>
 
     <!-- STEP 2: Official collection -->
-    <section v-if="targetUser && currentStep === 2" class="mb-6">
-      <div class="bg-white rounded-xl shadow-md p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold">2) {{ officialUsername }}'s Collection</h2>
-          <div class="flex items-center gap-3">
+    <section v-if="targetUser && currentStep === 2" class="mb-3">
+      <div class="bg-white rounded-lg shadow p-2">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <h2 class="text-sm font-semibold">2) {{ officialUsername }}'s Collection</h2>
+          <div class="flex items-center gap-2">
             <button
-              class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+              class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
               :disabled="!hasAnySelection"
               @click="currentStep = 3"
             >
@@ -206,11 +207,11 @@
               class="h-4 w-4 border rounded"
               @change="fetchOfficialPage(1)"
             />
-            <span class="text-base md:text-lg font-medium">Show Their Wishlist cToons</span>
+            <span class="text-xs font-medium">Show Their Wishlist cToons</span>
           </label>
 
-          <span v-if="loadingWishlist" class="text-xs text-gray-600">Loading...</span>
-          <span v-else-if="targetWishlistIds.size === 0" class="text-xs text-gray-600">
+          <span v-if="loadingWishlist" class="text-[10px] text-gray-600">Loading...</span>
+          <span v-else-if="targetWishlistIds.size === 0" class="text-[10px] text-gray-600">
             {{ targetUser.username }} has no wishlist items.
           </span>
         </FilterBar>
@@ -223,7 +224,7 @@
               ? `No cToons from ${targetUser?.username ?? 'user'}'s Wishlist in ${officialUsername}'s collection`
               : 'No cToons match your filters'"
           />
-          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
             <CtoonCard
               v-for="c in officialItems"
               :key="c.id"
@@ -237,20 +238,20 @@
           </div>
 
           <!-- Pagination -->
-          <div v-if="officialTotalPages > 1" class="mt-4 flex items-center justify-center gap-3">
+          <div v-if="officialTotalPages > 1" class="mt-3 flex items-center justify-center gap-2">
             <button
-              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
               :disabled="officialPage === 1"
               @click="fetchOfficialPage(officialPage - 1)"
             >
               Previous
             </button>
-            <span class="text-sm text-gray-600">
+            <span class="text-xs text-gray-600">
               Page {{ officialPage }} of {{ officialTotalPages }}
               <span class="text-gray-400">({{ officialTotal }} total)</span>
             </span>
             <button
-              class="px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-50"
+              class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
               :disabled="officialPage >= officialTotalPages"
               @click="fetchOfficialPage(officialPage + 1)"
             >
@@ -259,10 +260,10 @@
           </div>
         </div>
 
-        <div class="mt-4 flex items-center justify-between">
-          <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 1">Back</button>
+        <div class="mt-3 flex items-center justify-between">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="currentStep = 1">Back</button>
           <button
-            class="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
             :disabled="!hasAnySelection"
             @click="currentStep = 3"
           >
@@ -273,24 +274,24 @@
     </section>
 
     <!-- STEP 3: Confirm Offer -->
-    <section v-if="targetUser && currentStep === 3" class="mb-6">
-      <div class="bg-white rounded-xl shadow-md p-4">
-        <div class="flex items-center justify-between mb-3">
+    <section v-if="targetUser && currentStep === 3" class="mb-3">
+      <div class="bg-white rounded-lg shadow p-2">
+        <div class="flex items-center justify-between mb-2">
           <div>
-            <h2 class="text-lg font-semibold">3) Confirm Offer</h2>
-            <span class="text-xs text-gray-500">Review before sending</span>
+            <h2 class="text-sm font-semibold">3) Confirm Offer</h2>
+            <span class="text-[10px] text-gray-500">Review before sending</span>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <!-- Requested from other user -->
           <div>
-            <h3 class="font-semibold mb-2">Requesting from {{ targetUser.username }}</h3>
-            <div v-if="!selectedTargetCtoons.length" class="text-sm text-gray-600">
+            <h3 class="text-xs font-semibold mb-1.5">Requesting from {{ targetUser.username }}</h3>
+            <div v-if="!selectedTargetCtoons.length" class="text-xs text-gray-600">
               No cToons selected from {{ targetUser.username }}.
             </div>
-            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div v-for="c in selectedTargetCtoons" :key="c.id" class="border rounded p-2">
+            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <div v-for="c in selectedTargetCtoons" :key="c.id" class="border rounded-md p-2">
                 <img :src="c.assetPath" :alt="c.name" class="w-full h-24 object-contain mb-1" />
                 <p class="text-xs font-medium truncate">{{ c.name }}</p>
                 <p class="text-[11px] text-gray-600">{{ c.rarity }}</p>
@@ -300,12 +301,12 @@
 
           <!-- Offering -->
           <div>
-            <h3 class="font-semibold mb-2">Offering from {{ officialUsername }}</h3>
-            <div v-if="!selectedOfficialCtoons.length" class="text-sm text-gray-600">
+            <h3 class="text-xs font-semibold mb-1.5">Offering from {{ officialUsername }}</h3>
+            <div v-if="!selectedOfficialCtoons.length" class="text-xs text-gray-600">
               No cToons offered.
             </div>
-            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div v-for="c in selectedOfficialCtoons" :key="c.id" class="border rounded p-2">
+            <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <div v-for="c in selectedOfficialCtoons" :key="c.id" class="border rounded-md p-2">
                 <img :src="c.assetPath" :alt="c.name" class="w-full h-24 object-contain mb-1" />
                 <p class="text-xs font-medium truncate">{{ c.name }}</p>
                 <p class="text-[11px] text-gray-600">{{ c.rarity }}</p>
@@ -314,10 +315,10 @@
           </div>
         </div>
 
-        <div class="mt-6 flex items-center justify-between">
-          <button class="px-3 py-2 rounded border hover:bg-gray-50" @click="currentStep = 2">Back</button>
+        <div class="mt-4 flex items-center justify-between">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="currentStep = 2">Back</button>
           <button
-            class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
             :disabled="!hasAnySelection || makingOffer"
             @click="sendOffer"
           >
@@ -330,10 +331,11 @@
 
     <!-- Toast -->
     <transition name="fade">
-      <div v-if="toast.show" class="fixed bottom-4 right-4 bg-black text-white px-4 py-2 rounded shadow">
+      <div v-if="toast.show" class="fixed bottom-4 right-4 bg-black text-white px-3 py-2 rounded-md shadow text-xs">
         {{ toast.message }}
       </div>
     </transition>
+    </div>
   </div>
 </template>
 

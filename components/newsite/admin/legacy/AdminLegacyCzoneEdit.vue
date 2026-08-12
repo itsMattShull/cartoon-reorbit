@@ -1,14 +1,14 @@
 <template>
 
-  <div class="px-4 py-6 mx-auto flex flex-col items-center gap-4 w-full max-w-[900px]">
+  <div class="admin-legacy-czone-edit bg-gray-50 text-xs px-2 py-2 mx-auto flex flex-col items-center gap-3 w-full max-w-[900px]">
     <!-- Header -->
-    <div class="w-full flex items-center justify-between">
+    <div class="w-full flex items-center justify-between flex-wrap gap-2">
       <div>
-        <h1 class="text-xl font-bold">Admin: Edit cZone for <span class="text-indigo-600">{{ username }}</span></h1>
-        <p class="text-sm text-gray-500 mt-0.5">Click the X on a cToon to remove it, then save.</p>
+        <h1 class="text-base font-semibold">Admin: Edit cZone for <span class="text-indigo-600">{{ username }}</span></h1>
+        <p class="text-xs text-gray-500 mt-0.5">Click the X on a cToon to remove it, then save.</p>
       </div>
       <button
-        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+        class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
         @click="cancel"
       >
         Cancel
@@ -16,17 +16,17 @@
     </div>
 
     <!-- Zone pager -->
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
       <button
-        class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 disabled:opacity-50"
+        class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
         :disabled="currentZoneIndex === 0"
         @click="prevZone"
       >
         ← Zone {{ currentZoneIndex }}
       </button>
-      <span class="text-sm font-medium">Zone {{ currentZoneIndex + 1 }} of {{ zones.length }}</span>
+      <span class="text-xs font-medium">Zone {{ currentZoneIndex + 1 }} of {{ zones.length }}</span>
       <button
-        class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 disabled:opacity-50"
+        class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
         :disabled="currentZoneIndex === zones.length - 1"
         @click="nextZone"
       >
@@ -65,22 +65,22 @@
           </div>
         </div>
 
-        <div v-if="currentToons.length === 0 && !loading" class="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+        <div v-if="currentToons.length === 0 && !loading" class="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
           No cToons in this zone
         </div>
       </div>
     </div>
 
     <!-- Save button -->
-    <div class="flex gap-3">
+    <div class="flex gap-2">
       <button
-        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+        class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
         @click="cancel"
       >
         Cancel
       </button>
       <button
-        class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+        class="px-3 py-1.5 text-xs font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
         :disabled="saving"
         @click="save"
       >
