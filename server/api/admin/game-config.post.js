@@ -99,6 +99,18 @@ const EDRPS_NUMERIC_RANGES = [
 
 const EDRPS_FIELDS = EDRPS_NUMERIC_RANGES.map(([k]) => k)
 
+// Ranges mirror CONFIG_LIMITS in lib/reorbitChess.js, which clamps again on every read — this
+// rejects here so the admin sees an error instead of silently saving a value the game ignores.
+const REORBITCHESS_NUMERIC_RANGES = [
+  ['reorbitChessInitialSeconds', 60, 1800],
+  ['reorbitChessIncrementSeconds', 0, 30],
+  ['reorbitChessPairDailyAwardLimit', 0, 50],
+  ['reorbitChessMinPliesForAward', 0, 80],
+  ['reorbitChessGraceSeconds', 10, 180]
+]
+
+const REORBITCHESS_FIELDS = REORBITCHESS_NUMERIC_RANGES.map(([k]) => k)
+
 // ── Fruit Samurai field table ────────────────────────────────────────────────────────────
 // Ranges mirror CFG_BOUNDS in lib/fruitSamuraiSim.js, which is the source of truth and clamps
 // every one of these again on read — including on the way out of the Redis session. Rejecting
@@ -461,6 +473,25 @@ function validatePayload(payload) {
       throw createError({
         statusCode: 400,
         statusMessage: `Max rounds must be at least ${payload.edRpsWinsNeeded * 2 - 1} for a first-to-${payload.edRpsWinsNeeded} match`
+      })
+    }
+    if (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
+    }
+  } else if (payload.gameName === 'ReOrbitChess') {
+    for (const [field, min, max] of REORBITCHESS_NUMERIC_RANGES) {
+      const v = payload[field]
+      if (!Number.isInteger(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a whole number between ${min} and ${max}` })
+      }
+    }
+    // A game with no increment on a phone is a game decided by mobile latency rather than by
+    // chess, and this one pays points. Short base times are still allowed — they just have to
+    // carry an increment to be survivable.
+    if (payload.reorbitChessInitialSeconds < 180 && payload.reorbitChessIncrementSeconds < 2) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'A base time under 3 minutes needs at least a 2 second increment, or mobile players lose on lag'
       })
     }
     if (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0) {
