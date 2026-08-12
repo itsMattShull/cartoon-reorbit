@@ -458,6 +458,10 @@ model User {
   edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
   edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
   edRpsMatchesWhoLeft       EdRpsMatch[]                  @relation("EdRpsMatchWhoLeft")
+  chessMatchesAsWhite       ReOrbitChessMatch[]           @relation("ReOrbitChessMatchWhite")
+  chessMatchesAsBlack       ReOrbitChessMatch[]           @relation("ReOrbitChessMatchBlack")
+  chessMatchesAsWinner      ReOrbitChessMatch[]           @relation("ReOrbitChessMatchWinner")
+  chessMatchesWhoLeft       ReOrbitChessMatch[]           @relation("ReOrbitChessMatchWhoLeft")
   gtoonTournamentsWon       GtoonTournament[]             @relation("GtoonTournamentWinner")
   gtoonTournamentOptIns     GtoonTournamentOptIn[]
   gtoonTournamentMatchesAsA GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerA")
@@ -1264,6 +1268,20 @@ model GameConfig {
   edRpsWinsNeeded          Int? @default(4) // round wins to take the match (best of 7)
   edRpsMaxRounds           Int? @default(7) // hard ceiling; ties replay and don't count
   edRpsPairDailyAwardLimit Int? @default(2) // point-paying wins one pair of players may trade per day
+
+  // — ReOrbit Chess —
+  // Bounds live in CONFIG_LIMITS in lib/reorbitChess.js, which clampConfig() applies on every
+  // read, so an out-of-range value saved here can never break a live match. `pointsPerWin`
+  // above is what a decisive PvP game pays the winner; AI games never pay and are never
+  // persisted.
+  reorbitChessInitialSeconds      Int? @default(300) // starting clock per player
+  reorbitChessIncrementSeconds    Int? @default(3) // added to the mover's clock after each move
+  reorbitChessPairDailyAwardLimit Int? @default(2) // point-paying wins one pair of players may trade per day
+  // Anti-farm floor. A chess game can be thrown in two moves — far faster than any RPS match
+  // can be lost — so a decisive result below this many plies pays nothing. 20 plies is ten
+  // moves each, long enough that a thrown game costs more time than the points are worth.
+  reorbitChessMinPliesForAward    Int? @default(20)
+  reorbitChessGraceSeconds        Int? @default(45) // reconnect window before a disconnect forfeits
 }
 
 model GlobalGameConfig {
@@ -1319,6 +1337,11 @@ model GlobalGameConfig {
   gameTileBlackjackImagePath         String?
   gameTileEdrpsImagePath             String?
   gameTileFruitsamuraiImagePath      String?
+  // Note the casing: this is gameTile + the tile slot key with its first letter capitalised
+  // ('reorbitchess' → Reorbitchess), NOT the GameConfig gameName ('ReOrbitChess'). Compare
+  // gameTileReorbitmatchImagePath above. Get it wrong and the upload endpoint writes a column
+  // the Games page never reads.
+  gameTileReorbitchessImagePath      String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -1670,6 +1693,85 @@ model EdRpsMatch {
   @@index([endedAt])
   @@index([player1UserId, endedAt])
   @@index([player2UserId, endedAt])
+  @@index([winnerUserId, endedAt])
+}
+
+// ReOrbit Chess — one row per finished PvP game.
+//
+// AI games are NOT persisted. The player columns are non-null FKs to User and there is no bot
+// account to point them at, the leaderboard counts rows in this table, and an unlimited free
+// mode would write more rows than the paid mode by an order of magnitude. The browser plays
+// the AI entirely on its own, exactly as the Ed, Edd n Eddy RPS practice mode does.
+model ReOrbitChessMatch {
+  id     String @id @default(uuid())
+  roomId String
+
+  // Colour, not seat order: which side a player had decides who moved first, and every other
+  // column here reads more clearly against it than against player1/player2.
+  whiteUserId String
+  blackUserId String
+
+  // '1-0' | '0-1' | '1/2-1/2'. Redundant with winnerUserId for decisive games, but a draw has
+  // no winner and the leaderboard still has to tell a draw from an abandoned game.
+  result String
+
+  winnerUserId  String?
+  whoLeftUserId String?
+  // How the game ended. Only 'checkmate', 'resign' and 'flag' are decisive results that can
+  // pay; the draw reasons pay nothing by design, and 'forfeit'/'sweep' are abandonment.
+  // 'checkmate' | 'resign' | 'flag' | 'stalemate' | 'threefold' | 'fiftymove' |
+  // 'insufficient' | 'agreement' | 'forfeit' | 'sweep'
+  endReason String
+
+  plies    Int    @default(0)
+  finalFen String
+
+  // One entry per ply: [san, ms] where ms is the server-measured time that move took. Terse on
+  // purpose — the same reasoning as EdRpsMatch.rounds. It is read only by the admin log viewer,
+  // and move times are the collusion signal that a VPN and a fresh fingerprint cannot launder.
+  moves Json?
+
+  // The time control actually played, copied from GameConfig at match start. An admin editing
+  // the config must not retroactively change what a finished game was played at.
+  initialSeconds   Int
+  incrementSeconds Int
+  // Clock remaining at the final position, for the admin log.
+  whiteMsLeft Int @default(0)
+  blackMsLeft Int @default(0)
+
+  // Collusion signals, captured at match start. IPs use the deterministic encryptIp() from
+  // server/utils/ip-encrypt.js so they join directly against UserIP and DeviceFingerprintLog.
+  whiteIp        String?
+  blackIp        String?
+  whiteVisitorId String?
+  blackVisitorId String?
+  sameIp         Boolean @default(false)
+  sameVisitorId  Boolean @default(false)
+
+  // Award accounting. pointsAwardedAt is claimed with a compare-and-set inside the award
+  // transaction, so a flag racing a resign can never pay twice.
+  pointsAwarded   Int       @default(0)
+  pointsAwardedAt DateTime?
+  awardedUserId   String?
+  // null when paid; otherwise why not:
+  // 'draw' | 'too_short' | 'forfeit' | 'abandoned' | 'pair_limit' | 'same_device' |
+  // 'cap_exhausted' | 'banned'
+  suppressReason String?
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  white   User  @relation("ReOrbitChessMatchWhite", fields: [whiteUserId], references: [id])
+  black   User  @relation("ReOrbitChessMatchBlack", fields: [blackUserId], references: [id])
+  winner  User? @relation("ReOrbitChessMatchWinner", fields: [winnerUserId], references: [id])
+  whoLeft User? @relation("ReOrbitChessMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+
+  // The migration adds partial variants (WHERE "endedAt" IS NOT NULL) that Prisma cannot
+  // express, plus the LEAST/GREATEST pair index the per-pair daily award limit counts against.
+  @@index([startedAt])
+  @@index([endedAt])
+  @@index([whiteUserId, endedAt])
+  @@index([blackUserId, endedAt])
   @@index([winnerUserId, endedAt])
 }
 

@@ -100,6 +100,7 @@ export const ADMIN_SECTIONS = [
   S('achievementLogs', 'Achievement Logs', 'logs', nu('AdminAchievementLogs')),
   S('gtoonsClashLogs', 'gToons Clash Logs', 'logs', nu('AdminGtoonsClashLogs')),
   S('edRpsLogs', 'Ed Edd n Eddy RPS Logs', 'logs', nu('AdminEdRpsLogs')),
+  S('reorbitChessLogs', 'ReOrbit Chess Logs', 'logs', nu('AdminReOrbitChessLogs')),
   S('monsterBattleLogs', 'Monster Battle Logs', 'logs', nu('AdminMonsterBattleLogs')),
   S('lottoLogs', 'Lotto Logs', 'logs', nu('AdminLottoLogs')),
   S('winWheelLogs', 'Win Wheel Logs', 'logs', nu('AdminWinWheelLogs')),

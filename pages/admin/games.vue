@@ -649,6 +649,83 @@
           </button>
         </section>
 
+
+        <!-- ReOrbit Chess -->
+        <section v-if="activeTab === 'ReOrbitChess'" role="tabpanel" aria-label="ReOrbit Chess Settings">
+          <h2 class="text-2xl font-semibold mb-4">ReOrbit Chess Settings</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            Head-to-head wins draw from the same daily pool as TKO, gToons Clash and Ed, Edd n
+            Eddy RPS, set on the Global Settings tab. Only decisive games pay -- draws, forfeits
+            and games against the three AI opponents never do, and games against the AI are
+            unlimited and are not recorded. Every value below is clamped again by the game
+            engine on read, so a bad number here cannot break a live game.
+          </p>
+
+          <div v-if="chessConfigError" class="mb-4 p-3 border border-red-300 bg-red-50 rounded">
+            <p class="text-sm font-semibold text-red-800">These settings could not be loaded.</p>
+            <p class="text-xs text-red-700 mt-1">{{ chessConfigError }}</p>
+            <p class="text-xs text-red-700 mt-1">
+              The values below are defaults, not what is saved. If this database hasn't had the
+              ReOrbit Chess migration applied yet, run it and reload before saving --
+              saving now would write these defaults.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Points Per Win</label>
+              <input type="number" v-model.number="chessPointsPerWin" class="input" />
+              <p class="text-xs text-gray-400 mt-1">Paid to the winner of a decisive head-to-head game. Draws pay nothing.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Starting Clock (seconds)</label>
+              <input type="number" v-model.number="chessInitialSeconds" class="input" min="60" max="1800" />
+              <p class="text-xs text-gray-400 mt-1">
+                Each player's clock at the start. 300 is a five-minute blitz game.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Increment (seconds per move)</label>
+              <input type="number" v-model.number="chessIncrementSeconds" class="input" min="0" max="30" />
+              <p class="text-xs text-gray-400 mt-1">
+                Added to a player's clock after each move. This is the lag compensation -- a
+                base time under 3 minutes requires at least 2 seconds here, or players on
+                mobile data lose games to their connection rather than to chess.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Minimum Moves To Pay</label>
+              <input type="number" v-model.number="chessMinPliesForAward" class="input" min="0" max="80" />
+              <p class="text-xs text-gray-400 mt-1">
+                Half-moves (plies) a game must reach before a win pays. A chess game can be
+                thrown in two moves, so without this two accounts can trade a win every few
+                seconds. 20 is ten moves each. 0 disables the floor.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Paid Wins Per Pair Per Day</label>
+              <input type="number" v-model.number="chessPairDailyAwardLimit" class="input" min="0" max="50" />
+              <p class="text-xs text-gray-400 mt-1">
+                How many point-paying wins the same two players may trade in one daily window.
+                The main brake on win-trading between alts; 0 disables the limit.
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Reconnect Grace (seconds)</label>
+              <input type="number" v-model.number="chessGraceSeconds" class="input" min="10" max="180" />
+              <p class="text-xs text-gray-400 mt-1">
+                How long a disconnected player has to return before forfeiting. Their clock
+                keeps running throughout -- pausing it would make disconnecting a free timeout.
+              </p>
+            </div>
+          </div>
+
+          <button @click="saveChessConfig" :disabled="loadingChess || !!chessConfigError" class="btn-primary">
+            <span v-if="!loadingChess">Save ReOrbit Chess Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- Win Wheel -->
         <section v-if="activeTab === 'Winwheel'" role="tabpanel" aria-label="Win Wheel Settings">
           <h2 class="text-2xl font-semibold mb-4">Win Wheel Settings</h2>
@@ -1753,6 +1830,7 @@ const tabs = [
   { key: 'Clash',        label: 'gToon Clash' },
   { key: 'TKO',          label: 'TKO' },
   { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' },
+  { key: 'ReOrbitChess', label: 'ReOrbit Chess' },
   { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
@@ -1808,6 +1886,15 @@ const loadingEdRps               = ref(false)
 // the Ed, Edd n Eddy RPS migration applied yet. Surfaced on the tab so the values shown are
 // never mistaken for the saved ones.
 const edRpsConfigError           = ref('')
+const chessPointsPerWin          = ref(0)
+const chessInitialSeconds        = ref(300)
+const chessIncrementSeconds      = ref(3)
+const chessPairDailyAwardLimit   = ref(2)
+const chessMinPliesForAward      = ref(20)
+const chessGraceSeconds          = ref(45)
+const loadingChess               = ref(false)
+const chessConfigError           = ref('')
+
 const loadingTkoConfig      = ref(false)
 
 const winballBumperGeometry = ref([
@@ -2115,6 +2202,7 @@ async function loadSettings() {
   // when one was uploaded.
   gameTileImages.value.blackjack    = g.gameTileBlackjackImagePath    || ''
   gameTileImages.value.edrps        = g.gameTileEdrpsImagePath        || ''
+  gameTileImages.value.reorbitchess = g.gameTileReorbitchessImagePath || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -2199,6 +2287,22 @@ async function loadSettings() {
   } catch (e) {
     edRpsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
   }
+
+  // Wrapped like the EdRps load above: a database without the ReOrbit Chess migration must
+  // not take the whole settings page down with it.
+  try {
+    const rc = await $fetch('/api/admin/game-config?gameName=ReOrbitChess')
+    chessPointsPerWin.value        = rc.pointsPerWin ?? 0
+    chessInitialSeconds.value      = rc.reorbitChessInitialSeconds ?? 300
+    chessIncrementSeconds.value    = rc.reorbitChessIncrementSeconds ?? 3
+    chessPairDailyAwardLimit.value = rc.reorbitChessPairDailyAwardLimit ?? 2
+    chessMinPliesForAward.value    = rc.reorbitChessMinPliesForAward ?? 20
+    chessGraceSeconds.value        = rc.reorbitChessGraceSeconds ?? 45
+    chessConfigError.value = ''
+  } catch (e) {
+    chessConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
+  }
+
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
@@ -2597,6 +2701,30 @@ async function saveClashConfig() {
   }
 }
 
+
+async function saveChessConfig() {
+  loadingChess.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                        'ReOrbitChess',
+        pointsPerWin:                    chessPointsPerWin.value,
+        reorbitChessInitialSeconds:      chessInitialSeconds.value,
+        reorbitChessIncrementSeconds:    chessIncrementSeconds.value,
+        reorbitChessPairDailyAwardLimit: chessPairDailyAwardLimit.value,
+        reorbitChessMinPliesForAward:    chessMinPliesForAward.value,
+        reorbitChessGraceSeconds:        chessGraceSeconds.value
+      }
+    })
+    toastMessage.value = 'ReOrbit Chess settings saved.'
+  } catch (e) {
+    toastMessage.value = e?.data?.statusMessage || 'Could not save these settings.'
+  } finally {
+    loadingChess.value = false
+  }
+}
+
 async function saveEdRpsConfig() {
   loadingEdRps.value = true; toastMessage.value = ''
   try {
@@ -2655,11 +2783,12 @@ const gameTileSlots = [
   { slot: 'flappy',       label: 'Flappy Powerpuff' },
   { slot: 'fruitsamurai', label: 'Fruit Samurai' },
   { slot: 'blackjack',    label: 'ReOrbit Blackjack' },
-  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' }
+  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' },
+  { slot: 'reorbitchess', label: 'ReOrbit Chess' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '', reorbitchess: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null, reorbitchess: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false, reorbitchess: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null

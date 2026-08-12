@@ -320,7 +320,10 @@ const items = computed(() => {
     {
       id: 'tko',
       done: Boolean(st.tkoPointsComplete),
-      text: `Play TKO, gToons Clash or Ed, Edd n Eddy RPS to win up to ${tkoDailyPointLimit} combined points.`
+      // Every game named here has to be a member of COMBAT_POOL_GAME_NAMES, and vice versa —
+      // this counter sums exactly that list (server/api/onboarding/daily.get.js), and nothing
+      // links the constant to this copy.
+      text: `Play TKO, gToons Clash, Ed, Edd n Eddy RPS or ReOrbit Chess to win up to ${tkoDailyPointLimit} combined points.`
     },
     {
       id: 'winwheel',

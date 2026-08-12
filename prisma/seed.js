@@ -66,6 +66,18 @@ async function seedGameConfigs() {
     }
   })
 
+  // ReOrbit Chess (points for a decisive head-to-head game). Every other column carries a
+  // schema default; this exists so pointsPerWin isn't 0 on a fresh database. Draws pay
+  // nothing, so this is what a win, a resignation or a flag is worth.
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'ReOrbitChess' },
+    update: {},
+    create: {
+      gameName: 'ReOrbitChess',
+      pointsPerWin: 150
+    }
+  })
+
   // Winwheel config (spin cost, optional image)
   await prisma.gameConfig.upsert({
     where: { gameName: 'Winwheel' },
