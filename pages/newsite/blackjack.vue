@@ -388,6 +388,10 @@ definePageMeta({
   // some other game pages pass to <NuxtLayout> are ignored, since the layout declares none.
   showSidebar: false,
   showFooter: false,
+  // Required, not cosmetic: measure() below shrinks the table by however much the
+  // document overflows. On a page that is allowed to scroll, that correction never
+  // converges and drives the table straight to its 300px floor.
+  fitHeight: true,
   ssr: false,
   title: 'ReOrbit Blackjack',
   description: 'Play heads-up blackjack against Johnny Bravo in the Cartoon ReOrbit casino. Practice for free or wager points.'

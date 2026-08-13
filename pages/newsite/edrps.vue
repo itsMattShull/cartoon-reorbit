@@ -222,6 +222,9 @@ definePageMeta({
   // these to <NuxtLayout> instead would silently do nothing.
   showSidebar: false,
   showFooter: false,
+  // This page disables pinch-zoom, so a page tall enough to scroll would leave a
+  // short-viewport player no way to reach the bottom of the match.
+  fitHeight: true,
   ssr: false,
   title: 'Ed, Edd n Eddy Rock Paper Scissors',
   description: 'Face off in the cul-de-sac. Pick Ed, Edd or Eddy and play rock paper scissors head to head for points on Cartoon ReOrbit.'

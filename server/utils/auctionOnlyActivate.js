@@ -7,18 +7,11 @@
 import fetch from 'node-fetch'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose } from './queues.js'
+import { rarityFloor } from './auctionPriceSuggestion.js'
+import { logAuctionOnlyError } from './auctionOnlyErrorLog.js'
 
 const DISCORD_API = 'https://discord.com/api/v10'
-
-export function auctionOnlyRarityFloor(r) {
-  const s = (r || '').trim().toLowerCase()
-  if (s === 'common') return 25
-  if (s === 'uncommon') return 50
-  if (s === 'rare') return 100
-  if (s === 'very rare') return 187
-  if (s === 'crazy rare') return 312
-  return 50
-}
+const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 
 export async function sendAuctionOnlyDiscordAnnouncement(result, isHolidayItem = false) {
   try {
@@ -99,8 +92,15 @@ export const AUCTION_ONLY_ROW_INCLUDE = {
 }
 
 // Activates a single AuctionOnly row (id + userCtoon include as above) into a
-// live Auction. Returns the created-auction summary, or null if the row was
-// already started / already has a live Auction by the time the transaction runs.
+// live Auction. Returns:
+//   - the created-auction summary on success
+//   - null if the row was already started / already has a live Auction by the
+//     time the transaction runs (not an error — just lost a race)
+//   - { refused: true, reason } if the official account no longer holds the
+//     copy that was scheduled to be auctioned. The listing is left pending
+//     (not marked isStarted) rather than silently activated against whoever
+//     holds the copy now, and the refusal is logged to AuctionOnlyErrorLog
+//     for the Manage Auction Only page.
 export async function activateAuctionOnlyRow(row) {
   const result = await prisma.$transaction(async (tx) => {
     const fresh = await tx.auctionOnly.findUnique({
@@ -117,6 +117,20 @@ export async function activateAuctionOnlyRow(row) {
     })
     if (!fresh || fresh.isStarted) return null
 
+    const official = await tx.user.findUnique({
+      where: { username: OFFICIAL_USERNAME },
+      select: { id: true }
+    })
+    if (!official) return { refused: true, reason: 'Official account not found' }
+
+    const userCtoon = await tx.userCtoon.findUnique({
+      where: { id: fresh.userCtoonId },
+      select: { userId: true, mintNumber: true }
+    })
+    if (!userCtoon || userCtoon.userId !== official.id) {
+      return { refused: true, reason: 'The official account no longer holds this copy — listing left pending.' }
+    }
+
     const active = await tx.auction.findFirst({
       where: { userCtoonId: fresh.userCtoonId, status: 'ACTIVE' },
       select: { id: true }
@@ -126,7 +140,7 @@ export async function activateAuctionOnlyRow(row) {
       return null
     }
 
-    const floor = auctionOnlyRarityFloor(row.userCtoon?.ctoon?.rarity)
+    const floor = rarityFloor(row.userCtoon?.ctoon?.rarity)
     const initialBet = Math.max(Number(fresh.pricePoints || 0), floor)
 
     const ms = new Date(fresh.endsAt).getTime() - new Date(fresh.startsAt).getTime()
@@ -138,7 +152,7 @@ export async function activateAuctionOnlyRow(row) {
         initialBet,
         duration: durationDays,
         endAt: new Date(fresh.endsAt),
-        creatorId: row.userCtoon?.userId,
+        creatorId: userCtoon.userId,
         isFeatured: fresh.isFeatured,
         auctionOnlyId: fresh.id
       },
@@ -161,13 +175,18 @@ export async function activateAuctionOnlyRow(row) {
       initialBet,
       durationDays,
       ctoon: row.userCtoon.ctoon,
-      mintNumber: row.userCtoon.mintNumber,
+      mintNumber: userCtoon.mintNumber,
       ctoonId: row.userCtoon.ctoon.id,
       isFeatured: fresh.isFeatured
     }
   })
 
   if (!result) return null
+
+  if (result.refused) {
+    await logAuctionOnlyError('activation', new Error(result.reason), row.id)
+    return result
+  }
 
   await scheduleAuctionClose(result.auctionId, result.endAt)
 

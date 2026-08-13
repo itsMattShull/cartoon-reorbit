@@ -162,7 +162,8 @@
 </template>
 
 <script setup>
-definePageMeta({ ssr: false })
+// fitHeight keeps the whole board on screen; see the flag's note in the layout.
+definePageMeta({ ssr: false, fitHeight: true })
 
 // ─── Game constants ────────────────────────────────────────────────────────────
 const TILE_GAP = 3

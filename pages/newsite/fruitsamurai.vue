@@ -125,7 +125,8 @@
             <p class="final-line" v-if="finalSlices">
               {{ finalSlices.toLocaleString() }} cut · {{ Math.floor(finalTicks / 60) }}s survived
             </p>
-            <p v-if="wasRanked" class="points-line">
+            <p v-if="submitFailed" class="points-line points-line--failed">Run could not be recorded</p>
+            <p v-else-if="wasRanked" class="points-line">
               <span v-if="pointsError">Your score is recorded — points could not be awarded just now.</span>
               <span v-else-if="pointsAwarded > 0">+{{ pointsAwarded }} points</span>
               <span v-else>No points left in today's pool</span>
@@ -181,13 +182,16 @@ import {
   FRUIT_TYPES,
   createState,
   createSegmentFeeder,
+  clampSampleX,
+  clampSampleY,
   hashSeed,
   step
 } from '~/lib/fruitSamuraiSim.js'
 
 // ssr: false to match the other canvas game — the whole page is a render loop against a
 // canvas sized from the real viewport, so there is nothing worth rendering on the server.
-definePageMeta({ middleware: 'newsite', ssr: false })
+// fitHeight keeps the whole playfield on screen; see the flag's note in the layout.
+definePageMeta({ middleware: 'newsite', ssr: false, fitHeight: true })
 
 const MS_PER_TICK = 1000 / TICK_HZ
 
@@ -218,6 +222,10 @@ const finalSlices = ref(0)
 const pointsAwarded = ref(0)
 const pointsError = ref(false)
 const wasRanked = ref(false)
+// Distinct from `wasRanked === false`. A rejected submission used to fall through to the
+// practice branch and tell the player "Practice run — not scored", which was simply untrue:
+// the run was ranked, the attempt was spent, and the score was lost.
+const submitFailed = ref(false)
 
 const jackLine = ref('')
 
@@ -351,9 +359,13 @@ function toWorld (ev) {
   // slightly away from where the player actually swiped.
   const rect = canvas.getBoundingClientRect()
   if (rect.width < 1 || rect.height < 1) return null
+  // Clamped into the legal box before it can ever reach the log. The pointer is captured on
+  // pointerdown, so following a swipe off the edge of the board — which is completely ordinary
+  // play — keeps delivering positions well outside the world, and an unclamped sample there
+  // used to fail validation and cost the player the entire run.
   return {
-    x: Math.round((ev.clientX - rect.left) * WORLD_W / rect.width),
-    y: Math.round((ev.clientY - rect.top) * WORLD_H / rect.height)
+    x: clampSampleX(Math.round((ev.clientX - rect.left) * WORLD_W / rect.width)),
+    y: clampSampleY(Math.round((ev.clientY - rect.top) * WORLD_H / rect.height))
   }
 }
 
@@ -846,6 +858,7 @@ async function startGame () {
     rankedPlaysLeft.value = r.playsLeft
     piggyMultiplier.value = cfg.piggyMultiplier
 
+    submitFailed.value = false
     strokes = []
     openStroke = null
     activePointerId = null
@@ -904,7 +917,7 @@ async function finishRun () {
     await fetchStatus()
   } catch (err) {
     submitError.value = err?.data?.statusMessage || 'Could not submit your run. Score not recorded.'
-    wasRanked.value = false
+    submitFailed.value = true
   }
 
   uiState.value = 'gameover'
@@ -1191,6 +1204,7 @@ onBeforeUnmount(() => {
 }
 .final-line { font-size: 0.85rem; opacity: 0.72; margin-bottom: 8px; }
 .points-line { font-size: 0.92rem; margin-bottom: 14px; font-weight: 600; }
+.points-line--failed { color: #ff9d8f; }
 .err-text { color: #ff9d8f; font-size: 0.85rem; margin-top: 10px; }
 
 .btn-start {

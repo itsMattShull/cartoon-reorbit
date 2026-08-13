@@ -49,36 +49,45 @@
       </div>
 
       <!-- Result modal -->
-      <transition name="fade">
-        <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-          <div class="modal-box">
-            <h2 class="modal-title">{{ modalTitle }}</h2>
-            <div class="modal-body">
-              <div v-if="modalCtoon" class="modal-ctoon">
-                <CtoonAsset
-                  :src="modalCtoon.assetPath"
-                  :alt="modalCtoon.name"
-                  :name="modalCtoon.name"
-                  :ctoon-id="modalCtoon.id"
-                  image-class="modal-ctoon-image"
-                />
-                <p class="modal-ctoon-name">{{ modalCtoon.name }}</p>
-              </div>
-              <div v-else-if="modalVerificationCode" class="modal-verification">
-                <p>{{ modalMessage }}</p>
-                <div class="verification-box">
-                  <p><strong>Code:</strong> {{ modalVerificationCode }}</p>
-                  <p class="break-all"><strong>Hash:</strong> <span class="verification-hash">{{ modalVerificationHash }}</span></p>
+      <!-- Teleported to body: .site-container carries a `transform`, which makes it the
+           containing block for `position: fixed` descendants and then clips them with
+           `overflow: hidden`. Without this the overlay is pinned to the chrome's box
+           rather than the viewport, so on a page scrolled down it renders offset and
+           partly unreachable. Same approach as AuctionModal / CtoonInfoCard / Trade.
+           Teleport wraps the transition, not the other way round: Transition needs a
+           single resolvable element child, which a Teleport is not. -->
+      <Teleport to="body">
+        <transition name="fade">
+          <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+            <div class="modal-box">
+              <h2 class="modal-title">{{ modalTitle }}</h2>
+              <div class="modal-body">
+                <div v-if="modalCtoon" class="modal-ctoon">
+                  <CtoonAsset
+                    :src="modalCtoon.assetPath"
+                    :alt="modalCtoon.name"
+                    :name="modalCtoon.name"
+                    :ctoon-id="modalCtoon.id"
+                    image-class="modal-ctoon-image"
+                  />
+                  <p class="modal-ctoon-name">{{ modalCtoon.name }}</p>
                 </div>
+                <div v-else-if="modalVerificationCode" class="modal-verification">
+                  <p>{{ modalMessage }}</p>
+                  <div class="verification-box">
+                    <p><strong>Code:</strong> {{ modalVerificationCode }}</p>
+                    <p class="break-all"><strong>Hash:</strong> <span class="verification-hash">{{ modalVerificationHash }}</span></p>
+                  </div>
+                </div>
+                <p v-else class="modal-message">{{ modalMessage }}</p>
               </div>
-              <p v-else class="modal-message">{{ modalMessage }}</p>
-            </div>
-            <div class="modal-actions">
-              <button class="btn-modal-close" @click="closeModal">Close</button>
+              <div class="modal-actions">
+                <button class="btn-modal-close" @click="closeModal">Close</button>
+              </div>
             </div>
           </div>
-        </div>
-      </transition>
+        </transition>
+      </Teleport>
 </template>
 
 <script setup>

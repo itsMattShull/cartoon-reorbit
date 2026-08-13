@@ -43,62 +43,76 @@
       </div>
 
       <!-- Avatar modal -->
-      <div v-if="showAvatarModal" class="modal-overlay" @click.self="closeAvatarModal">
-        <div class="modal-box">
-          <h2 class="modal-title">Change Avatar</h2>
-          <p class="modal-desc">Choose a new avatar and click save.</p>
+      <!-- Teleported to body: .site-container carries a `transform`, which makes it the
+           containing block for `position: fixed` descendants and then clips them with
+           `overflow: hidden`. Without this the overlay is pinned to the chrome's box
+           rather than the viewport, so on a page scrolled down it renders offset and
+           partly unreachable. Same approach as AuctionModal / CtoonInfoCard / Trade. -->
+      <Teleport to="body">
+        <div v-if="showAvatarModal" class="modal-overlay" @click.self="closeAvatarModal">
+          <div class="modal-box">
+            <h2 class="modal-title">Change Avatar</h2>
+            <p class="modal-desc">Choose a new avatar and click save.</p>
 
-          <div class="avatar-grid">
-            <label v-for="img in avatars" :key="img" class="avatar-option">
-              <img
-                :src="`/avatars/${img}`"
-                :class="['avatar-img', avatarDraft === img ? 'avatar-selected' : '']"
-              />
-              <input v-model="avatarDraft" type="radio" class="sr-only" :value="img" />
-            </label>
-          </div>
+            <div class="avatar-grid">
+              <label v-for="img in avatars" :key="img" class="avatar-option">
+                <img
+                  :src="`/avatars/${img}`"
+                  :class="['avatar-img', avatarDraft === img ? 'avatar-selected' : '']"
+                />
+                <input v-model="avatarDraft" type="radio" class="sr-only" :value="img" />
+              </label>
+            </div>
 
-          <p v-if="avatarError" class="modal-error">{{ avatarError }}</p>
+            <p v-if="avatarError" class="modal-error">{{ avatarError }}</p>
 
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="closeAvatarModal">Cancel</button>
-            <button class="btn-save-blue" :disabled="savingAvatar" @click="saveAvatar">
-              {{ savingAvatar ? 'Saving...' : 'Save' }}
-            </button>
+            <div class="modal-actions">
+              <button class="btn-cancel" @click="closeAvatarModal">Cancel</button>
+              <button class="btn-save-blue" :disabled="savingAvatar" @click="saveAvatar">
+                {{ savingAvatar ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Teleport>
 
       <!-- Username modal -->
-      <div v-if="showUsernameModal" class="modal-overlay" @click.self="closeUsernameModal">
-        <div class="modal-box">
-          <h2 class="modal-title">Change Username</h2>
-          <p class="modal-desc">Pick from the Cartoon Orbit username builder.</p>
+      <!-- Teleported to body: .site-container carries a `transform`, which makes it the
+           containing block for `position: fixed` descendants and then clips them with
+           `overflow: hidden`. Without this the overlay is pinned to the chrome's box
+           rather than the viewport, so on a page scrolled down it renders offset and
+           partly unreachable. Same approach as AuctionModal / CtoonInfoCard / Trade. -->
+      <Teleport to="body">
+        <div v-if="showUsernameModal" class="modal-overlay" @click.self="closeUsernameModal">
+          <div class="modal-box">
+            <h2 class="modal-title">Change Username</h2>
+            <p class="modal-desc">Pick from the Cartoon Orbit username builder.</p>
 
-          <div class="username-selects">
-            <select v-model="part1" class="username-select">
-              <option v-for="w in wordLists[0]" :key="`s-1-${w}`" :value="w">{{ w }}</option>
-            </select>
-            <select v-model="part2" class="username-select">
-              <option v-for="w in wordLists[1]" :key="`s-2-${w}`" :value="w">{{ w }}</option>
-            </select>
-            <select v-model="part3" class="username-select">
-              <option v-for="w in wordLists[2]" :key="`s-3-${w}`" :value="w">{{ w }}</option>
-            </select>
-          </div>
+            <div class="username-selects">
+              <select v-model="part1" class="username-select">
+                <option v-for="w in wordLists[0]" :key="`s-1-${w}`" :value="w">{{ w }}</option>
+              </select>
+              <select v-model="part2" class="username-select">
+                <option v-for="w in wordLists[1]" :key="`s-2-${w}`" :value="w">{{ w }}</option>
+              </select>
+              <select v-model="part3" class="username-select">
+                <option v-for="w in wordLists[2]" :key="`s-3-${w}`" :value="w">{{ w }}</option>
+              </select>
+            </div>
 
-          <button @click="randomize" class="btn-randomize">🔄 Randomize</button>
+            <button @click="randomize" class="btn-randomize">🔄 Randomize</button>
 
-          <p v-if="usernameError" class="modal-error">{{ usernameError }}</p>
+            <p v-if="usernameError" class="modal-error">{{ usernameError }}</p>
 
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="closeUsernameModal">Cancel</button>
-            <button class="btn-save-purple" :disabled="savingUsername" @click="saveUsername">
-              {{ savingUsername ? 'Saving...' : 'Save' }}
-            </button>
+            <div class="modal-actions">
+              <button class="btn-cancel" @click="closeUsernameModal">Cancel</button>
+              <button class="btn-save-purple" :disabled="savingUsername" @click="saveUsername">
+                {{ savingUsername ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Teleport>
 </template>
 
 <script setup>

@@ -917,7 +917,14 @@ function getCoords(e) {
 function toCanvasCoords(cx, cy) {
   const r = canvasRect()
   if (!r) return { x: 0, y: 0 }
-  const s = scale.value || 1
+  // Derived from the canvas's own on-screen rectangle rather than from `scale`,
+  // because a pointer event's clientX/clientY are in visual pixels while `scale`
+  // is only this component's own layout scale. The newsite shell wraps the page
+  // in its own `transform: scale()`, so the two differ whenever the shell is
+  // scaled down, and dividing by the wrong one drops every toon short of where
+  // it was actually released — by 1/shellScale, growing with distance from the
+  // transform origin. Same reasoning as pages/newsite/fruitsamurai.vue.
+  const s = r.width > 0 ? r.width / CANVAS_W : (scale.value || 1)
   return { x: (cx - r.left) / s, y: (cy - r.top) / s }
 }
 

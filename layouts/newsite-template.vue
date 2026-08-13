@@ -1,6 +1,18 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300..700&display=swap');
 
+html.newsite-active {
+  /* Always reserve the vertical scrollbar gutter. The layout scale is derived
+     from documentElement.clientWidth, which shrinks when a classic scrollbar
+     appears — and since the chrome's height is a multiple of that scale, a
+     narrow band of window sizes exists where the scrollbar's arrival shrinks
+     the page just enough to make the scrollbar unnecessary, which brings it
+     back, at frame rate. Reserving the gutter unconditionally breaks that loop,
+     and stops the page jumping sideways when navigating between a short page
+     and a long one. */
+  overflow-y: scroll;
+}
+
 html.newsite-active,
 html.newsite-active body {
   background: var(--bg-color);
@@ -25,7 +37,12 @@ html.newsite-active body {
   --font-family:                     'Nunito', sans-serif;
 
   --site-container-bg:               transparent;
-  --site-container-height:           862px;
+  /* topbar 105 + sidebar 682 + footer 60, plus the two 10px row gaps between
+     them. This was 862px, five short, so `overflow: hidden` clipped the bottom
+     edge of the footer. Barely visible while everything was scaled to 70%;
+     plainly visible now that the chrome renders at 1:1. Mirrored by SITE_HEIGHT
+     in utils/siteScale.js. */
+  --site-container-height:           867px;
   --site-container-width:            1040px;
   --site-container-radius:           0px;
   --site-container-border-thickness: 0px;
@@ -278,6 +295,8 @@ html.newsite-active body {
 </template>
 
 <script setup>
+import { computeSiteScale, scaleMarginBottom, MOBILE_QUERY } from '~/utils/siteScale'
+
 const route = useRoute()
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const {
@@ -329,7 +348,7 @@ const mainContentBorder = computed(() => route.meta.mainContentBorder === false 
 
 
 // Pages that opt into `fluidLayout` (currently the admin console) escape the
-// fixed 1040x862 retro chrome entirely. That chrome is a `transform: scale()`
+// fixed-size retro chrome entirely. That chrome is a `transform: scale()`
 // container, and a transform — even `scale(1)` — makes the element the
 // containing block for `position: fixed` descendants, so every `fixed inset-0`
 // modal inside it resolves against the 1040px box and is then clipped by
@@ -351,45 +370,77 @@ const gridRows = computed(() => {
     : 'var(--topbar-height) 1fr'
 })
 
-const SITE_WIDTH = 1040
-const SITE_HEIGHT = 862
-const SITE_PADDING = 20
-const MOBILE_BREAKPOINT = 768
-const MAIN_CONTENT_WIDTH = 800
-const MAIN_CONTENT_HEIGHT = 669
+// Opt back into the old shrink-to-fit-the-height behaviour. The chrome is taller
+// than a 768p laptop's viewport, so fitting height means never rendering at full
+// size there — but a handful of pages genuinely cannot tolerate a scrolling
+// page and are better off small. Two verified reasons, not hypotheticals:
+// pages/newsite/blackjack.vue measures document overflow and shrinks its table
+// to absorb it (a deliberately-overflowing page would collapse the table to its
+// 300px floor), and pages/newsite/flappypowerpuff.vue pins `body` on every game
+// start to defeat pull-to-refresh, which would strand the bottom of a scrolling
+// playfield off-screen. Timed canvas games also just play badly when the
+// playfield can scroll out from under the player.
+const fitHeight = computed(() => route.meta.fitHeight === true)
+
 const scale = ref(1)
 const isMobile = ref(false)
 
-// Captured once on mount (assumed to be at 100% zoom). devicePixelRatio is the
-// only cross-browser API that reliably reflects browser zoom; outerWidth includes
-// browser chrome in Firefox, making outerWidth/innerWidth an inaccurate zoom proxy there.
-let baseDPR = null
+// `isMobile` comes straight from the same media query the CSS uses, rather than
+// from a measured width, so the layout's JS and its own `@media (max-width:
+// 768px)` blocks cannot disagree about which mode they are in. That mismatch is
+// exactly what composables/useIsNarrow.js was written to work around back when
+// this was computed from a zoom-adjusted width.
+let mql = null
 
+// Measured in CSS pixels, with no devicePixelRatio anywhere: see the long note
+// in utils/siteScale.js for why trying to detect and cancel out browser zoom is
+// what broke reloads for zoomed-in players. clientWidth excludes a classic
+// vertical scrollbar; innerWidth (which includes it) is the SSR-safe fallback.
+const measure = () => {
+  const el = document.documentElement
+  const width = el?.clientWidth || window.innerWidth
+  scale.value = fitHeight.value
+    ? computeSiteScale(width, el?.clientHeight || window.innerHeight)
+    : computeSiteScale(width)
+}
+
+// Re-measures inline rather than going through the rAF-coalesced path: Vue
+// flushes on the microtask queue, which runs before the next animation frame,
+// so deferring here would paint one frame of the new mode at the old mode's
+// scale — a visible pop when a phone rotates across the breakpoint.
+const applyMobile = e => {
+  isMobile.value = e.matches
+  measure()
+}
+
+// Coalesced into a frame. Not for frequency — browsers already cap `resize` at
+// one per frame — but for ordering: it defers the ref write, and so Vue's DOM
+// patch, past the other resize listeners in the same dispatch. Several pages
+// (MyCzone, CzoneEdit) read geometry in their own resize handlers, and without
+// this they read it immediately after this layout rewrites `transform` on the
+// whole chrome subtree, forcing a synchronous reflow.
+let frame = null
 const computeLayout = () => {
-  if (baseDPR === null) baseDPR = window.devicePixelRatio
-  const zoomFactor = window.devicePixelRatio / baseDPR
-  const effectiveWidth = Math.round(window.innerWidth * zoomFactor)
-  const effectiveHeight = Math.round(window.innerHeight * zoomFactor)
-
-  // <=, not <: every `@media (max-width: 768px)` in the app matches *at* 768.
-  // With `<` the layout stayed in desktop mode at exactly 768px — 1032px of
-  // grid tracks inside a 768px container, with the right edge of main-content
-  // clipped off-screen by `body { overflow-x: hidden }` and no scrollbar —
-  // while the components inside were already using their mobile rules.
-  isMobile.value = effectiveWidth <= MOBILE_BREAKPOINT
-  if (!isMobile.value) {
-    const scaleX = (effectiveWidth - SITE_PADDING) / SITE_WIDTH
-    const scaleY = (effectiveHeight - SITE_PADDING) / SITE_HEIGHT
-    scale.value = Math.min(scaleX, scaleY, 1)
-  }
+  if (frame !== null) return
+  frame = requestAnimationFrame(() => {
+    frame = null
+    measure()
+  })
 }
 
 onMounted(() => {
-  computeLayout()
+  mql = window.matchMedia(MOBILE_QUERY)
+  // Read on mount, not during setup: the server always renders the desktop
+  // branch, so applying a `mobile` value any earlier would be a hydration
+  // mismatch on every narrow load.
+  applyMobile(mql)
+  mql.addEventListener('change', applyMobile)
   window.addEventListener('resize', computeLayout)
 })
 
 onUnmounted(() => {
+  if (frame !== null) cancelAnimationFrame(frame)
+  mql?.removeEventListener('change', applyMobile)
   window.removeEventListener('resize', computeLayout)
 })
 
@@ -411,10 +462,18 @@ const scaleStyle = computed(() => {
       height: 'auto',
     }
   }
+  // The transform stays even at scale(1). It is free — a static 2D scale is not
+  // layer-promoted — and dropping it conditionally would make the container a
+  // containing block for `position: fixed` descendants at some window widths
+  // but not others. Several places already depend on the current, consistent
+  // behaviour (pages/newsite/edrps.vue teleports its overlay to body for
+  // exactly this reason), and a containing block that flips on viewport width
+  // produces bugs that only reproduce at specific window sizes. `fluidLayout`
+  // above is the explicit, per-route way to opt out.
   return {
     transform: `scale(${scale.value})`,
     transformOrigin: 'top center',
-    marginBottom: `${(scale.value - 1) * SITE_HEIGHT}px`
+    marginBottom: `${scaleMarginBottom(scale.value)}px`
   }
 })
 </script>
