@@ -1,6 +1,8 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose } from '../utils/queues.js'
+import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
+import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 
 const QUEUE_NAME = process.env.DISSOLVE_AUCTION_LAUNCH_QUEUE_KEY || 'dissolveAuctionLaunch'
 const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
@@ -9,16 +11,6 @@ const connection = {
   host: process.env.REDIS_HOST,
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD?.trim() || undefined,
-}
-
-function rarityFloor(r) {
-  const s = (r || '').trim().toLowerCase()
-  if (s === 'common')     return 25
-  if (s === 'uncommon')   return 50
-  if (s === 'rare')       return 100
-  if (s === 'very rare')  return 187
-  if (s === 'crazy rare') return 312
-  return 50
 }
 
 new Worker(QUEUE_NAME, async (job) => {
@@ -37,6 +29,18 @@ new Worker(QUEUE_NAME, async (job) => {
     }
   })
   if (!entry) return  // already processed or deleted
+
+  // Not auto-listable (Auction/Prize/Code Only, Crazy Rare, or an
+  // unrecognized rarity with no explicit floor). Clear scheduledFor instead
+  // of leaving the entry stranded with no job: the next applyDissolveSchedule
+  // run picks up any entry with scheduledFor: null and re-queues it.
+  if (!isAutoAuctionEligibleRarity(entry.userCtoon?.ctoon?.rarity)) {
+    await prisma.dissolveAuctionQueue.update({
+      where: { id: entry.id },
+      data: { scheduledFor: null }
+    })
+    return
+  }
 
   const endAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
