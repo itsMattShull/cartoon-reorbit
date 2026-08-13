@@ -16,6 +16,8 @@ import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDis
 import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
+import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
+import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 
@@ -1047,13 +1049,15 @@ async function createDailyFeaturedAuction() {
   })
   if (!officialUser) return
 
-  const candidates = await prisma.userCtoon.findMany({
+  const rawCandidates = await prisma.userCtoon.findMany({
     where: {
       userId: officialUser.id,
       burnedAt: null,
-      ctoon: {
-        rarity: { not: "Crazy Rare" }
-      }
+      // Excludes any pending (unstarted) AuctionOnly listing via the relation
+      // itself, rather than loading every pending userCtoonId into a notIn
+      // array — stays bounded as the AuctionOnly table grows. Backed by the
+      // AuctionOnly(userCtoonId, isStarted) index.
+      auctionOnlyListings: { none: { isStarted: false } }
     },
     include: {
       ctoon: {
@@ -1062,17 +1066,9 @@ async function createDailyFeaturedAuction() {
     }
   })
 
-  if (!candidates.length) return
+  const candidates = rawCandidates.filter(c => isAutoAuctionEligibleRarity(c.ctoon?.rarity))
 
-  const rarityFloor = (r) => {
-    const s = (r || "").trim().toLowerCase()
-    if (s === "common") return 25
-    if (s === "uncommon") return 50
-    if (s === "rare") return 100
-    if (s === "very rare") return 187
-    if (s === "crazy rare") return 312
-    return 50
-  }
+  if (!candidates.length) return
 
   const shuffled = candidates.slice()
   for (let i = shuffled.length - 1; i > 0; i--) {

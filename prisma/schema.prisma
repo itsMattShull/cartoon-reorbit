@@ -2100,6 +2100,7 @@ model AuctionOnly {
 
   @@index([startsAt])
   @@index([endsAt])
+  @@index([userCtoonId, isStarted])
 }
 
 model AuctionOnlyErrorLog {

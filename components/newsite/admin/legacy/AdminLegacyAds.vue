@@ -1,46 +1,47 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-5xl mx-auto bg-white rounded-lg shadow p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-semibold">Ad Images</h1>
+    <div class="bg-white rounded border p-3">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h1 class="text-base font-semibold">Ad Images</h1>
         <button
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           @click="openUpload"
         >
           Upload
         </button>
       </div>
 
-      <div v-if="error" class="text-red-600 mb-4">{{ error.message }}</div>
-      <div v-if="pending" class="text-gray-500">Loading…</div>
+      <div v-if="error" class="text-red-600 mb-3">{{ error.message }}</div>
+      <div v-if="pending" class="text-gray-500 py-6 text-center">Loading…</div>
 
-      <div v-if="images?.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div v-if="images?.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
         <div
           v-for="img in images"
           :key="img.id"
-          class="border rounded-lg overflow-hidden flex flex-col"
+          class="bg-white border rounded-lg shadow overflow-hidden flex flex-col"
         >
           <div class="aspect-video bg-gray-100 flex items-center justify-center">
             <img :src="img.imagePath" alt="" class="max-h-full max-w-full object-contain" />
           </div>
-          <div class="p-3 text-sm flex-1">
-            <p class="break-words"><strong>Path:</strong> {{ img.imagePath }}</p>
-            <p class="text-gray-500 mt-1">
+          <div class="p-2 text-[11px] flex-1">
+            <p class="break-words"><span class="text-gray-500">Path:</span> {{ img.imagePath }}</p>
+            <p class="text-gray-500 mt-0.5">
               {{ new Date(img.createdAt).toLocaleString() }}
             </p>
-            <p v-if="img.label" class="mt-1"><strong>Label:</strong> {{ img.label }}</p>
-            <p v-if="img.url" class="mt-1 break-words">
-              <strong>URL:</strong>
+            <p v-if="img.label" class="mt-0.5"><span class="text-gray-500">Label:</span> {{ img.label }}</p>
+            <p v-if="img.url" class="mt-0.5 break-words">
+              <span class="text-gray-500">URL:</span>
               <a :href="img.url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">
                 {{ img.url }}
               </a>
             </p>
-            <p v-else class="mt-1 text-gray-500"><strong>URL:</strong> /newsite/home (default)</p>
+            <p v-else class="mt-0.5 text-gray-500"><span class="text-gray-500">URL:</span> /newsite/home (default)</p>
           </div>
-          <div class="p-3 pt-0 flex justify-end gap-2">
+          <div class="p-2 pt-0 flex justify-end gap-2">
             <button
-              class="text-red-700 hover:text-red-900"
+              class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50"
               @click="del(img.id)"
             >
               Delete
@@ -48,47 +49,48 @@
           </div>
         </div>
       </div>
-      <div v-else class="text-gray-500">No images.</div>
+      <div v-else class="text-gray-500 py-6 text-center">No images.</div>
+    </div>
     </div>
 
     <!-- Upload Modal -->
-    <div v-if="showUpload" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showUpload" class="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div class="absolute inset-0 bg-black/50" @click="closeUpload"></div>
-      <div class="relative bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Upload Ad Image</h2>
-          <button class="text-gray-600 hover:text-gray-800" @click="closeUpload">Close</button>
+      <div class="relative bg-white w-full max-w-lg rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h2 class="text-sm font-semibold">Upload Ad Image</h2>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeUpload">Close</button>
         </div>
 
-        <div class="p-4 overflow-y-auto">
-          <div class="space-y-4">
-            <div>
-              <label class="block mb-1 font-medium">Select Image</label>
-              <input ref="fileInput" type="file" accept="image/*" class="w-full" />
-              <p class="text-xs text-gray-500 mt-1">PNG, JPG, GIF, WEBP, or SVG</p>
+        <div class="overflow-y-auto flex-1 px-4 py-3">
+          <div class="space-y-3">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Select Image</label>
+              <input ref="fileInput" type="file" accept="image/*" class="text-xs" />
+              <p class="text-[10px] text-gray-500">PNG, JPG, GIF, WEBP, or SVG</p>
             </div>
-            <div>
-              <label class="block mb-1 font-medium">Label (optional)</label>
-              <input v-model="label" type="text" class="w-full border rounded px-3 py-2" />
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Label (optional)</label>
+              <input v-model="label" type="text" class="border rounded-md px-2 py-1.5 text-sm" />
             </div>
-            <div>
-              <label class="block mb-1 font-medium">URL (optional)</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">URL (optional)</label>
               <input
                 v-model="linkUrl"
                 type="url"
                 placeholder="https://example.com"
-                class="w-full border rounded px-3 py-2"
+                class="border rounded-md px-2 py-1.5 text-sm"
               />
-              <p class="text-xs text-gray-500 mt-1">Leave blank to link to /newsite/home</p>
+              <p class="text-[10px] text-gray-500">Leave blank to link to /newsite/home</p>
             </div>
-            <div v-if="uploadError" class="text-red-600 text-sm">{{ uploadError }}</div>
+            <div v-if="uploadError" class="text-red-600 text-[11px]">{{ uploadError }}</div>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2">
-          <button class="px-4 py-2 rounded border" @click="closeUpload">Close</button>
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+          <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeUpload">Close</button>
           <button
-            class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             :disabled="uploading"
             @click="upload"
           >

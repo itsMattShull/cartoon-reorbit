@@ -1,127 +1,129 @@
 <template>
 
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Admin Changes</h1>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+      <h1 class="text-base font-semibold mb-3">Admin: Admin Changes</h1>
 
-    <div class="bg-white rounded-lg shadow-md p-4 md:p-6 max-w-6xl mx-auto">
-      <!-- Filters -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-4 md:mb-6">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Admin</label>
-          <select v-model="filters.userId" class="input">
-            <option value="">All admins</option>
-            <option v-for="u in adminUsers" :key="u.id" :value="u.id">{{ u.username || u.discordTag || u.id }}</option>
-          </select>
+      <div class="bg-white rounded border p-3">
+        <!-- Filters -->
+        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end mb-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Admin</label>
+            <select v-model="filters.userId" class="text-xs border rounded-md px-1.5 py-1">
+              <option value="">All admins</option>
+              <option v-for="u in adminUsers" :key="u.id" :value="u.id">{{ u.username || u.discordTag || u.id }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Target user</label>
+            <input
+              v-model.trim="filters.targetUsername"
+              type="text"
+              placeholder="Username affected"
+              class="text-xs border rounded-md px-1.5 py-1"
+              @keydown.enter="applyFilters"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Start date</label>
+            <input type="date" v-model="filters.startDate" class="text-xs border rounded-md px-1.5 py-1" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">End date</label>
+            <input type="date" v-model="filters.endDate" class="text-xs border rounded-md px-1.5 py-1" />
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="applyFilters">Apply</button>
+            <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="clearFilters">Clear</button>
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Target user</label>
-          <input
-            v-model.trim="filters.targetUsername"
-            type="text"
-            placeholder="Username affected"
-            class="input"
-            @keydown.enter="applyFilters"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Start date</label>
-          <input type="date" v-model="filters.startDate" class="input" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">End date</label>
-          <input type="date" v-model="filters.endDate" class="input" />
-        </div>
-        <div class="flex items-end gap-2">
-          <button class="btn-primary w-full" @click="applyFilters">Apply</button>
-          <button class="btn-secondary" @click="clearFilters">Clear</button>
-        </div>
-      </div>
 
-      <div v-if="loading" class="text-center text-gray-500 py-6">Loading…</div>
+        <div v-if="loading" class="text-center text-gray-500 py-6">Loading…</div>
 
-      <template v-else>
-        <!-- Desktop table -->
-        <div class="hidden md:block overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead>
-              <tr class="text-left text-gray-600 border-b">
-                <th class="px-3 py-2">When (CDT)</th>
-                <th class="px-3 py-2">Admin</th>
-                <th class="px-3 py-2">Target</th>
-                <th class="px-3 py-2">Area</th>
-                <th class="px-3 py-2">Key</th>
-                <th class="px-3 py-2">Previous</th>
-                <th class="px-3 py-2">New</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="row in rows" :key="row.id">
-                <tr class="border-b align-top">
-                  <td class="px-3 py-2 whitespace-nowrap">{{ row.createdAtCdt }}</td>
-                  <td class="px-3 py-2 break-words">{{ labelUser(row.user) }}</td>
-                  <td class="px-3 py-2 break-words">{{ row.targetUsername || '—' }}</td>
-                  <td class="px-3 py-2 break-words">{{ row.area }}</td>
-                  <td class="px-3 py-2 break-words">{{ row.key }}</td>
-                  <td class="px-3 py-2 text-gray-700 break-words">
-                    <pre v-if="!row.seizure" class="whitespace-pre-wrap">{{ row.prevValue ?? '—' }}</pre>
-                    <span v-else class="text-xs text-gray-400">—</span>
-                  </td>
-                  <td class="px-3 py-2 text-gray-900 break-words min-w-0">
-                    <template v-if="row.seizure">
-                      <div>{{ seizureSummary(row.seizure) }}</div>
-                      <button class="mt-1 text-indigo-600 text-xs underline" @click="toggleExpand(row.id)">
-                        {{ expandedIds.has(row.id) ? 'Hide details' : 'Show details' }}
-                      </button>
-                    </template>
-                    <pre v-else class="whitespace-pre-wrap">{{ row.newValue ?? '—' }}</pre>
-                  </td>
+        <template v-else>
+          <!-- Desktop table -->
+          <div class="hidden md:block overflow-x-auto">
+            <table class="min-w-full text-xs">
+              <thead>
+                <tr>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">When (CDT)</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Admin</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Target</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Area</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Key</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Previous</th>
+                  <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">New</th>
                 </tr>
-                <tr v-if="row.seizure && expandedIds.has(row.id)" class="border-b bg-indigo-50/40">
-                  <td colspan="7" class="px-3 py-3">
-                    <SeizureDetail :seizure="row.seizure" />
-                  </td>
+              </thead>
+              <tbody class="divide-y">
+                <template v-for="row in rows" :key="row.id">
+                  <tr class="align-top">
+                    <td class="px-2 py-1.5 whitespace-nowrap">{{ row.createdAtCdt }}</td>
+                    <td class="px-2 py-1.5 break-words">{{ labelUser(row.user) }}</td>
+                    <td class="px-2 py-1.5 break-words">{{ row.targetUsername || '—' }}</td>
+                    <td class="px-2 py-1.5 break-words">{{ row.area }}</td>
+                    <td class="px-2 py-1.5 break-words">{{ row.key }}</td>
+                    <td class="px-2 py-1.5 text-gray-700 break-words">
+                      <pre v-if="!row.seizure" class="whitespace-pre-wrap">{{ row.prevValue ?? '—' }}</pre>
+                      <span v-else class="text-[10px] text-gray-400">—</span>
+                    </td>
+                    <td class="px-2 py-1.5 text-gray-900 break-words min-w-0">
+                      <template v-if="row.seizure">
+                        <div>{{ seizureSummary(row.seizure) }}</div>
+                        <button class="mt-1 text-blue-600 text-[11px] underline" @click="toggleExpand(row.id)">
+                          {{ expandedIds.has(row.id) ? 'Hide details' : 'Show details' }}
+                        </button>
+                      </template>
+                      <pre v-else class="whitespace-pre-wrap">{{ row.newValue ?? '—' }}</pre>
+                    </td>
+                  </tr>
+                  <tr v-if="row.seizure && expandedIds.has(row.id)" class="bg-blue-50/40">
+                    <td colspan="7" class="px-2 py-2">
+                      <SeizureDetail :seizure="row.seizure" />
+                    </td>
+                  </tr>
+                </template>
+                <tr v-if="!rows.length">
+                  <td colspan="7" class="px-2 py-6 text-center text-gray-500">No changes found.</td>
                 </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile cards -->
+          <div class="md:hidden grid grid-cols-1 gap-2">
+            <div v-for="row in rows" :key="row.id" class="bg-white border rounded-lg shadow p-2">
+              <div class="text-[10px] text-gray-500">{{ row.createdAtCdt }}</div>
+              <div class="text-xs font-medium break-words">{{ labelUser(row.user) }}</div>
+              <div class="text-[11px] text-gray-700 break-words">{{ row.area }} · {{ row.key }}</div>
+              <div v-if="row.targetUsername" class="text-[10px] text-gray-500 break-words">Target: {{ row.targetUsername }}</div>
+
+              <template v-if="row.seizure">
+                <div class="mt-1 text-[11px] break-words">{{ seizureSummary(row.seizure) }}</div>
+                <button class="mt-1 text-blue-600 text-[11px] underline" @click="toggleExpand(row.id)">
+                  {{ expandedIds.has(row.id) ? 'Hide details' : 'Show details' }}
+                </button>
+                <div v-if="expandedIds.has(row.id)" class="mt-1 pt-1 border-t">
+                  <SeizureDetail :seizure="row.seizure" />
+                </div>
               </template>
-              <tr v-if="!rows.length">
-                <td colspan="7" class="px-3 py-6 text-center text-gray-500">No changes found.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
 
-        <!-- Mobile cards -->
-        <div class="md:hidden space-y-3">
-          <div v-for="row in rows" :key="row.id" class="rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div class="text-xs text-gray-500">{{ row.createdAtCdt }}</div>
-            <div class="font-medium break-words">{{ labelUser(row.user) }}</div>
-            <div class="text-sm text-gray-700 break-words">{{ row.area }} · {{ row.key }}</div>
-            <div v-if="row.targetUsername" class="text-xs text-gray-500 break-words">Target: {{ row.targetUsername }}</div>
-
-            <template v-if="row.seizure">
-              <div class="mt-2 text-sm break-words">{{ seizureSummary(row.seizure) }}</div>
-              <button class="mt-1 text-indigo-600 text-xs underline" @click="toggleExpand(row.id)">
-                {{ expandedIds.has(row.id) ? 'Hide details' : 'Show details' }}
-              </button>
-              <div v-if="expandedIds.has(row.id)" class="mt-2 pt-2 border-t border-gray-200">
-                <SeizureDetail :seizure="row.seizure" />
-              </div>
-            </template>
-
-            <div v-else class="mt-2 grid grid-cols-1 gap-2">
-              <div>
-                <div class="text-xs text-gray-500">Previous</div>
-                <div class="text-sm break-words"><pre class="whitespace-pre-wrap">{{ row.prevValue ?? '—' }}</pre></div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">New</div>
-                <div class="text-sm break-words"><pre class="whitespace-pre-wrap">{{ row.newValue ?? '—' }}</pre></div>
+              <div v-else class="mt-1 grid grid-cols-1 gap-1">
+                <div>
+                  <div class="text-[10px] text-gray-500">Previous</div>
+                  <div class="text-[11px] break-words"><pre class="whitespace-pre-wrap">{{ row.prevValue ?? '—' }}</pre></div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-gray-500">New</div>
+                  <div class="text-[11px] break-words"><pre class="whitespace-pre-wrap">{{ row.newValue ?? '—' }}</pre></div>
+                </div>
               </div>
             </div>
+            <div v-if="!rows.length" class="text-center text-gray-500 py-4">No changes found.</div>
           </div>
-          <div v-if="!rows.length" class="text-center text-gray-500 py-4">No changes found.</div>
-        </div>
-      </template>
+        </template>
 
+      </div>
     </div>
   </div>
 </template>
@@ -260,10 +262,3 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.input { width: 100%; border: 1px solid #D1D5DB; border-radius: .375rem; padding: .5rem; outline: none }
-.input:focus { border-color: #6366F1; box-shadow: 0 0 0 1px #6366F1 }
-.btn-primary{ background-color:#6366F1; color:#fff; padding:.5rem 1.25rem; border-radius:.375rem }
-.btn-primary:disabled{ opacity:.5 }
-.btn-secondary{ background-color:#E5E7EB; color:#374151; padding:.5rem 1rem; border-radius:.375rem }
-</style>

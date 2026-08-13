@@ -45,6 +45,10 @@ async function handleStart(event) {
     throw createError({ statusCode: 500, statusMessage: `Failed to start auction: ${err?.message || String(err)}` })
   }
 
+  if (result?.refused) {
+    throw createError({ statusCode: 409, statusMessage: result.reason })
+  }
+
   if (!result) {
     throw createError({
       statusCode: 409,

@@ -1,71 +1,74 @@
 <template>
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Manage Barcode Monsters</h1>
+  <div class="admin-legacy-monsters bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h1 class="text-base font-semibold">Admin: Manage Barcode Monsters</h1>
+    </div>
 
-    <div class="bg-white rounded-lg shadow-md p-6 max-w-6xl mx-auto">
+    <div class="bg-white rounded border shadow p-3 max-w-6xl mx-auto">
       <!-- Tabs -->
-      <div class="border-b mb-6">
-        <nav class="flex flex-wrap gap-2 sm:gap-4">
-          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Game Config' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Game Config'">Game Config</button>
-          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Monsters'">Monsters</button>
-          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='AI Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='AI Monsters'">AI Monsters</button>
-          <button class="px-3 py-2 border-b-2 text-sm sm:text-base whitespace-nowrap" :class="activeTab==='Items' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Items'">Items</button>
+      <div class="border-b mb-3">
+        <nav class="flex flex-wrap gap-1">
+          <button class="px-3 py-1.5 text-xs border-b-2 whitespace-nowrap" :class="activeTab==='Game Config' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Game Config'">Game Config</button>
+          <button class="px-3 py-1.5 text-xs border-b-2 whitespace-nowrap" :class="activeTab==='Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Monsters'">Monsters</button>
+          <button class="px-3 py-1.5 text-xs border-b-2 whitespace-nowrap" :class="activeTab==='AI Monsters' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='AI Monsters'">AI Monsters</button>
+          <button class="px-3 py-1.5 text-xs border-b-2 whitespace-nowrap" :class="activeTab==='Items' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'" @click="activeTab='Items'">Items</button>
         </nav>
       </div>
 
       <!-- Game Config -->
-      <section v-if="activeTab==='Game Config'" class="space-y-8">
-        <div class="text-sm text-gray-600">
+      <section v-if="activeTab==='Game Config'" class="space-y-6">
+        <div class="text-xs text-gray-600">
           Configure scanning odds and rarity distribution for the active barcode game version. Changes affect future scans immediately.
         </div>
 
         <!-- Odds -->
         <div>
-          <h2 class="text-lg font-semibold mb-2">Scan Outcome Odds</h2>
-          <p class="text-sm text-gray-600 mb-3">Odds must sum to 1.00. These control the chance of a scan yielding nothing, an item, or a monster.</p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <h2 class="text-xs font-semibold mb-2">Scan Outcome Odds</h2>
+          <p class="text-xs text-gray-600 mb-2">Odds must sum to 1.00. These control the chance of a scan yielding nothing, an item, or a monster.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Odds — Nothing</label>
-              <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsNothing" />
+              <label class="block text-xs font-medium">Odds — Nothing</label>
+              <input type="number" class="border rounded-md px-2 py-1.5 text-sm" step="0.01" min="0" max="1" v-model.number="oddsNothing" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Odds — Item</label>
-              <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsItem" />
+              <label class="block text-xs font-medium">Odds — Item</label>
+              <input type="number" class="border rounded-md px-2 py-1.5 text-sm" step="0.01" min="0" max="1" v-model.number="oddsItem" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Odds — Monster</label>
-              <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsMonster" />
+              <label class="block text-xs font-medium">Odds — Monster</label>
+              <input type="number" class="border rounded-md px-2 py-1.5 text-sm" step="0.01" min="0" max="1" v-model.number="oddsMonster" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700">Odds — Battle</label>
-              <input type="number" class="input" step="0.01" min="0" max="1" v-model.number="oddsBattle" />
+              <label class="block text-xs font-medium">Odds — Battle</label>
+              <input type="number" class="border rounded-md px-2 py-1.5 text-sm" step="0.01" min="0" max="1" v-model.number="oddsBattle" />
             </div>
           </div>
           <div class="text-xs mt-1" :class="sumOddsOk ? 'text-green-700' : 'text-red-700'">Sum: {{ sumOddsDisplay }}</div>
         </div>
 
         <!-- Distributions: side-by-side on large screens, stacked on mobile -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <!-- Monster Rarity Distribution -->
-          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <h2 class="text-lg font-semibold mb-2">Monster Rarity Distribution</h2>
-            <p class="text-sm text-gray-600 mb-3">Percentages per monster rarity. Values are normalized; higher values increase selection odds when a scan yields a monster.</p>
+          <div class="rounded border p-3">
+            <h2 class="text-xs font-semibold mb-2">Monster Rarity Distribution</h2>
+            <p class="text-xs text-gray-600 mb-2">Percentages per monster rarity. Values are normalized; higher values increase selection odds when a scan yields a monster.</p>
             <!-- Desktop table -->
             <div class="overflow-x-auto hidden sm:block">
               <table class="min-w-full border-separate border-spacing-y-1">
                 <thead>
-                  <tr class="text-left text-sm text-gray-600">
-                    <th class="px-3 py-2">Rarity</th>
-                    <th class="px-3 py-2">Percent</th>
+                  <tr class="">
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Percent</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="r in rarityDisplayOrder" :key="r.key" class="bg-white">
-                    <td class="px-3 py-2 font-medium">{{ r.label }}</td>
-                    <td class="px-3 py-2 w-48">
+                    <td class="px-2 py-1.5 font-medium">{{ r.label }}</td>
+                    <td class="px-2 py-1.5 w-40">
                       <div class="flex items-center gap-2">
-                        <input type="number" class="input" min="0" max="100" step="1" v-model.number="rarityPercents[r.key]" />
-                        <span class="text-sm text-gray-600">%</span>
+                        <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="rarityPercents[r.key]" />
+                        <span class="text-xs text-gray-600">%</span>
                       </div>
                     </td>
                   </tr>
@@ -73,95 +76,95 @@
               </table>
             </div>
             <!-- Mobile cards -->
-            <div class="space-y-3 sm:hidden">
-              <div v-for="r in rarityDisplayOrder" :key="r.key" class="rounded-lg border border-gray-200 bg-white px-4 py-3">
-                <div class="font-semibold text-gray-800 mb-2">{{ r.label }}</div>
+            <div class="space-y-2 sm:hidden">
+              <div v-for="r in rarityDisplayOrder" :key="r.key" class="bg-white border rounded-lg shadow p-2">
+                <div class="font-semibold text-xs text-gray-800 mb-2">{{ r.label }}</div>
                 <div class="flex items-center gap-2">
-                  <input type="number" class="input" min="0" max="100" step="1" v-model.number="rarityPercents[r.key]" />
-                  <span class="text-sm text-gray-600">%</span>
+                  <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="rarityPercents[r.key]" />
+                  <span class="text-xs text-gray-600">%</span>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Item Rarity Distribution -->
-          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <h2 class="text-lg font-semibold mb-2">Item Rarity Distribution</h2>
-            <p class="text-sm text-gray-600 mb-3">Percentages per item rarity. Item selection happens in two steps: pick rarity based on these weights, then pick uniformly among items of that rarity.</p>
+          <div class="rounded border p-3">
+            <h2 class="text-xs font-semibold mb-2">Item Rarity Distribution</h2>
+            <p class="text-xs text-gray-600 mb-2">Percentages per item rarity. Item selection happens in two steps: pick rarity based on these weights, then pick uniformly among items of that rarity.</p>
             <!-- Desktop table -->
             <div class="overflow-x-auto hidden sm:block">
               <table class="min-w-full border-separate border-spacing-y-1">
                 <thead>
-                  <tr class="text-left text-sm text-gray-600">
-                    <th class="px-3 py-2">Rarity</th>
-                    <th class="px-3 py-2">Percent</th>
+                  <tr class="">
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Percent</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr class="bg-white">
-                    <td class="px-3 py-2 font-medium">Crazy Rare</td>
-                    <td class="px-3 py-2 w-48"><div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.CrazyRare" /><span class="text-sm text-gray-600">%</span></div></td>
+                    <td class="px-2 py-1.5 font-medium">Crazy Rare</td>
+                    <td class="px-2 py-1.5 w-40"><div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.CrazyRare" /><span class="text-xs text-gray-600">%</span></div></td>
                   </tr>
                   <tr class="bg-white">
-                    <td class="px-3 py-2 font-medium">Rare</td>
-                    <td class="px-3 py-2 w-48"><div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.Rare" /><span class="text-sm text-gray-600">%</span></div></td>
+                    <td class="px-2 py-1.5 font-medium">Rare</td>
+                    <td class="px-2 py-1.5 w-40"><div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.Rare" /><span class="text-xs text-gray-600">%</span></div></td>
                   </tr>
                   <tr class="bg-white">
-                    <td class="px-3 py-2 font-medium">Common</td>
-                    <td class="px-3 py-2 w-48"><div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.Common" /><span class="text-sm text-gray-600">%</span></div></td>
+                    <td class="px-2 py-1.5 font-medium">Common</td>
+                    <td class="px-2 py-1.5 w-40"><div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.Common" /><span class="text-xs text-gray-600">%</span></div></td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <!-- Mobile cards -->
-            <div class="space-y-3 sm:hidden">
-              <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
-                <div class="font-semibold text-gray-800 mb-2">Crazy Rare</div>
-                <div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.CrazyRare" /><span class="text-sm text-gray-600">%</span></div>
+            <div class="space-y-2 sm:hidden">
+              <div class="bg-white border rounded-lg shadow p-2">
+                <div class="font-semibold text-xs text-gray-800 mb-2">Crazy Rare</div>
+                <div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.CrazyRare" /><span class="text-xs text-gray-600">%</span></div>
               </div>
-              <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
-                <div class="font-semibold text-gray-800 mb-2">Rare</div>
-                <div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.Rare" /><span class="text-sm text-gray-600">%</span></div>
+              <div class="bg-white border rounded-lg shadow p-2">
+                <div class="font-semibold text-xs text-gray-800 mb-2">Rare</div>
+                <div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.Rare" /><span class="text-xs text-gray-600">%</span></div>
               </div>
-              <div class="rounded-lg border border-gray-200 bg-white px-4 py-3">
-                <div class="font-semibold text-gray-800 mb-2">Common</div>
-                <div class="flex items-center gap-2"><input type="number" class="input" min="0" max="100" step="1" v-model.number="itemRarityPercents.Common" /><span class="text-sm text-gray-600">%</span></div>
+              <div class="bg-white border rounded-lg shadow p-2">
+                <div class="font-semibold text-xs text-gray-800 mb-2">Common</div>
+                <div class="flex items-center gap-2"><input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="100" step="1" v-model.number="itemRarityPercents.Common" /><span class="text-xs text-gray-600">%</span></div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Variance, Decay, Points, Daily Limit & Cooldown -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
           <div>
-            <label class="block text-sm font-medium text-gray-700">Monster Stat Variance</label>
-            <input type="number" class="input" min="0" max="50" step="1" v-model.number="variancePct" />
+            <label class="block text-xs font-medium">Monster Stat Variance</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="50" step="1" v-model.number="variancePct" />
             <p class="text-xs text-gray-500 mt-1">Percent variability applied per monster instance when rolled (e.g., 12 means ±12%).</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">Inactivity HP Decay (hours)</label>
-            <input type="number" class="input" min="0" max="720" step="1" v-model.number="decayHours" />
+            <label class="block text-xs font-medium">Inactivity HP Decay (hours)</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="720" step="1" v-model.number="decayHours" />
             <p class="text-xs text-gray-500 mt-1">Hours until the last-selected monster reaches 0 HP with no activity. Set to 0 to disable.</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">Scan Points Award</label>
-            <input type="number" class="input" min="0" max="1000000" step="1" v-model.number="scanPoints" />
+            <label class="block text-xs font-medium">Scan Points Award</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="1000000" step="1" v-model.number="scanPoints" />
             <p class="text-xs text-gray-500 mt-1">Points earned for each successful scan. Not counted toward daily point limits.</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">Daily Scan Limit</label>
-            <input type="number" class="input" min="0" max="500" step="1" v-model.number="dailyScanLimit" />
+            <label class="block text-xs font-medium">Daily Scan Limit</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="500" step="1" v-model.number="dailyScanLimit" />
             <p class="text-xs text-gray-500 mt-1">Max scans per user per day. Resets at 8am CST. Set to 0 to disable.</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700">Barcode Cooldown (days)</label>
-            <input type="number" class="input" min="0" max="365" step="1" v-model.number="cooldownDays" />
+            <label class="block text-xs font-medium">Barcode Cooldown (days)</label>
+            <input type="number" class="border rounded-md px-2 py-1.5 text-sm" min="0" max="365" step="1" v-model.number="cooldownDays" />
             <p class="text-xs text-gray-500 mt-1">Per-user cooldown per barcode mapping before scanning again grants a result.</p>
           </div>
         </div>
 
         <div>
-          <button class="btn-primary" :disabled="savingCfg || !sumOddsOk" @click="saveConfig">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingCfg || !sumOddsOk" @click="saveConfig">
             <span v-if="!savingCfg">Save</span><span v-else>Saving…</span>
           </button>
         </div>
@@ -169,84 +172,84 @@
 
       <!-- Monsters (Species) -->
       <section v-if="activeTab==='Monsters'" class="space-y-6">
-        <div class="text-sm text-gray-600">Create, edit, and delete species templates. New species indexes are assigned automatically.</div>
+        <div class="text-xs text-gray-600">Create, edit, and delete species templates. New species indexes are assigned automatically.</div>
 
         <!-- Add species toolbar -->
         <div class="flex justify-end">
-          <button class="btn-primary" @click="openAddSpeciesModal">Add Species</button>
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" @click="openAddSpeciesModal">Add Species</button>
         </div>
 
         <!-- Add Species Modal -->
         <transition name="fade">
           <div v-if="showAddSpeciesModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeAddSpeciesModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addSpeciesTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="addSpeciesTitle" class="text-lg font-semibold">Add Species</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeAddSpeciesModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeAddSpeciesModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addSpeciesTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="addSpeciesTitle" class="text-sm font-semibold">Add Species</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeAddSpeciesModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Species Name</label>
-                    <input class="input" placeholder="e.g., Zapling" v-model="newSpecies.name" />
+                    <label class="block text-xs font-medium">Species Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g., Zapling" v-model="newSpecies.name" />
                     <p class="text-xs text-gray-500 mt-1">Display name used in scan results and owned monster lists.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
-                    <input class="input" placeholder="e.g., Electric" v-model="newSpecies.type" />
+                    <label class="block text-xs font-medium">Monster Type</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g., Electric" v-model="newSpecies.type" />
                     <p class="text-xs text-gray-500 mt-1">Free-form category (e.g., Fire, Water). Shown to players for flavor and balancing.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="newSpecies.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="newSpecies.rarity">
                       <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
                     </select>
                     <p class="text-xs text-gray-500 mt-1">Affects how often this species is selected when a scan yields a monster. Final odds also depend on the Game Config rarity distribution.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600">Base HP</label>
-                        <input class="input" type="number" min="1" v-model.number="newSpecies.baseHp" />
+                        <label class="block text-xs font-medium">Base HP</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newSpecies.baseHp" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base ATK</label>
-                        <input class="input" type="number" min="1" v-model.number="newSpecies.baseAtk" />
+                        <label class="block text-xs font-medium">Base ATK</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newSpecies.baseAtk" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base DEF</label>
-                        <input class="input" type="number" min="1" v-model.number="newSpecies.baseDef" />
+                        <label class="block text-xs font-medium">Base DEF</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newSpecies.baseDef" />
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">Players receive per-instance rolled stats based on these values, varied by the configured variance percent.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Images</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Images</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'walking')" />
+                        <label class="block text-xs font-medium mb-1">Walking</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'walking')" />
                         <p class="text-xs text-gray-500 mt-1">PNG/JPG/GIF. Used for walking animation/frame.</p>
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'standing')" />
+                        <label class="block text-xs font-medium mb-1">Standing Still</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'standing')" />
                         <p class="text-xs text-gray-500 mt-1">PNG/JPG/GIF. Used for idle pose.</p>
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'jumping')" />
+                        <label class="block text-xs font-medium mb-1">Jumping</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onFileChange($event, 'jumping')" />
                         <p class="text-xs text-gray-500 mt-1">PNG/JPG/GIF. Used for jumping animation/frame.</p>
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 mt-2">All three images are required to create a species.</p>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-2">
-                  <button class="px-3 py-2 rounded border" @click="closeAddSpeciesModal">Cancel</button>
-                  <button class="btn-primary" :disabled="addingSpecies" @click="confirmAddSpecies">
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeAddSpeciesModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="addingSpecies" @click="confirmAddSpecies">
                     <span v-if="!addingSpecies">Add Species</span>
                     <span v-else>Adding…</span>
                   </button>
@@ -259,66 +262,66 @@
         <!-- Edit Species Modal -->
         <transition name="fade">
           <div v-if="showEditSpeciesModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeEditSpeciesModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editSpeciesTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="editSpeciesTitle" class="text-lg font-semibold">Edit Species</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeEditSpeciesModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeEditSpeciesModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editSpeciesTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="editSpeciesTitle" class="text-sm font-semibold">Edit Species</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEditSpeciesModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Species Name</label>
-                    <input class="input" v-model="editSpecies.name" />
+                    <label class="block text-xs font-medium">Species Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editSpecies.name" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
-                    <input class="input" v-model="editSpecies.type" />
+                    <label class="block text-xs font-medium">Monster Type</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editSpecies.type" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="editSpecies.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="editSpecies.rarity">
                       <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600">Base HP</label>
-                        <input class="input" type="number" min="1" v-model.number="editSpecies.baseHp" />
+                        <label class="block text-xs font-medium">Base HP</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editSpecies.baseHp" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base ATK</label>
-                        <input class="input" type="number" min="1" v-model.number="editSpecies.baseAtk" />
+                        <label class="block text-xs font-medium">Base ATK</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editSpecies.baseAtk" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base DEF</label>
-                        <input class="input" type="number" min="1" v-model.number="editSpecies.baseDef" />
+                        <label class="block text-xs font-medium">Base DEF</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editSpecies.baseDef" />
                       </div>
                     </div>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Replace Images (optional)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'walking')" />
+                        <label class="block text-xs font-medium mb-1">Walking</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'walking')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'standing')" />
+                        <label class="block text-xs font-medium mb-1">Standing Still</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'standing')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'jumping')" />
+                        <label class="block text-xs font-medium mb-1">Jumping</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditSpeciesFileChange($event, 'jumping')" />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-2">
-                  <button class="px-3 py-2 rounded border" @click="closeEditSpeciesModal">Cancel</button>
-                  <button class="btn-primary" :disabled="savingSpecies" @click="saveSpecies(editSpeciesIndex)">Save</button>
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeEditSpeciesModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingSpecies" @click="saveSpecies(editSpeciesIndex)">Save</button>
                 </div>
               </div>
             </div>
@@ -329,30 +332,30 @@
         <div class="overflow-x-auto hidden sm:block">
           <table class="min-w-full border-separate border-spacing-y-1">
             <thead>
-              <tr class="text-left text-sm text-gray-600">
-                <th class="px-3 py-2">Index</th>
-                <th class="px-3 py-2">Name</th>
-                <th class="px-3 py-2">Type</th>
-                <th class="px-3 py-2">Rarity</th>
-                <th class="px-3 py-2">Base HP</th>
-                <th class="px-3 py-2">Base ATK</th>
-                <th class="px-3 py-2">Base DEF</th>
-                <th class="px-3 py-2">Actions</th>
+              <tr class="">
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Index</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Name</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Type</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Base HP</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Base ATK</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Base DEF</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in species" :key="s.speciesIndex" class="bg-gray-50">
-                <td class="px-3 py-2">{{ s.speciesIndex }}</td>
-                <td class="px-3 py-2">{{ s.name }}</td>
-                <td class="px-3 py-2">{{ s.type }}</td>
-                <td class="px-3 py-2 w-48">{{ rarityLabel(s.rarity) }}</td>
-                <td class="px-3 py-2 w-28">{{ s.baseHp }}</td>
-                <td class="px-3 py-2 w-28">{{ s.baseAtk }}</td>
-                <td class="px-3 py-2 w-28">{{ s.baseDef }}</td>
-                <td class="px-3 py-2">
+                <td class="px-2 py-1.5">{{ s.speciesIndex }}</td>
+                <td class="px-2 py-1.5">{{ s.name }}</td>
+                <td class="px-2 py-1.5">{{ s.type }}</td>
+                <td class="px-2 py-1.5 w-40">{{ rarityLabel(s.rarity) }}</td>
+                <td class="px-2 py-1.5 w-24">{{ s.baseHp }}</td>
+                <td class="px-2 py-1.5 w-24">{{ s.baseAtk }}</td>
+                <td class="px-2 py-1.5 w-24">{{ s.baseDef }}</td>
+                <td class="px-2 py-1.5">
                   <div class="flex gap-2">
-                    <button class="px-3 py-2 rounded border" @click="startEditSpecies(s)">Edit</button>
-                    <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeSpecies(s.speciesIndex)" :disabled="deletingSpecies">Delete</button>
+                    <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEditSpecies(s)">Edit</button>
+                    <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeSpecies(s.speciesIndex)" :disabled="deletingSpecies">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -360,17 +363,17 @@
           </table>
         </div>
         <!-- Mobile cards -->
-        <div class="space-y-3 sm:hidden">
-          <div v-for="s in species" :key="s.speciesIndex" class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+        <div class="space-y-2 sm:hidden">
+          <div v-for="s in species" :key="s.speciesIndex" class="rounded border p-2">
             <div class="flex justify-between items-center">
-              <div class="font-semibold text-gray-800">#{{ s.speciesIndex }} — {{ s.name }}</div>
-              <div class="text-sm text-gray-600">{{ rarityLabel(s.rarity) }}</div>
+              <div class="font-semibold text-xs text-gray-800">#{{ s.speciesIndex }} — {{ s.name }}</div>
+              <div class="text-xs text-gray-600">{{ rarityLabel(s.rarity) }}</div>
             </div>
-            <div class="text-sm text-gray-700">Type: {{ s.type }}</div>
-            <div class="text-sm text-gray-700">Stats: HP {{ s.baseHp }} • ATK {{ s.baseAtk }} • DEF {{ s.baseDef }}</div>
+            <div class="text-xs text-gray-700">Type: {{ s.type }}</div>
+            <div class="text-xs text-gray-700">Stats: HP {{ s.baseHp }} • ATK {{ s.baseAtk }} • DEF {{ s.baseDef }}</div>
             <div class="mt-3 flex gap-2">
-              <button class="px-3 py-2 rounded border" @click="startEditSpecies(s)">Edit</button>
-              <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeSpecies(s.speciesIndex)">Delete</button>
+              <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEditSpecies(s)">Edit</button>
+              <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeSpecies(s.speciesIndex)">Delete</button>
             </div>
           </div>
         </div>
@@ -378,74 +381,74 @@
 
       <!-- AI Monsters -->
       <section v-if="activeTab==='AI Monsters'" class="space-y-6">
-        <div class="text-sm text-gray-600">Create, edit, and delete AI monster templates used for battles.</div>
+        <div class="text-xs text-gray-600">Create, edit, and delete AI monster templates used for battles.</div>
 
         <div class="flex justify-end">
-          <button class="btn-primary" @click="openAddAiMonsterModal">Add AI Monster</button>
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" @click="openAddAiMonsterModal">Add AI Monster</button>
         </div>
 
         <transition name="fade">
           <div v-if="showAddAiMonsterModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeAddAiMonsterModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addAiMonsterTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="addAiMonsterTitle" class="text-lg font-semibold">Add AI Monster</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeAddAiMonsterModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeAddAiMonsterModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addAiMonsterTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="addAiMonsterTitle" class="text-sm font-semibold">Add AI Monster</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeAddAiMonsterModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                    <input class="input" placeholder="e.g., Shockjaw" v-model="newAiMonster.name" />
+                    <label class="block text-xs font-medium">Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g., Shockjaw" v-model="newAiMonster.name" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
-                    <input class="input" placeholder="e.g., Electric" v-model="newAiMonster.type" />
+                    <label class="block text-xs font-medium">Monster Type</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g., Electric" v-model="newAiMonster.type" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="newAiMonster.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="newAiMonster.rarity">
                       <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600">Base HP</label>
-                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseHp" />
+                        <label class="block text-xs font-medium">Base HP</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newAiMonster.baseHp" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base ATK</label>
-                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseAtk" />
+                        <label class="block text-xs font-medium">Base ATK</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newAiMonster.baseAtk" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base DEF</label>
-                        <input class="input" type="number" min="1" v-model.number="newAiMonster.baseDef" />
+                        <label class="block text-xs font-medium">Base DEF</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="newAiMonster.baseDef" />
                       </div>
                     </div>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Images</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Images</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'walking')" />
+                        <label class="block text-xs font-medium mb-1">Walking</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'walking')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'standing')" />
+                        <label class="block text-xs font-medium mb-1">Standing Still</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'standing')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'jumping')" />
+                        <label class="block text-xs font-medium mb-1">Jumping</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onAiMonsterFileChange($event, 'jumping')" />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-3">
-                  <button class="px-4 py-2 rounded border" @click="closeAddAiMonsterModal">Cancel</button>
-                  <button class="btn-primary" :disabled="addingAiMonster" @click="confirmAddAiMonster">
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeAddAiMonsterModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="addingAiMonster" @click="confirmAddAiMonster">
                     <span v-if="!addingAiMonster">Create</span><span v-else>Saving…</span>
                   </button>
                 </div>
@@ -456,66 +459,66 @@
 
         <transition name="fade">
           <div v-if="showEditAiMonsterModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeEditAiMonsterModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editAiMonsterTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="editAiMonsterTitle" class="text-lg font-semibold">Edit AI Monster</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeEditAiMonsterModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeEditAiMonsterModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editAiMonsterTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="editAiMonsterTitle" class="text-sm font-semibold">Edit AI Monster</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEditAiMonsterModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                    <input class="input" v-model="editAiMonster.name" />
+                    <label class="block text-xs font-medium">Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editAiMonster.name" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Monster Type</label>
-                    <input class="input" v-model="editAiMonster.type" />
+                    <label class="block text-xs font-medium">Monster Type</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editAiMonster.type" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="editAiMonster.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="editAiMonster.rarity">
                       <option v-for="r in monsterRarities" :key="r.key" :value="r.key">{{ r.label }}</option>
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Base Stats</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Base Stats</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600">Base HP</label>
-                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseHp" />
+                        <label class="block text-xs font-medium">Base HP</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editAiMonster.baseHp" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base ATK</label>
-                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseAtk" />
+                        <label class="block text-xs font-medium">Base ATK</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editAiMonster.baseAtk" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600">Base DEF</label>
-                        <input class="input" type="number" min="1" v-model.number="editAiMonster.baseDef" />
+                        <label class="block text-xs font-medium">Base DEF</label>
+                        <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editAiMonster.baseDef" />
                       </div>
                     </div>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Replace Images (optional)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Walking</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'walking')" />
+                        <label class="block text-xs font-medium mb-1">Walking</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'walking')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Standing Still</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'standing')" />
+                        <label class="block text-xs font-medium mb-1">Standing Still</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'standing')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Jumping</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'jumping')" />
+                        <label class="block text-xs font-medium mb-1">Jumping</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onEditAiMonsterFileChange($event, 'jumping')" />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-3">
-                  <button class="px-4 py-2 rounded border" @click="closeEditAiMonsterModal">Cancel</button>
-                  <button class="btn-primary" :disabled="savingAiMonster" @click="saveAiMonster(editAiMonsterId)">
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeEditAiMonsterModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingAiMonster" @click="saveAiMonster(editAiMonsterId)">
                     <span v-if="!savingAiMonster">Save</span><span v-else>Saving…</span>
                   </button>
                 </div>
@@ -524,18 +527,18 @@
           </div>
         </transition>
 
-        <div v-if="!aiMonsters.length" class="text-sm text-gray-500">No AI monsters yet.</div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div v-for="m in aiMonsters" :key="m.id" class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div v-if="!aiMonsters.length" class="text-xs text-gray-500">No AI monsters yet.</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div v-for="m in aiMonsters" :key="m.id" class="rounded border p-3">
             <div class="flex items-start justify-between gap-3">
               <div>
-                <div class="text-lg font-semibold text-gray-800">{{ m.name }}</div>
-                <div class="text-sm text-gray-600">{{ m.type }} · {{ rarityLabel(m.rarity) }}</div>
-                <div class="text-sm text-gray-600 mt-1">HP {{ m.baseHp }} · ATK {{ m.baseAtk }} · DEF {{ m.baseDef }}</div>
+                <div class="text-xs font-semibold text-gray-800">{{ m.name }}</div>
+                <div class="text-xs text-gray-600">{{ m.type }} · {{ rarityLabel(m.rarity) }}</div>
+                <div class="text-xs text-gray-600 mt-1">HP {{ m.baseHp }} · ATK {{ m.baseAtk }} · DEF {{ m.baseDef }}</div>
               </div>
               <div class="flex gap-2">
-                <button class="px-3 py-2 rounded border border-gray-300 text-gray-700" @click="startEditAiMonster(m)">Edit</button>
-                <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeAiMonster(m.id)">Delete</button>
+                <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEditAiMonster(m)">Edit</button>
+                <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeAiMonster(m.id)">Delete</button>
               </div>
             </div>
           </div>
@@ -544,75 +547,75 @@
 
       <!-- Items -->
       <section v-if="activeTab==='Items'" class="space-y-6">
-        <div class="text-sm text-gray-600">Create, edit, and delete items.</div>
+        <div class="text-xs text-gray-600">Create, edit, and delete items.</div>
 
         <!-- Add item toolbar -->
         <div class="flex justify-end">
-          <button class="btn-primary" @click="openAddItemModal">Add Item</button>
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" @click="openAddItemModal">Add Item</button>
         </div>
 
         <!-- Add Item Modal -->
         <transition name="fade">
           <div v-if="showAddItemModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeAddItemModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addItemTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="addItemTitle" class="text-lg font-semibold">Add Item</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeAddItemModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeAddItemModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="addItemTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="addItemTitle" class="text-sm font-semibold">Add Item</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeAddItemModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Item Code</label>
-                    <input class="input" type="number" min="1" placeholder="e.g., 1" v-model.number="newItem.code" />
+                    <label class="block text-xs font-medium">Item Code</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" placeholder="e.g., 1" v-model.number="newItem.code" />
                     <p class="text-xs text-gray-500 mt-1">Unique per active config. Used to identify items; duplicates are blocked.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Item Name</label>
-                    <input class="input" placeholder="e.g., Power Crystal" v-model="newItem.name" />
+                    <label class="block text-xs font-medium">Item Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" placeholder="e.g., Power Crystal" v-model="newItem.name" />
                     <p class="text-xs text-gray-500 mt-1">Displayed to players when they receive an item from a scan.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="newItem.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="newItem.rarity">
                       <option v-for="r in itemRarities" :key="r" :value="r">{{ r }}</option>
                     </select>
                     <p class="text-xs text-gray-500 mt-1">Rarity of the item to determine chances.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Power</label>
-                    <input class="input" type="number" min="0" placeholder="e.g., 25" v-model.number="newItem.power" />
+                    <label class="block text-xs font-medium">Power</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="0" placeholder="e.g., 25" v-model.number="newItem.power" />
                     <p class="text-xs text-gray-500 mt-1">Stat stored with the item and included in scan results. Non-negative integer.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Effect</label>
-                    <select class="input" v-model="newItem.effect">
+                    <label class="block text-xs font-medium">Effect</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="newItem.effect">
                       <option v-for="e in itemEffects" :key="e" :value="e">{{ e }}</option>
                     </select>
                     <p class="text-xs text-gray-500 mt-1">Defines what the item does when used.</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Images</label>
+                    <label class="block text-xs font-medium">Images</label>
                     <p class="text-xs text-gray-500 mb-2">Upload up to three images. At least one is required.</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 0</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image0')" />
+                        <label class="block text-xs font-medium mb-1">Image 0</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image0')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 1 (optional)</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image1')" />
+                        <label class="block text-xs font-medium mb-1">Image 1 (optional)</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image1')" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 2 (optional)</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image2')" />
+                        <label class="block text-xs font-medium mb-1">Image 2 (optional)</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="onNewItemFileChange($event, 'image2')" />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-2">
-                  <button class="px-3 py-2 rounded border" @click="closeAddItemModal">Cancel</button>
-                  <button class="btn-primary" :disabled="addingItem" @click="confirmAddItem">
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeAddItemModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="addingItem" @click="confirmAddItem">
                     <span v-if="!addingItem">Add Item</span>
                     <span v-else>Adding…</span>
                   </button>
@@ -625,59 +628,59 @@
         <!-- Edit Item Modal -->
         <transition name="fade">
           <div v-if="showEditItemModal" class="fixed inset-0 z-50">
-            <div class="absolute inset-0 bg-black/40" @click="closeEditItemModal" />
-            <div class="absolute inset-0 flex items-center justify-center p-4">
-              <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-lg shadow-xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
-                <div class="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 id="editItemTitle" class="text-lg font-semibold">Edit Item</h3>
-                  <button class="text-gray-500 hover:text-gray-700" @click="closeEditItemModal" aria-label="Close">✕</button>
+            <div class="absolute inset-0 bg-black/50" @click="closeEditItemModal" />
+            <div class="absolute inset-0 flex items-center justify-center p-2">
+              <div class="bg-white w-full max-w-2xl max-h-[92vh] rounded-lg shadow-lg flex flex-col" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
+                <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+                  <h3 id="editItemTitle" class="text-sm font-semibold">Edit Item</h3>
+                  <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEditItemModal" aria-label="Close">✕</button>
                 </div>
-                <div class="p-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+                <div class="px-4 py-3 space-y-4 flex-1 overflow-y-auto min-h-0">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Item Code</label>
-                    <input class="input" type="number" min="1" v-model.number="editItem.code" />
+                    <label class="block text-xs font-medium">Item Code</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="1" v-model.number="editItem.code" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Item Name</label>
-                    <input class="input" v-model="editItem.name" />
+                    <label class="block text-xs font-medium">Item Name</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" v-model="editItem.name" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Rarity</label>
-                    <select class="input" v-model="editItem.rarity">
+                    <label class="block text-xs font-medium">Rarity</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="editItem.rarity">
                       <option v-for="r in itemRarities" :key="r" :value="r">{{ r }}</option>
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Power</label>
-                    <input class="input" type="number" min="0" v-model.number="editItem.power" />
+                    <label class="block text-xs font-medium">Power</label>
+                    <input class="border rounded-md px-2 py-1.5 text-sm" type="number" min="0" v-model.number="editItem.power" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Effect</label>
-                    <select class="input" v-model="editItem.effect">
+                    <label class="block text-xs font-medium">Effect</label>
+                    <select class="border rounded-md px-2 py-1.5 text-sm" v-model="editItem.effect">
                       <option v-for="e in itemEffects" :key="e" :value="e">{{ e }}</option>
                     </select>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">Replace Images (optional)</label>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-1">
+                    <label class="block text-xs font-medium">Replace Images (optional)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-1">
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 0</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image0 = e?.target?.files?.[0] || null" />
+                        <label class="block text-xs font-medium mb-1">Image 0</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image0 = e?.target?.files?.[0] || null" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 1</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image1 = e?.target?.files?.[0] || null" />
+                        <label class="block text-xs font-medium mb-1">Image 1</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image1 = e?.target?.files?.[0] || null" />
                       </div>
                       <div>
-                        <label class="block text-xs text-gray-600 mb-1">Image 2</label>
-                        <input class="input" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image2 = e?.target?.files?.[0] || null" />
+                        <label class="block text-xs font-medium mb-1">Image 2</label>
+                        <input class="text-xs" type="file" accept="image/png,image/jpeg,image/jpg,image/gif" @change="e => editItemFiles.image2 = e?.target?.files?.[0] || null" />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="px-6 py-4 border-t flex justify-end gap-2">
-                  <button class="px-3 py-2 rounded border" @click="closeEditItemModal">Cancel</button>
-                  <button class="btn-primary" :disabled="savingItem" @click="saveItem(editItemId)">Save</button>
+                <div class="px-4 py-3 border-t flex-shrink-0 flex justify-end gap-2">
+                  <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="closeEditItemModal">Cancel</button>
+                  <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingItem" @click="saveItem(editItemId)">Save</button>
                 </div>
               </div>
             </div>
@@ -688,24 +691,24 @@
         <div class="overflow-x-auto hidden sm:block">
           <table class="min-w-full border-separate border-spacing-y-1">
             <thead>
-              <tr class="text-left text-sm text-gray-600">
-                <th class="px-3 py-2">Code</th>
-                <th class="px-3 py-2">Name</th>
-                <th class="px-3 py-2">Rarity</th>
-                <th class="px-3 py-2">Power</th>
-                <th class="px-3 py-2">Actions</th>
+              <tr class="">
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Code</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Name</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Power</th>
+                <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="it in items" :key="it.id" class="bg-gray-50">
-                <td class="px-3 py-2 w-24">{{ it.code }}</td>
-                <td class="px-3 py-2">{{ it.name }}</td>
-                <td class="px-3 py-2 w-40">{{ it.rarity }}</td>
-                <td class="px-3 py-2 w-28">{{ it.power }}</td>
-                <td class="px-3 py-2">
+                <td class="px-2 py-1.5 w-20">{{ it.code }}</td>
+                <td class="px-2 py-1.5">{{ it.name }}</td>
+                <td class="px-2 py-1.5 w-36">{{ it.rarity }}</td>
+                <td class="px-2 py-1.5 w-24">{{ it.power }}</td>
+                <td class="px-2 py-1.5">
                   <div class="flex gap-2">
-                    <button class="px-3 py-2 rounded border" @click="startEditItem(it)">Edit</button>
-                    <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeItem(it.id)" :disabled="deletingItem">Delete</button>
+                    <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEditItem(it)">Edit</button>
+                    <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeItem(it.id)" :disabled="deletingItem">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -713,22 +716,23 @@
           </table>
         </div>
         <!-- Mobile cards -->
-        <div class="space-y-3 sm:hidden">
-          <div v-for="it in items" :key="it.id" class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+        <div class="space-y-2 sm:hidden">
+          <div v-for="it in items" :key="it.id" class="rounded border p-2">
             <div class="flex justify-between items-center">
-              <div class="font-semibold text-gray-800">#{{ it.code }} — {{ it.name }}</div>
-              <div class="text-sm text-gray-600">{{ it.rarity }}</div>
+              <div class="font-semibold text-xs text-gray-800">#{{ it.code }} — {{ it.name }}</div>
+              <div class="text-xs text-gray-600">{{ it.rarity }}</div>
             </div>
-            <div class="text-sm text-gray-700">Power: {{ it.power }}</div>
+            <div class="text-xs text-gray-700">Power: {{ it.power }}</div>
             <div class="mt-3 flex gap-2">
-              <button class="px-3 py-2 rounded border" @click="startEditItem(it)">Edit</button>
-              <button class="px-3 py-2 rounded border border-red-300 text-red-600" @click="removeItem(it.id)">Delete</button>
+              <button class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50" @click="startEditItem(it)">Edit</button>
+              <button class="px-3 py-1 text-xs border rounded-md text-red-700 border-red-200 hover:bg-red-50" @click="removeItem(it.id)">Delete</button>
             </div>
           </div>
         </div>
       </section>
 
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded', toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">{{ toast.msg }}</div>
+    </div>
     </div>
   </div>
 </template>

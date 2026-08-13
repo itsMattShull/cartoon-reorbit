@@ -1,65 +1,66 @@
 <template>
-  <div class="p-6 space-y-8 max-w-6xl mx-auto">
+  <div class="bg-gray-50 text-xs">
+   <div class="px-2 py-2 space-y-3">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <h1 class="text-2xl font-semibold tracking-tight">Backgrounds</h1>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h1 class="text-base font-semibold">Backgrounds</h1>
     </div>
 
     <!-- Upload card -->
-    <section class="bg-white rounded-xl border border-gray-200 shadow p-6 space-y-4">
-      <h2 class="text-lg font-semibold">Add a Background</h2>
-      <form @submit.prevent="submit" class="grid md:grid-cols-2 gap-6 items-start">
-        <div class="space-y-3">
+    <section class="bg-white rounded-lg border shadow p-3 space-y-3">
+      <h2 class="text-xs font-semibold">Add a Background</h2>
+      <form @submit.prevent="submit" class="grid sm:grid-cols-2 gap-3 items-start">
+        <div class="space-y-2">
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">Label (optional)</label>
+            <label class="text-xs font-medium">Label (optional)</label>
             <input v-model="label" type="text" placeholder="e.g. Night City"
-              class="rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600" />
+              class="border rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600" />
           </div>
 
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">Visibility</label>
+            <label class="text-xs font-medium">Visibility</label>
             <select v-model="visibility"
-              class="rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600">
+              class="border rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600">
               <option value="public">Public</option>
               <option value="code-only">Code only</option>
             </select>
-            <p class="text-xs text-gray-500">"Code only" hides it from normal UI; still available to your code.</p>
+            <p class="text-[10px] text-gray-500">"Code only" hides it from normal UI; still available to your code.</p>
           </div>
 
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">Image (PNG, GIF, or JPEG)</label>
+            <label class="text-xs font-medium">Image (PNG, GIF, or JPEG)</label>
             <input ref="fileInput" type="file" accept="image/png,image/gif,image/jpeg" @change="onFile"
-              class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
-            <p class="text-xs text-gray-500">Exactly <strong>510×344</strong> or <strong>512×346</strong> or <strong>800×600</strong> px.</p>
+              class="block w-full text-xs text-gray-700 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
+            <p class="text-[10px] text-gray-500">Exactly <strong>510×344</strong> or <strong>512×346</strong> or <strong>800×600</strong> px.</p>
           </div>
 
           <button type="submit" :disabled="!imageFile || uploading" :title="!imageFile ? 'Choose an image' : ''"
-            class="inline-flex items-center gap-2 rounded-md px-5 py-2.5 font-semibold text-white disabled:bg-gray-400 disabled:cursor-not-allowed bg-blue-700 hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-blue-700">
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
             {{ uploading ? 'Uploading…' : 'Upload' }}
           </button>
         </div>
 
         <!-- Preview -->
         <div class="flex items-center justify-center">
-          <img v-if="imagePreview" :src="imagePreview" alt="Preview" class="max-w-full rounded-md border border-gray-300" />
-          <div v-else class="text-sm text-gray-500">No image selected.</div>
+          <img v-if="imagePreview" :src="imagePreview" alt="Preview" class="max-w-full rounded-md border" />
+          <div v-else class="text-xs text-gray-500">No image selected.</div>
         </div>
       </form>
     </section>
 
     <!-- List -->
     <section>
-      <div v-if="pending" class="py-10 text-gray-500 text-center">Loading…</div>
-      <div v-else-if="error" class="py-10 text-red-600 text-center">{{ error.message || 'Failed to fetch backgrounds' }}</div>
+      <div v-if="pending" class="text-gray-500 py-6 text-center">Loading…</div>
+      <div v-else-if="error" class="text-red-600 py-6 text-center">{{ error.message || 'Failed to fetch backgrounds' }}</div>
       <template v-else>
-        <div v-if="updateError" class="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div v-if="updateError" class="mb-3 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {{ updateError }}
         </div>
 
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div v-for="bg in backgrounds" :key="bg.id" class="bg-white rounded-xl border border-gray-200 shadow overflow-hidden">
-            <img :src="bg.imagePath" :alt="bg.label || 'Background'" class="w-full h-44 object-cover" />
-            <div class="p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div v-for="bg in backgrounds" :key="bg.id" class="bg-white border rounded-lg shadow overflow-hidden">
+            <img :src="bg.imagePath" :alt="bg.label || 'Background'" class="w-full h-32 object-cover" />
+            <div class="p-2 space-y-1.5 text-xs">
               <div class="font-medium truncate">{{ bg.label || '—' }}</div>
               <div class="text-gray-600">{{ bg.width }}×{{ bg.height }} • {{ shortMime(bg.mimeType) }}</div>
               <div class="flex items-center gap-2">
@@ -69,7 +70,7 @@
                   :disabled="!!saving[bg.id]"
                   :title="bg.visibility === 'PUBLIC' ? 'Click to make Code Only' : 'Click to make Public'"
                   :class="[
-                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors min-h-[28px]',
+                    'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors min-h-[22px]',
                     bg.visibility === 'PUBLIC'
                       ? 'bg-green-100 text-green-800 hover:bg-green-200'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
@@ -80,15 +81,15 @@
                   {{ fromEnum(bg.visibility) }}
                 </button>
               </div>
-              <div class="text-gray-500">Added: {{ formatDate(bg.createdAt) }}</div>
+              <div class="text-[10px] text-gray-500">Added: {{ formatDate(bg.createdAt) }}</div>
             </div>
-            <div class="px-4 pb-4 flex gap-2">
+            <div class="px-2 pb-2 flex gap-1.5">
               <button @click="openEdit(bg)"
-                class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                class="flex-1 px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50">
                 Edit
               </button>
               <button @click="openDelete(bg)"
-                class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500">
+                class="flex-1 px-2 py-1 text-[11px] border rounded-md text-red-700 border-red-200 hover:bg-red-50">
                 Delete
               </button>
             </div>
@@ -96,30 +97,31 @@
         </div>
       </template>
     </section>
+   </div>
   </div>
 
   <!-- ── Edit Modal ──────────────────────────────────────────────────── -->
-  <div v-if="editModal.show" class="fixed inset-0 z-50 flex items-center justify-center">
+  <div v-if="editModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-2">
     <div class="absolute inset-0 bg-black/50" @click="closeEdit" />
-    <div class="relative bg-white rounded-lg shadow-lg w-full max-w-xl max-h-[90vh] flex flex-col">
-      <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
-        <h2 class="text-lg font-semibold">Edit Background</h2>
-        <button class="text-gray-500 hover:text-gray-700 text-xl leading-none" @click="closeEdit">&times;</button>
+    <div class="relative bg-white w-full max-w-xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
+      <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+        <h3 class="text-sm font-semibold">Edit Background</h3>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeEdit">&times;</button>
       </div>
 
-      <div class="p-4 overflow-y-auto flex-1 space-y-4">
+      <div class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
         <!-- Label -->
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">Label</label>
+          <label class="text-xs font-medium">Label</label>
           <input v-model="editModal.label" type="text" placeholder="e.g. Night City"
-            class="rounded-md border border-gray-400 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600" />
+            class="border rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600" />
         </div>
 
         <!-- Visibility -->
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">Visibility</label>
+          <label class="text-xs font-medium">Visibility</label>
           <select v-model="editModal.visibility"
-            class="rounded-md border border-gray-400 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600">
+            class="border rounded-md px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600">
             <option value="PUBLIC">Public</option>
             <option value="CODE_ONLY">Code only</option>
           </select>
@@ -127,36 +129,36 @@
 
         <!-- Replace image -->
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">Replace Image (optional)</label>
-          <div class="text-xs text-gray-500 mb-1">
+          <label class="text-xs font-medium">Replace Image (optional)</label>
+          <div class="text-[10px] text-gray-500 mb-1">
             Current: {{ editModal.bg?.width }}×{{ editModal.bg?.height }} px
           </div>
           <input ref="editFileInput" type="file" accept="image/png,image/gif,image/jpeg"
             @change="onEditFile"
-            class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
-          <p class="text-xs text-gray-500">Exactly <strong>510×344</strong>, <strong>512×346</strong>, or <strong>800×600</strong> px. All cZones using this background will be updated to the new image.</p>
+            class="block w-full text-xs text-gray-700 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
+          <p class="text-[10px] text-gray-500">Exactly <strong>510×344</strong>, <strong>512×346</strong>, or <strong>800×600</strong> px. All cZones using this background will be updated to the new image.</p>
         </div>
 
         <!-- Dimension mismatch warning -->
-        <div v-if="editModal.dimensionWarning" class="rounded-md bg-yellow-50 border border-yellow-300 px-3 py-2 text-sm text-yellow-800">
+        <div v-if="editModal.dimensionWarning" class="rounded-md bg-yellow-50 border border-yellow-300 px-3 py-2 text-xs text-yellow-800">
           {{ editModal.dimensionWarning }}
         </div>
 
         <!-- New image preview -->
         <div v-if="editModal.imagePreview" class="flex flex-col gap-1">
-          <div class="text-xs text-gray-500 font-medium">New image preview:</div>
-          <img :src="editModal.imagePreview" alt="New image preview" class="max-w-full rounded-md border border-gray-300 max-h-48 object-contain" />
+          <div class="text-[10px] text-gray-500 font-medium">New image preview:</div>
+          <img :src="editModal.imagePreview" alt="New image preview" class="max-w-full rounded-md border max-h-48 object-contain" />
         </div>
 
-        <div v-if="editModal.error" class="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+        <div v-if="editModal.error" class="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {{ editModal.error }}
         </div>
       </div>
 
-      <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
-        <button class="px-4 py-2 rounded border border-gray-300 text-sm font-medium" @click="closeEdit">Cancel</button>
+      <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeEdit">Cancel</button>
         <button
-          class="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-3 py-1 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
           :disabled="editModal.saving"
           @click="saveEdit">
           <span v-if="!editModal.saving">Save</span>
@@ -167,54 +169,54 @@
   </div>
 
   <!-- ── Delete Confirmation Modal ───────────────────────────────────── -->
-  <div v-if="deleteModal.show" class="fixed inset-0 z-50 flex items-center justify-center">
+  <div v-if="deleteModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-2">
     <div class="absolute inset-0 bg-black/50" @click="closeDelete" />
-    <div class="relative bg-white rounded-lg shadow-lg w-full max-w-md flex flex-col">
-      <div class="p-4 border-b flex items-center justify-between flex-shrink-0">
-        <h2 class="text-lg font-semibold text-red-700">Delete Background</h2>
-        <button class="text-gray-500 hover:text-gray-700 text-xl leading-none" @click="closeDelete">&times;</button>
+    <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+        <h3 class="text-sm font-semibold text-red-700">Delete Background</h3>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeDelete">&times;</button>
       </div>
 
-      <div class="p-4 space-y-4">
-        <p class="text-sm text-gray-700">
+      <div class="px-4 py-3 space-y-3">
+        <p class="text-xs text-gray-700">
           You are about to permanently delete
           <strong>{{ deleteModal.bg?.label || 'this background' }}</strong>.
           This cannot be undone.
         </p>
 
         <!-- Loading usage -->
-        <div v-if="deleteModal.loading" class="text-sm text-gray-500 flex items-center gap-2">
+        <div v-if="deleteModal.loading" class="text-xs text-gray-500 flex items-center gap-2">
           <span class="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           Checking usage…
         </div>
 
         <!-- Usage summary -->
-        <div v-else-if="deleteModal.usage" class="rounded-md border border-gray-200 divide-y text-sm">
-          <div class="px-3 py-2 flex justify-between">
+        <div v-else-if="deleteModal.usage" class="rounded-md border divide-y text-xs">
+          <div class="px-2 py-1.5 flex justify-between">
             <span class="text-gray-600">Player owners (will lose it)</span>
             <span :class="deleteModal.usage.userCount > 0 ? 'font-semibold text-red-700' : 'text-gray-500'">
               {{ deleteModal.usage.userCount }}
             </span>
           </div>
-          <div class="px-3 py-2 flex justify-between">
+          <div class="px-2 py-1.5 flex justify-between">
             <span class="text-gray-600">cZones using this background</span>
             <span :class="deleteModal.usage.czoneCount > 0 ? 'font-semibold text-amber-700' : 'text-gray-500'">
               {{ deleteModal.usage.czoneCount }}
             </span>
           </div>
-          <div class="px-3 py-2 flex justify-between">
+          <div class="px-2 py-1.5 flex justify-between">
             <span class="text-gray-600">Claim code reward slots (will be removed)</span>
             <span :class="deleteModal.usage.rewardBackgroundCount > 0 ? 'font-semibold text-amber-700' : 'text-gray-500'">
               {{ deleteModal.usage.rewardBackgroundCount }}
             </span>
           </div>
-          <div class="px-3 py-2 flex justify-between">
+          <div class="px-2 py-1.5 flex justify-between">
             <span class="text-gray-600">Achievement reward slots (will be removed)</span>
             <span :class="deleteModal.usage.achievementRewardCount > 0 ? 'font-semibold text-amber-700' : 'text-gray-500'">
               {{ deleteModal.usage.achievementRewardCount }}
             </span>
           </div>
-          <div class="px-3 py-2 flex justify-between">
+          <div class="px-2 py-1.5 flex justify-between">
             <span class="text-gray-600">cZone search conditions (will be cleared)</span>
             <span :class="deleteModal.usage.searchPrizeCount > 0 ? 'font-semibold text-red-700' : 'text-gray-500'">
               {{ deleteModal.usage.searchPrizeCount }}
@@ -224,19 +226,19 @@
 
         <!-- Active search condition warning -->
         <div v-if="deleteModal.usage?.searchPrizeCount > 0"
-          class="rounded-md bg-red-50 border border-red-300 px-3 py-2 text-sm text-red-800">
+          class="rounded-md bg-red-50 border border-red-300 px-3 py-2 text-xs text-red-800">
           This background is a condition on {{ deleteModal.usage.searchPrizeCount }} active search prize{{ deleteModal.usage.searchPrizeCount === 1 ? '' : 's' }}. Deleting it will permanently disable those conditions — players won't be able to satisfy them.
         </div>
 
-        <div v-if="deleteModal.error" class="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+        <div v-if="deleteModal.error" class="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {{ deleteModal.error }}
         </div>
       </div>
 
-      <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
-        <button class="px-4 py-2 rounded border border-gray-300 text-sm font-medium" @click="closeDelete">Cancel</button>
+      <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeDelete">Cancel</button>
         <button
-          class="px-4 py-2 rounded bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-3 py-1 text-sm rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed"
           :disabled="deleteModal.loading || deleteModal.deleting"
           @click="confirmDelete">
           <span v-if="deleteModal.deleting">Deleting…</span>

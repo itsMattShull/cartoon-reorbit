@@ -1,248 +1,250 @@
 <template>
-  <div class="bg-gray-50 p-6 ">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h1 class="text-2xl font-semibold">Claim Codes Admin</h1>
-        <NuxtLink
-          to="/newsite/admin/codes/new"
-          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Create New Code
-        </NuxtLink>
-      </div>
-
-      <!-- Tabs -->
-      <div class="mb-6 border-b">
-        <nav class="flex -mb-px">
-          <button
-            @click="activeTab = 'created'"
-            :class="activeTab === 'created'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-800'"
-            class="px-4 py-2 mr-4"
+      <div class="bg-white rounded border p-3">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h1 class="text-base font-semibold">Claim Codes Admin</h1>
+          <NuxtLink
+            to="/newsite/admin/codes/new"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
-            Created Codes
-          </button>
-          <button
-            @click="activeTab = 'claimed'"
-            :class="activeTab === 'claimed'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-800'"
-            class="px-4 py-2"
-          >
-            Claimed Codes
-          </button>
-        </nav>
-      </div>
-
-      <!-- Created Codes Tab -->
-      <div v-if="activeTab === 'created'">
-        <div class="mb-4 flex flex-wrap items-end gap-4">
-          <div class="flex-1">
-            <label for="createdFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by code or cToon</label>
-            <input
-              id="createdFilter"
-              v-model="createdQuery"
-              type="text"
-              placeholder="Type a code or cToon name..."
-              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-          <div class="w-full sm:w-60">
-            <label for="createdSort" class="block text-sm font-medium text-gray-700 mb-1">Sort by</label>
-            <select
-              id="createdSort"
-              v-model="createdSort"
-              class="w-full border border-gray-300 rounded px-3 py-2 bg-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="created">Created date</option>
-              <option value="expires">Expiration date</option>
-            </select>
-          </div>
+            Create New Code
+          </NuxtLink>
         </div>
-        <div v-if="createdError" class="text-red-600 mb-4">{{ createdError.message }}</div>
-        <div v-else-if="createdLoading" class="text-gray-500">Loading…</div>
-        <div v-else>
-          <!-- Desktop Table -->
-          <div class="hidden lg:block">
-            <table
-              v-if="codes.length"
-              class="w-full table-auto border-collapse"
+
+        <!-- Tabs -->
+        <div class="mb-3 border-b">
+          <nav class="flex -mb-px">
+            <button
+              @click="activeTab = 'created'"
+              :class="activeTab === 'created'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'"
+              class="px-3 py-1.5 text-xs mr-2"
             >
-              <thead>
-                <tr class="bg-gray-100">
-                  <th class="px-4 py-2 text-left">Code</th>
-                  <th class="px-4 py-2 text-left">Available At (CST)</th>
-                  <th class="px-4 py-2 text-left">Expires At</th>
-                  <th class="px-4 py-2 text-right"># cToons</th>
-                  <th class="px-4 py-2 text-right"># of Backgrounds</th>
-                  <th class="px-4 py-2 text-right">Points</th>
-                  <th class="px-4 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="c in codes" :key="c.code" class="border-b hover:bg-gray-50">
-                  <td class="px-4 py-2 max-w-[15ch] truncate" :title="c.code">{{ c.code }}</td>
-                  <td class="px-4 py-2">
-                    <span v-if="c.startsAt">
-                      {{ formatCST(c.startsAt) }}
-                    </span>
-                    <span v-else class="text-gray-500">Immediately</span>
-                  </td>
-                  <td class="px-4 py-2">
+              Created Codes
+            </button>
+            <button
+              @click="activeTab = 'claimed'"
+              :class="activeTab === 'claimed'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'"
+              class="px-3 py-1.5 text-xs"
+            >
+              Claimed Codes
+            </button>
+          </nav>
+        </div>
+
+        <!-- Created Codes Tab -->
+        <div v-if="activeTab === 'created'">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end mb-2">
+            <div class="flex-1 flex flex-col gap-1">
+              <label for="createdFilter" class="text-xs font-medium">Filter by code or cToon</label>
+              <input
+                id="createdFilter"
+                v-model="createdQuery"
+                type="text"
+                placeholder="Type a code or cToon name..."
+                class="text-xs border rounded-md px-1.5 py-1"
+              />
+            </div>
+            <div class="w-full sm:w-60 flex flex-col gap-1">
+              <label for="createdSort" class="text-xs font-medium">Sort by</label>
+              <select
+                id="createdSort"
+                v-model="createdSort"
+                class="text-xs border rounded-md px-1.5 py-1 bg-white"
+              >
+                <option value="created">Created date</option>
+                <option value="expires">Expiration date</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="createdError" class="text-red-600 mb-2 text-[11px]">{{ createdError.message }}</div>
+          <div v-else-if="createdLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <div v-else>
+            <!-- Desktop Table -->
+            <div class="hidden lg:block overflow-x-auto">
+              <table
+                v-if="codes.length"
+                class="w-full text-xs"
+              >
+                <thead>
+                  <tr>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Code</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Available At (CST)</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Expires At</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># cToons</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># of Backgrounds</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Points</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="c in codes" :key="c.code" class="hover:bg-gray-50">
+                    <td class="px-2 py-1.5 max-w-[15ch] truncate" :title="c.code">{{ c.code }}</td>
+                    <td class="px-2 py-1.5">
+                      <span v-if="c.startsAt">
+                        {{ formatCST(c.startsAt) }}
+                      </span>
+                      <span v-else class="text-gray-500">Immediately</span>
+                    </td>
+                    <td class="px-2 py-1.5">
+                      <span v-if="c.expiresAt">
+                        {{ new Date(c.expiresAt).toLocaleDateString() }}
+                      </span>
+                      <span v-else class="text-gray-500">Never</span>
+                    </td>
+                    <td class="px-2 py-1.5 text-right">{{ countCtoons(c) }}</td>
+                    <td class="px-2 py-1.5 text-right">{{ countBackgrounds(c) }}</td>
+                    <td class="px-2 py-1.5 text-right">{{ countPoints(c) }}</td>
+                    <td class="px-2 py-1.5 text-right">
+                      <NuxtLink
+                        :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
+                        class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
+                      >
+                        Edit
+                      </NuxtLink>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!codes.length" class="text-gray-500 py-6 text-center">
+                No codes found.
+              </div>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="block lg:hidden grid grid-cols-1 gap-2">
+              <div
+                v-for="c in codes"
+                :key="c.code"
+                class="bg-white border rounded-lg shadow p-2 flex flex-col gap-1"
+              >
+                <div class="text-[11px] space-y-0.5">
+                  <p><strong>Code:</strong> {{ c.code }}</p>
+                  <p>
+                    <strong>Available At:</strong>
+                    <span v-if="c.startsAt">{{ formatCST(c.startsAt) }}</span>
+                    <span v-else>Immediately</span>
+                  </p>
+                  <p>
+                    <strong>Expires:</strong>
                     <span v-if="c.expiresAt">
                       {{ new Date(c.expiresAt).toLocaleDateString() }}
                     </span>
-                    <span v-else class="text-gray-500">Never</span>
-                  </td>
-                  <td class="px-4 py-2 text-right">{{ countCtoons(c) }}</td>
-                  <td class="px-4 py-2 text-right">{{ countBackgrounds(c) }}</td>
-                  <td class="px-4 py-2 text-right">{{ countPoints(c) }}</td>
-                  <td class="px-4 py-2 text-right">
-                    <NuxtLink
-                      :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
-                      class="text-blue-600 hover:underline"
-                    >
-                      Edit
-                    </NuxtLink>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="!codes.length" class="text-gray-500">
-              No codes found.
-            </div>
-          </div>
-
-          <!-- Mobile Cards -->
-          <div class="block lg:hidden space-y-4">
-            <div
-              v-for="c in codes"
-              :key="c.code"
-              class="bg-gray-100 rounded-lg p-4 flex flex-col"
-            >
-              <div class="space-y-2">
-                <p><strong>Code:</strong> {{ c.code }}</p>
-                <p>
-                  <strong>Available At:</strong>
-                  <span v-if="c.startsAt">{{ formatCST(c.startsAt) }}</span>
-                  <span v-else>Immediately</span>
-                </p>
-                <p>
-                  <strong>Expires:</strong>
-                  <span v-if="c.expiresAt">
-                    {{ new Date(c.expiresAt).toLocaleDateString() }}
-                  </span>
-                  <span v-else>Never</span>
-                </p>
-                <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
-                <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
-                <p><strong>Points:</strong> {{ countPoints(c) }}</p>
+                    <span v-else>Never</span>
+                  </p>
+                  <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
+                  <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
+                  <p><strong>Points:</strong> {{ countPoints(c) }}</p>
+                </div>
+                <NuxtLink
+                  :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
+                  class="self-end px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
+                >
+                  Edit
+                </NuxtLink>
               </div>
-              <NuxtLink
-                :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
-                class="mt-4 self-end text-blue-600 hover:underline"
+              <div v-if="!codes.length" class="text-gray-500 py-6 text-center">
+                No codes found.
+              </div>
+            </div>
+          </div>
+
+          <!-- Created Pagination -->
+          <div v-if="!createdLoading && codes.length" class="mt-3 flex items-center justify-between">
+            <div class="text-[11px] text-gray-600">
+              Page {{ createdPage }} of {{ createdTotalPages }} - Showing {{ createdShowingRange }}
+            </div>
+            <div class="space-x-1">
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="createdPage <= 1" @click="prevCreatedPage">Prev</button>
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="createdPage >= createdTotalPages" @click="nextCreatedPage">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claimed Codes Tab -->
+        <div v-if="activeTab === 'claimed'">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end mb-2">
+            <div class="flex-1 flex flex-col gap-1">
+              <label for="claimedFilter" class="text-xs font-medium">Filter by username, code, or cToon</label>
+              <input
+                id="claimedFilter"
+                v-model="claimedQuery"
+                list="claimedUserSuggestions"
+                type="text"
+                @focus="fetchClaimedUserSuggestions"
+                placeholder="Type a username, code, or cToon name..."
+                class="text-xs border rounded-md px-1.5 py-1"
+              />
+              <datalist id="claimedUserSuggestions">
+                <option v-for="u in claimedUserSuggestions" :key="u" :value="u" />
+              </datalist>
+            </div>
+          </div>
+
+          <div v-if="claimedError" class="text-red-600 mb-2 text-[11px]">{{ claimedError.message }}</div>
+          <div v-else-if="claimedLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <div v-else>
+            <!-- Desktop Table -->
+            <div class="hidden lg:block overflow-x-auto">
+              <table
+                v-if="claimed.length"
+                class="w-full text-xs"
               >
-                Edit
-              </NuxtLink>
+                <thead>
+                  <tr>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Code</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">User</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Claimed At</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="row in claimed" :key="row.id" class="hover:bg-gray-50">
+                    <td class="px-2 py-1.5 break-words">{{ row.code }}</td>
+                    <td class="px-2 py-1.5">{{ row.user.username }}</td>
+                    <td class="px-2 py-1.5">
+                      {{ new Date(row.claimedAt).toLocaleString() }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!claimed.length" class="text-gray-500 py-6 text-center">
+                No claims found.
+              </div>
             </div>
-            <div v-if="!codes.length" class="text-gray-500">
-              No codes found.
-            </div>
-          </div>
-        </div>
 
-        <!-- Created Pagination -->
-        <div v-if="!createdLoading && codes.length" class="mt-6 flex items-center justify-between">
-          <div class="text-sm text-gray-600">
-            Page {{ createdPage }} of {{ createdTotalPages }} - Showing {{ createdShowingRange }}
-          </div>
-          <div class="space-x-2">
-            <button class="px-3 py-1 border rounded" :disabled="createdPage <= 1" @click="prevCreatedPage">Prev</button>
-            <button class="px-3 py-1 border rounded" :disabled="createdPage >= createdTotalPages" @click="nextCreatedPage">Next</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Claimed Codes Tab -->
-      <div v-if="activeTab === 'claimed'">
-        <div class="mb-4 flex flex-wrap items-end gap-4">
-          <div class="flex-1">
-            <label for="claimedFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter by username, code, or cToon</label>
-            <input
-              id="claimedFilter"
-              v-model="claimedQuery"
-              list="claimedUserSuggestions"
-              type="text"
-              @focus="fetchClaimedUserSuggestions"
-              placeholder="Type a username, code, or cToon name..."
-              class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <datalist id="claimedUserSuggestions">
-              <option v-for="u in claimedUserSuggestions" :key="u" :value="u" />
-            </datalist>
-          </div>
-        </div>
-
-        <div v-if="claimedError" class="text-red-600 mb-4">{{ claimedError.message }}</div>
-        <div v-else-if="claimedLoading" class="text-gray-500">Loading…</div>
-        <div v-else>
-          <!-- Desktop Table -->
-          <div class="hidden lg:block">
-            <table
-              v-if="claimed.length"
-              class="w-full table-auto border-collapse"
-            >
-              <thead>
-                <tr class="bg-gray-100">
-                  <th class="px-4 py-2 text-left">Code</th>
-                  <th class="px-4 py-2 text-left">User</th>
-                  <th class="px-4 py-2 text-left">Claimed At</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in claimed" :key="row.id" class="border-b hover:bg-gray-50">
-                  <td class="px-4 py-2 break-words">{{ row.code }}</td>
-                  <td class="px-4 py-2">{{ row.user.username }}</td>
-                  <td class="px-4 py-2">
-                    {{ new Date(row.claimedAt).toLocaleString() }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="!claimed.length" class="text-gray-500">
-              No claims found.
+            <!-- Mobile Cards -->
+            <div class="block lg:hidden grid grid-cols-1 gap-2">
+              <div
+                v-for="row in claimed"
+                :key="row.id"
+                class="bg-white border rounded-lg shadow p-2 flex flex-col gap-0.5 text-[11px]"
+              >
+                <p><strong>Code:</strong> {{ row.code }}</p>
+                <p><strong>User:</strong> {{ row.user.username }}</p>
+                <p><strong>Claimed At:</strong>
+                  {{ new Date(row.claimedAt).toLocaleString() }}
+                </p>
+              </div>
+              <div v-if="!claimed.length" class="text-gray-500 py-6 text-center">
+                No claims found.
+              </div>
             </div>
           </div>
 
-          <!-- Mobile Cards -->
-          <div class="block lg:hidden space-y-4">
-            <div
-              v-for="row in claimed"
-              :key="row.id"
-              class="bg-gray-100 rounded-lg p-4 flex flex-col"
-            >
-              <p><strong>Code:</strong> {{ row.code }}</p>
-              <p><strong>User:</strong> {{ row.user.username }}</p>
-              <p><strong>Claimed At:</strong>
-                {{ new Date(row.claimedAt).toLocaleString() }}
-              </p>
+          <!-- Claimed Pagination -->
+          <div v-if="!claimedLoading && claimed.length" class="mt-3 flex items-center justify-between">
+            <div class="text-[11px] text-gray-600">
+              Page {{ claimedPage }} of {{ claimedTotalPages }} - Showing {{ claimedShowingRange }}
             </div>
-            <div v-if="!claimed.length" class="text-gray-500">
-              No claims found.
+            <div class="space-x-1">
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="claimedPage <= 1" @click="prevClaimedPage">Prev</button>
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="claimedPage >= claimedTotalPages" @click="nextClaimedPage">Next</button>
             </div>
-          </div>
-        </div>
-
-        <!-- Claimed Pagination -->
-        <div v-if="!claimedLoading && claimed.length" class="mt-6 flex items-center justify-between">
-          <div class="text-sm text-gray-600">
-            Page {{ claimedPage }} of {{ claimedTotalPages }} - Showing {{ claimedShowingRange }}
-          </div>
-          <div class="space-x-2">
-            <button class="px-3 py-1 border rounded" :disabled="claimedPage <= 1" @click="prevClaimedPage">Prev</button>
-            <button class="px-3 py-1 border rounded" :disabled="claimedPage >= claimedTotalPages" @click="nextClaimedPage">Next</button>
           </div>
         </div>
       </div>

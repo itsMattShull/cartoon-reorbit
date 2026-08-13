@@ -1,17 +1,18 @@
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
 
-    <div class="max-w-xl mx-auto bg-white rounded-lg shadow p-6 ">
-      <h1 class="text-2xl font-semibold mb-4">Manage Production Instance</h1>
+    <div class="px-2 py-2">
+    <div class="bg-white rounded-lg shadow p-3">
+      <h1 class="text-base font-semibold mb-3">Manage Production Instance</h1>
 
-      <div class="flex items-center justify-between mb-4">
-        <div class="text-sm">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-xs">
           <div class="text-gray-600">Status</div>
           <div class="font-medium flex items-center gap-2">
             <span v-if="status==='active'">On</span>
             <span v-else-if="status==='off'">Off</span>
             <span v-else>{{ status }}</span>
-            <span v-if="vcpus && memoryMb" class="text-xs text-gray-500">
+            <span v-if="vcpus && memoryMb" class="text-[10px] text-gray-500">
               ({{ vcpus }} vCPU / {{ formatMemory(memoryMb) }})
             </span>
           </div>
@@ -19,7 +20,7 @@
         <button
           :disabled="working || scaleWorking || status==='unknown' || status==='missing'"
           @click="togglePower"
-          class="px-4 py-2 rounded text-white disabled:opacity-50"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md text-white disabled:opacity-50"
           :class="status==='active' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
         >
           <span v-if="working && status!=='active'">Turning On Production...</span>
@@ -28,21 +29,21 @@
         </button>
       </div>
 
-      <div class="flex items-center justify-between mb-4">
-        <div class="text-sm">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-xs">
           <div class="text-gray-600">Scale</div>
           <div class="font-medium">
             <span v-if="scaleUpUntil">Upsized</span>
             <span v-else>Normal</span>
           </div>
-          <div v-if="scaleUpUntil" class="text-xs text-gray-500">
+          <div v-if="scaleUpUntil" class="text-[10px] text-gray-500">
             Downsizes at {{ formatTimestamp(scaleUpUntil) }}
           </div>
         </div>
         <button
           :disabled="working || scaleWorking || status==='unknown' || status==='missing'"
           @click="handleScaleAction"
-          class="px-4 py-2 rounded text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+          class="px-3 py-1.5 text-xs font-semibold rounded-md text-white disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
         >
           <span v-if="scaleWorking && scaleUpUntil">Downsizing...</span>
           <span v-else-if="scaleWorking">Scaling Up...</span>
@@ -50,17 +51,18 @@
         </button>
       </div>
 
-      <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="text-xs text-red-600">{{ error }}</p>
 
-      <div class="mt-4">
+      <div class="mt-3">
         <button
           @click="refresh"
           :disabled="working || scaleWorking"
-          class="px-3 py-1 border rounded text-sm disabled:opacity-50"
+          class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50 disabled:opacity-50"
         >
           Refresh status
         </button>
       </div>
+    </div>
     </div>
   </div>
 </template>

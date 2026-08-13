@@ -1,118 +1,119 @@
 <template>
-  <div class="bg-gray-100 p-6 ">
-    <h1 class="text-3xl font-bold mb-6">Admin: Homepage &amp; Showcase</h1>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
+    <h1 class="text-base font-semibold mb-3">Admin: Homepage &amp; Showcase</h1>
 
-    <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-3">
       <!-- Tabs -->
-      <div class="border-b mb-6">
-        <nav class="flex gap-1 sm:gap-4 overflow-x-auto flex-nowrap -mb-px">
+      <div class="border-b mb-3">
+        <nav class="flex gap-1 sm:gap-3 overflow-x-auto flex-nowrap -mb-px">
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Homepage' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Homepage'">Homepage</button>
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Home' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Home'">Home</button>
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Sidebar' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Sidebar'">Sidebar</button>
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Release Settings' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Release Settings'">Release Settings</button>
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Other' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Other'">Other</button>
           <button
-            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            class="px-2 py-1.5 text-xs border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Favicon' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Favicon'">Favicon</button>
         </nav>
       </div>
 
       <!-- Homepage tab -->
-      <section v-if="activeTab==='Homepage'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Homepage'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Upload SVG/PNG/JPEG/GIF/MP4. Files are stored on the server and paths saved in the database.
         </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <!-- Top Left -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Top Left</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
+          <div class="space-y-2">
+            <h2 class="text-xs font-semibold">Top Left</h2>
+            <p class="text-[10px] text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.topLeft && files.topLeft.type && files.topLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topLeft || '')"
                 :src="previewUrls.topLeft || paths.topLeft" :poster="(previewUrls.topLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topLeft)) ? previewUrls.topLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topLeft||'') ? paths.topLeft : '')"
                 controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
               <img v-else-if="previewUrls.topLeft || paths.topLeft" :src="previewUrls.topLeft || paths.topLeft" alt="Top Left" class="max-h-full max-w-full" />
-              <span v-else class="text-gray-400 text-sm">No image</span>
+              <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
                  <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('topLeft', $event)" class="block w-full text-sm" />
-            <div v-if="files.topLeft" class="text-xs text-gray-600 truncate">Selected: {{ files.topLeft.name }}</div>
-            <button type="button" class="px-3 py-1 text-sm rounded border"
+                   @change="onFile('topLeft', $event)" class="block w-full text-xs" />
+            <div v-if="files.topLeft" class="text-[10px] text-gray-600 truncate">Selected: {{ files.topLeft.name }}</div>
+            <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                     v-if="paths.topLeft" @click="clearPath('topLeft')">Clear</button>
           </div>
 
           <!-- Top Right -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Top Right</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
+          <div class="space-y-2">
+            <h2 class="text-xs font-semibold">Top Right</h2>
+            <p class="text-[10px] text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.topRight && files.topRight.type && files.topRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topRight || '')"
                 :src="previewUrls.topRight || paths.topRight" :poster="(previewUrls.topRight && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topRight)) ? previewUrls.topRight : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topRight||'') ? paths.topRight : '')"
                 controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
               <img v-else-if="previewUrls.topRight || paths.topRight" :src="previewUrls.topRight || paths.topRight" alt="Top Right" class="max-h-full max-w-full" />
-              <span v-else class="text-gray-400 text-sm">No image</span>
+              <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
                  <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('topRight', $event)" class="block w-full text-sm" />
-            <div v-if="files.topRight" class="text-xs text-gray-600 truncate">Selected: {{ files.topRight.name }}</div>
-            <button type="button" class="px-3 py-1 text-sm rounded border"
+                   @change="onFile('topRight', $event)" class="block w-full text-xs" />
+            <div v-if="files.topRight" class="text-[10px] text-gray-600 truncate">Selected: {{ files.topRight.name }}</div>
+            <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                     v-if="paths.topRight" @click="clearPath('topRight')">Clear</button>
           </div>
 
           <!-- Bottom Left -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Bottom Left</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
+          <div class="space-y-2">
+            <h2 class="text-xs font-semibold">Bottom Left</h2>
+            <p class="text-[10px] text-gray-500">Max size is 374px by 292px</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
               <video v-if="(files.bottomLeft && files.bottomLeft.type && files.bottomLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomLeft || '')"
                 :src="previewUrls.bottomLeft || paths.bottomLeft" :poster="(previewUrls.bottomLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.bottomLeft)) ? previewUrls.bottomLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.bottomLeft||'') ? paths.bottomLeft : '')"
                 controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
               <img v-else-if="previewUrls.bottomLeft || paths.bottomLeft" :src="previewUrls.bottomLeft || paths.bottomLeft" alt="Bottom Left" class="max-h-full max-w-full" />
-              <span v-else class="text-gray-400 text-sm">No image</span>
+              <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
                  <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('bottomLeft', $event)" class="block w-full text-sm" />
-            <div v-if="files.bottomLeft" class="text-xs text-gray-600 truncate">Selected: {{ files.bottomLeft.name }}</div>
-            <button type="button" class="px-3 py-1 text-sm rounded border"
+                   @change="onFile('bottomLeft', $event)" class="block w-full text-xs" />
+            <div v-if="files.bottomLeft" class="text-[10px] text-gray-600 truncate">Selected: {{ files.bottomLeft.name }}</div>
+            <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                     v-if="paths.bottomLeft" @click="clearPath('bottomLeft')">Clear</button>
           </div>
 
           <!-- Bottom Right removed — now managed in the Sidebar tab -->
-          <div class="space-y-3 border rounded p-4 bg-gray-50">
-            <h2 class="font-semibold text-gray-400">Bottom Right</h2>
-            <p class="text-xs text-gray-400">The Bottom Right image has been moved to the <button type="button" class="underline text-indigo-500" @click="activeTab='Sidebar'">Sidebar tab</button> as "Bottom Spotlight".</p>
+          <div class="space-y-2 border rounded-md p-3 bg-gray-50">
+            <h2 class="text-xs font-semibold text-gray-400">Bottom Right</h2>
+            <p class="text-[10px] text-gray-400">The Bottom Right image has been moved to the <button type="button" class="underline text-indigo-500" @click="activeTab='Sidebar'">Sidebar tab</button> as "Bottom Spotlight".</p>
           </div>
         </div>
 
         <div class="mt-2">
-          <button class="btn-primary" :disabled="saving" @click="saveAll">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveAll">
             <span v-if="!saving">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Home tab (formerly Showcase) -->
-      <section v-if="activeTab==='Home'" class="space-y-6">
+      <section v-if="activeTab==='Home'" class="space-y-3">
         <!-- Showcase image — compact -->
-        <div class="border rounded p-4 space-y-2">
-          <h2 class="font-semibold text-sm">Showcase Image / Video</h2>
-          <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-1.5">
+          <h2 class="text-xs font-semibold">Showcase Image / Video</h2>
+          <div class="flex items-center gap-3">
             <div class="w-40 h-24 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <video v-if="(showcaseFile && showcaseFile.type && showcaseFile.type.startsWith('video/')) || /\.mp4($|\?)/i.test(showcasePath || '')"
                 :src="previewUrls.showcase || showcasePath"
@@ -124,11 +125,11 @@
             <div class="space-y-1 min-w-0">
               <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
                 @change="onShowcaseFile($event)" class="block w-full text-xs" />
-              <div v-if="showcaseFile" class="text-xs text-gray-600 truncate">{{ showcaseFile.name }}</div>
+              <div v-if="showcaseFile" class="text-[10px] text-gray-600 truncate">{{ showcaseFile.name }}</div>
               <div class="flex gap-2">
-                <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                         v-if="showcasePath" @click="clearShowcase()">Clear</button>
-                <button class="btn-primary text-xs px-3 py-1" :disabled="saving" @click="saveShowcase">
+                <button class="px-3 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveShowcase">
                   <span v-if="!saving">Save</span><span v-else>Saving…</span>
                 </button>
               </div>
@@ -138,12 +139,12 @@
 
         <!-- 4 Home Images -->
         <div>
-          <h2 class="font-semibold mb-3">Home Page Images</h2>
-          <p class="text-sm text-gray-500 mb-4">These 4 images display in the main content area of the newsite home page. Each can link to a page or custom URL.</p>
-          <div class="space-y-4">
-            <div v-for="n in 4" :key="n" class="border rounded p-4 space-y-3">
-              <h3 class="font-medium text-sm">Image {{ n }}</h3>
-              <div class="flex items-center gap-4">
+          <h2 class="text-xs font-semibold mb-2">Home Page Images</h2>
+          <p class="text-xs text-gray-500 mb-2">These 4 images display in the main content area of the newsite home page. Each can link to a page or custom URL.</p>
+          <div class="space-y-2">
+            <div v-for="n in 4" :key="n" class="border rounded-md p-2 space-y-2">
+              <h3 class="text-xs font-medium">Image {{ n }}</h3>
+              <div class="flex items-center gap-3">
                 <div class="w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
                   <img v-if="previewUrls['homeImage' + n] || homeImages[n].path"
                     :src="previewUrls['homeImage' + n] || homeImages[n].path"
@@ -151,16 +152,16 @@
                     class="max-h-full max-w-full object-contain" />
                   <span v-else class="text-gray-400 text-xs">None</span>
                 </div>
-                <div class="space-y-2 flex-1 min-w-0">
+                <div class="space-y-1.5 flex-1 min-w-0">
                   <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
                     @change="onHomeImageFile(n, $event)" class="block w-full text-xs" />
-                  <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
-                  <div v-if="homeImageFiles[n]" class="text-xs text-gray-600 truncate">{{ homeImageFiles[n].name }}</div>
-                  <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                  <p class="text-[10px] text-gray-500">Max size is 374px by 292px</p>
+                  <div v-if="homeImageFiles[n]" class="text-[10px] text-gray-600 truncate">{{ homeImageFiles[n].name }}</div>
+                  <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                           v-if="homeImages[n].path" @click="clearHomeImage(n)">Clear</button>
-                  <div class="space-y-1">
-                    <label class="text-xs text-gray-600 font-medium">Link to</label>
-                    <select v-model="homeImages[n].linkPreset" @change="onLinkPresetChange(n)" class="block w-full text-sm border rounded p-1.5">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium">Link to</label>
+                    <select v-model="homeImages[n].linkPreset" @change="onLinkPresetChange(n)" class="block w-full border rounded-md px-2 py-1.5 text-sm">
                       <option value="">— None —</option>
                       <option value="my-cworld">My cWorld</option>
                       <option value="cmart">cMart</option>
@@ -177,14 +178,14 @@
                     <input v-if="homeImages[n].linkPreset === 'custom'"
                       type="url" v-model="homeImages[n].link"
                       placeholder="https://example.com"
-                      class="block w-full text-sm border rounded p-1.5 mt-1" />
+                      class="block w-full border rounded-md px-2 py-1.5 text-sm mt-1" />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="mt-4">
-            <button class="btn-primary" :disabled="saving" @click="saveHomeImages">
+          <div class="mt-3">
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveHomeImages">
               <span v-if="!saving">Save Home Images</span><span v-else>Saving…</span>
             </button>
           </div>
@@ -192,16 +193,16 @@
       </section>
 
       <!-- Sidebar tab -->
-      <section v-if="activeTab==='Sidebar'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Sidebar'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure the bottom spotlight image shown in the site sidebar.
         </p>
 
         <!-- Bottom Spotlight -->
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">Bottom Spotlight</h2>
-          <p class="text-xs text-gray-500">Size should be 757px by 254px.</p>
-          <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Bottom Spotlight</h2>
+          <p class="text-[10px] text-gray-500">Size should be 757px by 254px.</p>
+          <div class="flex items-center gap-3">
             <div class="w-48 h-20 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <video v-if="(files.bottomRight && files.bottomRight.type && files.bottomRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomRight || '')"
                 :src="previewUrls.bottomRight || paths.bottomRight"
@@ -209,19 +210,19 @@
               <img v-else-if="previewUrls.bottomRight || paths.bottomRight" :src="previewUrls.bottomRight || paths.bottomRight" alt="Bottom Spotlight" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
-            <div class="space-y-2 flex-1 min-w-0">
+            <div class="space-y-1.5 flex-1 min-w-0">
               <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                @change="onFile('bottomRight', $event)" class="block w-full text-sm" />
-              <div v-if="files.bottomRight" class="text-xs text-gray-600 truncate">Selected: {{ files.bottomRight.name }}</div>
-              <button type="button" class="px-3 py-1 text-sm rounded border"
+                @change="onFile('bottomRight', $event)" class="block w-full text-xs" />
+              <div v-if="files.bottomRight" class="text-[10px] text-gray-600 truncate">Selected: {{ files.bottomRight.name }}</div>
+              <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                       v-if="paths.bottomRight" @click="clearPath('bottomRight')">Clear</button>
             </div>
           </div>
 
           <!-- Link options -->
-          <div class="space-y-1 mt-2">
-            <label class="text-sm font-medium text-gray-700">Link to</label>
-            <select v-model="bottomSpotlightLinkPreset" @change="onBottomSpotlightPresetChange" class="block w-full text-sm border rounded p-1.5">
+          <div class="flex flex-col gap-1 mt-2">
+            <label class="text-xs font-medium">Link to</label>
+            <select v-model="bottomSpotlightLinkPreset" @change="onBottomSpotlightPresetChange" class="block w-full border rounded-md px-2 py-1.5 text-sm">
               <option value="">— None —</option>
               <option value="my-cworld">My cWorld</option>
               <option value="cmart">cMart</option>
@@ -236,22 +237,22 @@
             <input v-if="bottomSpotlightLinkPreset === 'custom'"
               type="url" v-model="bottomSpotlightLink"
               placeholder="https://example.com"
-              class="block w-full text-sm border rounded p-1.5 mt-1" />
-            <p v-if="bottomSpotlightLinkPreset === 'winball'" class="text-xs text-indigo-600 mt-1">
+              class="block w-full border rounded-md px-2 py-1.5 text-sm mt-1" />
+            <p v-if="bottomSpotlightLinkPreset === 'winball'" class="text-[10px] text-indigo-600 mt-1">
               The Winball prize cToon overlay will be shown on the frontend.
             </p>
           </div>
         </div>
 
         <!-- Middle Sidebar -->
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">Middle Sidebar</h2>
-          <p class="text-sm text-gray-500">Up to 3 images displayed in the middle sidebar area. Each can link to a page or custom URL.</p>
-          <p class="text-sm text-gray-500">Images must be 757px wide. Total height across all uploaded images must equal 1668px. Split evenly: 1 image = 1668px tall, 2 images = 834px each, 3 images = 556px each. You don't have to do evenly split heights, they just need to total up to 1668px.</p>
-          <div class="space-y-4">
-            <div v-for="n in 3" :key="n" class="border rounded p-3 space-y-2">
-              <h3 class="font-medium text-sm">Image {{ n }}</h3>
-              <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Middle Sidebar</h2>
+          <p class="text-[10px] text-gray-500">Up to 3 images displayed in the middle sidebar area. Each can link to a page or custom URL.</p>
+          <p class="text-[10px] text-gray-500">Images must be 757px wide. Total height across all uploaded images must equal 1668px. Split evenly: 1 image = 1668px tall, 2 images = 834px each, 3 images = 556px each. You don't have to do evenly split heights, they just need to total up to 1668px.</p>
+          <div class="space-y-2">
+            <div v-for="n in 3" :key="n" class="border rounded-md p-2 space-y-1.5">
+              <h3 class="text-xs font-medium">Image {{ n }}</h3>
+              <div class="flex items-center gap-3">
                 <div class="w-32 h-20 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
                   <img v-if="previewUrls['middleSidebar' + n] || middleSidebarImages[n].path"
                     :src="previewUrls['middleSidebar' + n] || middleSidebarImages[n].path"
@@ -259,16 +260,16 @@
                     class="max-h-full max-w-full object-contain" />
                   <span v-else class="text-gray-400 text-xs">None</span>
                 </div>
-                <div class="space-y-2 flex-1 min-w-0">
+                <div class="space-y-1.5 flex-1 min-w-0">
                   <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
                     @change="onMiddleSidebarFile(n, $event)" class="block w-full text-xs" />
-                  <p class="text-xs text-gray-500">Max width of 757px.</p>
-                  <div v-if="middleSidebarFiles[n]" class="text-xs text-gray-600 truncate">{{ middleSidebarFiles[n].name }}</div>
-                  <button type="button" class="px-2 py-0.5 text-xs rounded border"
+                  <p class="text-[10px] text-gray-500">Max width of 757px.</p>
+                  <div v-if="middleSidebarFiles[n]" class="text-[10px] text-gray-600 truncate">{{ middleSidebarFiles[n].name }}</div>
+                  <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                           v-if="middleSidebarImages[n].path" @click="clearMiddleSidebar(n)">Clear</button>
-                  <div class="space-y-1">
-                    <label class="text-xs text-gray-600 font-medium">Link to</label>
-                    <select v-model="middleSidebarImages[n].linkPreset" @change="onMiddleSidebarPresetChange(n)" class="block w-full text-sm border rounded p-1.5">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium">Link to</label>
+                    <select v-model="middleSidebarImages[n].linkPreset" @change="onMiddleSidebarPresetChange(n)" class="block w-full border rounded-md px-2 py-1.5 text-sm">
                       <option value="">— None —</option>
                       <option value="my-cworld">My cWorld</option>
                       <option value="cmart">cMart</option>
@@ -285,7 +286,7 @@
                     <input v-if="middleSidebarImages[n].linkPreset === 'custom'"
                       type="url" v-model="middleSidebarImages[n].link"
                       placeholder="https://example.com"
-                      class="block w-full text-sm border rounded p-1.5 mt-1" />
+                      class="block w-full border rounded-md px-2 py-1.5 text-sm mt-1" />
                   </div>
                 </div>
               </div>
@@ -294,113 +295,113 @@
         </div>
 
         <div class="mt-2">
-          <button class="btn-primary" :disabled="saving" @click="saveSidebar">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveSidebar">
             <span v-if="!saving">Save Sidebar</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Release Settings tab -->
-      <section v-if="activeTab==='Release Settings'" class="space-y-6 max-w-md">
-        <p class="text-sm text-gray-600">Configure staged release defaults for all cToons.</p>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Initial Release %</label>
-          <input type="number" v-model.number="releasePercent" min="0" max="100" class="w-full border rounded p-2" />
-          <p class="text-xs text-gray-500">Percent of total released at the initial time (min 1 unit enforced at runtime).</p>
+      <section v-if="activeTab==='Release Settings'" class="space-y-3 max-w-md">
+        <p class="text-xs text-gray-600">Configure staged release defaults for all cToons.</p>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs font-medium">Initial Release %</label>
+          <input type="number" v-model.number="releasePercent" min="0" max="100" class="border rounded-md px-2 py-1.5 text-sm" />
+          <p class="text-[10px] text-gray-500">Percent of total released at the initial time (min 1 unit enforced at runtime).</p>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs font-medium">Delay (hours) to Final Release</label>
+          <input type="number" v-model.number="delayHours" min="1" max="72" class="border rounded-md px-2 py-1.5 text-sm" />
+          <p class="text-[10px] text-gray-500">Hours after initial release when the remaining quantity is released.</p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Delay (hours) to Final Release</label>
-          <input type="number" v-model.number="delayHours" min="1" max="72" class="w-full border rounded p-2" />
-          <p class="text-xs text-gray-500">Hours after initial release when the remaining quantity is released.</p>
-        </div>
-        <div>
-          <button class="btn-primary" :disabled="saving" @click="saveReleaseSettings">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveReleaseSettings">
             <span v-if="!saving">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Other tab -->
-      <section v-if="activeTab==='Other'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Other'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Configure additional page images.
         </p>
 
         <!-- News image -->
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">News</h2>
-          <p class="text-xs text-gray-500">Image displayed on the News page.</p>
-          <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">News</h2>
+          <p class="text-[10px] text-gray-500">Image displayed on the News page.</p>
+          <div class="flex items-center gap-3">
             <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <img v-if="previewUrls.news || newsPath" :src="previewUrls.news || newsPath" alt="News" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
-            <div class="space-y-2 flex-1 min-w-0">
+            <div class="space-y-1.5 flex-1 min-w-0">
               <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
-                @change="onNewsFile($event)" class="block w-full text-sm" />
-              <div v-if="newsFile" class="text-xs text-gray-600 truncate">Selected: {{ newsFile.name }}</div>
-              <button type="button" class="px-3 py-1 text-sm rounded border"
+                @change="onNewsFile($event)" class="block w-full text-xs" />
+              <div v-if="newsFile" class="text-[10px] text-gray-600 truncate">Selected: {{ newsFile.name }}</div>
+              <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                       v-if="newsPath" @click="clearNews()">Clear</button>
             </div>
           </div>
         </div>
 
         <!-- Earn Points image -->
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">Earn Points</h2>
-          <p class="text-xs text-gray-500">Image displayed on the Earn Points page.</p>
-          <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Earn Points</h2>
+          <p class="text-[10px] text-gray-500">Image displayed on the Earn Points page.</p>
+          <div class="flex items-center gap-3">
             <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <img v-if="previewUrls.earnPoints || earnPointsPath" :src="previewUrls.earnPoints || earnPointsPath" alt="Earn Points" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-xs">No image</span>
             </div>
-            <div class="space-y-2 flex-1 min-w-0">
+            <div class="space-y-1.5 flex-1 min-w-0">
               <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
-                @change="onEarnPointsFile($event)" class="block w-full text-sm" />
-              <div v-if="earnPointsFile" class="text-xs text-gray-600 truncate">Selected: {{ earnPointsFile.name }}</div>
-              <button type="button" class="px-3 py-1 text-sm rounded border"
+                @change="onEarnPointsFile($event)" class="block w-full text-xs" />
+              <div v-if="earnPointsFile" class="text-[10px] text-gray-600 truncate">Selected: {{ earnPointsFile.name }}</div>
+              <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                       v-if="earnPointsPath" @click="clearEarnPoints()">Clear</button>
             </div>
           </div>
         </div>
 
         <!-- Label image -->
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">Label Image</h2>
-          <p class="text-xs text-gray-500">Image displayed as the orbit label on the newsite template (replaces the default orbit-label.gif).</p>
-          <div class="flex items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Label Image</h2>
+          <p class="text-[10px] text-gray-500">Image displayed as the orbit label on the newsite template (replaces the default orbit-label.gif).</p>
+          <div class="flex items-center gap-3">
             <div class="w-48 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <img v-if="previewUrls.label || labelPath" :src="previewUrls.label || labelPath" alt="Label" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-xs">No image (uses default)</span>
             </div>
-            <div class="space-y-2 flex-1 min-w-0">
+            <div class="space-y-1.5 flex-1 min-w-0">
               <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
-                @change="onLabelFile($event)" class="block w-full text-sm" />
-              <div v-if="labelFile" class="text-xs text-gray-600 truncate">Selected: {{ labelFile.name }}</div>
-              <button type="button" class="px-3 py-1 text-sm rounded border"
+                @change="onLabelFile($event)" class="block w-full text-xs" />
+              <div v-if="labelFile" class="text-[10px] text-gray-600 truncate">Selected: {{ labelFile.name }}</div>
+              <button type="button" class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                       v-if="labelPath" @click="clearLabel()">Clear</button>
             </div>
           </div>
         </div>
 
         <div class="mt-2">
-          <button class="btn-primary" :disabled="saving" @click="saveOther">
+          <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="saving" @click="saveOther">
             <span v-if="!saving">Save</span><span v-else>Saving…</span>
           </button>
         </div>
       </section>
 
       <!-- Favicon tab -->
-      <section v-if="activeTab==='Favicon'" class="space-y-6">
-        <p class="text-sm text-gray-600">
+      <section v-if="activeTab==='Favicon'" class="space-y-3">
+        <p class="text-xs text-gray-600">
           Upload one image (PNG, JPG, or WEBP) and it will replace the site's favicon and all
           meta/touch icons used site-wide. It will be automatically cropped to a centered square.
           Changes may take a minute to appear everywhere due to browser caching.
         </p>
 
-        <div class="border rounded p-4 space-y-3">
-          <h2 class="font-semibold">Master Icon Image</h2>
-          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Master Icon Image</h2>
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div class="relative w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
               <img v-if="faviconPreviewUrl || faviconSourcePath" :src="faviconPreviewUrl || faviconSourcePath" alt="Favicon preview" class="max-h-full max-w-full object-contain" @load="onFaviconPreviewLoad" />
               <span v-else class="text-gray-400 text-xs">No image</span>
@@ -409,19 +410,19 @@
                 <div class="border-2 border-dashed border-indigo-500/80" :style="cropOverlayStyle"></div>
               </div>
             </div>
-            <div class="space-y-2 flex-1 min-w-0">
-              <label for="favicon-file-input" class="block text-sm font-medium text-gray-700">Choose image</label>
+            <div class="space-y-1.5 flex-1 min-w-0">
+              <label for="favicon-file-input" class="block text-xs font-medium">Choose image</label>
               <input id="favicon-file-input" type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/webp,.webp"
-                @change="onFaviconFile($event)" class="block w-full text-sm" />
-              <p v-if="faviconPreviewUrl" class="text-xs text-gray-500">
+                @change="onFaviconFile($event)" class="block w-full text-xs" />
+              <p v-if="faviconPreviewUrl" class="text-[10px] text-gray-500">
                 Dashed box shows the centered square that will be used — anything outside it is cropped away.
               </p>
-              <div v-if="faviconFile" class="text-xs text-gray-600 truncate">Selected: {{ faviconFile.name }}</div>
+              <div v-if="faviconFile" class="text-[10px] text-gray-600 truncate">Selected: {{ faviconFile.name }}</div>
             </div>
           </div>
 
           <!-- A handful of representative generated sizes — not all ~20, to keep this usable on mobile -->
-          <div v-if="faviconPreviewUrl" class="flex items-end gap-4 pt-2">
+          <div v-if="faviconPreviewUrl" class="flex items-end gap-3 pt-2">
             <div v-for="s in [16, 32, 96, 180]" :key="s" class="flex flex-col items-center gap-1">
               <img :src="faviconPreviewUrl" :style="{ width: Math.min(s, 64) + 'px', height: Math.min(s, 64) + 'px' }" class="object-cover border rounded" :alt="s + 'px preview'" />
               <span class="text-[10px] text-gray-500">{{ s }}px</span>
@@ -429,7 +430,7 @@
           </div>
 
           <div class="mt-2">
-            <button class="btn-primary inline-flex items-center gap-2" :disabled="!faviconFile || faviconSaving" @click="saveFavicon">
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2" :disabled="!faviconFile || faviconSaving" @click="saveFavicon">
               <svg v-if="faviconSaving" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
@@ -440,10 +441,11 @@
         </div>
       </section>
 
-      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
+      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 text-xs rounded-md',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
       </div>
+    </div>
     </div>
   </div>
 </template>

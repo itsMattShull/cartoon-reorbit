@@ -1,20 +1,21 @@
 <template>
-  <div class="bg-gray-50 p-6">
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2">
 
-    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 ">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 space-y-4 lg:space-y-0">
-        <h1 class="text-2xl font-semibold">All cToons</h1>
+      <div class="max-w-6xl mx-auto bg-white rounded-lg shadow p-3">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-3 gap-2">
+        <h1 class="text-base font-semibold">All cToons</h1>
         <div class="flex flex-wrap gap-2">
           <NuxtLink
             to="/newsite/admin/ctoons/new"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Create cToon
           </NuxtLink>
 
           <NuxtLink
             to="/newsite/admin/ctoonsBulkUpload"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Bulk Upload cToons
           </NuxtLink>
@@ -23,7 +24,7 @@
             :disabled="!isSearching"
             @click="openBulkEdit"
             :class="[
-              'px-4 py-2 rounded font-medium transition-colors',
+              'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
               isSearching
                 ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -37,7 +38,7 @@
             :disabled="!isSearching"
             @click="openMakeSecondEdition"
             :class="[
-              'px-4 py-2 rounded font-medium transition-colors',
+              'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
               isSearching
                 ? 'bg-purple-600 text-white hover:bg-purple-700'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -50,16 +51,16 @@
       </div>
 
       <!-- FILTER BAR -->
-      <div class="flex flex-col lg:flex-row gap-4 mb-6">
+      <div class="flex flex-col sm:flex-row gap-2 mb-3">
         <input
           type="text"
           v-model="searchTerm"
           placeholder="Search by name…"
-          class="flex-1 border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="flex-1 border rounded-md px-2 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500"
         />
         <select
           v-model="selectedSet"
-          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 max-w-[350px]"
+          class="border rounded-md px-2 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 sm:max-w-[280px]"
         >
           <option value="">All Sets</option>
           <option v-for="set in setsOptions" :key="set" :value="set">
@@ -68,7 +69,7 @@
         </select>
         <select
           v-model="selectedSeries"
-          class="border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500 max-w-[350px]"
+          class="border rounded-md px-2 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 sm:max-w-[280px]"
         >
           <option value="">All Series</option>
           <option v-for="series in seriesOptions" :key="series" :value="series">
@@ -79,44 +80,44 @@
 
       <!-- TABLE VIEW (desktop) -->
       <div class="overflow-x-auto hidden lg:block">
-        <table class="min-w-full table-auto border-collapse">
+        <table class="min-w-full table-auto border-collapse text-xs">
           <thead>
             <tr class="bg-gray-100">
-              <th class="px-4 py-2 text-left">Asset</th>
-              <th class="px-4 py-2 text-left">Name</th>
-              <th class="px-4 py-2 text-left">Release Date (CDT)</th>
-              <th class="px-4 py-2 text-left">Rarity</th>
-              <th class="px-4 py-2 text-right">Highest Mint</th>
-              <th class="px-4 py-2 text-right">Quantity</th>
-              <th class="px-4 py-2 text-center">In C-mart</th>
-              <th class="px-4 py-2 text-right">Edit</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Asset</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Name</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Release Date (CDT)</th>
+              <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600">Rarity</th>
+              <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600">Highest Mint</th>
+              <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600">Quantity</th>
+              <th class="px-2 py-1.5 text-center text-[11px] font-semibold text-gray-600">In C-mart</th>
+              <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600">Edit</th>
             </tr>
           </thead>
           <!-- Skeleton rows while loading or searching -->
           <tbody v-if="loading || (isSearching && searching)">
             <tr v-for="n in 8" :key="`skeleton-desktop-${n}`" class="border-b">
-              <td class="px-4 py-2">
+              <td class="px-2 py-1.5">
                 <div class="h-16 w-24 bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2">
+              <td class="px-2 py-1.5">
                 <div class="h-4 w-40 bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2">
+              <td class="px-2 py-1.5">
                 <div class="h-4 w-56 bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2">
+              <td class="px-2 py-1.5">
                 <div class="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-2 py-1.5 text-right">
                 <div class="h-4 w-14 ml-auto bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-2 py-1.5 text-right">
                 <div class="h-4 w-16 ml-auto bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2 text-center">
+              <td class="px-2 py-1.5 text-center">
                 <div class="h-4 w-10 mx-auto bg-gray-200 rounded animate-pulse"></div>
               </td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-2 py-1.5 text-right">
                 <div class="h-4 w-10 ml-auto bg-gray-200 rounded animate-pulse"></div>
               </td>
             </tr>
@@ -128,7 +129,7 @@
               :key="c.id"
               class="border-b hover:bg-gray-50"
             >
-              <td class="px-4 py-2">
+              <td class="px-2 py-1.5">
                 <div class="relative w-fit mx-auto">
                   <img
                     loading="lazy"
@@ -139,8 +140,8 @@
                   <SecondEditionOverlay :ctoon="c" />
                 </div>
               </td>
-              <td class="px-4 py-2">{{ c.name }}</td>
-              <td class="px-4 py-2 whitespace-nowrap">
+              <td class="px-2 py-1.5">{{ c.name }}</td>
+              <td class="px-2 py-1.5 whitespace-nowrap">
                 {{
                   new Date(c.releaseDate).toLocaleString('en-US', {
                     year: 'numeric',
@@ -153,15 +154,15 @@
                   })
                 }}
               </td>
-              <td class="px-4 py-2">{{ c.rarity }}</td>
-              <td class="px-4 py-2 text-right">{{ c.highestMint }}</td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-2 py-1.5">{{ c.rarity }}</td>
+              <td class="px-2 py-1.5 text-right">{{ c.highestMint }}</td>
+              <td class="px-2 py-1.5 text-right">
                 {{ formatQuantity(c.quantity) }}
               </td>
-              <td class="px-4 py-2 text-center">
+              <td class="px-2 py-1.5 text-center">
                 {{ c.inCmart ? 'Yes' : 'No' }}
               </td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-2 py-1.5 text-right">
                 <NuxtLink
                   :to="`/newsite/admin/ctoons/edit/${c.id}`"
                   class="text-blue-600 hover:text-blue-800"
@@ -173,35 +174,35 @@
       </div>
 
       <!-- CARD VIEW (mobile) -->
-      <div class="space-y-4 block lg:hidden">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 lg:hidden">
         <!-- Skeleton cards while loading or searching -->
         <template v-if="loading || (isSearching && searching)">
           <div
             v-for="n in 6"
             :key="`skeleton-mobile-${n}`"
-            class="bg-gray-100 rounded-lg p-4 flex flex-col animate-pulse"
+            class="bg-white border rounded-lg shadow p-2 flex flex-col animate-pulse"
           >
-            <div class="flex items-start space-x-4">
-              <div class="w-[80px] h-[80px] bg-gray-200 rounded"></div>
+            <div class="flex items-start gap-2">
+              <div class="w-[80px] h-[80px] bg-gray-200 rounded flex-shrink-0"></div>
               <div class="flex-1 space-y-2">
-                <div class="h-5 w-2/3 bg-gray-200 rounded"></div>
-                <div class="h-4 w-1/2 bg-gray-200 rounded"></div>
-                <div class="h-4 w-1/3 bg-gray-200 rounded"></div>
-                <div class="h-4 w-1/4 bg-gray-200 rounded"></div>
-                <div class="h-4 w-1/3 bg-gray-200 rounded"></div>
+                <div class="h-4 w-2/3 bg-gray-200 rounded"></div>
+                <div class="h-3 w-1/2 bg-gray-200 rounded"></div>
+                <div class="h-3 w-1/3 bg-gray-200 rounded"></div>
+                <div class="h-3 w-1/4 bg-gray-200 rounded"></div>
+                <div class="h-3 w-1/3 bg-gray-200 rounded"></div>
               </div>
             </div>
-            <div class="mt-4 h-8 w-24 bg-gray-200 rounded self-end"></div>
+            <div class="mt-2 h-6 w-20 bg-gray-200 rounded self-end"></div>
           </div>
         </template>
         <!-- Data cards -->
         <template v-else>
-          <div
+          <article
             v-for="c in displayedCtoons"
             :key="c.id"
-            class="bg-gray-100 rounded-lg p-4 flex flex-col"
+            class="bg-white border rounded-lg shadow p-2 flex flex-col"
           >
-            <div class="flex items-start space-x-4">
+            <div class="flex items-start gap-2">
               <div class="relative w-fit flex-shrink-0">
                 <img
                   loading="lazy"
@@ -211,9 +212,9 @@
                 />
                 <SecondEditionOverlay :ctoon="c" />
               </div>
-              <div class="flex-1 space-y-1">
-                <h2 class="text-lg font-semibold">{{ c.name }}</h2>
-                <p class="text-sm text-gray-600">
+              <div class="flex-1 min-w-0 space-y-0.5">
+                <h2 class="text-xs font-semibold truncate">{{ c.name }}</h2>
+                <p class="text-[11px] text-gray-500">
                   {{
                     new Date(c.releaseDate).toLocaleString('en-US', {
                       year: 'numeric',
@@ -225,21 +226,21 @@
                     })
                   }}
                 </p>
-                <p class="text-sm"><strong>Rarity:</strong> {{ c.rarity }}</p>
-                <p class="text-sm"><strong>Highest Mint:</strong> {{ c.highestMint }}</p>
-                <p class="text-sm"><strong>Quantity:</strong> {{ formatQuantity(c.quantity) }}</p>
-                <p class="text-sm"><strong>In C-mart:</strong> {{ c.inCmart ? 'Yes' : 'No' }}</p>
-                <p class="text-sm"><strong>Set:</strong> {{ c.set }}</p>
-                <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">Rarity:</span> {{ c.rarity }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">Highest Mint:</span> {{ c.highestMint }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">Quantity:</span> {{ formatQuantity(c.quantity) }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">In C-mart:</span> {{ c.inCmart ? 'Yes' : 'No' }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">Set:</span> {{ c.set }}</p>
+                <p class="text-[11px] text-gray-600"><span class="text-gray-500">Series:</span> {{ c.series }}</p>
               </div>
             </div>
             <NuxtLink
               :to="`/newsite/admin/ctoons/edit/${c.id}`"
-              class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium self-end"
+              class="mt-2 inline-block px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 text-center self-end"
             >
               Edit
             </NuxtLink>
-          </div>
+          </article>
         </template>
       </div>
 
@@ -249,25 +250,26 @@
       </div>
 
       <!-- PAGINATION (browse only) -->
-      <div v-if="!isSearching" class="mt-6 flex items-center justify-between">
+      <div v-if="!isSearching" class="mt-3 flex items-center justify-between">
         <button
-          class="px-4 py-2 border rounded disabled:opacity-50"
+          class="px-3 py-1.5 text-xs border rounded-md disabled:opacity-50"
           @click="prevPage"
           :disabled="currentPage===1 || loading"
         >
           Previous
         </button>
-        <div class="text-sm text-gray-600">
+        <div class="text-[11px] text-gray-600">
           Page {{ currentPage }}
           <span v-if="loading" class="ml-2">Loading…</span>
         </div>
         <button
-          class="px-4 py-2 border rounded disabled:opacity-50"
+          class="px-3 py-1.5 text-xs border rounded-md disabled:opacity-50"
           @click="nextPage"
           :disabled="!hasNextPage || loading"
         >
           Next
         </button>
+      </div>
       </div>
     </div>
 

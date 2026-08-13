@@ -1,300 +1,301 @@
 <!-- pages/admin/edit-pack/[id].vue -->
 <template>
 
-  <div class="p-4 sm:p-8 max-w-6xl mx-auto space-y-10 sm:space-y-14 ">
-    <!-- 🡐 Back & title -->
-    <div class="flex items-center gap-4">
-      <NuxtLink
-        to="/newsite/admin/packs"
-        class="text-blue-700 hover:underline focus-visible:outline-blue-700"
-      >
-        ← Back to Packs
-      </NuxtLink>
-      <h1 class="text-3xl font-semibold tracking-tight">Edit Pack</h1>
-    </div>
+  <div class="bg-gray-50 text-xs">
+    <div class="px-2 py-2 max-w-4xl mx-auto">
+      <!-- 🡐 Back & title -->
+      <div class="flex items-center gap-3 mb-3">
+        <NuxtLink
+          to="/newsite/admin/packs"
+          class="text-blue-700 hover:underline text-xs"
+        >
+          ← Back to Packs
+        </NuxtLink>
+        <h1 class="text-base font-semibold">Edit Pack</h1>
+      </div>
 
-    <!-- loading / 404 states -->
-    <div v-if="pending" class="text-center text-gray-500">Loading…</div>
-    <div v-else-if="!loadedOk" class="text-center text-red-600">Pack not found.</div>
+      <!-- loading / 404 states -->
+      <div v-if="pending" class="text-center text-gray-500 py-6">Loading…</div>
+      <div v-else-if="!loadedOk" class="text-center text-red-600 py-6">Pack not found.</div>
 
-    <!-- ───────────── FORM ───────────── -->
-    <template v-else>
-      <p class="text-sm text-gray-600">
-        Change the thumbnail, counts or drop odds. All validation rules from the&nbsp;create form
-        still apply (card-counts between <code>1 – N</code> &amp; weights totalling 100 %).
-      </p>
+      <!-- ───────────── FORM ───────────── -->
+      <template v-else>
+        <p class="text-[11px] text-gray-600 mb-3">
+          Change the thumbnail, counts or drop odds. All validation rules from the&nbsp;create form
+          still apply (card-counts between <code>1 – N</code> &amp; weights totalling 100 %).
+        </p>
 
-      <form
-        @submit.prevent="submit"
-        class="space-y-16 bg-white shadow-lg rounded-xl p-4 sm:p-8 border border-gray-200"
-      >
-        <!-- 1️⃣  BASIC INFO --------------------------------------------------- -->
-        <section class="grid lg:grid-cols-2 gap-6">
-          <!-- name -->
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">Pack name</label>
-            <input v-model="name" required
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"/>
-          </div>
-
-          <!-- price -->
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">Price (points)</label>
-            <input v-model.number="price" type="number" min="0" required
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"/>
-          </div>
-
-          <!-- description -->
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label class="text-sm font-medium">Short description</label>
-            <textarea v-model="description" rows="3"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"/>
-          </div>
-
-          <!-- thumbnail -->
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label class="text-sm font-medium">Thumbnail (png / jpeg)</label>
-
-            <img v-if="!newImageFile && imagePreview"
-                 :src="imagePreview"
-                 class="w-32 h-32 object-cover rounded border border-gray-300 mb-3"/>
-
-            <input ref="fileInput" type="file" accept="image/png,image/jpeg"
-              class="block w-full text-sm text-gray-700
-                     file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0
-                     file:text-sm file:font-semibold file:bg-blue-600 file:text-white
-                     hover:file:bg-blue-700"
-              @change="onFile"/>
-
-            <p class="text-xs text-gray-500 ml-1">Leave blank to keep current image.</p>
-
-            <img v-if="newImageFile" :src="imagePreview"
-                 class="mt-3 w-32 h-32 object-cover rounded border border-gray-300"/>
-          </div>
-
-          <!-- list in cmart -->
-          <div class="flex items-start gap-2 lg:col-span-2">
-            <input v-model="inCmart" type="checkbox"
-              class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"/>
-            <label class="select-none text-sm">List in cMart</label>
-          </div>
-
-          <!-- go live date/time -->
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label for="pack-go-live" class="text-sm font-medium">
-              Pack go live (CST)
-            </label>
-            <input
-              id="pack-go-live"
-              v-model="scheduledAtLocal"
-              type="datetime-local"
-              step="3600"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-            />
-            <p class="text-xs text-gray-500 ml-1">
-              Time must be on the hour. Leave blank to keep this pack out of cMart.
-            </p>
-          </div>
-
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label for="pack-go-dark" class="text-sm font-medium">
-              Pack remove from cMart (CST)
-            </label>
-            <input
-              id="pack-go-dark"
-              v-model="scheduledOffAtLocal"
-              type="datetime-local"
-              step="3600"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-            />
-            <p class="text-xs text-gray-500 ml-1">
-              Time must be on the hour. Leave blank to keep this pack listed.
-            </p>
-          </div>
-
-          <!-- daily purchase limit -->
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label class="text-sm font-medium">Daily purchase limit per user</label>
-            <input
-              v-model.number="dailyPurchaseLimit"
-              type="number"
-              min="1"
-              placeholder="Leave blank for unlimited"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              @input="onDailyLimitInput"
-            />
-            <p class="text-xs text-gray-500 ml-1">
-              Max purchases per user per day (8pm–7:59pm CST window). Leave blank for unlimited.
-            </p>
-          </div>
-
-          <!-- total purchase limit -->
-          <div class="lg:col-span-2 flex flex-col gap-1">
-            <label class="text-sm font-medium">Total purchase limit per user</label>
-            <input
-              v-model.number="maxBuysPerUser"
-              type="number"
-              min="1"
-              placeholder="Leave blank for unlimited"
-              class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              @input="onMaxBuysInput"
-            />
-            <p class="text-xs text-gray-500 ml-1">
-              All-time cap on how many times a single user can buy this pack. Never resets. Leave blank for unlimited.
-            </p>
-          </div>
-
-          <!-- sell-out behavior -->
-          <div class="lg:col-span-2 space-y-2">
-            <p class="text-sm font-medium">Pack sell-out behavior</p>
-            <div class="flex flex-col gap-2 text-sm text-gray-700">
-              <label class="inline-flex items-start gap-2">
-                <input
-                  v-model="sellOutBehavior"
-                  type="radio"
-                  value="REMOVE_ON_ANY_RARITY_EMPTY"
-                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
-                />
-                <span>Remove pack when any rarity sells out</span>
-              </label>
-              <label class="inline-flex items-start gap-2">
-                <input
-                  v-model="sellOutBehavior"
-                  type="radio"
-                  value="KEEP_IF_SINGLE_RARITY_EMPTY"
-                  class="mt-1 rounded border-gray-400 text-blue-600 focus:ring-blue-600"
-                />
-                <span>Keep pack even if a rarity is sold out</span>
-              </label>
+        <form
+          @submit.prevent="submit"
+          class="space-y-4 bg-white rounded border p-3"
+        >
+          <!-- 1️⃣  BASIC INFO --------------------------------------------------- -->
+          <section class="grid sm:grid-cols-2 gap-3">
+            <!-- name -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Pack name</label>
+              <input v-model="name" required
+                class="border rounded-md px-2 py-1.5 text-sm"/>
             </div>
-          </div>
-        </section>
 
-        <!-- 2️⃣  ADD / REMOVE CTOONS ---------------------------------------- -->
-        <section class="space-y-4">
-          <h2 class="text-xl font-semibold">Add / remove cToons</h2>
-          <div class="flex items-center gap-3">
-            <div class="relative flex-1 cto-autocomplete">
+            <!-- price -->
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Price (points)</label>
+              <input v-model.number="price" type="number" min="0" required
+                class="border rounded-md px-2 py-1.5 text-sm"/>
+            </div>
+
+            <!-- description -->
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Short description</label>
+              <textarea v-model="description" rows="3"
+                class="border rounded-md px-2 py-1.5 text-sm"/>
+            </div>
+
+            <!-- thumbnail -->
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Thumbnail (png / jpeg)</label>
+
+              <img v-if="!newImageFile && imagePreview"
+                   :src="imagePreview"
+                   class="w-20 h-20 object-cover rounded border mb-1"/>
+
+              <input ref="fileInput" type="file" accept="image/png,image/jpeg"
+                class="text-xs"
+                @change="onFile"/>
+
+              <p class="text-[10px] text-gray-500">Leave blank to keep current image.</p>
+
+              <img v-if="newImageFile" :src="imagePreview"
+                   class="mt-1 w-20 h-20 object-cover rounded border"/>
+            </div>
+
+            <!-- list in cmart -->
+            <div class="flex items-start gap-2 sm:col-span-2">
+              <input v-model="inCmart" type="checkbox"
+                class="mt-0.5"/>
+              <label class="select-none text-xs">List in cMart</label>
+            </div>
+
+            <!-- go live date/time -->
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label for="pack-go-live" class="text-xs font-medium">
+                Pack go live (CST)
+              </label>
               <input
-                ref="searchInput"
-                v-model="search"
-                placeholder="Search cToons…"
-                class="w-full rounded-md border border-gray-400 px-3 py-2 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-                @focus="onInputFocus"
-                @keydown.down.prevent="highlightNext"
-                @keydown.up.prevent="highlightPrev"
-                @keydown.enter.prevent="chooseHighlighted"/>
-
-              <ul v-if="suggestionsOpen && suggestions.length"
-                  class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg divide-y">
-                <li v-for="(s,idx) in suggestions" :key="s.id"
-                    @mousedown.prevent="toggleSelect(s)"
-                    :class="['flex items-center gap-3 px-3 py-2 cursor-pointer',
-                             idx===highlighted?'bg-blue-50':'hover:bg-gray-50']">
-                  <div class="relative shrink-0 w-12 h-12">
-                    <img v-if="s.assetPath" :src="s.assetPath"
-                         class="w-full h-full object-contain rounded border border-gray-300 bg-white"/>
-                    <SecondEditionOverlay :ctoon="s"/>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="truncate font-medium flex flex-wrap items-center gap-1.5">
-                      <span class="truncate">{{ s.name }}</span>
-                      <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
-                        {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
-                      </span>
-                      <span v-if="s.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
-                    </p>
-                    <p class="text-xs text-gray-500">{{ s.rarity }}</p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-            <span class="text-sm text-gray-600">Selected: {{ selectedCount }}</span>
-          </div>
-        </section>
-
-        <!-- 3️⃣  GROUPED BY RARITY ------------------------------------------- -->
-        <section class="space-y-10">
-          <div v-for="(ids, rarity) in grouped" :key="rarity"
-               class="border border-gray-300 rounded-md">
-            <div class="flex flex-wrap items-center gap-3 bg-gray-50 px-4 py-3 rounded-t-md">
-              <h3 class="font-medium">{{ rarity }}</h3>
-
-              <!-- cards / pack -->
-              <div class="flex items-center gap-1">
-                <input v-model.number="countsByRarity[rarity].count" type="number"
-                       :min="1" :max="ids.length"
-                       class="w-16 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
-                <span class="text-xs text-gray-500">cards</span>
-              </div>
-
-              <!-- probability -->
-              <div class="flex items-center gap-1">
-                <input v-model.number="countsByRarity[rarity].probabilityPercent" type="number"
-                       min="1" max="100"
-                       class="w-20 rounded-md border border-gray-400 px-2 py-1 text-sm focus:ring-1 focus:ring-blue-600 focus:border-blue-600"/>
-                <span class="text-xs text-gray-500">%</span>
-              </div>
-
-              <div class="flex items-center gap-2 ml-auto">
-                <button type="button" @click="rebalance(rarity)"
-                        class="even-out-btn">
-                  Even out
-                </button>
-                <span class="weight-badge"
-                      :class="sumWeights(rarity)===100?'weight-ok':'weight-bad'">
-                  {{ sumWeights(rarity) }} %
-                </span>
-              </div>
+                id="pack-go-live"
+                v-model="scheduledAtLocal"
+                type="datetime-local"
+                step="3600"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+              <p class="text-[10px] text-gray-500">
+                Time must be on the hour. Leave blank to keep this pack out of cMart.
+              </p>
             </div>
 
-            <div>
-              <div v-for="id in ids" :key="id"
-                   class="group-row flex flex-wrap items-center gap-3 px-4 py-3">
-                <div class="flex items-center gap-3 flex-1 min-w-[200px]">
-                  <div class="relative shrink-0 w-16 h-16">
-                    <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath"
-                         class="w-full h-full object-contain rounded border border-gray-300 bg-white"/>
-                    <SecondEditionOverlay :ctoon="lookup[id]"/>
-                  </div>
-                  <div class="min-w-0">
-                    <p class="font-medium flex flex-wrap items-center gap-1.5">
-                      <span class="truncate">{{ lookup[id]?.name }}</span>
-                      <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
-                      <span v-if="lookup[id]?.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
-                    </p>
-                  </div>
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label for="pack-go-dark" class="text-xs font-medium">
+                Pack remove from cMart (CST)
+              </label>
+              <input
+                id="pack-go-dark"
+                v-model="scheduledOffAtLocal"
+                type="datetime-local"
+                step="3600"
+                class="border rounded-md px-2 py-1.5 text-sm"
+              />
+              <p class="text-[10px] text-gray-500">
+                Time must be on the hour. Leave blank to keep this pack listed.
+              </p>
+            </div>
+
+            <!-- daily purchase limit -->
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Daily purchase limit per user</label>
+              <input
+                v-model.number="dailyPurchaseLimit"
+                type="number"
+                min="1"
+                placeholder="Leave blank for unlimited"
+                class="border rounded-md px-2 py-1.5 text-sm"
+                @input="onDailyLimitInput"
+              />
+              <p class="text-[10px] text-gray-500">
+                Max purchases per user per day (8pm–7:59pm CST window). Leave blank for unlimited.
+              </p>
+            </div>
+
+            <!-- total purchase limit -->
+            <div class="sm:col-span-2 flex flex-col gap-1">
+              <label class="text-xs font-medium">Total purchase limit per user</label>
+              <input
+                v-model.number="maxBuysPerUser"
+                type="number"
+                min="1"
+                placeholder="Leave blank for unlimited"
+                class="border rounded-md px-2 py-1.5 text-sm"
+                @input="onMaxBuysInput"
+              />
+              <p class="text-[10px] text-gray-500">
+                All-time cap on how many times a single user can buy this pack. Never resets. Leave blank for unlimited.
+              </p>
+            </div>
+
+            <!-- sell-out behavior -->
+            <div class="sm:col-span-2 space-y-1">
+              <p class="text-xs font-medium">Pack sell-out behavior</p>
+              <div class="flex flex-col gap-1 text-xs text-gray-700">
+                <label class="inline-flex items-start gap-2">
+                  <input
+                    v-model="sellOutBehavior"
+                    type="radio"
+                    value="REMOVE_ON_ANY_RARITY_EMPTY"
+                    class="mt-0.5"
+                  />
+                  <span>Remove pack when any rarity sells out</span>
+                </label>
+                <label class="inline-flex items-start gap-2">
+                  <input
+                    v-model="sellOutBehavior"
+                    type="radio"
+                    value="KEEP_IF_SINGLE_RARITY_EMPTY"
+                    class="mt-0.5"
+                  />
+                  <span>Keep pack even if a rarity is sold out</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <hr />
+
+          <!-- 2️⃣  ADD / REMOVE CTOONS ---------------------------------------- -->
+          <section class="space-y-2">
+            <h2 class="text-xs font-semibold">Add / remove cToons</h2>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1 cto-autocomplete">
+                <input
+                  ref="searchInput"
+                  v-model="search"
+                  placeholder="Search cToons…"
+                  class="w-full border rounded-md px-2 py-1.5 text-sm"
+                  @focus="onInputFocus"
+                  @keydown.down.prevent="highlightNext"
+                  @keydown.up.prevent="highlightPrev"
+                  @keydown.enter.prevent="chooseHighlighted"/>
+
+                <ul v-if="suggestionsOpen && suggestions.length"
+                    class="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg divide-y">
+                  <li v-for="(s,idx) in suggestions" :key="s.id"
+                      @mousedown.prevent="toggleSelect(s)"
+                      :class="['flex items-center gap-2 px-2 py-1.5 cursor-pointer',
+                               idx===highlighted?'bg-blue-50':'hover:bg-gray-50']">
+                    <div class="relative shrink-0 w-9 h-9">
+                      <img v-if="s.assetPath" :src="s.assetPath"
+                           class="w-full h-full object-contain rounded border bg-white"/>
+                      <SecondEditionOverlay :ctoon="s"/>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="truncate font-medium flex flex-wrap items-center gap-1">
+                        <span class="truncate">{{ s.name }}</span>
+                        <span :class="s.isSecondEdition ? 'edition-badge edition-badge-2nd' : 'edition-badge edition-badge-1st'">
+                          {{ s.isSecondEdition ? '2nd Edition' : '1st Edition' }}
+                        </span>
+                        <span v-if="s.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
+                      </p>
+                      <p class="text-[10px] text-gray-500">{{ s.rarity }}</p>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+              <span class="text-[11px] text-gray-600">Selected: {{ selectedCount }}</span>
+            </div>
+          </section>
+
+          <hr />
+
+          <!-- 3️⃣  GROUPED BY RARITY ------------------------------------------- -->
+          <section class="space-y-3">
+            <div v-for="(ids, rarity) in grouped" :key="rarity"
+                 class="border rounded-md">
+              <div class="flex flex-wrap items-center gap-2 bg-gray-100 px-2 py-1.5 rounded-t-md">
+                <h3 class="text-xs font-medium">{{ rarity }}</h3>
+
+                <!-- cards / pack -->
+                <div class="flex items-center gap-1">
+                  <input v-model.number="countsByRarity[rarity].count" type="number"
+                         :min="1" :max="ids.length"
+                         class="w-14 border rounded px-1 py-0.5 text-xs"/>
+                  <span class="text-[10px] text-gray-500">cards</span>
                 </div>
 
-                <div class="flex items-center gap-3 ml-auto">
-                  <div class="flex items-center gap-1">
-                    <input v-model.number="weights[id]" type="number" min="1" max="100"
-                           class="w-20 rounded-md border border-gray-400 px-2 py-1 focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-                           @input="onManualWeight(rarity,id)"/>
-                    <span class="text-xs text-gray-500">%</span>
-                  </div>
+                <!-- probability -->
+                <div class="flex items-center gap-1">
+                  <input v-model.number="countsByRarity[rarity].probabilityPercent" type="number"
+                         min="1" max="100"
+                         class="w-16 border rounded px-1 py-0.5 text-xs"/>
+                  <span class="text-[10px] text-gray-500">%</span>
+                </div>
 
-                  <button type="button" @click="toggleSelect(lookup[id])"
-                          class="text-red-700 hover:underline text-sm shrink-0">
-                    Remove
+                <div class="flex items-center gap-2 ml-auto">
+                  <button type="button" @click="rebalance(rarity)"
+                          class="even-out-btn">
+                    Even out
                   </button>
+                  <span class="weight-badge"
+                        :class="sumWeights(rarity)===100?'weight-ok':'weight-bad'">
+                    {{ sumWeights(rarity) }} %
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div v-for="id in ids" :key="id"
+                     class="group-row flex flex-wrap items-center gap-2 px-2 py-1.5">
+                  <div class="flex items-center gap-2 flex-1 min-w-[160px]">
+                    <div class="relative shrink-0 w-10 h-10">
+                      <img v-if="lookup[id]?.assetPath" :src="lookup[id].assetPath"
+                           class="w-full h-full object-contain rounded border bg-white"/>
+                      <SecondEditionOverlay :ctoon="lookup[id]"/>
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-xs font-medium flex flex-wrap items-center gap-1">
+                        <span class="truncate">{{ lookup[id]?.name }}</span>
+                        <span v-if="lookup[id]?.isSecondEdition" class="edition-badge edition-badge-2nd">2nd Edition</span>
+                        <span v-if="lookup[id]?.inCmart === false" class="exclusive-badge">Pack Exclusive</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2 ml-auto">
+                    <div class="flex items-center gap-1">
+                      <input v-model.number="weights[id]" type="number" min="1" max="100"
+                             class="w-16 border rounded px-1 py-0.5 text-xs"
+                             @input="onManualWeight(rarity,id)"/>
+                      <span class="text-[10px] text-gray-500">%</span>
+                    </div>
+
+                    <button type="button" @click="toggleSelect(lookup[id])"
+                            class="text-red-700 hover:underline text-[11px] shrink-0">
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- 4️⃣  SUBMIT ------------------------------------------------------- -->
-        <div>
-          <button type="submit" :disabled="!allValid"
-                  class="inline-flex items-center gap-2 rounded-md px-6 py-2.5 font-semibold
-                         transition text-white disabled:bg-gray-400 bg-blue-700 hover:bg-blue-800
-                         disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-blue-700">
-            Save Changes
-          </button>
-        </div>
-      </form>
-    </template>
+          <!-- 4️⃣  SUBMIT ------------------------------------------------------- -->
+          <div>
+            <button type="submit" :disabled="!allValid"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -618,17 +619,17 @@ async function submit () {
 
 <style scoped>
 .cto-autocomplete ul { z-index: 60; }
-.weight-badge { @apply inline-block rounded-full px-2 py-0.5 text-xs font-semibold; }
+.weight-badge { @apply inline-block rounded px-1.5 py-0 text-[10px] font-medium; }
 .weight-ok  { @apply bg-green-100 text-green-700; }
 .weight-bad { @apply bg-red-100 text-red-700; }
 .edition-badge {
   display: inline-block;
   flex-shrink: 0;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 10px;
 }
 .edition-badge-2nd { background: #7c3aed; color: #fff; }
@@ -636,16 +637,16 @@ async function submit () {
 .exclusive-badge {
   display: inline-block;
   flex-shrink: 0;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 10px;
   background: #d97706;
   color: #fff;
 }
-.even-out-btn { @apply text-xs font-semibold text-blue-700 border border-blue-300 rounded-full px-2.5 py-1 hover:bg-blue-100 whitespace-nowrap; }
+.even-out-btn { @apply text-[11px] font-semibold text-blue-700 border border-blue-300 rounded-md px-2 py-0.5 hover:bg-blue-100 whitespace-nowrap; }
 .group-row:not(:last-child){ border-bottom:1px solid theme('colors.gray.200'); }
-input[type='number']{ min-width:4rem; }
+input[type='number']{ min-width:3.5rem; }
 </style>
