@@ -26,6 +26,7 @@ import {
   isUuid,
   MAX_COUNTER_CHAIN_DEPTH
 } from '@/server/utils/tradeOffer'
+import { notifyTradeOfferReceived } from '@/server/utils/notifications'
 
 /// One response for every "you may not counter this" case. Distinguishing
 /// "no such offer" from "not yours" from "already settled" would make this
@@ -159,6 +160,17 @@ export default defineEventHandler(async (event) => {
     pointsOffered,
     offeredCount: resolvedOffered.length,
     requestedCount: resolvedRequested.length,
+    isCounter: true
+  }).catch(() => {})
+
+  // Exactly one in-app notification too, mirroring the DM rule above. The
+  // countered party IS this recipient — emitting a separate "your offer was
+  // countered" alongside this would re-introduce the double-notification the
+  // comment above exists to prevent.
+  notifyTradeOfferReceived(prisma, {
+    userId: recipient.id,
+    fromUserId: callerId,
+    fromUsername: me.username,
     isCounter: true
   }).catch(() => {})
 

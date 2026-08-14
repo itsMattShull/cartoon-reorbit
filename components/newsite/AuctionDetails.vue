@@ -37,6 +37,17 @@
             <span class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
             <span v-if="!auction.isHolidayItem && auction.ctoon.mintNumber" class="adet-dim">#{{ auction.ctoon.mintNumber }}</span>
             <span v-if="auction.ctoon.series" class="adet-dim">{{ auction.ctoon.series }}</span>
+            <!-- Deliberately in .adet-meta rather than in the bid block below.
+                 This row already wraps, so the seller costs no vertical space
+                 when it fits alongside the rarity chip — and on a phone the bid
+                 button is already close to the fold. -->
+            <span v-if="auction.creatorUsername" class="adet-lister">
+              <span class="adet-dim">Listed by</span>
+              <NuxtLink
+                :to="`/newsite/czone/${encodeURIComponent(auction.creatorUsername)}`"
+                class="adet-lister-link"
+              >{{ auction.creatorUsername }}</NuxtLink>
+            </span>
           </div>
 
           <!-- Timer / winner -->
@@ -232,7 +243,12 @@ async function loadAuction() {
   auction.value = data
   auction.value.highestBid = data.highestBid ?? data.currentBid ?? 0
   bids.value       = data.bids || []
-  userPoints.value = pts.points
+  // Available, not gross. The server rejects a bid it cannot fund from
+  // points-minus-active-locks (see bid.post.js), so gating the button and the
+  // "Need N more pts (have X)" hint on the gross balance told users they could
+  // afford bids that were then refused. `?? pts.points` keeps this working if
+  // the endpoint is ever rolled back.
+  userPoints.value = pts.available ?? pts.points
   blockedByFeaturedLead.value = !!data.blockedByFeaturedLead
   currentTopBidder.value = topBidderFromHistory.value ?? data.highestBidderUsername ?? null
   recentSales.value = await $fetch(`/api/auction/${props.auctionId}/getRecentAuctions`)
@@ -557,14 +573,36 @@ onUnmounted(() => {
 
 .adet-dim { font-size: 0.6rem; color: rgba(255,255,255,0.42); }
 
+.adet-lister {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+}
+
+.adet-lister-link {
+  font-size: 0.62rem;
+  font-weight: bold;
+  color: var(--OrbitLightBlue);
+  text-decoration: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adet-lister-link:hover { text-decoration: underline; color: #fff; }
+
 .adet-timer { font-size: 0.7rem; font-weight: bold; color: #fca5a5; }
 .adet-winner { font-size: 0.72rem; font-weight: bold; color: var(--OrbitGreen); }
-.adet-winner-name { color: #fff; }
+/* min-width/ellipsis: these are nowrap text runs inside a space-between flex row
+   with no shrink floor, so a long username would otherwise punch out of
+   .adet-info and give the whole body a horizontal scrollbar. */
+.adet-winner-name { color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .adet-bid-info { display: flex; flex-direction: column; gap: 2px; }
 .adet-bid-row  { display: flex; justify-content: space-between; align-items: center; }
-.adet-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
-.adet-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; }
+.adet-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+.adet-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .adet-featured-notice {
   font-size: 0.6rem;
@@ -693,7 +731,7 @@ onUnmounted(() => {
   font-size: 0.65rem;
 }
 
-.adet-history-user { color: rgba(255,255,255,0.8); }
+.adet-history-user { color: rgba(255,255,255,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adet-history-amt  { font-weight: bold; color: #fff; }
 
 .adet-empty {
@@ -746,5 +784,15 @@ onUnmounted(() => {
   .adet-bid-btn { min-height: 36px; }
   /* Sub-16px inputs make iOS Safari zoom the page on focus. */
   .adet-autobid-input { font-size: 16px; }
+  /* .adet-meta's type is ~10px, which is not a tappable link. Matches the 32px
+     floor already used for .ah-view / .ah-relist in AuctionHouse.vue. */
+  .adet-lister-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 4px;
+    font-size: 0.7rem;
+    max-width: 160px;
+  }
 }
 </style>

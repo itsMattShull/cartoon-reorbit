@@ -14,11 +14,18 @@
 // is many hands, so these two routes are the highest-frequency authenticated endpoints in the
 // app. They read only the session row and Redis. Handlers that move points call
 // assertPlayable() themselves, since skipping guild-check means event.context.user is unset.
+// The notification badge is in the same position for a different reason: it is
+// not many calls per user action, it is one call per user per poll interval, on
+// every page, forever. It reads a single count and nothing else. It authenticates
+// off event.context.userId (set by the JWT middleware, which is not skipped here)
+// and folds the ban check into its own query — see the long note in
+// server/api/notifications/count.get.js.
 const HOT_PATHS = [
   '/api/game/guessctoon/answer',
   '/api/game/guessctoon/image/',
   '/api/game/blackjack/bet',
-  '/api/game/blackjack/action'
+  '/api/game/blackjack/action',
+  '/api/notifications/count'
 ]
 
 export function isHotPath (path) {

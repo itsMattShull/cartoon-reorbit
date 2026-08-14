@@ -60,7 +60,7 @@ export default defineEventHandler(async (event) => {
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
 
-  const [ctoonCount, uniqueCtoonRows] = await Promise.all([
+  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications] = await Promise.all([
     prisma.userCtoon.count({
       where: {
         userId: user.id,
@@ -73,8 +73,27 @@ export default defineEventHandler(async (event) => {
         userId: user.id,
         burnedAt: null
       }
-    })
+    }),
+    // Points committed to live auction bids and pending trade offers. UserPoints
+    // .points is the GROSS balance — locks are an overlay that every spend path
+    // subtracts at spend time — so without this the sidebar shows a number the
+    // user cannot actually spend.
+    //
+    // Both of these ride the /api/auth/me request rather than getting endpoints
+    // of their own. Every handler here authenticates by internally re-fetching
+    // this route, so a separate endpoint for either figure would re-derive this
+    // entire payload (including the two collection aggregates above) to return
+    // one integer. Added to the existing Promise.all, they cost one extra
+    // round trip each on a request that was happening anyway.
+    prisma.lockedPoints.aggregate({
+      _sum: { amount: true },
+      where: { userId: user.id, status: 'ACTIVE' }
+    }),
+    prisma.notification.count({ where: { userId: user.id, readAt: null } })
   ])
+
+  const lockedPoints = lockAgg._sum.amount || 0
+  const grossPoints  = user.points?.points || 0
 
   // Return full session data
   return {
@@ -85,7 +104,12 @@ export default defineEventHandler(async (event) => {
     avatar: user.avatar,
     username: user.username || null,
     roles: user.roles,
-    points: user.points?.points || 0,
+    points: grossPoints,
+    lockedPoints,
+    // What the user can actually commit right now. Clamped for display only; the
+    // spend paths do their own arithmetic and must not be fed a clamped figure.
+    availablePoints: Math.max(0, grossPoints - lockedPoints),
+    unreadNotifications,
     needsSetup: !(user.username && user.avatar && ctoonCount > 0),
     inGuild: user.inGuild,
     isAdmin: user.isAdmin,

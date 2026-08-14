@@ -22,10 +22,27 @@ export default defineEventHandler(async (event) => {
     include: {
       userCtoon: { include: { ctoon: true } },
       winner: { select: { username: true } },
-      highestBidder: { select: { username: true } }
+      highestBidder: { select: { username: true } },
+      // Username only, never creatorId. No party's raw user id is exposed by this
+      // route (winner and highestBidder are username-only above), and handing out
+      // a stable id would give callers a join key across other endpoints.
+      creator: { select: { username: true } }
     }
   })
   if (!auction) throw createError({ statusCode: 404, statusMessage: 'Auction not found' })
+
+  // Who listed this. `creatorId` is nullable for system stock: auction-only
+  // listings and dissolve-launched auctions are created against the official
+  // account, and a dissolved user's live auctions are reassigned to it, so a null
+  // here means the official account rather than an unknown seller.
+  let creatorUsername = auction.creator?.username || null
+  if (!creatorUsername && !auction.creatorId) {
+    const official = await prisma.user.findUnique({
+      where: { username: process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial' },
+      select: { username: true }
+    })
+    creatorUsername = official?.username || null
+  }
 
   // Holiday flag for this cToon
   const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
@@ -104,6 +121,7 @@ export default defineEventHandler(async (event) => {
     canRelist,
     highestBid: auction.highestBid ?? currentBid,
     highestBidderUsername: auction.highestBidder?.username || null,
+    creatorUsername,
     bids: bids.map(b => ({ user: b.user.username, amount: b.amount })),
     winnerUsername: auction.winner?.username || null
   }
