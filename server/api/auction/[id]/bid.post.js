@@ -6,6 +6,7 @@ import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { assertFeaturedEligibility, assertNoConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
+import { notifyOutbid, notifyAuctionBid } from '@/server/utils/notifications'
 
 const ANTI_SNIPE_MS = 60_000
 
@@ -130,7 +131,11 @@ export default defineEventHandler(async (event) => {
 
     // Compute available points = total points - active locked points
     const up = await tx.userPoints.findUnique({ where: { userId } })
-    const activeLocks = await tx.lockedPoints.findMany({
+    // Summed in Postgres rather than shipping every lock row over the wire to
+    // reduce in JS. This runs inside the auction's hot transaction, and the new
+    // (userId, status) INCLUDE (amount) index makes it index-only.
+    const lockAgg = await tx.lockedPoints.aggregate({
+      _sum: { amount: true },
       where: {
         userId,
         status: 'ACTIVE',
@@ -141,9 +146,8 @@ export default defineEventHandler(async (event) => {
           ],
         },
       },
-      select: { amount: true },
     })
-    const lockedSum = activeLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
+    const lockedSum = lockAgg._sum.amount || 0
     const totalPts  = up?.points || 0
     const available = totalPts - lockedSum
     if (available < manualAmount) {
@@ -222,6 +226,49 @@ export default defineEventHandler(async (event) => {
       console.error('[AuctionClose] Failed to reschedule after bid:', err)
     )
   }
+
+  // 5b) In-app notifications.
+  //
+  // Placement matters here. Not inside the transaction above: that block already
+  // runs ~10 queries plus the unbounded proxy auto-bid loop while holding row
+  // locks on this auction, and every concurrent bidder serialises behind it.
+  // Not down with the Discord DM either: that sits behind a fresh socket.io
+  // handshake with a 1500ms worst case, and the bidder's response already waits
+  // on it. After the commit, not awaited, is the only place that costs the
+  // bidder nothing.
+  //
+  // The recipients come from `outbidUserIds`, which the transaction already
+  // accumulates from both the manual displacement and the proxy cascade. Note
+  // the DM path below deliberately uses a lossier reconstruction that picks only
+  // the LAST leader to lose the lead, because DMs are expensive; the hub is
+  // cheap, so it can notify everyone who was actually outbid. In a cascade
+  // A → B → A → C, the DM path tells only A, while this tells both A and B.
+  ;(async () => {
+    const finalLeaderId = finalAuction?.highestBidderId ?? null
+    const finalAmount   = finalAuction?.highestBid ?? manualAmount
+
+    const ctoon = await db.auction.findUnique({
+      where: { id: auctionId },
+      select: { userCtoon: { select: { ctoon: { select: { name: true } } } } }
+    })
+    const ctoonName = ctoon?.userCtoon?.ctoon?.name || null
+
+    const outbid = Array.from(new Set(outbidUserIds))
+      .filter(uid => uid && uid !== finalLeaderId)
+    for (const uid of outbid) {
+      await notifyOutbid(db, { userId: uid, auctionId, ctoonName, amount: finalAmount })
+    }
+
+    // One notification per request, not per Bid row. A single manual bid into a
+    // proxy war writes many Bid rows, and the seller does not want a card for
+    // each rung of the ladder. The collapse index makes repeat bids over time
+    // bump a count rather than stack up, too.
+    if (pre.creatorId && pre.creatorId !== userId) {
+      await notifyAuctionBid(db, {
+        userId: pre.creatorId, auctionId, ctoonName, amount: finalAmount
+      })
+    }
+  })().catch(err => console.error('[notifications] bid path:', err?.message || err))
 
   // 6) Emit socket events
   const url = useRuntimeConfig().socketOrigin

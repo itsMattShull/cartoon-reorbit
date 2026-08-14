@@ -11,6 +11,9 @@ import { startDiagnostics } from './diagnostics/telemetry.mjs'
 import { Worker } from 'bullmq'
 import { redisConnection, scheduleAuctionClose, scheduleMintEnd } from './utils/queues.js'
 import { resolveAuctionCloseOutcome, AUCTION_CLOSE_DOUBLE_SALE } from './utils/auctionClose.js'
+// Relative, like everything else here: this is a plain Node process, so the `@/`
+// alias Nuxt handlers use does not resolve. See the header of that file.
+import { notifyAuctionWon } from './utils/notifications.js'
 import { getRedis } from './utils/redis.js'
 import * as redisState from './utils/redisState.js'
 
@@ -2989,7 +2992,11 @@ startEdRpsSweep(io)
 async function performAuctionClose(auctionId) {
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
-    select: { id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, createdAt: true }
+    select: {
+      id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, createdAt: true,
+      // Only for the "you won" notification's text.
+      userCtoon: { select: { ctoon: { select: { name: true } } } }
+    }
   })
 
   // Guard: already closed or cancelled (e.g. duplicate job fire)
@@ -3137,6 +3144,21 @@ async function performAuctionClose(auctionId) {
           method:    'Auction',
           direction: 'decrease'
         }
+      })
+
+      // "You won" goes here, inside the settle branch, rather than after the
+      // transaction. Two reasons. It is then atomic with the payout, so a
+      // notification can never exist for a sale that rolled back. And it is
+      // unreachable from the two terminal paths above that must NOT produce one:
+      // the early return when a concurrent anti-snipe bid extended endAt (no
+      // sale happened yet), and the DOUBLE_SALE branch, where the bidder did not
+      // get the cToon and is owed a manual refund decision — telling them they
+      // won would be worse than telling them nothing.
+      await notifyAuctionWon(tx, {
+        userId: winningBid.userId,
+        auctionId: id,
+        ctoonName: auc.userCtoon?.ctoon?.name || null,
+        amount: winningBid.amount
       })
 
       await tx.lockedPoints.updateMany({
