@@ -2138,6 +2138,7 @@ model DissolveAuctionQueue {
   fromInactive   Boolean   @default(false) // true = queued via the automatic 9-month inactivity dissolve
   sourceUsername String? // username of the dissolved account this cToon came from
   scheduledFor   DateTime? // UTC; null = not yet scheduled
+  pinnedAt       DateTime? // non-null = a mod manually rescheduled this entry (set by [id].patch.js); excluded from applyDissolveSchedule's bulk recompute unless includePinned is passed
   createdAt      DateTime  @default(now())
 
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
