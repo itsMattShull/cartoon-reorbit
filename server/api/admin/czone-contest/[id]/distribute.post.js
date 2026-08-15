@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
       winnerPrizes: true,
       participantPrizes: true,
       submissions: {
-        select: { id: true, userId: true }
+        select: { id: true, userId: true, imageUrl: true }
       }
     }
   })
@@ -119,7 +119,7 @@ export default defineEventHandler(async (event) => {
   // Fire the Discord announcement without blocking the admin's response — Discord being
   // slow/unreachable must never make a successful, already-committed distribution look failed.
   // announceCZoneContestWinner never throws; this catch is just a safety net.
-  announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes)
+  announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes, winnerSubmission.imageUrl)
     .catch(e => console.error('cZone contest Discord announcement failed:', e?.message || e))
 
   return {
@@ -130,7 +130,7 @@ export default defineEventHandler(async (event) => {
   }
 })
 
-async function announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes) {
+async function announceContestDistribution(contest, winnerUserId, winnerPrizes, participantPrizes, winnerImageUrl) {
   const ctoonIds = [
     ...(winnerPrizes.ctoons ?? []).map(c => c.ctoonId),
     ...(participantPrizes.ctoons ?? []).map(c => c.ctoonId)
@@ -151,6 +151,7 @@ async function announceContestDistribution(contest, winnerUserId, winnerPrizes, 
     winnerUserId,
     winnerPrizeSummary: withNames(winnerPrizes),
     participantPrizeSummary: withNames(participantPrizes),
-    participantCount: contest.submissions.length
+    participantCount: contest.submissions.length,
+    winnerImageUrl
   })
 }
