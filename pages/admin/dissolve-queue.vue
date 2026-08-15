@@ -47,23 +47,32 @@
                   <span v-if="entry.series"> · {{ entry.series }}</span>
                   <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
-                  <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                </div>
+                <div class="flex flex-wrap items-center gap-1 mt-1">
+                  <span class="px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
-                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
-                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.isFeatured" class="px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.pinned" class="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-xs text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
               </div>
-              <div class="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
-                <div class="hidden sm:block text-xs text-gray-600">{{ fmtCST(entry.scheduledFor) }}</div>
+              <div class="flex flex-col sm:flex-row items-end sm:items-center gap-1 shrink-0">
+                <div class="hidden sm:block text-xs text-gray-600 mr-1">{{ fmtCST(entry.scheduledFor) }}</div>
                 <button
                   @click="openReschedule(entry)"
-                  class="text-xs text-blue-600 hover:text-blue-800"
+                  class="px-2 py-1.5 text-xs rounded text-blue-600 hover:bg-blue-50"
                 >Reschedule</button>
                 <button
+                  v-if="entry.pinned"
+                  @click="unpinEntry(entry.id)"
+                  class="px-2 py-1.5 text-xs rounded text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+                  :disabled="unpinningId === entry.id"
+                >{{ unpinningId === entry.id ? '…' : 'Unpin' }}</button>
+                <button
                   @click="cancelEntry(entry.id)"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="px-2 py-1.5 text-xs rounded text-red-500 hover:bg-red-50 disabled:opacity-50"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : 'Unschedule' }}</button>
               </div>
@@ -187,10 +196,13 @@
                   <span v-if="entry.series"> · {{ entry.series }}</span>
                   <span v-if="entry.set"> · {{ entry.set }}</span>
                   <span v-if="entry.mintNumber != null"> · Mint #{{ entry.mintNumber }}</span>
-                  <span class="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                </div>
+                <div class="flex flex-wrap items-center gap-1 mt-1">
+                  <span class="px-1.5 py-0.5 rounded text-xs font-medium"
                         :class="categoryChip(entry.category)">{{ entry.category }}</span>
-                  <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
-                  <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.isFeatured" class="px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Featured</span>
+                  <span v-if="entry.fromInactive" class="px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">From Inactive</span>
+                  <span v-if="entry.pinned" class="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-xs text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-xs text-gray-500 mt-1">
@@ -200,11 +212,17 @@
               <div class="shrink-0 flex flex-col items-end gap-1">
                 <button
                   @click="openReschedule(entry)"
-                  class="text-xs text-blue-600 hover:text-blue-800"
+                  class="px-2 py-1.5 text-xs rounded text-blue-600 hover:bg-blue-50"
                 >Reschedule</button>
                 <button
+                  v-if="entry.pinned"
+                  @click="unpinEntry(entry.id)"
+                  class="px-2 py-1.5 text-xs rounded text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+                  :disabled="unpinningId === entry.id"
+                >{{ unpinningId === entry.id ? '…' : 'Unpin' }}</button>
+                <button
                   @click="cancelEntry(entry.id)"
-                  class="text-xs text-red-500 hover:text-red-700"
+                  class="px-2 py-1.5 text-xs rounded text-red-500 hover:bg-red-50 disabled:opacity-50"
                   :disabled="cancellingId === entry.id"
                 >{{ cancellingId === entry.id ? '…' : (entry.scheduledFor ? 'Unschedule' : 'Remove') }}</button>
               </div>
@@ -291,6 +309,51 @@
             :disabled="scheduling"
             class="w-full sm:w-auto px-4 py-2 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
           >{{ scheduling ? 'Scheduling…' : 'Apply Schedule' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reschedule All: pinned-entry confirmation modal -->
+    <div v-if="showRescheduleConfirm" class="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-black/40" @click.self="closeRescheduleConfirm">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div class="p-4 sm:p-5 border-b">
+          <h2 class="font-semibold text-lg">Some auctions were manually rescheduled</h2>
+        </div>
+
+        <div class="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 text-sm text-gray-700 leading-relaxed">
+          <p>
+            <span class="font-semibold">{{ pinnedCount }}</span>
+            {{ pinnedCount === 1 ? 'cToon currently has' : 'cToons currently have' }}
+            a date/time that a mod manually picked for it. That's called being
+            <span class="font-semibold">"pinned."</span>
+          </p>
+          <p>
+            Normally, "Reschedule All" recalculates the date/time for every entry using the cadence
+            settings above. Pinned entries are protected from that by default, so a mod's manual
+            choice doesn't get silently undone by this form.
+          </p>
+          <p>What should this run do with the pinned {{ pinnedCount === 1 ? 'entry' : 'entries' }}?</p>
+        </div>
+
+        <div class="p-4 sm:p-5 border-t space-y-2">
+          <button
+            @click="doApplySchedule(false)"
+            :disabled="scheduling"
+            class="w-full px-4 py-2.5 text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+          >Keep the {{ pinnedCount === 1 ? 'pinned entry' : `${pinnedCount} pinned entries` }} as-is (Recommended)</button>
+          <button
+            @click="doApplySchedule(true)"
+            :disabled="scheduling"
+            class="w-full px-4 py-2.5 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >Reset the pinned {{ pinnedCount === 1 ? 'entry' : 'entries' }} too</button>
+          <p class="text-xs text-gray-400 text-center px-2">
+            Resetting will erase those manually-picked dates and reassign them like any other queue entry.
+          </p>
+          <button
+            @click="closeRescheduleConfirm"
+            :disabled="scheduling"
+            class="w-full px-4 py-2 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          >Cancel</button>
         </div>
       </div>
     </div>
@@ -520,6 +583,10 @@ const scheduling      = ref(false)
 const scheduleError   = ref('')
 const scheduleSuccess = ref('')
 const cancellingId    = ref(null)
+const unpinningId     = ref(null)
+
+const showRescheduleConfirm = ref(false)
+const pinnedCount = computed(() => allEntries.value.filter(e => e.pinned).length)
 
 async function loadData() {
   try {
@@ -541,7 +608,22 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
 })
 
-async function applySchedule() {
+function applySchedule() {
+  // Recompute-everything can silently overwrite dates mods hand-picked for
+  // specific entries — make that an explicit choice instead of a surprise.
+  if (form.value.reschedule && pinnedCount.value > 0) {
+    showRescheduleConfirm.value = true
+    return
+  }
+  doApplySchedule(false)
+}
+
+function closeRescheduleConfirm() {
+  showRescheduleConfirm.value = false
+}
+
+async function doApplySchedule(includePinned) {
+  showRescheduleConfirm.value = false
   scheduling.value    = true
   scheduleError.value = ''
   scheduleSuccess.value = ''
@@ -555,6 +637,7 @@ async function applySchedule() {
         featuredPerCadence: f.featuredPerCadence,
         otherPerCadence:    f.otherPerCadence,
         reschedule:         f.reschedule,
+        includePinned,
       }
     })
     scheduleSuccess.value = `Scheduled ${res.scheduled} entries.`
@@ -612,13 +695,28 @@ async function saveReschedule(id) {
       method: 'PATCH',
       body: { scheduledForUtc }
     })
-    updateEntryInLists(id, { scheduledFor: scheduledForUtc })
+    updateEntryInLists(id, { scheduledFor: scheduledForUtc, pinned: true })
     cancelReschedule()
     await loadData()
   } catch (e) {
     rescheduleError.value = e?.data?.statusMessage || 'Failed to reschedule entry.'
   } finally {
     reschedulingSaving.value = false
+  }
+}
+
+async function unpinEntry(id) {
+  unpinningId.value = id
+  try {
+    await $fetch(`/api/admin/dissolve-queue/${id}`, {
+      method: 'PATCH',
+      body: { unpin: true }
+    })
+    updateEntryInLists(id, { pinned: false })
+  } catch (e) {
+    console.error('Failed to unpin entry', e)
+  } finally {
+    unpinningId.value = null
   }
 }
 
