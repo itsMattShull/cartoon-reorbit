@@ -30,11 +30,13 @@ export default defineEventHandler(async (event) => {
     OTHER:    { total: 0, scheduled: 0, unscheduled: 0 },
   }
 
+  let pinnedCount = 0
   for (const e of allEntries) {
     const cat = byCategory[e.category] || byCategory.OTHER
     cat.total++
     if (e.scheduledFor) cat.scheduled++
     else cat.unscheduled++
+    if (e.pinnedAt) pinnedCount++
   }
 
   const mapEntry = (e) => ({
@@ -45,6 +47,7 @@ export default defineEventHandler(async (event) => {
     fromInactive:   e.fromInactive,
     sourceUsername: e.sourceUsername,
     scheduledFor:   e.scheduledFor,
+    pinned:         !!e.pinnedAt,
     createdAt:      e.createdAt,
     ctoonName:      e.userCtoon?.ctoon?.name ?? null,
     ctoonImage:     e.userCtoon?.ctoon?.assetPath ?? null,
@@ -66,6 +69,7 @@ export default defineEventHandler(async (event) => {
   return {
     total: allEntries.length,
     byCategory,
+    pinnedCount,
     upcoming,
     entries,
   }

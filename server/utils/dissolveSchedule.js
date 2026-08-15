@@ -54,9 +54,12 @@ export async function saveDissolveScheduleConfig({ cadenceDays, featuredPerCaden
  * @param {number} opts.featuredPerCadence
  * @param {number} opts.otherPerCadence
  * @param {boolean} [opts.reschedule] - if true, recompute every entry (not just unscheduled ones)
+ * @param {boolean} [opts.includePinned] - if true (and reschedule is true), also recompute
+ *   entries a mod manually rescheduled (pinnedAt set), clearing their pin in the process.
+ *   Ignored when reschedule is false, since unscheduled entries are never pinned.
  * @returns {Promise<number>} number of entries scheduled
  */
-export async function applyDissolveSchedule({ startAtUtc, cadenceDays, featuredPerCadence, otherPerCadence, reschedule = false }) {
+export async function applyDissolveSchedule({ startAtUtc, cadenceDays, featuredPerCadence, otherPerCadence, reschedule = false, includePinned = false }) {
   const startMs = new Date(startAtUtc).getTime()
   if (isNaN(startMs)) throw new Error('Invalid startAtUtc')
 
@@ -65,8 +68,12 @@ export async function applyDissolveSchedule({ startAtUtc, cadenceDays, featuredP
     OTHER:    Number(otherPerCadence)    || 0,
   }
 
+  const where = reschedule
+    ? (includePinned ? {} : { pinnedAt: null })
+    : { scheduledFor: null }
+
   const entries = await prisma.dissolveAuctionQueue.findMany({
-    where: reschedule ? {} : { scheduledFor: null },
+    where,
     orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     select: { id: true, category: true, scheduledFor: true }
   })
@@ -91,7 +98,9 @@ export async function applyDissolveSchedule({ startAtUtc, cadenceDays, featuredP
       const scheduledFor = new Date(startMs + i * intervalMs)
       await prisma.dissolveAuctionQueue.update({
         where: { id: ids[i] },
-        data:  { scheduledFor }
+        // Any entry swept up by the auto-scheduler is auto-managed going
+        // forward, so clear its pin (a no-op for entries that weren't pinned).
+        data:  { scheduledFor, pinnedAt: null }
       })
       await scheduleDissolveAuctionLaunch(ids[i], scheduledFor)
       scheduled++

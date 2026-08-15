@@ -724,7 +724,10 @@ async function enforceDormantAccounts() {
         cadenceDays,
         featuredPerCadence,
         otherPerCadence,
-        reschedule: true
+        reschedule: true,
+        // Never let the automatic inactivity sweep touch entries a mod
+        // hand-scheduled — only an explicit admin "Reschedule All" override can.
+        includePinned: false
       })
     } catch (err) {
       console.error('[enforceDormantAccounts] Failed to auto-schedule dissolve queue:', err)
