@@ -1,3 +1,4 @@
+<!-- claude-pipeline-test: verifies automated issue pickup routine -->
 ## Cartoon ReOrbit
 This is the codebase for [https://www.cartoonreorbit.com](https://www.cartoonreorbit.com). It’s a clone of Cartoon Orbit, a Cartoon Network game/community from the early 2000s.
 
