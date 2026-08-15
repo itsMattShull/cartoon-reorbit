@@ -65,7 +65,9 @@ export default defineEventHandler(async (event) => {
   try {
     await mkdir(uploadDir, { recursive: true })
 
-    const safeExt = extname(filePart.filename || '').toLowerCase() || '.png'
+    const ALLOWED_EXTS = new Set(['.png', '.jpg', '.jpeg'])
+    const requestedExt = extname(filePart.filename || '').toLowerCase()
+    const safeExt = ALLOWED_EXTS.has(requestedExt) ? requestedExt : '.png'
     filename = `${me.id}-${id}-${Date.now()}${safeExt}`
     await writeFile(join(uploadDir, filename), filePart.data)
 

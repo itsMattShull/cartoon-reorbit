@@ -301,7 +301,7 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 // Everything else (content text, @everyone/@here, roles, other users) is blocked at the
 // API level via allowed_mentions, so message content built from user-controlled strings
 // (usernames, contest/item names, etc.) can never trigger an unintended mass-ping.
-export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = []) {
+export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = [], embeds = []) {
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
   const authHeader = rawToken.startsWith('Bot ') ? rawToken : `Bot ${rawToken}`
@@ -314,7 +314,8 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
       },
       body: JSON.stringify({
         content,
-        allowed_mentions: { parse: [], users: mentionUserIds }
+        allowed_mentions: { parse: [], users: mentionUserIds },
+        ...(embeds.length ? { embeds } : {})
       }),
       signal: AbortSignal.timeout(5000)
     })
@@ -405,7 +406,8 @@ export async function announceCZoneContestWinner(prisma, {
   winnerUserId,
   winnerPrizeSummary,
   participantPrizeSummary,
-  participantCount = 0
+  participantCount = 0,
+  winnerImageUrl = null
 }) {
   try {
     const [config, winner] = await Promise.all([
@@ -434,7 +436,17 @@ export async function announceCZoneContestWinner(prisma, {
       msg += `\n🎁 All ${participantCount} participant${participantCount === 1 ? '' : 's'} received: ${participantParts}.`
     }
 
-    await sendGuildChannelMessageById(channelId, msg, botToken, canPing ? [winner.discordId] : [])
+    const embeds = []
+    if (winnerImageUrl) {
+      const isProd = process.env.NODE_ENV === 'production'
+      const baseUrl = isProd ? 'https://www.cartoonreorbit.com' : 'http://localhost:3000'
+      embeds.push({
+        title: String(contestName || 'cZone Contest').slice(0, 256),
+        image: { url: encodeURI(`${baseUrl}${winnerImageUrl}`) }
+      })
+    }
+
+    await sendGuildChannelMessageById(channelId, msg, botToken, canPing ? [winner.discordId] : [], embeds)
   } catch (e) {
     console.error('announceCZoneContestWinner failed:', e?.message || e)
   }
