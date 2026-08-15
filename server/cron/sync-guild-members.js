@@ -1057,7 +1057,11 @@ async function createDailyFeaturedAuction() {
       // itself, rather than loading every pending userCtoonId into a notIn
       // array — stays bounded as the AuctionOnly table grows. Backed by the
       // AuctionOnly(userCtoonId, isStarted) index.
-      auctionOnlyListings: { none: { isStarted: false } }
+      auctionOnlyListings: { none: { isStarted: false } },
+      // Excludes cToons sitting in the dissolve queue awaiting their own
+      // scheduled auto-listing (dissolve-auction-launch.worker.js), so this
+      // job never double-lists / preempts that separate launch.
+      dissolveAuctionQueue: null
     },
     include: {
       ctoon: {
