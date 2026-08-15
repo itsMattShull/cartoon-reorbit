@@ -19,7 +19,11 @@
           <div class="settings-body">
             <div class="settings-row">
               <div>
-                <h2 class="settings-row-title">Auction Notifications</h2>
+                <!-- Named for the channel it actually controls. In-app
+                     notifications are a separate channel and deliberately ignore
+                     this flag: turning it off means "stop DMing me", not "hide
+                     alerts inside the site I am looking at". -->
+                <h2 class="settings-row-title">Auction Discord DMs</h2>
                 <p class="settings-row-desc">Receive Discord DMs when you're outbid on an auction.</p>
               </div>
 

@@ -4,6 +4,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -226,8 +227,18 @@ export default defineEventHandler(async (event) => {
     maxWait: 10000
   })
 
+  // 7a) In-app notification to the initiator — their sent offer was accepted.
+  // Ahead of the DM block below because that block awaits two Discord API calls;
+  // this one must not be stuck behind them, and must not be skipped when the
+  // user has no Discord id or the bot token is unset.
+  notifyTradeOfferAccepted(prisma, {
+    userId: offer.initiatorId,
+    offerId,
+    byUsername: me.username
+  }).catch(() => {})
+
   try {
-    // 7) Notify initiator via Discord DM
+    // 7b) Notify initiator via Discord DM
     if (initiator?.discordId && process.env.BOT_TOKEN) {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'

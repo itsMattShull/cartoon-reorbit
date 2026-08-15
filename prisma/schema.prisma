@@ -16,6 +16,18 @@ enum LockedPointsReason {
   TRADE_OFFER
 }
 
+/// In-app notification kinds. Deliberately a closed set: server/utils/notifications.js
+/// builds every title and body from a fixed whitelist of fields per type, so no
+/// caller can smuggle another user's private data (an auto-bid maximum, say) into
+/// text that gets shown to someone else.
+enum NotificationType {
+  AUCTION_OUTBID
+  AUCTION_NEW_BID
+  AUCTION_WON
+  TRADE_OFFER_RECEIVED
+  TRADE_OFFER_ACCEPTED
+}
+
 /// Current state of a lock
 enum LockedPointsStatus {
   ACTIVE
@@ -96,6 +108,40 @@ model LockedPoints {
   @@index([userId, status])
   @@index([contextType, contextId, status])
   @@map("loackedPoints")
+}
+
+/// One in-app notification. Rows are collapsed rather than accumulated: repeated
+/// events of the same kind about the same thing (twelve bids on one auction, three
+/// trade offers from one user) bump `count` on the existing unread row instead of
+/// inserting twelve. That is enforced by a partial unique index on
+/// (userId, type, contextId) WHERE "readAt" IS NULL, which lives in the migration
+/// because partial indexes are not expressible in the Prisma schema language.
+///
+/// There is deliberately no `link` column. A free-text route written by five call
+/// sites — one of them in a separate process — and rendered into a NuxtLink `:to`
+/// is an open-redirect and `javascript:` sink that would persist in the database.
+/// The route is derived on the client from `type` alone; `contextId` is only ever
+/// a collapse key and, for auctions, the id used to build the path.
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  type        NotificationType
+  title       String
+  body        String?
+  contextType LockedContextType?
+  contextId   String?
+  /// How many times this event has recurred while still unread. 1 for a fresh row.
+  count       Int              @default(1)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  // Serves the drawer's "newest N for this user". The badge's "count unread"
+  // rides a partial index created in the migration, so the hot query touches an
+  // index sized by unread volume rather than by total history.
+  @@index([userId, createdAt])
 }
 
 model CZone {
@@ -429,6 +475,7 @@ model User {
   gamePointLogs             GamePointLog[]
   pointsLogs                PointsLog[]
   lockedPoints              LockedPoints[]
+  notifications             Notification[]
   claims                    Claim[]
   visits                    Visit[]
   points                    UserPoints?

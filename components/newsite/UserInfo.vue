@@ -17,7 +17,19 @@
         </template>
         <template v-else>
           <NuxtLink :to="`/newsite/czone/${user.username}`" class="user-info-username" ref="usernameEl">{{ user.username }}</NuxtLink>
-          <span class="user-info-stat">{{ (user.points ?? 0).toLocaleString() }} Points</span>
+          <!-- Locked rides the existing points line rather than getting a line of
+               its own. This box is a fixed 85px with overflow:hidden, and its
+               current five rows already measure ~90px — the daily-reset row is
+               being shaved today. A sixth row would clip the divider and the
+               countdown outright, and growing --sidebar-top-height means
+               shrinking --sidebar-middle-height in :root plus the five pages
+               that override it, or WinballPromo gets clipped instead. -->
+          <span class="user-info-stat" :title="lockedTitle">
+            {{ (user.points ?? 0).toLocaleString() }} Points<span
+              v-if="lockedPoints > 0"
+              class="user-info-locked"
+            > · {{ lockedPoints.toLocaleString() }} locked</span>
+          </span>
           <span class="user-info-stat">{{ (collectionSummary.uniqueCount ?? 0).toLocaleString() }} Unique cToons</span>
           <span class="user-info-stat">{{ (collectionSummary.totalCount ?? 0).toLocaleString() }} Total cToons</span>
         </template>
@@ -39,6 +51,18 @@
 import { DateTime } from 'luxon'
 
 const { user, fetchSelf } = useAuth()
+
+// Points committed to live auction bids and pending trade offers. Comes back on
+// the /api/auth/me payload that fetchSelf() below already loads, so this costs
+// no extra request.
+const lockedPoints = computed(() => Number(user.value?.lockedPoints ?? 0))
+const lockedTitle = computed(() => {
+  if (lockedPoints.value <= 0) return ''
+  const available = Number(user.value?.availablePoints ?? 0)
+  return `${lockedPoints.value.toLocaleString()} points are locked in auction bids and pending trade offers. `
+    + `You can spend ${available.toLocaleString()}.`
+})
+
 const collectionSummary = ref({ totalCount: 0, uniqueCount: 0 })
 const resetCountdown = ref('--:--:--')
 const ready = ref(false)
@@ -141,6 +165,15 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Brighter than the stat text it sits in, so the locked figure reads as a
+   distinct number rather than as part of the points total. .user-info-stat
+   already clips with an ellipsis, so on a narrow sidebar this degrades to
+   "12,340 Points · 2,5…" rather than breaking the fixed-height box. */
+.user-info-locked {
+  color: #ffd166;
+  font-weight: bold;
 }
 
 .user-info-divider {

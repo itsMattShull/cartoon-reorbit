@@ -9,7 +9,12 @@
         <button class="tr-tab" :class="{ active: tradeActiveTab === 'create' }" @click="switchTab('create')">Create Trade</button>
       </div>
       <div v-if="tradeActiveTab !== 'create'" class="tr-topbar-right">
-        <span class="tr-pts-label">{{ (user?.points ?? 0).toLocaleString() }} pts</span>
+        <span class="tr-pts-label">
+          {{ (user?.points ?? 0).toLocaleString() }} pts<span
+            v-if="(user?.lockedPoints ?? 0) > 0"
+            class="tr-pts-locked"
+          > · {{ (user.lockedPoints).toLocaleString() }} locked</span>
+        </span>
       </div>
       <div v-else-if="tradeTargetUser" class="tr-topbar-right">
         <span class="tr-step-indicator">Step {{ tradeCurrentStep }} of 3</span>
@@ -321,7 +326,7 @@
                 <input
                   type="number"
                   v-model.number="pointsToOffer"
-                  :max="user?.points || 0"
+                  :max="user?.availablePoints ?? user?.points ?? 0"
                   min="0"
                   @input="pointsToOffer = Math.max(0, pointsToOffer)"
                   class="tr-points-input"
@@ -1850,6 +1855,9 @@ onBeforeUnmount(() => {
 .tr-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
 .tr-topbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .tr-pts-label { font-size: 0.65rem; color: var(--OrbitGreen); font-weight: bold; }
+/* The points chip sits right above the offer builder, so the locked figure has
+   to be visible here too — otherwise the max on the points input looks arbitrary. */
+.tr-pts-locked { color: #ffd166; }
 .tr-step-indicator { font-size: 0.62rem; color: rgba(255,255,255,0.6); }
 
 /* ── Content ── */

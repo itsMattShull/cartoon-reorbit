@@ -232,7 +232,12 @@ async function loadAuction() {
   auction.value = data
   auction.value.highestBid = data.highestBid ?? data.currentBid ?? 0
   bids.value       = data.bids || []
-  userPoints.value = pts.points
+  // Available, not gross. The server rejects a bid it cannot fund from
+  // points-minus-active-locks (see bid.post.js), so gating the button and the
+  // "Need N more pts (have X)" hint on the gross balance told users they could
+  // afford bids that were then refused. `?? pts.points` keeps this working if
+  // the endpoint is ever rolled back.
+  userPoints.value = pts.available ?? pts.points
   blockedByFeaturedLead.value = !!data.blockedByFeaturedLead
   currentTopBidder.value = topBidderFromHistory.value ?? data.highestBidderUsername ?? null
   recentSales.value = await $fetch(`/api/auction/${props.auctionId}/getRecentAuctions`)
@@ -559,12 +564,15 @@ onUnmounted(() => {
 
 .adet-timer { font-size: 0.7rem; font-weight: bold; color: #fca5a5; }
 .adet-winner { font-size: 0.72rem; font-weight: bold; color: var(--OrbitGreen); }
-.adet-winner-name { color: #fff; }
+/* min-width/ellipsis: these are nowrap text runs inside a space-between flex row
+   with no shrink floor, so a long username would otherwise punch out of
+   .adet-info and give the whole body a horizontal scrollbar. */
+.adet-winner-name { color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .adet-bid-info { display: flex; flex-direction: column; gap: 2px; }
 .adet-bid-row  { display: flex; justify-content: space-between; align-items: center; }
-.adet-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
-.adet-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; }
+.adet-bid-lbl  { font-size: 0.6rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+.adet-bid-amt  { font-size: 0.72rem; font-weight: bold; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .adet-featured-notice {
   font-size: 0.6rem;
@@ -693,7 +701,7 @@ onUnmounted(() => {
   font-size: 0.65rem;
 }
 
-.adet-history-user { color: rgba(255,255,255,0.8); }
+.adet-history-user { color: rgba(255,255,255,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adet-history-amt  { font-weight: bold; color: #fff; }
 
 .adet-empty {

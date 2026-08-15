@@ -290,7 +290,15 @@ html.newsite-active body {
       @created="onAuctionCreated"
     />
   </div>
-  <Onboarding />
+  <!-- Hidden while a modal is up. `.site-container` gets `transform: scale()` on
+       desktop, which makes it a stacking context at z-index auto, so the modals
+       inside it (CtoonInfoCard at 10000, AuctionModal at 1000) are trapped below
+       this sibling's z-50 and the floating pill paints over them. On mobile the
+       transform is dropped, the container stops being a stacking context, and
+       the modals cover the pill correctly — so without this the behaviour flips
+       at 768px, which is exactly the class of bug the note above warns about.
+       A permanently-visible unread badge would make it obvious. -->
+  <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen" />
   <CMoonSelectModal />
 </template>
 

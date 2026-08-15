@@ -17,6 +17,7 @@ import {
   assertOfferHasContent,
   sendTradeOfferDM
 } from '@/server/utils/tradeOffer'
+import { notifyTradeOfferReceived } from '@/server/utils/notifications'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate user
@@ -85,6 +86,15 @@ export default defineEventHandler(async (event) => {
     pointsOffered,
     offeredCount: resolvedOffered.length,
     requestedCount: resolvedRequested.length,
+    isCounter: false
+  }).catch(() => {})
+
+  // In-app notification, same placement and same reasoning as the DM above:
+  // after the commit, not awaited.
+  notifyTradeOfferReceived(prisma, {
+    userId: recipient.id,
+    fromUserId: initiatorId,
+    fromUsername: me.username,
     isCounter: false
   }).catch(() => {})
 
