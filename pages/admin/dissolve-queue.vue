@@ -6,6 +6,7 @@
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold">Dissolve Queue</h1>
         <div class="flex items-center gap-4">
+          <button @click="openErrorsModal" class="text-sm text-red-600 underline">Errors</button>
           <button @click="openFeaturedModal" class="text-sm text-blue-600 underline">Edit Featured</button>
           <button @click="loadData" class="text-sm text-blue-600 underline">Refresh</button>
         </div>
@@ -441,6 +442,71 @@
         </div>
       </div>
     </div>
+
+    <!-- Errors modal: failures launching a queue entry into a live auction -->
+    <div v-if="showErrorsModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="closeErrorsModal">
+      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-2xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4 gap-2">
+          <h2 class="text-xl font-semibold">Errors</h2>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="errorLog.length"
+              type="button"
+              class="px-3 py-1.5 text-sm rounded border border-red-600 text-red-700 hover:bg-red-50"
+              @click="clearErrorLog"
+            >Clear Log</button>
+            <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeErrorsModal">X</button>
+          </div>
+        </div>
+
+        <div v-if="errorLogLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+        <template v-else>
+          <div v-if="errorLog.length" class="bg-gray-50 rounded-lg border divide-y">
+            <div v-for="e in errorLog" :key="e.id" class="p-3 sm:p-4">
+              <div class="flex flex-wrap items-center gap-2 text-sm">
+                <span class="font-medium">{{ e.ctoonName || 'Unknown cToon' }}</span>
+                <span v-if="e.mintNumber != null" class="text-gray-500">Mint #{{ e.mintNumber }}</span>
+                <span v-if="e.rarity" class="text-gray-500">· {{ e.rarity }}</span>
+                <span v-if="e.series" class="text-gray-500">· {{ e.series }}</span>
+                <span v-if="e.set" class="text-gray-500">· {{ e.set }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1">
+                <span>{{ fmtCST(e.createdAt) }}</span>
+                <span v-if="e.sourceUsername">· From: {{ e.sourceUsername }}</span>
+                <span v-if="e.userCtoonId">· userCtoonId: {{ e.userCtoonId }}</span>
+                <span v-if="e.queueEntryId">· queueEntryId: {{ e.queueEntryId }}</span>
+              </div>
+              <pre class="text-xs text-red-700 mt-2 whitespace-pre-wrap break-words">{{ e.message }}</pre>
+            </div>
+          </div>
+          <p v-else class="text-gray-500">No errors logged.</p>
+        </template>
+        <p v-if="errorLogError" class="text-red-600 mt-2 text-sm">{{ errorLogError }}</p>
+      </div>
+    </div>
+
+    <!-- Reschedule error modal: surfaces details when a reschedule save fails -->
+    <div v-if="showRescheduleErrorModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="closeRescheduleErrorModal">
+      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4 gap-2">
+          <h2 class="text-xl font-semibold text-red-700">Reschedule Failed</h2>
+          <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeRescheduleErrorModal">X</button>
+        </div>
+        <div v-if="rescheduleErrorDetails" class="space-y-2 text-sm">
+          <div><span class="font-medium">cToon:</span> {{ rescheduleErrorDetails.ctoonName || '—' }}
+            <span v-if="rescheduleErrorDetails.mintNumber != null"> (Mint #{{ rescheduleErrorDetails.mintNumber }})</span>
+          </div>
+          <div><span class="font-medium">Queue entry ID:</span> {{ rescheduleErrorDetails.entryId }}</div>
+          <div><span class="font-medium">Attempted date/time:</span> {{ rescheduleErrorDetails.attemptedLocal }} ({{ rescheduleErrorDetails.attemptedUtc }})</div>
+          <div><span class="font-medium">HTTP status:</span> {{ rescheduleErrorDetails.statusCode ?? '—' }}</div>
+          <div><span class="font-medium">Time of failure:</span> {{ rescheduleErrorDetails.occurredAt }}</div>
+          <div>
+            <div class="font-medium mb-1">Error details:</div>
+            <pre class="text-xs text-red-700 bg-gray-50 border rounded p-2 whitespace-pre-wrap break-words">{{ rescheduleErrorDetails.message }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -655,6 +721,15 @@ const rescheduleLocal     = ref('')
 const reschedulingSaving  = ref(false)
 const rescheduleError     = ref('')
 
+// Reschedule error modal
+const showRescheduleErrorModal = ref(false)
+const rescheduleErrorDetails   = ref(null)
+
+function closeRescheduleErrorModal() {
+  showRescheduleErrorModal.value = false
+  rescheduleErrorDetails.value = null
+}
+
 function toDatetimeLocal(iso) {
   const d = iso ? new Date(iso) : new Date()
   const pad = (n) => String(n).padStart(2, '0')
@@ -682,15 +757,30 @@ function updateEntryInLists(id, patch) {
   apply(allEntries.value)
 }
 
+// Matches the server-side floor in server/api/admin/dissolve-queue/[id].patch.js:
+// the launch job fires with delay = max(0, scheduledFor - now), so anything not
+// comfortably in the future would fire almost immediately instead of at the
+// intended time.
+const MIN_LEAD_MS = 60 * 1000
+
 async function saveReschedule(id) {
   rescheduleError.value = ''
   if (!rescheduleLocal.value) {
     rescheduleError.value = 'Please choose a date/time.'
     return
   }
+  const scheduledForDate = new Date(rescheduleLocal.value)
+  if (isNaN(scheduledForDate.getTime())) {
+    rescheduleError.value = 'Please choose a valid date/time.'
+    return
+  }
+  if (scheduledForDate.getTime() < Date.now() + MIN_LEAD_MS) {
+    rescheduleError.value = 'Please choose a date/time at least 1 minute in the future.'
+    return
+  }
   reschedulingSaving.value = true
   try {
-    const scheduledForUtc = new Date(rescheduleLocal.value).toISOString()
+    const scheduledForUtc = scheduledForDate.toISOString()
     await $fetch(`/api/admin/dissolve-queue/${id}`, {
       method: 'PATCH',
       body: { scheduledForUtc }
@@ -699,7 +789,19 @@ async function saveReschedule(id) {
     cancelReschedule()
     await loadData()
   } catch (e) {
+    const entry = [...upcoming.value, ...allEntries.value].find(x => x.id === id)
     rescheduleError.value = e?.data?.statusMessage || 'Failed to reschedule entry.'
+    rescheduleErrorDetails.value = {
+      entryId: id,
+      ctoonName: entry?.ctoonName || null,
+      mintNumber: entry?.mintNumber ?? null,
+      attemptedLocal: rescheduleLocal.value,
+      attemptedUtc: (() => { try { return scheduledForDate.toISOString() } catch { return '—' } })(),
+      statusCode: e?.statusCode ?? e?.data?.statusCode ?? e?.response?.status ?? null,
+      occurredAt: new Date().toISOString(),
+      message: e?.data?.statusMessage || e?.message || String(e),
+    }
+    showRescheduleErrorModal.value = true
   } finally {
     reschedulingSaving.value = false
   }
@@ -836,6 +938,38 @@ async function saveFeaturedConfig() {
     featuredError.value = e?.data?.statusMessage || 'Failed to save featured config.'
   } finally {
     savingFeatured.value = false
+  }
+}
+
+// ── Errors modal (dissolve-queue → live-auction launch failures) ──────────
+const showErrorsModal = ref(false)
+const errorLog        = ref([])
+const errorLogLoading = ref(false)
+const errorLogError   = ref('')
+
+async function openErrorsModal() {
+  showErrorsModal.value = true
+  errorLogError.value   = ''
+  errorLogLoading.value = true
+  try {
+    errorLog.value = await $fetch('/api/admin/dissolve-queue/errors', { headers })
+  } catch (e) {
+    errorLogError.value = e?.data?.statusMessage || 'Failed to load error log.'
+  } finally {
+    errorLogLoading.value = false
+  }
+}
+
+function closeErrorsModal() {
+  showErrorsModal.value = false
+}
+
+async function clearErrorLog() {
+  try {
+    await $fetch('/api/admin/dissolve-queue/errors', { method: 'DELETE' })
+    errorLog.value = []
+  } catch (e) {
+    errorLogError.value = e?.data?.statusMessage || 'Failed to clear error log.'
   }
 }
 </script>
