@@ -1550,7 +1550,9 @@ html:has(body.page-newsite-blackjack) {
    the box's width. That is how the four of them are fitted around the hands without anyone
    overlapping the cards. Grim's own image is half scythe — his body sits in its left 55% —
    so he hangs off the right end of the table to bring his body onto it. */
-.bj-char--jack    { left: 14%;  bottom: 74%; height: 70%; }   /* ~9%  wide -> 14-23%  */
+/* Jack is cut off at 58% of his own art rather than 63%: below that his gi tapers into a
+   narrow strip of hakama, and a strip that thin reads as a stick rather than a leg. */
+.bj-char--jack    { left: 14%;  bottom: 67%; height: 78%; }   /* ~10% wide -> 14-24%  */
 .bj-char--johnny  { left: 32%;  bottom: 58%; height: 88%; }   /* ~24% wide -> 32-56%  */
 .bj-char--courage { left: 58%;  bottom: 88%; height: 34%; }   /* ~15% wide -> 58-73%  */
 .bj-char--grim    { right: -15%; bottom: 64%; height: 78%; }  /* body      -> 74-97%  */
