@@ -1,0 +1,44 @@
+name: Enforce ready-for-claude label permission
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  check-label:
+    if: github.event.label.name == 'ready for claude'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Verify actor is allowed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const allowed = [
+              'itsMattShull',
+              'claude',
+              'TomSomerville',
+              'cjedwards4',
+              'cruzazulv2',
+              'MisTawne',
+              'GloopyGloop7',
+              'PixelPunkShaman',
+            ].map(u => u.toLowerCase());
+
+            const actor = context.actor.toLowerCase();
+
+            if (!allowed.includes(actor)) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                name: 'ready for claude',
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: `@${context.actor} you don't have permission to add the \`ready for claude\` label.`,
+              });
+            }
