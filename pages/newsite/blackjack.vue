@@ -82,41 +82,80 @@
       <div
         class="bj-scene"
         :class="[isGamble ? 'is-gamble' : 'is-practice', { 'no-cast': !showSpectators }]"
+        :style="sceneStyle"
         ref="scene"
       >
         <div class="bj-room" aria-hidden="true"></div>
 
-        <!-- Spectators. `v-if` rather than `display:none` — a hidden <img> still downloads,
-             and these are pure decoration that a phone should never pay for. -->
-        <template v-if="showSpectators">
-          <img src="/blackjack/samurai-jack.png" alt="" aria-hidden="true"
-               class="bj-char bj-char--jack" decoding="async" />
-          <img src="/blackjack/grim.png" alt="" aria-hidden="true"
-               class="bj-char bj-char--grim" decoding="async" />
-          <img src="/blackjack/courage.png" alt="" aria-hidden="true"
-               class="bj-char bj-char--courage" decoding="async" />
-          <img src="/blackjack/johnny-bravo.png" alt="Johnny Bravo, dealing"
-               class="bj-char bj-char--johnny" decoding="async" />
-        </template>
+        <!-- The table is a real drawing rather than a CSS ellipse. The characters sit behind
+             it in the stacking order, so its far edge cuts them off at the waist instead of
+             them bleeding through a translucent shape.
 
-        <div class="bj-felt" aria-hidden="true"></div>
-        <!-- Painted over the character bottoms: a cutout whose feet you can see reads as
-             clip-art, one cut off by furniture reads as someone standing behind a table. -->
-        <div class="bj-rail" aria-hidden="true"></div>
+             The cast and the hands both live inside this box rather than beside it. The box
+             is exactly the size of the drawing, so a percentage in here names a fixed spot ON
+             the table however the table is scaled. Positioning them against the scene instead
+             let them drift off the table as the scene changed shape. -->
+        <div class="bj-tablearea">
+          <!-- The cast, before the table in source order and below it in z-index, so the table
+               paints over their legs and cuts them off at the waist. A cutout whose feet you
+               can see reads as clip-art; one cut off by furniture reads as someone standing
+               behind a table.
+               `v-if` rather than `display:none` — a hidden <img> still downloads, and these are
+               decoration a phone should never pay for. -->
+          <template v-if="showSpectators">
+            <img src="/blackjack/samurai-jack.png" alt="" aria-hidden="true"
+                 class="bj-char bj-char--jack" decoding="async" />
+            <img src="/blackjack/grim.png" alt="" aria-hidden="true"
+                 class="bj-char bj-char--grim" decoding="async" />
+            <img src="/blackjack/courage.png" alt="" aria-hidden="true"
+                 class="bj-char bj-char--courage" decoding="async" />
+            <img src="/blackjack/johnny-bravo.png" alt="Johnny Bravo, dealing"
+                 class="bj-char bj-char--johnny" decoding="async" />
+          </template>
 
-        <!-- Dealer -->
-        <div class="bj-row bj-row--dealer">
-          <div class="bj-row-head">
-            <img v-if="!showSpectators" src="/blackjack/johnny-avatar.png" alt="Johnny Bravo"
-                 class="bj-avatar" decoding="async" />
-            <span class="bj-row-name">Johnny</span>
-            <span v-if="hand" class="bj-total" :class="{ 'is-bust': hand.dealer.busted }">
-              {{ hand.dealer.hidden ? hand.dealer.total + ' +' : hand.dealer.total }}
-            </span>
+          <img src="/blackjack/table.png" alt="" aria-hidden="true" class="bj-table" decoding="async" />
+
+          <!-- Dealer -->
+          <div class="bj-row bj-row--dealer">
+            <div class="bj-row-head">
+              <img v-if="!showSpectators" src="/blackjack/johnny-avatar.png" alt="Johnny Bravo"
+                   class="bj-avatar" decoding="async" />
+              <span class="bj-row-name">Johnny</span>
+              <span v-if="hand && dealerCards.length" class="bj-total"
+                    :class="{ 'is-bust': hand.dealer.busted && dealComplete }">
+                {{ shownDealerTotal }}<template v-if="dealerBackShown"> +</template>
+              </span>
+            </div>
+            <div class="bj-fan">
+              <BjCard
+                v-for="(card, i) in dealerCards" :key="'d' + i" :card="card" :index="i"
+                :flipping="i === 1 && flippingHole"
+              />
+              <div v-if="dealerBackShown" class="bj-card bj-card--back" :style="fanStyle(dealerCards.length)"></div>
+            </div>
           </div>
-          <div class="bj-fan">
-            <BjCard v-for="(card, i) in dealerCards" :key="'d' + i" :card="card" :index="i" />
-            <div v-if="hand && hand.dealer.hidden" class="bj-card bj-card--back" :style="fanStyle(1)"></div>
+
+          <!-- Player. Split hands resolve one at a time, so the active hand is shown full
+               size and the other collapses to a summary strip — smaller AND clearer than
+               two half-size hands on a phone. -->
+          <div class="bj-row bj-row--player">
+            <div v-if="inactiveHand" class="bj-otherhand">
+              Hand {{ inactiveHand.index + 1 }} · {{ inactiveHand.total }} ·
+              bet {{ inactiveHand.bet }}
+              <span v-if="inactiveHand.busted">· bust</span>
+            </div>
+            <div class="bj-row-head">
+              <span class="bj-row-name">
+                You<template v-if="hand && hand.hands.length > 1"> · hand {{ activeHand.index + 1 }}</template>
+              </span>
+              <span v-if="activeHand && playerCards.length" class="bj-total"
+                    :class="{ 'is-bust': activeHand.busted && dealComplete }">
+                {{ shownPlayerTotal }}<template v-if="activeHand.soft && !activeHand.busted && dealComplete"> soft</template>
+              </span>
+            </div>
+            <div class="bj-fan">
+              <BjCard v-for="(card, i) in playerCards" :key="'p' + i" :card="card" :index="i" />
+            </div>
           </div>
         </div>
 
@@ -137,28 +176,6 @@
             {{ spectatorBark.text }}
           </div>
         </transition>
-
-        <!-- Player. Split hands resolve one at a time, so the active hand is shown full
-             size and the other collapses to a summary strip — smaller AND clearer than
-             two half-size hands on a phone. -->
-        <div class="bj-row bj-row--player">
-          <div v-if="inactiveHand" class="bj-otherhand">
-            Hand {{ inactiveHand.index + 1 }} · {{ inactiveHand.total }} ·
-            bet {{ inactiveHand.bet }}
-            <span v-if="inactiveHand.busted">· bust</span>
-          </div>
-          <div class="bj-row-head">
-            <span class="bj-row-name">
-              You<template v-if="hand && hand.hands.length > 1"> · hand {{ activeHand.index + 1 }}</template>
-            </span>
-            <span v-if="activeHand" class="bj-total" :class="{ 'is-bust': activeHand.busted }">
-              {{ activeHand.total }}<template v-if="activeHand.soft && !activeHand.busted"> soft</template>
-            </span>
-          </div>
-          <div class="bj-fan">
-            <BjCard v-for="(card, i) in playerCards" :key="'p' + i" :card="card" :index="i" />
-          </div>
-        </div>
 
         <!-- Outcome stamp -->
         <transition name="bj-stamp">
@@ -190,7 +207,7 @@
             <button class="bj-btn bj-btn--ghost" :disabled="busy || !lastBet || lastBet > maxBet"
                     @click="pendingBet = toIncrement(Math.min(lastBet, maxBet))">Repeat</button>
             <button class="bj-btn bj-btn--gold bj-btn--wide"
-                    :disabled="busy || pendingBet < rules.minBet" @click="deal">
+                    :disabled="busy || dealing || pendingBet < rules.minBet" @click="deal">
               {{ pendingBet >= rules.minBet ? `Deal · ${pendingBet}` : `Min bet ${rules.minBet}` }}
             </button>
             <button class="bj-btn bj-btn--ghost" :disabled="busy || maxBet < rules.minBet"
@@ -414,13 +431,17 @@ function fanStyle (index) {
 // Rendered inline rather than as a separate file: it is a dozen lines and only this page
 // will ever use it.
 const BjCard = (props) => h('div', {
-  class: ['bj-card', (props.card.suit === 'H' || props.card.suit === 'D') ? 'is-red' : 'is-black'],
+  class: [
+    'bj-card',
+    (props.card.suit === 'H' || props.card.suit === 'D') ? 'is-red' : 'is-black',
+    props.flipping ? 'is-flipping' : ''
+  ],
   style: { '--i': props.index }
 }, [
   h('span', { class: 'bj-card-rank' }, props.card.rank),
   h('span', { class: 'bj-card-suit' }, SUIT_GLYPH[props.card.suit] || '')
 ])
-BjCard.props = ['card', 'index']
+BjCard.props = ['card', 'index', 'flipping']
 
 // ── state ─────────────────────────────────────────────────────────────────────
 const wrapper = ref(null)
@@ -512,6 +533,14 @@ const phase = computed(() => {
   return 'playing'
 })
 
+// Moving to the second split hand re-deals it from its own first card, so the switch is
+// visible rather than the totals silently changing.
+watch(() => hand.value?.active, (now, before) => {
+  if (now === undefined || before === undefined || now === before) return
+  shownPlayer.value = 0
+  runDeal()
+})
+
 const activeHand = computed(() => {
   if (!hand.value) return null
   return hand.value.hands[Math.min(hand.value.active, hand.value.hands.length - 1)]
@@ -520,8 +549,137 @@ const inactiveHand = computed(() => {
   if (!hand.value || hand.value.hands.length < 2) return null
   return hand.value.hands.find(h2 => h2.index !== activeHand.value?.index) ?? null
 })
-const dealerCards = computed(() => hand.value?.dealer.cards ?? [])
-const playerCards = computed(() => activeHand.value?.cards ?? [])
+// ── dealing pace ──────────────────────────────────────────────────────────────
+// The server hands over the whole hand at once, so without this every card would appear in
+// the same frame. These counters walk the table forward one card at a time.
+//
+// `shownDealer` counts SLOTS, not cards: while the hole card is face down the dealer occupies
+// two slots but `dealer.cards` holds only the up card, so counting cards would make the second
+// slot pop in a beat late.
+const shownDealer = ref(0)
+const shownPlayer = ref(0)
+const dealing = ref(false)
+const flippingHole = ref(false)
+let dealTimer = null
+let afterDeal = null
+
+// Reduced motion means no animation, so the pauses between cards would just be dead waiting —
+// the sequence collapses to something near-instant instead of theatre nobody can see.
+const reducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+const pace = (ms) => (reducedMotion() ? 40 : ms)
+const DEAL_GAP_MS = 430    // between cards on the opening deal
+const HIT_GAP_MS = 380     // a single card sliding in
+const FLIP_MS = 780        // the hole card turning over — the best beat in the game, so it gets room
+const DRAW_GAP_MS = 620    // the dealer drawing on himself afterwards
+
+const dealerSlots = computed(() => {
+  const h = hand.value
+  if (!h) return 0
+  return h.dealer.cards.length + (h.dealer.hidden ? 1 : 0)
+})
+
+/** Dealer cards actually on the table right now, with a face-down slot if one is still hidden. */
+const dealerCards = computed(() => (hand.value?.dealer.cards ?? []).slice(0, shownDealer.value))
+const dealerBackShown = computed(() =>
+  Boolean(hand.value?.dealer.hidden) && shownDealer.value >= dealerSlots.value
+)
+const playerCards = computed(() => (activeHand.value?.cards ?? []).slice(0, shownPlayer.value))
+
+const shownDealerTotal = computed(() => valueOfShown(dealerCards.value))
+const shownPlayerTotal = computed(() => valueOfShown(playerCards.value))
+
+/**
+ * Walks the table forward one card at a time.
+ *
+ * The opening deal alternates player, dealer, player, dealer, exactly as at a real table; a hit
+ * is a single card; and once the hole card turns over the dealer's own draws follow one by one.
+ * Each of those gets its own tempo below, because they are different moments — a card sliding
+ * across the felt should not take as long as the reveal that decides the hand.
+ */
+function runDeal () {
+  clearTimeout(dealTimer)
+
+  const targetP = activeHand.value?.cards.length ?? 0
+  const targetD = dealerSlots.value
+  const hidden = Boolean(hand.value?.dealer.hidden)
+
+  if (shownPlayer.value >= targetP && shownDealer.value >= targetD) {
+    dealing.value = false
+    const done = afterDeal
+    afterDeal = null
+    if (done) done()
+    return
+  }
+
+  dealing.value = true
+
+  // The hole card turning over is its own beat: hold, flip, then carry on with any draws.
+  const holeJustRevealed =
+    !hidden && shownDealer.value === 1 && targetD >= 2 && !flippingHole.value
+  if (holeJustRevealed) {
+    flippingHole.value = true
+    dealTimer = setTimeout(() => {
+      shownDealer.value = 2
+      flippingHole.value = false
+      dealTimer = setTimeout(runDeal, pace(DRAW_GAP_MS))
+    }, pace(FLIP_MS))
+    return
+  }
+
+  const openingDeal = targetP <= 2 && targetD <= 2 && (shownPlayer.value + shownDealer.value) < 4
+  // Player first when both are behind, which is the real dealing order.
+  const playerNext = shownPlayer.value < targetP &&
+    (shownPlayer.value <= shownDealer.value || shownDealer.value >= targetD)
+
+  if (playerNext) shownPlayer.value++
+  else shownDealer.value++
+
+  const gap = openingDeal ? DEAL_GAP_MS : (shownDealer.value > 2 ? DRAW_GAP_MS : HIT_GAP_MS)
+  dealTimer = setTimeout(runDeal, pace(gap))
+}
+
+/** Queues work to run once the table has finished dealing. */
+function whenDealt (fn) {
+  if (dealComplete.value && !dealing.value) { fn(); return }
+  afterDeal = fn
+}
+
+/** Wipes the table between hands. */
+function resetDeal () {
+  clearTimeout(dealTimer)
+  dealing.value = false
+  flippingHole.value = false
+  afterDeal = null
+  shownDealer.value = 0
+  shownPlayer.value = 0
+}
+
+/**
+ * Blackjack value of the cards currently visible.
+ *
+ * The server sends the finished total, but showing it while cards are still being dealt would
+ * give away the hand a beat early — so during the deal the total counts only what has landed.
+ */
+function valueOfShown (cards) {
+  let total = 0
+  let aces = 0
+  for (const c of cards) {
+    if (c.rank === 'A') { aces++; total += 11 }
+    else if (c.rank === 'J' || c.rank === 'Q' || c.rank === 'K' || c.rank === '10') total += 10
+    else total += Number(c.rank)
+  }
+  while (total > 21 && aces > 0) { total -= 10; aces-- }
+  return total
+}
+
+/** True once every card the server sent is on the table. */
+const dealComplete = computed(() =>
+  shownDealer.value >= dealerSlots.value &&
+  shownPlayer.value >= (activeHand.value?.cards.length ?? 0)
+)
 
 const outOfChips = computed(() =>
   screen.value === 'table' && chips.value < rules.value.minBet && phase.value !== 'playing' && !wagered.value
@@ -552,7 +710,18 @@ const rootStyle = computed(() => (
   availableHeight.value ? { '--bj-h': availableHeight.value + 'px' } : {}
 ))
 
+// The table is sized from the scene's HEIGHT as well as its width, because the cast stands in
+// the space above it. A table sized on width alone is fine on a 1920x1080 desktop and far too
+// tall on a 1366x660 laptop, where it would leave no room for anyone's head — so the room
+// above the table is reserved first, and the table takes what is left.
+const sceneStyle = computed(() => (
+  sceneHeight.value ? { '--scene-h': sceneHeight.value + 'px' } : {}
+))
+
 function can (action) {
+  // Cards still landing: the hand on screen is not yet the hand the server is describing, so
+  // acting on it would mean acting on incomplete information.
+  if (dealing.value) return false
   return hand.value?.actions?.includes(action) ?? false
 }
 
@@ -756,6 +925,10 @@ async function refresh () {
   const view = await fetchStatus()
   if (!view) return
   applyView(view)
+  // A hand resumed from a previous visit is already in progress, so it is shown complete
+  // rather than dealt out again from nothing.
+  shownPlayer.value = activeHand.value?.cards.length ?? 0
+  shownDealer.value = dealerSlots.value
   // A session left open from a previous visit drops the player straight back at the table.
   if (view.hasGamble || view.hasPractice) {
     mode.value = view.hasGamble ? 'gamble' : 'practice'
@@ -810,10 +983,14 @@ async function deal () {
   if (!view) return
   lastBet.value = bet
   pendingBet.value = 0
+  resetDeal()
   applyView(view)
   politeMessage.value = describeHand()
-  if (view.hand?.phase === 'settled') { settleUi(view); return }
-  reactToTable(view)
+  runDeal()
+  // A hand that settles on the deal (a natural, or the dealer's peek) still gets dealt out
+  // before the stamp lands — announcing the result over an empty felt reads as a glitch.
+  if (view.hand?.phase === 'settled') whenDealt(() => settleUi(view))
+  else whenDealt(() => reactToTable(view))
 }
 
 async function act (action) {
@@ -825,8 +1002,9 @@ async function act (action) {
   if (action === 'double') say('playerDouble')
   if (action === 'split') { say('playerSplit'); spectatorReply('split', 900) }
 
-  if (view.hand?.phase === 'settled') { settleUi(view); return }
-  reactToTable(view)
+  runDeal()
+  if (view.hand?.phase === 'settled') whenDealt(() => settleUi(view))
+  else whenDealt(() => reactToTable(view))
 }
 
 /**
@@ -884,6 +1062,7 @@ function settleUi (view) {
 }
 
 function nextHand () {
+  resetDeal()
   hand.value = null
   stamp.value = null
   spectatorBark.value = null
@@ -925,6 +1104,7 @@ async function leaveTable () {
   const view = await call('/api/game/blackjack/leave', { mode: mode.value || 'practice' })
   if (view) applyView(view)
 
+  resetDeal()
   screen.value = 'select'
   mode.value = null
   hand.value = null
@@ -1038,6 +1218,7 @@ onBeforeUnmount(() => {
   clearTimeout(barkTimer)
   clearTimeout(stampTimer)
   clearTimeout(spectatorTimer)
+  clearTimeout(dealTimer)
   window.removeEventListener('resize', onResize)
   window.visualViewport?.removeEventListener('resize', onResize)
   window.removeEventListener('orientationchange', onResize)
@@ -1080,8 +1261,6 @@ html:has(body.page-newsite-blackjack) {
   --room-far: #4A1522;
   --room-near: #1E0810;
   --rail: #7A2B1A;
-  --felt: #1F7A3D;
-  --felt-dk: #14612F;
 
   /* Every size below is derived from these two, so the table scales to fit its box on any
      device rather than overflowing and being cropped. */
@@ -1105,17 +1284,67 @@ html:has(body.page-newsite-blackjack) {
   position: relative;
 }
 
-/* Without the characters there is nothing to fill the room above the table, so the felt moves
-   up to use the space rather than leaving a dead band across the top of a phone screen. */
-.bj-scene.no-cast .bj-felt { top: 15%; }
-.bj-scene.no-cast .bj-rail { top: 13%; }
-.bj-scene.no-cast .bj-row--dealer { top: 19%; }
-/* The table sits higher without the cast, so the gap between the two hands moves with it. */
-.bj-scene.no-cast .bj-stampword { top: 58%; }
+/* The box IS the table: the artwork is 438x219, and the box carries that ratio, so a
+   percentage inside it names a fixed spot on the drawing however the table is scaled.
+   Positioning the hands against the scene instead let them drift off the table as the scene
+   changed shape.
 
-/* Practice runs on blue felt. The largest object on screen changing colour is a far stronger
-   signal than any badge that you are or are not wagering real points. */
-.bj-scene.is-practice { --felt: #1B5E9E; --felt-dk: #124470; }
+   The measurements the rules below are built on, all taken from the PNG rather than eyeballed
+   (fractions of the box, origin top-left):
+     · the tabletop's far edge runs from y≈0.10 at x≈0.18 down to y≈0.27 at x≈0.60 — it is a
+       perspective oval, so "the top of the table" is not one number
+     · felt spans y 0.114–0.63 overall, but at any single x it is much shallower
+     · the roulette wheel occupies x 0.55–0.78, y 0.27–0.52
+   The cast is placed against the first, the hands against the second and third.
+
+   Width is capped so the drawing is never blown up far past its native 438px; spanning a
+   1000px scene would be a 2.3x upscale and visibly soft. */
+.bj-tablearea {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  transform: translateX(-50%);
+  /* 1.35 * scene height => the table occupies the bottom ~67% of the scene and the cast has
+     the top third for their heads. See sceneStyle() for why height comes into it at all. */
+  width: min(100%, 860px, calc(var(--scene-h, 400px) * 1.35));
+  z-index: 4;
+  container-type: inline-size;
+  /* Cards sized from the TABLE, not the viewport, so they always sit on the felt in scale. */
+  --card-w: clamp(20px, 7cqw, 54px);
+}
+
+/* The image, in flow, is what gives the box its height. Doing it the other way round —
+   aspect-ratio on the box and height:100% on the image — collapsed to zero height, because
+   every other child is absolutely positioned and contributes nothing to size. */
+.bj-table {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: auto;
+  z-index: 1;                 /* above the cast, so the table cuts them off at the waist */
+  pointer-events: none;
+  filter: drop-shadow(0 -3px 0 rgba(0, 0, 0, 0.3));
+}
+
+/* Practice keeps its own colour. The felt colour was the strongest signal that no real points
+   are at stake, and a fixed image would have thrown that away — so the whole table shifts hue
+   instead, which is the same "largest object on screen changes" cue. */
+.bj-scene.is-practice .bj-table { filter: drop-shadow(0 -3px 0 rgba(0, 0, 0, 0.3)) hue-rotate(38deg) saturate(1.15); }
+/* Without the cast there is nothing standing behind the table, so it can run wider than the
+   scene and sit lower — a phone has no room to spend on the empty floor around it. The hands
+   are positioned against the table itself, so they need no adjustment here. */
+/* A phone's scene is tall and narrow; the table is a 2:1 drawing that can only be as tall as
+   it is wide, so it can never fill that height. Pinned to the bottom, the leftover room piles
+   up above it and reads as a mistake — centred, the same room reads as a dark casino the
+   table sits in. With nobody standing behind it the cards get the whole table and grow. */
+.bj-scene.no-cast .bj-tablearea {
+  width: min(100%, 620px);
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  --card-w: clamp(16px, 8.5cqw, 56px);
+}
+.bj-scene.no-cast .bj-stampword { top: 52%; }
 
 /* ── loading / panels ───────────────────────────────────────────────────────── */
 .bj-center {
@@ -1286,46 +1515,37 @@ html:has(body.page-newsite-blackjack) {
     radial-gradient(120% 90% at 50% 22%, var(--room-far), var(--room-near) 78%);
 }
 
-.bj-felt {
-  position: absolute;
-  left: 2%;
-  right: 2%;
-  top: 34%;
-  bottom: -14%;
-  border: var(--ink-w) solid var(--ink);
-  border-radius: 50% 50% 46% 46% / 22% 22% 30% 30%;
-  background: radial-gradient(110% 80% at 50% 30%, var(--felt), var(--felt-dk) 85%);
-}
-
-.bj-rail {
-  position: absolute;
-  left: 2%;
-  right: 2%;
-  top: 32%;
-  height: 5%;
-  border: var(--ink-w) solid var(--ink);
-  border-radius: 50%;
-  background: linear-gradient(180deg, #A8462C, var(--rail));
-  z-index: 3;
-}
-
 /* One synthesized ink line and one contact shadow for all four cutouts, so they share a line
    weight with the cards and buttons and read as one drawing. It also swallows the JPEG
    fringe left over from cutting Johnny out of a white background. */
 .bj-char {
   position: absolute;
   object-fit: contain;
-  z-index: 2;
+  z-index: 0;                 /* under the table image, which is what cuts them off */
   pointer-events: none;
   filter:
     drop-shadow(2px 0 0 #000) drop-shadow(-2px 0 0 #000)
     drop-shadow(0 2px 0 #000) drop-shadow(0 -2px 0 #000)
     drop-shadow(6px 8px 0 rgba(0, 0, 0, 0.35));
 }
-.bj-char--johnny  { left: 50%; transform: translateX(-50%); bottom: 63%; height: 46%; }
-.bj-char--jack    { left: 2%;  bottom: 58%; height: 40%; }
-.bj-char--grim    { right: 2%; bottom: 60%; height: 33%; }
-.bj-char--courage { right: 24%; bottom: 61%; height: 15%; }
+/* Percentages of the TABLE box, not the scene, so the cast keeps its footing on the table at
+   any size. Two numbers matter for each one:
+     · `bottom` puts their feet ON THE FELT, i.e. below the far edge at that x — that is what
+       makes the table paint over their legs instead of them standing on top of it
+     · `height` then decides how much shows above the edge; anything over ~(1 - bottom + 0.2)
+       of the box rises above the artwork and into the room, which is where their heads belong
+   The far edge sits at y≈0.10 of the box on the left and y≈0.27 on the right, so the right of
+   the rail needs its feet lower to be cut off by the same amount.
+
+   Widths are not guessed either: each cutout's aspect is known (Jack 0.27, Johnny 0.56,
+   Courage 0.90, Grim 1.08), and the box is 2:1, so a height of h% occupies h%*0.5*aspect of
+   the box's width. That is how the four of them are fitted around the hands without anyone
+   overlapping the cards. Grim's own image is half scythe — his body sits in its left 55% —
+   so he hangs off the right end of the table to bring his body onto it. */
+.bj-char--jack    { left: 0%;   bottom: 70%; height: 66%; }   /* ~9%  wide ->  0-9%   */
+.bj-char--johnny  { left: 9%;   bottom: 64%; height: 80%; }   /* ~22% wide ->  9-31%  */
+.bj-char--courage { left: 58%;  bottom: 60%; height: 36%; }   /* ~16% wide -> 58-74%  */
+.bj-char--grim    { right: -11%; bottom: 58%; height: 68%; }  /* body      -> 76-96%  */
 
 .bj-avatar {
   width: clamp(24px, 7vw, 34px);
@@ -1350,8 +1570,43 @@ html:has(body.page-newsite-blackjack) {
   padding: 0 6px;
   box-sizing: border-box;
 }
-.bj-row--dealer { top: 38%; }
-.bj-row--player { bottom: 4%; }
+/* Percentages of the table box. The table is drawn in perspective, so its felt is an oval:
+   across any wide span the depth shared by every column is only ~20% of the box, and two rows
+   of readable cards need more than twice that. The hands are therefore centred on the middle
+   of the drawing, where it is deepest, and allowed to straddle the far rim and the skirt —
+   both of which are still the table. The one thing avoided is a hand floating clear of the
+   artwork in the room, which is why the dealer's row starts at the far edge (29%) and not
+   above it, and why the cast stands out at the ends rather than behind the cards. */
+/* On the table the name and total sit BESIDE the cards rather than above them. Stacked, each
+   row costs ~9% of the box in label before a single card is drawn, and two rows then need
+   more depth than the table has — which is what pushed the player's hand off the near edge
+   and jammed the two hands together. Sideways they cost nothing vertically. */
+.bj-tablearea .bj-row {
+  position: absolute;
+  left: 20%;
+  right: 32%;
+  z-index: 3;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.bj-row--dealer { top: 23%; }
+.bj-row--player { top: 47%; }
+
+/* Without the cast the hands get the whole table instead of the gap between the characters,
+   so they sit centrally and the cards grow — the felt is the same depth either way, so the
+   extra room buys card size rather than a third row. */
+.bj-scene.no-cast .bj-tablearea .bj-row {
+  /* Label on the right so the CARDS land on the left third of the drawing, which is where the
+     table is deepest in frame (0.145 to 0.75 of the box, against 0.29-0.79 over the wheel).
+     That extra depth is exactly what lets both hands sit on the artwork at a readable size. */
+  flex-direction: row-reverse;
+  left: 12%;
+  right: 32%;
+}
+.bj-scene.no-cast .bj-row--dealer { top: 15%; }
+.bj-scene.no-cast .bj-row--player { top: 47%; }
 
 .bj-row-head {
   display: flex;
@@ -1378,6 +1633,17 @@ html:has(body.page-newsite-blackjack) {
   line-height: 1.3;
 }
 .bj-total.is-bust { background: var(--stop); color: #FFF8E7; }
+
+/* On the table these are sized from the TABLE, not the viewport. A phone held sideways gets a
+   two-column layout whose scene is only ~195px wide, and a label frozen at 15/17px there is
+   taller than the cards it labels — which is what made the two hands collide. */
+.bj-tablearea .bj-row-name { font-size: clamp(8px, 2.8cqw, 15px); }
+.bj-tablearea .bj-total { font-size: clamp(9px, 3.4cqw, 17px); padding: 0 6px; }
+.bj-tablearea .bj-otherhand { font-size: clamp(8px, 2.6cqw, 12px); padding: 0 7px; }
+/* Same reason, and this one was the actual culprit: Johnny's avatar stands in for him when
+   the cast is hidden, and at a viewport-derived 34px it was taller than a 24px card, so the
+   dealer's row was avatar-height and ran into the player's. */
+.bj-tablearea .bj-avatar { width: clamp(14px, 5cqw, 30px); height: clamp(14px, 5cqw, 30px); }
 
 .bj-otherhand {
   font-size: clamp(10px, 2.6vw, 12px);
@@ -1406,13 +1672,27 @@ html:has(body.page-newsite-blackjack) {
      six-card hand still fits the narrowest phone. 64% rather than a tighter overlap because
      "10" is two glyphs and needs noticeably more room than a single-character rank. */
   margin-left: calc(var(--card-w) * -0.36);
-  animation: bj-deal 180ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  animation: bj-deal 340ms cubic-bezier(0.18, 0.85, 0.28, 1) both;
 }
 .bj-card:first-child { margin-left: 0; }
 
+/* A card comes in from the dealer's side rather than dropping straight down, and travels far
+   enough to read as being dealt. */
 @keyframes bj-deal {
-  from { opacity: 0; transform: translateY(-18px) rotate(-12deg) scale(0.86); }
+  from { opacity: 0; transform: translate(-46px, -34px) rotate(-16deg) scale(0.82); }
+  60%  { opacity: 1; }
   to   { opacity: 1; transform: none; }
+}
+
+/* The hole card turning over. Half the animation squashes it to nothing, which is the moment
+   the face swaps in underneath, and the second half opens it back out. */
+.bj-card.is-flipping { animation: bj-flip 780ms cubic-bezier(0.4, 0, 0.25, 1) both; }
+
+@keyframes bj-flip {
+  0%   { transform: rotateY(0deg) scale(1); }
+  45%  { transform: rotateY(90deg) scale(1.06); }
+  55%  { transform: rotateY(90deg) scale(1.06); }
+  100% { transform: rotateY(0deg) scale(1); }
 }
 
 .bj-card-rank {
@@ -1454,12 +1734,15 @@ html:has(body.page-newsite-blackjack) {
   box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.45);
 }
 
-/* Each bubble sits beside the character who owns it. Only one spectator ever speaks at a
-   time, so Courage's and Grim's slots may overlap without ever colliding in practice. */
-.bj-bubble--johnny { top: 2%; right: 3%; }
-.bj-bubble--jack { top: 6%; left: 13%; max-width: 30%; }
-.bj-bubble--courage { top: 30%; right: 20%; max-width: 32%; }
-.bj-bubble--grim { top: 30%; right: 2%; max-width: 32%; }
+/* Each bubble sits beside the character who owns it. These follow the cast: the table is
+   centred and about three quarters of the scene wide, so a character standing at f of the
+   table stands at roughly f*0.75 + 0.125 of the scene — which puts Jack and Johnny in the
+   left third and Courage and Grim in the right. Only one spectator ever speaks at a time, so
+   their slots may overlap each other without ever colliding in practice. */
+.bj-bubble--johnny { top: 1%; left: 32%; max-width: 36%; }
+.bj-bubble--jack { top: 12%; left: 0%; max-width: 27%; }
+.bj-bubble--courage { top: 26%; left: 38%; max-width: 28%; }
+.bj-bubble--grim { top: 4%; right: 1%; max-width: 28%; }
 
 /* No cast on screen: reuses the dealer's slot (they are sequenced, never simultaneous) with
    the speaker named so the joke still lands. Anywhere lower would cover the cards. */
@@ -1668,7 +1951,6 @@ html:has(body.page-newsite-blackjack) {
   .bj-btn { min-height: 40px; font-size: 15px; }
   .bj-btn--sm { min-height: 34px; font-size: 13px; }
   .bj-chip { min-width: 34px; min-height: 34px; font-size: 12px; }
-  .bj-row--dealer { top: 32%; }
   .bj-hud-label { display: none; }
   .bj-hud-item { padding: 1px 4px; }
 }
@@ -1729,7 +2011,7 @@ html:has(body.page-newsite-blackjack) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bj-card { animation: none; }
+  .bj-card, .bj-card.is-flipping { animation: none; }
   .bj-pop-enter-active, .bj-stamp-enter-active,
   .bj-pop-leave-active, .bj-stamp-leave-active { transition: opacity 120ms; }
   .bj-stamp-enter-from { transform: translate(-50%, -50%) rotate(-6deg); }
