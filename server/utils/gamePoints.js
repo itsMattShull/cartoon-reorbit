@@ -56,7 +56,7 @@ export async function awardCappedGamePoints(tx, { userId, gameName, poolGameName
 // `notIn` EXCLUSION. Award from a combat game without listing it here and the points are
 // charged to BOTH pools: the full combat cap is still available, and the arcade games
 // silently lose that much of their own budget.
-export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash', 'EdRps']
+export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash', 'EdRps', 'PokemonBattle']
 
 /**
  * Awards points from the GENERAL daily pool — everything that is not a combat-pool game

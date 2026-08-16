@@ -68,6 +68,10 @@
         <img v-if="tiles.fruitsamurai" :src="tiles.fruitsamurai" alt="Fruit Samurai" class="tile-img" />
         <span v-else>Fruit Samurai</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/pokemonbattle" class="quadrant quadrant--pokemonbattle">
+        <img v-if="tiles.pokemonbattle" :src="tiles.pokemonbattle" alt="Pokemon: Fire, Water, Grass!" class="tile-img" />
+        <span v-else>Pokemon: Fire, Water, Grass!</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -108,7 +112,7 @@ const tiles = computed(() => tileData.value ?? {})
   display: grid;
   grid-template-columns: 1fr 1fr;
   /* 14 tiles in 2 columns needs 7 rows — bump this when a game is added. */
-  grid-template-rows: repeat(7, 1fr);
+  grid-template-rows: repeat(8, 1fr);
   /* Belt and braces: a 15th tile would otherwise land in an implicit auto-height row and
      collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
      height. */
@@ -169,6 +173,7 @@ const tiles = computed(() => tileData.value ?? {})
 .quadrant--flappy        { background: #2f6f9e; }
 .quadrant--blackjack     { background: #17171a; }
 .quadrant--edrps         { background: #b8321f; }
+.quadrant--pokemonbattle { background: #2a75bb; }
 .quadrant--fruitsamurai  { background: #6d1f4a; }
 
 /* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently

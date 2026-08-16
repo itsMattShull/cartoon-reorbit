@@ -66,6 +66,17 @@ async function seedGameConfigs() {
     }
   })
 
+  // Pokemon: Fire, Water, Grass! (points per completed head-to-head win). Every other column
+  // carries a schema default; this exists so pointsPerWin isn't 0 on a fresh database.
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'PokemonBattle' },
+    update: {},
+    create: {
+      gameName: 'PokemonBattle',
+      pointsPerWin: 100
+    }
+  })
+
   // Winwheel config (spin cost, optional image)
   await prisma.gameConfig.upsert({
     where: { gameName: 'Winwheel' },

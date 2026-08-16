@@ -648,6 +648,125 @@
           </button>
         </section>
 
+        <!-- Pokemon: Fire, Water, Grass! -->
+        <section v-if="activeTab === 'PokemonBattle'" role="tabpanel" aria-label="Pokemon Fire Water Grass Settings">
+          <h2 class="text-base font-semibold mb-3">Pokemon: Fire, Water, Grass! Settings</h2>
+          <p class="text-[11px] text-gray-500 mb-3">
+            Wins draw from the same daily pool as TKO, gToons Clash and Ed, Edd n Eddy RPS, set on
+            the Global Settings tab. Only head-to-head matches played to a natural finish pay out —
+            forfeits, quits and single-player games never do. The per-pair daily limit is shared
+            with Ed, Edd n Eddy RPS: two players cannot trade their quota in one game and then
+            again in the other.
+          </p>
+
+          <div v-if="pkmnConfigError" class="mb-3 p-2 border border-red-300 bg-red-50 rounded">
+            <p class="text-xs font-semibold text-red-800">These settings could not be loaded.</p>
+            <p class="text-[11px] text-red-700 mt-1">{{ pkmnConfigError }}</p>
+            <p class="text-[11px] text-red-700 mt-1">
+              The values below are defaults, not what is saved. If this database has not had the
+              Pokemon migration applied yet, run it and reload before saving.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Points Per Win</label>
+              <input type="number" v-model.number="pkmnPointsPerWin" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+              <p class="text-[11px] text-gray-400 mt-1">Paid to the winner of a completed head-to-head battle.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Round Timer (seconds)</label>
+              <input type="number" v-model.number="pkmnRoundSeconds" min="5" max="60" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+              <p class="text-[11px] text-gray-400 mt-1">
+                A player who runs out of time has a move chosen for them at random. Keep this above
+                10 — a phone that briefly backgrounds itself would otherwise drop rounds.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Round Wins Needed (HP)</label>
+              <input type="number" v-model.number="pkmnWinsNeeded" min="1" max="6" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+              <p class="text-[11px] text-gray-400 mt-1">
+                Also the number of HP segments each side drains. Capped at 6 — past that the bar
+                stops reading as a bar on a phone.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Max Rounds</label>
+              <input type="number" v-model.number="pkmnMaxRounds" min="1" max="21" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+              <p class="text-[11px] text-gray-400 mt-1">
+                Must be at least {{ Math.max(1, (pkmnWinsNeeded || 1) * 2 - 1) }} for a
+                first-to-{{ pkmnWinsNeeded || 1 }} battle, or a tied match could never finish.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-700">Paid Wins Per Pair Per Day</label>
+              <input type="number" v-model.number="pkmnPairDailyAwardLimit" min="0" max="50" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+              <p class="text-[11px] text-gray-400 mt-1">
+                Shared with Ed, Edd n Eddy RPS across both games. The main brake on win-trading
+                between alts; 0 disables the limit.
+              </p>
+            </div>
+          </div>
+
+          <h3 class="text-sm font-semibold mb-2">Art</h3>
+          <p class="text-[11px] text-gray-500 mb-2">
+            Everything is optional — the game is playable before any of it is uploaded and draws a
+            typed silhouette in place of a missing sprite. Images are re-encoded to WebP and
+            resized; animated GIFs keep their animation.
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+            <div v-for="slot in PKMN_ASSET_SLOTS" :key="slot.key" class="border rounded p-1.5">
+              <p class="text-[11px] font-medium text-gray-700">{{ slot.label }}</p>
+              <img v-if="pkmnAssets[slot.key]" :src="pkmnAssets[slot.key].path" :alt="slot.label" class="h-12 w-auto object-contain my-1" />
+              <p v-else class="text-[11px] text-gray-400 my-1">Not set</p>
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+                     class="w-full text-[11px]" @change="e => uploadPkmnAsset(slot.key, e)" />
+            </div>
+          </div>
+
+          <h3 class="text-sm font-semibold mb-2">Music</h3>
+          <p class="text-[11px] text-gray-500 mb-2">
+            MP3, OGG or WAV, 1.5MB max — a 60-90 second loop at 96kbps is about right. Every player
+            downloads this, so keep it short. Players can mute it in game.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+            <div v-for="slot in PKMN_AUDIO_SLOTS" :key="slot.key" class="border rounded p-1.5">
+              <p class="text-[11px] font-medium text-gray-700">{{ slot.label }}</p>
+              <audio v-if="pkmnAssets[slot.key]" :src="pkmnAssets[slot.key].path" controls class="w-full my-1 h-8"></audio>
+              <p v-else class="text-[11px] text-gray-400 my-1">Not set</p>
+              <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"
+                     class="w-full text-[11px]" @change="e => uploadPkmnAudio(slot.key, e)" />
+            </div>
+          </div>
+
+          <h3 class="text-sm font-semibold mb-2">Trainers</h3>
+          <p class="text-[11px] text-gray-500 mb-2">
+            Cosmetic only — the Pokemon are the moves, so a trainer never affects who wins. Images
+            are auto-resized. Names allow letters, numbers, spaces, apostrophes and hyphens.
+          </p>
+          <div class="flex flex-wrap items-end gap-2 mb-2">
+            <input v-model="pkmnTrainerName" placeholder="Trainer name" maxlength="24"
+                   class="border border-gray-300 rounded px-1.5 py-1 text-xs text-gray-900" />
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+                   class="text-[11px]" @change="e => pkmnTrainerFile = e.target.files?.[0] || null" />
+            <button @click="addPkmnTrainer" :disabled="loadingPkmn || !pkmnTrainerName || !pkmnTrainerFile"
+                    class="px-2 py-1 text-xs font-semibold rounded bg-green-600 text-white disabled:opacity-50">Add trainer</button>
+          </div>
+          <div v-if="pkmnTrainers.length" class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+            <div v-for="t in pkmnTrainers" :key="t.id" class="border rounded p-1.5 text-center">
+              <img :src="t.thumbPath || t.imagePath" :alt="t.name" class="h-12 w-auto mx-auto object-contain" />
+              <p class="text-[11px] truncate text-gray-700">{{ t.name }}</p>
+              <button @click="deletePkmnTrainer(t.id)" class="text-[11px] text-red-600 underline">Remove</button>
+            </div>
+          </div>
+          <p v-else class="text-[11px] text-gray-400 mb-4">No trainers yet. Players get a plain silhouette until you add one.</p>
+
+          <button @click="savePkmnConfig" :disabled="loadingPkmn || !!pkmnConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            <span v-if="!loadingPkmn">Save Pokemon: Fire, Water, Grass! Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- Win Wheel -->
         <section v-if="activeTab === 'Winwheel'" role="tabpanel" aria-label="Win Wheel Settings">
           <h2 class="text-sm font-semibold mb-3">Win Wheel Settings</h2>
@@ -1746,6 +1865,7 @@ const tabs = [
   { key: 'Clash',        label: 'gToon Clash' },
   { key: 'TKO',          label: 'TKO' },
   { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' },
+  { key: 'PokemonBattle', label: 'Pokemon: Fire, Water, Grass!' },
   { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
@@ -1801,6 +1921,33 @@ const loadingEdRps               = ref(false)
 // the Ed, Edd n Eddy RPS migration applied yet. Surfaced on the tab so the values shown are
 // never mistaken for the saved ones.
 const edRpsConfigError           = ref('')
+
+const PKMN_ASSET_SLOTS = [
+  { key: 'charizard-front', label: 'Charizard (front)' },
+  { key: 'charizard-back',  label: 'Charizard (back)' },
+  { key: 'blastoise-front', label: 'Blastoise (front)' },
+  { key: 'blastoise-back',  label: 'Blastoise (back)' },
+  { key: 'venusaur-front',  label: 'Venusaur (front)' },
+  { key: 'venusaur-back',   label: 'Venusaur (back)' },
+  { key: 'logo',            label: 'Logo' },
+  { key: 'battlebg',        label: 'Battle background' },
+  { key: 'menubg',          label: 'Menu background' }
+]
+const PKMN_AUDIO_SLOTS = [
+  { key: 'battlemusic', label: 'Battle music' },
+  { key: 'menumusic',   label: 'Menu music' }
+]
+const pkmnPointsPerWin          = ref(0)
+const pkmnRoundSeconds          = ref(12)
+const pkmnWinsNeeded            = ref(3)
+const pkmnMaxRounds             = ref(9)
+const pkmnPairDailyAwardLimit   = ref(2)
+const pkmnAssets                = ref({})
+const pkmnTrainers              = ref([])
+const pkmnTrainerName           = ref('')
+const pkmnTrainerFile           = ref(null)
+const loadingPkmn               = ref(false)
+const pkmnConfigError           = ref('')
 const loadingTkoConfig      = ref(false)
 
 const winballBumperGeometry = ref([
@@ -2191,6 +2338,25 @@ async function loadSettings() {
   } catch (e) {
     edRpsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
   }
+
+  // Wrapped in its own try for the same reason the EdRps fetch is: loadSettings() is one
+  // unbroken await chain, so an unguarded rejection here silently abandons every config loaded
+  // after it, leaving those tabs showing defaults that a save would then write over.
+  try {
+    const pk = await $fetch('/api/admin/game-config?gameName=PokemonBattle')
+    pkmnPointsPerWin.value        = pk.pointsPerWin ?? 0
+    pkmnRoundSeconds.value        = pk.pokemonBattleRoundSeconds ?? 12
+    pkmnWinsNeeded.value          = pk.pokemonBattleWinsNeeded ?? 3
+    pkmnMaxRounds.value           = pk.pokemonBattleMaxRounds ?? 9
+    pkmnPairDailyAwardLimit.value = pk.pokemonBattlePairDailyAwardLimit ?? 2
+    pkmnAssets.value              = pk.pokemonBattleAssets || {}
+    pkmnConfigError.value = ''
+  } catch (e) {
+    pkmnConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
+  }
+  try {
+    pkmnTrainers.value = await $fetch('/api/admin/pokemonbattle-trainers')
+  } catch { pkmnTrainers.value = [] }
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
@@ -2586,6 +2752,94 @@ async function saveClashConfig() {
     toastMessage.value = 'Error saving Clash settings'; toastType.value = 'error'
   } finally {
     loadingClash.value = false
+  }
+}
+
+async function savePkmnConfig() {
+  loadingPkmn.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                         'PokemonBattle',
+        pointsPerWin:                     pkmnPointsPerWin.value,
+        pokemonBattleRoundSeconds:        pkmnRoundSeconds.value,
+        pokemonBattleWinsNeeded:          pkmnWinsNeeded.value,
+        pokemonBattleMaxRounds:           pkmnMaxRounds.value,
+        pokemonBattlePairDailyAwardLimit: pkmnPairDailyAwardLimit.value,
+        dailyPointLimit:                  globalDailyPointLimit.value
+      }
+    })
+    toastMessage.value = 'Pokemon: Fire, Water, Grass! settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    toastMessage.value = e?.data?.statusMessage || 'Error saving Pokemon settings'
+    toastType.value = 'error'
+  } finally {
+    loadingPkmn.value = false
+  }
+}
+
+async function uploadPkmnAsset(slot, e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('slot', slot)
+  fd.append('image', file)
+  try {
+    const res = await $fetch('/api/admin/pokemonbattle-asset', { method: 'POST', body: fd })
+    pkmnAssets.value = { ...pkmnAssets.value, [slot]: { path: res.assetPath, width: res.width, height: res.height, animated: res.animated } }
+    toastMessage.value = 'Art uploaded!'; toastType.value = 'success'
+  } catch (err) {
+    toastMessage.value = err?.data?.statusMessage || 'Upload failed'; toastType.value = 'error'
+  } finally {
+    e.target.value = ''
+  }
+}
+
+async function uploadPkmnAudio(slot, e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('slot', slot)
+  fd.append('audio', file)
+  try {
+    const res = await $fetch('/api/admin/pokemonbattle-audio', { method: 'POST', body: fd })
+    pkmnAssets.value = { ...pkmnAssets.value, [slot]: { path: res.assetPath } }
+    toastMessage.value = 'Music uploaded!'; toastType.value = 'success'
+  } catch (err) {
+    toastMessage.value = err?.data?.statusMessage || 'Upload failed'; toastType.value = 'error'
+  } finally {
+    e.target.value = ''
+  }
+}
+
+async function addPkmnTrainer() {
+  if (!pkmnTrainerName.value || !pkmnTrainerFile.value) return
+  loadingPkmn.value = true
+  const fd = new FormData()
+  fd.append('name', pkmnTrainerName.value)
+  fd.append('sortOrder', String(pkmnTrainers.value.length))
+  fd.append('image', pkmnTrainerFile.value)
+  try {
+    const row = await $fetch('/api/admin/pokemonbattle-trainers', { method: 'POST', body: fd })
+    pkmnTrainers.value = [...pkmnTrainers.value, row]
+    pkmnTrainerName.value = ''
+    pkmnTrainerFile.value = null
+    toastMessage.value = 'Trainer added!'; toastType.value = 'success'
+  } catch (err) {
+    toastMessage.value = err?.data?.statusMessage || 'Could not add trainer'; toastType.value = 'error'
+  } finally {
+    loadingPkmn.value = false
+  }
+}
+
+async function deletePkmnTrainer(id) {
+  if (!confirm('Remove this trainer? Players who picked it fall back to no trainer.')) return
+  try {
+    await $fetch('/api/admin/pokemonbattle-trainers', { method: 'DELETE', body: { id } })
+    pkmnTrainers.value = pkmnTrainers.value.filter(t => t.id !== id)
+  } catch (err) {
+    toastMessage.value = err?.data?.statusMessage || 'Could not remove trainer'; toastType.value = 'error'
   }
 }
 

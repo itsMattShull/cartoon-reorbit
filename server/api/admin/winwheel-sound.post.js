@@ -1,94 +1,88 @@
 // server/api/admin/winwheel-sound.post.js
-import {
-  defineEventHandler,
-  readMultipartFormData,
-  getRequestHeader,
-  createError
-} from 'h3'
+//
+// Hardened during the Pokemon: Fire, Water, Grass! work, which needed an audio upload and
+// found this one was not a safe pattern to copy. Three defects, all fixed here:
+//
+//   1. The allowlist tested `filePart.type` — the multipart Content-Type, which the client
+//      writes and can set to anything. Now the type comes from the file's magic bytes.
+//   2. The saved extension came from `extname(filePart.filename)`, also client-supplied. In
+//      production nginx serves this directory and derives Content-Type from the extension, so
+//      a request declaring `audio/mpeg` while naming its file `x.html` wrote an HTML document
+//      served as text/html from this site's own origin — stored XSS, with no CSP to contain
+//      it. The extension is now looked up from the sniffed type.
+//   3. There was no size limit at all, so this was an authenticated unbounded-disk-write.
+//
+// There was also a latent path traversal: the `label` form field was interpolated into the
+// filename, guarded only by `typeof p.data === 'string'` — which is never true, because h3's
+// readMultipartFormData returns a Buffer for every part, file or field. That check was the
+// only thing preventing `label = '../../../.output/server/chunks/x'` with a `.js` extension.
+// The field is gone entirely rather than sanitised: the filename is now built wholly from
+// server-controlled values, which is the only version of this that stays safe under editing.
+import { defineEventHandler, readMultipartFormData, createError } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, dirname, extname } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { assertInside } from '@/server/utils/imageUploadValidation'
+import { sniffAudioType, audioExtFor, MAX_AUDIO_BYTES } from '@/server/utils/audioUploadValidation'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
-const ALLOWED = new Set([
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/ogg'
-])
-
-function resolveExt(filePart) {
-  const ext = extname(filePart.filename || '').toLowerCase()
-  if (ext) return ext
-  if (filePart.type === 'audio/ogg') return '.ogg'
-  if (filePart.type === 'audio/wav' || filePart.type === 'audio/x-wav') return '.wav'
-  return '.mp3'
-}
-
 export default defineEventHandler(async (event) => {
-  // 1) Auth check
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
+  assertSameOrigin(event)
+  const me = await requireAdmin(event)
 
-  // 2) Parse multipart
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'No form data' })
 
-  let filePart = null
-  let label = 'winwheel-sound'
-  for (const p of parts) {
-    if (p.filename) filePart = p
-    else if (p.name === 'label' && typeof p.data === 'string') label = p.data.trim() || 'winwheel-sound'
-  }
+  const filePart = parts.find(p => p.filename)
   if (!filePart) throw createError({ statusCode: 400, statusMessage: 'Missing audio file' })
-  if (!ALLOWED.has(filePart.type)) {
-    throw createError({ statusCode: 400, statusMessage: 'Only MP3, WAV, or OGG are allowed' })
+  if (filePart.data.length > MAX_AUDIO_BYTES) {
+    throw createError({ statusCode: 413, statusMessage: 'Audio must be 3MB or smaller' })
   }
 
-  // 3) Persist file
+  const sniffed = sniffAudioType(filePart.data)
+  if (!sniffed) {
+    throw createError({ statusCode: 400, statusMessage: 'Only MP3, OGG or WAV audio is allowed' })
+  }
+
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'winwheel')
     : join(baseDir, 'public', 'winwheel')
-
   await mkdir(uploadDir, { recursive: true })
-  const safeExt = resolveExt(filePart)
-  const filename = `${label}-${Date.now()}${safeExt}`
-  const outPath = join(uploadDir, filename)
+
+  // Every component is server-controlled: a fixed literal, a clock reading, and an extension
+  // looked up from the sniffed type. Nothing the client sent appears here.
+  const filename = `winwheel-sound-${Date.now()}${audioExtFor(sniffed)}`
+  const outPath = assertInside(uploadDir, join(uploadDir, filename))
   await writeFile(outPath, filePart.data)
 
   const assetPath = process.env.NODE_ENV === 'production'
     ? `/images/winwheel/${filename}`
     : `/winwheel/${filename}`
 
-  // 4) Update DB config
   try {
-    const before = await db.gameConfig.findUnique({ where: { gameName: 'Winwheel' } })
+    const before = await db.gameConfig.findUnique({
+      where: { gameName: 'Winwheel' },
+      select: { winWheelSoundPath: true }
+    })
     await db.gameConfig.upsert({
       where: { gameName: 'Winwheel' },
-      create: {
-        gameName: 'Winwheel',
-        winWheelSoundPath: assetPath
-      },
-      update: {
-        winWheelSoundPath: assetPath,
-        updatedAt: new Date()
-      }
+      create: { gameName: 'Winwheel', winWheelSoundPath: assetPath },
+      update: { winWheelSoundPath: assetPath, updatedAt: new Date() }
     })
-    if ((before?.winWheelSoundPath || null) !== (assetPath || null)) {
+    if ((before?.winWheelSoundPath || null) !== assetPath) {
       await logAdminChange(db, {
         userId: me.id,
         area: 'GameConfig:Winwheel',
         key: 'winWheelSoundPath',
         prevValue: before?.winWheelSoundPath || null,
-        newValue: assetPath || null
+        newValue: assetPath
       })
     }
   } catch (err) {
@@ -96,6 +90,5 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'Audio saved, but updating config failed' })
   }
 
-  // 5) Return path for immediate UI preview
   return { assetPath }
 })
