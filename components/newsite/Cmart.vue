@@ -77,6 +77,7 @@
                   class="owned-badge"
                   :class="originalOwnedSet.has(item.ctoonId) ? 'owned-badge--owned' : 'owned-badge--unowned'"
                 >{{ originalOwnedSet.has(item.ctoonId) ? 'Owned' : 'Unowned' }}</span>
+                <span v-if="item.inCmart === false" class="pack-exclusive-badge pack-exclusive-badge--preview">Pack Exclusive</span>
                 <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="pack-preview-ctoon-img" />
                 <SecondEditionOverlay :ctoon="item" />
                 <p class="pack-preview-ctoon-name">{{ item.name }}</p>
@@ -1483,6 +1484,13 @@ async function closeOverlay() {
   text-align: right;
 }
 
+:global(.pack-exclusive-badge--preview) {
+  top: 4px;
+  right: auto;
+  left: 4px;
+  text-align: left;
+}
+
 :global(.pack-reveal-img-wrap) {
   position: relative;
   display: inline-block;
@@ -1627,6 +1635,10 @@ async function closeOverlay() {
   }
 
   :global(.pack-reveal-grid) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pack-preview-ctoon-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 

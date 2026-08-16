@@ -1291,11 +1291,13 @@ html:has(body.page-newsite-blackjack) {
 
    The measurements the rules below are built on, all taken from the PNG rather than eyeballed
    (fractions of the box, origin top-left):
-     · the tabletop's far edge runs from y≈0.10 at x≈0.18 down to y≈0.27 at x≈0.60 — it is a
-       perspective oval, so "the top of the table" is not one number
-     · felt spans y 0.114–0.63 overall, but at any single x it is much shallower
-     · the roulette wheel occupies x 0.55–0.78, y 0.27–0.52
-   The cast is placed against the first, the hands against the second and third.
+     · the tabletop's far edge — the dealer's side — sits at y≈0.00 across the middle and only
+       rises at the very ends (0.05 at x=0.08, 0.105 at x=0.03). Everyone behind the table is
+       therefore cut off at the same line, and how much of them shows is decided by height
+       alone rather than by where their feet are
+     · the felt runs y 0.08–0.58, and across x 0.25–0.75 it is 0.445 deep — deep enough for
+       two rows of cards to sit inside it, which the previous artwork was not
+     · the tabletop's near edge is at y≈0.68 in the middle; below that is leg
 
    Width is capped so the drawing is never blown up far past its native 438px; spanning a
    1000px scene would be a 2.3x upscale and visibly soft. */
@@ -1310,7 +1312,7 @@ html:has(body.page-newsite-blackjack) {
   z-index: 4;
   container-type: inline-size;
   /* Cards sized from the TABLE, not the viewport, so they always sit on the felt in scale. */
-  --card-w: clamp(20px, 7cqw, 54px);
+  --card-w: clamp(20px, 7.5cqw, 58px);
 }
 
 /* The image, in flow, is what gives the box its height. Doing it the other way round —
@@ -1326,10 +1328,12 @@ html:has(body.page-newsite-blackjack) {
   filter: drop-shadow(0 -3px 0 rgba(0, 0, 0, 0.3));
 }
 
-/* Practice keeps its own colour. The felt colour was the strongest signal that no real points
-   are at stake, and a fixed image would have thrown that away — so the whole table shifts hue
-   instead, which is the same "largest object on screen changes" cue. */
-.bj-scene.is-practice .bj-table { filter: drop-shadow(0 -3px 0 rgba(0, 0, 0, 0.3)) hue-rotate(38deg) saturate(1.15); }
+/* Practice still reads differently at a glance, but by draining the table rather than turning
+   it another colour. Rotating the hue took the felt to blue, the rail to gold and the red
+   payout legend to orange — it repainted a drawing that is meant to look like one specific
+   table. Desaturating keeps every shape and every word reading correctly and still says
+   "play money" the moment you see it next to the gamble table. */
+.bj-scene.is-practice .bj-table { filter: drop-shadow(0 -3px 0 rgba(0, 0, 0, 0.3)) saturate(0.5) brightness(0.94); }
 /* Without the cast there is nothing standing behind the table, so it can run wider than the
    scene and sit lower — a phone has no room to spend on the empty floor around it. The hands
    are positioned against the table itself, so they need no adjustment here. */
@@ -1338,11 +1342,15 @@ html:has(body.page-newsite-blackjack) {
    up above it and reads as a mistake — centred, the same room reads as a dark casino the
    table sits in. With nobody standing behind it the cards get the whole table and grow. */
 .bj-scene.no-cast .bj-tablearea {
-  width: min(100%, 620px);
+  /* 112%, not 100%: a phone's scene is tall and narrow, the drawing is 2:1, and every pixel
+     of table width is what buys card size. The outer 6% at each end is bare rail — measured,
+     no felt and no betting box lives there — so letting it run past the frame costs nothing
+     and makes the cards a third bigger. */
+  width: min(112%, 620px);
   top: 50%;
   bottom: auto;
   transform: translate(-50%, -50%);
-  --card-w: clamp(16px, 8.5cqw, 56px);
+  --card-w: clamp(16px, 8cqw, 60px);
 }
 .bj-scene.no-cast .bj-stampword { top: 52%; }
 
@@ -1542,10 +1550,12 @@ html:has(body.page-newsite-blackjack) {
    the box's width. That is how the four of them are fitted around the hands without anyone
    overlapping the cards. Grim's own image is half scythe — his body sits in its left 55% —
    so he hangs off the right end of the table to bring his body onto it. */
-.bj-char--jack    { left: 0%;   bottom: 70%; height: 66%; }   /* ~9%  wide ->  0-9%   */
-.bj-char--johnny  { left: 9%;   bottom: 64%; height: 80%; }   /* ~22% wide ->  9-31%  */
-.bj-char--courage { left: 58%;  bottom: 60%; height: 36%; }   /* ~16% wide -> 58-74%  */
-.bj-char--grim    { right: -11%; bottom: 58%; height: 68%; }  /* body      -> 76-96%  */
+/* Jack is cut off at 58% of his own art rather than 63%: below that his gi tapers into a
+   narrow strip of hakama, and a strip that thin reads as a stick rather than a leg. */
+.bj-char--jack    { left: 14%;  bottom: 67%; height: 78%; }   /* ~10% wide -> 14-24%  */
+.bj-char--johnny  { left: 32%;  bottom: 58%; height: 88%; }   /* ~24% wide -> 32-56%  */
+.bj-char--courage { left: 58%;  bottom: 88%; height: 34%; }   /* ~15% wide -> 58-73%  */
+.bj-char--grim    { right: -15%; bottom: 64%; height: 78%; }  /* body      -> 74-97%  */
 
 .bj-avatar {
   width: clamp(24px, 7vw, 34px);
@@ -1570,43 +1580,46 @@ html:has(body.page-newsite-blackjack) {
   padding: 0 6px;
   box-sizing: border-box;
 }
-/* Percentages of the table box. The table is drawn in perspective, so its felt is an oval:
-   across any wide span the depth shared by every column is only ~20% of the box, and two rows
-   of readable cards need more than twice that. The hands are therefore centred on the middle
-   of the drawing, where it is deepest, and allowed to straddle the far rim and the skirt —
-   both of which are still the table. The one thing avoided is a hand floating clear of the
-   artwork in the room, which is why the dealer's row starts at the far edge (29%) and not
-   above it, and why the cast stands out at the ends rather than behind the cards. */
+/* Percentages of the table box. The felt is 44.5% of the box deep across the middle, so both
+   rows sit inside it: the dealer's hand up by the chip tray, the player's down on the betting
+   boxes, the way they fall on a real layout. The cast never competes for this space — they
+   stand beyond the far edge, which is the top of the artwork, so everything of them that is
+   inside this box is behind the table. */
 /* On the table the name and total sit BESIDE the cards rather than above them. Stacked, each
    row costs ~9% of the box in label before a single card is drawn, and two rows then need
    more depth than the table has — which is what pushed the player's hand off the near edge
    and jammed the two hands together. Sideways they cost nothing vertically. */
 .bj-tablearea .bj-row {
   position: absolute;
-  left: 20%;
-  right: 32%;
+  left: 19%;
+  right: 35%;
   z-index: 3;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 8px;
 }
-.bj-row--dealer { top: 23%; }
-.bj-row--player { top: 47%; }
+.bj-row--dealer { top: 11%; }
+.bj-row--player { top: 35%; }
+
+/* Below this the cards hit their 16px floor, and two rows at that size are taller than the
+   felt is deep — so on a table this small they spread onto the rail, which is still tabletop.
+   Queried against the table box itself, which is the thing that ran out of room. */
+@container (max-width: 320px) {
+  .bj-row--dealer { top: 3%; }
+  .bj-row--player { top: 36%; }
+}
 
 /* Without the cast the hands get the whole table instead of the gap between the characters,
    so they sit centrally and the cards grow — the felt is the same depth either way, so the
    extra room buys card size rather than a third row. */
 .bj-scene.no-cast .bj-tablearea .bj-row {
-  /* Label on the right so the CARDS land on the left third of the drawing, which is where the
-     table is deepest in frame (0.145 to 0.75 of the box, against 0.29-0.79 over the wheel).
-     That extra depth is exactly what lets both hands sit on the artwork at a readable size. */
+  /* Label on the right so the CARDS sit over the middle of the layout rather than off to one
+     side — the table is symmetrical, so there is no deeper end to prefer. */
   flex-direction: row-reverse;
-  left: 12%;
-  right: 32%;
+  left: 33%;
+  right: 9%;
 }
-.bj-scene.no-cast .bj-row--dealer { top: 15%; }
-.bj-scene.no-cast .bj-row--player { top: 47%; }
 
 .bj-row-head {
   display: flex;
