@@ -65,9 +65,10 @@ import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
  *   pointsMethod   PointsLog.method
  *   matchDelegate  Prisma delegate NAME on the client (e.g. 'edRpsMatch')
  *   matchTable     the same table's SQL name (e.g. 'EdRpsMatch') for the one raw claim
- *   pairScopeDelegates  every duel match delegate that shares ONE per-pair daily award budget.
- *                  Must include this game's own delegate. Per-game budgets would let one
- *                  colluding pair trade its quota once per game.
+ *   pairScopeTables  every duel match TABLE sharing ONE per-pair daily award budget. Must
+ *                  include this game's own table. Per-game budgets would let one colluding
+ *                  pair trade its quota once per game. SQL names, not delegates -- see
+ *                  server/utils/duelPairScope.js for why.
  *   configSelect   { column: true } for this game's tuning columns
  *   readConfig     (row) => raw config object for clampConfig
  *   clampConfig    (raw) => { roundSeconds, winsNeeded, maxRounds, pairDailyAwardLimit }
@@ -574,17 +575,22 @@ export function createDuelRuntime(spec) {
       // pair. spec.pairScopeDelegates lists every table that counts toward one shared budget.
       if (cfg.pairDailyAwardLimit > 0) {
         const [a, b] = [p1, p2].sort()
-        const pairWhere = {
-          pointsAwardedAt: { gte: windowStart },
-          OR: [
-            { player1UserId: a, player2UserId: b },
-            { player1UserId: b, player2UserId: a }
-          ]
-        }
-        const counts = await Promise.all(
-          spec.pairScopeDelegates.map(d => tx[d].count({ where: pairWhere }).catch(() => 0))
-        )
-        const paidBetweenPair = counts.reduce((sum, n) => sum + n, 0)
+        // Written in the LEAST/GREATEST form the pair index is built for. The equivalent
+        // Prisma `OR: [{p1:a,p2:b},{p1:b,p2:a}]` cannot use an expression index — EXPLAIN
+        // shows it scanning the partial index on pointsAwardedAt alone and filtering the rest
+        // — and this runs inside the award transaction on every paying match.
+        //
+        // Table names come from spec.pairScopeTables, a literal list in
+        // server/utils/duelPairScope.js that assertSpec resolves against real Prisma delegates
+        // at boot. Nothing from the request reaches the SQL text; a, b and the window start are
+        // all bound.
+        const union = spec.pairScopeTables.map(t => `
+          SELECT count(*)::int AS n FROM "${t}"
+           WHERE "pointsAwardedAt" >= $1
+             AND LEAST("player1UserId", "player2UserId") = $2
+             AND GREATEST("player1UserId", "player2UserId") = $3`).join(' UNION ALL ')
+        const rows = await tx.$queryRawUnsafe(union, windowStart, a, b)
+        const paidBetweenPair = rows.reduce((sum, r) => sum + Number(r.n || 0), 0)
         if (paidBetweenPair >= cfg.pairDailyAwardLimit) {
           suppressReason = 'pair_limit'
           await MATCH(tx).update({ where: { id: row.id }, data: { suppressReason } })
@@ -1002,17 +1008,20 @@ function assertSpec(spec) {
   if (typeof db[spec.matchDelegate]?.create !== 'function') {
     throw new Error(`[duelRuntime] no Prisma delegate named "${spec.matchDelegate}"`)
   }
-  if (!spec.pairScopeDelegates?.includes(spec.matchDelegate)) {
+  if (!spec.pairScopeTables?.includes(spec.matchTable)) {
     // A game whose own table is missing from its pair scope does not count its own paid
     // matches, so its per-pair limit never trips at all.
     throw new Error(
-      `[duelRuntime] ${spec.gameName} pairScopeDelegates must include its own delegate ` +
-      `"${spec.matchDelegate}"`
+      `[duelRuntime] ${spec.gameName} pairScopeTables must include its own table ` +
+      `"${spec.matchTable}"`
     )
   }
-  for (const d of spec.pairScopeDelegates) {
+  for (const t of spec.pairScopeTables) {
+    // These names are interpolated into SQL, so each one is checked against a real Prisma
+    // delegate at boot rather than trusted because it is "a literal".
+    const d = t.charAt(0).toLowerCase() + t.slice(1)
     if (typeof db[d]?.count !== 'function') {
-      throw new Error(`[duelRuntime] pairScopeDelegates names an unknown delegate "${d}"`)
+      throw new Error(`[duelRuntime] pairScopeTables names an unknown table "${t}"`)
     }
   }
   if (!COMBAT_POOL_GAME_NAMES.includes(spec.gameName)) {

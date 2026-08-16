@@ -26,6 +26,7 @@ import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
 import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
+import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonBattleRuntime.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1860,6 +1861,12 @@ io.on('connection', socket => {
   // reads the shared socket.data.roomId.
   registerEdRps(io, socket, resolveSocketUser)
 
+  // Same runtime, different spec (server/utils/duelRuntime.js). Its socket.data keys are
+  // namespaced pkmnBattle* rather than edRps*, so a player with both games open on one socket
+  // cannot have one game's disconnect cleanup consume the other's room id -- which would leave
+  // the abandoned match hanging until the sweep instead of forfeiting.
+  registerPokemonBattle(io, socket, resolveSocketUser)
+
   socket.on('battle:create', async ({ player1MonsterId, opponent }) => {
     try {
       // Same rule as the Clash handlers: the battle belongs to whoever the cookie says is
@@ -2987,6 +2994,7 @@ setInterval(() => {
 // RPS rooms churn far faster than Clash's, and its matches need an absolute-age backstop that
 // does not depend on socket presence, so it runs its own sweep on its own interval.
 startEdRpsSweep(io)
+startPokemonBattleSweep(io)
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {

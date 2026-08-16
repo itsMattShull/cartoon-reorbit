@@ -22,7 +22,7 @@ const runtime = createDuelRuntime({
 
   matchDelegate: 'pokemonBattleMatch',
   matchTable: 'PokemonBattleMatch',
-  pairScopeDelegates: DUEL_PAIR_SCOPE,
+  pairScopeTables: DUEL_PAIR_SCOPE,
 
   configSelect: {
     pokemonBattleRoundSeconds: true,

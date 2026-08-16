@@ -18,7 +18,7 @@ const runtime = createDuelRuntime({
 
   matchDelegate: 'edRpsMatch',
   matchTable: 'EdRpsMatch',
-  pairScopeDelegates: DUEL_PAIR_SCOPE,
+  pairScopeTables: DUEL_PAIR_SCOPE,
 
   configSelect: {
     edRpsRoundSeconds: true,
