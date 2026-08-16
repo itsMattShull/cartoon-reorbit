@@ -99,6 +99,16 @@ const EDRPS_NUMERIC_RANGES = [
 
 const EDRPS_FIELDS = EDRPS_NUMERIC_RANGES.map(([k]) => k)
 
+// Ranges mirror CONFIG_LIMITS in lib/pokemonBattle.js, which clampConfig() applies again on
+// every read -- this is the friendly error, not the safety net.
+const POKEMONBATTLE_NUMERIC_RANGES = [
+  ['pokemonBattleRoundSeconds', 5, 60],
+  ['pokemonBattleWinsNeeded', 1, 6],
+  ['pokemonBattleMaxRounds', 1, 21],
+  ['pokemonBattlePairDailyAwardLimit', 0, 50]
+]
+const POKEMONBATTLE_FIELDS = POKEMONBATTLE_NUMERIC_RANGES.map(([k]) => k)
+
 // ── Fruit Samurai field table ────────────────────────────────────────────────────────────
 // Ranges mirror CFG_BOUNDS in lib/fruitSamuraiSim.js, which is the source of truth and clamps
 // every one of these again on read — including on the way out of the Redis session. Rejecting
@@ -466,6 +476,24 @@ function validatePayload(payload) {
     if (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0) {
       throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
     }
+  } else if (payload.gameName === 'PokemonBattle') {
+    for (const [field, min, max] of POKEMONBATTLE_NUMERIC_RANGES) {
+      const v = payload[field]
+      if (!Number.isInteger(v) || v < min || v > max) {
+        throw createError({ statusCode: 400, statusMessage: `"${field}" must be a whole number between ${min} and ${max}` })
+      }
+    }
+    // A best-of-N needs 2N-1 rounds for both players to be able to reach N wins; fewer and a
+    // match sitting at match point could never resolve.
+    if (payload.pokemonBattleMaxRounds < payload.pokemonBattleWinsNeeded * 2 - 1) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Max rounds must be at least ${payload.pokemonBattleWinsNeeded * 2 - 1} for a first-to-${payload.pokemonBattleWinsNeeded} match`
+      })
+    }
+    if (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0) {
+      throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -802,6 +830,13 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...edRpsData }
         updateData = { ...updateData, ...edRpsData }
+      } else if (gameName === 'PokemonBattle') {
+        const pkmnData = { pointsPerWin }
+        for (const key of POKEMONBATTLE_FIELDS) {
+          if (body[key] != null) pkmnData[key] = body[key]
+        }
+        createData = { ...createData, ...pkmnData }
+        updateData = { ...updateData, ...pkmnData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -1059,6 +1094,17 @@ export default defineEventHandler(async (event) => {
             const next = body[key]
             if (next != null && prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:EdRps', key, prevValue: prev, newValue: next })
+            }
+          }
+        } else if (gameName === 'PokemonBattle') {
+          if (before?.pointsPerWin !== pointsPerWin) {
+            await logAdminChange(tx, { userId: me.id, area, key: 'pointsPerWin', prevValue: before?.pointsPerWin, newValue: pointsPerWin })
+          }
+          for (const key of POKEMONBATTLE_FIELDS) {
+            const prev = before?.[key]
+            const next = body[key]
+            if (next != null && prev !== next) {
+              await logAdminChange(tx, { userId: me.id, area: 'GameConfig:PokemonBattle', key, prevValue: prev, newValue: next })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

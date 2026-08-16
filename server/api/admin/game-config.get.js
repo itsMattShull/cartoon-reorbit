@@ -208,6 +208,10 @@ export default defineEventHandler(async (event) => {
         // Same story: every edRps* column has a schema default, and lib/edRps.js clamps them
         // again on read.
         config = await db.gameConfig.create({ data: { gameName } })
+      } else if (gameName === 'PokemonBattle') {
+        // Same story: every pokemonBattle* column has a schema default, and
+        // lib/pokemonBattle.js clamps them again on read.
+        config = await db.gameConfig.create({ data: { gameName } })
       } else if (gameName === 'FruitSamurai') {
         // Same story again: every fruitSamurai* column carries a schema default, and
         // normalizeConfig() in lib/fruitSamuraiSim.js clamps them on every read.
