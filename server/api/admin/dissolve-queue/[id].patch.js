@@ -49,6 +49,18 @@ export default defineEventHandler(async (event) => {
   const scheduledFor = new Date(scheduledForUtc)
   if (isNaN(scheduledFor.getTime())) throw createError({ statusCode: 400, statusMessage: 'Invalid scheduledForUtc' })
 
+  // The launch job fires with delay = max(0, scheduledFor - now) (see
+  // scheduleDissolveAuctionLaunch), so anything not comfortably in the future
+  // fires almost immediately instead of at the intended time. Require a
+  // minimum lead time so a reschedule always lands on a real future slot.
+  const MIN_LEAD_MS = 60 * 1000
+  if (scheduledFor.getTime() < Date.now() + MIN_LEAD_MS) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'scheduledFor must be at least 1 minute in the future'
+    })
+  }
+
   const pinnedAt = new Date()
   await prisma.dissolveAuctionQueue.update({ where: { id }, data: { scheduledFor, pinnedAt } })
   await scheduleDissolveAuctionLaunch(id, scheduledFor)

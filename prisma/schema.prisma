@@ -413,10 +413,10 @@ model User {
   vpnDetected                       Boolean   @default(false)
 
   // cMoon (faction) membership
-  cMoonId           String?
-  cMoon             CMoon?    @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
-  cMoonSelectedAt   DateTime?
-  cMoonAutoAssigned Boolean   @default(false)
+  cMoonId            String?
+  cMoon              CMoon?    @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
+  cMoonSelectedAt    DateTime?
+  cMoonAutoAssigned  Boolean   @default(false)
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt DateTime?
@@ -2148,6 +2148,28 @@ model DissolveAuctionQueue {
   @@index([scheduledFor])
   @@index([priority])
   @@index([fromInactive])
+}
+
+// Errors thrown while launching a dissolve-queue entry into a live auction
+// (server/workers/dissolve-auction-launch.worker.js). Surfaced via the
+// "Errors" button/modal on the admin "Manage Dissolve Queue" page. The
+// cToon/queue fields are denormalized snapshots taken at failure time since
+// the queue row (and sometimes the userCtoon) may be deleted or altered by
+// the time an admin reads this log.
+model DissolveAuctionErrorLog {
+  id             String   @id @default(uuid())
+  queueEntryId   String? // best-effort reference; the queue row may already be deleted by the time this is read
+  userCtoonId    String?
+  ctoonName      String?
+  mintNumber     Int?
+  rarity         String?
+  series         String?
+  set            String?
+  sourceUsername String?
+  message        String
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model HomepageConfig {
