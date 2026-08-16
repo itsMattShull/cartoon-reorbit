@@ -311,6 +311,13 @@ const resetLabel = computed(() => {
 let scale = 1
 let dpr = 1
 
+// The memo below is keyed on the canvas ELEMENT as well as the measurement, and the element
+// half is load-bearing. Starting another run re-creates the board through `v-if`, so a fresh
+// <canvas> arrives at its browser default of 300x150 with no inline size at all. Keyed on the
+// measurement alone, the stage measured the same as before and this early-returned, leaving
+// that untouched 300x150 element to render the world at 0.625 scale — a small box adrift in the
+// middle of the stage with the backdrop clipped off. Comparing the element catches it.
+let lastFitEl = null
 let lastFitW = 0
 let lastFitH = 0
 
@@ -328,9 +335,10 @@ function resizeCanvas () {
   const layoutW = stage.clientWidth
   const layoutH = stage.clientHeight
   if (layoutW < 2 || layoutH < 2) return
-  // Nothing moved — bail before touching canvas.width, which is destructive (it clears the
-  // backing store and resets the context state).
-  if (layoutW === lastFitW && layoutH === lastFitH) return
+  // Same element, nothing moved — bail before touching canvas.width, which is destructive (it
+  // clears the backing store and resets the context state).
+  if (canvas === lastFitEl && layoutW === lastFitW && layoutH === lastFitH) return
+  lastFitEl = canvas
   lastFitW = layoutW
   lastFitH = layoutH
 
@@ -859,6 +867,9 @@ async function startGame () {
     piggyMultiplier.value = cfg.piggyMultiplier
 
     submitFailed.value = false
+    // A new run must never inherit the previous one's pause. Nothing else clears this on the
+    // way into a run, so a player who paused, died and hit Again came back to a frozen board.
+    paused.value = false
     strokes = []
     openStroke = null
     activePointerId = null
@@ -948,6 +959,13 @@ function resumeGame () {
 
 function onVisibilityChange () { if (document.hidden) pauseGame(); else resumeGame() }
 function onWindowBlur () { pauseGame() }
+// The mirror of the blur handler, and it has to exist. `blur` fires for things that are not a
+// tab switch — clicking another window on the same screen, an iframe on the page taking focus,
+// opening devtools — and none of those fire `visibilitychange`, which was the only thing that
+// resumed. So a single stray blur left the game paused forever, with the overlay up and the
+// board frozen, and the only way out was to reload. Guarded on document.hidden so a focus
+// event delivered while the tab is still hidden cannot un-pause a backgrounded game.
+function onWindowFocus () { if (!document.hidden) resumeGame() }
 
 // CSS user-select is the main defence, but some mobile browsers still begin a selection or a
 // drag from a long-press before the style applies, and a selection started mid-run swallows
@@ -978,6 +996,7 @@ onMounted(async () => {
   document.addEventListener('touchmove', blockMultiTouch, { passive: false })
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('blur', onWindowBlur)
+  window.addEventListener('focus', onWindowFocus)
 
   landscapeMql = window.matchMedia?.('(max-height: 500px) and (orientation: landscape)')
   landscapeMql?.addEventListener?.('change', onLandscapeChange)
@@ -1022,6 +1041,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('touchmove', blockMultiTouch)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('blur', onWindowBlur)
+  window.removeEventListener('focus', onWindowFocus)
   landscapeMql?.removeEventListener?.('change', onLandscapeChange)
 })
 </script>
