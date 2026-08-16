@@ -66,6 +66,7 @@ export default defineEventHandler(async (event) => {
             ctoon:   {
               select: {
                 name: true, rarity: true, assetPath: true, isGtoon: true, cost: true, power: true,
+                inCmart: true,
                 isSecondEdition: true,
                 secondEditionOverlayX: true,
                 secondEditionOverlayY: true,
@@ -104,6 +105,7 @@ export default defineEventHandler(async (event) => {
     isGtoon: o.ctoon.isGtoon,
     cost:    o.ctoon.cost,
     power:   o.ctoon.power,
+    inCmart: o.ctoon.inCmart,
     weight:  o.weight,
     isSecondEdition:          o.ctoon.isSecondEdition,
     secondEditionOverlayX:    o.ctoon.secondEditionOverlayX,
