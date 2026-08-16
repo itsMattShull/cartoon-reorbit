@@ -1761,10 +1761,12 @@ model PokemonBattleMatch {
 
   player1UserId  String
   player2UserId  String
-  // The cosmetic trainer each side picked. Nullable because the roster starts empty and a
-  // trainer can be retired after the match that used it.
-  player1Trainer String?
-  player2Trainer String?
+  // The cosmetic avatar each side picked -- a trainer id here, an Ed there. Named "Character"
+  // to match EdRpsMatch exactly: the shared runtime writes this row, so an identically shaped
+  // table is what lets one code path serve both games (and one admin log viewer read both).
+  // Nullable because the trainer roster starts empty and a trainer can be retired later.
+  player1Character String?
+  player2Character String?
   player1Score   Int     @default(0)
   player2Score   Int     @default(0)
 
@@ -1773,12 +1775,17 @@ model PokemonBattleMatch {
   // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
   endReason     String  @default("natural")
 
-  // One entry per resolved round, as a positional array rather than an object:
-  // [n, p1, p2, p1Auto, p2Auto, p1Ms, p2Ms, w]. JSONB repeats every key name in every element,
-  // so the object form the RPS table uses costs ~190 bytes per round against ~40 here. That
-  // matters because it is stored inline: at ~1.3KB of round history per row the heap fits only
-  // four rows per 8KB page, and every leaderboard scan drags all of it through the buffer pool.
-  // The migration also lowers toast_tuple_target so this column moves out of line entirely.
+  // One entry per resolved round: { n, p1, p2, p1Auto, p2Auto, p1Ms, p2Ms, w } where p1/p2 are
+  // type indices, *Ms is the server-measured response time, and w is 0 (tie) | 1 | 2. Same
+  // shape as EdRpsMatch because the same shared runtime writes both.
+  //
+  // JSONB repeats every key name in every element, so this runs ~190 bytes per round. Left as
+  // objects rather than packed positionally — that would be ~40 bytes, but the encoding is
+  // written by shared code and changing it here alone would desync the two games. The cost is
+  // instead removed where it actually bites: the migration lowers toast_tuple_target so the
+  // column moves out of line, since otherwise ~1.3KB of history per row means about four rows
+  // per 8KB page and every leaderboard scan drags all of it through the buffer pool for a
+  // column it never reads.
   rounds Json?
 
   // Collusion signals, captured at match start. IPs use the deterministic encryptIp() from

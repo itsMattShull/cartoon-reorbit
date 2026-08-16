@@ -595,11 +595,23 @@ export function createDuelRuntime(spec) {
       // Claim the award before paying it. Nothing else makes awardCappedGamePoints idempotent —
       // GamePointLog has no unique constraint — so if a forfeit ever raced a natural end, the
       // winner would be paid twice.
-      const claimed = await tx.$executeRaw`
-        UPDATE ${spec.matchTable}
-           SET "pointsAwardedAt" = now(), "awardedUserId" = ${winnerUserId}
-         WHERE "id" = ${row.id} AND "pointsAwardedAt" IS NULL`
-      if (claimed !== 1) return
+      //
+      // This was a tagged-template $executeRaw naming the table literally. It cannot stay raw
+      // now the table comes from the spec: Prisma's tagged template treats every `${}` as a
+      // BIND PARAMETER, so a table name interpolated that way compiles to `UPDATE $1` and the
+      // statement dies on a syntax error — which endMatch catches and logs, leaving the match
+      // to finish looking completely normal while paying nothing. $executeRawUnsafe would fix
+      // the syntax by reintroducing an injection surface for a value that no longer needs to
+      // be raw at all.
+      //
+      // updateMany with `pointsAwardedAt: null` in the WHERE is the same compare-and-set: the
+      // UPDATE takes a row lock and re-checks the predicate, so exactly one of two racing
+      // callers sees count === 1.
+      const claim = await MATCH(tx).updateMany({
+        where: { id: row.id, pointsAwardedAt: null },
+        data: { pointsAwardedAt: new Date(), awardedUserId: winnerUserId }
+      })
+      if (claim.count !== 1) return
 
       awarded = await awardCappedGamePoints(tx, {
         userId: winnerUserId,
