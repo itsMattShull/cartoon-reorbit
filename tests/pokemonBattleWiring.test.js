@@ -398,6 +398,62 @@ test('the lobby can reach the socket without a click it cannot make', () => {
     'the create button no longer reflects connection state')
 })
 
+test('every uploadable asset slot is actually consumed by the game', () => {
+  // Shipped broken once: `menubg` was accepted by the upload endpoint, offered in the admin
+  // panel, stored, and served by the config API -- and rendered by nothing. The admin uploaded
+  // a menu background and it silently went nowhere. An upload slot with no consumer is worse
+  // than a missing feature, because it looks like a working one.
+  const endpoint = read('server/api/admin/pokemonbattle-asset.post.js')
+  const audio = read('server/api/admin/pokemonbattle-audio.post.js')
+  const page = read('pages/newsite/pokemonbattle.vue')
+
+  const imageSlots = [...(/const SLOTS = \{([\s\S]*?)\n\}/.exec(endpoint)?.[1] || '')
+    .matchAll(/^\s*'?([a-z-]+)'?:/gm)].map(m => m[1])
+  assert.ok(imageSlots.length >= 9, `expected the asset slots, found ${imageSlots.length}`)
+
+  const audioSlots = [...(/const SLOTS = new Set\(\[([^\]]*)\]/.exec(audio)?.[1] || '')
+    .matchAll(/'([a-z]+)'/g)].map(m => m[1])
+  assert.ok(audioSlots.length === 2, `expected two audio slots, found ${audioSlots.length}`)
+
+  for (const slot of [...imageSlots, ...audioSlots]) {
+    // The six Pokemon sprites are looked up dynamically as `${mon.id}-front` / `-back`, so a
+    // literal match will not find them; everything else must appear literally.
+    const dynamic = /^(charizard|blastoise|venusaur)-(front|back)$/.test(slot)
+    if (dynamic) continue
+    assert.ok(page.includes(`'${slot}'`), `nothing in the game renders the "${slot}" upload slot`)
+  }
+  // And the dynamic pair really is built, or all six sprite slots would be dead at once.
+  assert.ok(page.includes('-back') && page.includes('-front'),
+    'the page no longer builds the sprite slot names, so every sprite upload is dead')
+
+  // The admin panel must offer exactly what the endpoints accept -- a slot in the panel that
+  // the endpoint rejects is an upload button that always errors.
+  const admin = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
+  for (const slot of [...imageSlots, ...audioSlots]) {
+    assert.ok(admin.includes(`key: '${slot}'`), `the admin panel cannot upload the "${slot}" slot`)
+  }
+})
+
+test('the menu backdrop stays legible under any uploaded image', () => {
+  // The title, chips and notes sit directly on an admin-supplied image that is as likely to be
+  // bright as dark, so the scrim is what guarantees the text survives. Worst case is a pure
+  // white upload; the alpha is computed rather than eyeballed.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const scrim = Number(/const MENU_SCRIM = ([\d.]+)/.exec(page)?.[1])
+  assert.ok(Number.isFinite(scrim), 'the menu scrim constant is gone')
+
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const rel = ([r, g, b]) => 0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255)
+  const scrimRgb = (/rgba\((\d+),\s*(\d+),\s*(\d+),/.exec(page) || []).slice(1).map(Number)
+  assert.equal(scrimRgb.length, 3, 'could not read the scrim colour')
+
+  // White image under the scrim, composited in sRGB.
+  const composited = scrimRgb.map(c => scrim * c + (1 - scrim) * 255)
+  const ratio = (rel([248, 248, 248]) + 0.05) / (rel(composited) + 0.05)
+  assert.ok(ratio >= 4.5,
+    `body text over a pure-white menu upload is only ${ratio.toFixed(2)}:1; raise MENU_SCRIM`)
+})
+
 test('the battlefield is sized from width, never from height', () => {
   // Shipped broken once, in both directions. The layout gives .main-content `height: auto` on
   // mobile, so a height-driven field has nothing definite to resolve against and collapses to

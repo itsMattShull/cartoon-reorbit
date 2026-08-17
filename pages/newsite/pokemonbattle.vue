@@ -2,7 +2,7 @@
   <div class="pfwg" ref="wrapper">
 
     <!-- ── Menu ──────────────────────────────────────────────────────────────────────── -->
-    <div v-if="screen === 'menu'" class="pfwg-menu">
+    <div v-if="screen === 'menu'" class="pfwg-menu" :style="menuStyle">
       <img
         v-if="art('logo')"
         :src="art('logo').path" :width="art('logo').width" :height="art('logo').height"
@@ -320,6 +320,25 @@ const secondsLeft = computed(() => {
 const canThrow = computed(() =>
   !over.value && myPick.value === null && !revealed.value && deadlineAt.value > 0
 )
+
+// The uploaded menu backdrop. Scrimmed rather than shown raw: the title, the type chips and
+// the notes sit directly on it, and an arbitrary uploaded image is as likely to be bright as
+// dark. MENU_SCRIM is the alpha at which #f8f8f8 body text still clears 4.5:1 over a pure
+// WHITE image, which is the worst case an admin can produce.
+//
+// 0.66, not the 0.55 a pure-black scrim would need: this scrim is tinted (#0c1c2e), and a
+// tinted overlay composites LIGHTER than black at the same alpha, which quietly costs about
+// a point of contrast. Computed rather than eyeballed, and asserted in
+// tests/pokemonBattleWiring.test.js so a later colour tweak cannot silently undo it.
+const MENU_SCRIM = 0.66
+const menuStyle = computed(() => {
+  const bg = art('menubg')
+  if (!bg) return {}
+  return {
+    backgroundImage:
+      `linear-gradient(rgba(12, 28, 46, ${MENU_SCRIM}), rgba(12, 28, 46, ${MENU_SCRIM})), url('${bg.path}')`
+  }
+})
 
 const fieldStyle = computed(() => {
   const bg = art('battlebg')
@@ -855,6 +874,14 @@ html.pfwg-page body ::selection { background: transparent; }
   padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
   box-sizing: border-box;
   text-align: center;
+  /* Backdrop set inline from the uploaded asset; these only describe how it is drawn.
+     `cover` rather than the battlefield's `100% 100%` -- this one is scenery behind a
+     scrolling column, so cropping it is correct and distorting it is not. Never
+     `background-attachment: fixed`: unsupported and janky on iOS. */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: scroll;
 }
 .pfwg-logo { display: block; width: min(100%, 420px); height: auto; margin: 0 auto 6px; }
 .pfwg-title {
