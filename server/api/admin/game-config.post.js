@@ -835,6 +835,10 @@ export default defineEventHandler(async (event) => {
         for (const key of POKEMONBATTLE_FIELDS) {
           if (body[key] != null) pkmnData[key] = body[key]
         }
+        // Explicit null check, not a truthiness one: `false` is the whole point of this field.
+        if (body.pokemonBattleEnabled != null) {
+          pkmnData.pokemonBattleEnabled = Boolean(body.pokemonBattleEnabled)
+        }
         createData = { ...createData, ...pkmnData }
         updateData = { ...updateData, ...pkmnData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
@@ -1105,6 +1109,18 @@ export default defineEventHandler(async (event) => {
             const next = body[key]
             if (next != null && prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:PokemonBattle', key, prevValue: prev, newValue: next })
+            }
+          }
+          // Taking a game offline is the kind of change someone asks about later, so it is
+          // logged like any other.
+          if (body.pokemonBattleEnabled != null) {
+            const wasOn = before?.pokemonBattleEnabled !== false
+            const nowOn = Boolean(body.pokemonBattleEnabled)
+            if (wasOn !== nowOn) {
+              await logAdminChange(tx, {
+                userId: me.id, area: 'GameConfig:PokemonBattle', key: 'pokemonBattleEnabled',
+                prevValue: String(wasOn), newValue: String(nowOn)
+              })
             }
           }
         } else if (gameName === 'Clash' || gameName === 'TKO') {

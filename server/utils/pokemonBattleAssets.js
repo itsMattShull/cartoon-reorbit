@@ -68,7 +68,8 @@ export async function getPokemonBattleAssets() {
           pokemonBattleAssets: true,
           pokemonBattleRoundSeconds: true,
           pokemonBattleWinsNeeded: true,
-          pokemonBattleMaxRounds: true
+          pokemonBattleMaxRounds: true,
+          pokemonBattleEnabled: true
         }
       })
       cache = {
@@ -76,14 +77,17 @@ export async function getPokemonBattleAssets() {
         config: {
           roundSeconds: row?.pokemonBattleRoundSeconds ?? null,
           winsNeeded: row?.pokemonBattleWinsNeeded ?? null,
-          maxRounds: row?.pokemonBattleMaxRounds ?? null
+          maxRounds: row?.pokemonBattleMaxRounds ?? null,
+          // Only an explicit `false` disables it. A missing row or a database that predates the
+          // migration must leave the game playable rather than silently switching it off.
+          enabled: row?.pokemonBattleEnabled !== false
         }
       }
       cachedAt = Date.now()
       return cache
     } catch (err) {
       console.error('[pokemonbattle] asset read failed:', err)
-      cache = cache || { assets: {}, config: { roundSeconds: null, winsNeeded: null, maxRounds: null } }
+      cache = cache || { assets: {}, config: { roundSeconds: null, winsNeeded: null, maxRounds: null, enabled: true } }
       cachedAt = Date.now()
       return cache
     } finally {

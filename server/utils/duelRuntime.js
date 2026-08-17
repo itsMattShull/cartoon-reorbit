@@ -77,6 +77,10 @@ import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
  *   isChoice       (v) => boolean
  *   isAvatarId     async (v) => boolean   -- may hit a cached DB roster
  *   breakMs        (cmp) => ms to pause after a round with this result
+ *   isEnabled      optional async () => boolean. False takes the game offline: no new rooms
+ *                  and no joins, so nothing can be played for points while it is off. Live
+ *                  matches are left alone -- yanking a match out from under two players who
+ *                  are mid-round would be a worse outcome than letting it finish.
  *   announce       { emoji, label, url }
  */
 export function createDuelRuntime(spec) {
@@ -843,9 +847,19 @@ export function createDuelRuntime(spec) {
       socket.emit(EV('rooms'), lobbyRoomList())
     })
 
+    // Checked on both entry points, not just one: a room created before the game was taken
+    // offline is still joinable otherwise.
+    const offline = async () => {
+      if (!spec.isEnabled) return false
+      try { return !(await spec.isEnabled()) } catch { return false }
+    }
+
     socket.on(EV('createRoom'), async ({ character } = {}) => {
       const user = await auth()
       if (!user) return
+      if (await offline()) {
+        return socket.emit(EV('error'), { code: 'offline', message: 'This game is currently unavailable.' })
+      }
       if (!(await spec.isAvatarId(character))) {
         return socket.emit(EV('error'), { code: 'badCharacter', message: 'Pick a character first.' })
       }
@@ -887,6 +901,9 @@ export function createDuelRuntime(spec) {
     socket.on(EV('joinRoom'), async ({ roomId, character } = {}) => {
       const user = await auth()
       if (!user) return
+      if (await offline()) {
+        return socket.emit(EV('error'), { code: 'offline', message: 'This game is currently unavailable.' })
+      }
       if (typeof roomId !== 'string' || !ROOM_ID_RE.test(roomId)) {
         return socket.emit(EV('error'), { code: 'badRoom', message: 'That room is no longer available.' })
       }

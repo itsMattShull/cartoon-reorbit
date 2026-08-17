@@ -353,13 +353,71 @@ test('the leaderboard endpoint the component points at exists', () => {
   assert.doesNotThrow(() => read(route), `${route} does not exist`)
 })
 
-test('the Games page tile grid has a row for every tile', () => {
+test('the Games page tile grid derives its rows from the tiles that render', () => {
+  // Two columns, so N tiles need ceil(N/2) rows: a short grid drops the last tiles into an
+  // implicit auto-height row which collapses to nothing, because .tile-img is absolutely
+  // positioned -- present but invisible. This used to be a literal with a comment asking people
+  // to bump it. Now that a tile can be hidden at runtime no literal can be right in both
+  // states, so the count is computed instead and only TOTAL_TILES has to match reality.
   const src = read('components/newsite/GamesHome.vue')
   const tiles = (src.match(/class="quadrant quadrant--/g) || []).length
-  const rows = Number(/grid-template-rows: repeat\((\d+), 1fr\)/.exec(src)?.[1])
-  // Two columns, so N tiles need ceil(N/2) explicit rows. A short grid drops the last tiles
-  // into an implicit auto-height row which collapses to nothing -- present but invisible.
-  assert.equal(rows, Math.ceil(tiles / 2), `${tiles} tiles need ${Math.ceil(tiles / 2)} grid rows, found ${rows}`)
+  const total = Number(/const TOTAL_TILES = (\d+)/.exec(src)?.[1])
+  assert.equal(total, tiles, `TOTAL_TILES is ${total} but the template renders ${tiles} tiles`)
+  assert.ok(/gridTemplateRows: `repeat\(\$\{Math\.ceil\(/.test(src),
+    'the grid row count is no longer derived from the visible tile count')
+})
+
+test('the admin tile panel can reach every tile slot the endpoint accepts', () => {
+  // Shipped broken twice by the same mechanism: the slot list was duplicated across the
+  // rendered list, three state maps and a block of hand-written assignments in loadSettings().
+  // Blackjack fell out of the loader, then Fruit Samurai did -- both showed "not set" forever
+  // even with an image uploaded -- and Pokemon was missing from the list entirely, so its tile
+  // could not be changed at all. Everything is derived from one list now; this holds it there.
+  const admin = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
+  const endpoint = read('server/api/admin/game-tile-image.post.js')
+
+  const endpointSlots = [...(/const SLOT_FIELD = \{([\s\S]*?)\n\}/.exec(endpoint)?.[1] || '')
+    .matchAll(/^\s*([a-z]+):\s*'([A-Za-z]+)'/gm)].map(m => ({ slot: m[1], column: m[2] }))
+  assert.ok(endpointSlots.length >= 15, `expected the tile slots, found ${endpointSlots.length}`)
+
+  const listed = [...(/const gameTileSlots = \[([\s\S]*?)\n\]/.exec(admin)?.[1] || '')
+    .matchAll(/slot: '([a-z]+)'[^}]*column: '([A-Za-z]+)'/g)].map(m => ({ slot: m[1], column: m[2] }))
+
+  for (const { slot, column } of endpointSlots) {
+    const hit = listed.find(l => l.slot === slot)
+    assert.ok(hit, `the admin tile panel cannot manage the "${slot}" tile`)
+    assert.equal(hit.column, column,
+      `"${slot}" reads ${hit.column} in the panel but the endpoint writes ${column}`)
+  }
+
+  // And nothing may hand-write the per-slot assignments again, which is what drifted.
+  assert.ok(/for \(const t of gameTileSlots\) gameTileImages\.value/.test(admin),
+    'the tile loader is hand-written again rather than driven by gameTileSlots')
+})
+
+test('switching the game off takes it off the site, not just off the Games page', () => {
+  // "Not visible" has to mean "not playable": the route is reachable by URL and a head-to-head
+  // win pays points, so hiding the tile alone would leave an off game quietly earning.
+  const runtime = read('server/utils/pokemonBattleRuntime.js')
+  assert.ok(runtime.includes('isEnabled:'), 'the runtime has no enabled gate')
+
+  const duel = code('server/utils/duelRuntime.js')
+  assert.ok(/createRoom[\s\S]{0,400}await offline\(\)/.test(duel), 'createRoom is not gated on the switch')
+  assert.ok(/joinRoom[\s\S]{0,400}await offline\(\)/.test(duel),
+    'joinRoom is not gated -- a room made before the game went off would still be joinable')
+
+  // The page renders its own closed state rather than trusting the tile to be hidden.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  assert.ok(page.includes('v-if="!enabled"'), 'the game page has no closed state')
+  assert.ok(page.includes('if (enabled.value) connectSocket()'),
+    'a switched-off game still opens a socket')
+
+  // A missing column or an unreadable config must fail OPEN, or a migration lag takes the game
+  // down on its own.
+  const assets = code('server/utils/pokemonBattleAssets.js')
+  assert.ok(assets.includes('!== false'), 'the enabled flag does not default to on')
+  assert.ok(code('server/api/game-tile-images.get.js').includes('hidden'),
+    'the tile endpoint does not report hidden games')
 })
 
 test('the admin log component and its endpoint agree', () => {
@@ -380,6 +438,102 @@ test('the battle UI depends on no emoji glyph', () => {
   const template = page.slice(0, page.indexOf('</template>'))
   const emoji = template.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || []
   assert.deepEqual(emoji, [], `the template contains emoji (${emoji.join(' ')}) -- use art or a CSS shape`)
+})
+
+test('the lobby can reach the socket without a click it cannot make', () => {
+  // Shipped broken once: the "Create a battle" button was disabled until `connected`, and the
+  // only caller of connectSocket() was that button's own click handler. The socket could
+  // therefore never open, and the lobby sat on "Connecting..." forever. The room list was
+  // permanently empty for the same reason.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const mounted = page.slice(page.indexOf('onMounted('), page.indexOf('onBeforeUnmount('))
+  assert.ok(mounted.includes('connectSocket()'),
+    'nothing connects the socket on mount, so a lobby gated on `connected` can never enable itself')
+
+  // And the gate itself still has to be a gate: if the button stops being disabled while
+  // disconnected, the emit silently no-ops instead.
+  assert.ok(/createRoom"[^>]*:disabled="!connected"/.test(page) || page.includes(':disabled="!connected"'),
+    'the create button no longer reflects connection state')
+})
+
+test('every uploadable asset slot is actually consumed by the game', () => {
+  // Shipped broken once: `menubg` was accepted by the upload endpoint, offered in the admin
+  // panel, stored, and served by the config API -- and rendered by nothing. The admin uploaded
+  // a menu background and it silently went nowhere. An upload slot with no consumer is worse
+  // than a missing feature, because it looks like a working one.
+  const endpoint = read('server/api/admin/pokemonbattle-asset.post.js')
+  const audio = read('server/api/admin/pokemonbattle-audio.post.js')
+  const page = read('pages/newsite/pokemonbattle.vue')
+
+  const imageSlots = [...(/const SLOTS = \{([\s\S]*?)\n\}/.exec(endpoint)?.[1] || '')
+    .matchAll(/^\s*'?([a-z-]+)'?:/gm)].map(m => m[1])
+  assert.ok(imageSlots.length >= 9, `expected the asset slots, found ${imageSlots.length}`)
+
+  const audioSlots = [...(/const SLOTS = new Set\(\[([^\]]*)\]/.exec(audio)?.[1] || '')
+    .matchAll(/'([a-z]+)'/g)].map(m => m[1])
+  assert.ok(audioSlots.length === 2, `expected two audio slots, found ${audioSlots.length}`)
+
+  for (const slot of [...imageSlots, ...audioSlots]) {
+    // The six Pokemon sprites are looked up dynamically as `${mon.id}-front` / `-back`, so a
+    // literal match will not find them; everything else must appear literally.
+    const dynamic = /^(charizard|blastoise|venusaur)-(front|back)$/.test(slot)
+    if (dynamic) continue
+    assert.ok(page.includes(`'${slot}'`), `nothing in the game renders the "${slot}" upload slot`)
+  }
+  // And the dynamic pair really is built, or all six sprite slots would be dead at once.
+  assert.ok(page.includes('-back') && page.includes('-front'),
+    'the page no longer builds the sprite slot names, so every sprite upload is dead')
+
+  // The admin panel must offer exactly what the endpoints accept -- a slot in the panel that
+  // the endpoint rejects is an upload button that always errors.
+  const admin = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
+  for (const slot of [...imageSlots, ...audioSlots]) {
+    assert.ok(admin.includes(`key: '${slot}'`), `the admin panel cannot upload the "${slot}" slot`)
+  }
+})
+
+test('the menu backdrop stays legible under any uploaded image', () => {
+  // The title, chips and notes sit directly on an admin-supplied image that is as likely to be
+  // bright as dark, so the scrim is what guarantees the text survives. Worst case is a pure
+  // white upload; the alpha is computed rather than eyeballed.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const scrim = Number(/const MENU_SCRIM = ([\d.]+)/.exec(page)?.[1])
+  assert.ok(Number.isFinite(scrim), 'the menu scrim constant is gone')
+
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const rel = ([r, g, b]) => 0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255)
+  const scrimRgb = (/rgba\((\d+),\s*(\d+),\s*(\d+),/.exec(page) || []).slice(1).map(Number)
+  assert.equal(scrimRgb.length, 3, 'could not read the scrim colour')
+
+  // White image under the scrim, composited in sRGB.
+  const composited = scrimRgb.map(c => scrim * c + (1 - scrim) * 255)
+  const ratio = (rel([248, 248, 248]) + 0.05) / (rel(composited) + 0.05)
+  assert.ok(ratio >= 4.5,
+    `body text over a pure-white menu upload is only ${ratio.toFixed(2)}:1; raise MENU_SCRIM`)
+})
+
+test('the battlefield is sized from width, never from height', () => {
+  // Shipped broken once, in both directions. The layout gives .main-content `height: auto` on
+  // mobile, so a height-driven field has nothing definite to resolve against and collapses to
+  // a 0px sliver. Deriving width from height instead overflows: at a 2.14 ratio a 280px-tall
+  // stage wants a 600px-wide field, which a 375px phone crops via `overflow: hidden` rather
+  // than scrolling. Width is the only dimension that is definite in every context.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const rule = /\.pfwg-field \{([\s\S]*?)\}/.exec(page)?.[1]
+  assert.ok(rule, 'could not find the .pfwg-field rule')
+  // Anchored so `max-width` / `max-height` are not mistaken for the real properties -- the
+  // field legitimately carries a `max-height: 100%` letterbox guard.
+  const prop = (name) => new RegExp(`(^|[;{\\s])${name}:\\s*([^;]+)`, 'm').exec(rule)?.[2]?.trim()
+  assert.equal(prop('width'), '100%', '.pfwg-field must take its width from its container')
+  assert.equal(prop('height'), 'auto', '.pfwg-field must derive its height from its width')
+  assert.ok(/aspect-ratio/.test(rule), '.pfwg-field lost its aspect ratio')
+
+  // The base (mobile) grid must not hand the stage a flexible track either -- `1fr` of an
+  // indefinite parent is zero.
+  const battle = /\.pfwg-battle \{([\s\S]*?)\}/.exec(page)?.[1]
+  assert.ok(battle, 'could not find the .pfwg-battle rule')
+  assert.ok(!/grid-template-rows:[^;]*1fr/.test(battle),
+    'the base battle grid uses a 1fr track; on mobile that resolves to zero height')
 })
 
 test('the page never renders admin-supplied text as HTML', () => {
