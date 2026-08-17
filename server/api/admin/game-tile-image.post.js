@@ -8,6 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
+import { MAX_IMAGE_BYTES, sniffImageType, assertInside } from '@/server/utils/imageUploadValidation'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -15,7 +16,20 @@ const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
-const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/gif'])
+// The format is decided by the file's magic bytes, not by filePart.type -- that is the
+// multipart Content-Type, which the client writes and can set to anything.
+//
+// SVG is no longer accepted. Production serves this directory through nginx, which picks
+// Content-Type from the extension, so an SVG here executes script on direct navigation from
+// the app's own origin, with the admin's session cookie and no CSP to contain it. The
+// extension is likewise no longer taken from the client's filename: declaring image/png while
+// naming the file x.html previously wrote a document served as text/html.
+const EXT_BY_TYPE = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp'
+}
 
 const SLOT_FIELD = {
   winball:      'gameTileWinballImagePath',
@@ -31,7 +45,8 @@ const SLOT_FIELD = {
   flappy:       'gameTileFlappyImagePath',
   blackjack:    'gameTileBlackjackImagePath',
   edrps:        'gameTileEdrpsImagePath',
-  fruitsamurai: 'gameTileFruitsamuraiImagePath'
+  fruitsamurai: 'gameTileFruitsamuraiImagePath',
+  pokemonbattle: 'gameTilePokemonbattleImagePath'
 }
 
 export default defineEventHandler(async (event) => {
@@ -50,7 +65,13 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!filePart) throw createError({ statusCode: 400, statusMessage: 'Missing image file' })
-  if (!ALLOWED.has(filePart.type)) throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPG, SVG, or GIF allowed' })
+  if (filePart.data.length > MAX_IMAGE_BYTES) {
+    throw createError({ statusCode: 413, statusMessage: 'Image must be 5MB or smaller' })
+  }
+  const sniffed = sniffImageType(filePart.data)
+  if (!sniffed || !EXT_BY_TYPE[sniffed]) {
+    throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPG, GIF or WebP images are allowed' })
+  }
   if (!SLOT_FIELD[slot]) throw createError({ statusCode: 400, statusMessage: `Invalid slot "${slot}"` })
 
   const uploadDir = process.env.NODE_ENV === 'production'
@@ -58,14 +79,10 @@ export default defineEventHandler(async (event) => {
     : join(baseDir, 'public', 'game-tiles')
   await mkdir(uploadDir, { recursive: true })
 
-  const safeExt = extname(filePart.filename || '').toLowerCase() || (
-    filePart.type === 'image/svg+xml' ? '.svg'
-    : filePart.type === 'image/png' ? '.png'
-    : filePart.type === 'image/gif' ? '.gif'
-    : '.jpg'
-  )
-  const filename = `${slot}-${Date.now()}${safeExt}`
-  await writeFile(join(uploadDir, filename), filePart.data)
+  // Every component is server-controlled: an allowlisted slot, a clock reading, and an
+  // extension looked up from the sniffed type.
+  const filename = `${slot}-${Date.now()}${EXT_BY_TYPE[sniffed]}`
+  await writeFile(assertInside(uploadDir, join(uploadDir, filename)), filePart.data)
 
   const assetPath = process.env.NODE_ENV === 'production'
     ? `/images/game-tiles/${filename}`

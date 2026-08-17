@@ -505,6 +505,10 @@ model User {
   edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
   edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
   edRpsMatchesWhoLeft       EdRpsMatch[]                  @relation("EdRpsMatchWhoLeft")
+  pokemonBattleAsPlayer1    PokemonBattleMatch[]          @relation("PokemonBattleMatchPlayer1")
+  pokemonBattleAsPlayer2    PokemonBattleMatch[]          @relation("PokemonBattleMatchPlayer2")
+  pokemonBattleAsWinner     PokemonBattleMatch[]          @relation("PokemonBattleMatchWinner")
+  pokemonBattleWhoLeft      PokemonBattleMatch[]          @relation("PokemonBattleMatchWhoLeft")
   gtoonTournamentsWon       GtoonTournament[]             @relation("GtoonTournamentWinner")
   gtoonTournamentOptIns     GtoonTournamentOptIn[]
   gtoonTournamentMatchesAsA GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerA")
@@ -1311,6 +1315,26 @@ model GameConfig {
   edRpsWinsNeeded          Int? @default(4) // round wins to take the match (best of 7)
   edRpsMaxRounds           Int? @default(7) // hard ceiling; ties replay and don't count
   edRpsPairDailyAwardLimit Int? @default(2) // point-paying wins one pair of players may trade per day
+
+  // — Pokemon: Fire, Water, Grass! —
+  // Bounds live in CONFIG_LIMITS in lib/pokemonBattle.js, applied by clampConfig() on every
+  // read. `pointsPerWin` above is shared with the other games. The per-pair daily limit is
+  // enforced across ALL duel games (see server/utils/duelPairScope.js), so this value and the
+  // edRps one describe the same shared budget from either side.
+  pokemonBattleRoundSeconds        Int? @default(12) // shorter than RPS: the intermission is longer
+  pokemonBattleWinsNeeded          Int? @default(3)
+  pokemonBattleMaxRounds           Int? @default(9)
+  pokemonBattlePairDailyAwardLimit Int? @default(2)
+
+  // Uploaded art and music, as one JSON map of { slot: { path, width, height } } rather than
+  // eleven more columns. GameConfig already carries 256 of them, several callers still do a
+  // bare findUnique that ships every one, and art slots are the kind of thing that gets added
+  // again next quarter. The allowlisted slot->column map that makes the upload endpoints safe
+  // survives unchanged as an allowlisted slot->key map.
+  //
+  // Dimensions are stored alongside each path because the art is admin-supplied: the page
+  // needs the real aspect ratio to reserve space, and hardcoding one guarantees layout shift.
+  pokemonBattleAssets Json?
 }
 
 model GlobalGameConfig {
@@ -1366,6 +1390,7 @@ model GlobalGameConfig {
   gameTileBlackjackImagePath         String?
   gameTileEdrpsImagePath             String?
   gameTileFruitsamuraiImagePath      String?
+  gameTilePokemonbattleImagePath     String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -1718,6 +1743,114 @@ model EdRpsMatch {
   @@index([player1UserId, endedAt])
   @@index([player2UserId, endedAt])
   @@index([winnerUserId, endedAt])
+}
+
+// Pokemon: Fire, Water, Grass! — one row per finished PvP match.
+//
+// Same shape as EdRpsMatch and written by the same code (server/utils/duelRuntime.js), but a
+// separate table rather than one table with a discriminator: sharing the code is what stops
+// the award logic drifting, while sharing the TABLE would mean a live-data migration touching
+// two leaderboards, the pair-limit count and five indexes for no benefit.
+//
+// AI matches are played entirely in the browser and never reach this table, which is why both
+// player columns are NOT NULL — the leaderboard reads this table, so an AI row would be a
+// scoring bug as well as a farming one.
+model PokemonBattleMatch {
+  id     String @id @default(uuid())
+  roomId String
+
+  player1UserId  String
+  player2UserId  String
+  // The cosmetic avatar each side picked -- a trainer id here, an Ed there. Named "Character"
+  // to match EdRpsMatch exactly: the shared runtime writes this row, so an identically shaped
+  // table is what lets one code path serve both games (and one admin log viewer read both).
+  // Nullable because the trainer roster starts empty and a trainer can be retired later.
+  player1Character String?
+  player2Character String?
+  player1Score   Int     @default(0)
+  player2Score   Int     @default(0)
+
+  winnerUserId  String?
+  whoLeftUserId String?
+  // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
+  endReason     String  @default("natural")
+
+  // One entry per resolved round: { n, p1, p2, p1Auto, p2Auto, p1Ms, p2Ms, w } where p1/p2 are
+  // type indices, *Ms is the server-measured response time, and w is 0 (tie) | 1 | 2. Same
+  // shape as EdRpsMatch because the same shared runtime writes both.
+  //
+  // JSONB repeats every key name in every element, so this runs ~190 bytes per round. Left as
+  // objects rather than packed positionally — that would be ~40 bytes, but the encoding is
+  // written by shared code and changing it here alone would desync the two games. The cost is
+  // instead removed where it actually bites: the migration lowers toast_tuple_target so the
+  // column moves out of line, since otherwise ~1.3KB of history per row means about four rows
+  // per 8KB page and every leaderboard scan drags all of it through the buffer pool for a
+  // column it never reads.
+  rounds Json?
+
+  // Collusion signals, captured at match start. IPs use the deterministic encryptIp() from
+  // server/utils/ip-encrypt.js so they join directly against UserIP and DeviceFingerprintLog.
+  player1Ip        String?
+  player2Ip        String?
+  player1VisitorId String?
+  player2VisitorId String?
+  sameIp           Boolean @default(false)
+  sameVisitorId    Boolean @default(false)
+
+  // Award accounting. pointsAwardedAt is claimed with a compare-and-set inside the award
+  // transaction, so a forfeit racing a natural end can never pay twice.
+  pointsAwarded   Int       @default(0)
+  pointsAwardedAt DateTime?
+  awardedUserId   String?
+  // null when paid; otherwise why not:
+  // 'forfeit' | 'abandoned' | 'pair_limit' | 'same_device' | 'cap_exhausted' | 'banned' |
+  // 'self_match'
+  suppressReason  String?
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  player1 User  @relation("PokemonBattleMatchPlayer1", fields: [player1UserId], references: [id])
+  player2 User  @relation("PokemonBattleMatchPlayer2", fields: [player2UserId], references: [id])
+  winner  User? @relation("PokemonBattleMatchWinner", fields: [winnerUserId], references: [id])
+  whoLeft User? @relation("PokemonBattleMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+
+  // Deliberately a smaller index set than EdRpsMatch, which carries eight. Three of those earn
+  // nothing: (player1UserId, endedAt) is strictly wider than the partial p1_finished variant
+  // that supersedes it (same for p2), and a bare endedAt index is never chosen because the
+  // leaderboard's `endedAt IS NOT NULL` predicate matches almost every row. Each dropped index
+  // is one less B-tree write on the hot path — inside the award transaction, under an advisory
+  // lock. whoLeftUserId gets one it lacks there: it carries an ON DELETE SET NULL foreign key,
+  // and the account-dissolve worker would otherwise scan this whole table per deleted user.
+  // The partial and expression indexes live in the migration; Prisma cannot express them.
+  @@index([startedAt])
+  @@index([winnerUserId, endedAt])
+  @@index([whoLeftUserId])
+}
+
+// Cosmetic player characters for Pokemon: Fire, Water, Grass!.
+//
+// Purely presentational — the Pokemon are the moves. A trainer never affects a match outcome,
+// which is why the runtime treats the id as an opaque validated token and the client resolves
+// it to a name and image from the public config it already fetched. The name is admin-supplied
+// text that reaches every visitor's DOM, so it is validated on write, not escaped on read.
+model PokemonBattleTrainer {
+  id        String   @id @default(uuid())
+  name      String
+  imagePath String
+  // Small variant for the match HUD portrait, so a 320px lobby image is not downloaded to be
+  // drawn at 28px.
+  thumbPath String?
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  // Staged trainers are hidden from players but keep their row, so a match that referenced one
+  // still resolves its name in the admin log.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([active, sortOrder])
 }
 
 model MonsterBattle {

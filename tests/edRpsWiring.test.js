@@ -38,11 +38,21 @@ test('the gameName string agrees everywhere it is duplicated', () => {
     assert.ok(read(file).includes(`'${GAME_NAME}'`), `${file} is missing the ${GAME_NAME} branch`)
   }
 
-  // The runtime is what actually writes GamePointLog.gameName.
+  // The runtime is what actually writes GamePointLog.gameName. It now declares it as one field
+  // of the spec it hands to createDuelRuntime() rather than as a module constant, because the
+  // runtime body is shared with the Pokemon game — but the string still has to agree.
   assert.ok(
-    read('server/utils/edRpsRuntime.js').includes(`const GAME_NAME = '${GAME_NAME}'`),
+    read('server/utils/edRpsRuntime.js').includes(`gameName: '${GAME_NAME}'`),
     'the runtime writes a different gameName than the admin and seed use'
   )
+
+  // The delegate and the raw-SQL table name are the pair nothing else can check: a wrong
+  // delegate counts another game's rows for the pair limit, and a wrong table name in the award
+  // claim matches zero rows, so the winner is silently never paid. duelRuntime's assertSpec
+  // enforces this at boot; asserting it here fails the build instead.
+  const spec = read('server/utils/edRpsRuntime.js')
+  assert.ok(spec.includes("matchDelegate: 'edRpsMatch'"), 'EdRps spec names the wrong Prisma delegate')
+  assert.ok(spec.includes("matchTable: 'EdRpsMatch'"), 'EdRps spec names the wrong SQL table')
 })
 
 test('the tile slot key is wired through all four places it has to appear', () => {
