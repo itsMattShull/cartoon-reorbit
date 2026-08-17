@@ -1,5 +1,6 @@
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { getPokemonBattleAssets } from '@/server/utils/pokemonBattleAssets'
 
 export default defineEventHandler(async () => {
   const cfg = await db.globalGameConfig.findUnique({
@@ -23,7 +24,14 @@ export default defineEventHandler(async () => {
     }
   })
 
+  // A game an admin has switched off is reported separately from its tile, because an absent
+  // tile only means "no image uploaded" -- GamesHome still renders a text tile in that case,
+  // which would leave a switched-off game plainly visible.
+  const { config } = await getPokemonBattleAssets()
+  const hidden = config.enabled ? [] : ['pokemonbattle']
+
   return {
+    hidden,
     winball:      cfg?.gameTileWinballImagePath      ?? null,
     lotto:        cfg?.gameTileLottoImagePath        ?? null,
     winwheel:     cfg?.gameTileWinwheelImagePath     ?? null,

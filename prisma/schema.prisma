@@ -1326,6 +1326,11 @@ model GameConfig {
   pokemonBattleMaxRounds           Int? @default(9)
   pokemonBattlePairDailyAwardLimit Int? @default(2)
 
+  // Master switch. Off hides the game from the Games page AND refuses to start a battle --
+  // hiding the tile alone would leave the route playable by anyone with the URL, and PvP pays
+  // points, so "not visible" has to mean "not earning" too.
+  pokemonBattleEnabled Boolean? @default(true)
+
   // Uploaded art and music, as one JSON map of { slot: { path, width, height } } rather than
   // eleven more columns. GameConfig already carries 256 of them, several callers still do a
   // bare findUnique that ships every one, and art slots are the kind of thing that gets added

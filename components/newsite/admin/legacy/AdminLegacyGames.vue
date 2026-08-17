@@ -659,6 +659,19 @@
             again in the other.
           </p>
 
+          <label class="flex items-start gap-2 mb-3 p-2 border rounded bg-white">
+            <input type="checkbox" v-model="pkmnEnabled" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-semibold text-gray-800">Game is live</span>
+              <span class="block text-[11px] text-gray-500">
+                Unchecked hides the game from the Games page and closes it for everyone: the page
+                shows an "unavailable" notice, and no new battles can be created or joined, so
+                nothing can be played for points. Battles already in progress are allowed to
+                finish rather than being cut off mid-round.
+              </span>
+            </span>
+          </label>
+
           <div v-if="pkmnConfigError" class="mb-3 p-2 border border-red-300 bg-red-50 rounded">
             <p class="text-xs font-semibold text-red-800">These settings could not be loaded.</p>
             <p class="text-[11px] text-red-700 mt-1">{{ pkmnConfigError }}</p>
@@ -1937,6 +1950,7 @@ const PKMN_AUDIO_SLOTS = [
   { key: 'battlemusic', label: 'Battle music' },
   { key: 'menumusic',   label: 'Menu music' }
 ]
+const pkmnEnabled               = ref(true)
 const pkmnPointsPerWin          = ref(0)
 const pkmnRoundSeconds          = ref(12)
 const pkmnWinsNeeded            = ref(3)
@@ -2239,21 +2253,9 @@ async function loadSettings() {
   const g = await $fetch('/api/admin/global-config')
   globalDailyPointLimit.value = g.dailyPointLimit
   globalTkoDailyPointLimit.value = g.tkoDailyPointLimit
-  gameTileImages.value.winball      = g.gameTileWinballImagePath      || ''
-  gameTileImages.value.lotto        = g.gameTileLottoImagePath        || ''
-  gameTileImages.value.winwheel     = g.gameTileWinwheelImagePath     || ''
-  gameTileImages.value.clash        = g.gameTileClashImagePath        || ''
-  gameTileImages.value.tko          = g.gameTileTkoImagePath          || ''
-  gameTileImages.value.reorbitmatch = g.gameTileReorbitmatchImagePath || ''
-  gameTileImages.value.tower        = g.gameTileTowerImagePath        || ''
-  gameTileImages.value.asteroid     = g.gameTileAsteroidImagePath     || ''
-  gameTileImages.value.flappy       = g.gameTileFlappyImagePath       || ''
-  gameTileImages.value.reorbitmemory = g.gameTileReorbitmemoryImagePath || ''
-  gameTileImages.value.guessctoon   = g.gameTileGuessctoonImagePath   || ''
-  // blackjack was missing here, so its tile always rendered as "not set" in this panel even
-  // when one was uploaded.
-  gameTileImages.value.blackjack    = g.gameTileBlackjackImagePath    || ''
-  gameTileImages.value.edrps        = g.gameTileEdrpsImagePath        || ''
+  // Driven by gameTileSlots, so a game added there is loaded here automatically. The
+  // hand-written version of this block is what silently broke blackjack, then fruitsamurai.
+  for (const t of gameTileSlots) gameTileImages.value[t.slot] = g[t.column] || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -2344,6 +2346,8 @@ async function loadSettings() {
   // after it, leaving those tabs showing defaults that a save would then write over.
   try {
     const pk = await $fetch('/api/admin/game-config?gameName=PokemonBattle')
+    // Only an explicit false is off, so a row predating the migration reads as live.
+    pkmnEnabled.value             = pk.pokemonBattleEnabled !== false
     pkmnPointsPerWin.value        = pk.pointsPerWin ?? 0
     pkmnRoundSeconds.value        = pk.pokemonBattleRoundSeconds ?? 12
     pkmnWinsNeeded.value          = pk.pokemonBattleWinsNeeded ?? 3
@@ -2762,6 +2766,7 @@ async function savePkmnConfig() {
       method: 'POST',
       body: {
         gameName:                         'PokemonBattle',
+        pokemonBattleEnabled:             pkmnEnabled.value,
         pointsPerWin:                     pkmnPointsPerWin.value,
         pokemonBattleRoundSeconds:        pkmnRoundSeconds.value,
         pokemonBattleWinsNeeded:          pkmnWinsNeeded.value,
@@ -2887,25 +2892,37 @@ async function saveTkoConfig() {
 }
 
 // ── Game Tile Images ─────────────────────────
+// ONE list, and everything else is derived from it.
+//
+// This used to be five parallel lists -- the slots rendered, the three state maps, and a block
+// of hand-written assignments in loadSettings() -- and they drifted, twice. Blackjack was
+// missing from the loader (there is still a comment about it), so its tile always read "not
+// set" even with an image uploaded; Fruit Samurai had exactly the same bug; and Pokemon was
+// missing from the list entirely, so its tile could not be changed at all. Each of those is
+// invisible until someone opens the panel and wonders why an upload did nothing.
+//
+// `column` is the GlobalGameConfig field, so adding a game means adding one row here.
 const gameTileSlots = [
-  { slot: 'winball',      label: 'Winball' },
-  { slot: 'lotto',        label: 'Lotto' },
-  { slot: 'winwheel',     label: 'Win Wheel' },
-  { slot: 'clash',        label: 'gToons Clash' },
-  { slot: 'tko',          label: 'TKO' },
-  { slot: 'reorbitmatch', label: 'ReOrbit Match' },
-  { slot: 'tower',        label: 'Tower Stack' },
-  { slot: 'reorbitmemory', label: 'ReOrbit Memory' },
-  { slot: 'guessctoon',   label: 'Guess that cToon!' },
-  { slot: 'asteroid',     label: 'Op. A.S.T.E.R.O.I.D.' },
-  { slot: 'flappy',       label: 'Flappy Powerpuff' },
-  { slot: 'fruitsamurai', label: 'Fruit Samurai' },
-  { slot: 'blackjack',    label: 'ReOrbit Blackjack' },
-  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' }
+  { slot: 'winball',       label: 'Winball',                column: 'gameTileWinballImagePath' },
+  { slot: 'lotto',         label: 'Lotto',                  column: 'gameTileLottoImagePath' },
+  { slot: 'winwheel',      label: 'Win Wheel',              column: 'gameTileWinwheelImagePath' },
+  { slot: 'clash',         label: 'gToons Clash',           column: 'gameTileClashImagePath' },
+  { slot: 'tko',           label: 'TKO',                    column: 'gameTileTkoImagePath' },
+  { slot: 'reorbitmatch',  label: 'ReOrbit Match',          column: 'gameTileReorbitmatchImagePath' },
+  { slot: 'tower',         label: 'Tower Stack',            column: 'gameTileTowerImagePath' },
+  { slot: 'reorbitmemory', label: 'ReOrbit Memory',         column: 'gameTileReorbitmemoryImagePath' },
+  { slot: 'guessctoon',    label: 'Guess that cToon!',      column: 'gameTileGuessctoonImagePath' },
+  { slot: 'asteroid',      label: 'Op. A.S.T.E.R.O.I.D.',   column: 'gameTileAsteroidImagePath' },
+  { slot: 'flappy',        label: 'Flappy Powerpuff',       column: 'gameTileFlappyImagePath' },
+  { slot: 'fruitsamurai',  label: 'Fruit Samurai',          column: 'gameTileFruitsamuraiImagePath' },
+  { slot: 'blackjack',     label: 'ReOrbit Blackjack',      column: 'gameTileBlackjackImagePath' },
+  { slot: 'edrps',         label: 'Ed, Edd n Eddy RPS',     column: 'gameTileEdrpsImagePath' },
+  { slot: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', column: 'gameTilePokemonbattleImagePath' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false })
+const fromSlots = (value) => Object.fromEntries(gameTileSlots.map(t => [t.slot, value]))
+const gameTileImages = ref(fromSlots(''))
+const gameTileFiles  = ref(fromSlots(null))
+const uploadingGameTile = ref(fromSlots(false))
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null

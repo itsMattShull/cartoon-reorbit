@@ -12,6 +12,7 @@
 import { createDuelRuntime } from './duelRuntime.js'
 import { compareTypes, isType, clampConfig, TYPES, intermissionMs } from '../../lib/pokemonBattle.js'
 import { isTrainerId } from './pokemonBattleConfig.js'
+import { getPokemonBattleAssets } from './pokemonBattleAssets.js'
 import { DUEL_PAIR_SCOPE } from './duelPairScope.js'
 
 const runtime = createDuelRuntime({
@@ -46,6 +47,10 @@ const runtime = createDuelRuntime({
   // client-supplied string is admitted into match state, and that string is echoed to the
   // OPPONENT in the match view — so it must be a real id, not merely a plausible one.
   isAvatarId: isTrainerId,
+
+  // Served from the same 60s cache the public config endpoint uses, so an admin flipping the
+  // switch takes effect within a minute without a socket handler ever hitting the database.
+  isEnabled: async () => (await getPokemonBattleAssets()).config.enabled,
 
   // Per-result: a tie narrates fewer lines than a decisive round, and both need longer than
   // the RPS game's flat banner. lib/pokemonBattle.js keeps these in step with the text budget

@@ -41,6 +41,9 @@ export default defineEventHandler(async (event) => {
   })
 
   return {
+    // Off means the admin has taken the game down: the page refuses to start a battle and the
+    // Games tile is hidden. Public because the page has to render the closed state.
+    enabled: config.enabled,
     assets,
     trainers: roster.list,
     // Difficulty tiers are public rules — the AI runs in the browser and pays nothing, so
