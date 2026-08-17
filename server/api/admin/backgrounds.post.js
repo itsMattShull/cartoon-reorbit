@@ -5,15 +5,10 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { prisma as db } from '@/server/prisma'
 import { imageSize } from 'image-size'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const baseDir = process.env.NODE_ENV === 'production'
-  ? join(__dirname, '..', '..', '..')
-  : process.cwd()
+import { backgroundUploadDir, backgroundPublicPath } from '@/server/utils/backgroundStorage'
 
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/gif']
 const ALLOWED_SIZES = [ [510,344], [512,346], [800,600] ]
@@ -65,9 +60,7 @@ export default defineEventHandler(async (event) => {
   const label = fields.label?.trim() || null
 
   // Decide folders & public URL
-  const uploadDir = process.env.NODE_ENV === 'production'
-    ? join(baseDir, 'cartoon-reorbit-images', 'backgrounds')
-    : join(baseDir, 'public', 'backgrounds')
+  const uploadDir = backgroundUploadDir()
 
   await mkdir(uploadDir, { recursive: true })
   const orig = sanitize(imagePart.filename)
@@ -75,9 +68,7 @@ export default defineEventHandler(async (event) => {
   const outPath  = join(uploadDir, filename)
   await writeFile(outPath, imagePart.data)
 
-  const imagePath = process.env.NODE_ENV === 'production'
-    ? `/images/backgrounds/${filename}`
-    : `/backgrounds/${filename}`
+  const imagePath = backgroundPublicPath(filename)
 
   const created = await db.background.create({
     data: {
