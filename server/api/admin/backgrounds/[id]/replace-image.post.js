@@ -1,18 +1,31 @@
 import { defineEventHandler, readMultipartFormData, getRequestHeader, createError } from 'h3'
 import { mkdir, writeFile, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
 import { imageSize } from 'image-size'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { redis } from '@/server/utils/redis'
 import { clearSearchesCache } from '@/server/api/czone/[username]/searches.get'
-import { backgroundUploadDir, backgroundFsPath, backgroundPublicPath } from '@/server/utils/backgroundStorage'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+// In production this file is at server/api/admin/backgrounds/[id]/ — 5 levels up to project root.
+// In dev, process.cwd() is always the project root.
+const baseDir = process.env.NODE_ENV === 'production'
+  ? join(__dirname, '..', '..', '..', '..', '..')
+  : process.cwd()
 
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/gif']
 const ALLOWED_SIZES = [[510, 344], [512, 346], [800, 600]]
 
 function sanitize(name = '') {
   return name.replace(/[^A-Za-z0-9._-]/g, '') || 'image'
+}
+
+function fsPathFromFilename(filename) {
+  return process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'backgrounds', filename)
+    : join(baseDir, 'public', 'backgrounds', filename)
 }
 
 export default defineEventHandler(async (event) => {
@@ -50,7 +63,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `Image must be exactly ${supported}.` })
   }
 
-  const uploadDir = backgroundUploadDir()
+  const uploadDir = process.env.NODE_ENV === 'production'
+    ? join(baseDir, 'cartoon-reorbit-images', 'backgrounds')
+    : join(baseDir, 'public', 'backgrounds')
 
   await mkdir(uploadDir, { recursive: true })
 
@@ -59,7 +74,9 @@ export default defineEventHandler(async (event) => {
   const outPath = join(uploadDir, newFilename)
   await writeFile(outPath, imagePart.data)
 
-  const newImagePath = backgroundPublicPath(newFilename)
+  const newImagePath = process.env.NODE_ENV === 'production'
+    ? `/images/backgrounds/${newFilename}`
+    : `/backgrounds/${newFilename}`
 
   const oldFilename = bg.filename
   const oldImagePath = bg.imagePath
@@ -142,7 +159,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // DB committed — now safe to remove the old file
-  try { await unlink(backgroundFsPath(oldFilename)) } catch {}
+  try { await unlink(fsPathFromFilename(oldFilename)) } catch {}
 
   // Invalidate Redis cache for any affected cZone searches
   for (const searchId of affectedSearchIds) {
