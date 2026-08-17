@@ -229,6 +229,12 @@
                 class="owned-badge"
                 :class="originalOwnedSet.has(c.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
               >{{ originalOwnedSet.has(c.id) ? 'Owned' : 'Unowned' }}</span>
+              <img
+                v-if="isGoingFast(c)"
+                src="/images/goingfast.png"
+                alt="Going fast"
+                class="going-fast-badge"
+              />
             </div>
           </template>
           <template #middle>
@@ -655,6 +661,18 @@ function isSoldOut(c) {
 function hasCountdown(c) {
   if (!c.nextReleaseAt) return false
   return new Date(c.nextReleaseAt).getTime() > nowTs.value
+}
+
+// Mirrors the infocard's "Going Fast" condition (10 or fewer left), using the
+// same totalMinted-based remaining-count math isSoldOut() already uses here,
+// rather than the per-cToon highestMint aggregate the single-cToon modal
+// endpoint computes — the sold-out/countdown states in this grid already run
+// on totalMinted, and this keeps the three states derived from one source.
+function isGoingFast(c) {
+  if (isSoldOut(c) || hasCountdown(c)) return false
+  if (typeof c.quantity !== 'number' || typeof c.totalMinted !== 'number') return false
+  const remaining = c.quantity - c.totalMinted
+  return remaining > 0 && remaining <= 10
 }
 
 function formatCountdown(c) {
@@ -1771,6 +1789,16 @@ async function closeOverlay() {
 .owned-badge--unowned {
   background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.75);
+}
+
+.going-fast-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .card-name {

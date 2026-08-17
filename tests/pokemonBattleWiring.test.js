@@ -363,8 +363,14 @@ test('the Games page tile grid derives its rows from the tiles that render', () 
   const tiles = (src.match(/class="quadrant quadrant--/g) || []).length
   const total = Number(/const TOTAL_TILES = (\d+)/.exec(src)?.[1])
   assert.equal(total, tiles, `TOTAL_TILES is ${total} but the template renders ${tiles} tiles`)
-  assert.ok(/gridTemplateRows: `repeat\(\$\{Math\.ceil\(/.test(src),
+  // Exposed as a --total-rows custom property, not a direct gridTemplateRows binding: an inline
+  // style always outranks a stylesheet rule, so binding the property itself would permanently
+  // pin the desktop row count and defeat the mobile breakpoint's own grid-template-rows
+  // override, collapsing every tile to ~0px height on mobile.
+  assert.ok(/'--total-rows':\s*Math\.ceil\(/.test(src),
     'the grid row count is no longer derived from the visible tile count')
+  assert.ok(/grid-template-rows:\s*repeat\(var\(--total-rows/.test(src),
+    'the desktop grid no longer reads the row count from --total-rows')
 })
 
 test('the admin tile panel can reach every tile slot the endpoint accepts', () => {

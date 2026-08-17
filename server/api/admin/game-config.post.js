@@ -7,6 +7,7 @@ import {
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { invalidateAssets } from '@/server/utils/pokemonBattleAssets'
 
 // ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
 // Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
@@ -1156,6 +1157,10 @@ export default defineEventHandler(async (event) => {
 
       return cfg
     })
+
+    // The public asset/config read is cached for a minute; without this the "Game is live"
+    // toggle would silently lag on the Games Home page and the game route itself.
+    if (gameName === 'PokemonBattle') invalidateAssets()
 
     return result
   } catch (err) {

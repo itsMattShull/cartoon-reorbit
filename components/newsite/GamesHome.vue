@@ -92,9 +92,17 @@ const isHidden = (slot) => hidden.value.has(slot)
 // collapses to nothing and is present but invisible. Now that a tile can be hidden at runtime
 // the literal cannot be right in both states anyway -- too few rows hides a real tile, too many
 // leaves a 1fr gap at the bottom of the grid.
+//
+// Exposed as a custom property, not a `grid-template-rows` value on the element itself: an
+// inline style always outranks a stylesheet rule, media query or not, so a direct binding here
+// would have permanently pinned the desktop 2-column row count and defeated the mobile
+// breakpoint's own `grid-template-rows: none`. On mobile the container's height is `auto`, so
+// those pinned `1fr` rows had no space to divide and collapsed toward 0px -- tiles were still in
+// the DOM, just rendered at ~0 height, which looked identical to a game "not showing up". Reading
+// the var back inside the stylesheet keeps the cascade -- and the mobile override -- intact.
 const TOTAL_TILES = 15
 const gridStyle = computed(() => ({
-  gridTemplateRows: `repeat(${Math.ceil((TOTAL_TILES - hidden.value.size) / 2)}, 1fr)`
+  '--total-rows': Math.ceil((TOTAL_TILES - hidden.value.size) / 2)
 }))
 </script>
 
@@ -128,8 +136,8 @@ const gridStyle = computed(() => ({
 .gameshome {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  /* 14 tiles in 2 columns needs 7 rows — bump this when a game is added. */
-  grid-template-rows: repeat(8, 1fr);
+  /* Row count comes from the script via --total-rows (see gridStyle above), not a literal here. */
+  grid-template-rows: repeat(var(--total-rows, 8), 1fr);
   /* Belt and braces: a 15th tile would otherwise land in an implicit auto-height row and
      collapse to nothing, because .tile-img is absolutely positioned and has no intrinsic
      height. */
