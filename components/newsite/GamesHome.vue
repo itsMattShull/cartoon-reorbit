@@ -6,7 +6,7 @@
         <GreenButton>Leaderboards</GreenButton>
       </NuxtLink>
     </div>
-    <div class="gameshome">
+    <div class="gameshome" :style="gridStyle">
       <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">
         <img v-if="tiles.winball" :src="tiles.winball" alt="Winball" class="tile-img" />
         <span v-else>Winball</span>
@@ -68,7 +68,7 @@
         <img v-if="tiles.fruitsamurai" :src="tiles.fruitsamurai" alt="Fruit Samurai" class="tile-img" />
         <span v-else>Fruit Samurai</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/pokemonbattle" class="quadrant quadrant--pokemonbattle">
+      <NuxtLink v-if="!isHidden('pokemonbattle')" to="/newsite/pokemonbattle" class="quadrant quadrant--pokemonbattle">
         <img v-if="tiles.pokemonbattle" :src="tiles.pokemonbattle" alt="Pokemon: Fire, Water, Grass!" class="tile-img" />
         <span v-else>Pokemon: Fire, Water, Grass!</span>
       </NuxtLink>
@@ -79,6 +79,23 @@
 <script setup>
 const { data: tileData } = useFetch('/api/game-tile-images', { default: () => ({}) })
 const tiles = computed(() => tileData.value ?? {})
+
+// Games an admin has switched off. Distinct from "no tile image uploaded", which still renders
+// a text tile.
+const hidden = computed(() => new Set(tileData.value?.hidden ?? []))
+const isHidden = (slot) => hidden.value.has(slot)
+
+// Rows are derived from the tiles that actually render, not hard-coded.
+//
+// The count was a literal that a comment asked people to remember to bump, and the row track is
+// load-bearing: .tile-img is absolutely positioned, so a tile that lands in an implicit row
+// collapses to nothing and is present but invisible. Now that a tile can be hidden at runtime
+// the literal cannot be right in both states anyway -- too few rows hides a real tile, too many
+// leaves a 1fr gap at the bottom of the grid.
+const TOTAL_TILES = 15
+const gridStyle = computed(() => ({
+  gridTemplateRows: `repeat(${Math.ceil((TOTAL_TILES - hidden.value.size) / 2)}, 1fr)`
+}))
 </script>
 
 <style scoped>

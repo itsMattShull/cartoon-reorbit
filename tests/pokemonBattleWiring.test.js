@@ -353,13 +353,71 @@ test('the leaderboard endpoint the component points at exists', () => {
   assert.doesNotThrow(() => read(route), `${route} does not exist`)
 })
 
-test('the Games page tile grid has a row for every tile', () => {
+test('the Games page tile grid derives its rows from the tiles that render', () => {
+  // Two columns, so N tiles need ceil(N/2) rows: a short grid drops the last tiles into an
+  // implicit auto-height row which collapses to nothing, because .tile-img is absolutely
+  // positioned -- present but invisible. This used to be a literal with a comment asking people
+  // to bump it. Now that a tile can be hidden at runtime no literal can be right in both
+  // states, so the count is computed instead and only TOTAL_TILES has to match reality.
   const src = read('components/newsite/GamesHome.vue')
   const tiles = (src.match(/class="quadrant quadrant--/g) || []).length
-  const rows = Number(/grid-template-rows: repeat\((\d+), 1fr\)/.exec(src)?.[1])
-  // Two columns, so N tiles need ceil(N/2) explicit rows. A short grid drops the last tiles
-  // into an implicit auto-height row which collapses to nothing -- present but invisible.
-  assert.equal(rows, Math.ceil(tiles / 2), `${tiles} tiles need ${Math.ceil(tiles / 2)} grid rows, found ${rows}`)
+  const total = Number(/const TOTAL_TILES = (\d+)/.exec(src)?.[1])
+  assert.equal(total, tiles, `TOTAL_TILES is ${total} but the template renders ${tiles} tiles`)
+  assert.ok(/gridTemplateRows: `repeat\(\$\{Math\.ceil\(/.test(src),
+    'the grid row count is no longer derived from the visible tile count')
+})
+
+test('the admin tile panel can reach every tile slot the endpoint accepts', () => {
+  // Shipped broken twice by the same mechanism: the slot list was duplicated across the
+  // rendered list, three state maps and a block of hand-written assignments in loadSettings().
+  // Blackjack fell out of the loader, then Fruit Samurai did -- both showed "not set" forever
+  // even with an image uploaded -- and Pokemon was missing from the list entirely, so its tile
+  // could not be changed at all. Everything is derived from one list now; this holds it there.
+  const admin = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
+  const endpoint = read('server/api/admin/game-tile-image.post.js')
+
+  const endpointSlots = [...(/const SLOT_FIELD = \{([\s\S]*?)\n\}/.exec(endpoint)?.[1] || '')
+    .matchAll(/^\s*([a-z]+):\s*'([A-Za-z]+)'/gm)].map(m => ({ slot: m[1], column: m[2] }))
+  assert.ok(endpointSlots.length >= 15, `expected the tile slots, found ${endpointSlots.length}`)
+
+  const listed = [...(/const gameTileSlots = \[([\s\S]*?)\n\]/.exec(admin)?.[1] || '')
+    .matchAll(/slot: '([a-z]+)'[^}]*column: '([A-Za-z]+)'/g)].map(m => ({ slot: m[1], column: m[2] }))
+
+  for (const { slot, column } of endpointSlots) {
+    const hit = listed.find(l => l.slot === slot)
+    assert.ok(hit, `the admin tile panel cannot manage the "${slot}" tile`)
+    assert.equal(hit.column, column,
+      `"${slot}" reads ${hit.column} in the panel but the endpoint writes ${column}`)
+  }
+
+  // And nothing may hand-write the per-slot assignments again, which is what drifted.
+  assert.ok(/for \(const t of gameTileSlots\) gameTileImages\.value/.test(admin),
+    'the tile loader is hand-written again rather than driven by gameTileSlots')
+})
+
+test('switching the game off takes it off the site, not just off the Games page', () => {
+  // "Not visible" has to mean "not playable": the route is reachable by URL and a head-to-head
+  // win pays points, so hiding the tile alone would leave an off game quietly earning.
+  const runtime = read('server/utils/pokemonBattleRuntime.js')
+  assert.ok(runtime.includes('isEnabled:'), 'the runtime has no enabled gate')
+
+  const duel = code('server/utils/duelRuntime.js')
+  assert.ok(/createRoom[\s\S]{0,400}await offline\(\)/.test(duel), 'createRoom is not gated on the switch')
+  assert.ok(/joinRoom[\s\S]{0,400}await offline\(\)/.test(duel),
+    'joinRoom is not gated -- a room made before the game went off would still be joinable')
+
+  // The page renders its own closed state rather than trusting the tile to be hidden.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  assert.ok(page.includes('v-if="!enabled"'), 'the game page has no closed state')
+  assert.ok(page.includes('if (enabled.value) connectSocket()'),
+    'a switched-off game still opens a socket')
+
+  // A missing column or an unreadable config must fail OPEN, or a migration lag takes the game
+  // down on its own.
+  const assets = code('server/utils/pokemonBattleAssets.js')
+  assert.ok(assets.includes('!== false'), 'the enabled flag does not default to on')
+  assert.ok(code('server/api/game-tile-images.get.js').includes('hidden'),
+    'the tile endpoint does not report hidden games')
 })
 
 test('the admin log component and its endpoint agree', () => {

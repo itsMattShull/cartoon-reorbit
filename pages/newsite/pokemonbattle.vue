@@ -1,8 +1,16 @@
 <template>
   <div class="pfwg" ref="wrapper">
 
+    <!-- The route stays reachable by URL when an admin switches the game off, so the closed
+         state is rendered here rather than relying on the Games page hiding the tile. -->
+    <div v-if="!enabled" class="pfwg-menu pfwg-closed">
+      <h1 class="pfwg-title">Pokemon<span class="pfwg-title-sub">Fire, Water, Grass!</span></h1>
+      <p class="pfwg-note">This game is currently unavailable. Check back soon!</p>
+      <NuxtLink to="/newsite/home" class="pfwg-btn pfwg-btn--go pfwg-closed-btn">Back to games</NuxtLink>
+    </div>
+
     <!-- ── Menu ──────────────────────────────────────────────────────────────────────── -->
-    <div v-if="screen === 'menu'" class="pfwg-menu" :style="menuStyle">
+    <div v-else-if="screen === 'menu'" class="pfwg-menu" :style="menuStyle">
       <img
         v-if="art('logo')"
         :src="art('logo').path" :width="art('logo').width" :height="art('logo').height"
@@ -259,6 +267,9 @@ const overBtn = ref(null)
 const blockedLandscape = ref(false)
 const error = ref('')
 
+// Assume on until the config says otherwise, so a slow or failed config fetch does not flash a
+// "closed" screen at a player on a working game.
+const enabled = ref(true)
 const assets = ref({})
 const trainers = ref([])
 const aiTiers = ref([])
@@ -646,6 +657,7 @@ function throwType(t) {
 let aiTimer = null
 
 function startAi() {
+  if (!enabled.value) return
   isAi.value = true
   resetBattle()
   aiHistory.value = []
@@ -751,6 +763,7 @@ onMounted(async () => {
 
   try {
     const cfg = await $fetch('/api/game/pokemonbattle/config')
+    enabled.value = cfg.enabled !== false
     assets.value = cfg.assets || {}
     trainers.value = cfg.trainers || []
     aiTiers.value = cfg.aiTiers || []
@@ -763,8 +776,9 @@ onMounted(async () => {
     error.value = 'Could not load the game. Try again in a moment.'
   }
 
-  // After the config, so the lobby has its trainer roster before a room can be created.
-  connectSocket()
+  // After the config, and not at all when the game is switched off -- an offline game should
+  // not be holding sockets open on a single-process server.
+  if (enabled.value) connectSocket()
 
   checkOrientation()
   orientationHandler = () => nextTick(checkOrientation)
@@ -883,6 +897,8 @@ html.pfwg-page body ::selection { background: transparent; }
   background-repeat: no-repeat;
   background-attachment: scroll;
 }
+.pfwg-closed { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 16px; }
+.pfwg-closed-btn { width: min(100%, 260px); text-align: center; text-decoration: none; line-height: 28px; }
 .pfwg-logo { display: block; width: min(100%, 420px); height: auto; margin: 0 auto 6px; }
 .pfwg-title {
   margin: 4px 0 8px;
