@@ -480,8 +480,15 @@ function applyView(v) {
   deadlineAt.value = v.deadlineAt || 0
 }
 
-// Connected lazily: a player who only ever fights the computer never opens a socket at all,
-// and the socket server is a single fork'd process.
+// Connected once the menu is on screen.
+//
+// This was originally deferred until the player clicked "Create a battle", to keep a
+// single-player-only visitor off the socket server (which is a single fork'd process). That was
+// wrong twice over. The button is disabled until `connected` is true, and `connected` only
+// becomes true after this runs -- so the only thing that could start the connection was a click
+// on a button that could never be clicked, and the lobby sat on "Connecting..." forever. It also
+// could not have paid off: the lobby shares a screen with the single-player mode, so every
+// visitor sees the room list, and a room list fed by no socket permanently reads "0 open".
 function connectSocket() {
   if (socket) return
   const url = import.meta.env.PROD ? undefined : `http://localhost:${runtime.public.socketPort}`
@@ -571,7 +578,11 @@ function pickTrainer(id) {
   trainerId.value = id
   try { localStorage.setItem('pfwg:trainer', id) } catch {}
 }
-function createRoom() { error.value = ''; connectSocket(); socket?.emit('pkmnb:createRoom', { character: trainerId.value }) }
+function createRoom() {
+  error.value = ''
+  connectSocket()
+  socket?.emit('pkmnb:createRoom', { character: trainerId.value })
+}
 function joinRoom(id) { error.value = ''; socket?.emit('pkmnb:joinRoom', { roomId: id, character: trainerId.value }) }
 function leaveRoom() { socket?.emit('pkmnb:leave'); myRoomId.value = null }
 
@@ -732,6 +743,9 @@ onMounted(async () => {
   } catch {
     error.value = 'Could not load the game. Try again in a moment.'
   }
+
+  // After the config, so the lobby has its trainer roster before a room can be created.
+  connectSocket()
 
   checkOrientation()
   orientationHandler = () => nextTick(checkOrientation)
@@ -945,13 +959,20 @@ html.pfwg-page body ::selection { background: transparent; }
 
 /* ── Battle ────────────────────────────────────────────────────────────────────────────
    Explicit grid tracks. The text box and the move row are FIXED heights, so nothing that
-   happens mid-round can reflow the controls under the player's thumb. Budget on a 360x640
-   phone: 14 padding + 34 hud + 54 text + 60 moves + gaps = ~180, leaving the stage the rest. */
+   happens mid-round can reflow the controls under the player's thumb.
+
+   Written mobile-first with an INTRINSIC stage, which is the whole point. The layout gives
+   .main-content `height: auto` on mobile (mainContentMobileStyle in newsite-template.vue), so
+   nothing in this subtree has a definite height to resolve against. The first version sized the
+   stage with a `1fr` track and the field with `height: 100%` -- against an indefinite parent
+   both resolve to zero, and the battlefield rendered as a 0px sliver with the rest of the
+   screen left empty below it. blackjack.vue documents the same trap. So the stage gets a
+   definite height from the viewport here, and only takes the flexible track on desktop, where
+   the box really is a fixed 682px. */
 .pfwg-battle {
   display: grid;
-  grid-template-rows: auto 1fr 54px 60px;
+  grid-template-rows: auto auto 54px 60px;
   gap: 6px;
-  flex: 1;
   min-height: 0;
   min-width: 0;
   padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
@@ -971,12 +992,27 @@ html.pfwg-page body ::selection { background: transparent; }
 .pfwg-timer.is-low { color: #f85838; }
 .pfwg-timer--idle { opacity: .35; }
 
-.pfwg-stage { min-height: 0; min-width: 0; display: grid; place-items: center; overflow: hidden; }
+/* The field is sized from its WIDTH, never its height, and that is load-bearing in both
+   directions. Width is the one dimension that is definite everywhere -- the layout hands this
+   subtree an auto height on mobile -- so a height-driven field collapses to nothing there. And
+   deriving width from height overflows: at a 2.14 ratio a 280px-tall stage wants a 600px-wide
+   field, which on a 375px phone is silently cropped by .main-content's `overflow: hidden`
+   rather than scrolled. Width in, height out, capped so a tall portrait screen does not hand
+   the battlefield half the page. */
+.pfwg-stage {
+  max-height: min(42svh, 320px);
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
 .pfwg-field {
   position: relative;
-  height: 100%;
-  width: auto;
-  max-width: 100%;
+  width: 100%;
+  height: auto;
+  /* Only bites where the box is wider than it is tall (landscape, desktop); the field then
+     letterboxes inside the stage rather than overflowing it. */
+  max-height: 100%;
   aspect-ratio: 240 / 112;
   border: 3px solid #202020;
   border-radius: 8px;
@@ -1147,6 +1183,9 @@ html.pfwg-page body ::selection { background: transparent; }
    scroll. The battle screen is unaffected: it fits its box at every size. */
 @media (max-width: 768px) {
   .pfwg-menu { flex: none; overflow-y: visible; min-height: 0; }
+  /* height:100% resolves to auto against the layout's auto-height .main-content, and an
+     explicit 100% there is what collapsed the battlefield. Say `auto` and mean it. */
+  .pfwg { height: auto; }
 }
 
 /* Landscape on a phone that stays in the layout's mobile branch. Stacked, the HUD, text box
@@ -1161,7 +1200,9 @@ html.pfwg-page body ::selection { background: transparent; }
     padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
   }
   .pfwg-hud { grid-area: hud; }
-  .pfwg-stage { grid-area: stage; }
+  /* The landscape grid gives the stage a real `1fr` track inside a viewport-height box, so it
+     drops the portrait viewport cap and fills its cell instead. */
+  .pfwg-stage { grid-area: stage; max-height: none; min-height: 0; }
   .pfwg-moves { grid-area: moves; grid-template-columns: 1fr; grid-template-rows: repeat(3, 1fr); gap: 4px; }
   .pfwg-move { min-height: 38px; flex-direction: row; gap: 6px; }
   /* No room for a two-line box here; the HP bars already carry the state. */
@@ -1169,8 +1210,14 @@ html.pfwg-page body ::selection { background: transparent; }
   .pfwg-hp-name { font-size: 9px; }
 }
 
-/* Desktop: the stage would otherwise blow a 240px-wide backdrop up more than 4x. */
+/* Desktop. Here .main-content is a real fixed box, so the stage can take the leftover space
+   the way the mobile version cannot -- and the 240px-wide backdrop needs a ceiling or it is
+   blown up more than 4x. */
 @media (min-width: 769px) {
+  .pfwg { height: 100%; }
+  .pfwg-battle { grid-template-rows: auto 1fr 54px 60px; flex: 1; height: 100%; }
+  /* A real box with real leftover space, so the cap comes off and the field centres in it. */
+  .pfwg-stage { max-height: none; min-height: 0; }
   .pfwg-field { max-width: 720px; }
 }
 

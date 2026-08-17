@@ -382,6 +382,46 @@ test('the battle UI depends on no emoji glyph', () => {
   assert.deepEqual(emoji, [], `the template contains emoji (${emoji.join(' ')}) -- use art or a CSS shape`)
 })
 
+test('the lobby can reach the socket without a click it cannot make', () => {
+  // Shipped broken once: the "Create a battle" button was disabled until `connected`, and the
+  // only caller of connectSocket() was that button's own click handler. The socket could
+  // therefore never open, and the lobby sat on "Connecting..." forever. The room list was
+  // permanently empty for the same reason.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const mounted = page.slice(page.indexOf('onMounted('), page.indexOf('onBeforeUnmount('))
+  assert.ok(mounted.includes('connectSocket()'),
+    'nothing connects the socket on mount, so a lobby gated on `connected` can never enable itself')
+
+  // And the gate itself still has to be a gate: if the button stops being disabled while
+  // disconnected, the emit silently no-ops instead.
+  assert.ok(/createRoom"[^>]*:disabled="!connected"/.test(page) || page.includes(':disabled="!connected"'),
+    'the create button no longer reflects connection state')
+})
+
+test('the battlefield is sized from width, never from height', () => {
+  // Shipped broken once, in both directions. The layout gives .main-content `height: auto` on
+  // mobile, so a height-driven field has nothing definite to resolve against and collapses to
+  // a 0px sliver. Deriving width from height instead overflows: at a 2.14 ratio a 280px-tall
+  // stage wants a 600px-wide field, which a 375px phone crops via `overflow: hidden` rather
+  // than scrolling. Width is the only dimension that is definite in every context.
+  const page = read('pages/newsite/pokemonbattle.vue')
+  const rule = /\.pfwg-field \{([\s\S]*?)\}/.exec(page)?.[1]
+  assert.ok(rule, 'could not find the .pfwg-field rule')
+  // Anchored so `max-width` / `max-height` are not mistaken for the real properties -- the
+  // field legitimately carries a `max-height: 100%` letterbox guard.
+  const prop = (name) => new RegExp(`(^|[;{\\s])${name}:\\s*([^;]+)`, 'm').exec(rule)?.[2]?.trim()
+  assert.equal(prop('width'), '100%', '.pfwg-field must take its width from its container')
+  assert.equal(prop('height'), 'auto', '.pfwg-field must derive its height from its width')
+  assert.ok(/aspect-ratio/.test(rule), '.pfwg-field lost its aspect ratio')
+
+  // The base (mobile) grid must not hand the stage a flexible track either -- `1fr` of an
+  // indefinite parent is zero.
+  const battle = /\.pfwg-battle \{([\s\S]*?)\}/.exec(page)?.[1]
+  assert.ok(battle, 'could not find the .pfwg-battle rule')
+  assert.ok(!/grid-template-rows:[^;]*1fr/.test(battle),
+    'the base battle grid uses a 1fr track; on mobile that resolves to zero height')
+})
+
 test('the page never renders admin-supplied text as HTML', () => {
   // Trainer names are admin-supplied and reach every visitor, including logged-out ones. The
   // natural way to bold a name inside a battle line is exactly the edit that would add v-html.
