@@ -103,6 +103,7 @@ export default defineEventHandler(async (event) => {
         createdAt: true,
         endAt: true,
         duration: true,
+        durationMinutes: true,
         highestBid: true,
         userCtoon: {
           select: { ctoon: { select: { id: true, name: true, assetPath: true } } }
@@ -125,6 +126,7 @@ export default defineEventHandler(async (event) => {
       createdAt: a.createdAt,
       endAt: a.endAt,
       duration: a.duration,
+      durationMinutes: a.durationMinutes ?? null,
       highestBid: a.highestBid,
       userCtoon: { ctoon: a.userCtoon?.ctoon ?? null },
       creator: a.creator ?? null,

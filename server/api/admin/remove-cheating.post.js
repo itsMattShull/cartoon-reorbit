@@ -17,7 +17,7 @@ function rarityPrice(r) {
 
 async function createAuction(tx, userCtoonId, initialBet, endAt, creatorId) {
   return tx.auction.create({
-    data: { userCtoonId, initialBet, duration: 3, endAt, creatorId },
+    data: { userCtoonId, initialBet, duration: 3, durationMinutes: 3 * 1440, endAt, creatorId },
     select: { id: true }
   })
 }

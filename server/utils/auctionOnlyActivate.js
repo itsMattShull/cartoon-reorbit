@@ -9,6 +9,11 @@ import { prisma } from '../prisma.js'
 import { scheduleAuctionClose } from './queues.js'
 import { rarityFloor } from './auctionPriceSuggestion.js'
 import { logAuctionOnlyError } from './auctionOnlyErrorLog.js'
+import {
+  MIN_AUCTION_MINUTES,
+  MAX_AUCTION_MINUTES,
+  formatAuctionDuration
+} from './auctionDuration.js'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
@@ -57,7 +62,7 @@ export async function sendAuctionOnlyDiscordAnnouncement(result, isHolidayItem =
       `**Rarity:** ${rarity ?? 'N/A'}`,
       ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
       `**Starting Bid:** ${result.initialBet} pts`,
-      `**Duration:** ${result.durationDays} day(s)`
+      `**Duration:** ${formatAuctionDuration(result.totalMinutes ?? result.durationDays * 1440)}`
     ]
 
     const payload = {
@@ -143,14 +148,23 @@ export async function activateAuctionOnlyRow(row) {
     const floor = rarityFloor(row.userCtoon?.ctoon?.rarity)
     const initialBet = Math.max(Number(fresh.pricePoints || 0), floor)
 
+    // Derive the length from the scheduled window. The cap must track the admin
+    // bound in server/api/admin/auction-only/index.post.js — when it said 5 and
+    // the admin bound said 7, a 7-day listing ran for the full 7 days but
+    // recorded duration: 5 and announced "Duration: 5 day(s)" on Discord.
     const ms = new Date(fresh.endsAt).getTime() - new Date(fresh.startsAt).getTime()
-    const durationDays = Math.max(1, Math.min(5, Math.round(ms / 86400000) || 1))
+    const totalMinutes = Math.max(
+      MIN_AUCTION_MINUTES,
+      Math.min(MAX_AUCTION_MINUTES, Math.round(ms / 60000) || MIN_AUCTION_MINUTES)
+    )
+    const durationDays = Math.floor(totalMinutes / 1440)
 
     const created = await tx.auction.create({
       data: {
         userCtoonId: fresh.userCtoonId,
         initialBet,
         duration: durationDays,
+        durationMinutes: totalMinutes,
         endAt: new Date(fresh.endsAt),
         creatorId: userCtoon.userId,
         isFeatured: fresh.isFeatured,
@@ -174,6 +188,7 @@ export async function activateAuctionOnlyRow(row) {
       endAt: new Date(fresh.endsAt),
       initialBet,
       durationDays,
+      totalMinutes,
       ctoon: row.userCtoon.ctoon,
       mintNumber: userCtoon.mintNumber,
       ctoonId: row.userCtoon.ctoon.id,

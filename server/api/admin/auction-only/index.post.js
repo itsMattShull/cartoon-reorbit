@@ -46,7 +46,7 @@ async function handleAuctionOnlyCreate(event) {
 
   const isFeaturedFlag = !!isFeatured
   if (!Number.isInteger(pricePoints) || pricePoints < 0) throw createError({ statusCode: 400, statusMessage: 'Invalid pricePoints' })
-  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 5) throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–5' })
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 7) throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–7' })
   const count = Number(createCount ?? 1)
   if (!Number.isInteger(count) || count < 1) throw createError({ statusCode: 400, statusMessage: 'createCount must be >= 1' })
   const releaseHours = Number(releaseEveryHours ?? 0)

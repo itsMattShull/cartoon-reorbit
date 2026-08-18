@@ -156,7 +156,7 @@
               <th class="px-1.5 py-1 text-left">Creator</th>
               <th class="px-1.5 py-1 text-left">Status</th>
               <th class="px-1.5 py-1 text-left">Created</th>
-              <th class="px-1.5 py-1 text-right">Days</th>
+              <th class="px-1.5 py-1 text-right">Length</th>
               <th class="px-1.5 py-1 text-right">Hrs Left</th>
               <th class="px-1.5 py-1 text-left">Top Bidder</th>
               <th class="px-1.5 py-1 text-left">Winner</th>
@@ -172,7 +172,7 @@
               <td class="px-1.5 py-1">{{ auc.creator?.username || '—' }}</td>
               <td class="px-1.5 py-1">{{ auc.status }}</td>
               <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(auc.createdAt) }}</td>
-              <td class="px-1.5 py-1 text-right tabular-nums">{{ auc.duration }}</td>
+              <td class="px-1.5 py-1 text-right tabular-nums">{{ auctionLength(auc) }}</td>
               <td class="px-1.5 py-1 text-right tabular-nums">{{ hoursLeft(auc.endAt) }}</td>
               <td class="px-1.5 py-1">{{ auc.highestBidder?.username || '—' }}</td>
               <td class="px-1.5 py-1">{{ auc.winner?.username || '—' }}</td>
@@ -197,7 +197,7 @@
             <div><span class="font-medium">Creator:</span> {{ auc.creator?.username || '—' }}</div>
             <div><span class="font-medium">Status:</span> {{ auc.status }}</div>
             <div><span class="font-medium">Created:</span> {{ formatDate(auc.createdAt) }}</div>
-            <div><span class="font-medium">Duration:</span> {{ auc.duration }} days</div>
+            <div><span class="font-medium">Duration:</span> {{ auctionLength(auc) }}</div>
             <div><span class="font-medium">Top Bidder:</span> {{ auc.highestBidder?.username || '—' }}</div>
             <div><span class="font-medium">Winner:</span> {{ auc.winner?.username || '—' }}</div>
             <div><span class="font-medium">Highest Bid:</span> {{ auc.highestBid }}</div>
@@ -223,6 +223,16 @@
 </template>
 
 <script setup>
+import { formatAuctionDuration } from '~/server/utils/auctionDuration'
+
+// Auction.duration is whole days, so every sub-day listing stores 0 and this
+// column read "0 days" for a 3-minute or 12-hour auction. durationMinutes
+// carries the real length where the row has it.
+function auctionLength(auc) {
+  const mins = auc?.durationMinutes
+  if (Number.isInteger(mins)) return formatAuctionDuration(mins)
+  return `${auc?.duration ?? 0} days`
+}
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const pageSize = 100

@@ -49,58 +49,9 @@
         </p>
 
         <!-- Duration -->
-        <div>
+        <div class="adp-light">
           <p class="block mb-1 font-medium">Duration</p>
-
-          <!-- Presets -->
-          <div class="flex flex-wrap gap-4 mb-2">
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="3m" v-model="durationPreset" />
-              <span class="ml-2">Quick: 3 minutes</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="30m" v-model="durationPreset" />
-              <span class="ml-2">30 minutes</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="1h" v-model="durationPreset" />
-              <span class="ml-2">1 hour</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="6h" v-model="durationPreset" />
-              <span class="ml-2">6 hours</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="4h" v-model="durationPreset" />
-              <span class="ml-2">4 hours</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="12h" v-model="durationPreset" />
-              <span class="ml-2">12 hours</span>
-            </label>
-            <label class="inline-flex items-center">
-              <input type="radio" class="form-radio" value="days" v-model="durationPreset" />
-              <span class="ml-2">Custom days</span>
-            </label>
-          </div>
-
-          <!-- Days slider only when "days" is selected -->
-          <div v-if="durationPreset === 'days'">
-            <label class="block mb-1">
-              Days: <span class="font-semibold">{{ timeframe }} day(s)</span>
-            </label>
-            <input
-              type="range"
-              v-model.number="timeframe"
-              :min="1"
-              :max="5"
-              step="1"
-              class="w-full"
-            />
-            <div class="flex justify-between text-sm mt-1">
-              <span>1</span><span>3</span><span>5</span>
-            </div>
-          </div>
+          <AuctionDurationPicker @update="onDurationUpdate" />
         </div>
       </div>
       <div class="mt-6 flex justify-between items-center">
@@ -115,7 +66,7 @@
           <button @click="closeModal" class="btn-secondary">Cancel</button>
           <button
             @click="sendToAuction"
-            :disabled="sending || initialBet < minInitialBet"
+            :disabled="sending || initialBet < minInitialBet || !duration.valid"
             class="btn-primary"
           >
             {{ sending ? 'Sending...' : 'Send to Auction' }}
@@ -148,11 +99,10 @@ const buttonClass = computed(() => ['btn', attrs.class])
 
 const showModal    = ref(false)
 const initialBet   = ref(props.userCtoon.price)
-const timeframe    = ref(1)     // days
-const quick3m      = ref(false) // 3-minute flag
 const sending      = ref(false)
 const auctionSent  = ref(false)
-const durationPreset = ref('days') // '3m' | '4h' | '12h' | 'days'
+// Populated by AuctionDurationPicker's @update.
+const duration     = ref({ durationDays: 0, durationMinutes: 0, totalMinutes: null, valid: false })
 const toastMessage = ref('')
 const toastType    = ref('error')
 const recentAuctions = ref([])
@@ -183,10 +133,10 @@ function showToast(message, type = 'error') {
   setTimeout(() => { toastMessage.value = '' }, 5000)
 }
 
+function onDurationUpdate(next) { duration.value = next }
+
 function openModal() {
   initialBet.value = Math.max(props.userCtoon.price || 0, minInitialBet.value)
-  timeframe.value = 1
-  durationPreset.value = 'days' // default to days
   showModal.value = true
   // Load recent auctions for this cToon (last 3 closed)
   loadRecentAuctions()
@@ -202,20 +152,11 @@ async function sendToAuction() {
     return
   }
 
-  // Map preset -> payload fields
-  let durationDays = 0
-  let durationMinutes = 0
-  switch (durationPreset.value) {
-    case '3m':  durationMinutes = 3;        break
-    case '30m': durationMinutes = 30;       break
-    case '1h':  durationMinutes = 60;       break
-    case '6h':  durationMinutes = 6 * 60;   break
-    case '4h':  durationMinutes = 4 * 60;   break
-    case '12h': durationMinutes = 12 * 60;  break
-    case 'days':
-    default:
-      durationDays = timeframe.value
+  if (!duration.value.valid) {
+    showToast('Pick a valid auction length.', 'error')
+    return
   }
+  const { durationDays, durationMinutes } = duration.value
 
   sending.value = true
   try {
@@ -245,8 +186,6 @@ async function instaBid() {
   sending.value = true
   try {
     initialBet.value = instaBidValue.value
-    durationPreset.value = 'days'
-    timeframe.value = 1
 
     const { auction } = await $fetch('/api/auctions', {
       method: 'POST',
@@ -289,6 +228,22 @@ function formatDate(d) {
 </script>
 
 <style scoped>
+/* The picker defaults to the dark AuctionModal surface. This host is a white
+   Tailwind panel, so it overrides the --adp-* variables rather than forking the
+   component. color-scheme matters as much as color here: without it, WebKit
+   renders the datetime-local editor's segments for the wrong scheme. */
+.adp-light :deep(.adp) {
+  --adp-fg: #111827;
+  --adp-fg-dim: #4b5563;
+  --adp-fg-faint: #6b7280;
+  --adp-border: #d1d5db;
+  --adp-surface: #f3f4f6;
+  --adp-input-bg: #fff;
+  --adp-accent: #2563eb;
+  --adp-error: #b91c1c;
+  --adp-scheme: light;
+}
+
 .btn {
   @apply px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50;
 }

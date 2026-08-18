@@ -87,7 +87,7 @@
         <div class="flex flex-col gap-1">
           <label class="text-xs font-medium">Duration</label>
           <div class="flex items-center gap-3">
-            <input v-model.number="durationDays" type="range" min="1" max="5" class="w-full" />
+            <input v-model.number="durationDays" type="range" min="1" max="7" class="w-full" />
             <span class="w-10 text-center text-xs">{{ durationDays }}d</span>
           </div>
         </div>

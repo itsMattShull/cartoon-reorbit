@@ -190,6 +190,7 @@
 </template>
 
 <script setup>
+import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
 const cmartCtoons = useState('cmartCtoons', () => [])
@@ -571,7 +572,7 @@ function openInfoModal(item) {
 // state, active auctions and pending trades before creating anything.
 function openRelist(item) {
   if (!item?.canRelist) return
-  const duration = reconstructDurationPrefill(item.createdAt, item.endAt)
+  const duration = reconstructDurationPrefill(item.createdAt, item.endAt, item.durationMinutes)
   openAuctionModal({
     ctoon: {
       id:         item.userCtoonId,
@@ -587,23 +588,31 @@ function openRelist(item) {
       initialBet:     item.initialBid,
       durationPreset: duration.preset,
       timeframe:      duration.timeframe,
+      customEndAtLocal: seedCustomEnd(duration.customMinutes),
     },
   })
+}
+
+// A re-list whose exact length isn't one of the chips reopens the calendar,
+// seeded to the same length measured from now.
+function seedCustomEnd(minutes) {
+  if (!Number.isInteger(minutes)) return ''
+  const d = new Date(Date.now() + minutes * 60000)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+         `T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 // ── Formatters ────────────────────────────────────────────────────
 function isEnded(endAt)  { return new Date(endAt) <= now.value }
 function formatDate(d)   { return new Date(d).toLocaleDateString() }
 
+// Hours were the largest unit here, so a multi-day auction rendered as
+// "167h 59m" inside a nowrap badge sitting over the card art. formatRemainingShort
+// adds a day tier and is shared with the detail page, which had its own copy of
+// the same bug.
 function formatRemaining(endAt) {
-  const diff = new Date(endAt) - now.value
-  if (diff <= 0) return 'ended'
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  if (h > 0)  return `${h}h ${m}m`
-  if (m > 0)  return `${m}m ${s}s`
-  return `${s}s`
+  return formatRemainingShort(new Date(endAt) - now.value)
 }
 
 function formatHighestBid(item) {

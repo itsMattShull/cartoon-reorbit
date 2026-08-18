@@ -14,6 +14,7 @@ import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
+import { formatAuctionDuration } from '../utils/auctionDuration.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
@@ -148,7 +149,7 @@ async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
       `**Rarity:** ${rarity ?? 'N/A'}`,
       ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
       `**Starting Bid:** ${result.initialBet} pts`,
-      `**Duration:** ${result.durationDays} day(s)`
+      `**Duration:** ${formatAuctionDuration(result.totalMinutes ?? result.durationDays * 1440)}`
     ]
 
     const payload = {
@@ -1104,6 +1105,7 @@ async function createDailyFeaturedAuction() {
           userCtoonId: chosen.id,
           initialBet,
           duration: durationDays,
+          durationMinutes: durationDays * 1440,
           endAt,
           creatorId: officialUser.id,
           isFeatured: true
