@@ -91,16 +91,42 @@ export const AUCTION_ONLY_ROW_INCLUDE = {
   }
 }
 
+// A refused listing stays pending, so startDueAuctions retries it every hour
+// until the blockage clears. Logging every attempt would bury the admin's Error
+// Log under repeats of a single problem, so a given listing is only recorded
+// once per window. The window is deliberately shorter than a typical auction, so
+// a long-running blockage still re-surfaces occasionally rather than going quiet.
+const REFUSAL_LOG_WINDOW_MS = 6 * 60 * 60 * 1000
+
+async function logActivationRefusalOnce(auctionOnlyId, reason) {
+  try {
+    const recent = await prisma.auctionOnlyErrorLog.findFirst({
+      where: {
+        auctionOnlyId,
+        context: 'activation',
+        createdAt: { gte: new Date(Date.now() - REFUSAL_LOG_WINDOW_MS) }
+      },
+      select: { id: true }
+    })
+    if (recent) return
+  } catch {
+    // If the dedupe lookup fails, fall through and log anyway — a duplicate row
+    // is far cheaper than losing the only record that something was refused.
+  }
+  await logAuctionOnlyError('activation', new Error(reason), auctionOnlyId)
+}
+
 // Activates a single AuctionOnly row (id + userCtoon include as above) into a
 // live Auction. Returns:
 //   - the created-auction summary on success
-//   - null if the row was already started / already has a live Auction by the
-//     time the transaction runs (not an error — just lost a race)
-//   - { refused: true, reason } if the official account no longer holds the
-//     copy that was scheduled to be auctioned. The listing is left pending
-//     (not marked isStarted) rather than silently activated against whoever
-//     holds the copy now, and the refusal is logged to AuctionOnlyErrorLog
-//     for the Manage Auction Only page.
+//   - null if the row was already started by the time the transaction runs
+//     (not an error — just lost a race)
+//   - { refused: true, reason } if it cannot be activated right now: the
+//     official account no longer holds the copy, or another auction is already
+//     live for it. The listing is left pending (not marked isStarted) rather
+//     than activated against whoever holds the copy now or silently consumed,
+//     and the refusal is logged to AuctionOnlyErrorLog for the Manage Auction
+//     Only page.
 export async function activateAuctionOnlyRow(row) {
   const result = await prisma.$transaction(async (tx) => {
     const fresh = await tx.auctionOnly.findUnique({
@@ -125,19 +151,42 @@ export async function activateAuctionOnlyRow(row) {
 
     const userCtoon = await tx.userCtoon.findUnique({
       where: { id: fresh.userCtoonId },
-      select: { userId: true, mintNumber: true }
+      select: { userId: true, mintNumber: true, burnedAt: true }
     })
     if (!userCtoon || userCtoon.userId !== official.id) {
       return { refused: true, reason: 'The official account no longer holds this copy — listing left pending.' }
     }
+    // A burned copy stays attached to its owner, so the ownership check above
+    // passes for one. There is nothing left to sell either way.
+    if (userCtoon.burnedAt) {
+      return { refused: true, reason: 'This copy has been burned — listing left pending.' }
+    }
 
+    // Something else already has this copy up for auction. This used to mark the
+    // listing isStarted and return, which spent a scheduled release without ever
+    // creating an auction for it — silently, with nothing logged. A mint
+    // scheduled at 1500 could simply never go up, and no record said why.
+    //
+    // Leave it pending instead, so the listing survives and still fires once the
+    // blocking auction clears:
+    //   * that auction is still running -> retried on the next pass
+    //   * it closed unsold, copy back with the official account -> activates as
+    //     scheduled, at the intended price
+    //   * it closed sold -> the ownership check above refuses, since there is no
+    //     longer anything here to sell
     const active = await tx.auction.findFirst({
       where: { userCtoonId: fresh.userCtoonId, status: 'ACTIVE' },
-      select: { id: true }
+      select: { id: true, initialBet: true, endAt: true, auctionOnlyId: true }
     })
     if (active) {
-      await tx.auctionOnly.update({ where: { id: fresh.id }, data: { isStarted: true } })
-      return null
+      return {
+        refused: true,
+        reason:
+          `Another auction (id ${active.id}, start ${active.initialBet} pts, ends ` +
+          `${new Date(active.endAt).toISOString()}) is already live for this copy` +
+          (active.auctionOnlyId ? '' : ' and did not come from a scheduled listing') +
+          ' — listing left pending and will be retried once that auction clears.'
+      }
     }
 
     const floor = rarityFloor(row.userCtoon?.ctoon?.rarity)
@@ -184,7 +233,7 @@ export async function activateAuctionOnlyRow(row) {
   if (!result) return null
 
   if (result.refused) {
-    await logAuctionOnlyError('activation', new Error(result.reason), row.id)
+    await logActivationRefusalOnce(row.id, result.reason)
     return result
   }
 
