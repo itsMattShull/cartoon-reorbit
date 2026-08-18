@@ -248,7 +248,7 @@
               </NuxtLink>
               <NuxtLink
                 v-if="owner.isTradeListItem"
-                :to="{ path: `/create-trade/${owner.username}`, query: { userCtoonId: owner.userCtoonId } }"
+                :to="{ path: '/newsite/trade', query: { username: owner.username, userCtoonId: owner.userCtoonId } }"
                 class="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 whitespace-nowrap hover:underline"
               >
                 Tradeable

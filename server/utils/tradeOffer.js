@@ -100,9 +100,20 @@ export async function validateTradeOfferInputs ({
   // favoritedByUserId rides along in a select this query already runs, and the
   // scan already visits the heap for every row (userId/burnedAt are not in the
   // primary key index), so the extra column costs no I/O and no round trip.
+  //
+  // isTradeable was never checked here. The invariant "isTradeable = false means
+  // untradeable" was enforced only by read-path filtering — /api/collection/:username
+  // hides those copies — but nothing makes a client pick from what the UI showed:
+  // resolveUserCtoonIds passes a raw UUID straight through, and the `uc|…` token is
+  // documented as unsigned and forgeable. So a copy escrowed for a forced dissolve
+  // auction, or locked by a holiday redemption, could be named directly and traded
+  // out from under the process that was about to claim it. Filtering here rather
+  // than checking after means a non-tradeable copy simply falls out of `owned` and
+  // hits the existing "not owned by you or no longer available" rejection, which
+  // already says exactly that.
   const owned = allIds.length
     ? await prisma.userCtoon.findMany({
-        where: { id: { in: allIds }, burnedAt: null },
+        where: { id: { in: allIds }, burnedAt: null, isTradeable: true },
         select: { id: true, userId: true, favoritedByUserId: true }
       })
     : []

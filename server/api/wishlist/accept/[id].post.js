@@ -166,7 +166,7 @@ export default defineEventHandler(async (event) => {
     if (initiator?.discordId && process.env.BOT_TOKEN) {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'
-      const baseUrl = isProd ? 'https://www.cartoonreorbit.com/trade-offers' : 'http://localhost:3000/trade-offers'
+      const baseUrl = isProd ? 'https://www.cartoonreorbit.com/newsite/trade' : 'http://localhost:3000/newsite/trade'
 
       const dmChannel = await $fetch('https://discord.com/api/v10/users/@me/channels', {
         method: 'POST',
