@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isSyntheticUserCtoonId, resolveUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonId'
 import { getActiveSale } from '@/server/utils/activeSaleCache'
+import { isFavoritedCopy } from '@/server/utils/favoriteRules'
 
 function asString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -156,8 +157,21 @@ export default defineEventHandler(async (event) => {
     ])
 
     const uRow = userAuctionStats[0] ?? {}
+    // This endpoint deliberately serves per-copy stats for ANY userCtoonId — it
+    // never checks that the caller owns the copy, and the `uc|user|ctoon|mint`
+    // token is a pure function of three values the Owners tab and the auction
+    // house publish, so tokens for other people's copies are trivially
+    // constructed. That is fine for sale history; it is not fine for a favorite,
+    // which would otherwise be readable one copy at a time for the whole game.
+    // So ownership is what gates it, not knowledge of the token.
+    const isOwner = userCtoon.userId === me.id
     userStats = {
       id: encodeUserCtoonId(userCtoon.userId, userCtoon.ctoonId, userCtoon.mintNumber),
+      // The real row id, for the favorites routes — they take a UUID rather than
+      // the token, which cannot address a specific copy of an unlimited edition.
+      // Owner-only for the same reason as isFavorite.
+      ...(isOwner ? { userCtoonId: userCtoon.id, isFavorite: isFavoritedCopy(userCtoon) } : {}),
+      isOwner,
       mintNumber: userCtoon.mintNumber ?? null,
       tradedCount: tradeCount,
       successfulAuctions: Number(uRow.count ?? 0),

@@ -22,7 +22,9 @@
           <SecondEditionOverlay :ctoon="ctoon" />
         </div>
         <div class="ctic-head-info">
-          <h3 class="ctic-name">{{ ctoon.name || 'cToon' }}</h3>
+          <h3 class="ctic-name">
+            <span v-if="userCtoon?.isFavorite" class="ctic-name-star" title="One of your favorites" aria-hidden="true">★</span>{{ ctoon.name || 'cToon' }}
+          </h3>
           <span v-if="ctoon.isSecondEdition" class="ctic-2nd-badge">2nd Edition</span>
           <p class="ctic-subtitle">cToon details</p>
           <button
@@ -192,6 +194,30 @@
             <!-- Mint-specific section -->
             <div v-if="userCtoon" class="ctic-mint-section">
               <h4 class="ctic-mint-title">Mint #{{ formatValue(userCtoon.mintNumber) }}</h4>
+
+              <!-- Lives in the per-copy section rather than the footer: a
+                   favorite is a fact about THIS mint, and .ctic-foot already
+                   carries up to three controls that wrap onto their own row
+                   below 480px. The state is carried in words, not just the
+                   star's colour. -->
+              <button
+                v-if="userCtoon.isOwner && userCtoon.userCtoonId"
+                class="ctic-fav-row"
+                :class="{ 'ctic-fav-row--on': userCtoon.isFavorite }"
+                :aria-pressed="userCtoon.isFavorite ? 'true' : 'false'"
+                :disabled="favPending"
+                @click="toggleFavorite"
+              >
+                <span class="ctic-fav-star" aria-hidden="true">★</span>
+                <span class="ctic-fav-text">
+                  {{ favPending
+                    ? 'Saving…'
+                    : userCtoon.isFavorite
+                      ? 'Favorited — other players can’t request this cToon in a trade'
+                      : 'Make this a favorite' }}
+                </span>
+              </button>
+              <p v-if="favError" class="ctic-fav-error" role="alert">{{ favError }}</p>
               <div class="ctic-grid">
                 <div class="ctic-tile">
                   <div class="ctic-label">Times Traded</div>
@@ -505,6 +531,33 @@ const statusImageAlt = computed(() => {
       : 'cToon status'
   }
 })
+
+// ── Favorite toggle ───────────────────────────────────────────────
+// isFavorite and userCtoonId only reach the client when the viewer owns the
+// copy — /api/ctoon/modal serves per-copy stats for ANY id, so the flag is
+// gated there rather than here.
+const favPending = ref(false)
+const favError = ref('')
+
+async function toggleFavorite() {
+  const uc = userCtoon.value
+  if (!uc?.userCtoonId || favPending.value) return
+  const was = !!uc.isFavorite
+  favPending.value = true
+  favError.value = ''
+  try {
+    const res = await $fetch(`/api/favorites/${encodeURIComponent(uc.userCtoonId)}`, {
+      method: was ? 'DELETE' : 'POST'
+    })
+    // Written back onto the shared modal payload so the star and the row agree
+    // without a refetch.
+    if (data.value?.userCtoon) data.value.userCtoon.isFavorite = !!res?.isFavorite
+  } catch (err) {
+    favError.value = err?.data?.statusMessage || err?.statusMessage || 'Could not update this favorite.'
+  } finally {
+    favPending.value = false
+  }
+}
 
 const holidayEvent = ref(null)
 const openingHoliday = ref(false)
@@ -1158,6 +1211,39 @@ function formatDate(value) {
 
 /* ── Mint section ────────────────────────────────────────────── */
 .ctic-mint-section { margin-top: 12px; }
+
+.ctic-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  /* 44px: this is a real touch target inside a scrolling modal body. */
+  min-height: 44px;
+  padding: 8px 10px;
+  margin: 6px 0 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.75);
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.ctic-fav-row--on {
+  background: rgba(234,179,8,0.16);
+  border-color: #eab308;
+  color: #fde68a;
+}
+
+.ctic-fav-star { font-size: 1rem; line-height: 1; color: rgba(255,255,255,0.35); }
+.ctic-fav-row--on .ctic-fav-star { color: #eab308; }
+.ctic-fav-row:disabled { opacity: 0.6; cursor: progress; }
+.ctic-fav-text { flex: 1; }
+.ctic-fav-error { font-size: 0.72rem; color: #fca5a5; margin: 0 0 8px; }
+
+.ctic-name-star { color: #eab308; margin-right: 6px; }
 .ctic-mint-title {
   font-size: 0.72rem;
   text-transform: uppercase;

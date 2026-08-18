@@ -14,6 +14,10 @@ import {
   pendingTradeGuardWhere,
   fmtPoints
 } from '@/server/utils/tradeOfferRules'
+import {
+  favoritedRequestedIds,
+  UNAVAILABLE_REQUEST_MESSAGE
+} from '@/server/utils/favoriteRules'
 
 export * from '@/server/utils/tradeOfferRules'
 
@@ -93,10 +97,13 @@ export async function validateTradeOfferInputs ({
   const allIds = [...resolvedOffered, ...resolvedRequested]
 
   // Ownership for both sides in one query, partitioned by owner afterwards.
+  // favoritedByUserId rides along in a select this query already runs, and the
+  // scan already visits the heap for every row (userId/burnedAt are not in the
+  // primary key index), so the extra column costs no I/O and no round trip.
   const owned = allIds.length
     ? await prisma.userCtoon.findMany({
         where: { id: { in: allIds }, burnedAt: null },
-        select: { id: true, userId: true }
+        select: { id: true, userId: true, favoritedByUserId: true }
       })
     : []
   const ownerById = new Map(owned.map(r => [r.id, r.userId]))
@@ -112,6 +119,33 @@ export async function validateTradeOfferInputs ({
       statusCode: 400,
       statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
     })
+  }
+
+  // Favorites, after the ownership checks above and before the round trips below.
+  //
+  // After ownership on purpose: checking first would answer "is this copy
+  // favorited?" for a cToon belonging to somebody who is not even party to the
+  // trade, which is exactly the oracle the generic messages here exist to avoid.
+  // Before the Promise.all so a rejection skips two queries.
+  //
+  // Only the REQUESTED side is checked. A favorite stops other people asking for
+  // the copy; it never stops the owner offering it themselves, which is why
+  // resolvedOffered is not consulted.
+  if (resolvedRequested.length) {
+    const exemptIds = excludeOfferIds.length
+      ? (await prisma.tradeOfferCtoon.findMany({
+          where: { tradeOfferId: { in: [...excludeOfferIds] }, userCtoonId: { in: resolvedRequested } },
+          select: { userCtoonId: true }
+        })).map(r => r.userCtoonId)
+      : []
+
+    if (favoritedRequestedIds(owned, resolvedRequested, exemptIds).length) {
+      // Same generic wording as the guards below, and it must never say the word
+      // "favorite": the read paths collapse favorited/pending/auctioned into one
+      // `unavailable` flag precisely so the three cannot be told apart, and a
+      // specific message here would undo that in one line.
+      throw createError({ statusCode: 400, statusMessage: UNAVAILABLE_REQUEST_MESSAGE })
+    }
   }
 
   if (allIds.length) {

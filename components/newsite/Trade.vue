@@ -286,8 +286,8 @@
                   <CtoonCard
                     :ctoon="c"
                     :selected="selectedTargetCtoonsMap.has(c.id)"
-                    :disabled="c.inPendingTrade || (targetAtLimit && !selectedTargetCtoonsMap.has(c.id))"
-                    :disabled-label="c.inPendingTrade ? 'In Trade' : 'Limit'"
+                    :disabled="c.unavailable || (targetAtLimit && !selectedTargetCtoonsMap.has(c.id))"
+                    :disabled-label="disabledReasonFor({ unavailable: c.unavailable, atLimit: targetAtLimit }) || 'Limit'"
                     :badge="selfOwnedIdsCreate.has(c.ctoonId) ? 'Owned' : 'Unowned'"
                     @toggle="toggleTargetCtoon(c)"
                   />
@@ -395,7 +395,8 @@
                     :ctoon="c"
                     :selected="selectedInitiatorCtoonsMap.has(c.id)"
                     :disabled="c.inPendingTrade || (initiatorAtLimit && !selectedInitiatorCtoonsMap.has(c.id))"
-                    :disabled-label="c.inPendingTrade ? 'In Trade' : 'Limit'"
+                    :disabled-label="disabledReasonFor({ isOwnSide: true, inPendingTrade: c.inPendingTrade, atLimit: initiatorAtLimit }) || 'Limit'"
+                    :favorite="!!c.isFavorite"
                     :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
                     badge-class-owned="tc-badge--blue"
                     @toggle="toggleInitiatorCtoon(c)"
@@ -425,7 +426,7 @@
               <button class="tr-btn-secondary" @click="tradeCurrentStep = 2">← Back</button>
               <!-- Short label on purpose: .tr-step-header has no mobile breakpoint
                    and .tr { overflow: hidden } clips rather than scrolls. -->
-              <button class="tr-btn-green" :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer" @click="sendOffer">
+              <button class="tr-btn-green" :disabled="sendBlocked" @click="sendOffer">
                 {{ makingOffer ? 'Sending…' : (isCounterMode ? 'Send Counter' : 'Make Offer') }}
               </button>
             </div>
@@ -471,6 +472,17 @@
             <div v-else-if="!isLoadingCreateValuations" class="tm-val-loading">
               No auction data available to estimate values.
             </div>
+          </div>
+
+          <div v-if="offeredFavorites.length" class="tr-fav-warn" role="alert">
+            <div class="tr-fav-warn-head">
+              ★ You are offering {{ offeredFavorites.length }} of your favorite{{ offeredFavorites.length > 1 ? 's' : '' }}
+            </div>
+            <div class="tr-fav-warn-list">{{ offeredFavoritesSummary }}</div>
+            <label class="tr-fav-warn-ack">
+              <input v-model="favAck" type="checkbox" class="tr-fav-warn-cb" />
+              <span>I understand and want to trade {{ offeredFavorites.length > 1 ? 'them' : 'it' }} away</span>
+            </label>
           </div>
 
           <div class="tr-confirm-grid">
@@ -704,6 +716,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
+import { disabledReasonFor } from '~/server/utils/favoriteRules'
 import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
 import { MAX_CTOONS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
@@ -1451,8 +1464,16 @@ const counterTrimmedCount = ref(0)
 function applyPreselectedCtoons() {
   // Single-item preselect from the cToon search / czone deep links.
   const preselectId = manualPreselectUserCtoonId.value || (route.query.userCtoonId ? String(route.query.userCtoonId) : null)
-  const deepLinked = preselectId
+  // `unavailable` is checked here and not only in the toggle: this path pushes
+  // straight into the selection and PINS it, so an unavailable cToon arriving by
+  // ?userCtoonId= (from the Owners tab or a cZone "request this" link) would be
+  // selected, rendered disabled, impossible to deselect, and would fail every
+  // send with a message that names nothing.
+  const deepLinkedCandidate = preselectId
     ? otherCtoons.value.find(c => c.id === preselectId)
+    : null
+  const deepLinked = deepLinkedCandidate && !deepLinkedCandidate.unavailable
+    ? deepLinkedCandidate
     : null
   if (deepLinked && !selectedTargetCtoonsMap.value.has(deepLinked.id)) {
     selectedTargetCtoons.value.push(deepLinked)
@@ -1474,7 +1495,13 @@ function applyPreselectedCtoons() {
     let missing = 0
     for (const k of keys) {
       const hit = byKey.get(k)
-      if (hit) found.push(hit); else missing++
+      // An unavailable cToon counts as missing rather than being mirrored in.
+      // The assignment below is wholesale and bypasses the toggle guard, so
+      // mirroring one would pin a card that can never be deselected. The server
+      // exempts the countered offer's own cToons from the favorite and
+      // pending-trade guards, so this only drops cToons that genuinely became
+      // unsendable — and counterMissingCount already tells the user.
+      if (hit && !hit.unavailable) found.push(hit); else missing++
     }
     return { found, missing }
   }
@@ -1536,7 +1563,7 @@ function notifyAtLimit(side) {
 }
 
 function toggleTargetCtoon(c) {
-  if (c.inPendingTrade) return
+  if (c.unavailable) return
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
   if (i >= 0) { selectedTargetCtoons.value.splice(i, 1); limitNotified.target = false; return }
   if (targetAtLimit.value) return notifyAtLimit('target')
@@ -1655,6 +1682,29 @@ function buildNameSuggestions(q, list) {
 // ── Offer creation ────────────────────────────────────────────────
 const pointsToOffer = ref(0)
 const makingOffer = ref(false)
+
+/**
+ * Favorites shield you from other people asking; they never stop you giving a
+ * cToon away yourself. The server enforces exactly that asymmetry, so this is a
+ * speed bump against an accident, not a security control — which is why it is an
+ * acknowledgement on the review step rather than a modal or a server refusal.
+ */
+const favAck = ref(false)
+const offeredFavorites = computed(() => selectedInitiatorCtoons.value.filter(c => c.isFavorite))
+const offeredFavoritesSummary = computed(() =>
+  offeredFavorites.value
+    .map(c => `${c.name}${c.mintNumber != null ? ` #${c.mintNumber}` : ''}`)
+    .join(', ')
+)
+const sendBlocked = computed(() =>
+  (selectedInitiatorCtoons.value.length === 0 && pointsToOffer.value === 0) ||
+  makingOffer.value ||
+  (offeredFavorites.value.length > 0 && !favAck.value)
+)
+
+// Re-arm the acknowledgement whenever the offered side changes, so ticking the
+// box for one cToon can never carry over to a different one added afterwards.
+watch(selectedInitiatorIds, () => { favAck.value = false })
 
 const isCounterMode = computed(() => !!tradeCounterSourceId.value)
 
@@ -2155,6 +2205,25 @@ onBeforeUnmount(() => {
   min-height: 0;
   height: 100%;
 }
+
+/* ── Offering your own favorites ── */
+.tr-fav-warn {
+  background: rgba(234,179,8,0.14);
+  border: 1px solid rgba(234,179,8,0.45);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.tr-fav-warn-head { font-size: 0.7rem; font-weight: bold; color: #fde68a; }
+.tr-fav-warn-list { font-size: 0.62rem; color: rgba(255,255,255,0.65); margin-top: 2px; }
+/* 44px so the row is a real touch target on the phone layout, where this panel
+   sits directly above the send button. */
+.tr-fav-warn-ack {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  font-size: 0.68rem; color: #fff; min-height: 44px; cursor: pointer;
+}
+.tr-fav-warn-cb { width: 20px; height: 20px; flex-shrink: 0; }
 
 /* ── Confirm ── */
 .tr-confirm-grid {
