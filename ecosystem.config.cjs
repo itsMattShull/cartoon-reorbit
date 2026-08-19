@@ -18,6 +18,7 @@
  *   worker-achieve                – BullMQ worker: daily achievements
  *   worker-content-analyzer       – BullMQ worker: survey content analysis
  *   guild-checker                 – Cron: Discord guild member sync
+ *   discord-chat                  – Discord gateway relay for the sidebar chat
  *
  * Workers run as single fork-mode instances to prevent double-processing of jobs.
  */
@@ -171,6 +172,36 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
+    // ── Discord chat relay: gateway connection ────────────────────────────
+    // Holds the single Discord Gateway WebSocket and republishes messages onto
+    // Redis for socket-server to fan out. Its own process, not part of
+    // socket-server, for the reasons in the header of the worker file — chiefly
+    // that socket-server has no uncaughtException handler and does not persist
+    // live Clash matches on a crash, so gateway code must not be able to take
+    // it down.
+    //
+    // instances: 1 is load-bearing: it is what guarantees a single gateway
+    // connection, so there is no distributed lock anywhere in this feature.
+    {
+      name:      'discord-chat',
+      script:    'server/workers/discord-chat.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      // The only PM2 app here with backoff, and it needs it. Discord resets the
+      // bot token if an app exceeds 1000 IDENTIFYs in 24h, and PM2's default is
+      // to restart a crashing process immediately — which would burn that budget
+      // in under an hour and break OAuth login, DMs and every announcement path
+      // site-wide. The worker also keeps its own persisted IDENTIFY counter;
+      // this is the outer guard.
+      exp_backoff_restart_delay: 1000,
+      max_restarts: 20,
+      wait_ready:     true,
+      listen_timeout: 15000,
+      kill_timeout:   5000,
       env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
       env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },

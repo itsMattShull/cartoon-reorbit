@@ -24,6 +24,21 @@
     <NuxtLink v-if="!isMobile" to="/newsite/settings" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
     </NuxtLink>
+    <!-- Labelled "Chat", not "Toggle Chat". `.topbar-nav-right` is
+         `overflow: hidden` and these buttons are `white-space: nowrap`, so they
+         are CLIPPED rather than wrapped on desktop. An admin's NavLeft carries
+         an extra "Admin" button, which leaves roughly 50px of slack in the row
+         at a ~1060px window — "Toggle Chat" (~112px) would eat the right edge
+         of Settings, "Chat" (~67px) fits.
+         Hidden where the sidebar is (7 pages set `showSidebar: false`, incl.
+         the whole admin console), because the panel has nowhere to render
+         there and the button would silently do nothing. -->
+    <BlueButton
+      v-if="chatAvailable"
+      :style="{ height: buttonHeight }"
+      :aria-pressed="chatOpen ? 'true' : 'false'"
+      @click="toggleChat"
+    >Chat</BlueButton>
   </div>
 </template>
 
@@ -38,6 +53,10 @@ const props = defineProps({
     default: false
   }
 })
+
+const route = useRoute()
+const { chatOpen, toggleChat } = useNewsiteLayout()
+const chatAvailable = computed(() => route.meta.showSidebar !== false && route.meta.fluidLayout !== true)
 </script>
 
 <style scoped>

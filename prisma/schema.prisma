@@ -474,6 +474,16 @@ model User {
   additionalCzones                  Int       @default(0)
   usernameChangedAt                 DateTime?
   vpnDetected                       Boolean   @default(false)
+  // Discord chat relay timeout. `banned` already stops chat outright (the socket
+  // auth helper refuses banned users), so this is the lesser lever: it blocks
+  // sending into Discord without touching the rest of the account. Null or past
+  // = not muted. Set from Admin > Manage Users.
+  //
+  // This exists because the relay is asymmetric: every site message reaches
+  // Discord as one webhook identity, so a Discord moderator's own tools
+  // (timeout/kick/ban) cannot single out a site user. Without this column the
+  // only lever is banning the account outright.
+  chatMutedUntil                    DateTime?
 
   // cMoon (faction) membership
   cMoonId            String?
@@ -1438,6 +1448,31 @@ model GlobalGameConfig {
   cMoonEnabled                       Boolean   @default(false)
   cMoonEnabledAt                     DateTime?
   cMoonSelectionDeadlineAt           DateTime?
+
+  // ── Discord chat relay (sidebar "Chat" panel) ───────────────────────────────
+  // Off by default: the relay republishes a guild channel to the website and
+  // gives every site user an ingress into Discord, so it is switched on
+  // deliberately rather than by deploying.
+  //
+  // The webhook credential is deliberately NOT here. Both admin config
+  // endpoints return this row wholesale (global-config.get.js returns `config`,
+  // .post.js returns `result`), so any secret in this model is shipped to every
+  // admin's browser on every settings load. A webhook token is an
+  // unauthenticated bearer credential that can post to the channel as any
+  // name and avatar, and it is revocable only by deleting the webhook. It
+  // lives in env alongside BOT_TOKEN and JWT_SECRET. See server/utils/discordChat/config.js.
+  discordChatEnabled                 Boolean   @default(false)
+  discordChatChannelId               String?
+  // Per-user floor between sends. Note this bounds ONE user; the per-webhook
+  // ceiling is enforced separately by a global token bucket, because N users
+  // each obeying their own slowmode still exceed Discord's per-webhook limit.
+  discordChatSlowmodeSeconds         Int       @default(5)
+  discordChatMaxLength               Int       @default(400)
+  // Off by default. Rendering attachments means any guild member can put an
+  // image on the website, and Discord's attachment CDN URLs are signed and
+  // expire, so buffered images rot after roughly a day.
+  discordChatShowAttachments         Boolean   @default(false)
+
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }

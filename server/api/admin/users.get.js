@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
       isAdmin: true,
       active: true,
       banned: true,
+      chatMutedUntil: true,
       warning180: true,
       warning210: true,
       warning240: true,
@@ -86,6 +87,7 @@ export default defineEventHandler(async (event) => {
     isAdmin:       u.isAdmin,
     active:        u.active,
     banned:        u.banned,
+    chatMutedUntil: u.chatMutedUntil,
     additionalCzones: u.additionalCzones ?? 0,
 
     // keep flat flags for convenience
