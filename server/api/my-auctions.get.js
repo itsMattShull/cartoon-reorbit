@@ -215,6 +215,9 @@ export default defineEventHandler(async (event) => {
     secondEditionOverlaySize: a.userCtoon?.ctoon?.secondEditionOverlaySize ?? null,
     createdAt:        a.createdAt.toISOString(),
     endAt:            a.endAt.toISOString(),      // <— new
+    // Exact listed length, so re-listing can prefill it rather than snapping
+    // endAt - createdAt to the nearest preset. Null on pre-migration rows.
+    durationMinutes:  a.durationMinutes ?? null,
     initialBid:       a.initialBet,
     highestBid:       a.bids[0]?.amount ?? null,
     winningBid:       a.bids[0]?.amount ?? null,

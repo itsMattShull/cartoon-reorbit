@@ -1579,7 +1579,12 @@ model Auction {
   id                 String        @id @default(uuid())
   userCtoonId        String
   initialBet         Int
-  duration           Int // days
+  duration           Int // days; 0 for any sub-day listing. Kept for back-compat — read durationMinutes instead.
+  // Exact listed length in minutes. Nullable because rows predating the column,
+  // and the admin/worker creation paths, don't set it. Needed because endAt is
+  // not a reliable record of the listed length: server/socket-server.js extends
+  // it by the full outage after downtime, so endAt - createdAt drifts.
+  durationMinutes    Int?
   endAt              DateTime
   status             AuctionStatus @default(ACTIVE)
   createdAt          DateTime      @default(now())
@@ -1611,6 +1616,10 @@ model Auction {
   // migration 20260803000000_unique_active_auction_per_user_ctoon and shows up
   // as drift in `prisma migrate dev`. Do not drop it.
   @@index([userCtoonId, status])
+  // The Auction House's default view filters status='ACTIVE' and orders by
+  // endAt, and socket-server's ending-soon notifier re-runs that same shape
+  // every 60 seconds. Without this the sort had no index to lean on.
+  @@index([status, endAt])
   @@index([status, winnerId, highestBid])
   @@index([isFeatured, status, highestBidderId])
   // /api/my-auctions filters on creatorId and orders by endAt desc. Postgres

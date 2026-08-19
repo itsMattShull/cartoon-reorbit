@@ -10,21 +10,12 @@ import fetch from 'node-fetch'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 import { rarityFloor } from '@/server/utils/auctionPriceSuggestion'
-
-// Longest listing the UI offers: 5 days, or 12 hours for the sub-day presets.
-const MAX_DURATION_DAYS = 5
-const MAX_DURATION_MINUTES = 12 * 60
-
-function formatDuration(days, minutes) {
-  if (minutes > 0) {
-    if (minutes % 60 === 0) {
-      const hours = minutes / 60
-      return `${hours} hour${hours === 1 ? '' : 's'}`
-    }
-    return `${minutes} minute(s)`
-  }
-  return `${days} day(s)`
-}
+import {
+  resolveAuctionDuration,
+  formatAuctionDuration,
+  MAX_INITIAL_BET,
+  MAX_CLOSE_DELAY_MS
+} from '@/server/utils/auctionDuration'
 
 export default defineEventHandler(async (event) => {
   // 1. Authenticate
@@ -41,16 +32,25 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2. Parse & validate
+  //
+  // `|| {}` because h3 returns undefined for an empty body, and a bare
+  // destructure of that throws a TypeError — a 500 where the caller deserves a
+  // 422. A non-JSON content-type can also make readBody return a raw string,
+  // which the object check below catches.
+  const body = (await readBody(event)) || {}
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw createError({ statusCode: 422, statusMessage: 'Malformed request body' })
+  }
+
   const {
     userCtoonId,
     initialBet,
     durationDays = 0,
     durationMinutes = 0,
     createInitialBid = false
-  } = await readBody(event)
+  } = body
 
-  if (!userCtoonId || initialBet == null ||
-      durationDays === undefined || durationMinutes === undefined) {
+  if (!userCtoonId || initialBet == null) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
@@ -58,17 +58,31 @@ export default defineEventHandler(async (event) => {
   // a huge one locks the cToon out of trading for years while overflowing the
   // BullMQ delay. Re-listing sends a duration the client reconstructed from the
   // previous auction, so this can't be left to the UI.
-  const days = Number(durationDays)
-  const minutes = Number(durationMinutes)
-  if (!Number.isInteger(days) || !Number.isInteger(minutes) ||
-      days < 0 || days > MAX_DURATION_DAYS ||
-      minutes < 0 || minutes > MAX_DURATION_MINUTES ||
-      (days === 0 && minutes === 0)) {
-    throw createError({ statusCode: 422, statusMessage: 'Invalid auction duration' })
+  //
+  // resolveAuctionDuration reduces the pair to a single `totalMinutes`, and
+  // that number is the only thing used below — endAt, both stored columns and
+  // the Discord label all derive from it. Keeping days and minutes alive past
+  // this point would mean two arithmetic paths that have to agree forever.
+  const durationResult = resolveAuctionDuration({ durationDays, durationMinutes })
+  if (!durationResult.ok) {
+    throw createError({ statusCode: 422, statusMessage: durationResult.reason })
   }
+  const totalMinutes = durationResult.totalMinutes
 
-  if (!Number.isInteger(Number(initialBet)) || Number(initialBet) <= 0) {
+  // Coerce the bet exactly once, here. Every later use — the floor check, the
+  // DB write, the Discord embed — reads `bet`, never the raw body value. The
+  // embed used to interpolate the raw value, so an initialBet of ["500\n\n\n"]
+  // passed validation as 500, stored as 500, and injected blank lines into the
+  // announcement around the Duration line.
+  const bet = typeof initialBet === 'number'
+    ? initialBet
+    : (typeof initialBet === 'string' && /^\d{1,10}$/.test(initialBet) ? Number(initialBet) : NaN)
+  if (!Number.isSafeInteger(bet) || bet <= 0) {
     throw createError({ statusCode: 422, statusMessage: 'Initial bet must be a positive whole number' })
+  }
+  // Auction.initialBet is an int4; without a ceiling this fails at the DB as a 500.
+  if (bet > MAX_INITIAL_BET) {
+    throw createError({ statusCode: 422, statusMessage: 'Initial bet is too large' })
   }
 
   const resolvedUserCtoonId = await resolveUserCtoonId(userCtoonId)
@@ -98,7 +112,7 @@ export default defineEventHandler(async (event) => {
   const expectedInitialBet = rarityFloor(userCtoonRec.ctoon?.rarity)
 
   // Enforce minimum initial bet
-  if (Number(initialBet) < expectedInitialBet) {
+  if (bet < expectedInitialBet) {
     throw createError({
       statusCode: 422,
       statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for rarity "${userCtoonRec.ctoon?.rarity ?? 'N/A'}"`
@@ -126,10 +140,15 @@ export default defineEventHandler(async (event) => {
   }
 
   // 5. Compute endAt
-  const nowMs    = Date.now()
-  const daysMs   = days * 24 * 60 * 60 * 1000
-  const minsMs   = minutes * 60 * 1000
-  const endAtUtc = new Date(nowMs + daysMs + minsMs).toISOString()
+  // One arithmetic path, derived solely from the validated totalMinutes.
+  const closeDelayMs = totalMinutes * 60000
+  if (closeDelayMs > MAX_CLOSE_DELAY_MS) {
+    // Unreachable while MAX_AUCTION_MINUTES is 7 days; here so that raising it
+    // past BullMQ's ~24.8-day setTimeout ceiling fails loudly instead of
+    // producing auctions that close the instant they are created.
+    throw createError({ statusCode: 422, statusMessage: 'Invalid auction duration' })
+  }
+  const endAtUtc = new Date(Date.now() + closeDelayMs).toISOString()
 
   // 6. Create auction
   //
@@ -140,6 +159,13 @@ export default defineEventHandler(async (event) => {
   // winner closed last — nothing stopped them. The partial unique index
   // "Auction_active_userCtoonId_key" (WHERE status = 'ACTIVE') is the real
   // guard; P2002 here is the loser of that race.
+  //
+  // Creating the auction and clearing isTradeable are one transaction: a crash
+  // between them used to leave an ACTIVE auction on a cToon the collection UI
+  // still offered as tradeable, for the whole life of the listing. Trades never
+  // actually double-spent it — server/utils/tradeOffer.js queries the Auction
+  // table directly rather than trusting the flag — but the UI lied, and a
+  // 7-day listing lies for a week.
   let auction
   try {
     auction = await prisma.$transaction(async (tx) => {
@@ -192,6 +218,11 @@ export default defineEventHandler(async (event) => {
           ...(userId ? { creatorId: userId } : {})
         }
       })
+      await tx.userCtoon.update({
+        where: { id: resolvedUserCtoonId },
+        data: { isTradeable: false }
+      })
+      return created
     })
   } catch (err) {
     if (err?.code === 'P2002') {
@@ -202,7 +233,7 @@ export default defineEventHandler(async (event) => {
 
   // 7. Optionally create initial bid — only if amount matches rarity mapping
   if (createInitialBid) {
-    if (Number(initialBet) === expectedInitialBet) {
+    if (bet === expectedInitialBet) {
       const initialBidder = await prisma.user.findUnique({
         where: { username: 'CartoonReOrbitOfficial' }
       })
@@ -292,7 +323,7 @@ export default defineEventHandler(async (event) => {
 
       const { name, rarity, assetPath, isSecondEdition } = userCtoonRec.ctoon || {}
       const mintNumber   = userCtoonRec.mintNumber
-      const durationText = formatDuration(days, minutes)
+      const durationText = formatAuctionDuration(totalMinutes)
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
       const rawImageUrl = assetPath
@@ -304,7 +335,7 @@ export default defineEventHandler(async (event) => {
         `**Rarity:** ${rarity ?? 'N/A'}`,
         ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
         ...(isSecondEdition ? [`**Second Edition**`] : []),
-        `**Starting Bid:** ${initialBet} pts`,
+        `**Starting Bid:** ${bet} pts`,
         `**Duration:** ${durationText}`
       ]
 
