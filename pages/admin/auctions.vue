@@ -130,7 +130,7 @@
             <td class="px-4 py-2">{{ auc.creator?.username || '—' }}</td>
             <td class="px-4 py-2">{{ auc.status }}</td>
             <td class="px-4 py-2">{{ formatDate(auc.createdAt) }}</td>
-            <td class="px-4 py-2">{{ auc.duration }} days</td>
+            <td class="px-4 py-2">{{ auctionLength(auc) }}</td>
             <td class="px-4 py-2">{{ hoursLeft(auc.endAt) }}</td>
             <td class="px-4 py-2">{{ auc.highestBidder?.username || '—' }}</td>
             <td class="px-4 py-2">{{ auc.winner?.username || '—' }}</td>
@@ -155,7 +155,7 @@
           <div><span class="font-medium">Creator:</span> {{ auc.creator?.username || '—' }}</div>
           <div><span class="font-medium">Status:</span> {{ auc.status }}</div>
           <div><span class="font-medium">Created:</span> {{ formatDate(auc.createdAt) }}</div>
-          <div><span class="font-medium">Duration:</span> {{ auc.duration }} days</div>
+          <div><span class="font-medium">Duration:</span> {{ auctionLength(auc) }}</div>
           <div><span class="font-medium">Top Bidder:</span> {{ auc.highestBidder?.username || '—' }}</div>
           <div><span class="font-medium">Winner:</span> {{ auc.winner?.username || '—' }}</div>
           <div><span class="font-medium">Highest Bid:</span> {{ auc.highestBid }}</div>
@@ -180,6 +180,16 @@
 </template>
 
 <script setup>
+import { formatAuctionDuration } from '~/server/utils/auctionDuration'
+
+// Auction.duration is whole days, so every sub-day listing stores 0 and this
+// column read "0 days" for a 3-minute or 12-hour auction. durationMinutes
+// carries the real length where the row has it.
+function auctionLength(auc) {
+  const mins = auc?.durationMinutes
+  if (Number.isInteger(mins)) return formatAuctionDuration(mins)
+  return `${auc?.duration ?? 0} days`
+}
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import Nav from '@/components/Nav.vue'
 

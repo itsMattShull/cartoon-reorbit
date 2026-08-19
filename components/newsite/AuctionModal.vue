@@ -76,21 +76,31 @@
 
           <hr class="am-divider" />
 
-          <!-- Duration presets -->
+          <!-- Duration -->
           <div class="am-field">
             <label class="am-label">Duration</label>
-            <div class="am-presets">
-              <button
-                v-for="p in PRESETS" :key="p.value"
-                class="am-preset" :class="{ active: durationPreset === p.value }"
-                @click="durationPreset = p.value"
-              >{{ p.label }}</button>
+            <AuctionDurationPicker
+              ref="durationPicker"
+              :prefill="durationPrefill"
+              @update="onDurationUpdate"
+            />
+          </div>
+
+          <!-- Long listings can't be undone: nothing in the app writes
+               AuctionStatus.CANCELLED to an Auction, so there is no withdraw
+               path once this is live. A day-plus listing is worth one tap of
+               confirmation. -->
+          <div v-if="confirming" class="am-confirm">
+            <div class="am-confirm-title">List for {{ durationLabel }}?</div>
+            <div class="am-confirm-body">
+              Ends {{ durationEndsAt }}. An auction can't be withdrawn once it starts,
+              and this cToon can't be traded until it ends.
             </div>
-            <!-- Days slider -->
-            <div v-if="durationPreset === 'days'" class="am-slider-wrap">
-              <div class="am-slider-label">{{ timeframe }} day{{ timeframe !== 1 ? 's' : '' }}</div>
-              <input class="am-slider" type="range" v-model.number="timeframe" :min="1" :max="5" step="1" />
-              <div class="am-slider-ticks"><span>1d</span><span>2d</span><span>3d</span><span>4d</span><span>5d</span></div>
+            <div class="am-confirm-actions">
+              <button class="am-cancel" @click="confirming = false">Back</button>
+              <button class="am-submit" :disabled="sending" @click="submitAuction">
+                {{ sending ? 'Sending…' : 'Confirm' }}
+              </button>
             </div>
           </div>
 
@@ -105,7 +115,7 @@
             <button class="am-cancel" @click="$emit('close')">Cancel</button>
             <button
               class="am-submit"
-              :disabled="sending || initialBet < minInitialBet"
+              :disabled="sending || !canSubmit"
               @click="sendToAuction"
             >{{ sending ? 'Sending…' : 'Send to Auction' }}</button>
           </div>
@@ -128,16 +138,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'created'])
 
-const PRESETS = [
-  { value: '3m',   label: '3 min'  },
-  { value: '30m',  label: '30 min' },
-  { value: '1h',   label: '1 hr'   },
-  { value: '4h',   label: '4 hr'   },
-  { value: '6h',   label: '6 hr'   },
-  { value: '12h',  label: '12 hr'  },
-  { value: 'days', label: 'Days…'  },
-]
-
 const RARITY_MIN = {
   'common': 25, 'uncommon': 50, 'rare': 100, 'very rare': 187,
   'crazy rare': 312, 'code only': 50, 'prize only': 50, 'auction only': 50,
@@ -155,8 +155,16 @@ const initialBet = ref(
     ? Math.max(props.prefill.initialBet, instaBidValue.value)
     : Math.max(props.ctoon.price || 0, instaBidValue.value)
 )
-const durationPreset = ref(props.prefill?.durationPreset || 'days')
-const timeframe      = ref(props.prefill?.timeframe || 1)
+const durationPrefill = computed(() => ({
+  preset:            props.prefill?.durationPreset || 'days',
+  timeframe:         props.prefill?.timeframe || 1,
+  customEndAtLocal:  props.prefill?.customEndAtLocal || ''
+}))
+
+// Populated by AuctionDurationPicker's @update.
+const duration       = ref({ durationDays: 0, durationMinutes: 0, totalMinutes: null, valid: false })
+const durationPicker = ref(null)
+const confirming     = ref(false)
 const sending        = ref(false)
 const recentAuctions = ref([])
 const suggestion     = ref(null)
@@ -230,22 +238,52 @@ function showToast(message, type = 'error') {
   setTimeout(() => { toast.message = '' }, 4000)
 }
 
+function onDurationUpdate(next) { duration.value = next }
+
+const canSubmit = computed(() =>
+  initialBet.value >= minInitialBet.value && duration.value.valid
+)
+
+const durationLabel  = computed(() => durationPicker.value?.describe?.() || '')
+const durationEndsAt = computed(() => {
+  const label = durationPicker.value?.endsAtLabel?.()
+  if (label) return label
+  const total = duration.value.totalMinutes
+  if (total == null) return ''
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    }).format(new Date(Date.now() + total * 60000))
+  } catch { return '' }
+})
+
+// Anything a day or longer gets a confirm step. There is no withdraw path for a
+// live auction, so a mis-set multi-day listing is unrecoverable for its whole
+// length — and with insta-bid it is also a guaranteed sale at the rarity floor.
+const CONFIRM_THRESHOLD_MINUTES = 1440
+
 function buildPayload(createInitialBid = false) {
-  let durationDays = 0, durationMinutes = 0
-  switch (durationPreset.value) {
-    case '3m':  durationMinutes = 3;       break
-    case '30m': durationMinutes = 30;      break
-    case '1h':  durationMinutes = 60;      break
-    case '4h':  durationMinutes = 240;     break
-    case '6h':  durationMinutes = 360;     break
-    case '12h': durationMinutes = 720;     break
-    default:    durationDays    = timeframe.value
+  return {
+    userCtoonId:     props.ctoon.id,
+    initialBet:      initialBet.value,
+    durationDays:    duration.value.durationDays,
+    durationMinutes: duration.value.durationMinutes,
+    createInitialBid
   }
-  return { userCtoonId: props.ctoon.id, initialBet: initialBet.value, durationDays, durationMinutes, createInitialBid }
 }
 
-async function sendToAuction() {
-  if (initialBet.value < minInitialBet.value) return
+function sendToAuction() {
+  if (!canSubmit.value) return
+  if ((duration.value.totalMinutes ?? 0) >= CONFIRM_THRESHOLD_MINUTES) {
+    confirming.value = true
+    return
+  }
+  submitAuction()
+}
+
+async function submitAuction() {
+  if (!canSubmit.value) return
   sending.value = true
   try {
     await $fetch('/api/auctions', { method: 'POST', body: buildPayload(false) })
@@ -254,6 +292,7 @@ async function sendToAuction() {
     setTimeout(() => emit('close'), 1200)
   } catch (e) {
     showToast(e.data?.statusMessage || e.data?.message || 'Failed to create auction.', 'error')
+    confirming.value = false
   } finally {
     sending.value = false
   }
@@ -436,7 +475,8 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
 }
 .am-input:focus { border-color: var(--OrbitLightBlue); }
 
-.am-error { font-size: 0.62rem; color: #fca5a5; }
+/* #fca5a5 on --OrbitDarkBlue is 3.10:1 and fails WCAG AA at this size. */
+.am-error { font-size: 0.62rem; color: #fee2e2; }
 
 /* ── cZone warning ── */
 .am-warning {
@@ -449,28 +489,22 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   padding: 7px 9px;
 }
 
-/* ── Presets ── */
-.am-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Presets and the days slider now live in AuctionDurationPicker.vue, which
+   themes itself through --adp-* custom properties. */
 
-.am-preset {
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 5px;
-  background: rgba(0,0,0,0.2);
-  color: rgba(255,255,255,0.55);
-  font-size: 0.65rem;
-  font-weight: bold;
-  padding: 3px 9px;
-  cursor: pointer;
-  transition: all 0.12s;
+/* ── Confirm step ── */
+.am-confirm {
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  background: rgba(234, 179, 8, 0.12);
+  border-radius: 6px;
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.am-preset.active { background: var(--OrbitLightBlue); border-color: var(--OrbitLightBlue); color: #fff; }
-.am-preset:not(.active):hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-
-/* ── Slider ── */
-.am-slider-wrap { display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
-.am-slider-label { font-size: 0.72rem; font-weight: bold; color: #fff; text-align: center; }
-.am-slider { width: 100%; accent-color: var(--OrbitLightBlue); }
-.am-slider-ticks { display: flex; justify-content: space-between; font-size: 0.58rem; color: rgba(255,255,255,0.4); }
+.am-confirm-title { font-size: 0.75rem; font-weight: bold; color: #fde68a; }
+.am-confirm-body  { font-size: 0.68rem; line-height: 1.4; color: #fef3c7; }
+.am-confirm-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* ── Footer ── */
 .am-footer {
@@ -588,6 +622,6 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
   /* Anything under 16px makes iOS Safari zoom the page on focus, which shoves
      the fixed-position modal half off-screen. */
   .am-input { font-size: 16px; }
-  .am-preset, .am-instabid, .am-cancel, .am-submit { min-height: 30px; }
+  .am-instabid, .am-cancel, .am-submit { min-height: 30px; }
 }
 </style>

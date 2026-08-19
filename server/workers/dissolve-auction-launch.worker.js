@@ -68,6 +68,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
           userCtoonId: entry.userCtoonId,
           initialBet:  rarityFloor(entry.userCtoon?.ctoon?.rarity),
           duration:    1,
+          durationMinutes: 1440,
           endAt,
           creatorId:   officialUser.id,
           isFeatured:  entry.isFeatured,
