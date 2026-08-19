@@ -2,7 +2,7 @@
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
-import { isFavoritedCopy, isUnavailableToOthers } from '@/server/utils/favoriteRules'
+import { isLockedCopy, isUnavailableToOthers } from '@/server/utils/lockRules'
 
 export default defineEventHandler(async (event) => {
   const requesterId = event.context.userId
@@ -75,15 +75,15 @@ export default defineEventHandler(async (event) => {
   // cToon's state they are allowed to see — see the mapping at the bottom.
   const isSelf = userWithCtoons.id === requesterId
 
-  // The countered offer's cToons are exempt from the favorite component of
+  // The countered offer's cToons are exempt from the lock component of
   // `unavailable` as well as the pending-trade component. A counter re-proposes
   // exactly those copies and assigns them wholesale (see applyPreselectedCtoons
   // in components/newsite/Trade.vue), bypassing the toggle guard — so if the
-  // other party favorited one of them after making the offer, the mirrored card
+  // other party locked one of them after making the offer, the mirrored card
   // would render disabled and could never be deselected, leaving the recipient
   // unable to counter at all. The server-side exemption in
   // server/utils/tradeOffer.js is scoped the same way.
-  const exemptFavoriteSet = new Set(
+  const exemptLockSet = new Set(
     excludeOfferId
       ? (await prisma.tradeOfferCtoon.findMany({
           where: { tradeOfferId: excludeOfferId },
@@ -137,16 +137,16 @@ export default defineEventHandler(async (event) => {
     isFirstEdition: uc.isFirstEdition,
     isHolidayItem: holidaySet.has(uc.ctoonId),
     // What another user may know about this copy is ONE bit: can it be asked
-    // for, yes or no. Reporting favorited / in-a-pending-trade / in-an-auction
-    // separately would publish favorites, because the other two are already
+    // for, yes or no. Reporting locked / in-a-pending-trade / in-an-auction
+    // separately would publish locks, because the other two are already
     // knowable — pending-trade state from this very field and auctions from the
     // public auction house — so `unavailable AND NOT the other two` isolates
-    // "favorited" by subtraction, one cheap read per copy. A favorite is the most
+    // "locked" by subtraction, one cheap read per copy. A lock is the most
     // personally revealing per-copy signal the game has and is inferable nowhere
     // else; the rest of this codebase already refuses to be an oracle for weaker
     // signals (the generic errors in server/utils/tradeOffer.js, the `cz:` tokens
     // in server/api/czone/[username].get.js). Collapsing the three is also what
-    // makes the requirement literally true: a favorite greys out "as if" it were
+    // makes the requirement literally true: a lock greys out "as if" it were
     // in a pending trade or an auction.
     // No inAuction term: the query above already filters isTradeable: true, and
     // every path that starts an auction clears that flag in the same statement
@@ -155,16 +155,16 @@ export default defineEventHandler(async (event) => {
     // would cost a join across the whole collection for nothing.
     unavailable: isUnavailableToOthers({
       inPendingTrade: pendingTradeSet.has(uc.id),
-      favorited: isFavoritedCopy(uc) && !exemptFavoriteSet.has(uc.id)
+      locked: isLockedCopy(uc) && !exemptLockSet.has(uc.id)
     }),
     // The breakdown is the owner's own business, so it goes out only to them.
-    // Trade.vue needs it: on your own side of a trade a favorite is not a block
+    // Trade.vue needs it: on your own side of a trade a lock is not a block
     // at all — it stays selectable and only wears a star — while a pending trade
     // still is.
     ...(isSelf
       ? {
           inPendingTrade: pendingTradeSet.has(uc.id),
-          isFavorite: isFavoritedCopy(uc)
+          isLocked: isLockedCopy(uc)
         }
       : {}),
     isSecondEdition: uc.ctoon.isSecondEdition,

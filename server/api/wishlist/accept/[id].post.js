@@ -46,17 +46,17 @@ export default defineEventHandler(async (event) => {
     ctoonId: wi.ctoonId,
     tradeOfferCtoons: { none: { tradeOffer: { status: 'PENDING' } } },
     auctions: { none: { status: 'ACTIVE' } },
-    // Favorites are skipped here for a different reason than everywhere else:
+    // Locks are skipped here for a different reason than everywhere else:
     // this is the ONE path where the server picks which of your copies leaves
     // without you naming it (highest mint wins, below). Protecting you from a bad
     // auto-pick is self-protection, not protection from the other user — you are
-    // the one accepting. If every copy you own is favorited the accept fails, and
-    // that is the intended outcome: unfavorite the one you meant to give up.
+    // the one accepting. If every copy you own is locked the accept fails, and
+    // that is the intended outcome: unlock the one you meant to give up.
     //
     // Spelled out rather than `not: recipientId` because a NULL column is neither
     // equal nor unequal to a value in SQL, so the terser form would exclude every
-    // un-favorited copy — i.e. all of them.
-    OR: [{ favoritedByUserId: null }, { favoritedByUserId: { not: recipientId } }]
+    // un-locked copy — i.e. all of them.
+    OR: [{ lockedByUserId: null }, { lockedByUserId: { not: recipientId } }]
   }
 
   // preflight ownership

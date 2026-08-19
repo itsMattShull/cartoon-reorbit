@@ -1,7 +1,7 @@
 // server/api/collections.get.js
 import { defineEventHandler, getRequestHeader, createError, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
-import { isFavoritedCopy } from '@/server/utils/favoriteRules'
+import { isLockedCopy } from '@/server/utils/lockRules'
 
 export default defineEventHandler(async (event) => {
   // auth
@@ -104,7 +104,7 @@ export default defineEventHandler(async (event) => {
     isHolidayItem: holidaySet.has(uc.ctoonId),
     // Every row here belongs to the caller (the query is scoped userId: me.id),
     // so the honest flag is the caller's own data rather than a disclosure.
-    isFavorite: isFavoritedCopy(uc),
+    isLocked: isLockedCopy(uc),
     isSecondEdition: uc.ctoon.isSecondEdition,
     secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
     secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,

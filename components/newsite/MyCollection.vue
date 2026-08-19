@@ -25,25 +25,27 @@
       <div v-if="loading" class="mc-status">Loading…</div>
       <div v-else-if="!ctoons.length" class="mc-status">{{ emptyMessage }}</div>
       <template v-else>
-        <ShortCard v-for="c in paginatedCtoons" :key="c.id" :style="{ '--sc-footer-left-width': '50%', '--sc-footer-right-width': '50%' }">
+        <ShortCard v-for="c in paginatedCtoons" :key="c.id">
           <template #header>
             <div class="card-img-wrap">
               <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
               <SecondEditionOverlay :ctoon="c" />
               <!-- Overlaid on the artwork rather than added to the footer: the
-                   footer already holds two buttons and stacks them into a column
-                   on mobile, so a third would cost about a quarter of the card's
-                   picture. Top-right is free (SecondEditionOverlay defaults to
+                   footer's two buttons are stacked at every width now, so a
+                   third row would take another ~35px straight out of the
+                   artwork. Top-right is free (SecondEditionOverlay defaults to
                    bottom-right). -->
               <button
-                class="mc-fav"
-                :class="{ 'mc-fav--on': c.isFavorite }"
-                :aria-pressed="c.isFavorite ? 'true' : 'false'"
-                :aria-label="(c.isFavorite ? 'Remove ' : 'Add ') + c.name + ' #' + (c.mintNumber ?? '?') + (c.isFavorite ? ' from favorites' : ' to favorites')"
-                :title="c.isFavorite ? 'Remove from favorites' : 'Favorite — keeps others from requesting it in a trade'"
-                :disabled="favPending.has(c.id)"
-                @click.stop="toggleFavorite(c)"
-              >★</button>
+                class="mc-lock"
+                :class="{ 'mc-lock--on': c.isLocked }"
+                :aria-pressed="c.isLocked ? 'true' : 'false'"
+                :aria-label="(c.isLocked ? 'Unlock ' : 'Lock ') + c.name + ' #' + (c.mintNumber ?? '?')"
+                :title="c.isLocked ? 'Unlock — let others request this cToon in a trade' : 'Lock — stop others requesting this cToon in a trade'"
+                :disabled="lockPending.has(c.id)"
+                @click.stop="toggleLock(c)"
+              >
+                <LockIcon :locked="c.isLocked" :filled="c.isLocked" />
+              </button>
             </div>
           </template>
           <template #middle>
@@ -52,13 +54,13 @@
             <span class="rarity-dot" :style="{ background: rarityColor(c.rarity) }" :title="c.rarity" />
           </template>
           <template #footer-left>
-            <BlueButton class="card-btn" :disabled="hasActiveAuction(c) || c.isFavorite" @click="openAuction(c)">
-              {{ hasActiveAuction(c) ? 'In Auction' : c.isFavorite ? 'Favorited' : 'Auction' }}
+            <BlueButton class="card-btn" :disabled="hasActiveAuction(c) || c.isLocked" @click="openAuction(c)">
+              {{ hasActiveAuction(c) ? 'In Auction' : c.isLocked ? 'Locked' : 'Auction' }}
             </BlueButton>
           </template>
           <template #footer-right>
-            <GreenButton class="card-btn" :disabled="tradeListLoading || c.isFavorite" @click="toggleTradeList(c)">
-              {{ c.isFavorite ? 'Favorited' : tradeList.includes(c.id) ? 'Remove Tradable' : 'Make Tradable' }}
+            <GreenButton class="card-btn" :disabled="tradeListLoading || c.isLocked" @click="toggleTradeList(c)">
+              {{ c.isLocked ? 'Locked' : tradeList.includes(c.id) ? 'Remove Tradable' : 'Make Tradable' }}
             </GreenButton>
           </template>
         </ShortCard>
@@ -153,7 +155,7 @@ function openAuction(c) {
 }
 
 async function toggleTradeList(c) {
-  // The trade-list endpoints refuse a favorited copy, and the button is disabled
+  // The trade-list endpoints refuse a locked copy, and the button is disabled
   // for one — but a wrapper keeps a stray call from surfacing as an unhandled
   // rejection, which is what happens today.
   try {
@@ -167,13 +169,13 @@ async function toggleTradeList(c) {
   }
 }
 
-// ── Favorites ─────────────────────────────────────────────────────
-// No shared composable and no /api/favorites GET: isFavorite already rides on
+// ── Locks ─────────────────────────────────────────────────────
+// No shared composable and no /api/locks GET: isLocked already rides on
 // the /api/collections payload these cards are built from, and a load-once
 // singleton (the shape composables/useTradeList.js uses) would go stale the
-// moment a trade or auction moved the cToon, leaving a lit star on a copy the
+// moment a trade or auction moved the cToon, leaving a lit lock on a copy the
 // user no longer owns.
-const favPending = ref(new Set())
+const lockPending = ref(new Set())
 
 function errMessage(err, fallback) {
   return err?.data?.statusMessage || err?.statusMessage || err?.message || fallback
@@ -188,25 +190,25 @@ function showToast(message, type = 'success') {
 }
 onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 
-async function toggleFavorite(c) {
+async function toggleLock(c) {
   // Per-id guard, not a global `loading`. Nothing visibly changes for a moment
   // after a tap, and mobile users double-tap when that happens; a shared flag
   // would let the second tap fire the opposite request.
-  if (favPending.value.has(c.id)) return
-  const was = !!c.isFavorite
+  if (lockPending.value.has(c.id)) return
+  const was = !!c.isLocked
 
   // Optimistic: this is a single UPDATE, and a spinner on a 170px card is noise.
   // The rollback below is what makes that safe — the POST really can 409 when
   // the copy is in an active auction.
-  favPending.value = new Set(favPending.value).add(c.id)
-  c.isFavorite = !was
+  lockPending.value = new Set(lockPending.value).add(c.id)
+  c.isLocked = !was
   try {
-    const res = await $fetch(`/api/favorites/${encodeURIComponent(c.id)}`, {
+    const res = await $fetch(`/api/locks/${encodeURIComponent(c.id)}`, {
       method: was ? 'DELETE' : 'POST'
     })
-    c.isFavorite = !!res?.isFavorite
+    c.isLocked = !!res?.isLocked
     if (!was) {
-      // Favoriting drops the copy off the public trade list server-side, so the
+      // Locking drops the copy off the public trade list server-side, so the
       // shared list has to lose it too or the button keeps offering "Remove
       // Tradable" for a listing that no longer exists.
       if (tradeList.value.includes(c.id)) {
@@ -214,18 +216,18 @@ async function toggleFavorite(c) {
       }
       showToast(
         res?.inPendingTrade
-          ? 'Favorited. Heads up: this cToon is in a pending trade, and that offer can still be accepted.'
-          : 'Favorited. Other players can no longer request this cToon in a trade.',
+          ? 'Locked. Heads up: this cToon is in a pending trade, and that offer can still be accepted.'
+          : 'Locked. Other players can no longer request this cToon in a trade.',
         'success'
       )
     } else {
-      showToast('Favorite removed.', 'success')
+      showToast('Lock removed.', 'success')
     }
   } catch (err) {
-    c.isFavorite = was
-    showToast(errMessage(err, 'Could not update this favorite.'), 'error')
+    c.isLocked = was
+    showToast(errMessage(err, 'Could not update this lock.'), 'error')
   } finally {
-    const next = new Set(favPending.value); next.delete(c.id); favPending.value = next
+    const next = new Set(lockPending.value); next.delete(c.id); lockPending.value = next
   }
 }
 
@@ -449,7 +451,25 @@ onMounted(async () => {
   padding: 4px;
   box-sizing: border-box;
   --shortcard-width: 100%;
+  /* Taller than the 176px default because the two action buttons stack rather
+     than sit side by side (see below). Without this the extra row would come
+     straight out of `.sc-header`, which is the artwork. */
+  --shortcard-height: 214px;
 }
+
+/* Stacked at every width, not just on phones. Full-width buttons give both
+   actions a real label instead of two ~46px halves that ellipsise "Remove
+   Tradable" on any card narrower than about 200px.
+
+   The `.mc-grid` prefix is load-bearing. A bare `:deep(.sc-footer)` compiles to
+   `[data-v-mc] .sc-footer`, which ties ShortCard's own `.sc-footer[data-v-sc]`
+   at (0,2,0) — so which one wins is decided purely by the order Rollup happens
+   to emit the two chunks' CSS in. Prefixed, it is (0,3,0) and deterministic. */
+.mc-grid :deep(.sc-footer) { flex-direction: column; }
+.mc-grid :deep(.sc-footer-left),
+.mc-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; }
+.mc-grid :deep(.sc-footer-right) { justify-content: flex-start; }
+.mc-grid :deep(.sc) { --sc-footer-gap: 3px; }
 
 @media (max-width: 768px) {
   .mc-grid {
@@ -457,41 +477,26 @@ onMounted(async () => {
     grid-auto-rows: auto;
   }
 
-  /* The `.mc-grid` prefix is load-bearing. A bare `:deep(.sc-footer)` compiles
-     to `[data-v-mc] .sc-footer`, which ties ShortCard's own `.sc-footer[data-v-sc]`
-     at (0,2,0) — so which one wins is decided purely by the order Rollup happens
-     to emit the two chunks' CSS in. Prefixed, it is (0,3,0) and deterministic. */
+  /* Stacking now comes from the base rules; the phone layout only relaxes the
+     fixed height so the card can breathe at two columns. */
   .mc-grid :deep(.sc) {
     height: auto;
-    aspect-ratio: 3 / 4;
-    --sc-footer-gap: 3px;
+    aspect-ratio: 3 / 4.4;
   }
 
-  @supports not (aspect-ratio: 3 / 4) {
-    .mc-grid :deep(.sc) { height: var(--shortcard-height, 176px); }
+  @supports not (aspect-ratio: 3 / 4.4) {
+    .mc-grid :deep(.sc) { height: var(--shortcard-height, 214px); }
   }
-
-  .mc-grid :deep(.sc-footer) { flex-direction: column; }
-  .mc-grid :deep(.sc-footer-left),
-  .mc-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; }
-  .mc-grid :deep(.sc-footer-right) { justify-content: flex-start; }
 
   .mc-chip {
     font-size: 0.78rem;
     padding: 6px 12px;
   }
 
-  /* Same intent as the .card-btn min-height bump further down: a 30px circle is
-     under the practical touch floor. */
-  .mc-fav {
-    width: 40px;
-    height: 40px;
-    font-size: 1.15rem;
-  }
 }
 
-/* ── Favorite toggle (overlaid on the artwork) ───────────────── */
-.mc-fav {
+/* ── Lock toggle (overlaid on the artwork) ───────────────── */
+.mc-lock {
   position: absolute;
   top: 2px;
   right: 2px;
@@ -512,14 +517,25 @@ onMounted(async () => {
   font-family: inherit;
 }
 
-/* Solid gold, matching .tc-fav on the trade card so the two surfaces agree. */
-.mc-fav--on {
+/* Solid gold, matching .tc-lock on the trade card so the two surfaces agree. */
+.mc-lock--on {
   background: #eab308;
   color: #111;
   border-color: #a16207;
 }
 
-.mc-fav:disabled { opacity: 0.5; cursor: progress; }
+.mc-lock:disabled { opacity: 0.5; cursor: progress; }
+
+/* Must stay AFTER the base rule above — equal specificity, so source order
+   decides, exactly as with .card-btn further down. A 30px circle is under the
+   practical touch floor. */
+@media (max-width: 768px) {
+  .mc-lock {
+    width: 40px;
+    height: 40px;
+    font-size: 1.15rem;
+  }
+}
 
 /* ── Toast ───────────────────────────────────────────────────── */
 .mc-toast-live {

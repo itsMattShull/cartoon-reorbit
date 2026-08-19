@@ -23,7 +23,7 @@
         </div>
         <div class="ctic-head-info">
           <h3 class="ctic-name">
-            <span v-if="userCtoon?.isFavorite" class="ctic-name-star" title="One of your favorites" aria-hidden="true">★</span>{{ ctoon.name || 'cToon' }}
+            <span v-if="userCtoon?.isLocked" class="ctic-name-lock" title="You have locked this copy"><LockIcon locked filled /></span>{{ ctoon.name || 'cToon' }}
           </h3>
           <span v-if="ctoon.isSecondEdition" class="ctic-2nd-badge">2nd Edition</span>
           <p class="ctic-subtitle">cToon details</p>
@@ -196,28 +196,28 @@
               <h4 class="ctic-mint-title">Mint #{{ formatValue(userCtoon.mintNumber) }}</h4>
 
               <!-- Lives in the per-copy section rather than the footer: a
-                   favorite is a fact about THIS mint, and .ctic-foot already
+                   lock is a fact about THIS mint, and .ctic-foot already
                    carries up to three controls that wrap onto their own row
                    below 480px. The state is carried in words, not just the
-                   star's colour. -->
+                   icon's colour. -->
               <button
                 v-if="userCtoon.isOwner && userCtoon.userCtoonId"
-                class="ctic-fav-row"
-                :class="{ 'ctic-fav-row--on': userCtoon.isFavorite }"
-                :aria-pressed="userCtoon.isFavorite ? 'true' : 'false'"
-                :disabled="favPending"
-                @click="toggleFavorite"
+                class="ctic-lock-row"
+                :class="{ 'ctic-lock-row--on': userCtoon.isLocked }"
+                :aria-pressed="userCtoon.isLocked ? 'true' : 'false'"
+                :disabled="lockPending"
+                @click="toggleLock"
               >
-                <span class="ctic-fav-star" aria-hidden="true">★</span>
-                <span class="ctic-fav-text">
-                  {{ favPending
+                <span class="ctic-lock-glyph"><LockIcon :locked="userCtoon.isLocked" :filled="userCtoon.isLocked" /></span>
+                <span class="ctic-lock-text">
+                  {{ lockPending
                     ? 'Saving…'
-                    : userCtoon.isFavorite
-                      ? 'Favorited — other players can’t request this cToon in a trade'
-                      : 'Make this a favorite' }}
+                    : userCtoon.isLocked
+                      ? 'Locked — other players can’t request this cToon in a trade'
+                      : 'Lock this copy' }}
                 </span>
               </button>
-              <p v-if="favError" class="ctic-fav-error" role="alert">{{ favError }}</p>
+              <p v-if="lockError" class="ctic-lock-error" role="alert">{{ lockError }}</p>
               <div class="ctic-grid">
                 <div class="ctic-tile">
                   <div class="ctic-label">Times Traded</div>
@@ -532,30 +532,30 @@ const statusImageAlt = computed(() => {
   }
 })
 
-// ── Favorite toggle ───────────────────────────────────────────────
-// isFavorite and userCtoonId only reach the client when the viewer owns the
+// ── Lock toggle ───────────────────────────────────────────────
+// isLocked and userCtoonId only reach the client when the viewer owns the
 // copy — /api/ctoon/modal serves per-copy stats for ANY id, so the flag is
 // gated there rather than here.
-const favPending = ref(false)
-const favError = ref('')
+const lockPending = ref(false)
+const lockError = ref('')
 
-async function toggleFavorite() {
+async function toggleLock() {
   const uc = userCtoon.value
-  if (!uc?.userCtoonId || favPending.value) return
-  const was = !!uc.isFavorite
-  favPending.value = true
-  favError.value = ''
+  if (!uc?.userCtoonId || lockPending.value) return
+  const was = !!uc.isLocked
+  lockPending.value = true
+  lockError.value = ''
   try {
-    const res = await $fetch(`/api/favorites/${encodeURIComponent(uc.userCtoonId)}`, {
+    const res = await $fetch(`/api/locks/${encodeURIComponent(uc.userCtoonId)}`, {
       method: was ? 'DELETE' : 'POST'
     })
-    // Written back onto the shared modal payload so the star and the row agree
+    // Written back onto the shared modal payload so the badge and the row agree
     // without a refetch.
-    if (data.value?.userCtoon) data.value.userCtoon.isFavorite = !!res?.isFavorite
+    if (data.value?.userCtoon) data.value.userCtoon.isLocked = !!res?.isLocked
   } catch (err) {
-    favError.value = err?.data?.statusMessage || err?.statusMessage || 'Could not update this favorite.'
+    lockError.value = err?.data?.statusMessage || err?.statusMessage || 'Could not update this lock.'
   } finally {
-    favPending.value = false
+    lockPending.value = false
   }
 }
 
@@ -1212,7 +1212,7 @@ function formatDate(value) {
 /* ── Mint section ────────────────────────────────────────────── */
 .ctic-mint-section { margin-top: 12px; }
 
-.ctic-fav-row {
+.ctic-lock-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1231,19 +1231,19 @@ function formatDate(value) {
   font-family: inherit;
 }
 
-.ctic-fav-row--on {
+.ctic-lock-row--on {
   background: rgba(234,179,8,0.16);
   border-color: #eab308;
   color: #fde68a;
 }
 
-.ctic-fav-star { font-size: 1rem; line-height: 1; color: rgba(255,255,255,0.35); }
-.ctic-fav-row--on .ctic-fav-star { color: #eab308; }
-.ctic-fav-row:disabled { opacity: 0.6; cursor: progress; }
-.ctic-fav-text { flex: 1; }
-.ctic-fav-error { font-size: 0.72rem; color: #fca5a5; margin: 0 0 8px; }
+.ctic-lock-glyph { font-size: 1.05rem; line-height: 1; color: rgba(255,255,255,0.4); display: flex; }
+.ctic-lock-row--on .ctic-lock-glyph { color: #eab308; }
+.ctic-lock-row:disabled { opacity: 0.6; cursor: progress; }
+.ctic-lock-text { flex: 1; }
+.ctic-lock-error { font-size: 0.72rem; color: #fca5a5; margin: 0 0 8px; }
 
-.ctic-name-star { color: #eab308; margin-right: 6px; }
+.ctic-name-lock { color: #eab308; margin-right: 6px; font-size: 1rem; display: inline-flex; vertical-align: -2px; }
 .ctic-mint-title {
   font-size: 0.72rem;
   text-transform: uppercase;

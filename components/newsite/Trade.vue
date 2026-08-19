@@ -396,7 +396,7 @@
                     :selected="selectedInitiatorCtoonsMap.has(c.id)"
                     :disabled="c.inPendingTrade || (initiatorAtLimit && !selectedInitiatorCtoonsMap.has(c.id))"
                     :disabled-label="disabledReasonFor({ isOwnSide: true, inPendingTrade: c.inPendingTrade, atLimit: initiatorAtLimit }) || 'Limit'"
-                    :favorite="!!c.isFavorite"
+                    :lock="!!c.isLocked"
                     :badge="targetOwnedIds.has(c.ctoonId) ? 'Owned by User' : 'Unowned by User'"
                     badge-class-owned="tc-badge--blue"
                     @toggle="toggleInitiatorCtoon(c)"
@@ -474,14 +474,14 @@
             </div>
           </div>
 
-          <div v-if="offeredFavorites.length" class="tr-fav-warn" role="alert">
-            <div class="tr-fav-warn-head">
-              ★ You are offering {{ offeredFavorites.length }} of your favorite{{ offeredFavorites.length > 1 ? 's' : '' }}
+          <div v-if="offeredLocked.length" class="tr-lock-warn" role="alert">
+            <div class="tr-lock-warn-head">
+              You are offering {{ offeredLocked.length }} locked cToon{{ offeredLocked.length > 1 ? 's' : '' }}
             </div>
-            <div class="tr-fav-warn-list">{{ offeredFavoritesSummary }}</div>
-            <label class="tr-fav-warn-ack">
-              <input v-model="favAck" type="checkbox" class="tr-fav-warn-cb" />
-              <span>I understand and want to trade {{ offeredFavorites.length > 1 ? 'them' : 'it' }} away</span>
+            <div class="tr-lock-warn-list">{{ offeredLockedSummary }}</div>
+            <label class="tr-lock-warn-ack">
+              <input v-model="lockAck" type="checkbox" class="tr-lock-warn-cb" />
+              <span>I understand and want to trade {{ offeredLocked.length > 1 ? 'them' : 'it' }} away</span>
             </label>
           </div>
 
@@ -716,7 +716,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
-import { disabledReasonFor } from '~/server/utils/favoriteRules'
+import { disabledReasonFor } from '~/server/utils/lockRules'
 import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
 import { MAX_CTOONS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
@@ -1498,7 +1498,7 @@ function applyPreselectedCtoons() {
       // An unavailable cToon counts as missing rather than being mirrored in.
       // The assignment below is wholesale and bypasses the toggle guard, so
       // mirroring one would pin a card that can never be deselected. The server
-      // exempts the countered offer's own cToons from the favorite and
+      // exempts the countered offer's own cToons from the lock and
       // pending-trade guards, so this only drops cToons that genuinely became
       // unsendable — and counterMissingCount already tells the user.
       if (hit && !hit.unavailable) found.push(hit); else missing++
@@ -1684,27 +1684,27 @@ const pointsToOffer = ref(0)
 const makingOffer = ref(false)
 
 /**
- * Favorites shield you from other people asking; they never stop you giving a
+ * Locks shield you from other people asking; they never stop you giving a
  * cToon away yourself. The server enforces exactly that asymmetry, so this is a
  * speed bump against an accident, not a security control — which is why it is an
  * acknowledgement on the review step rather than a modal or a server refusal.
  */
-const favAck = ref(false)
-const offeredFavorites = computed(() => selectedInitiatorCtoons.value.filter(c => c.isFavorite))
-const offeredFavoritesSummary = computed(() =>
-  offeredFavorites.value
+const lockAck = ref(false)
+const offeredLocked = computed(() => selectedInitiatorCtoons.value.filter(c => c.isLocked))
+const offeredLockedSummary = computed(() =>
+  offeredLocked.value
     .map(c => `${c.name}${c.mintNumber != null ? ` #${c.mintNumber}` : ''}`)
     .join(', ')
 )
 const sendBlocked = computed(() =>
   (selectedInitiatorCtoons.value.length === 0 && pointsToOffer.value === 0) ||
   makingOffer.value ||
-  (offeredFavorites.value.length > 0 && !favAck.value)
+  (offeredLocked.value.length > 0 && !lockAck.value)
 )
 
 // Re-arm the acknowledgement whenever the offered side changes, so ticking the
 // box for one cToon can never carry over to a different one added afterwards.
-watch(selectedInitiatorIds, () => { favAck.value = false })
+watch(selectedInitiatorIds, () => { lockAck.value = false })
 
 const isCounterMode = computed(() => !!tradeCounterSourceId.value)
 
@@ -2206,8 +2206,8 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-/* ── Offering your own favorites ── */
-.tr-fav-warn {
+/* ── Offering your own locks ── */
+.tr-lock-warn {
   background: rgba(234,179,8,0.14);
   border: 1px solid rgba(234,179,8,0.45);
   border-radius: 6px;
@@ -2215,15 +2215,15 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
   flex-shrink: 0;
 }
-.tr-fav-warn-head { font-size: 0.7rem; font-weight: bold; color: #fde68a; }
-.tr-fav-warn-list { font-size: 0.62rem; color: rgba(255,255,255,0.65); margin-top: 2px; }
+.tr-lock-warn-head { font-size: 0.7rem; font-weight: bold; color: #fde68a; }
+.tr-lock-warn-list { font-size: 0.62rem; color: rgba(255,255,255,0.65); margin-top: 2px; }
 /* 44px so the row is a real touch target on the phone layout, where this panel
    sits directly above the send button. */
-.tr-fav-warn-ack {
+.tr-lock-warn-ack {
   display: flex; align-items: center; gap: 8px; margin-top: 6px;
   font-size: 0.68rem; color: #fff; min-height: 44px; cursor: pointer;
 }
-.tr-fav-warn-cb { width: 20px; height: 20px; flex-shrink: 0; }
+.tr-lock-warn-cb { width: 20px; height: 20px; flex-shrink: 0; }
 
 /* ── Confirm ── */
 .tr-confirm-grid {

@@ -149,7 +149,7 @@ export default defineEventHandler(async (event) => {
   // 409 for the user, after the first accept already moved the cToon.
   //
   // Deliberately NOT routed through validateTradeOfferInputs: that function also
-  // rejects favorited cToons, and an admin trade must stay able to reach one. A
+  // rejects locked cToons, and an admin trade must stay able to reach one. A
   // user-set flag that silently blocks staff would make the tool for fixing bad
   // states unusable exactly when it is needed, and admin offers still require the
   // recipient to accept, so consent is unchanged.

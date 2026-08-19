@@ -23,11 +23,11 @@
       <span v-if="disabled && !selected" class="tc-in-trade">{{ disabledLabel }}</span>
       <!-- Selected indicator -->
       <span v-if="selected" class="tc-selected-pip">✓</span>
-      <!-- Favorite marker. Bottom-left is the only corner nothing else claims:
+      <!-- Lock marker. Bottom-left is the only corner nothing else claims:
            top-left holds the pip and the disabled pill, top-right the owned/
            unowned badge, and SecondEditionOverlay defaults to bottom-right. -->
-      <span v-if="favorite" class="tc-fav" :title="favoriteLabel">
-        <span aria-hidden="true">★</span><span class="tc-sr">{{ favoriteLabel }}</span>
+      <span v-if="lock" class="tc-lock" :title="lockLabel">
+        <LockIcon locked filled /><span class="tc-sr">{{ lockLabel }}</span>
       </span>
     </div>
 
@@ -58,10 +58,10 @@ const props = defineProps({
   // Why the card is unselectable. Defaults to the original hardcoded reason, so
   // callers that only ever disable for a pending trade need not pass it.
   disabledLabel: { type: String, default: 'In Trade' },
-  // Owner-side only. Other users never learn that a cToon is favorited — their
+  // Owner-side only. Other users never learn that a cToon is locked — their
   // cards just say "Unavailable" — so this is never true for their rows.
-  favorite: { type: Boolean, default: false },
-  favoriteLabel: { type: String, default: 'Favorite' },
+  lock: { type: Boolean, default: false },
+  lockLabel: { type: String, default: 'Lock' },
   badge: { type: String, default: '' },
   badgeClassOwned: { type: String, default: 'tc-badge--owned' },
   badgeClassUnowned: { type: String, default: 'tc-badge--unowned' },
@@ -218,7 +218,7 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
   box-shadow: 0 0 0 2px rgba(124,58,237,0.4), 0 1px 4px rgba(0,0,0,0.5);
 }
 
-.tc-fav {
+.tc-lock {
   position: absolute;
   bottom: 3px;
   left: 3px;

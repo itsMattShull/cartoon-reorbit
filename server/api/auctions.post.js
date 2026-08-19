@@ -145,31 +145,31 @@ export default defineEventHandler(async (event) => {
     auction = await prisma.$transaction(async (tx) => {
       // Claim the cToon BEFORE creating the auction, in the same transaction.
       //
-      // This is both the favorite guard and a fix for the write that used to sit
+      // This is both the lock guard and a fix for the write that used to sit
       // after the create: an auction could exist on a still-tradeable copy if the
       // process died in between. Doing it as a conditional updateMany here means
       // the row lock is taken before anything else, so a concurrent
-      // POST /api/favorites — whose own conditional updateMany contends on this
+      // POST /api/locks — whose own conditional updateMany contends on this
       // same row — serializes against it. Check-then-write on either side would
-      // let a favorite and an auction for one copy both commit, which is the
+      // let a lock and an auction for one copy both commit, which is the
       // exact state both guards exist to prevent.
       //
-      // "Not favorited by me" is spelled out rather than written as `not: userId`:
+      // "Not locked by me" is spelled out rather than written as `not: userId`:
       // in SQL a NULL column is neither equal nor unequal to a value, so the
-      // terser form would silently exclude every un-favorited copy.
+      // terser form would silently exclude every un-locked copy.
       const claimed = await tx.userCtoon.updateMany({
         where: {
           id: resolvedUserCtoonId,
           userId,
           burnedAt: null,
-          OR: [{ favoritedByUserId: null }, { favoritedByUserId: { not: userId } }]
+          OR: [{ lockedByUserId: null }, { lockedByUserId: { not: userId } }]
         },
         data: { isTradeable: false }
       })
       if (claimed.count !== 1) {
         throw createError({
           statusCode: 400,
-          statusMessage: 'This cToon is one of your favorites. Remove the favorite before auctioning it.'
+          statusMessage: 'This cToon is locked. Unlock it before putting it up for auction.'
         })
       }
 
