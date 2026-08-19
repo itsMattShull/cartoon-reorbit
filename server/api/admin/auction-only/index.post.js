@@ -4,6 +4,7 @@ dotenv.config()
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
+import { selectAuctionOnlyBatch } from '@/server/utils/auctionOnlySchedule'
 const OWNER_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 
 export default defineEventHandler(async (event) => {
@@ -181,19 +182,9 @@ async function handleAuctionOnlyCreate(event) {
       throw createError({ statusCode: 400, statusMessage: 'No copies available to create auctions' })
     }
 
-    const sorted = [...pool].sort((a, b) => {
-      const aMint = Number.isInteger(a.mintNumber) ? a.mintNumber : Number.POSITIVE_INFINITY
-      const bMint = Number.isInteger(b.mintNumber) ? b.mintNumber : Number.POSITIVE_INFINITY
-      if (aMint !== bMint) return aMint - bMint
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    })
-
-    let userCtoonIds = sorted.map(a => a.id)
-    // Keep the admin's explicitly-selected copy first when present & still available.
-    if (ucIdIn && userCtoonIds.includes(ucIdIn)) {
-      userCtoonIds = [ucIdIn, ...userCtoonIds.filter(id => id !== ucIdIn)]
-    }
-    userCtoonIds = userCtoonIds.slice(0, finalCount)
+    // Includes the admin's explicitly-picked copy, and puts the batch in mint
+    // order so the releases follow the mint numbers. See auctionOnlySchedule.js.
+    const userCtoonIds = selectAuctionOnlyBatch(pool, finalCount, ucIdIn).map(a => a.id)
 
     const rows = userCtoonIds.map((id, idx) => {
       const startsAt = new Date(normStarts.getTime() + idx * releaseHours * 3600000)
