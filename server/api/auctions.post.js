@@ -173,12 +173,15 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // A copy under auction is not something anyone can trade for, so it has no
-      // business still advertising itself on the owner's public "Make Tradable"
-      // list. This was missing: every other path that takes a cToon out of
-      // circulation clears the listing, so a copy could sit in an active auction
-      // and on the trade list at the same time.
-      await tx.userTradeListItem.deleteMany({ where: { userCtoonId: resolvedUserCtoonId } })
+      // Note: the owner's trade-list entry is deliberately left alone.
+      //
+      // The listing stays visible (trade-list/users/[username].get.js does not
+      // filter isTradeable), but it is cosmetic: an offer naming a cToon in an
+      // active auction is refused by validateTradeOfferInputs, both by the
+      // ACTIVE-auction guard and by the isTradeable filter on its ownership
+      // query. So clearing it would buy no protection, and would silently drop
+      // something off the owner's Trade List that they would then have to
+      // re-add — never having been told it went.
 
       return tx.auction.create({
         data: {
