@@ -359,6 +359,11 @@ model Ctoon {
   // unanswerable question. Excluded cToons can still be used as wrong answers.
   guessCtoonExcluded Boolean @default(false)
 
+  // Set once an admin uses "Give to Official" (mints 5 more copies for the Official
+  // system account). One-time-ever per cToon — also used as the DB-level guard so a
+  // double-click/race can only succeed once.
+  givenToOfficialAt DateTime?
+
   @@index([isSecondEdition])
   @@index([name])
 }
