@@ -17,10 +17,18 @@
       <SecondEditionOverlay :ctoon="ctoon" />
       <!-- Owned / Unowned badge -->
       <span v-if="badge" class="tc-badge" :class="badgeClassComputed">{{ badge }}</span>
-      <!-- Reason-for-disabled overlay -->
-      <span v-if="disabled" class="tc-in-trade">{{ disabledLabel }}</span>
+      <!-- Reason-for-disabled overlay. Hidden while selected: this and the
+           selected pip below share the same top-left corner, and a card can be
+           both (an already-selected cToon can go unavailable under it). -->
+      <span v-if="disabled && !selected" class="tc-in-trade">{{ disabledLabel }}</span>
       <!-- Selected indicator -->
       <span v-if="selected" class="tc-selected-pip">✓</span>
+      <!-- Lock marker. Bottom-left is the only corner nothing else claims:
+           top-left holds the pip and the disabled pill, top-right the owned/
+           unowned badge, and SecondEditionOverlay defaults to bottom-right. -->
+      <span v-if="lock" class="tc-lock" :title="lockLabel">
+        <LockIcon locked filled /><span class="tc-sr">{{ lockLabel }}</span>
+      </span>
     </div>
 
     <!-- Middle: name + rarity -->
@@ -50,6 +58,10 @@ const props = defineProps({
   // Why the card is unselectable. Defaults to the original hardcoded reason, so
   // callers that only ever disable for a pending trade need not pass it.
   disabledLabel: { type: String, default: 'In Trade' },
+  // Owner-side only. Other users never learn that a cToon is locked — their
+  // cards just say "Unavailable" — so this is never true for their rows.
+  lock: { type: Boolean, default: false },
+  lockLabel: { type: String, default: 'Lock' },
   badge: { type: String, default: '' },
   badgeClassOwned: { type: String, default: 'tc-badge--owned' },
   badgeClassUnowned: { type: String, default: 'tc-badge--unowned' },
@@ -108,9 +120,21 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
   box-shadow: 0 0 0 1px var(--OrbitLightBlue, #3399CC);
 }
 
+/* The card fades, its overlays do not. Fading the whole card took the pill that
+   says WHY down to 55% alpha at 8.32px — and on touch there is no hover or
+   tooltip, so that pill is the only explanation the user will ever get. */
 .tc--disabled {
-  opacity: 0.55;
   cursor: not-allowed;
+}
+
+.tc--disabled .tc-img,
+.tc--disabled .tc-middle,
+.tc--disabled .tc-footer {
+  opacity: 0.45;
+}
+
+.tc--disabled .tc-header {
+  filter: grayscale(0.65);
 }
 
 /* ── Header (splash + image) ── */
@@ -192,6 +216,44 @@ const rarityKey = computed(() => (props.ctoon.rarity || '').toLowerCase().replac
   justify-content: center;
   line-height: 1;
   box-shadow: 0 0 0 2px rgba(124,58,237,0.4), 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.tc-lock {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  /* Above SecondEditionOverlay's icon, which sits at z-index 5. */
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.52rem;
+  font-weight: bold;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 9999px;
+  /* Solid, reusing the .r-auction-only pair below. Deliberately NOT the
+     translucent #fbbf24 of .tc-in-trade: that treatment already means
+     "featured auction" in the auction house and "locked" in Trade.vue, and
+     #fbbf24 text on the #336699 card is 3.59:1, which fails AA at this size.
+     Solid is 9.85:1 for the glyph and 3.13:1 against the card. */
+  background: #eab308;
+  color: #111;
+  border: 1px solid #a16207;
+  pointer-events: none;
+}
+
+/* Keeps the reason in the card's accessible name, which is built from its text
+   content — an icon alone would delete it for screen-reader users. */
+.tc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── Middle: name + rarity ── */

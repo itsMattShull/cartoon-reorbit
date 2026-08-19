@@ -169,15 +169,51 @@ export default defineEventHandler(async (event) => {
   let auction
   try {
     auction = await prisma.$transaction(async (tx) => {
-      const created = await tx.auction.create({
+      // Claim the cToon BEFORE creating the auction, in the same transaction.
+      //
+      // This is both the lock guard and a fix for the write that used to sit
+      // after the create: an auction could exist on a still-tradeable copy if the
+      // process died in between. Doing it as a conditional updateMany here means
+      // the row lock is taken before anything else, so a concurrent
+      // POST /api/locks — whose own conditional updateMany contends on this
+      // same row — serializes against it. Check-then-write on either side would
+      // let a lock and an auction for one copy both commit, which is the
+      // exact state both guards exist to prevent.
+      //
+      // "Not locked by me" is spelled out rather than written as `not: userId`:
+      // in SQL a NULL column is neither equal nor unequal to a value, so the
+      // terser form would silently exclude every un-locked copy.
+      const claimed = await tx.userCtoon.updateMany({
+        where: {
+          id: resolvedUserCtoonId,
+          userId,
+          burnedAt: null,
+          OR: [{ lockedByUserId: null }, { lockedByUserId: { not: userId } }]
+        },
+        data: { isTradeable: false }
+      })
+      if (claimed.count !== 1) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'This cToon is locked. Unlock it before putting it up for auction.'
+        })
+      }
+
+      // Note: the owner's trade-list entry is deliberately left alone.
+      //
+      // The listing stays visible (trade-list/users/[username].get.js does not
+      // filter isTradeable), but it is cosmetic: an offer naming a cToon in an
+      // active auction is refused by validateTradeOfferInputs, both by the
+      // ACTIVE-auction guard and by the isTradeable filter on its ownership
+      // query. So clearing it would buy no protection, and would silently drop
+      // something off the owner's Trade List that they would then have to
+      // re-add — never having been told it went.
+
+      return tx.auction.create({
         data: {
           userCtoonId: resolvedUserCtoonId,
-          initialBet: bet,
-          // `duration` stays whole days for back-compat; durationMinutes carries
-          // the exact listed length, which is what admin reporting and the
-          // re-list prefill read.
-          duration: Math.floor(totalMinutes / 1440),
-          durationMinutes: totalMinutes,
+          initialBet: Number(initialBet),
+          duration: days,
           endAt: endAtUtc,
           ...(userId ? { creatorId: userId } : {})
         }
@@ -222,6 +258,9 @@ export default defineEventHandler(async (event) => {
 
   // 7.5 Schedule the BullMQ job that will close this auction at endAt
   await scheduleAuctionClose(auction.id, auction.endAt)
+
+  // 8. Tradeability was already disabled by the claim in step 6, which is what
+  // makes it atomic with the auction row.
 
   // 8.5 Holiday flag for Discord message
   const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({

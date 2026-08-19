@@ -45,7 +45,18 @@ export default defineEventHandler(async (event) => {
     userId: recipientId,
     ctoonId: wi.ctoonId,
     tradeOfferCtoons: { none: { tradeOffer: { status: 'PENDING' } } },
-    auctions: { none: { status: 'ACTIVE' } }
+    auctions: { none: { status: 'ACTIVE' } },
+    // Locks are skipped here for a different reason than everywhere else:
+    // this is the ONE path where the server picks which of your copies leaves
+    // without you naming it (highest mint wins, below). Protecting you from a bad
+    // auto-pick is self-protection, not protection from the other user — you are
+    // the one accepting. If every copy you own is locked the accept fails, and
+    // that is the intended outcome: unlock the one you meant to give up.
+    //
+    // Spelled out rather than `not: recipientId` because a NULL column is neither
+    // equal nor unequal to a value in SQL, so the terser form would exclude every
+    // un-locked copy — i.e. all of them.
+    OR: [{ lockedByUserId: null }, { lockedByUserId: { not: recipientId } }]
   }
 
   // preflight ownership
@@ -155,7 +166,7 @@ export default defineEventHandler(async (event) => {
     if (initiator?.discordId && process.env.BOT_TOKEN) {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'
-      const baseUrl = isProd ? 'https://www.cartoonreorbit.com/trade-offers' : 'http://localhost:3000/trade-offers'
+      const baseUrl = isProd ? 'https://www.cartoonreorbit.com/newsite/trade' : 'http://localhost:3000/newsite/trade'
 
       const dmChannel = await $fetch('https://discord.com/api/v10/users/@me/channels', {
         method: 'POST',

@@ -22,7 +22,9 @@
           <SecondEditionOverlay :ctoon="ctoon" />
         </div>
         <div class="ctic-head-info">
-          <h3 class="ctic-name">{{ ctoon.name || 'cToon' }}</h3>
+          <h3 class="ctic-name">
+            <span v-if="userCtoon?.isLocked" class="ctic-name-lock" title="You have locked this copy"><LockIcon locked filled /></span>{{ ctoon.name || 'cToon' }}
+          </h3>
           <span v-if="ctoon.isSecondEdition" class="ctic-2nd-badge">2nd Edition</span>
           <p class="ctic-subtitle">cToon details</p>
           <button
@@ -192,6 +194,30 @@
             <!-- Mint-specific section -->
             <div v-if="userCtoon" class="ctic-mint-section">
               <h4 class="ctic-mint-title">Mint #{{ formatValue(userCtoon.mintNumber) }}</h4>
+
+              <!-- Lives in the per-copy section rather than the footer: a
+                   lock is a fact about THIS mint, and .ctic-foot already
+                   carries up to three controls that wrap onto their own row
+                   below 480px. The state is carried in words, not just the
+                   icon's colour. -->
+              <button
+                v-if="userCtoon.isOwner && userCtoon.userCtoonId"
+                class="ctic-lock-row"
+                :class="{ 'ctic-lock-row--on': userCtoon.isLocked }"
+                :aria-pressed="userCtoon.isLocked ? 'true' : 'false'"
+                :disabled="lockPending"
+                @click="toggleLock"
+              >
+                <span class="ctic-lock-glyph"><LockIcon :locked="userCtoon.isLocked" :filled="userCtoon.isLocked" /></span>
+                <span class="ctic-lock-text">
+                  {{ lockPending
+                    ? 'Saving…'
+                    : userCtoon.isLocked
+                      ? 'Locked — other players can’t request this cToon in a trade'
+                      : 'Lock this copy' }}
+                </span>
+              </button>
+              <p v-if="lockError" class="ctic-lock-error" role="alert">{{ lockError }}</p>
               <div class="ctic-grid">
                 <div class="ctic-tile">
                   <div class="ctic-label">Times Traded</div>
@@ -505,6 +531,33 @@ const statusImageAlt = computed(() => {
       : 'cToon status'
   }
 })
+
+// ── Lock toggle ───────────────────────────────────────────────
+// isLocked and userCtoonId only reach the client when the viewer owns the
+// copy — /api/ctoon/modal serves per-copy stats for ANY id, so the flag is
+// gated there rather than here.
+const lockPending = ref(false)
+const lockError = ref('')
+
+async function toggleLock() {
+  const uc = userCtoon.value
+  if (!uc?.userCtoonId || lockPending.value) return
+  const was = !!uc.isLocked
+  lockPending.value = true
+  lockError.value = ''
+  try {
+    const res = await $fetch(`/api/locks/${encodeURIComponent(uc.userCtoonId)}`, {
+      method: was ? 'DELETE' : 'POST'
+    })
+    // Written back onto the shared modal payload so the badge and the row agree
+    // without a refetch.
+    if (data.value?.userCtoon) data.value.userCtoon.isLocked = !!res?.isLocked
+  } catch (err) {
+    lockError.value = err?.data?.statusMessage || err?.statusMessage || 'Could not update this lock.'
+  } finally {
+    lockPending.value = false
+  }
+}
 
 const holidayEvent = ref(null)
 const openingHoliday = ref(false)
@@ -1158,6 +1211,39 @@ function formatDate(value) {
 
 /* ── Mint section ────────────────────────────────────────────── */
 .ctic-mint-section { margin-top: 12px; }
+
+.ctic-lock-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  /* 44px: this is a real touch target inside a scrolling modal body. */
+  min-height: 44px;
+  padding: 8px 10px;
+  margin: 6px 0 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.75);
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.ctic-lock-row--on {
+  background: rgba(234,179,8,0.16);
+  border-color: #eab308;
+  color: #fde68a;
+}
+
+.ctic-lock-glyph { font-size: 1.05rem; line-height: 1; color: rgba(255,255,255,0.4); display: flex; }
+.ctic-lock-row--on .ctic-lock-glyph { color: #eab308; }
+.ctic-lock-row:disabled { opacity: 0.6; cursor: progress; }
+.ctic-lock-text { flex: 1; }
+.ctic-lock-error { font-size: 0.72rem; color: #fca5a5; margin: 0 0 8px; }
+
+.ctic-name-lock { color: #eab308; margin-right: 6px; font-size: 1rem; display: inline-flex; vertical-align: -2px; }
 .ctic-mint-title {
   font-size: 0.72rem;
   text-transform: uppercase;

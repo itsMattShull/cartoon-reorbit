@@ -18,7 +18,13 @@ export default defineEventHandler(async (event) => {
       userId,
       OR: [
         { userCtoon: { userId: { not: userId } } },
-        { userCtoon: { burnedAt: { not: null } } }
+        { userCtoon: { burnedAt: { not: null } } },
+        // Locking drops the trade-list row, and the trade-list POST refuses a
+        // locked copy — but the two touch different rows with no shared lock,
+        // so a precisely interleaved pair of requests could still leave both set.
+        // Healing it on read, the way this block already heals moved and burned
+        // rows, makes that state transient instead of permanent.
+        { userCtoon: { lockedByUserId: userId } }
       ]
     }
   })

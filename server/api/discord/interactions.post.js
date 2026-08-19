@@ -55,12 +55,13 @@ export default defineEventHandler(async (event) => {
         return { type: 4, data: { content: 'Name is empty after sanitizing.', flags: 64 } }
       }
 
-      const base =
+      // Both of these used to be top-level routes. They now live under /newsite,
+      // and the trade page takes the target as a query param rather than a path
+      // segment, so the link is built per command instead of by concatenation.
+      const link =
         cmd === 'czone'
-          ? 'https://www.cartoonreorbit.com/czone/'
-          : 'https://www.cartoonreorbit.com/create-trade/'
-
-      const link = `${base}${display}`
+          ? `https://www.cartoonreorbit.com/newsite/czone/${display}`
+          : `https://www.cartoonreorbit.com/newsite/trade?username=${encodeURIComponent(display)}`
 
       return { type: 4, data: { content: link, flags: 64 } }
     }

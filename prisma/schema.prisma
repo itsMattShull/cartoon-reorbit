@@ -123,7 +123,7 @@ model LockedPoints {
 /// The route is derived on the client from `type` alone; `contextId` is only ever
 /// a collapse key and, for auctions, the id used to build the path.
 model Notification {
-  id          String           @id @default(uuid())
+  id          String             @id @default(uuid())
   userId      String
   type        NotificationType
   title       String
@@ -131,10 +131,10 @@ model Notification {
   contextType LockedContextType?
   contextId   String?
   /// How many times this event has recurred while still unread. 1 for a fresh row.
-  count       Int              @default(1)
+  count       Int                @default(1)
   readAt      DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 
@@ -392,6 +392,23 @@ model UserCtoon {
   burnedAt       DateTime?
   userPackId     String?
   pricePaid      Int? // Points charged at purchase time; null for pack-origin, trade, reward, etc.
+
+  /// Owner-set "keep this one" marker. A copy counts as locked only when this
+  /// equals `userId` — see server/utils/lockRules.js#isLockedCopy.
+  ///
+  /// Deliberately NOT a bare `isLocked Boolean`. A boolean travels with the row
+  /// through a change of owner, so any transfer site that forgot to clear it would
+  /// hand the new owner a lock they never set — silently blocking everyone else
+  /// from requesting that copy and blocking the new owner from auctioning it, with
+  /// no way to tell a real lock from a stale one. Storing WHO locked it makes
+  /// a stale value self-invalidating: after a transfer the ids no longer match and
+  /// the row simply reads as unlocked. That is why none of the ~15 ownership
+  /// transfer sites in this repo need to know this column exists.
+  ///
+  /// No index on purpose. Nothing filters on it without also filtering on userId
+  /// (already indexed), and any index mentioning this column would disqualify the
+  /// HOT-update path for every lock toggle on this very hot table.
+  lockedByUserId String?
 
   user     User      @relation(fields: [userId], references: [id])
   ctoon    Ctoon     @relation(fields: [ctoonId], references: [id])
@@ -1773,16 +1790,16 @@ model PokemonBattleMatch {
   id     String @id @default(uuid())
   roomId String
 
-  player1UserId  String
-  player2UserId  String
+  player1UserId    String
+  player2UserId    String
   // The cosmetic avatar each side picked -- a trainer id here, an Ed there. Named "Character"
   // to match EdRpsMatch exactly: the shared runtime writes this row, so an identically shaped
   // table is what lets one code path serve both games (and one admin log viewer read both).
   // Nullable because the trainer roster starts empty and a trainer can be retired later.
   player1Character String?
   player2Character String?
-  player1Score   Int     @default(0)
-  player2Score   Int     @default(0)
+  player1Score     Int     @default(0)
+  player2Score     Int     @default(0)
 
   winnerUserId  String?
   whoLeftUserId String?
@@ -3384,20 +3401,20 @@ model SurveyAnswers {
   user   User   @relation(fields: [userId], references: [id])
 
   // Raw text answers
-  whyJoin       String @db.Text
-  howFound      String @db.Text
-  favoriteShows String @db.Text
+  whyJoin   String @db.Text
+  howFound  String @db.Text
+  lockShows String @db.Text
 
   // Character lengths (for validation audit)
-  whyJoinLen       Int
-  howFoundLen      Int
-  favoriteShowsLen Int
+  whyJoinLen   Int
+  howFoundLen  Int
+  lockShowsLen Int
 
   // Embedding vectors stored as JSON float arrays (384-dim MiniLM)
   // Set by content-analyzer worker after submission
-  whyJoinVec       Json?
-  howFoundVec      Json?
-  favoriteShowsVec Json?
+  whyJoinVec   Json?
+  howFoundVec  Json?
+  lockShowsVec Json?
 
   // Combined stylometric feature blob (set by worker)
   stylometric Json?
