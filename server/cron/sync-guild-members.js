@@ -14,7 +14,6 @@ import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
-import { formatAuctionDuration } from '../utils/auctionDuration.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
@@ -87,96 +86,6 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   }
 }
 
-async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
-  try {
-    const botToken = ANNOUNCEMENTS_BOT_TOKEN
-    const guildId  = process.env.DISCORD_GUILD_ID
-
-    if (!botToken || !guildId) {
-      console.error('Missing DISCORD_ANNOUNCEMENTS_BOT_TOKEN/BOT_TOKEN or DISCORD_GUILD_ID env vars.')
-      return
-    }
-
-    const authHeader =
-      botToken.startsWith('Bot ') ? botToken : `Bot ${botToken}`
-
-    // 1) Look up the "cmart-alerts" channel by name
-    const channelsRes = await fetch(
-      `${DISCORD_API}/guilds/${guildId}/channels`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: authHeader,
-        },
-      }
-    )
-
-    if (!channelsRes.ok) {
-      console.error(
-        'Failed to fetch guild channels:',
-        channelsRes.status,
-        channelsRes.statusText
-      )
-      return
-    }
-
-    const channels = await channelsRes.json()
-    const targetChannel = channels.find(
-      (ch) => ch.type === 0 && ch.name === 'cmart-alerts' // type 0 = text channel
-    )
-
-    if (!targetChannel) {
-      console.error('No channel named "cmart-alerts" found in the guild.')
-      return
-    }
-
-    const channelId = targetChannel.id
-
-    const baseUrl =
-      process.env.PUBLIC_BASE_URL ||
-      (process.env.NODE_ENV === 'production'
-        ? 'https://www.cartoonreorbit.com'
-        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
-
-    const { name, rarity, assetPath } = result.ctoon || {}
-    const auctionLink = `${baseUrl}/auction/${result.auctionId}`
-    const rawImageUrl = assetPath
-      ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`)
-      : null
-    const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
-
-    const lines = [
-      `**Rarity:** ${rarity ?? 'N/A'}`,
-      ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
-      `**Starting Bid:** ${result.initialBet} pts`,
-      `**Duration:** ${formatAuctionDuration(result.totalMinutes ?? result.durationDays * 1440)}`
-    ]
-
-    const payload = {
-      content: `A scheduled auction is now live.`,
-      embeds: [{
-        title: name ?? 'cToon',
-        url: auctionLink,
-        description: lines.join('\n'),
-        ...(imageUrl ? { image: { url: imageUrl } } : {})
-      }]
-    }
-
-    await fetch(
-      `${DISCORD_API}/channels/${channelId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }
-    )
-  } catch (e1) {
-    // swallow in cron context
-  }
-}
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   try {
@@ -1132,13 +1041,6 @@ async function createDailyFeaturedAuction() {
     createdCount += 1
 
     await scheduleAuctionClose(result.auctionId, endAt)
-
-    const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-      where: { ctoonId: result.ctoonId },
-      select: { id: true }
-    }))
-
-    await sendAuctionDiscordAnnouncement(result, isHolidayItem)
   }
 
   // Mark this slot as fired so restarts don't double-create
