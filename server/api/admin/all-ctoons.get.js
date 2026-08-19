@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
       rarity: true,
       inCmart: true,
       totalMinted: true, // ← pull aggregate
+      givenToOfficialAt: true,
       isSecondEdition: true,
       secondEditionOverlayX: true,
       secondEditionOverlayY: true,
