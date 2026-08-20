@@ -16,14 +16,6 @@ import { resolveAuctionCloseOutcome, AUCTION_CLOSE_DOUBLE_SALE } from './utils/a
 import { notifyAuctionWon } from './utils/notifications.js'
 import { getRedis } from './utils/redis.js'
 import * as redisState from './utils/redisState.js'
-import { CHAT_CHANNELS } from './utils/discordChat/constants.js'
-import { loadChatConfig, webhookCredentials } from './utils/discordChat/config.js'
-import { bufferSnapshot } from './utils/discordChat/buffer.js'
-import { relayMessage, ChatRateError } from './utils/discordChat/send.js'
-import { ChatContentError } from './utils/discordChat/sanitize.js'
-import { rawBotToken } from './utils/discordChat/config.js'
-import { discordFetch, botAuth } from './utils/discordChat/rest.js'
-import { encryptIp } from './utils/ip-encrypt.js'
 
 import fs                 from 'node:fs'
 import path               from 'node:path'
@@ -113,6 +105,12 @@ const syncPvpRoom = (roomId, room) =>
   redisState.setPvpRoom(roomId, room).catch(e => console.error('[redisState] setPvpRoom:', e))
 const syncDeletePvpRoom = (roomId) =>
   redisState.delPvpRoom(roomId).catch(e => console.error('[redisState] delPvpRoom:', e))
+/* ────────────────────────────────────────────────────────────
+ *  cZone visitors & chat (unchanged)
+ * ────────────────────────────────────────────────────────── */
+const zoneVisitors = {}        // zone → count
+const zoneSockets  = {}        // zone → Set(socketId)
+
 // near top, alongside pveMatches:
 const pvpRooms   = new Map();    // roomId -> { players: [userId], decks: {userId: deck} }
 const pvpMatches = new Map();    // roomId -> { battle, recordId }
@@ -1856,195 +1854,6 @@ async function requireSocketUser(socket, errorEvent = 'authError') {
   return user
 }
 
-/* ── Discord chat relay — /chat namespace ─────────────────────────────────
- * A namespace, not a second connection, so it rides an existing game socket's
- * transport for free. Gateway lives in server/workers/discord-chat.worker.js;
- * this side fans out what that process publishes and relays sends outbound. */
-const chatNsp = io.of('/chat')
-const CHAT_ROOM = 'discord-chat'
-const CHAT_JOIN_COOLDOWN_MS = 2000
-const GUILD_CHECK_TTL_SECONDS = 300
-
-const chatRedis = getRedis()
-const chatSub = chatRedis.duplicate() // subscriber mode can't serve ordinary commands
-
-// Live-checks membership rather than trusting User.inGuild, which is only
-// refreshed by the hourly guild-sync cron (see refreshDiscordTokenAndRoles —
-// its call sites pass the wrong arg order and the refresh never actually
-// runs). Cached in Redis so a chatty user costs one check per 5 minutes.
-async function verifyGuildMembership(discordId) {
-  const guildId = process.env.DISCORD_GUILD_ID
-  const token = rawBotToken()
-  if (!guildId || !token || !discordId) return false
-
-  const key = `discordchat:guild:${discordId}`
-  try {
-    const cached = await chatRedis.get(key)
-    if (cached !== null) return cached === '1'
-  } catch {}
-
-  let member = false
-  try {
-    const res = await discordFetch(`/guilds/${guildId}/members/${discordId}`, { auth: botAuth(token), attempts: 1 })
-    member = Boolean(res?.user?.id || res?.roles)
-  } catch {
-    member = false // 404 = not a member; anything else fails closed
-  }
-  try { await chatRedis.set(key, member ? '1' : '0', 'EX', GUILD_CHECK_TTL_SECONDS) } catch {}
-  return member
-}
-
-// resolveSocketUser() caches {id, username, banned} for the connection's
-// life, which is fine for game handlers but not for a panel open for hours —
-// a user banned or muted mid-session must be caught on their next message.
-async function resolveChatMember(socket, { forSending }) {
-  const base = await requireSocketUser(socket, 'chat:error')
-  if (!base) return null
-
-  let row
-  try {
-    row = await db.user.findUnique({
-      where: { id: base.id },
-      select: {
-        id: true,
-        username: true,
-        banned: true,
-        active: true,
-        inGuild: true,
-        discordId: true,
-        avatar: true,
-        chatMutedUntil: true
-      }
-    })
-  } catch {
-    socket.emit('chat:error', { reason: 'unavailable' })
-    return null
-  }
-
-  if (!row || row.banned || row.active === false || !row.username || !row.discordId) {
-    socket.emit('chat:error', { reason: 'not_allowed' })
-    return null
-  }
-
-  // Belt-and-braces on read (middleware/newsite.js already gates the page);
-  // live-verified on send, since that's the side that can cause real harm.
-  if (!row.inGuild) {
-    socket.emit('chat:error', { reason: 'not_in_guild' })
-    return null
-  }
-
-  if (forSending) {
-    if (row.chatMutedUntil && row.chatMutedUntil.getTime() > Date.now()) {
-      socket.emit('chat:error', { reason: 'muted' })
-      return null
-    }
-    const stillMember = await verifyGuildMembership(row.discordId)
-    if (!stillMember) {
-      socket.emit('chat:error', { reason: 'not_in_guild' })
-      return null
-    }
-  }
-
-  return row
-}
-
-function chatBaseUrl() {
-  return process.env.NODE_ENV === 'production'
-    ? 'https://www.cartoonreorbit.com'
-    : `http://localhost:${process.env.NUXT_PORT || 3000}`
-}
-
-async function emitChatState(target) {
-  let config
-  try {
-    config = await loadChatConfig(chatRedis, db)
-  } catch {
-    config = { discordChatEnabled: false }
-  }
-  target.emit('chat:state', {
-    enabled: config.discordChatEnabled === true,
-    maxLength: config.discordChatMaxLength ?? 400,
-    slowmodeSeconds: config.discordChatSlowmodeSeconds ?? 5
-  })
-}
-
-chatNsp.on('connection', (socket) => {
-  socket.on('chat:join', async () => {
-    const now = Date.now() // cooldown guards against a client looping join
-    if (socket.data.lastChatJoin && now - socket.data.lastChatJoin < CHAT_JOIN_COOLDOWN_MS) return
-    socket.data.lastChatJoin = now
-
-    const member = await resolveChatMember(socket, { forSending: false })
-    if (!member) return
-
-    const config = await loadChatConfig(chatRedis, db)
-    if (!config.discordChatEnabled) {
-      socket.emit('chat:state', { enabled: false })
-      return
-    }
-
-    socket.join(CHAT_ROOM)
-    await emitChatState(socket)
-    // Client REPLACES its list from this, so it self-heals a missed delete.
-    socket.emit('chat:snapshot', { messages: await bufferSnapshot(chatRedis) })
-  })
-
-  socket.on('chat:leave', () => {
-    socket.leave(CHAT_ROOM)
-  })
-
-  socket.on('chat:send', async ({ content } = {}) => {
-    const member = await resolveChatMember(socket, { forSending: true })
-    if (!member) return
-
-    const config = await loadChatConfig(chatRedis, db)
-    if (!config.discordChatEnabled) {
-      socket.emit('chat:error', { reason: 'disabled' })
-      return
-    }
-    const webhook = webhookCredentials()
-    if (!webhook) {
-      console.error('[DiscordChat] no webhook configured; refusing to relay')
-      socket.emit('chat:error', { reason: 'unavailable' })
-      return
-    }
-
-    // Hashed via encryptIp (deterministic) for the alt-account rate-limit key.
-    const rawIp = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim() || socket.handshake.address
-    let ipHash = null
-    try { ipHash = encryptIp(rawIp) } catch { ipHash = null }
-
-    try {
-      const messageId = await relayMessage(chatRedis, { user: member, rawContent: content, config, webhook, baseUrl: chatBaseUrl(), ipHash })
-      // id lets the client dedupe its optimistic bubble against the gateway echo.
-      socket.emit('chat:sent', { messageId })
-    } catch (err) {
-      if (err instanceof ChatContentError || err instanceof ChatRateError) {
-        socket.emit('chat:error', { reason: err.reason, message: err.message, retryAfterMs: err.retryAfterMs ?? 0 })
-        return
-      }
-      console.error('[DiscordChat] relay failed:', err?.message || err)
-      socket.emit('chat:error', { reason: 'unavailable' })
-    }
-  })
-})
-
-// Fans out what the gateway publishes. No per-message DB/Discord work here —
-// this room holds every online user, so nothing high-frequency belongs in it.
-chatSub.subscribe(CHAT_CHANNELS.events).catch((err) => console.error('[DiscordChat] subscribe failed:', err?.message || err))
-chatSub.on('message', (channel, raw) => {
-  if (channel !== CHAT_CHANNELS.events) return
-  let event
-  try { event = JSON.parse(raw) } catch { return }
-  switch (event.kind) {
-    case 'message': chatNsp.to(CHAT_ROOM).emit('chat:message', event.message); break
-    case 'update': chatNsp.to(CHAT_ROOM).emit('chat:update', { id: event.id, patch: event.patch }); break
-    case 'delete': chatNsp.to(CHAT_ROOM).emit('chat:delete', { ids: event.ids }); break // unconditional — clients hold more than the buffer
-    case 'reseed': chatNsp.to(CHAT_ROOM).emit('chat:snapshot', { messages: event.messages }); break
-    case 'state': chatNsp.to(CHAT_ROOM).emit('chat:gateway', event.state); break
-  }
-})
-
 io.on('connection', socket => {
   // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
   // on every event rather than trusting a payload userId. It keeps its own socket.data keys
@@ -2794,10 +2603,38 @@ io.on('connection', socket => {
     }
   })
 
-  // Removed: the old cZone `join-zone`/`visitor-count`/`chat-message` handlers.
-  // Dead code, but `chat-message` had no auth and took the room + display name
-  // from the client — a spoofable broadcast primitive not worth keeping next
-  // to a real chat feature. Its replacement is the `/chat` namespace below.
+  socket.on('join-zone', ({ zone }) => {
+    const prevZone = socket.zone
+    if (prevZone && prevZone !== zone) {
+      socket.leave(prevZone)
+      if (zoneSockets[prevZone]) {
+        zoneSockets[prevZone].delete(socket.id)
+      }
+      if (zoneVisitors[prevZone]) {
+        zoneVisitors[prevZone] = Math.max(zoneVisitors[prevZone] - 1, 0)
+        if (zoneVisitors[prevZone] === 0) {
+          delete zoneVisitors[prevZone]
+          delete zoneSockets[prevZone]
+        } else {
+          io.to(prevZone).emit('visitor-count', zoneVisitors[prevZone])
+        }
+      }
+    }
+
+    socket.zone = zone
+    socket.join(zone)
+
+    zoneSockets[zone] = (zoneSockets[zone] || new Set());
+    if (!zoneSockets[zone].has(socket.id)) {
+      zoneSockets[zone].add(socket.id)
+      zoneVisitors[zone] = (zoneVisitors[zone] || 0) + 1
+      io.to(zone).emit('visitor-count', zoneVisitors[zone])
+    }
+  })
+
+  socket.on('chat-message', ({ zone, user, message }) => {
+    io.to(zone).emit('chat-message', { user, message })
+  })
 
   // ── Reconnect rejoin handlers ──────────────────────────────────────────────
   // Emitted by clients on socket reconnect to restore their session.
@@ -2862,6 +2699,28 @@ io.on('connection', socket => {
   // ──────────────────────────────────────────────────────────────────────────
 
 
+  socket.on('leave-zone', ({ zone }) => {
+    if (zone) {
+      socket.leave(zone)
+      if (socket.zone === zone) {
+        socket.zone = null
+      }
+    }
+    if (zone && zoneVisitors[zone]) {
+      zoneVisitors[zone]--
+      if (zoneSockets[zone]) {
+        zoneSockets[zone].delete(socket.id)
+      }
+
+      if (zoneVisitors[zone] <= 0) {
+        delete zoneVisitors[zone]
+        delete zoneSockets[zone]
+      } else {
+        io.to(zone).emit('visitor-count', zoneVisitors[zone])
+      }
+    }
+  })
+
   socket.on('disconnecting', async () => {
     // During a graceful server reload state has already been saved to Redis —
     // skip PvP leave logic so active matches aren't ended prematurely.
@@ -2891,6 +2750,19 @@ io.on('connection', socket => {
             scheduleMonsterDisconnect(io, battle, loserKey)
           }
         }
+      }
+    }
+
+    const zone = socket.zone
+    if (zone && zoneSockets[zone] && zoneSockets[zone].has(socket.id)) {
+      zoneSockets[zone].delete(socket.id)
+      zoneVisitors[zone] = Math.max((zoneVisitors[zone] || 1) - 1, 0)
+
+      if (zoneVisitors[zone] === 0) {
+        delete zoneVisitors[zone]
+        delete zoneSockets[zone]
+      } else {
+        io.to(zone).emit('visitor-count', zoneVisitors[zone])
       }
     }
 
@@ -3037,6 +2909,18 @@ io.on('connection', socket => {
 async function sweepStaleState() {
   const now = Date.now()
   const activeSocketIds = new Set(io.sockets.sockets.keys())
+
+  for (const [zone, socketSet] of Object.entries(zoneSockets)) {
+    for (const socketId of Array.from(socketSet)) {
+      if (!activeSocketIds.has(socketId)) socketSet.delete(socketId)
+    }
+    if (socketSet.size === 0) {
+      delete zoneSockets[zone]
+      delete zoneVisitors[zone]
+    } else {
+      zoneVisitors[zone] = socketSet.size
+    }
+  }
 
   for (const [roomId, room] of pvpRooms.entries()) {
     if (roomSize(io, roomId) === 0 && isIdle(room, now, PVP_ROOM_IDLE_MS)) {

@@ -90,22 +90,6 @@
                     class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
                     @click="openActionModal(u, 'UNBAN'); closeMenu()"
                   >Unban user</button>
-                  <!-- Chat relay timeout — narrower than a ban, see chat-mute.post.js -->
-                  <button
-                    v-if="!u.isAdmin && !isChatMuted(u)"
-                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
-                    @click="muteChat(u, 60); closeMenu()"
-                  >Mute chat (1 hour)</button>
-                  <button
-                    v-if="!u.isAdmin && !isChatMuted(u)"
-                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
-                    @click="muteChat(u, 1440); closeMenu()"
-                  >Mute chat (1 day)</button>
-                  <button
-                    v-if="!u.isAdmin && isChatMuted(u)"
-                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
-                    @click="muteChat(u, 0); closeMenu()"
-                  >Unmute chat</button>
                   <button
                     v-if="!u.isAdmin && !u.active && !u.banned"
                     class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
@@ -798,24 +782,6 @@ const noteTone = (action) => {
   if (action === 'UNBAN') return 'text-emerald-700'
   if (action === 'DISSOLVE') return 'text-rose-700'
   return 'text-gray-700'
-}
-
-// Discord chat relay timeout — see server/api/admin/users/[id]/chat-mute.post.js
-function isChatMuted (u) {
-  return Boolean(u?.chatMutedUntil && new Date(u.chatMutedUntil).getTime() > Date.now())
-}
-
-async function muteChat (u, minutes) {
-  try {
-    const res = await $fetch(`/api/admin/users/${u.id}/chat-mute`, {
-      method: 'POST',
-      body: { minutes }
-    })
-    // Patch in place so the menu flips without a full refetch.
-    u.chatMutedUntil = res?.chatMutedUntil ?? null
-  } catch (e) {
-    console.error('chat mute failed', e)
-  }
 }
 
 // Ban/Unban modal state + actions

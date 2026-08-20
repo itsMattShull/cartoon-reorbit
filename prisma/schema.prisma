@@ -474,8 +474,6 @@ model User {
   additionalCzones                  Int       @default(0)
   usernameChangedAt                 DateTime?
   vpnDetected                       Boolean   @default(false)
-  // Discord chat relay timeout, narrower than a full ban. Null/past = not muted.
-  chatMutedUntil                    DateTime?
 
   // cMoon (faction) membership
   cMoonId            String?
@@ -1440,17 +1438,6 @@ model GlobalGameConfig {
   cMoonEnabled                       Boolean   @default(false)
   cMoonEnabledAt                     DateTime?
   cMoonSelectionDeadlineAt           DateTime?
-
-  // ── Discord chat relay (sidebar "Chat" panel) ─────────────────────────────
-  // Off by default. Webhook credential is deliberately NOT here — this row is
-  // returned wholesale by the admin config endpoints, so a secret would leak
-  // to every admin's browser. It lives in env (see discordChat/config.js).
-  discordChatEnabled                 Boolean   @default(false)
-  discordChatChannelId               String?
-  discordChatSlowmodeSeconds         Int       @default(5)
-  discordChatMaxLength               Int       @default(400)
-  discordChatShowAttachments         Boolean   @default(false)
-
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
