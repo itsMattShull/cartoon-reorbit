@@ -18,7 +18,6 @@
  *   worker-achieve                – BullMQ worker: daily achievements
  *   worker-content-analyzer       – BullMQ worker: survey content analysis
  *   guild-checker                 – Cron: Discord guild member sync
- *   discord-chat                  – Discord gateway relay for the sidebar chat
  *
  * Workers run as single fork-mode instances to prevent double-processing of jobs.
  */
@@ -172,26 +171,6 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
-    },
-
-    // ── Discord chat relay: gateway connection ────────────────────────────
-    // Own process (see the worker file's header for why). instances:1
-    // guarantees a single gateway connection with no distributed lock needed.
-    {
-      name:      'discord-chat',
-      script:    'server/workers/discord-chat.worker.js',
-      exec_mode: 'fork',
-      instances: 1,
-      // Backoff matters here: Discord resets the bot token past 1000
-      // IDENTIFYs/24h, and PM2's default immediate-restart would burn that
-      // budget in under an hour on a crash loop.
-      exp_backoff_restart_delay: 1000,
-      max_restarts: 20,
-      wait_ready:     true,
-      listen_timeout: 15000,
-      kill_timeout:   5000,
       env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
       env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
