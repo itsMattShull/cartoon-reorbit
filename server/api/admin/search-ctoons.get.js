@@ -56,6 +56,7 @@ export default defineEventHandler(async (event) => {
       quantity: true,
       rarity: true,
       inCmart: true,
+      givenToOfficialAt: true,
       isSecondEdition: true,
       secondEditionOverlayX: true,
       secondEditionOverlayY: true,

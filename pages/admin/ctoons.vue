@@ -90,7 +90,7 @@
               <th class="px-4 py-2 text-right">Highest Mint</th>
               <th class="px-4 py-2 text-right">Quantity</th>
               <th class="px-4 py-2 text-center">In C-mart</th>
-              <th class="px-4 py-2 text-right">Edit</th>
+              <th class="px-4 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <!-- Skeleton rows while loading or searching -->
@@ -163,10 +163,26 @@
                 {{ c.inCmart ? 'Yes' : 'No' }}
               </td>
               <td class="px-4 py-2 text-right">
-                <NuxtLink
-                  :to="`/admin/editCtoon/${c.id}`"
-                  class="text-blue-600 hover:text-blue-800"
-                >Edit</NuxtLink>
+                <div class="flex flex-col items-end gap-1.5">
+                  <NuxtLink
+                    :to="`/admin/editCtoon/${c.id}`"
+                    class="bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 text-xs font-medium"
+                  >Edit</NuxtLink>
+                  <button
+                    type="button"
+                    :disabled="!!giveToOfficialDisabledReason(c)"
+                    :title="giveToOfficialDisabledReason(c) || 'Mint 5 more and give them to Official'"
+                    @click="openGiveToOfficial(c)"
+                    :class="[
+                      'px-3 py-1.5 rounded text-xs font-medium whitespace-nowrap',
+                      giveToOfficialDisabledReason(c)
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-amber-600 text-white hover:bg-amber-700'
+                    ]"
+                  >
+                    Give to Official
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -234,12 +250,28 @@
                 <p class="text-sm"><strong>Series:</strong> {{ c.series }}</p>
               </div>
             </div>
-            <NuxtLink
-              :to="`/admin/editCtoon/${c.id}`"
-              class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium self-end"
-            >
-              Edit
-            </NuxtLink>
+            <div class="mt-4 flex gap-2 self-end">
+              <NuxtLink
+                :to="`/admin/editCtoon/${c.id}`"
+                class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center text-sm font-medium"
+              >
+                Edit
+              </NuxtLink>
+              <button
+                type="button"
+                :disabled="!!giveToOfficialDisabledReason(c)"
+                :title="giveToOfficialDisabledReason(c) || 'Mint 5 more and give them to Official'"
+                @click="openGiveToOfficial(c)"
+                :class="[
+                  'px-4 py-2 rounded text-sm font-medium whitespace-nowrap',
+                  giveToOfficialDisabledReason(c)
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-amber-600 text-white hover:bg-amber-700'
+                ]"
+              >
+                Give to Official
+              </button>
+            </div>
           </div>
         </template>
       </div>
@@ -289,6 +321,14 @@
       @close="showMakeSecondEditionModal = false"
       @saved="onMakeSecondEditionSaved"
     />
+
+    <!-- Give to Official Modal -->
+    <GiveToOfficialModal
+      v-if="giveToOfficialTarget"
+      :ctoon="giveToOfficialTarget"
+      @close="giveToOfficialTarget = null"
+      @given="onGivenToOfficial"
+    />
   </div>
 </template>
 
@@ -299,7 +339,41 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import Nav from '~/components/Nav.vue'
 import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
 import MakeSecondEditionModal from '~/components/MakeSecondEditionModal.vue'
+import GiveToOfficialModal from '~/components/GiveToOfficialModal.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
+
+/* Give to Official */
+const giveToOfficialTarget = ref(null)
+function giveToOfficialDisabledReason(c) {
+  if (c.givenToOfficialAt) return 'Already given to Official for this cToon.'
+  if (c.quantity == null || c.highestMint !== c.quantity) {
+    return 'Not eligible until highest mint equals quantity (fully sold out).'
+  }
+  return ''
+}
+function openGiveToOfficial(c) {
+  if (giveToOfficialDisabledReason(c)) return
+  giveToOfficialTarget.value = c
+}
+function patchCtoonEverywhere(id, patch) {
+  const applyTo = (list) => {
+    const idx = list.value.findIndex(c => c.id === id)
+    if (idx !== -1) list.value[idx] = { ...list.value[idx], ...patch }
+  }
+  applyTo(rawCtoons)
+  applyTo(searchResults)
+}
+function onGivenToOfficial(updatedCtoon) {
+  if (updatedCtoon?.id) {
+    patchCtoonEverywhere(updatedCtoon.id, {
+      totalMinted: updatedCtoon.totalMinted,
+      highestMint: updatedCtoon.highestMint,
+      quantity: updatedCtoon.quantity,
+      givenToOfficialAt: updatedCtoon.givenToOfficialAt,
+    })
+  }
+  giveToOfficialTarget.value = null
+}
 
 /* Meta options from API */
 const setsOptions   = ref([])

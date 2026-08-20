@@ -212,17 +212,13 @@ export default defineEventHandler(async (event) => {
       return tx.auction.create({
         data: {
           userCtoonId: resolvedUserCtoonId,
-          initialBet: Number(initialBet),
-          duration: days,
+          initialBet: bet,
+          duration: Math.floor(totalMinutes / 1440),
+          durationMinutes: totalMinutes,
           endAt: endAtUtc,
           ...(userId ? { creatorId: userId } : {})
         }
       })
-      await tx.userCtoon.update({
-        where: { id: resolvedUserCtoonId },
-        data: { isTradeable: false }
-      })
-      return created
     })
   } catch (err) {
     if (err?.code === 'P2002') {
