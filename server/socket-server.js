@@ -1917,35 +1917,50 @@ async function resolveChatMember(socket, { forSending }) {
       }
     })
   } catch {
-    socket.emit('chat:error', { reason: 'unavailable' })
+    emitChatError(socket, 'unavailable')
     return null
   }
 
   if (!row || row.banned || row.active === false || !row.username || !row.discordId) {
-    socket.emit('chat:error', { reason: 'not_allowed' })
+    emitChatError(socket, 'not_allowed')
     return null
   }
 
   // Belt-and-braces on read (middleware/newsite.js already gates the page);
   // live-verified on send, since that's the side that can cause real harm.
   if (!row.inGuild) {
-    socket.emit('chat:error', { reason: 'not_in_guild' })
+    emitChatError(socket, 'not_in_guild')
     return null
   }
 
   if (forSending) {
     if (row.chatMutedUntil && row.chatMutedUntil.getTime() > Date.now()) {
-      socket.emit('chat:error', { reason: 'muted' })
+      emitChatError(socket, 'muted')
       return null
     }
     const stillMember = await verifyGuildMembership(row.discordId)
     if (!stillMember) {
-      socket.emit('chat:error', { reason: 'not_in_guild' })
+      emitChatError(socket, 'not_in_guild')
       return null
     }
   }
 
   return row
+}
+
+// Every reason gets a real message: several call sites used to emit
+// {reason} alone, which the client falls back to a bare "Message not sent."
+// for — impossible to tell apart from a genuine outage in the UI.
+const CHAT_ERROR_MESSAGES = {
+  unavailable: 'Chat is unavailable right now. Try again in a moment.',
+  disabled: 'Chat is turned off right now.',
+  not_allowed: 'You are not able to use chat right now.',
+  not_in_guild: 'Join the Discord server to use chat.',
+  muted: 'You have been muted from chat.'
+}
+
+function emitChatError(socket, reason, extra = {}) {
+  socket.emit('chat:error', { reason, message: CHAT_ERROR_MESSAGES[reason], ...extra })
 }
 
 function chatBaseUrl() {
@@ -1999,13 +2014,13 @@ chatNsp.on('connection', (socket) => {
 
     const config = await loadChatConfig(chatRedis, db)
     if (!config.discordChatEnabled) {
-      socket.emit('chat:error', { reason: 'disabled' })
+      emitChatError(socket, 'disabled')
       return
     }
     const webhook = webhookCredentials()
     if (!webhook) {
       console.error('[DiscordChat] no webhook configured; refusing to relay')
-      socket.emit('chat:error', { reason: 'unavailable' })
+      emitChatError(socket, 'unavailable')
       return
     }
 
@@ -2020,11 +2035,11 @@ chatNsp.on('connection', (socket) => {
       socket.emit('chat:sent', { messageId })
     } catch (err) {
       if (err instanceof ChatContentError || err instanceof ChatRateError) {
-        socket.emit('chat:error', { reason: err.reason, message: err.message, retryAfterMs: err.retryAfterMs ?? 0 })
+        emitChatError(socket, err.reason, { message: err.message, retryAfterMs: err.retryAfterMs ?? 0 })
         return
       }
       console.error('[DiscordChat] relay failed:', err?.message || err)
-      socket.emit('chat:error', { reason: 'unavailable' })
+      emitChatError(socket, 'unavailable')
     }
   })
 })
