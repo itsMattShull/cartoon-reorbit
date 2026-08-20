@@ -34,8 +34,8 @@ async function handleAuctionOnlyUpdate(event) {
   if (!Number.isInteger(pricePoints) || pricePoints < 0) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid pricePoints' })
   }
-  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 5) {
-    throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–5' })
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 7) {
+    throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–7' })
   }
   if (!startsAtUtc) throw createError({ statusCode: 400, statusMessage: 'startsAtUtc required' })
   const startsAt = new Date(startsAtUtc)

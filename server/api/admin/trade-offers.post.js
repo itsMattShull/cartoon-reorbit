@@ -88,7 +88,7 @@ export default defineEventHandler(async (event) => {
   // 5) Verify ownership of offered cToons (official account)
   if (resolvedOffered.length) {
     const ownedByOfficial = await prisma.userCtoon.findMany({
-      where: { id: { in: resolvedOffered }, userId: official.id },
+      where: { id: { in: resolvedOffered }, userId: official.id, burnedAt: null },
       select: { id: true }
     })
     if (ownedByOfficial.length !== resolvedOffered.length) {
@@ -102,7 +102,7 @@ export default defineEventHandler(async (event) => {
   // 6) Verify ownership of requested cToons (recipient)
   if (resolvedRequested.length) {
     const ownedByRecipient = await prisma.userCtoon.findMany({
-      where: { id: { in: resolvedRequested }, userId: recipient.id },
+      where: { id: { in: resolvedRequested }, userId: recipient.id, burnedAt: null },
       select: { id: true }
     })
     if (ownedByRecipient.length !== resolvedRequested.length) {
@@ -139,6 +139,37 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // 7.5) Prevent trades involving cToons already committed to a pending trade.
+  //
+  // This guard was missing entirely, unlike the player-facing path
+  // (server/utils/tradeOffer.js#validateTradeOfferInputs). Without it an admin
+  // offer can request a copy that another pending offer already claims; both
+  // offers are then acceptable, and the second one to be accepted fails deep
+  // inside accept.post.js's transaction on `moved.count !== ids.length` — a raw
+  // 409 for the user, after the first accept already moved the cToon.
+  //
+  // Deliberately NOT routed through validateTradeOfferInputs: that function also
+  // rejects locked cToons, and an admin trade must stay able to reach one. A
+  // user-set flag that silently blocks staff would make the tool for fixing bad
+  // states unusable exactly when it is needed, and admin offers still require the
+  // recipient to accept, so consent is unchanged.
+  const allInvolvedIds = [...resolvedOffered, ...resolvedRequested]
+  if (allInvolvedIds.length) {
+    const alreadyPending = await prisma.tradeOfferCtoon.findFirst({
+      where: {
+        userCtoonId: { in: allInvolvedIds },
+        tradeOffer: { status: 'PENDING' }
+      },
+      select: { id: true }
+    })
+    if (alreadyPending) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more cToons in this trade are already part of a pending trade.'
+      })
+    }
+  }
+
   // 8) Create the TradeOffer + nested C-Toon joins
   const offer = await prisma.$transaction(async (tx) => {
     return tx.tradeOffer.create({
@@ -165,8 +196,8 @@ export default defineEventHandler(async (event) => {
       const BOT_TOKEN = process.env.BOT_TOKEN
       const isProd = process.env.NODE_ENV === 'production'
       const baseUrl = isProd
-        ? 'https://www.cartoonreorbit.com/trade-offers'
-        : 'http://localhost:3000/trade-offers'
+        ? 'https://www.cartoonreorbit.com/newsite/trade'
+        : 'http://localhost:3000/newsite/trade'
 
       // 9a) Open (or fetch) a DM channel with that user
       const dmChannel = await $fetch(

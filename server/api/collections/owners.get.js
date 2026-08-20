@@ -24,7 +24,11 @@ export default defineEventHandler(async (event) => {
     // 3) Fetch owners and holiday flag
     const [owners, holidayRow] = await Promise.all([
       prisma.userCtoon.findMany({
-        where: { ctoonId: String(cToonId) },
+        // burnedAt was missing: a copy consumed by a holiday redemption stayed in
+        // the Owners list forever, attributed to the user who destroyed it, with a
+        // "Tradeable" link that could never resolve. Every other read path in the
+        // app already filters this.
+        where: { ctoonId: String(cToonId), burnedAt: null },
         select: {
           id: true,
           userId: true,

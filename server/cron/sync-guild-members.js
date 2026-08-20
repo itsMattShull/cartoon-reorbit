@@ -16,8 +16,6 @@ import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDis
 import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
-import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
-import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 
@@ -86,96 +84,6 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   }
 }
 
-async function sendAuctionDiscordAnnouncement(result, isHolidayItem = false) {
-  try {
-    const botToken = ANNOUNCEMENTS_BOT_TOKEN
-    const guildId  = process.env.DISCORD_GUILD_ID
-
-    if (!botToken || !guildId) {
-      console.error('Missing DISCORD_ANNOUNCEMENTS_BOT_TOKEN/BOT_TOKEN or DISCORD_GUILD_ID env vars.')
-      return
-    }
-
-    const authHeader =
-      botToken.startsWith('Bot ') ? botToken : `Bot ${botToken}`
-
-    // 1) Look up the "cmart-alerts" channel by name
-    const channelsRes = await fetch(
-      `${DISCORD_API}/guilds/${guildId}/channels`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: authHeader,
-        },
-      }
-    )
-
-    if (!channelsRes.ok) {
-      console.error(
-        'Failed to fetch guild channels:',
-        channelsRes.status,
-        channelsRes.statusText
-      )
-      return
-    }
-
-    const channels = await channelsRes.json()
-    const targetChannel = channels.find(
-      (ch) => ch.type === 0 && ch.name === 'cmart-alerts' // type 0 = text channel
-    )
-
-    if (!targetChannel) {
-      console.error('No channel named "cmart-alerts" found in the guild.')
-      return
-    }
-
-    const channelId = targetChannel.id
-
-    const baseUrl =
-      process.env.PUBLIC_BASE_URL ||
-      (process.env.NODE_ENV === 'production'
-        ? 'https://www.cartoonreorbit.com'
-        : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
-
-    const { name, rarity, assetPath } = result.ctoon || {}
-    const auctionLink = `${baseUrl}/auction/${result.auctionId}`
-    const rawImageUrl = assetPath
-      ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`)
-      : null
-    const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
-
-    const lines = [
-      `**Rarity:** ${rarity ?? 'N/A'}`,
-      ...(!isHolidayItem ? [`**Mint #:** ${result.mintNumber ?? 'N/A'}`] : []),
-      `**Starting Bid:** ${result.initialBet} pts`,
-      `**Duration:** ${result.durationDays} day(s)`
-    ]
-
-    const payload = {
-      content: `A scheduled auction is now live.`,
-      embeds: [{
-        title: name ?? 'cToon',
-        url: auctionLink,
-        description: lines.join('\n'),
-        ...(imageUrl ? { image: { url: imageUrl } } : {})
-      }]
-    }
-
-    await fetch(
-      `${DISCORD_API}/channels/${channelId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }
-    )
-  } catch (e1) {
-    // swallow in cron context
-  }
-}
 
 async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   try {
@@ -1017,138 +925,6 @@ async function updateWinballGrandPrizeFromSchedule() {
   }
 }
 
-async function createDailyFeaturedAuction() {
-  const username = process.env.OFFICIAL_USERNAME
-  if (!username) return
-
-  const config = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-
-  // Determine current CST hour and date
-  const nowCST = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-  const cstHour = nowCST.getHours()
-
-  // Check if this hour is in the configured schedule
-  const scheduledHours = Array.isArray(config?.featuredAuctionHours) ? config.featuredAuctionHours : []
-  if (scheduledHours.length === 0 || !scheduledHours.includes(cstHour)) return
-
-  // Check if today is an "on" day based on interval (modulo a fixed CST epoch of Jan 1 2025)
-  const intervalDays = config?.featuredAuctionIntervalDays ?? 1
-  const cstMidnight = new Date(nowCST)
-  cstMidnight.setHours(0, 0, 0, 0)
-  const EPOCH = new Date('2025-01-01T00:00:00').getTime()
-  const dayNum = Math.floor((cstMidnight.getTime() - EPOCH) / 86_400_000)
-  if (dayNum % intervalDays !== 0) return
-
-  // Idempotency: skip if this exact slot already fired
-  const slotKey = `${nowCST.getFullYear()}-${String(nowCST.getMonth() + 1).padStart(2, '0')}-${String(nowCST.getDate()).padStart(2, '0')}-${String(cstHour).padStart(2, '0')}`
-  if (config?.featuredAuctionLastFiredSlot === slotKey) return
-
-  const dailyCap = config?.featuredAuctionsPerSlot ?? 1
-  if (dailyCap <= 0) return
-
-  const officialUser = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true }
-  })
-  if (!officialUser) return
-
-  const rawCandidates = await prisma.userCtoon.findMany({
-    where: {
-      userId: officialUser.id,
-      burnedAt: null,
-      // Excludes any pending (unstarted) AuctionOnly listing via the relation
-      // itself, rather than loading every pending userCtoonId into a notIn
-      // array — stays bounded as the AuctionOnly table grows. Backed by the
-      // AuctionOnly(userCtoonId, isStarted) index.
-      auctionOnlyListings: { none: { isStarted: false } },
-      // Excludes cToons sitting in the dissolve queue awaiting their own
-      // scheduled auto-listing (dissolve-auction-launch.worker.js), so this
-      // job never double-lists / preempts that separate launch.
-      dissolveAuctionQueue: null
-    },
-    include: {
-      ctoon: {
-        select: { id: true, name: true, rarity: true, assetPath: true }
-      }
-    }
-  })
-
-  const candidates = rawCandidates.filter(c => isAutoAuctionEligibleRarity(c.ctoon?.rarity))
-
-  if (!candidates.length) return
-
-  const shuffled = candidates.slice()
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-
-  const now = new Date()
-  const durationDays = 1
-  const endAt = new Date(now.getTime() + durationDays * 86_400_000)
-  let createdCount = 0
-
-  for (const chosen of shuffled) {
-    if (createdCount >= dailyCap) break
-    const initialBet = rarityFloor(chosen.ctoon?.rarity)
-
-    const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.auction.findFirst({
-        where: { userCtoonId: chosen.id, status: "ACTIVE" },
-        select: { id: true }
-      })
-      if (existing) return null
-
-      const created = await tx.auction.create({
-        data: {
-          userCtoonId: chosen.id,
-          initialBet,
-          duration: durationDays,
-          endAt,
-          creatorId: officialUser.id,
-          isFeatured: true
-        },
-        select: { id: true }
-      })
-
-      await tx.userCtoon.update({
-        where: { id: chosen.id },
-        data: { isTradeable: false }
-      })
-
-      return {
-        auctionId: created.id,
-        initialBet,
-        durationDays,
-        ctoon: chosen.ctoon,
-        mintNumber: chosen.mintNumber,
-        ctoonId: chosen.ctoonId
-      }
-    })
-
-    if (!result) continue
-    createdCount += 1
-
-    await scheduleAuctionClose(result.auctionId, endAt)
-
-    const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-      where: { ctoonId: result.ctoonId },
-      select: { id: true }
-    }))
-
-    await sendAuctionDiscordAnnouncement(result, isHolidayItem)
-  }
-
-  // Mark this slot as fired so restarts don't double-create
-  if (createdCount > 0) {
-    await prisma.globalGameConfig.update({
-      where: { id: 'singleton' },
-      data: { featuredAuctionLastFiredSlot: slotKey }
-    })
-  }
-}
-
-
 async function runTournamentCron() {
   try {
     await runTournamentScheduler(prisma)
@@ -1203,9 +979,6 @@ cron.schedule('0 * * * *', () => runJob('updateWinballGrandPrizeFromSchedule', u
 
 await runJob('enforceDormantAccounts', enforceDormantAccounts)
 cron.schedule('0 4 * * *', () => runJob('enforceDormantAccounts', enforceDormantAccounts))    // 04:00 daily
-
-// check featured auction schedule every hour
-cron.schedule("0 * * * *", () => runJob('createDailyFeaturedAuction', createDailyFeaturedAuction), { timezone: "America/Chicago" })
 
 // Sync Wordle daily crown results from Discord
 async function syncWordleResultsDaily() {

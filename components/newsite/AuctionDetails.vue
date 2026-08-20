@@ -141,6 +141,7 @@
 </template>
 
 <script setup>
+import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const props = defineProps({
   auctionId: { type: [String, Number], required: true },
 })
@@ -205,15 +206,12 @@ function showToast(message, type = 'error') {
   setTimeout(() => { toast.message = '' }, 4000)
 }
 
+// See the note on AuctionHouse.vue's copy: hours as the largest unit meant a
+// 7-day auction counted down from "167h 59m".
 function formatRemaining(endAt) {
   const diff = new Date(endAt) - now.value
   if (diff <= 0) return '0s'
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  if (h > 0)  return `${h}h ${m}m ${s}s`
-  if (m > 0)  return `${m}m ${s}s`
-  return `${s}s`
+  return formatRemainingShort(diff)
 }
 
 function formatDate(d) {
@@ -271,7 +269,7 @@ function openInfoModal() {
 
 function openRelist() {
   if (!auction.value?.canRelist) return
-  const duration = reconstructDurationPrefill(auction.value.createdAt, auction.value.endAt)
+  const duration = reconstructDurationPrefill(auction.value.createdAt, auction.value.endAt, auction.value.durationMinutes)
   openAuctionModal({
     ctoon: {
       id:         auction.value.ctoon.userCtoonId,
@@ -286,8 +284,19 @@ function openRelist() {
       initialBet:     auction.value.initialBet,
       durationPreset: duration.preset,
       timeframe:      duration.timeframe,
+      customEndAtLocal: seedCustomEnd(duration.customMinutes),
     },
   })
+}
+
+// A re-list whose exact length isn't one of the chips reopens the calendar,
+// seeded to the same length measured from now.
+function seedCustomEnd(minutes) {
+  if (!Number.isInteger(minutes)) return ''
+  const d = new Date(Date.now() + minutes * 60000)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+         `T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 // This page still shows the old, closed auction. Once it's been re-listed the

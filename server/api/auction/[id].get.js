@@ -99,6 +99,9 @@ export default defineEventHandler(async (event) => {
     endAt:      auction.endAt.toISOString(),
     initialBet: auction.initialBet,
     duration:   auction.duration,
+    // Exact listed length; `duration` is whole days and reads 0 for anything
+    // shorter. Null on rows created before the column existed.
+    durationMinutes: auction.durationMinutes ?? null,
     status:     auction.status,
     bidCount:   bids.length,
     canRelist,

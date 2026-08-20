@@ -3397,6 +3397,49 @@ setInterval(async () => {
 }, 60 * 1000).unref()
 
 
+// ── Overdue-auction reconciliation ──────────────────────────────────────────
+// The BullMQ delayed job is otherwise the ONLY thing that ever closes an
+// auction: performAuctionClose has exactly one caller, the worker below. If
+// Redis loses bull:auctionClose:delayed — a restart without AOF, an eviction, a
+// fresh container — the job is gone and nothing notices. The auction stays
+// ACTIVE forever, its cToon stays isTradeable:false, and every bidder's
+// LockedPoints row stays ACTIVE, stranding their points until an admin releases
+// them by hand.
+//
+// The boot backfill below covers a Redis flush that happens while this process
+// is down. It cannot cover one that happens while it is up, and a 7-day auction
+// can now outlive the deploy cadence that was making that backfill the de facto
+// sweep. Re-asserting the job is idempotent (jobId = auctionId, and
+// scheduleAuctionClose declines to touch a job that is currently active), so
+// this is safe to run on a timer: an overdue auction resolves to delay 0 and
+// the worker picks it up on the next poll.
+let overdueSweepInFlight = false
+setInterval(async () => {
+  if (overdueSweepInFlight) return
+  overdueSweepInFlight = true
+  try {
+    const overdue = await db.auction.findMany({
+      where: { status: 'ACTIVE', endAt: { lte: new Date() } },
+      select: { id: true, endAt: true }
+    })
+    if (overdue.length) {
+      console.warn(`[AuctionSweep] ${overdue.length} ACTIVE auction(s) past endAt — re-scheduling close jobs.`)
+      for (const a of overdue) {
+        try {
+          await scheduleAuctionClose(a.id, a.endAt)
+        } catch (err) {
+          console.error(`[AuctionSweep] Failed to reschedule ${a.id}:`, err)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[AuctionSweep] Overdue auction sweep failed:', err)
+  } finally {
+    overdueSweepInFlight = false
+  }
+}, 5 * 60 * 1000).unref()
+
+
 // Minimum gap (ms) between last heartbeat and now before we consider it a
 // real downtime event.  One missed 60-second tick is noise; anything longer
 // means the server was actually down.
